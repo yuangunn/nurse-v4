@@ -57,6 +57,7 @@ class GenerateRequest(BaseModel):
     requirements: Requirements
     rules: Rules
     prev_schedule: Optional[Dict[str, Dict[str, str]]] = None  # {nurse_id: {date_str: shift}}
+    holidays: List[str] = []  # ['YYYY-M-D', ...] 법정공휴일 날짜 목록 (스케줄러는 참조용)
 
 
 class ScheduleSave(BaseModel):

@@ -314,13 +314,15 @@
               <template x-for="day in scheduleDays" :key="day">
                 <th class="border px-0.5 py-1 text-center sticky z-20 cursor-pointer select-none"
                   :class="[getDayClass(day),
-                           day.getDay()===6 ? 'border-r-2 border-r-gray-500 bg-blue-100' : (day.getDay()===0 ? 'bg-red-100' : 'bg-gray-50'),
+                           isHoliday(day) ? 'bg-orange-100' : (day.getDay()===6 ? 'border-r-2 border-r-gray-500 bg-blue-100' : (day.getDay()===0 ? 'bg-red-100' : 'bg-gray-50')),
+                           day.getDay()===6 ? 'border-r-2 border-r-gray-500' : '',
                            isCycleStart(day) && day.getDate()!==1 ? 'border-l-2 border-l-indigo-300' : '']"
                   style="min-width:2rem; top:27px"
                   @contextmenu.prevent="markHoliday(day)"
-                  title="우클릭: 전체 법정공휴일 지정">
+                  :title="isHoliday(day) ? '우클릭: 법정공휴일 해제' : '우클릭: 법정공휴일 지정'">
                   <div x-text="day.getDate()"></div>
                   <div class="font-normal" x-text="['일','월','화','수','목','금','토'][day.getDay()]"></div>
+                  <div x-show="isHoliday(day)" class="text-orange-600 font-bold" style="font-size:0.6rem; line-height:1">법</div>
                 </th>
               </template>
               <th class="border px-2 py-1 text-gray-400 text-xs whitespace-nowrap sticky bg-gray-50 z-20" style="top:27px">입력수</th>
@@ -335,7 +337,8 @@
                 </td>
                 <template x-for="day in scheduleDays" :key="day">
                   <td class="border p-0.5"
-                    :class="[day.getDay()===6 ? 'border-r-2 border-r-gray-500 bg-blue-50' : (day.getDay()===0 ? 'bg-red-50' : ''),
+                    :class="[isHoliday(day) ? 'bg-orange-50' : (day.getDay()===6 ? 'bg-blue-50' : (day.getDay()===0 ? 'bg-red-50' : '')),
+                             day.getDay()===6 ? 'border-r-2 border-r-gray-500' : '',
                              isCycleStart(day) && day.getDate()!==1 ? 'border-l-2 border-l-indigo-300' : '']">
                     <template x-if="getPrevShift(nurse.id, day)">
                       <span :class="`shift-${getPrevShift(nurse.id, day)} schedule-cell block`"
@@ -658,6 +661,7 @@ function app() {
     prevShifts:    ['D','D1','E','중','N','OF','주','V','생','특','공','법','병'],
 
     prevSchedule: {},   // {nurse_id: {'YYYY-MM-DD': shift}} 사전 고정 근무
+    holidays: [],       // ['YYYY-M-D', ...] 법정공휴일로 지정된 날짜 목록
 
     nurseModal: {open:false, isNew:true, data:{}},
     shiftEdit:  {open:false, nurse:null, day:null, dateLabel:'', mode:'schedule'},
@@ -750,6 +754,7 @@ function app() {
           requirements: this.requirements,
           rules: this.rules,
           prev_schedule: Object.keys(this.prevSchedule).length ? this.prevSchedule : null,
+          holidays: this.holidays,
         });
         this.statusOk = result.success;
         this.statusMessage = result.message;
@@ -899,15 +904,20 @@ function app() {
       }
     },
 
-    // ── 법정공휴일 일괄 지정 (날짜 헤더 우클릭) ───────────────────────────────
+    // ── 법정공휴일 지정/해제 (날짜 헤더 우클릭) ──────────────────────────────
+    isHoliday(day) {
+      return this.holidays.includes(this.dayKey(day));
+    },
     markHoliday(day) {
       const k = this.dayKey(day);
       const dn = ['일','월','화','수','목','금','토'];
       const label = `${day.getMonth()+1}/${day.getDate()}(${dn[day.getDay()]})`;
-      if (!confirm(`${label}을(를) 법정공휴일로 지정합니다.\n모든 간호사에게 '법'이 입력됩니다. 계속하시겠습니까?`)) return;
-      for (const nurse of this.nurses) {
-        if (!this.prevSchedule[nurse.id]) this.prevSchedule[nurse.id] = {};
-        this.prevSchedule[nurse.id][k] = '법';
+      if (this.isHoliday(day)) {
+        if (!confirm(`${label} 법정공휴일 지정을 해제합니다. 계속하시겠습니까?`)) return;
+        this.holidays = this.holidays.filter(h => h !== k);
+      } else {
+        if (!confirm(`${label}을(를) 법정공휴일로 지정합니다.\n이 날에 각 간호사에게 개별적으로 '법'을 배정할 수 있습니다. 계속하시겠습니까?`)) return;
+        this.holidays.push(k);
       }
     },
 
