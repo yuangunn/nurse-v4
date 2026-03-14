@@ -1,0 +1,69 @@
+from pydantic import BaseModel
+from typing import Dict, List, Optional
+
+
+class Nurse(BaseModel):
+    id: str
+    name: str
+    group: str = ""
+    gender: str = "female"  # female | male
+    capable_shifts: List[str] = ["DC", "D", "D1", "EC", "E", "중", "NC", "N"]
+    is_night_shift: bool = False  # 야간전담 여부
+    seniority: int = 0  # 0 = 낮음(시니어), 숫자 클수록 경력 낮음
+    wishes: Dict[str, str] = {}  # {"1": "D", "15": "OFF", ...}
+    juhu_day: Optional[int] = None  # 주휴 요일: 0=일,1=월,...,6=토. None=임의
+    juhu_auto_rotate: bool = True   # True: 4주마다 1일 자동 당기기
+
+
+class DayRequirement(BaseModel):
+    """
+    D/E/N은 해당 시간대 총 인원 (charge 포함).
+    예) D=3 이면 DC 1명 + D 2명 = 합계 3명.
+    스케줄러 내부에서 charge 1명을 자동으로 배정.
+    """
+    D: int = 3   # Day 시간대 총 인원 (DC 포함)
+    E: int = 3   # Evening 시간대 총 인원 (EC 포함)
+    N: int = 3   # Night 시간대 총 인원 (NC 포함)
+
+
+class Requirements(BaseModel):
+    mon: DayRequirement = DayRequirement()
+    tue: DayRequirement = DayRequirement()
+    wed: DayRequirement = DayRequirement()
+    thu: DayRequirement = DayRequirement()
+    fri: DayRequirement = DayRequirement()
+    sat: DayRequirement = DayRequirement()
+    sun: DayRequirement = DayRequirement()
+
+
+class Rules(BaseModel):
+    weeklyOff: bool = True
+    noNOD: bool = True          # N→OF→D 금지
+    avoidDN: bool = True         # D→N 회피 (soft)
+    maxConsecutiveWork: bool = True
+    maxConsecutiveWorkDays: int = 6
+    maxConsecutiveNight: bool = True
+    maxConsecutiveNightDays: int = 3
+    restAfterNight: bool = True
+    patternOptimization: bool = True
+    autoMenstrualLeave: bool = True
+    maxVPerMonth: int = 1        # V(연차) 월 최대 사용 횟수 (hard)
+
+
+class GenerateRequest(BaseModel):
+    year: int
+    month: int
+    nurses: List[Nurse]
+    requirements: Requirements
+    rules: Rules
+    prev_schedule: Optional[Dict[str, Dict[str, str]]] = None  # {nurse_id: {date_str: shift}}
+
+
+class ScheduleSave(BaseModel):
+    year: int
+    month: int
+    nurses: List[Nurse]
+    requirements: Requirements
+    rules: Rules
+    schedule: Dict[str, Dict[str, str]]
+    name: Optional[str] = None

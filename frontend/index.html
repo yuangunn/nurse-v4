@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="ko" x-data="app()" x-init="init()">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>간호사 스케줄러 v2</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .shift-DC { background:#bfdbfe; color:#1d4ed8; }
+    .shift-D  { background:#dbeafe; color:#1d4ed8; }
+    .shift-D1 { background:#e0f2fe; color:#0284c7; }
+    .shift-EC { background:#bbf7d0; color:#15803d; }
+    .shift-E  { background:#dcfce7; color:#15803d; }
+    .shift-중 { background:#ccfbf1; color:#0f766e; }
+    .shift-NC { background:#fde68a; color:#92400e; }
+    .shift-N  { background:#fef9c3; color:#92400e; }
+    .shift-OF { background:#f3f4f6; color:#6b7280; }
+    .shift-주 { background:#e0e7ff; color:#4338ca; }
+    .shift-V  { background:#fce7f3; color:#be185d; }
+    .shift-생 { background:#fdf2f8; color:#be185d; }
+    .shift-특 { background:#fdf4ff; color:#7e22ce; }
+    .shift-공 { background:#ecfdf5; color:#064e3b; }
+    .shift-법 { background:#fff7ed; color:#c2410c; }
+    .shift-병 { background:#fef2f2; color:#dc2626; }
+    .schedule-cell { min-width: 2rem; text-align:center; font-size:0.7rem; font-weight:600; border-radius:4px; padding:2px 0; cursor:pointer; user-select:none; }
+    .loading-spin { animation: spin 1s linear infinite; }
+    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-800 min-h-screen">
+
+<!-- 헤더 -->
+<header class="bg-blue-700 text-white shadow-md sticky top-0 z-30">
+  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      </svg>
+      <span class="font-bold text-lg">간호사 스케줄러 v2</span>
+    </div>
+    <!-- 탭 (데스크탑) -->
+    <nav class="hidden md:flex gap-1">
+      <template x-for="tab in tabs" :key="tab.id">
+        <button @click="activeTab=tab.id"
+          :class="activeTab===tab.id ? 'bg-white text-blue-700' : 'text-blue-100 hover:bg-blue-600'"
+          class="px-4 py-1.5 rounded-full text-sm font-medium transition"
+          x-text="tab.label"></button>
+      </template>
+    </nav>
+  </div>
+  <!-- 탭 (모바일) -->
+  <div class="md:hidden border-t border-blue-600 flex">
+    <template x-for="tab in tabs" :key="tab.id">
+      <button @click="activeTab=tab.id"
+        :class="activeTab===tab.id ? 'bg-white text-blue-700' : 'text-blue-100'"
+        class="flex-1 py-2 text-xs font-medium"
+        x-text="tab.label"></button>
+    </template>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-2 md:px-4 py-4">
+
+  <!-- ══════════════════════════════════════════════════════
+       탭 1: 설정
+  ══════════════════════════════════════════════════════ -->
+  <div x-show="activeTab==='settings'" x-cloak>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <!-- 년월 선택 -->
+      <div class="bg-white rounded-xl shadow p-4">
+        <h2 class="font-semibold text-gray-700 mb-3">📅 대상 년월</h2>
+        <div class="flex gap-3 items-center">
+          <input type="number" x-model.number="year" min="2020" max="2099"
+            class="border rounded px-3 py-2 w-24 text-center" />
+          <span>년</span>
+          <input type="number" x-model.number="month" min="1" max="12"
+            class="border rounded px-3 py-2 w-16 text-center" />
+          <span>월</span>
+        </div>
+      </div>
+
+      <!-- 규칙 설정 -->
+      <div class="bg-white rounded-xl shadow p-4">
+        <h2 class="font-semibold text-gray-700 mb-3">📋 규칙 설정</h2>
+        <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
+
+          <label class="flex items-center gap-2">
+            <input type="checkbox" x-model="rules.weeklyOff" />
+            주 2회 휴무 (주휴+OF)
+          </label>
+          <label class="flex items-center gap-2 text-gray-400">
+            <input type="checkbox" checked disabled />
+            E→D 금지 <span class="text-xs">(항상)</span>
+          </label>
+          <label class="flex items-center gap-2 text-gray-400">
+            <input type="checkbox" checked disabled />
+            N→E 금지 <span class="text-xs">(항상)</span>
+          </label>
+          <label class="flex items-center gap-2 text-gray-400">
+            <input type="checkbox" checked disabled />
+            N→D 금지 <span class="text-xs">(항상)</span>
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" x-model="rules.noNOD" />
+            N→OF→D 금지
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" x-model="rules.avoidDN" />
+            D→N 회피 (Soft)
+          </label>
+          <label class="flex items-center gap-2 col-span-2">
+            <input type="checkbox" x-model="rules.maxConsecutiveWork" />
+            최대 연속 근무
+            <input type="number" x-model.number="rules.maxConsecutiveWorkDays"
+              min="1" max="10" class="w-12 border rounded px-1 text-center" />일
+          </label>
+          <label class="flex items-center gap-2 col-span-2">
+            <input type="checkbox" x-model="rules.maxConsecutiveNight" />
+            최대 연속 야간
+            <input type="number" x-model.number="rules.maxConsecutiveNightDays"
+              min="1" max="7" class="w-12 border rounded px-1 text-center" />일
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" x-model="rules.patternOptimization" />
+            순방향 패턴 우선
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" x-model="rules.autoMenstrualLeave" />
+            여성 생휴 자동
+          </label>
+          <label class="flex items-center gap-2 col-span-2">
+            V(연차) 월 최대
+            <input type="number" x-model.number="rules.maxVPerMonth"
+              min="0" max="10" class="w-12 border rounded px-1 text-center" />회
+          </label>
+        </div>
+        <button @click="saveRules()" class="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 rounded-lg">
+          규칙 저장
+        </button>
+      </div>
+
+      <!-- 간호사 목록 -->
+      <div class="bg-white rounded-xl shadow p-4 md:col-span-2">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold text-gray-700">👩‍⚕️ 간호사 목록 <span class="text-blue-600 font-bold" x-text="`(${nurses.length}명)`"></span></h2>
+          <button @click="openNurseModal(null)"
+            class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1.5 rounded-lg">
+            + 추가
+          </button>
+        </div>
+
+        <!-- 모바일: 카드 -->
+        <div class="md:hidden space-y-2">
+          <template x-for="(nurse, idx) in nurses" :key="nurse.id">
+            <div class="border rounded-lg p-3 flex items-center justify-between">
+              <div>
+                <span class="font-medium" x-text="nurse.name"></span>
+                <span class="ml-2 text-xs text-gray-400" x-text="nurse.group"></span>
+                <div class="text-xs text-gray-500 mt-0.5"
+                  x-text="nurse.capable_shifts.join(' ')"></div>
+              </div>
+              <div class="flex gap-2">
+                <button @click="openNurseModal(nurse)" class="text-blue-600 text-sm">수정</button>
+                <button @click="removeNurse(nurse.id)" class="text-red-500 text-sm">삭제</button>
+              </div>
+            </div>
+          </template>
+          <p x-show="nurses.length===0" class="text-center text-gray-400 py-4 text-sm">간호사가 없습니다.</p>
+        </div>
+
+        <!-- 데스크탑: 테이블 -->
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-3 py-2 text-left">#</th>
+                <th class="px-3 py-2 text-left">이름</th>
+                <th class="px-3 py-2 text-left">그룹</th>
+                <th class="px-3 py-2 text-left">성별</th>
+                <th class="px-3 py-2 text-left">가능 근무</th>
+                <th class="px-3 py-2 text-left">야간전담</th>
+                <th class="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(nurse, idx) in nurses" :key="nurse.id">
+                <tr class="border-t hover:bg-gray-50">
+                  <td class="px-3 py-2 text-gray-400" x-text="idx+1"></td>
+                  <td class="px-3 py-2 font-medium" x-text="nurse.name"></td>
+                  <td class="px-3 py-2 text-gray-500" x-text="nurse.group"></td>
+                  <td class="px-3 py-2 text-gray-500" x-text="nurse.gender==='female'?'여':'남'"></td>
+                  <td class="px-3 py-2">
+                    <span class="text-xs text-gray-600" x-text="nurse.capable_shifts.join(', ')"></span>
+                  </td>
+                  <td class="px-3 py-2 text-center">
+                    <span x-show="nurse.is_night_shift" class="text-yellow-600 font-bold">야간</span>
+                  </td>
+                  <td class="px-3 py-2 flex gap-2 justify-end">
+                    <button @click="openNurseModal(nurse)" class="text-blue-600 hover:underline text-xs">수정</button>
+                    <button @click="removeNurse(nurse.id)" class="text-red-500 hover:underline text-xs">삭제</button>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="nurses.length===0">
+                <td colspan="7" class="text-center py-6 text-gray-400">간호사가 없습니다. + 추가 버튼을 눌러주세요.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 요일별 필요 인원 -->
+      <div class="bg-white rounded-xl shadow p-4 md:col-span-2">
+        <h2 class="font-semibold text-gray-700 mb-3">👥 요일별 필요 인원</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm text-center">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-2 py-2">근무</th>
+                <template x-for="(label, key) in weekdayLabels" :key="key">
+                  <th class="px-2 py-2" x-text="label"></th>
+                </template>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="shift in workShifts" :key="shift">
+                <tr class="border-t">
+                  <td class="px-2 py-1.5 font-semibold">
+                    <span :class="`shift-${shift}`" class="px-2 py-0.5 rounded text-xs" x-text="shift"></span>
+                  </td>
+                  <template x-for="(label, key) in weekdayLabels" :key="key">
+                    <td class="px-1 py-1">
+                      <input type="number" min="0" max="20"
+                        :value="requirements[key][shift]"
+                        @change="requirements[key][shift] = parseInt($event.target.value) || 0"
+                        class="w-12 border rounded text-center py-1" />
+                    </td>
+                  </template>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        <button @click="saveRequirements()" class="mt-3 w-full bg-green-600 hover:bg-green-700 text-white text-sm py-2 rounded-lg">
+          인원 설정 저장
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       탭 2: 사전입력
+  ══════════════════════════════════════════════════════ -->
+  <div x-show="activeTab==='preinput'" x-cloak>
+    <div class="bg-white rounded-xl shadow p-4">
+      <div class="flex flex-wrap items-center gap-3 mb-3">
+        <span class="font-semibold text-gray-700">📝 사전입력</span>
+        <!-- 년월 선택기 -->
+        <div class="flex items-center gap-1 bg-gray-100 rounded-lg px-2 py-1">
+          <button @click="prevMonth()" class="w-6 h-6 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600 font-bold">‹</button>
+          <input type="number" x-model.number="year" min="2020" max="2099"
+            class="w-14 text-center text-sm font-semibold bg-transparent border-none outline-none" />
+          <span class="text-sm text-gray-500">년</span>
+          <input type="number" x-model.number="month" min="1" max="12"
+            class="w-8 text-center text-sm font-semibold bg-transparent border-none outline-none" />
+          <span class="text-sm text-gray-500">월</span>
+          <button @click="nextMonth()" class="w-6 h-6 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600 font-bold">›</button>
+        </div>
+        <span class="text-xs text-gray-400 hidden md:inline">V·생·특·공·병·OF·주·원하는근무를 미리 고정합니다.</span>
+        <div class="ml-auto flex gap-2">
+          <button @click="clearPrevSchedule()"
+            class="border border-red-300 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-sm">
+            전체 초기화
+          </button>
+          <button @click="prevInputCount()"
+            class="border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-lg text-sm text-gray-600"
+            x-text="`${countPrevEntries()}건 입력됨`">
+          </button>
+        </div>
+      </div>
+
+      <!-- 범례 -->
+      <div class="flex flex-wrap gap-1 mb-3 text-xs">
+        <template x-for="s in ['D','D1','E','중','N','OF','주','V','생','특','공','법','병']" :key="s">
+          <span :class="`shift-${s}`" class="px-2 py-0.5 rounded font-bold" x-text="s"></span>
+        </template>
+        <span class="text-gray-400 ml-2">빈칸 = 자동배정</span>
+      </div>
+
+      <!-- 사전입력 그리드 -->
+      <!-- overflow-auto + max-height → thead sticky 작동 -->
+      <div x-show="nurses.length > 0" class="overflow-auto" style="max-height:calc(100vh - 14rem)">
+        <table class="text-xs border-collapse" style="min-width:700px">
+          <thead>
+            <!-- 주기 행 (sticky top-0) -->
+            <tr>
+              <th class="border px-2 py-1 sticky left-0 top-0 bg-white z-30 text-left text-gray-400 whitespace-nowrap text-xs">주기</th>
+              <template x-for="span in getCycleSpans()" :key="span.key">
+                <th :colspan="span.count"
+                    :class="getCycleClass(span.cycle)"
+                    class="border text-center text-xs font-bold py-1 sticky top-0 z-20"
+                    x-text="`${span.cycle}주기`">
+                </th>
+              </template>
+              <th class="border bg-white sticky top-0 z-20"></th>
+            </tr>
+            <!-- 날짜/요일 행 (sticky top-[27px]) -->
+            <tr>
+              <th class="border px-2 py-1 sticky left-0 bg-gray-50 z-30 text-left" style="top:27px">이름</th>
+              <template x-for="day in scheduleDays" :key="day">
+                <th class="border px-0.5 py-1 text-center sticky z-20 cursor-pointer select-none"
+                  :class="[getDayClass(day),
+                           day.getDay()===6 ? 'border-r-2 border-r-gray-500 bg-blue-100' : (day.getDay()===0 ? 'bg-red-100' : 'bg-gray-50'),
+                           isCycleStart(day) && day.getDate()!==1 ? 'border-l-2 border-l-indigo-300' : '']"
+                  style="min-width:2rem; top:27px"
+                  @contextmenu.prevent="markHoliday(day)"
+                  title="우클릭: 전체 법정공휴일 지정">
+                  <div x-text="day.getDate()"></div>
+                  <div class="font-normal" x-text="['일','월','화','수','목','금','토'][day.getDay()]"></div>
+                </th>
+              </template>
+              <th class="border px-2 py-1 text-gray-400 text-xs whitespace-nowrap sticky bg-gray-50 z-20" style="top:27px">입력수</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="nurse in nurses" :key="nurse.id">
+              <tr class="hover:brightness-95">
+                <td class="border px-2 py-1 font-medium sticky left-0 bg-white z-10 whitespace-nowrap text-xs">
+                  <div x-text="nurse.name"></div>
+                  <div class="text-gray-400 font-normal" x-text="nurse.group + '팀'"></div>
+                </td>
+                <template x-for="day in scheduleDays" :key="day">
+                  <td class="border p-0.5"
+                    :class="[day.getDay()===6 ? 'border-r-2 border-r-gray-500 bg-blue-50' : (day.getDay()===0 ? 'bg-red-50' : ''),
+                             isCycleStart(day) && day.getDate()!==1 ? 'border-l-2 border-l-indigo-300' : '']">
+                    <template x-if="getPrevShift(nurse.id, day)">
+                      <span :class="`shift-${getPrevShift(nurse.id, day)} schedule-cell block`"
+                        x-text="getPrevShift(nurse.id, day)"
+                        @click="openPrevEdit(nurse, day)">
+                      </span>
+                    </template>
+                    <template x-if="!getPrevShift(nurse.id, day)">
+                      <span class="schedule-cell block text-gray-200 hover:bg-gray-100"
+                        @click="openPrevEdit(nurse, day)">+</span>
+                    </template>
+                  </td>
+                </template>
+                <td class="border px-2 py-1 text-center text-gray-500"
+                  x-text="countNursePrev(nurse.id)">
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <p x-show="nurses.length===0" class="text-center text-gray-400 py-12 text-sm">
+        설정 탭에서 간호사를 먼저 등록해주세요.
+      </p>
+
+      <!-- 하단 안내 -->
+      <div class="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-700 space-y-1">
+        <div>✅ <strong>사전입력 팁</strong></div>
+        <div>· V(연차), 생(생리휴가), 법(법정공휴일), 공(보수교육·예비군 등 공적 업무), 병(병가) 등 확정된 항목을 먼저 입력하세요.</div>
+        <div>· 공(공적업무)이 입력된 날 전날에는 야간(N/NC)이 자동으로 회피됩니다.</div>
+        <div>· 특정 날짜에 특정 근무(D/E/N)를 원하면 미리 고정할 수 있습니다.</div>
+        <div>· 사전입력이 많을수록 스케줄 생성이 빠르고 정확해집니다.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       탭 3: 스케줄
+  ══════════════════════════════════════════════════════ -->
+  <div x-show="activeTab==='schedule'" x-cloak>
+    <div class="bg-white rounded-xl shadow p-4">
+      <div class="flex flex-wrap items-center gap-3 mb-4">
+        <span class="font-semibold text-gray-700">📅 근무표</span>
+        <!-- 년월 선택기 -->
+        <div class="flex items-center gap-1 bg-gray-100 rounded-lg px-2 py-1">
+          <button @click="prevMonth()" class="w-6 h-6 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600 font-bold">‹</button>
+          <input type="number" x-model.number="year" min="2020" max="2099"
+            class="w-14 text-center text-sm font-semibold bg-transparent border-none outline-none" />
+          <span class="text-sm text-gray-500">년</span>
+          <input type="number" x-model.number="month" min="1" max="12"
+            class="w-8 text-center text-sm font-semibold bg-transparent border-none outline-none" />
+          <span class="text-sm text-gray-500">월</span>
+          <button @click="nextMonth()" class="w-6 h-6 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600 font-bold">›</button>
+        </div>
+        <button @click="generate()"
+          :disabled="generating"
+          class="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+          <svg x-show="generating" class="w-4 h-4 loading-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          <span x-text="generating ? '생성 중...' : '스케줄 생성'"></span>
+        </button>
+        <button @click="saveSchedule()" x-show="schedule && Object.keys(schedule).length > 0"
+          class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm">
+          저장
+        </button>
+        <button @click="activeTab='saved'"
+          class="border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">
+          불러오기
+        </button>
+      </div>
+
+      <!-- 메시지 -->
+      <div x-show="statusMessage" x-cloak
+        :class="statusOk ? 'bg-green-50 text-green-800 border-green-200' : 'bg-red-50 text-red-800 border-red-200'"
+        class="border rounded-lg px-4 py-2 mb-4 text-sm" x-text="statusMessage">
+      </div>
+
+      <!-- 스케줄 그리드 -->
+      <div x-show="schedule && Object.keys(schedule).length > 0" class="overflow-x-auto">
+        <table class="text-xs border-collapse" style="min-width:700px">
+          <thead>
+            <tr class="bg-gray-50">
+              <th class="border px-2 py-1 sticky left-0 bg-gray-50 z-10">이름</th>
+              <template x-for="day in scheduleDays" :key="day">
+                <th class="border px-1 py-1 text-center"
+                  :class="getDayClass(day)"
+                  style="min-width:2rem"
+                  x-text="day.getDate()"></th>
+              </template>
+              <th class="border px-2 py-1">D</th>
+              <th class="border px-2 py-1">E</th>
+              <th class="border px-2 py-1">N</th>
+              <th class="border px-2 py-1">휴</th>
+            </tr>
+            <tr class="bg-gray-50 text-gray-500">
+              <th class="border px-2 py-0.5 sticky left-0 bg-gray-50"></th>
+              <template x-for="day in scheduleDays" :key="day">
+                <th class="border py-0.5 text-center text-gray-400"
+                  x-text="['일','월','화','수','목','금','토'][day.getDay()]"></th>
+              </template>
+              <th colspan="4"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="nurse in nurses" :key="nurse.id">
+              <tr class="hover:bg-blue-50">
+                <td class="border px-2 py-1 font-medium sticky left-0 bg-white z-10 whitespace-nowrap"
+                  x-text="nurse.name"></td>
+                <template x-for="day in scheduleDays" :key="day">
+                  <td class="border p-0.5 text-center">
+                    <span :class="`shift-${getShift(nurse.id, day)} schedule-cell`"
+                      x-text="getShift(nurse.id, day)"
+                      @click="openShiftEdit(nurse, day)">
+                    </span>
+                  </td>
+                </template>
+                <!-- 통계 -->
+                <td class="border px-2 py-1 text-center" x-text="countShifts(nurse.id, ['DC','D'])"></td>
+                <td class="border px-2 py-1 text-center" x-text="countShifts(nurse.id, ['EC','E'])"></td>
+                <td class="border px-2 py-1 text-center" x-text="countShifts(nurse.id, ['NC','N'])"></td>
+                <td class="border px-2 py-1 text-center" x-text="countShifts(nurse.id, ['OF','주'])"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <p x-show="!schedule || Object.keys(schedule).length === 0" class="text-center text-gray-400 py-12">
+        스케줄 생성 버튼을 눌러 근무표를 만들어주세요.
+      </p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       탭 3: 저장된 스케줄
+  ══════════════════════════════════════════════════════ -->
+  <div x-show="activeTab==='saved'" x-cloak>
+    <div class="bg-white rounded-xl shadow p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold text-gray-700">💾 저장된 스케줄</h2>
+        <button @click="loadSavedList()" class="text-blue-600 text-sm hover:underline">새로고침</button>
+      </div>
+      <div class="space-y-2">
+        <template x-for="item in savedSchedules" :key="item.id">
+          <div class="border rounded-lg p-3 flex items-center justify-between">
+            <div>
+              <span class="font-medium" x-text="item.name || `${item.year}년 ${item.month}월`"></span>
+              <span class="ml-2 text-xs text-gray-400" x-text="item.created_at"></span>
+            </div>
+            <div class="flex gap-2">
+              <button @click="loadSaved(item.id)"
+                class="bg-blue-600 text-white text-xs px-3 py-1 rounded">불러오기</button>
+              <button @click="deleteSaved(item.id)"
+                class="text-red-500 text-xs hover:underline">삭제</button>
+            </div>
+          </div>
+        </template>
+        <p x-show="savedSchedules.length===0" class="text-center text-gray-400 py-8">저장된 스케줄이 없습니다.</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ══════════════════════════════════════════════════════════
+     간호사 추가/수정 모달
+══════════════════════════════════════════════════════════ -->
+<div x-show="nurseModal.open" x-cloak
+  class="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40"
+  @click.self="nurseModal.open=false">
+  <div class="bg-white w-full max-w-lg rounded-t-2xl md:rounded-2xl shadow-xl p-5 max-h-[90vh] overflow-y-auto">
+    <h3 class="font-bold text-lg mb-4" x-text="nurseModal.isNew ? '간호사 추가' : '간호사 수정'"></h3>
+
+    <div class="space-y-3">
+      <div class="flex gap-3">
+        <div class="flex-1">
+          <label class="text-sm text-gray-600">이름 *</label>
+          <input x-model="nurseModal.data.name" class="w-full border rounded px-3 py-2 mt-1" placeholder="홍길동" />
+        </div>
+        <div class="flex-1">
+          <label class="text-sm text-gray-600">그룹</label>
+          <input x-model="nurseModal.data.group" class="w-full border rounded px-3 py-2 mt-1" placeholder="A팀" />
+        </div>
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-600">성별</label>
+        <div class="flex gap-3 mt-1">
+          <label class="flex items-center gap-1">
+            <input type="radio" x-model="nurseModal.data.gender" value="female" /> 여성
+          </label>
+          <label class="flex items-center gap-1">
+            <input type="radio" x-model="nurseModal.data.gender" value="male" /> 남성
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-600">가능 근무 (복수 선택)</label>
+        <div class="flex flex-wrap gap-2 mt-1">
+          <template x-for="s in ['DC','D','D1','EC','E','중','NC','N']" :key="s">
+            <label class="flex items-center gap-1 text-sm">
+              <input type="checkbox"
+                :checked="nurseModal.data.capable_shifts.includes(s)"
+                @change="toggleShift(s)" />
+              <span :class="`shift-${s}`" class="px-2 py-0.5 rounded text-xs font-bold" x-text="s"></span>
+            </label>
+          </template>
+        </div>
+      </div>
+
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" x-model="nurseModal.data.is_night_shift" />
+        야간전담 간호사
+      </label>
+
+      <div class="p-2 bg-blue-50 rounded text-xs text-blue-700">
+        💡 주휴 요일은 <strong>사전입력 탭</strong>에서 1주기 날짜에 '주'를 입력하면 나머지 주기가 자동 계산됩니다.
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-600">시니어리티 (낮을수록 선임)</label>
+        <input type="number" x-model.number="nurseModal.data.seniority"
+          min="0" max="100" class="w-24 border rounded px-3 py-2 mt-1" />
+      </div>
+    </div>
+
+    <div class="flex gap-3 mt-5">
+      <button @click="nurseModal.open=false"
+        class="flex-1 border border-gray-300 py-2 rounded-lg text-sm">취소</button>
+      <button @click="saveNurse()"
+        class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     셀 편집 모달
+══════════════════════════════════════════════════════════ -->
+<div x-show="shiftEdit.open" x-cloak
+  class="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40"
+  @click.self="shiftEdit.open=false">
+  <div class="bg-white w-full max-w-xs rounded-t-2xl md:rounded-2xl shadow-xl p-5">
+    <h3 class="font-bold mb-1 text-sm">
+      <span x-text="shiftEdit.nurse?.name"></span>
+      <span class="font-normal text-gray-500 ml-1" x-text="shiftEdit.dateLabel"></span>
+      <span x-show="shiftEdit.mode==='prev'" class="ml-1 text-xs text-blue-500">[사전입력]</span>
+    </h3>
+    <div class="flex flex-wrap gap-2 mb-3">
+      <template x-for="s in (shiftEdit.mode==='prev' ? prevShifts : allShifts)" :key="s">
+        <button @click="applyShiftEdit(s)"
+          :class="`shift-${s}`"
+          class="px-3 py-1.5 rounded text-xs font-bold border hover:opacity-80"
+          x-text="s"></button>
+      </template>
+    </div>
+    <!-- 사전입력 모드: 해당 셀 초기화 버튼 -->
+    <button x-show="shiftEdit.mode==='prev' && getPrevShift(shiftEdit.nurse?.id, shiftEdit.day)"
+      @click="applyShiftEdit('__CLEAR__')"
+      class="w-full mb-2 border border-red-300 text-red-500 hover:bg-red-50 py-1.5 rounded-lg text-sm">
+      이 날 초기화 (자동배정으로)
+    </button>
+    <button @click="shiftEdit.open=false"
+      class="w-full border border-gray-300 py-2 rounded-lg text-sm">취소</button>
+  </div>
+</div>
+
+<script>
+function app() {
+  return {
+    // ── 상태 ──────────────────────────────────────────────────────────────
+    tabs: [
+      {id:'settings', label:'⚙️ 설정'},
+      {id:'preinput', label:'📝 사전입력'},
+      {id:'schedule', label:'📅 스케줄'},
+      {id:'saved',    label:'💾 저장'},
+    ],
+    activeTab: 'settings',
+
+    year:  new Date().getFullYear(),
+    month: new Date().getMonth() + 1,
+
+    nurses: [],
+    requirements: {
+      mon:{DC:1,D:2,EC:1,E:2,NC:1,N:2},
+      tue:{DC:1,D:2,EC:1,E:2,NC:1,N:2},
+      wed:{DC:1,D:2,EC:1,E:2,NC:1,N:2},
+      thu:{DC:1,D:2,EC:1,E:2,NC:1,N:2},
+      fri:{DC:1,D:2,EC:1,E:2,NC:1,N:2},
+      sat:{DC:1,D:1,EC:1,E:1,NC:1,N:1},
+      sun:{DC:1,D:1,EC:1,E:1,NC:1,N:1},
+    },
+    rules: {
+      weeklyOff: true,
+      noNOD: true,
+      avoidDN: true,
+      maxConsecutiveWork: true,
+      maxConsecutiveWorkDays: 6,
+      maxConsecutiveNight: true,
+      maxConsecutiveNightDays: 3,
+      patternOptimization: true,
+      autoMenstrualLeave: true,
+      maxVPerMonth: 1,
+    },
+
+    schedule: {},
+    extendedSchedule: {},
+    generating: false,
+    statusMessage: '',
+    statusOk: true,
+    savedSchedules: [],
+
+    weekdayLabels: {mon:'월',tue:'화',wed:'수',thu:'목',fri:'금',sat:'토',sun:'일'},
+    workShifts: ['D','E','N'],   // 요구사항 테이블 표시용 (D1/중은 개별 배정)
+    allWorkShifts: ['DC','D','D1','EC','E','중','NC','N'],
+    allShifts:     ['DC','D','D1','EC','E','중','NC','N','OF','주','V','생','특','공','법','병'],
+    prevShifts:    ['D','D1','E','중','N','OF','주','V','생','특','공','법','병'],
+
+    prevSchedule: {},   // {nurse_id: {'YYYY-MM-DD': shift}} 사전 고정 근무
+
+    nurseModal: {open:false, isNew:true, data:{}},
+    shiftEdit:  {open:false, nurse:null, day:null, dateLabel:'', mode:'schedule'},
+    // mode: 'schedule' = 결과 근무표 편집 / 'prev' = 사전입력 편집
+
+    // ── 초기화 ──────────────────────────────────────────────────────────────
+    async init() {
+      await Promise.all([
+        this.loadNurses(),
+        this.loadRules(),
+        this.loadRequirements(),
+        this.loadSavedList(),
+      ]);
+    },
+
+    // ── API 헬퍼 ────────────────────────────────────────────────────────────
+    async api(method, url, body) {
+      const opts = {method, headers:{'Content-Type':'application/json'}};
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const res = await fetch(url, opts);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+
+    // ── 간호사 ──────────────────────────────────────────────────────────────
+    async loadNurses() {
+      this.nurses = await this.api('GET', '/api/nurses');
+    },
+    openNurseModal(nurse) {
+      this.nurseModal.isNew = !nurse;
+      this.nurseModal.data = nurse ? JSON.parse(JSON.stringify(nurse)) : {
+        id: crypto.randomUUID(),
+        name: '',
+        group: '',
+        gender: 'female',
+        capable_shifts: ['DC','D','EC','E','NC','N'],
+        is_night_shift: false,
+        seniority: this.nurses.length,
+        wishes: {},
+        juhu_day: null,
+        juhu_auto_rotate: true,
+      };
+      this.nurseModal.open = true;
+    },
+    toggleShift(s) {
+      const arr = this.nurseModal.data.capable_shifts;
+      const idx = arr.indexOf(s);
+      if (idx >= 0) arr.splice(idx, 1); else arr.push(s);
+    },
+    async saveNurse() {
+      if (!this.nurseModal.data.name.trim()) { alert('이름을 입력하세요.'); return; }
+      await this.api('POST', '/api/nurses', this.nurseModal.data);
+      await this.loadNurses();
+      this.nurseModal.open = false;
+    },
+    async removeNurse(id) {
+      if (!confirm('삭제하시겠습니까?')) return;
+      await this.api('DELETE', `/api/nurses/${id}`);
+      await this.loadNurses();
+    },
+
+    // ── 규칙 ────────────────────────────────────────────────────────────────
+    async loadRules() {
+      this.rules = await this.api('GET', '/api/rules');
+    },
+    async saveRules() {
+      await this.api('POST', '/api/rules', this.rules);
+      alert('규칙이 저장되었습니다.');
+    },
+
+    // ── 요구사항 ────────────────────────────────────────────────────────────
+    async loadRequirements() {
+      this.requirements = await this.api('GET', '/api/requirements');
+    },
+    async saveRequirements() {
+      await this.api('POST', '/api/requirements', this.requirements);
+      alert('인원 설정이 저장되었습니다.');
+    },
+
+    // ── 스케줄 생성 ──────────────────────────────────────────────────────────
+    async generate() {
+      if (this.nurses.length === 0) { alert('간호사를 먼저 등록해주세요.'); return; }
+      this.generating = true;
+      this.statusMessage = '';
+      try {
+        const result = await this.api('POST', '/api/generate', {
+          year: this.year,
+          month: this.month,
+          nurses: this.nurses,
+          requirements: this.requirements,
+          rules: this.rules,
+          prev_schedule: Object.keys(this.prevSchedule).length ? this.prevSchedule : null,
+        });
+        this.statusOk = result.success;
+        this.statusMessage = result.message;
+        if (result.success) {
+          this.schedule = result.schedule;
+          this.extendedSchedule = result.extended_schedule;
+          this.activeTab = 'schedule';
+          if (result.warning) {
+              this.statusMessage = result.warning + '\n\n' + this.statusMessage;
+              this.statusOk = false;
+          }
+        }
+      } catch(e) {
+        this.statusOk = false;
+        this.statusMessage = '서버 오류: ' + e.message;
+      } finally {
+        this.generating = false;
+      }
+    },
+
+    // ── 스케줄 표시 헬퍼 ────────────────────────────────────────────────────
+    get scheduleDays() {
+      const days = [];
+      const d = new Date(this.year, this.month - 1, 1);
+      while (d.getMonth() === this.month - 1) {
+        days.push(new Date(d));
+        d.setDate(d.getDate() + 1);
+      }
+      return days;
+    },
+    getShift(nurseId, day) {
+      const key = `${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`;
+      return (this.schedule[nurseId] && this.schedule[nurseId][key]) || '-';
+    },
+    getDayClass(day) {
+      const dow = day.getDay();
+      if (dow === 0) return 'text-red-500';
+      if (dow === 6) return 'text-blue-500';
+      return '';
+    },
+
+    // ── 주기 헬퍼 ────────────────────────────────────────────────────────────
+    // 기준일: 2026-03-01 = 1주기 시작. 7일마다 주기 전환, 4주기 후 다시 1주기.
+    _CYCLE_REF: new Date(2026, 2, 1),   // 2026-03-01 (month 0-indexed)
+
+    _daysSinceRef(day) {
+      return Math.round((day - this._CYCLE_REF) / 86400000);
+    },
+    getCycleNum(day) {
+      const d = this._daysSinceRef(day);
+      return Math.floor(((d % 28) + 28) % 28 / 7) + 1;  // 1~4 순환
+    },
+    // Alpine.js getter는 반응형이 아니라 method로 선언
+    getCycleSpans() {
+      const days = this.scheduleDays;
+      if (!days.length) return [];
+      const result = [];
+      let cur = { cycle: this.getCycleNum(days[0]), count: 0, key: days[0].getDate() };
+      for (const d of days) {
+        const c = this.getCycleNum(d);
+        if (c !== cur.cycle) {
+          result.push(cur);
+          cur = { cycle: c, count: 0, key: d.getDate() };
+        }
+        cur.count++;
+      }
+      result.push(cur);
+      return result;
+    },
+    getCycleClass(cycle) {
+      return [
+        'bg-blue-50 text-blue-700',
+        'bg-green-50 text-green-700',
+        'bg-purple-50 text-purple-700',
+        'bg-orange-50 text-orange-700',
+      ][cycle - 1];
+    },
+    isCycleStart(day) {
+      return ((this._daysSinceRef(day) % 7) + 7) % 7 === 0;
+    },
+    countShifts(nurseId, shifts) {
+      if (!this.schedule[nurseId]) return 0;
+      return Object.values(this.schedule[nurseId]).filter(v => shifts.includes(v)).length;
+    },
+
+    // ── 년월 이동 ────────────────────────────────────────────────────────────
+    prevMonth() {
+      if (this.month === 1) { this.month = 12; this.year--; }
+      else this.month--;
+    },
+    nextMonth() {
+      if (this.month === 12) { this.month = 1; this.year++; }
+      else this.month++;
+    },
+
+    // ── 날짜 키 헬퍼 ──────────────────────────────────────────────────────────
+    dayKey(day) {
+      return `${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`;
+    },
+
+    // ── 결과 근무표 셀 편집 ───────────────────────────────────────────────────
+    openShiftEdit(nurse, day) {
+      this.shiftEdit = {open:true, nurse, day, dateLabel:`${day.getMonth()+1}/${day.getDate()}`, mode:'schedule'};
+    },
+
+    // ── 사전입력 셀 편집 ──────────────────────────────────────────────────────
+    openPrevEdit(nurse, day) {
+      this.shiftEdit = {open:true, nurse, day, dateLabel:`${day.getMonth()+1}/${day.getDate()}`, mode:'prev'};
+    },
+    getPrevShift(nurseId, day) {
+      const k = this.dayKey(day);
+      return this.prevSchedule[nurseId]?.[k] || '';
+    },
+    clearPrevSchedule() {
+      if (!confirm('사전입력을 모두 초기화하시겠습니까?')) return;
+      this.prevSchedule = {};
+    },
+    countPrevEntries() {
+      return Object.values(this.prevSchedule).reduce((s,v) => s + Object.keys(v).length, 0);
+    },
+    countNursePrev(nurseId) {
+      return Object.keys(this.prevSchedule[nurseId] || {}).length;
+    },
+    prevInputCount() { /* 버튼 텍스트용 더미 */ },
+
+    // ── 공통 셀 편집 적용 ─────────────────────────────────────────────────────
+    applyShiftEdit(shift) {
+      const nid = this.shiftEdit.nurse.id;
+      const k   = this.dayKey(this.shiftEdit.day);
+      if (this.shiftEdit.mode === 'prev') {
+        if (shift === '__CLEAR__') {
+          if (this.prevSchedule[nid]) delete this.prevSchedule[nid][k];
+          this.shiftEdit.open = false;
+        } else if (shift === '주') {
+          // 주휴 자동배분: 현재 주기 기준으로 나머지 주기 자동 계산
+          this.autoFillJuhu(this.shiftEdit.nurse, this.shiftEdit.day);
+          // autoFillJuhu 내에서 모달 닫음
+        } else {
+          if (!this.prevSchedule[nid]) this.prevSchedule[nid] = {};
+          this.prevSchedule[nid][k] = shift;
+          this.shiftEdit.open = false;
+        }
+      } else {
+        if (!this.schedule[nid]) this.schedule[nid] = {};
+        this.schedule[nid][k] = shift;
+        this.shiftEdit.open = false;
+      }
+    },
+
+    // ── 법정공휴일 일괄 지정 (날짜 헤더 우클릭) ───────────────────────────────
+    markHoliday(day) {
+      const k = this.dayKey(day);
+      const dn = ['일','월','화','수','목','금','토'];
+      const label = `${day.getMonth()+1}/${day.getDate()}(${dn[day.getDay()]})`;
+      if (!confirm(`${label}을(를) 법정공휴일로 지정합니다.\n모든 간호사에게 '법'이 입력됩니다. 계속하시겠습니까?`)) return;
+      for (const nurse of this.nurses) {
+        if (!this.prevSchedule[nurse.id]) this.prevSchedule[nurse.id] = {};
+        this.prevSchedule[nurse.id][k] = '법';
+      }
+    },
+
+    // ── 주휴 자동배분 ─────────────────────────────────────────────────────────
+    // 규칙: 4주기(28일) 블록 안에서는 매주 같은 요일, 블록이 넘어가면 1일 당김
+    // 예) 3월 1주기~4주기: 월요일 → 3월 29일(1주기, 새 블록): 일요일
+    autoFillJuhu(nurse, baseDay) {
+      const nid = nurse.id;
+      const dayNames = ['일','월','화','수','목','금','토'];
+
+      // 기준 week index, period, 요일
+      const baseWi     = Math.floor(this._daysSinceRef(baseDay) / 7);
+      const basePeriod = Math.floor(baseWi / 4);   // 28일 블록 번호
+      const W          = baseDay.getDay();          // 기준 요일 (0=일~6=토)
+
+      // 이번 달의 각 week에 대해 기대 요일 계산
+      const seen = new Set();
+      const toFill = [];
+
+      for (const d of this.scheduleDays) {
+        const wi = Math.floor(this._daysSinceRef(d) / 7);
+        if (seen.has(wi)) continue;
+        seen.add(wi);
+
+        const period    = Math.floor(wi / 4);
+        // 블록이 넘어갈 때마다 1일 당김 (같은 블록 내에서는 동일 요일 유지)
+        const expectedW = ((W - (period - basePeriod)) % 7 + 7) % 7;
+
+        const match = this.scheduleDays.find(day =>
+          Math.floor(this._daysSinceRef(day) / 7) === wi && day.getDay() === expectedW
+        );
+        if (match) toFill.push({ day: match, cycle: (wi % 4) + 1, dow: expectedW });
+      }
+
+      toFill.sort((a, b) => a.day - b.day);
+      const preview = toFill
+        .map(f => `${f.cycle}주기: ${f.day.getDate()}일(${dayNames[f.dow]})`)
+        .join('\n');
+
+      if (!confirm(`${nurse.name}의 주휴를 아래와 같이 입력합니다:\n\n${preview}\n\n이미 입력된 날은 덮어씁니다. 계속하시겠습니까?`)) {
+        this.shiftEdit.open = false;
+        return;
+      }
+
+      if (!this.prevSchedule[nid]) this.prevSchedule[nid] = {};
+      for (const { day } of toFill) {
+        this.prevSchedule[nid][this.dayKey(day)] = '주';
+      }
+      this.shiftEdit.open = false;
+    },
+
+    // ── 저장/불러오기 ────────────────────────────────────────────────────────
+    async saveSchedule() {
+      const name = prompt('저장 이름을 입력하세요 (선택)', `${this.year}년 ${this.month}월`);
+      if (name === null) return;
+      await this.api('POST', '/api/schedules', {
+        year: this.year,
+        month: this.month,
+        nurses: this.nurses,
+        requirements: this.requirements,
+        rules: this.rules,
+        schedule: this.schedule,
+        name: name || null,
+      });
+      await this.loadSavedList();
+      alert('저장되었습니다.');
+    },
+    async loadSavedList() {
+      this.savedSchedules = await this.api('GET', '/api/schedules');
+    },
+    async loadSaved(id) {
+      const data = await this.api('GET', `/api/schedules/${id}`);
+      this.year  = data.data.year || data.year;
+      this.month = data.data.month || data.month;
+      this.nurses = data.data.nurses || [];
+      this.requirements = data.data.requirements || this.requirements;
+      this.rules = data.data.rules || this.rules;
+      this.schedule = data.data.schedule || {};
+      this.activeTab = 'schedule';
+    },
+    async deleteSaved(id) {
+      if (!confirm('삭제하시겠습니까?')) return;
+      await this.api('DELETE', `/api/schedules/${id}`);
+      await this.loadSavedList();
+    },
+  };
+}
+</script>
+</body>
+</html>
