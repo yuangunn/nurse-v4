@@ -55,6 +55,15 @@ def init_db():
                 data TEXT NOT NULL,
                 created_at TEXT DEFAULT (datetime('now','localtime'))
             );
+
+            CREATE TABLE IF NOT EXISTS prev_schedules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                data TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now','localtime'))
+            );
         """)
         # 기존 DB 호환: juhu 컬럼 마이그레이션
         try:
@@ -243,6 +252,40 @@ def load_schedule(schedule_id: int) -> Optional[Dict]:
 def delete_schedule(schedule_id: int) -> None:
     with get_conn() as conn:
         conn.execute("DELETE FROM schedules WHERE id=?", (schedule_id,))
+
+
+# ── PrevSchedule CRUD ────────────────────────────────────────────────────────
+
+def list_prev_schedules() -> List[Dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, name, year, month, created_at FROM prev_schedules ORDER BY created_at DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def save_prev_schedule(year: int, month: int, data: Dict, name: Optional[str] = None) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO prev_schedules (name, year, month, data) VALUES (?,?,?,?)",
+            (name, year, month, json.dumps(data))
+        )
+        return cur.lastrowid
+
+
+def load_prev_schedule(prev_id: int) -> Optional[Dict]:
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM prev_schedules WHERE id=?", (prev_id,)).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        result["data"] = json.loads(result["data"])
+        return result
+
+
+def delete_prev_schedule(prev_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM prev_schedules WHERE id=?", (prev_id,))
 
 
 # ── 내부 헬퍼 ───────────────────────────────────────────────────────────────

@@ -202,3 +202,35 @@ def load_schedule(schedule_id: int):
 def delete_schedule(schedule_id: int):
     db.delete_schedule(schedule_id)
     return {"ok": True}
+
+
+# ── 사전입력 저장/관리 API ─────────────────────────────────────────────────────
+
+@app.get("/api/prev_schedules")
+def list_prev_schedules():
+    return db.list_prev_schedules()
+
+
+@app.post("/api/prev_schedules")
+def save_prev_schedule(body: dict):
+    pid = db.save_prev_schedule(
+        year=body["year"],
+        month=body["month"],
+        data=body["data"],
+        name=body.get("name"),
+    )
+    return {"id": pid}
+
+
+@app.get("/api/prev_schedules/{prev_id}")
+def load_prev_schedule(prev_id: int):
+    result = db.load_prev_schedule(prev_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="사전입력을 찾을 수 없습니다.")
+    return result
+
+
+@app.delete("/api/prev_schedules/{prev_id}")
+def delete_prev_schedule(prev_id: int):
+    db.delete_prev_schedule(prev_id)
+    return {"ok": True}

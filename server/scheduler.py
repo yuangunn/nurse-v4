@@ -32,7 +32,7 @@ WEEKDAY_KEYS   = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 W_DN_PENALTY      = 30   # D→N 연속 기피 (개인 선호 soft, 간격은 충분)
 W_N_GONG_PENALTY  = 40   # N/NC → 공 전환 페널티 (공 전날 야간 배정 회피)
 W_V_PENALTY       = 500  # V(연차) 사용 페널티
-W_MENSTRUAL_PEN   = 200  # 생리휴가 사용 페널티
+W_MENSTRUAL_REW   = 80   # 생리휴가 배정 보상 (여성 간호사 1회 권장)
 W_FORWARD_REWARD  = 20   # 순방향 전환 보상 (D→E, E→N)
 W_SAME_SHIFT_REW  = 15   # 연속 동일근무 보상
 W_REST_PAIR_REW   = 30   # 연속 휴일 보상
@@ -123,6 +123,7 @@ class NurseScheduler:
         self._c_shift_eligibility(prob, x)
         self._c_daily_requirements(prob, x)
         self._c_charge_requirements(prob, x)
+        self._c_charge_seniority(prob, x)              # 선임이 charge 맡기
         self._c_forbidden_transitions(prob, x)         # E→D, N→E, N→D 항상 금지
         if self.rules.noNOD:
             self._c_nod_pattern(prob, x)               # N→OF→D 금지
@@ -247,6 +248,38 @@ class NurseScheduler:
                         f"charge_{d}_{charge}"
                     )
 
+    def _c_charge_seniority(self, prob, x):
+        """
+        Charge 간호사는 해당 시간대 근무자 중 가장 선임이어야 함.
+        seniority 숫자가 낮을수록 선임.
+        후임(seniority 높음) i 가 Charge 일 때, 선임(seniority 낮음) j 가
+        같은 시간대 일반 근무 배정되는 경우를 금지:
+          x[i][d][charge] + x[j][d][regular] <= 1
+        """
+        # (charge_shift, regular_shift) 시간대 쌍
+        charge_regular_pairs = [
+            ("DC", "D"),
+            ("EC", "E"),
+            ("NC", "N"),
+        ]
+        for d, dt in enumerate(self.all_dates):
+            if dt.month != self.month:
+                continue
+            for i_nurse in self.nurses:
+                for j_nurse in self.nurses:
+                    if i_nurse["id"] == j_nurse["id"]:
+                        continue
+                    # i 가 더 후임 (seniority 숫자 큼), j 가 더 선임 (seniority 숫자 작음)
+                    if i_nurse.get("seniority", 0) <= j_nurse.get("seniority", 0):
+                        continue
+                    nid_i = i_nurse["id"]
+                    nid_j = j_nurse["id"]
+                    for charge_s, regular_s in charge_regular_pairs:
+                        prob += (
+                            x[nid_i][d][charge_s] + x[nid_j][d][regular_s] <= 1,
+                            f"seniority_{nid_i}_{nid_j}_{d}_{charge_s}"
+                        )
+
     def _c_forbidden_transitions(self, prob, x):
         """
         물리적으로 불가능한 근무 전환 - 항상 금지 (토글 없음)
@@ -366,10 +399,11 @@ class NurseScheduler:
         for nurse in self.nurses:
             nid = nurse["id"]
 
-            # ── V / 생리휴가 페널티 (당월만) ─────────────────────────────────
+            # ── V 페널티 / 생리휴가 보상 (당월만) ──────────────────────────────
             for d in month_days:
                 terms.append(-W_V_PENALTY * x[nid][d]["V"])
-                terms.append(-W_MENSTRUAL_PEN * x[nid][d]["생"])
+                if nurse.get("gender") == "female":
+                    terms.append(+W_MENSTRUAL_REW * x[nid][d]["생"])
 
             # ── 소프트 전환 보조변수 (당월 연속일 쌍만) ──────────────────────
             for d, d1 in month_day_pairs:
@@ -594,6 +628,49 @@ class NurseScheduler:
             lines.append("  [원인] 주휴/OF 배정과 인원 요구사항이 충돌합니다.")
             lines.append(f"    현재 간호사: {N}명, 주당 평균 필요 근무: {total_work/7:.1f}명/일")
             lines.append(f"    주 2회 휴무 시 실제 가용: {N * 5/7:.1f}명/일")
+            # ── 주차별 상세 분석 ──────────────────────────────────────────────
+            lines.append("  [주차별 분석]")
+            DAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
+            for wi, (ws, we) in enumerate(self.weeks):
+                week_slots_needed = 0
+                day_details = []
+                for d in range(ws, we + 1):
+                    dt = self.all_dates[d]
+                    if dt.month != self.month:
+                        continue
+                    wk = WEEKDAY_KEYS[dt.weekday()]
+                    day_req = req_dict.get(wk, {})
+                    needed = sum(day_req.get(pp, 0) for pp in ["D", "E", "N"])
+                    # 해당 날 고정 휴무/휴가 인원
+                    fixed_off = sum(
+                        1 for nurse in self.nurses
+                        if self.prev.get(nurse["id"], {}).get(dt.strftime("%Y-%m-%d"), "")
+                        in (REST_SHIFTS + LEAVE_SHIFTS)
+                    )
+                    week_slots_needed += needed
+                    day_details.append((dt, needed, fixed_off))
+
+                month_days_in_week = len(day_details)
+                if month_days_in_week == 0:
+                    continue
+                # 주 2회 휴무 → 주당 총 가용 근무슬롯
+                week_avail = N * month_days_in_week - N * 2
+                tight = " ★빡빡" if week_slots_needed > week_avail else ""
+                start_dt = self.all_dates[ws]
+                end_dt = self.all_dates[min(we, len(self.all_dates)-1)]
+                lines.append(
+                    f"    {wi+1}주차 ({start_dt.strftime('%m/%d')}~{end_dt.strftime('%m/%d')}): "
+                    f"필요 {week_slots_needed}슬롯 / 가용 {week_avail}슬롯{tight}"
+                )
+                # 해당 주에서 가장 빡빡한 날 상위 3개 표시
+                day_details_sorted = sorted(day_details, key=lambda x: x[1] - (N - x[2]), reverse=True)
+                for dt, needed, fixed_off in day_details_sorted[:3]:
+                    avail_day = N - fixed_off
+                    flag = " ←부족" if needed > avail_day else ""
+                    lines.append(
+                        f"      {dt.strftime('%m/%d')}({DAY_KR[dt.weekday()]}): "
+                        f"필요 {needed}명 / 가용 {avail_day}명{flag}"
+                    )
             lines.append("    해결: 간호사를 늘리거나 요일별 필요 인원을 줄이세요.")
             return "\n".join(lines)
 
