@@ -15,18 +15,27 @@ from .models import GenerateRequest, Nurse, Requirements, Rules
 
 # ── 상수 ────────────────────────────────────────────────────────────────────
 
-DAY_SHIFTS     = ["DC", "D"]
-DAY1_SHIFTS    = ["D1"]              # 상근/교육번  08:30~17:30
-EVENING_SHIFTS = ["EC", "E"]
-MIDDLE_SHIFTS  = ["중"]              # 중간번       11:00~19:00
-NIGHT_SHIFTS   = ["NC", "N"]
-CHARGE_SHIFTS  = ["DC", "EC", "NC"]
-WORK_SHIFTS    = DAY_SHIFTS + DAY1_SHIFTS + EVENING_SHIFTS + MIDDLE_SHIFTS + NIGHT_SHIFTS
-REST_SHIFTS    = ["OF", "주"]
-LEAVE_SHIFTS   = ["V", "생", "특", "공", "법", "병"]
-ALL_SHIFTS     = WORK_SHIFTS + REST_SHIFTS + LEAVE_SHIFTS
+WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
-WEEKDAY_KEYS   = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+# 기본 근무 16종 (DB 없이 fallback 시 사용)
+_DEFAULT_SHIFTS = [
+    {"code": "DC", "period": "day",     "is_charge": True},
+    {"code": "D",  "period": "day",     "is_charge": False},
+    {"code": "D1", "period": "day1",    "is_charge": False},
+    {"code": "EC", "period": "evening", "is_charge": True},
+    {"code": "E",  "period": "evening", "is_charge": False},
+    {"code": "중", "period": "middle",  "is_charge": False},
+    {"code": "NC", "period": "night",   "is_charge": True},
+    {"code": "N",  "period": "night",   "is_charge": False},
+    {"code": "OF", "period": "rest",    "is_charge": False},
+    {"code": "주", "period": "rest",    "is_charge": False},
+    {"code": "V",  "period": "leave",   "is_charge": False},
+    {"code": "생", "period": "leave",   "is_charge": False},
+    {"code": "특", "period": "leave",   "is_charge": False},
+    {"code": "공", "period": "leave",   "is_charge": False},
+    {"code": "법", "period": "leave",   "is_charge": False},
+    {"code": "병", "period": "leave",   "is_charge": False},
+]
 
 # 목적함수 가중치
 W_DN_PENALTY      = 30   # D→N 연속 기피 (개인 선호 soft, 간격은 충분)
@@ -47,6 +56,25 @@ class NurseScheduler:
         self.req   = request.requirements
         self.rules = request.rules
         self.prev  = request.prev_schedule or {}
+
+        # ── 근무 정의 → 카테고리 리스트 동적 구성 ─────────────────────────────
+        shifts = [s.model_dump() for s in request.shifts] if request.shifts else []
+        if not shifts:
+            # fallback: 기본 16종 (DB 없이 임포트 시)
+            shifts = _DEFAULT_SHIFTS
+
+        self.DAY_SHIFTS     = [s["code"] for s in shifts if s["period"] == "day"]
+        self.DAY1_SHIFTS    = [s["code"] for s in shifts if s["period"] == "day1"]
+        self.EVENING_SHIFTS = [s["code"] for s in shifts if s["period"] == "evening"]
+        self.MIDDLE_SHIFTS  = [s["code"] for s in shifts if s["period"] == "middle"]
+        self.NIGHT_SHIFTS   = [s["code"] for s in shifts if s["period"] == "night"]
+        self.CHARGE_SHIFTS  = [s["code"] for s in shifts if s["is_charge"]]
+        self.REST_SHIFTS    = [s["code"] for s in shifts if s["period"] == "rest"]
+        self.LEAVE_SHIFTS   = [s["code"] for s in shifts if s["period"] == "leave"]
+        self.WORK_SHIFTS    = (self.DAY_SHIFTS + self.DAY1_SHIFTS +
+                               self.EVENING_SHIFTS + self.MIDDLE_SHIFTS + self.NIGHT_SHIFTS)
+        self.ALL_SHIFTS     = self.WORK_SHIFTS + self.REST_SHIFTS + self.LEAVE_SHIFTS
+        self._shifts        = shifts   # 원본 리스트 (charge_seniority 등에서 사용)
 
         self._build_date_range()
 
@@ -106,7 +134,7 @@ class NurseScheduler:
                 dt_str = dt.strftime("%Y-%m-%d")
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
-                for s in ALL_SHIFTS:
+                for s in self.ALL_SHIFTS:
                     if pre:
                         x[nid][d][s] = pulp.LpVariable(
                             f"x_{nid}_{d}_{s}",
@@ -188,15 +216,15 @@ class NurseScheduler:
         for nurse in self.nurses:
             nid = nurse["id"]
             for d in range(self.T):
-                prob += pulp.lpSum(x[nid][d][s] for s in ALL_SHIFTS) == 1, f"one_{nid}_{d}"
+                prob += pulp.lpSum(x[nid][d][s] for s in self.ALL_SHIFTS) == 1, f"one_{nid}_{d}"
 
     def _c_shift_eligibility(self, prob, x):
         """간호사별 가능한 근무만 배정"""
         for nurse in self.nurses:
             nid = nurse["id"]
-            capable = set(nurse.get("capable_shifts", WORK_SHIFTS))
+            capable = set(nurse.get("capable_shifts", self.WORK_SHIFTS))
             # 불가능한 근무는 0으로 고정
-            impossible = [s for s in WORK_SHIFTS if s not in capable]
+            impossible = [s for s in self.WORK_SHIFTS if s not in capable]
             for d in range(self.T):
                 for s in impossible:
                     prob += x[nid][d][s] == 0, f"elig_{nid}_{d}_{s}"
@@ -211,9 +239,9 @@ class NurseScheduler:
         """
         req_dict = self.req.model_dump()
         period_map = {
-            "D": DAY_SHIFTS,      # DC + D
-            "E": EVENING_SHIFTS,  # EC + E
-            "N": NIGHT_SHIFTS,    # NC + N
+            "D": self.DAY_SHIFTS + self.DAY1_SHIFTS,
+            "E": self.EVENING_SHIFTS + self.MIDDLE_SHIFTS,
+            "N": self.NIGHT_SHIFTS,
         }
         for d, dt in enumerate(self.all_dates):
             if dt.month != self.month:
@@ -232,20 +260,23 @@ class NurseScheduler:
     def _c_charge_requirements(self, prob, x):
         """
         Charge 근무 정확히 1명 배정.
-        D 인원이 필요한 날이면 DC도 정확히 1명 자동 배정.
+        D/E/N 인원이 필요한 날이면 해당 period의 charge shift도 정확히 1명 자동 배정.
         """
         req_dict = self.req.model_dump()
-        charge_map = {"D": "DC", "E": "EC", "N": "NC"}
+        # period → 요구사항 키 매핑 (day/day1 모두 "D" 요구사항에 포함)
+        period_to_req = {"day": "D", "evening": "E", "night": "N"}
+        charge_shifts = [s for s in self._shifts if s["is_charge"]]
         for d, dt in enumerate(self.all_dates):
             if dt.month != self.month:
                 continue
             weekday_key = WEEKDAY_KEYS[dt.weekday()]
             day_req = req_dict.get(weekday_key, {})
-            for period, charge in charge_map.items():
-                if day_req.get(period, 0) > 0:
+            for s in charge_shifts:
+                req_key = period_to_req.get(s["period"])
+                if req_key and day_req.get(req_key, 0) > 0:
                     prob += (
-                        pulp.lpSum(x[n["id"]][d][charge] for n in self.nurses) == 1,
-                        f"charge_{d}_{charge}"
+                        pulp.lpSum(x[n["id"]][d][s["code"]] for n in self.nurses) == 1,
+                        f"charge_{d}_{s['code']}"
                     )
 
     def _c_charge_seniority(self, prob, x):
@@ -256,12 +287,23 @@ class NurseScheduler:
         같은 시간대 일반 근무 배정되는 경우를 금지:
           x[i][d][charge] + x[j][d][regular] <= 1
         """
-        # (charge_shift, regular_shift) 시간대 쌍
-        charge_regular_pairs = [
-            ("DC", "D"),
-            ("EC", "E"),
-            ("NC", "N"),
-        ]
+        # period → 같은 시간대로 보는 period 집합
+        # day charge는 day/day1 일반 근무자에 대해 제약
+        period_peers = {
+            "day":     ("day", "day1"),
+            "evening": ("evening", "middle"),
+            "night":   ("night",),
+        }
+        # charge shift → 같은 시간대 일반 근무 코드 목록
+        charge_regular_map = {}
+        for s in self._shifts:
+            if not s["is_charge"]:
+                continue
+            peers = period_peers.get(s["period"], (s["period"],))
+            regulars = [r["code"] for r in self._shifts
+                        if r["period"] in peers and not r["is_charge"]]
+            charge_regular_map[s["code"]] = regulars
+
         for d, dt in enumerate(self.all_dates):
             if dt.month != self.month:
                 continue
@@ -269,16 +311,16 @@ class NurseScheduler:
                 for j_nurse in self.nurses:
                     if i_nurse["id"] == j_nurse["id"]:
                         continue
-                    # i 가 더 후임 (seniority 숫자 큼), j 가 더 선임 (seniority 숫자 작음)
                     if i_nurse.get("seniority", 0) <= j_nurse.get("seniority", 0):
                         continue
                     nid_i = i_nurse["id"]
                     nid_j = j_nurse["id"]
-                    for charge_s, regular_s in charge_regular_pairs:
-                        prob += (
-                            x[nid_i][d][charge_s] + x[nid_j][d][regular_s] <= 1,
-                            f"seniority_{nid_i}_{nid_j}_{d}_{charge_s}"
-                        )
+                    for charge_s, regulars in charge_regular_map.items():
+                        for regular_s in regulars:
+                            prob += (
+                                x[nid_i][d][charge_s] + x[nid_j][d][regular_s] <= 1,
+                                f"seniority_{nid_i}_{nid_j}_{d}_{charge_s}"
+                            )
 
     def _c_forbidden_transitions(self, prob, x):
         """
@@ -287,12 +329,12 @@ class NurseScheduler:
         a + b <= 1  (두 변수 동시에 1이 될 수 없음)
         """
         forbidden = [
-            (EVENING_SHIFTS, DAY_SHIFTS),    # E→D  (E 23:00→D 07:00 = 8h)
-            (EVENING_SHIFTS, DAY1_SHIFTS),   # E→D1 (E 23:00→D1 08:30 = 9.5h)
-            (NIGHT_SHIFTS,  EVENING_SHIFTS), # N→E
-            (NIGHT_SHIFTS,  DAY_SHIFTS),     # N→D
-            (NIGHT_SHIFTS,  DAY1_SHIFTS),    # N→D1 (N 07:00→D1 08:30 = 1.5h)
-            (NIGHT_SHIFTS,  MIDDLE_SHIFTS),  # N→중 (N 07:00→중 11:00 = 4h)
+            (self.EVENING_SHIFTS, self.DAY_SHIFTS),
+            (self.EVENING_SHIFTS, self.DAY1_SHIFTS),
+            (self.NIGHT_SHIFTS,   self.EVENING_SHIFTS),
+            (self.NIGHT_SHIFTS,   self.DAY_SHIFTS),
+            (self.NIGHT_SHIFTS,   self.DAY1_SHIFTS),
+            (self.NIGHT_SHIFTS,   self.MIDDLE_SHIFTS),
         ]
         for nurse in self.nurses:
             nid = nurse["id"]
@@ -310,8 +352,8 @@ class NurseScheduler:
         for nurse in self.nurses:
             nid = nurse["id"]
             for d in range(self.T - 2):
-                for ns in NIGHT_SHIFTS:
-                    for ds in DAY_SHIFTS:
+                for ns in self.NIGHT_SHIFTS:
+                    for ds in self.DAY_SHIFTS:
                         prob += (
                             x[nid][d][ns] + x[nid][d + 1]["OF"] + x[nid][d + 2][ds] <= 2,
                             f"nod_{nid}_{d}_{ns}_{ds}"
@@ -341,7 +383,7 @@ class NurseScheduler:
             for start in range(self.T - max_days):
                 window = range(start, start + max_days + 1)
                 prob += (
-                    pulp.lpSum(x[nid][d][s] for d in window for s in WORK_SHIFTS) <= max_days,
+                    pulp.lpSum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= max_days,
                     f"consec_work_{nid}_{start}"
                 )
 
@@ -352,7 +394,7 @@ class NurseScheduler:
             for start in range(self.T - max_nights):
                 window = range(start, start + max_nights + 1)
                 prob += (
-                    pulp.lpSum(x[nid][d][s] for d in window for s in NIGHT_SHIFTS) <= max_nights,
+                    pulp.lpSum(x[nid][d][s] for d in window for s in self.NIGHT_SHIFTS) <= max_nights,
                     f"consec_night_{nid}_{start}"
                 )
 
@@ -372,7 +414,9 @@ class NurseScheduler:
                 prob += pulp.lpSum(v_vars) <= max_v, f"max_v_{nid}"
 
     def _c_menstrual_leave(self, prob, x):
-        """생리휴가: 여성 간호사당 전체 기간 최대 1회"""
+        """생리휴가: 여성 간호사당 전체 기간 최대 1회 (코드 '생'이 있을 때만)"""
+        if "생" not in self.ALL_SHIFTS:
+            return
         for nurse in self.nurses:
             if nurse.get("gender") != "female":
                 continue
@@ -401,15 +445,16 @@ class NurseScheduler:
 
             # ── V 페널티 / 생리휴가 보상 (당월만) ──────────────────────────────
             for d in month_days:
-                terms.append(-W_V_PENALTY * x[nid][d]["V"])
-                if nurse.get("gender") == "female":
+                if "V" in self.ALL_SHIFTS:
+                    terms.append(-W_V_PENALTY * x[nid][d]["V"])
+                if "생" in self.ALL_SHIFTS and nurse.get("gender") == "female":
                     terms.append(+W_MENSTRUAL_REW * x[nid][d]["생"])
 
             # ── 소프트 전환 보조변수 (당월 연속일 쌍만) ──────────────────────
             for d, d1 in month_day_pairs:
                 # N/NC → 공 전환 페널티 (공 전날 야간 배정 회피)
-                night_sum_d  = pulp.lpSum(x[nid][d][s]  for s in NIGHT_SHIFTS)
-                gong_next    = x[nid][d1]["공"]
+                night_sum_d  = pulp.lpSum(x[nid][d][s]  for s in self.NIGHT_SHIFTS)
+                gong_next    = x[nid][d1]["공"] if "공" in self.ALL_SHIFTS else pulp.lpSum([])
                 ng = pulp.LpVariable(f"ng_{nid}_{d}", cat="Binary")
                 prob += ng <= night_sum_d,             f"ng_a_{nid}_{d}"
                 prob += ng <= gong_next,               f"ng_b_{nid}_{d}"
@@ -418,8 +463,8 @@ class NurseScheduler:
 
                 # D→N 전환 페널티
                 if self.rules.avoidDN:
-                    day_sum   = pulp.lpSum(x[nid][d][s]  for s in DAY_SHIFTS)
-                    night_sum = pulp.lpSum(x[nid][d1][s] for s in NIGHT_SHIFTS)
+                    day_sum   = pulp.lpSum(x[nid][d][s]  for s in self.DAY_SHIFTS)
+                    night_sum = pulp.lpSum(x[nid][d1][s] for s in self.NIGHT_SHIFTS)
                     dn = pulp.LpVariable(f"dn_{nid}_{d}", cat="Binary")
                     prob += dn <= day_sum,               f"dn_a_{nid}_{d}"
                     prob += dn <= night_sum,              f"dn_b_{nid}_{d}"
@@ -429,8 +474,8 @@ class NurseScheduler:
                 # 순방향 전환 보상 (D→E, E→N)
                 if self.rules.patternOptimization:
                     for fg, sg, tag in [
-                        (DAY_SHIFTS, EVENING_SHIFTS, "de"),
-                        (EVENING_SHIFTS, NIGHT_SHIFTS, "en"),
+                        (self.DAY_SHIFTS, self.EVENING_SHIFTS, "de"),
+                        (self.EVENING_SHIFTS, self.NIGHT_SHIFTS, "en"),
                     ]:
                         f_sum = pulp.lpSum(x[nid][d][s]  for s in fg)
                         s_sum = pulp.lpSum(x[nid][d1][s] for s in sg)
@@ -441,7 +486,7 @@ class NurseScheduler:
                         terms.append(W_FORWARD_REWARD * fwd)
 
                     # 연속 동일 시간대 보상
-                    for group, tag in [(DAY_SHIFTS,"d"),(EVENING_SHIFTS,"e"),(NIGHT_SHIFTS,"n")]:
+                    for group, tag in [(self.DAY_SHIFTS,"d"),(self.EVENING_SHIFTS,"e"),(self.NIGHT_SHIFTS,"n")]:
                         g1 = pulp.lpSum(x[nid][d][s]  for s in group)
                         g2 = pulp.lpSum(x[nid][d1][s] for s in group)
                         same = pulp.LpVariable(f"same_{nid}_{d}_{tag}", cat="Binary")
@@ -451,8 +496,8 @@ class NurseScheduler:
                         terms.append(W_SAME_SHIFT_REW * same)
 
                 # 연속 휴일 보상
-                r1 = pulp.lpSum(x[nid][d][s]  for s in REST_SHIFTS)
-                r2 = pulp.lpSum(x[nid][d1][s] for s in REST_SHIFTS)
+                r1 = pulp.lpSum(x[nid][d][s]  for s in self.REST_SHIFTS)
+                r2 = pulp.lpSum(x[nid][d1][s] for s in self.REST_SHIFTS)
                 rp = pulp.LpVariable(f"rp_{nid}_{d}", cat="Binary")
                 prob += rp <= r1,          f"rp_a_{nid}_{d}"
                 prob += rp <= r2,          f"rp_b_{nid}_{d}"
@@ -465,7 +510,7 @@ class NurseScheduler:
                 nurse["id"]: pulp.lpSum(
                     x[nurse["id"]][d][s]
                     for d in month_days
-                    for s in NIGHT_SHIFTS
+                    for s in self.NIGHT_SHIFTS
                 )
                 for nurse in self.nurses
             }
@@ -490,8 +535,8 @@ class NurseScheduler:
                     d = self.date_to_idx[wish_date]
                     if wish_shift == "OFF":
                         terms.append(W_WISH_REWARD * pulp.lpSum(
-                            x[nid][d][s] for s in REST_SHIFTS + LEAVE_SHIFTS))
-                    elif wish_shift in ALL_SHIFTS:
+                            x[nid][d][s] for s in self.REST_SHIFTS + self.LEAVE_SHIFTS))
+                    elif wish_shift in self.ALL_SHIFTS:
                         terms.append(W_WISH_REWARD * x[nid][d][wish_shift])
                 except (ValueError, KeyError):
                     pass
@@ -523,7 +568,7 @@ class NurseScheduler:
                     dt_str = self.all_dates[d].strftime("%Y-%m-%d")
                     pre = self.prev.get(nid, {}).get(dt_str)
                     xx[nid][d] = {}
-                    for s in ALL_SHIFTS:
+                    for s in self.ALL_SHIFTS:
                         if pre:
                             xx[nid][d][s] = pulp.LpVariable(
                                 f"dx_{nid}_{d}_{s}",
@@ -566,7 +611,7 @@ class NurseScheduler:
                 fixed_rest = sum(
                     1 for nurse in self.nurses
                     if self.prev.get(nurse["id"], {}).get(dt.strftime("%Y-%m-%d"), "")
-                    in (LEAVE_SHIFTS + REST_SHIFTS)
+                    in (self.LEAVE_SHIFTS + self.REST_SHIFTS)
                 )
                 avail = N - fixed_rest
                 needed = sum(day_req.get(p_, 0) for p_ in ["D", "E", "N"])
@@ -645,7 +690,7 @@ class NurseScheduler:
                     fixed_off = sum(
                         1 for nurse in self.nurses
                         if self.prev.get(nurse["id"], {}).get(dt.strftime("%Y-%m-%d"), "")
-                        in (REST_SHIFTS + LEAVE_SHIFTS)
+                        in (self.REST_SHIFTS + self.LEAVE_SHIFTS)
                     )
                     week_slots_needed += needed
                     day_details.append((dt, needed, fixed_off))
@@ -754,8 +799,8 @@ class NurseScheduler:
             nid = nurse["id"]
             for d, dt in enumerate(self.all_dates):
                 dt_str = dt.strftime("%Y-%m-%d")
-                assigned = "OF"
-                for s in ALL_SHIFTS:
+                assigned = self.REST_SHIFTS[0] if self.REST_SHIFTS else "OF"
+                for s in self.ALL_SHIFTS:
                     val = pulp.value(x[nid][d][s])
                     if val is not None and round(val) == 1:
                         assigned = s

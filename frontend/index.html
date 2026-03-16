@@ -231,7 +231,7 @@
               <template x-for="shift in workShifts" :key="shift">
                 <tr class="border-t">
                   <td class="px-2 py-1.5 font-semibold">
-                    <span :class="`shift-${shift}`" class="px-2 py-0.5 rounded text-xs" x-text="shift"></span>
+                    <span :style="getShiftStyle(shift)" class="px-2 py-0.5 rounded text-xs font-bold" x-text="shift"></span>
                   </td>
                   <template x-for="(label, key) in weekdayLabels" :key="key">
                     <td class="px-1 py-1">
@@ -250,6 +250,63 @@
           인원 설정 저장
         </button>
       </div>
+
+      <!-- 근무 관리 -->
+      <div class="bg-white rounded-xl shadow p-4 md:col-span-2">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold text-gray-700">🔧 근무 관리 <span class="text-xs text-gray-400 font-normal ml-1">근무 코드·이름·유형·색상 관리</span></h2>
+          <div class="flex gap-2">
+            <button @click="openShiftModal(null)"
+              class="bg-purple-600 hover:bg-purple-700 text-white text-sm px-3 py-1.5 rounded-lg">
+              + 새 근무 추가
+            </button>
+            <button @click="shiftMgmtOpen=!shiftMgmtOpen"
+              :class="shiftMgmtOpen ? 'bg-gray-200 text-gray-700' : 'border border-gray-300 text-gray-500 hover:bg-gray-50'"
+              class="text-sm px-3 py-1.5 rounded-lg"
+              x-text="shiftMgmtOpen ? '접기' : '목록 보기'">
+            </button>
+          </div>
+        </div>
+        <div x-show="shiftMgmtOpen" x-cloak class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-3 py-2 text-left">미리보기</th>
+                <th class="px-3 py-2 text-left">코드</th>
+                <th class="px-3 py-2 text-left">이름</th>
+                <th class="px-3 py-2 text-left">유형</th>
+                <th class="px-3 py-2 text-left">근무시간</th>
+                <th class="px-3 py-2 text-left">차지</th>
+                <th class="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="s in shifts" :key="s.code">
+                <tr class="border-t hover:bg-gray-50">
+                  <td class="px-3 py-2">
+                    <span :style="getShiftStyle(s.code)"
+                      class="px-2 py-0.5 rounded text-xs font-bold" x-text="s.code"></span>
+                  </td>
+                  <td class="px-3 py-2 font-mono font-bold text-gray-700" x-text="s.code"></td>
+                  <td class="px-3 py-2 text-gray-700" x-text="s.name"></td>
+                  <td class="px-3 py-2 text-gray-500 text-xs">
+                    <span x-text="({day:'낮',day1:'낮(상근)',evening:'저녁',middle:'중간번',night:'야간',rest:'휴무',leave:'휴가'})[s.period]"></span>
+                  </td>
+                  <td class="px-3 py-2 text-gray-500 text-xs" x-text="s.hours || '-'"></td>
+                  <td class="px-3 py-2 text-center">
+                    <span x-show="s.is_charge" class="text-purple-600 font-bold text-xs">차지</span>
+                  </td>
+                  <td class="px-3 py-2 flex gap-2 justify-end">
+                    <button @click="openShiftModal(s)" class="text-blue-600 hover:underline text-xs">수정</button>
+                    <button @click="deleteShift(s.code)" class="text-red-500 hover:underline text-xs">삭제</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -327,8 +384,8 @@
 
       <!-- 범례 -->
       <div class="flex flex-wrap gap-1 mb-3 text-xs">
-        <template x-for="s in ['D','D1','E','중','N','OF','주','V','생','특','공','법','병']" :key="s">
-          <span :class="`shift-${s}`" class="px-2 py-0.5 rounded font-bold" x-text="s"></span>
+        <template x-for="s in prevShifts" :key="s">
+          <span :style="getShiftStyle(s)" class="px-2 py-0.5 rounded font-bold" x-text="s"></span>
         </template>
         <span class="text-gray-400 ml-2">빈칸 = 자동배정</span>
       </div>
@@ -381,11 +438,12 @@
                   <td class="border p-0"
                     :class="[
                       getPrevShift(nurse.id, day)
-                        ? `shift-${getPrevShift(nurse.id, day)}`
+                        ? ''
                         : (isHoliday(day) ? 'bg-orange-50' : (day.getDay()===6 ? 'bg-blue-50' : (day.getDay()===0 ? 'bg-red-50' : ''))),
                       day.getDay()===6 ? 'border-r-2 border-r-gray-500' : '',
                       isCycleStart(day) && day.getDate()!==1 ? 'border-l-2 border-l-indigo-300' : ''
-                    ]">
+                    ]"
+                    :style="getPrevShift(nurse.id, day) ? getShiftStyle(getPrevShift(nurse.id, day)) : {}">
                     <template x-if="getPrevShift(nurse.id, day)">
                       <span class="schedule-cell-text block"
                         x-text="getPrevShift(nurse.id, day)"
@@ -526,11 +584,12 @@
                   <td class="border p-0"
                     :class="[
                       getShift(nurse.id, day) !== '-'
-                        ? `shift-${getShift(nurse.id, day)}`
+                        ? ''
                         : (isHoliday(day) ? 'bg-orange-50' : (day.getDay()===6 ? 'bg-blue-50' : (day.getDay()===0 ? 'bg-red-50' : ''))),
                       day.getDay()===6 ? 'border-r-2 border-r-gray-500' : '',
                       isCycleStart(day) && day.getDate()!==1 ? 'border-l-2 border-l-indigo-300' : ''
-                    ]">
+                    ]"
+                    :style="getShift(nurse.id, day) !== '-' ? getShiftStyle(getShift(nurse.id, day)) : {}">
                     <span class="schedule-cell-text block"
                       x-text="getShift(nurse.id, day) !== '-' ? getShift(nurse.id, day) : ''"
                       @click="openShiftEdit(nurse, day)">
@@ -637,12 +696,12 @@
       <div>
         <label class="text-sm text-gray-600">가능 근무 (복수 선택)</label>
         <div class="flex flex-wrap gap-2 mt-1">
-          <template x-for="s in ['DC','D','D1','EC','E','중','NC','N']" :key="s">
+          <template x-for="s in allWorkShifts" :key="s">
             <label class="flex items-center gap-1 text-sm">
               <input type="checkbox"
                 :checked="nurseModal.data.capable_shifts.includes(s)"
                 @change="toggleShift(s)" />
-              <span :class="`shift-${s}`" class="px-2 py-0.5 rounded text-xs font-bold" x-text="s"></span>
+              <span :style="getShiftStyle(s)" class="px-2 py-0.5 rounded text-xs font-bold" x-text="s"></span>
             </label>
           </template>
         </div>
@@ -674,6 +733,92 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
+     근무 추가/수정 모달
+══════════════════════════════════════════════════════════ -->
+<div x-show="shiftModal.open" x-cloak
+  class="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40"
+  @click.self="shiftModal.open=false">
+  <div class="bg-white w-full max-w-md rounded-t-2xl md:rounded-2xl shadow-xl p-5 max-h-[90vh] overflow-y-auto">
+    <h3 class="font-bold text-lg mb-4" x-text="shiftModal.isNew ? '새 근무 추가' : '근무 수정'"></h3>
+    <div class="space-y-3">
+      <!-- 코드 -->
+      <div>
+        <label class="text-sm text-gray-600">코드 * <span class="text-xs text-gray-400">(최대 4자, 고유 식별자)</span></label>
+        <input x-model="shiftModal.data.code" :disabled="!shiftModal.isNew"
+          :class="!shiftModal.isNew ? 'bg-gray-100 text-gray-400' : ''"
+          class="w-full border rounded px-3 py-2 mt-1 font-mono uppercase"
+          maxlength="4" placeholder="예: XX" />
+      </div>
+      <!-- 이름 -->
+      <div>
+        <label class="text-sm text-gray-600">이름 *</label>
+        <input x-model="shiftModal.data.name"
+          class="w-full border rounded px-3 py-2 mt-1" placeholder="예: 특수낮번" />
+      </div>
+      <!-- 유형 -->
+      <div>
+        <label class="text-sm text-gray-600">유형 * <span class="text-xs text-gray-400">(스케줄링 엔진 분류)</span></label>
+        <select x-model="shiftModal.data.period" class="w-full border rounded px-3 py-2 mt-1">
+          <option value="day">낮 (D 요구사항 충족, E/N→낮 금지 전환 적용)</option>
+          <option value="day1">낮(상근) (D 요구사항, E/N→상근 금지 전환 적용)</option>
+          <option value="evening">저녁 (E 요구사항, N→저녁 금지 전환 적용)</option>
+          <option value="middle">중간번 (E 요구사항, N→중간 금지 전환 적용)</option>
+          <option value="night">야간 (N 요구사항)</option>
+          <option value="rest">휴무 (주 1회 OF/주휴 대상)</option>
+          <option value="leave">휴가 (V·생·공 등, 연속 근무 미포함)</option>
+        </select>
+      </div>
+      <!-- 차지 여부 -->
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" x-model="shiftModal.data.is_charge" />
+        차지 근무 <span class="text-xs text-gray-400">(해당 유형에서 매일 정확히 1명 배정)</span>
+      </label>
+      <!-- 근무시간 -->
+      <div>
+        <label class="text-sm text-gray-600">근무시간 <span class="text-xs text-gray-400">(표시용, 예: 06:00~14:00)</span></label>
+        <input x-model="shiftModal.data.hours"
+          class="w-full border rounded px-3 py-2 mt-1" placeholder="예: 06:00~14:00" />
+      </div>
+      <!-- 색상 -->
+      <div class="flex gap-4 items-end">
+        <div class="flex-1">
+          <label class="text-sm text-gray-600">배경색</label>
+          <div class="flex gap-2 mt-1 items-center">
+            <input type="color" x-model="shiftModal.data.color_bg"
+              class="w-10 h-10 rounded border cursor-pointer p-0.5" />
+            <input type="text" x-model="shiftModal.data.color_bg"
+              class="flex-1 border rounded px-2 py-1.5 text-sm font-mono" />
+          </div>
+        </div>
+        <div class="flex-1">
+          <label class="text-sm text-gray-600">글자색</label>
+          <div class="flex gap-2 mt-1 items-center">
+            <input type="color" x-model="shiftModal.data.color_text"
+              class="w-10 h-10 rounded border cursor-pointer p-0.5" />
+            <input type="text" x-model="shiftModal.data.color_text"
+              class="flex-1 border rounded px-2 py-1.5 text-sm font-mono" />
+          </div>
+        </div>
+      </div>
+      <!-- 미리보기 -->
+      <div class="text-sm text-gray-600">미리보기</div>
+      <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+        <span :style="{background: shiftModal.data.color_bg, color: shiftModal.data.color_text}"
+          class="px-3 py-1 rounded font-bold text-sm" x-text="shiftModal.data.code || '코드'"></span>
+        <span class="text-sm text-gray-600" x-text="shiftModal.data.name || '이름'"></span>
+        <span class="text-xs text-gray-400" x-text="shiftModal.data.hours || ''"></span>
+      </div>
+    </div>
+    <div class="flex gap-3 mt-5">
+      <button @click="shiftModal.open=false"
+        class="flex-1 border border-gray-300 py-2 rounded-lg text-sm">취소</button>
+      <button @click="saveShift()"
+        class="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg text-sm font-medium">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
      셀 편집 모달
 ══════════════════════════════════════════════════════════ -->
 <div x-show="shiftEdit.open" x-cloak
@@ -688,7 +833,7 @@
     <div class="flex flex-wrap gap-2 mb-3">
       <template x-for="s in (shiftEdit.mode==='prev' ? prevShifts : allShifts)" :key="s">
         <button @click="applyShiftEdit(s)"
-          :class="`shift-${s}`"
+          :style="getShiftStyle(s)"
           class="px-3 py-1.5 rounded text-xs font-bold border hover:opacity-80"
           x-text="s"></button>
       </template>
@@ -753,18 +898,12 @@ function app() {
     statusOk: true,
     savedSchedules: [],
 
-    footerRows: [
-      { label: '낮',   shifts: ['DC','D'],  color: 'text-blue-700'  },
-      { label: '저녁', shifts: ['EC','E'],  color: 'text-green-700' },
-      { label: '야간', shifts: ['NC','N'],  color: 'text-amber-700' },
-      { label: '휴무', shifts: ['주','OF'], color: 'text-gray-600'  },
-    ],
-
     weekdayLabels: {mon:'월',tue:'화',wed:'수',thu:'목',fri:'금',sat:'토',sun:'일'},
-    workShifts: ['D','E','N'],   // 요구사항 테이블 표시용 (D1/중은 개별 배정)
-    allWorkShifts: ['DC','D','D1','EC','E','중','NC','N'],
-    allShifts:     ['DC','D','D1','EC','E','중','NC','N','OF','주','V','생','특','공','법','병'],
-    prevShifts:    ['D','D1','E','중','N','OF','주','V','생','특','공','법','병'],
+    workShifts: ['D','E','N'],   // 요구사항 테이블 표시용
+
+    shifts: [],  // DB에서 로드한 ShiftDef 목록
+    shiftMgmtOpen: false,
+    shiftModal: {open:false, isNew:true, data:{}},
 
     prevSchedule: {},   // {nurse_id: {'YYYY-MM-DD': shift}} 사전 고정 근무
     holidays: [],       // ['YYYY-M-D', ...] 법정공휴일로 지정된 날짜 목록
@@ -777,12 +916,37 @@ function app() {
     shiftEdit:  {open:false, nurse:null, day:null, dateLabel:'', mode:'schedule'},
     // mode: 'schedule' = 결과 근무표 편집 / 'prev' = 사전입력 편집
 
+    // ── 동적 근무 computed ──────────────────────────────────────────────────
+    get allWorkShifts() {
+      return this.shifts.filter(s => ['day','day1','evening','middle','night'].includes(s.period)).map(s => s.code);
+    },
+    get allShifts() {
+      return this.shifts.map(s => s.code);
+    },
+    get prevShifts() {
+      // 사전입력 모달: charge 제외한 근무 + 휴무 + 휴가
+      return this.shifts.filter(s => !s.is_charge).map(s => s.code);
+    },
+    get footerRows() {
+      const dayShifts     = this.shifts.filter(s => s.period === 'day').map(s => s.code);
+      const eveningShifts = this.shifts.filter(s => ['evening','middle'].includes(s.period)).map(s => s.code);
+      const nightShifts   = this.shifts.filter(s => s.period === 'night').map(s => s.code);
+      const restShifts    = this.shifts.filter(s => s.period === 'rest').map(s => s.code);
+      return [
+        { label: '낮',   shifts: dayShifts,     color: 'text-blue-700'  },
+        { label: '저녁', shifts: eveningShifts,  color: 'text-green-700' },
+        { label: '야간', shifts: nightShifts,    color: 'text-amber-700' },
+        { label: '휴무', shifts: restShifts,     color: 'text-gray-600'  },
+      ];
+    },
+
     // ── 초기화 ──────────────────────────────────────────────────────────────
     async init() {
       await Promise.all([
         this.loadNurses(),
         this.loadRules(),
         this.loadRequirements(),
+        this.loadShifts(),
         this.loadSavedList(),
         this.loadPrevSavesList(),
       ]);
@@ -852,6 +1016,42 @@ function app() {
       alert('인원 설정이 저장되었습니다.');
     },
 
+    // ── 근무 관리 ────────────────────────────────────────────────────────────
+    async loadShifts() {
+      this.shifts = await this.api('GET', '/api/shifts');
+    },
+    getShiftStyle(code) {
+      const s = this.shifts.find(x => x.code === code);
+      if (!s) return {};
+      return { background: s.color_bg, color: s.color_text };
+    },
+    openShiftModal(shift) {
+      this.shiftModal.isNew = !shift;
+      this.shiftModal.data = shift ? JSON.parse(JSON.stringify(shift)) : {
+        code: '', name: '', period: 'day', is_charge: false,
+        hours: '', color_bg: '#dbeafe', color_text: '#1d4ed8', sort_order: this.shifts.length,
+      };
+      this.shiftModal.open = true;
+    },
+    async saveShift() {
+      const d = this.shiftModal.data;
+      if (!d.code.trim()) { alert('코드를 입력하세요.'); return; }
+      if (!d.name.trim()) { alert('이름을 입력하세요.'); return; }
+      await this.api('POST', '/api/shifts', d);
+      await this.loadShifts();
+      this.shiftModal.open = false;
+    },
+    async deleteShift(code) {
+      const PROTECTED = ['DC','D','D1','EC','E','중','NC','N','OF','주'];
+      if (PROTECTED.includes(code)) {
+        alert('기본 근무(DC·D·D1·EC·E·중·NC·N·OF·주)는 삭제할 수 없습니다.');
+        return;
+      }
+      if (!confirm(`'${code}' 근무를 삭제하시겠습니까?`)) return;
+      await this.api('DELETE', `/api/shifts/${code}`);
+      await this.loadShifts();
+    },
+
     // ── 스케줄 생성 ──────────────────────────────────────────────────────────
     calcEstimatedSeconds() {
       const daysInMonth = new Date(this.year, this.month, 0).getDate();
@@ -879,6 +1079,7 @@ function app() {
           rules: this.rules,
           prev_schedule: Object.keys(this.prevSchedule).length ? this.prevSchedule : null,
           holidays: this.holidays,
+          shifts: this.shifts,
         });
         this.statusOk = result.success;
         this.statusMessage = result.message;

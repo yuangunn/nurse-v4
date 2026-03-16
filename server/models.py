@@ -2,6 +2,17 @@ from pydantic import BaseModel
 from typing import Dict, List, Optional
 
 
+class ShiftDef(BaseModel):
+    code: str
+    name: str
+    period: str          # day|day1|evening|middle|night|rest|leave
+    is_charge: bool = False
+    hours: str = ''
+    color_bg: str = '#f3f4f6'
+    color_text: str = '#374151'
+    sort_order: int = 0
+
+
 class Nurse(BaseModel):
     id: str
     name: str
@@ -58,6 +69,7 @@ class GenerateRequest(BaseModel):
     rules: Rules
     prev_schedule: Optional[Dict[str, Dict[str, str]]] = None  # {nurse_id: {date_str: shift}}
     holidays: List[str] = []  # ['YYYY-M-D', ...] 법정공휴일 날짜 목록 (스케줄러는 참조용)
+    shifts: List[ShiftDef] = []  # 근무 정의 목록 (비어있으면 DB에서 로드)
 
 
 class ScheduleSave(BaseModel):

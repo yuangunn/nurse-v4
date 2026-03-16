@@ -100,18 +100,46 @@ def save_requirements(body: dict):
     return {"ok": True}
 
 
+# ── 근무 API ──────────────────────────────────────────────────────────────────
+
+@app.get("/api/shifts")
+def get_shifts():
+    return db.list_shifts()
+
+
+@app.post("/api/shifts")
+def save_shift(body: dict):
+    db.save_shift(
+        code=body["code"],
+        name=body["name"],
+        period=body["period"],
+        is_charge=body.get("is_charge", False),
+        hours=body.get("hours", ""),
+        color_bg=body.get("color_bg", "#f3f4f6"),
+        color_text=body.get("color_text", "#374151"),
+        sort_order=body.get("sort_order", 0),
+    )
+    return {"ok": True}
+
+
+@app.delete("/api/shifts/{code}")
+def delete_shift(code: str):
+    db.delete_shift(code)
+    return {"ok": True}
+
+
 # ── 스케줄 생성 API ───────────────────────────────────────────────────────────
 
 # 일별 인원 사전 검증
 from datetime import date as _date, timedelta as _td
-from .scheduler import WORK_SHIFTS, DAY_SHIFTS, EVENING_SHIFTS, NIGHT_SHIFTS, LEAVE_SHIFTS, REST_SHIFTS, WEEKDAY_KEYS
 
-def _validate_staffing(request: GenerateRequest) -> Optional[str]:
+def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts: list) -> Optional[str]:
     """
     prev_schedule의 고정 근무를 반영한 후, 각 날짜별 근무 가능 인원이
     요구사항을 충족할 수 있는지 사전 검증.
     부족한 날이 있으면 경고 메시지 반환, 없으면 None.
     """
+    weekday_keys = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
     year, month = request.year, request.month
     first = _date(year, month, 1)
     if month == 12:
@@ -120,20 +148,19 @@ def _validate_staffing(request: GenerateRequest) -> Optional[str]:
         last = _date(year, month + 1, 1) - _td(days=1)
 
     req_dict = request.requirements.model_dump()
-    period_map = {"D": DAY_SHIFTS, "E": EVENING_SHIFTS, "N": NIGHT_SHIFTS}
+    off_shifts = leave_shifts + rest_shifts
     prev = request.prev_schedule or {}
     warnings = []
 
     cur = first
     while cur <= last:
         dt_str = cur.strftime("%Y-%m-%d")
-        weekday_key = WEEKDAY_KEYS[cur.weekday()]
+        weekday_key = weekday_keys[cur.weekday()]
         day_req = req_dict.get(weekday_key, {})
 
-        # 이날 사용 불가한 간호사 수 (V/생/특/공/병/주/OF로 고정된 경우)
         unavailable = sum(
             1 for nurse in request.nurses
-            if prev.get(nurse.id, {}).get(dt_str, "") in (LEAVE_SHIFTS + REST_SHIFTS)
+            if prev.get(nurse.id, {}).get(dt_str, "") in off_shifts
         )
         available = len(request.nurses) - unavailable
 
@@ -155,7 +182,16 @@ def _validate_staffing(request: GenerateRequest) -> Optional[str]:
 @app.post("/api/generate")
 def generate(request: GenerateRequest):
     try:
-        warning = _validate_staffing(request)
+        # shifts가 비어있으면 DB에서 로드
+        if not request.shifts:
+            from .models import ShiftDef
+            raw = db.list_shifts()
+            request.shifts = [ShiftDef(**s) for s in raw]
+
+        leave_shifts = [s.code for s in request.shifts if s.period == "leave"]
+        rest_shifts  = [s.code for s in request.shifts if s.period == "rest"]
+
+        warning = _validate_staffing(request, leave_shifts, rest_shifts)
         scheduler = NurseScheduler(request)
         result = scheduler.solve()
         if warning and not result.get("success"):

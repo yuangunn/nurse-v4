@@ -64,6 +64,17 @@ def init_db():
                 data TEXT NOT NULL,
                 created_at TEXT DEFAULT (datetime('now','localtime'))
             );
+
+            CREATE TABLE IF NOT EXISTS shifts (
+                code       TEXT PRIMARY KEY,
+                name       TEXT NOT NULL,
+                period     TEXT NOT NULL,
+                is_charge  INTEGER DEFAULT 0,
+                hours      TEXT DEFAULT '',
+                color_bg   TEXT DEFAULT '#f3f4f6',
+                color_text TEXT DEFAULT '#374151',
+                sort_order INTEGER DEFAULT 0
+            );
         """)
         # 기존 DB 호환: juhu 컬럼 마이그레이션
         try:
@@ -93,6 +104,42 @@ def init_db():
         existing_nurses = conn.execute("SELECT COUNT(*) FROM nurses").fetchone()[0]
         if existing_nurses == 0:
             _seed_nurses(conn)
+
+        # 기본 근무 시드 (shifts 테이블이 비어 있을 때만)
+        existing_shifts = conn.execute("SELECT COUNT(*) FROM shifts").fetchone()[0]
+        if existing_shifts == 0:
+            _seed_shifts(conn)
+
+
+# ── 근무 시드 데이터 ─────────────────────────────────────────────────────────
+
+def _seed_shifts(conn: sqlite3.Connection):
+    """기본 근무 16종 삽입"""
+    shifts = [
+        # code   name            period    is_charge  hours              color_bg   color_text  sort
+        ("DC", "Day Charge",    "day",     1, "06:00~14:00", "#bfdbfe", "#1d4ed8", 0),
+        ("D",  "Day",           "day",     0, "06:00~14:00", "#dbeafe", "#1d4ed8", 1),
+        ("D1", "Day1",          "day1",    0, "08:30~17:30", "#e0f2fe", "#0284c7", 2),
+        ("EC", "Evening Charge","evening", 1, "14:00~22:00", "#bbf7d0", "#15803d", 3),
+        ("E",  "Evening",       "evening", 0, "14:00~22:00", "#dcfce7", "#15803d", 4),
+        ("중", "중간번",         "middle",  0, "11:00~19:00", "#ccfbf1", "#0f766e", 5),
+        ("NC", "Night Charge",  "night",   1, "22:00~06:00", "#fde68a", "#92400e", 6),
+        ("N",  "Night",         "night",   0, "22:00~06:00", "#fef9c3", "#92400e", 7),
+        ("OF", "Off",           "rest",    0, "-",           "#f3f4f6", "#6b7280", 8),
+        ("주", "주휴",           "rest",    0, "-",           "#e0e7ff", "#4338ca", 9),
+        ("V",  "연차",           "leave",   0, "-",           "#fce7f3", "#be185d", 10),
+        ("생", "생리휴가",        "leave",   0, "-",           "#fdf2f8", "#be185d", 11),
+        ("특", "특별휴가",        "leave",   0, "-",           "#fdf4ff", "#7e22ce", 12),
+        ("공", "공적업무",        "leave",   0, "-",           "#ecfdf5", "#064e3b", 13),
+        ("법", "법정공휴일",      "leave",   0, "-",           "#fff7ed", "#c2410c", 14),
+        ("병", "병가",           "leave",   0, "-",           "#fef2f2", "#dc2626", 15),
+    ]
+    conn.executemany(
+        "INSERT OR IGNORE INTO shifts "
+        "(code, name, period, is_charge, hours, color_bg, color_text, sort_order) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        shifts,
+    )
 
 
 # ── 예시 간호사 시드 데이터 ──────────────────────────────────────────────────
@@ -286,6 +333,32 @@ def load_prev_schedule(prev_id: int) -> Optional[Dict]:
 def delete_prev_schedule(prev_id: int) -> None:
     with get_conn() as conn:
         conn.execute("DELETE FROM prev_schedules WHERE id=?", (prev_id,))
+
+
+# ── Shift CRUD ───────────────────────────────────────────────────────────────
+
+def list_shifts() -> List[Dict]:
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM shifts ORDER BY sort_order, code").fetchall()
+        return [dict(r) for r in rows]
+
+
+def save_shift(code: str, name: str, period: str, is_charge: bool,
+               hours: str, color_bg: str, color_text: str, sort_order: int) -> None:
+    with get_conn() as conn:
+        conn.execute("""
+            INSERT INTO shifts (code, name, period, is_charge, hours, color_bg, color_text, sort_order)
+            VALUES (?,?,?,?,?,?,?,?)
+            ON CONFLICT(code) DO UPDATE SET
+                name=excluded.name, period=excluded.period, is_charge=excluded.is_charge,
+                hours=excluded.hours, color_bg=excluded.color_bg, color_text=excluded.color_text,
+                sort_order=excluded.sort_order
+        """, (code, name, period, 1 if is_charge else 0, hours, color_bg, color_text, sort_order))
+
+
+def delete_shift(code: str) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM shifts WHERE code=?", (code,))
 
 
 # ── 내부 헬퍼 ───────────────────────────────────────────────────────────────
