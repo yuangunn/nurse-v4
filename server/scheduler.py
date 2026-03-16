@@ -163,6 +163,7 @@ class NurseScheduler:
             self._c_max_consecutive_night(prob, x, self.rules.maxConsecutiveNightDays)
         self._c_max_v_per_month(prob, x)               # V 월 최대 횟수
         self._c_menstrual_leave(prob, x)
+        self._c_night_shift_nurses(prob, x)            # 야간전담 전용 규칙
 
         # ── Objective (Soft Constraints) ─────────────────────────────────────
 
@@ -219,12 +220,19 @@ class NurseScheduler:
                 prob += pulp.lpSum(x[nid][d][s] for s in self.ALL_SHIFTS) == 1, f"one_{nid}_{d}"
 
     def _c_shift_eligibility(self, prob, x):
-        """간호사별 가능한 근무만 배정"""
+        """간호사별 가능한 근무만 배정.
+        자격 체크는 day/evening/night period 근무에만 적용.
+        day1(상근)·middle(중간번)은 누구나 배정 가능 — UI에 체크박스 없음.
+        """
+        # 자격 체크 대상: day1·middle 제외한 근무 시프트
+        eligible_check = [
+            s["code"] for s in self._shifts
+            if s["period"] in ("day", "evening", "night")
+        ]
         for nurse in self.nurses:
             nid = nurse["id"]
             capable = set(nurse.get("capable_shifts", self.WORK_SHIFTS))
-            # 불가능한 근무는 0으로 고정
-            impossible = [s for s in self.WORK_SHIFTS if s not in capable]
+            impossible = [s for s in eligible_check if s not in capable]
             for d in range(self.T):
                 for s in impossible:
                     prob += x[nid][d][s] == 0, f"elig_{nid}_{d}_{s}"
@@ -319,7 +327,7 @@ class NurseScheduler:
                         for regular_s in regulars:
                             prob += (
                                 x[nid_i][d][charge_s] + x[nid_j][d][regular_s] <= 1,
-                                f"seniority_{nid_i}_{nid_j}_{d}_{charge_s}"
+                                f"seniority_{nid_i}_{nid_j}_{d}_{charge_s}_{regular_s}"
                             )
 
     def _c_forbidden_transitions(self, prob, x):
@@ -362,19 +370,21 @@ class NurseScheduler:
     def _c_weekly_off(self, prob, x):
         """
         각 완전한 주에 주휴 1개 + OF 1개.
-        주휴 요일은 prev_schedule(사전입력)로 고정되며, 스케줄러는 '주 1회' 제약만 유지.
+        야간전담 간호사는 주휴만 적용, OF는 무제한.
         """
         for nurse in self.nurses:
             nid = nurse["id"]
+            is_night = nurse.get("is_night_shift", False)
             for ws, we in self.weeks:
                 prob += (
                     pulp.lpSum(x[nid][d]["주"] for d in range(ws, we + 1)) == 1,
                     f"weekly_joo_{nid}_{ws}"
                 )
-                prob += (
-                    pulp.lpSum(x[nid][d]["OF"] for d in range(ws, we + 1)) == 1,
-                    f"weekly_of_{nid}_{ws}"
-                )
+                if not is_night:
+                    prob += (
+                        pulp.lpSum(x[nid][d]["OF"] for d in range(ws, we + 1)) == 1,
+                        f"weekly_of_{nid}_{ws}"
+                    )
 
     def _c_max_consecutive_work(self, prob, x, max_days: int):
         """최대 연속 근무일 제한"""
@@ -423,6 +433,67 @@ class NurseScheduler:
             nid = nurse["id"]
             menstrual_vars = [x[nid][d]["생"] for d in range(self.T)]
             prob += pulp.lpSum(menstrual_vars) <= 1, f"menstrual_{nid}"
+
+    def _c_night_shift_nurses(self, prob, x):
+        """
+        야간전담 간호사 전용 제약 (is_night_shift=True):
+          1. N/NC만 배정 (낮·저녁·중간번·상근 모두 금지)
+          2. 5일 윈도우 내 근무 <= 3 → 3일 연속 후 2일 휴무 자동 보장
+          3. 당월 정확히 14일 근무 (N+NC)
+          4. 여성 간호사 + 31일 달 → 생리휴가 정확히 1회 (hard)
+        주휴는 _c_weekly_off 에서 일반과 동일하게 처리.
+        OF는 _c_weekly_off 에서 야간전담은 제외 → 무제한.
+        """
+        night_nurses = [n for n in self.nurses if n.get("is_night_shift")]
+        if not night_nurses:
+            return
+
+        import calendar
+        month_days = calendar.monthrange(self.year, self.month)[1]
+        month_idxs = [d for d, dt in enumerate(self.all_dates) if dt.month == self.month]
+
+        # 야간 제외 근무 코드 목록 (휴무·휴가 제외, 근무 shift만)
+        non_night_work = [
+            s["code"] for s in self._shifts
+            if s["period"] not in ("night", "rest", "leave")
+        ]
+
+        for nurse in night_nurses:
+            nid = nurse["id"]
+
+            # ── 1. N/NC 외 모든 근무 금지 ─────────────────────────────────
+            for d in range(self.T):
+                for s in non_night_work:
+                    if s in x[nid][d]:
+                        prob += x[nid][d][s] == 0, f"night_only_{nid}_{d}_{s}"
+
+            # ── 2. 5일 윈도우 <= 3 (3연속+2휴무 보장) ────────────────────
+            for start in range(self.T - 4):
+                prob += (
+                    pulp.lpSum(
+                        x[nid][d][s]
+                        for d in range(start, start + 5)
+                        for s in self.NIGHT_SHIFTS
+                    ) <= 3,
+                    f"night_5day_{nid}_{start}",
+                )
+
+            # ── 3. 당월 정확히 14일 근무 ─────────────────────────────────
+            prob += (
+                pulp.lpSum(
+                    x[nid][d][s]
+                    for d in month_idxs
+                    for s in self.NIGHT_SHIFTS
+                ) == 14,
+                f"night_monthly_{nid}",
+            )
+
+            # ── 4. 31일 달 + 여성 → 생리휴가 정확히 1회 ─────────────────
+            if month_days == 31 and nurse.get("gender") == "female" and "생" in self.ALL_SHIFTS:
+                prob += (
+                    pulp.lpSum(x[nid][d]["생"] for d in month_idxs) == 1,
+                    f"night_menstrual_{nid}",
+                )
 
     # ── 목적함수 (Soft Constraints) ──────────────────────────────────────────
 
@@ -589,7 +660,56 @@ class NurseScheduler:
         self._c_shift_eligibility(p, x)
         p += 0
         if not _try(p):
-            lines.append("  [원인] prev_schedule 충돌: 같은 날에 두 가지 근무가 고정되었습니다.")
+            lines.append("  [원인] prev_schedule에 알 수 없는 근무 코드가 포함되어 있습니다.")
+            known = set(self.ALL_SHIFTS)
+            bad = []
+            for nurse in self.nurses:
+                nid = nurse["id"]
+                nname = nurse["name"]
+                for d in range(self.T):
+                    dt = self.all_dates[d]
+                    if dt.month != self.month:
+                        continue
+                    dt_str = dt.strftime("%Y-%m-%d")
+                    pre = self.prev.get(nid, {}).get(dt_str)
+                    if pre and pre not in known:
+                        bad.append(f"    · {nname}({nid}) {dt_str}: \"{pre}\" (현재 근무 목록에 없음)")
+            if bad:
+                lines.append("  문제가 된 항목:")
+                lines.extend(bad[:10])
+                if len(bad) > 10:
+                    lines.append(f"    ... 외 {len(bad)-10}건")
+            else:
+                # 코드는 유효하지만 근무 자격(capable_shifts) 충돌 확인
+                # day1·middle은 자격 체크 제외 (UI에 체크박스 없어 capable_shifts에 없어도 됨)
+                eligible_check_set = set(
+                    s["code"] for s in self._shifts
+                    if s["period"] in ("day", "evening", "night")
+                )
+                cap_bad = []
+                for nurse in self.nurses:
+                    nid = nurse["id"]
+                    nname = nurse["name"]
+                    capable = set(nurse.get("capable_shifts", self.WORK_SHIFTS))
+                    for d in range(self.T):
+                        dt = self.all_dates[d]
+                        if dt.month != self.month:
+                            continue
+                        dt_str = dt.strftime("%Y-%m-%d")
+                        pre = self.prev.get(nid, {}).get(dt_str)
+                        if pre and pre in eligible_check_set and pre not in capable:
+                            cap_bad.append(
+                                f"    · {nname}({nid}) {dt_str}: \"{pre}\" "
+                                f"(해당 간호사의 가능 근무 목록에 없음)"
+                            )
+                if cap_bad:
+                    lines[-1] = "  [원인] 사전입력 근무가 간호사 자격과 충돌합니다."
+                    lines.append("  문제가 된 항목:")
+                    lines.extend(cap_bad[:10])
+                    if len(cap_bad) > 10:
+                        lines.append(f"    ... 외 {len(cap_bad)-10}건")
+                else:
+                    lines.append("  (원인 불명: 사전입력을 초기화하거나 간호사/규칙 설정을 확인해 주세요.)")
             return "\n".join(lines)
 
         # ── Phase 2: 일별 인원 요구사항 ──────────────────────────────────────
@@ -665,49 +785,82 @@ class NurseScheduler:
             self._c_weekly_off(p, x)
         p += 0
         if not _try(p):
-            total_work = sum(
-                sum(day_req.get(pp, 0) for pp in ["D", "E", "N"])
-                for wk in WEEKDAY_KEYS
-                for day_req in [req_dict.get(wk, {})]
-            )
             lines.append("  [원인] 주휴/OF 배정과 인원 요구사항이 충돌합니다.")
-            lines.append(f"    현재 간호사: {N}명, 주당 평균 필요 근무: {total_work/7:.1f}명/일")
-            lines.append(f"    주 2회 휴무 시 실제 가용: {N * 5/7:.1f}명/일")
-            # ── 주차별 상세 분석 ──────────────────────────────────────────────
-            lines.append("  [주차별 분석]")
             DAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
+
+            # ── 원인 1: 같은 주에 OF 또는 주휴 중복 사전입력 ─────────────────
+            dup_found = []
+            for wi, (ws, we) in enumerate(self.weeks):
+                week_dates = [self.all_dates[d].strftime("%Y-%m-%d") for d in range(ws, we + 1)]
+                for nurse in self.nurses:
+                    nid, nname = nurse["id"], nurse["name"]
+                    prev_week = {dt: self.prev.get(nid, {}).get(dt, "") for dt in week_dates}
+                    of_days  = [dt for dt, s in prev_week.items() if s == "OF"]
+                    joo_days = [dt for dt, s in prev_week.items() if s == "주"]
+                    if len(of_days) >= 2:
+                        dup_found.append(
+                            f"    · {nname}({nid}) {wi+1}주차: OF가 {len(of_days)}회 "
+                            f"({', '.join(of_days)})"
+                        )
+                    if len(joo_days) >= 2:
+                        dup_found.append(
+                            f"    · {nname}({nid}) {wi+1}주차: 주휴가 {len(joo_days)}회 "
+                            f"({', '.join(joo_days)})"
+                        )
+            if dup_found:
+                lines.append("  [세부 원인] 같은 주에 OF 또는 주휴가 2회 이상 사전입력되었습니다.")
+                lines.extend(dup_found[:10])
+                lines.append("  → 해결: 해당 사전입력을 수정하세요.")
+                return "\n".join(lines)
+
+            # ── 원인 2: 휴가 + OF + 주휴 → 주 내 off가 너무 많아 슬랙 부족 ──
+            lines.append("  [주차별 분석]")
             for wi, (ws, we) in enumerate(self.weeks):
                 week_slots_needed = 0
                 day_details = []
+                total_extra_leave = 0  # 휴가(leave)로 고정된 슬롯 수
                 for d in range(ws, we + 1):
                     dt = self.all_dates[d]
-                    if dt.month != self.month:
-                        continue
+                    dt_str = dt.strftime("%Y-%m-%d")
+                    is_cur_month = (dt.month == self.month)
                     wk = WEEKDAY_KEYS[dt.weekday()]
                     day_req = req_dict.get(wk, {})
-                    needed = sum(day_req.get(pp, 0) for pp in ["D", "E", "N"])
-                    # 해당 날 고정 휴무/휴가 인원
-                    fixed_off = sum(
+                    needed = sum(day_req.get(pp, 0) for pp in ["D", "E", "N"]) if is_cur_month else 0
+                    fixed_rest = sum(
                         1 for nurse in self.nurses
-                        if self.prev.get(nurse["id"], {}).get(dt.strftime("%Y-%m-%d"), "")
+                        if self.prev.get(nurse["id"], {}).get(dt_str, "")
                         in (self.REST_SHIFTS + self.LEAVE_SHIFTS)
                     )
-                    week_slots_needed += needed
-                    day_details.append((dt, needed, fixed_off))
+                    fixed_leave = sum(
+                        1 for nurse in self.nurses
+                        if self.prev.get(nurse["id"], {}).get(dt_str, "")
+                        in self.LEAVE_SHIFTS
+                    )
+                    if is_cur_month:
+                        week_slots_needed += needed
+                        day_details.append((dt, needed, fixed_rest))
+                    total_extra_leave += fixed_leave
 
                 month_days_in_week = len(day_details)
                 if month_days_in_week == 0:
                     continue
-                # 주 2회 휴무 → 주당 총 가용 근무슬롯
-                week_avail = N * month_days_in_week - N * 2
-                tight = " ★빡빡" if week_slots_needed > week_avail else ""
+
+                # 가용 슬롯: 일수 비율로 OF+주휴 차감
+                expected_off = N * 2 * month_days_in_week / 7
+                week_avail = max(0, round(N * month_days_in_week - expected_off))
+
+                # 휴가 고정으로 실제 슬랙이 줄어드는 효과 반영
+                effective_avail = max(0, week_avail - total_extra_leave)
+                tight = " ★빡빡" if week_slots_needed > effective_avail else ""
+
                 start_dt = self.all_dates[ws]
                 end_dt = self.all_dates[min(we, len(self.all_dates)-1)]
+                leave_note = f", 휴가고정 {total_extra_leave}건" if total_extra_leave else ""
                 lines.append(
                     f"    {wi+1}주차 ({start_dt.strftime('%m/%d')}~{end_dt.strftime('%m/%d')}): "
-                    f"필요 {week_slots_needed}슬롯 / 가용 {week_avail}슬롯{tight}"
+                    f"필요 {week_slots_needed}슬롯 / 가용 {effective_avail}슬롯{leave_note}{tight}"
                 )
-                # 해당 주에서 가장 빡빡한 날 상위 3개 표시
+                # 해당 주에서 가장 빡빡한 날 상위 3개
                 day_details_sorted = sorted(day_details, key=lambda x: x[1] - (N - x[2]), reverse=True)
                 for dt, needed, fixed_off in day_details_sorted[:3]:
                     avail_day = N - fixed_off
@@ -716,7 +869,7 @@ class NurseScheduler:
                         f"      {dt.strftime('%m/%d')}({DAY_KR[dt.weekday()]}): "
                         f"필요 {needed}명 / 가용 {avail_day}명{flag}"
                     )
-            lines.append("    해결: 간호사를 늘리거나 요일별 필요 인원을 줄이세요.")
+            lines.append("  → 해결: 간호사를 늘리거나 요일별 필요 인원을 줄이세요.")
             return "\n".join(lines)
 
         # ── Phase 6: 연속 근무/야간 제한 ────────────────────────────────────

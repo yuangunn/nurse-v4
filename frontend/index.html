@@ -533,7 +533,8 @@
       <!-- 메시지 -->
       <div x-show="statusMessage" x-cloak
         :class="statusOk ? 'bg-green-50 text-green-800 border-green-200' : 'bg-red-50 text-red-800 border-red-200'"
-        class="border rounded-lg px-4 py-2 mb-4 text-sm" x-text="statusMessage">
+        class="border rounded-lg px-4 py-3 mb-4 text-sm whitespace-pre-wrap"
+        x-text="statusMessage">
       </div>
 
       <!-- 스케줄 그리드 -->
