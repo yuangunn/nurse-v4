@@ -137,6 +137,16 @@ def init_db():
         if existing_scoring == 0:
             _seed_scoring_rules(conn)
 
+        # 퐁당퐁당 회피 규칙 마이그레이션 (기존 DB에 없을 경우 추가)
+        has_pondang = conn.execute(
+            "SELECT COUNT(*) FROM scoring_rules WHERE rule_type='pattern' AND name LIKE '%퐁당%'"
+        ).fetchone()[0]
+        if not has_pondang:
+            conn.execute(
+                "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
+                ("퐁당퐁당 회피", "pattern", json.dumps({"pattern": ["work", "rest_leave", "work"]}), -20, 1, 12)
+            )
+
 
 # ── 근무 시드 데이터 ─────────────────────────────────────────────────────────
 
@@ -414,6 +424,7 @@ def _seed_scoring_rules(conn: sqlite3.Connection):
         ("연속 휴일 보상",          "consecutive_same", json.dumps({"period": "rest"}),                                    +30, 1, 9),
         ("희망 근무 반영 보상",     "wish",             json.dumps({}),                                                    +50, 1, 10),
         ("야간 근무 공평성",        "night_fairness",   json.dumps({}),                                                    -50, 1, 11),
+        ("퐁당퐁당 회피",           "pattern",          json.dumps({"pattern": ["work", "rest_leave", "work"]}),           -20, 1, 12),
     ]
     conn.executemany(
         "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",

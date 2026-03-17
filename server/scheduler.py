@@ -49,6 +49,7 @@ class NurseScheduler:
         self.prev  = request.prev_schedule or {}
         self.per_day_req = request.per_day_requirements or {}
         self.mip_gap = request.mip_gap
+        self.time_limit = request.time_limit
 
         # ── 근무 정의 → 카테고리 리스트 동적 구성 ─────────────────────────────
         shifts = [s.model_dump() for s in request.shifts] if request.shifts else []
@@ -155,7 +156,7 @@ class NurseScheduler:
 
         # 경험 계수: HiGHS 실측 기준 ~0.12초/변수
         estimated = total_vars * 0.12
-        return int(min(1200, max(5, round(estimated))))
+        return int(min(self.time_limit, max(5, round(estimated))))
 
     # ── 메인 솔버 ────────────────────────────────────────────────────────────
 
@@ -223,24 +224,38 @@ class NurseScheduler:
         # ── Solve ─────────────────────────────────────────────────────────────
 
         solver = pulp.HiGHS(
-            timeLimit=1200,
+            timeLimit=self.time_limit,
             mip_rel_gap=self.mip_gap,
             msg=False,
         )
-        status = prob.solve(solver)
+        try:
+            status = prob.solve(solver)
+        except Exception:
+            # kInterrupt 등 PuLP가 매핑 못하는 상태 → status를 직접 확인
+            pass
 
-        if pulp.LpStatus[prob.status] in ("Optimal", "Feasible"):
+        status_str = pulp.constants.LpStatus.get(prob.status, "Unknown")
+
+        # feasible solution 존재 여부: 변수에 값이 할당되어 있는지 확인
+        has_solution = any(
+            v.varValue is not None and v.varValue > 0.5
+            for v in prob.variables() if v.name.startswith("x_")
+        )
+
+        if status_str in ("Optimal", "Feasible") or (has_solution and status_str != "Infeasible"):
             schedule, extended = self._extract_solution(x)
-            nurse_scores = self._compute_nurse_scores(schedule)
+            nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
+            label = "중지" if status_str not in ("Optimal", "Feasible") else status_str
             return {
                 "success": True,
                 "schedule": schedule,
                 "extended_schedule": extended,
                 "nurse_scores": nurse_scores,
-                "message": f"근무표가 생성되었습니다. (상태: {pulp.LpStatus[prob.status]})",
+                "nurse_score_details": nurse_score_details,
+                "message": f"근무표가 생성되었습니다. (상태: {label})",
                 "estimated_seconds": self.estimate_seconds(),
             }
-        elif pulp.LpStatus[prob.status] == "Infeasible":
+        elif status_str == "Infeasible":
             # 즉시 판정된 Infeasible → 진단 실행 (각 단계 10초 이내)
             diagnosis = self._diagnose_infeasibility()
             return {
@@ -250,13 +265,13 @@ class NurseScheduler:
                 "message": diagnosis,
             }
         else:
-            # Not Solved = 타임아웃 (600초 소진)
+            # Not Solved = 타임아웃 또는 해 없이 중단
             return {
                 "success": False,
                 "schedule": {},
                 "extended_schedule": {},
                 "message": (
-                    "제한 시간(10분) 내에 근무표를 완성하지 못했습니다.\n"
+                    f"제한 시간({self.time_limit//60}분) 내에 근무표를 완성하지 못했습니다.\n"
                     "힌트:\n"
                     "  · 간호사를 추가하거나 요일별 필요 인원을 줄여보세요.\n"
                     "  · 연속 근무/야간 일수 제한을 완화해보세요.\n"
@@ -316,7 +331,7 @@ class NurseScheduler:
                 if required <= 0:
                     continue
                 prob += (
-                    pulp.lpSum(x[n["id"]][d][s] for n in self.nurses for s in shifts) >= required,
+                    pulp.lpSum(x[n["id"]][d][s] for n in self.nurses for s in shifts) == required,
                     f"req_{d}_{period}"
                 )
 
@@ -718,10 +733,11 @@ class NurseScheduler:
 
         return pulp.lpSum(terms)
 
-    def _compute_nurse_scores(self, schedule: Dict) -> Dict[str, int]:
+    def _compute_nurse_scores(self, schedule: Dict):
         """
         확정된 스케줄에서 간호사별 소프트 제약 점수를 계산.
         scoring_rules 기반 동적 계산. 높을수록 좋은 스케줄.
+        Returns (scores: {nid: int}, details: {nid: [{name, rule_type, count, score_per, total}]})
         """
         import calendar as _cal
         month_days_count = _cal.monthrange(self.year, self.month)[1]
@@ -729,11 +745,16 @@ class NurseScheduler:
         dt_keys = [dt.strftime("%Y-%m-%d") for dt in month_dates]
 
         scores = {nurse["id"]: 0 for nurse in self.nurses}
+        # details: {nid: [{name, rule_type, count, score_per, total}]}
+        details: Dict[str, list] = {nurse["id"]: [] for nurse in self.nurses}
 
         for rule in self.scoring_rules:
             rt = rule.rule_type
             p  = rule.params
             sc = rule.score
+
+            # per-nurse count accumulator for this rule
+            counts: Dict[str, int] = {nurse["id"]: 0 for nurse in self.nurses}
 
             if rt == "specific_shift":
                 code = p.get("shift_code", "")
@@ -748,6 +769,7 @@ class NurseScheduler:
                     for dk in dt_keys:
                         if ns.get(dk) == code:
                             scores[nid] += sc
+                            counts[nid] += 1
 
             elif rt == "transition":
                 from_shifts = set(self._resolve_group(p.get("from", "")))
@@ -762,6 +784,7 @@ class NurseScheduler:
                         s2 = ns.get(dt_keys[i + 1], "")
                         if s1 in from_shifts and s2 in to_shifts:
                             scores[nid] += sc
+                            counts[nid] += 1
 
             elif rt == "consecutive_same":
                 period_shifts = set(self._resolve_group(p.get("period", "")))
@@ -775,6 +798,7 @@ class NurseScheduler:
                         s2 = ns.get(dt_keys[i + 1], "")
                         if s1 in period_shifts and s2 in period_shifts:
                             scores[nid] += sc
+                            counts[nid] += 1
 
             elif rt == "pattern":
                 pattern = p.get("pattern", [])
@@ -791,6 +815,7 @@ class NurseScheduler:
                         window_shifts = [ns.get(dt_keys[i + k], "") for k in range(n_steps)]
                         if all(window_shifts[k] in groups[k] for k in range(n_steps)):
                             scores[nid] += sc
+                            counts[nid] += 1
 
             elif rt == "wish":
                 for nurse in self.nurses:
@@ -805,13 +830,30 @@ class NurseScheduler:
                             s = ns.get(dk, "")
                             if wish_shift == "OFF" and s in self.REST_SHIFTS + self.LEAVE_SHIFTS:
                                 scores[nid] += sc
+                                counts[nid] += 1
                             elif s == wish_shift:
                                 scores[nid] += sc
+                                counts[nid] += 1
                         except (ValueError, KeyError):
                             pass
             # night_fairness는 개인 점수에 미포함 (전체 지표)
+            else:
+                continue
 
-        return scores
+            # counts가 0이 아닌 간호사에게만 detail 추가
+            for nurse in self.nurses:
+                nid = nurse["id"]
+                c = counts[nid]
+                if c != 0:
+                    details[nid].append({
+                        "name": rule.name,
+                        "rule_type": rt,
+                        "count": c,
+                        "score_per": sc,
+                        "total": c * sc,
+                    })
+
+        return scores, details
 
     # ── Infeasible 진단 ──────────────────────────────────────────────────────
 

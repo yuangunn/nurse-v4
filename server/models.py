@@ -84,6 +84,7 @@ class GenerateRequest(BaseModel):
     per_day_requirements: Optional[Dict[str, Dict[str, int]]] = None  # {'YYYY-MM-DD': {'D':4,'E':5,'N':3}}
     scoring_rules: List[ScoringRule] = []  # 배점 규칙 목록 (비어있으면 DB에서 로드)
     mip_gap: float = 0.02  # MIP 오차 허용 범위 (0=완벽한 최적해, 0.02=2% 오차허용 조기종료)
+    time_limit: int = 1200  # 솔버 타임리밋 (초, 기본 20분)
 
 
 class ScheduleSave(BaseModel):

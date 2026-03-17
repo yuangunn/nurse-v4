@@ -97,7 +97,7 @@ py main.py
 | 제약 | 설명 |
 |------|------|
 | 1일 1근무 | 모든 간호사는 하루에 정확히 1개의 근무 |
-| 일별 인원 충족 | D/E/N 각 시간대 요구 인원 이상 |
+| 일별 인원 **정확** 충족 | D/E/N 각 시간대 요구 인원과 **정확히 일치** (초과 배정 불가) |
 | Charge 필수 | 매일 DC/EC/NC 각 1명 이상 |
 | **Charge 시니어리티** | DC/EC/NC는 해당 듀티(D/E/N)에서 seniority 가장 낮은(선임) 간호사에게만 배정. 더 선임이 같은 듀티에 일반 근무(D/E/N)로 배정될 경우 후임은 Charge 불가. |
 | 근무 자격 | capable_shifts에 없는 근무 배정 불가 |
@@ -206,6 +206,17 @@ D/E/N 수치는 charge 포함 총 인원. (예: D=4 → DC 1명 + D 3명)
 | GET | `/api/requirements` | 요일별 인원 조회 |
 | POST | `/api/requirements` | 요일별 인원 저장 |
 | POST | `/api/generate` | 스케줄 생성 |
+| POST | `/api/generate/stop` | 생성 중지 (cancelSolve) |
+| GET | `/api/generate/progress` | 생성 진행 상황 (폴링) |
+| GET | `/api/generate/stream` | SSE 실시간 로그 스트리밍 |
+| GET | `/api/generate/result` | 마지막 생성 결과 조회 (새로고침 복구용) |
+| POST | `/api/estimate` | 예상 소요시간 조회 |
+| GET | `/api/shifts` | 근무 목록 |
+| POST | `/api/shifts` | 근무 추가/수정 |
+| DELETE | `/api/shifts/{code}` | 근무 삭제 |
+| GET | `/api/scoring_rules` | 배점 규칙 목록 |
+| POST | `/api/scoring_rules` | 배점 규칙 추가/수정 |
+| DELETE | `/api/scoring_rules/{id}` | 배점 규칙 삭제 |
 | GET | `/api/schedules` | 저장된 스케줄 목록 |
 | POST | `/api/schedules` | 스케줄 저장 |
 | GET | `/api/schedules/{id}` | 스케줄 불러오기 |
@@ -286,10 +297,69 @@ pyinstaller --onedir --windowed ^
 
 ---
 
+## highspy 1.8.1 콜백 API
+
+> **중요**: highspy 1.8.1에서 `setLogCallback()` 메서드가 제거됨.
+> 대신 `cbLogging.subscribe(fn)` 방식 사용. 콜백 이벤트는 `event.message`로 로그 수신.
+
+```python
+# 구 API (동작 안 함)
+# self.setLogCallback(lambda _, msg: ...)
+
+# 신 API (highspy 1.8.1+)
+def _on_log(event):
+    msg = getattr(event, "message", "")
+    ...
+self.cbLogging.subscribe(_on_log)
+```
+
+`setCallback(fn, user_data)`도 있지만 모든 내부 이벤트("MIP check limits" 등)를
+쏟아내므로 사용하지 않음. `cbLogging.subscribe()`가 로그 전용 콜백.
+
+---
+
+## 솔버 중지 및 새로고침 복구
+
+### 중지 (cancelSolve)
+- `POST /api/generate/stop` → `_TrackableHighs` 인스턴스의 `cancelSolve()` 호출
+- PuLP가 `kInterrupt` 상태를 반환 → `LpStatus`에 매핑 안 됨
+- 해결: `prob.solve()` 예외 처리 + 변수에 값이 할당되어 있으면 feasible solution으로 인정
+
+### 새로고침 복구
+- `_last_generate_result` 전역 변수에 마지막 생성 결과 보관
+- `GET /api/generate/result` → `running` / `done` / `idle` 반환
+- 프론트엔드 `init()` 시 자동 감지: 진행 중이면 SSE 재접속 + 폴링, 완료면 결과 복원
+
+### 동시 생성 방지
+- `POST /api/generate` 진입 시 이전 솔버가 돌고 있으면 409 에러 반환
+- "이미 생성이 진행 중입니다. 중지 후 다시 시도하세요."
+
+---
+
+## 솔버 로그 UI
+
+- 생성 중/완료/오류 모든 상태에서 솔버 로그 확인 가능
+- 로그창 높이 420px, B&B 헤더 설명 테이블 포함
+- 로그 항목은 `{id, msg}` 객체 + 고유 키로 렌더링 (Alpine.js `shift()` 렌더링 이슈 방지)
+- 300줄 초과 시 `slice(-200)`으로 일괄 트리밍
+
+---
+
+## 성능 참고 (18명 × 31일 기준)
+
+- 주휴만 사전입력 (81건): ~5분 (300초), Optimal
+- 사전입력 많을수록 자유 변수 감소 → 속도 향상
+- `mip_gap=0.02` (2% 오차 허용) 설정 시 조기 종료 가능
+- CPU 싱글코어 성능이 핵심 (HiGHS는 기본 싱글스레드)
+- GPU 사용 안 함
+
+---
+
 ## 알려진 주의사항
 
 - `pulp.HiGHS_CMD` 사용 금지 → `pulp.HiGHS` (Python 바인딩) 사용
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)
-- solver timeLimit: 600초 (대규모 병원, 간호사 많을 경우 늘릴 수 있음)
+- solver timeLimit: 프론트엔드에서 설정 가능 (기본 20분, 최대 60분)
+- 일별 인원 제약은 `==` (정확히 일치) — 초과 배정 불가
 - __pycache__ 구버전 캐시로 인한 오류 발생 시: 서버 완전 종료 후 `__pycache__` 폴더 삭제
 - 포트 5757 점유 시 완전히 종료 후 재시작 필요 (기존 uvicorn 프로세스 확인)

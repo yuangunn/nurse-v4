@@ -1,13 +1,66 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pathlib import Path
 from typing import List, Optional
 import json
+import queue
 
 from . import database as db
 from .models import GenerateRequest, ScheduleSave, ScoringRule
 from .scheduler import NurseScheduler
+
+# ── HiGHS 인스턴스 추적 (중지 기능용) ────────────────────────────────────────
+# PuLP의 HiGHS 솔버가 내부적으로 생성하는 highspy.Highs 인스턴스를 가로채
+# cancelSolve() 호출과 mip_gap 캡처를 가능하게 함.
+_current_highs_instance = None
+_last_mip_gap: Optional[float] = None
+_solve_cancelled: bool = False
+_solve_progress: dict = {"gap_percent": None, "nodes": 0, "has_solution": False, "is_running": False}
+_log_queue: queue.Queue = queue.Queue()
+_last_generate_result: Optional[dict] = None  # 마지막 생성 결과 보관 (새로고침 복구용)
+
+try:
+    import highspy as _highspy_mod
+    _OrigHighs = _highspy_mod.Highs
+
+    class _TrackableHighs(_OrigHighs):
+        def run(self):
+            global _current_highs_instance, _last_mip_gap, _log_queue
+            _current_highs_instance = self
+            # 큐 초기화 (이전 실행 잔여 로그 제거)
+            while not _log_queue.empty():
+                try: _log_queue.get_nowait()
+                except Exception: break
+            # 로그 콜백 등록 — 솔버 출력을 큐에 적재
+            # highspy 1.8+: cbLogging.subscribe(fn) — event.message로 로그 수신
+            def _on_log(event):
+                msg = getattr(event, "message", "")
+                if msg and msg.strip():
+                    _log_queue.put({"type": "log", "msg": msg.rstrip()})
+            try:
+                self.cbLogging.subscribe(_on_log)
+            except Exception:
+                pass
+            self.setOptionValue("output_flag", True)
+            # HandleUserInterrupt=True 필수: 이 플래그가 있어야 cancelSolve()가
+            # MIP 인터럽트 콜백을 활성화하여 솔버를 실제로 중단할 수 있음
+            self.HandleUserInterrupt = True
+            try:
+                result = super().run()
+                return result
+            finally:
+                try:
+                    status, gap = super().getInfoValue("mip_gap")
+                    if status.value == 0:  # kOk
+                        _last_mip_gap = float(gap)
+                except Exception:
+                    pass
+                _current_highs_instance = None
+
+    _highspy_mod.Highs = _TrackableHighs
+except ImportError:
+    pass  # highspy 없으면 패스 (cancel/gap 기능 비활성화)
 
 app = FastAPI(title="NurseScheduler v2")
 
@@ -198,8 +251,91 @@ def estimate(request: GenerateRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/generate/stop")
+def stop_generate():
+    """진행 중인 스케줄 생성을 중지하고 지금까지 찾은 최선의 해를 반환하도록 신호."""
+    global _solve_cancelled
+    h = _current_highs_instance
+    if h is not None:
+        _solve_cancelled = True
+        h.cancelSolve()
+        return {"ok": True, "message": "중지 신호를 전송했습니다."}
+    return {"ok": False, "message": "진행 중인 생성이 없습니다."}
+
+
+@app.get("/api/generate/stream")
+def generate_stream():
+    """SSE: 솔버 로그 + 진행 상황 실시간 스트리밍"""
+    def event_gen():
+        import time
+        # 솔버가 아직 시작되지 않았을 수 있으므로 최대 30초 대기
+        waited = 0
+        while _current_highs_instance is None and _log_queue.empty() and waited < 30:
+            if _solve_progress.get("is_running"):
+                # generate()가 호출됨 → 솔버 시작 대기
+                time.sleep(0.2)
+                waited += 0.2
+            else:
+                # generate() 자체가 아직 호출 안 됨 → 짧게 대기
+                time.sleep(0.5)
+                waited += 0.5
+        while True:
+            h = _current_highs_instance
+            # 로그 메시지 우선 드레인
+            try:
+                item = _log_queue.get(timeout=0.05)
+                yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+                continue
+            except queue.Empty:
+                pass
+            # 솔버 종료 + 큐 비어있으면 done
+            if h is None and _log_queue.empty() and not _solve_progress.get("is_running"):
+                yield "data: {\"type\":\"done\"}\n\n"
+                break
+            # 1초 heartbeat — 현재 progress 전송
+            prog = dict(_solve_progress)
+            prog["type"] = "progress"
+            yield f"data: {json.dumps(prog)}\n\n"
+            time.sleep(1)
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/generate/progress")
+def get_generate_progress():
+    """생성 중 실시간 진행 상황 반환 (2초 간격 폴링용)"""
+    global _solve_progress
+    h = _current_highs_instance
+    _solve_progress["is_running"] = h is not None
+    if h is not None:
+        try:
+            import math
+            status, gap = h.getInfoValue("mip_gap")
+            if status.value == 0 and math.isfinite(float(gap)):
+                _solve_progress["gap_percent"] = round(float(gap) * 100, 2)
+                _solve_progress["has_solution"] = True
+            status2, nodes = h.getInfoValue("mip_node_count")
+            if status2.value == 0:
+                _solve_progress["nodes"] = int(nodes)
+
+        except Exception:
+            pass
+    return _solve_progress
+
+
 @app.post("/api/generate")
 def generate(request: GenerateRequest):
+    global _last_mip_gap, _solve_cancelled, _solve_progress, _last_generate_result
+    # 이전 솔버가 아직 돌고 있으면 거부
+    if _current_highs_instance is not None or _solve_progress.get("is_running"):
+        raise HTTPException(status_code=409, detail="이미 생성이 진행 중입니다. 중지 후 다시 시도하세요.")
+    _last_mip_gap = None
+    _solve_cancelled = False
+    _solve_progress = {"gap_percent": None, "nodes": 0, "has_solution": False, "is_running": True}
+    _last_generate_result = None  # 새 생성 시작 시 이전 결과 초기화
     try:
         # shifts가 비어있으면 DB에서 로드
         if not request.scoring_rules:
@@ -218,13 +354,37 @@ def generate(request: GenerateRequest):
         warning = _validate_staffing(request, leave_shifts, rest_shifts)
         scheduler = NurseScheduler(request)
         result = scheduler.solve()
+
+        # MIP gap 및 중지 여부 추가
+        if _last_mip_gap is not None:
+            import math
+            if math.isfinite(_last_mip_gap):
+                result["mip_gap_percent"] = round(_last_mip_gap * 100, 2)
+        if _solve_cancelled and result.get("success"):
+            result["stopped"] = True
+
         if warning and not result.get("success"):
             result["message"] = warning + "\n\n" + result.get("message", "")
         elif warning:
             result["warning"] = warning
+
+        _last_generate_result = result  # 결과 보관
+        _solve_progress["is_running"] = False
         return result
     except Exception as e:
+        _solve_progress["is_running"] = False
+        _last_generate_result = {"success": False, "message": str(e), "schedule": {}}
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/generate/result")
+def get_generate_result():
+    """마지막 생성 결과 조회 (새로고침 복구용)"""
+    if _solve_progress.get("is_running"):
+        return {"status": "running"}
+    if _last_generate_result is not None:
+        return {"status": "done", "result": _last_generate_result}
+    return {"status": "idle"}
 
 
 # ── 스케줄 저장/관리 API ──────────────────────────────────────────────────────
