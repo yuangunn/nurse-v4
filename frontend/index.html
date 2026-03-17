@@ -513,6 +513,62 @@
         </div>
       </div>
 
+      <!-- 배점 관리 -->
+      <div class="glass-panel md:col-span-2">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold text-gray-700">📊 배점 관리 <span class="text-xs text-gray-400 font-normal ml-1">소프트 제약 규칙·점수 관리</span></h2>
+          <div class="flex gap-2">
+            <button @click="openScoringModal(null)"
+              class="bg-indigo-600 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-indigo-700">
+              + 새 규칙 추가
+            </button>
+            <button @click="scoringMgmtOpen=!scoringMgmtOpen"
+              :class="scoringMgmtOpen ? 'bg-gray-200 text-gray-700' : 'border border-gray-300 text-gray-500 hover:bg-gray-50'"
+              class="text-sm px-3 py-1.5 rounded-lg"
+              x-text="scoringMgmtOpen ? '접기' : '목록 보기'">
+            </button>
+          </div>
+        </div>
+        <div x-show="scoringMgmtOpen" x-cloak class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-3 py-2 text-left w-10">ON</th>
+                <th class="px-3 py-2 text-left">규칙 이름</th>
+                <th class="px-3 py-2 text-left">유형</th>
+                <th class="px-3 py-2 text-left">조건 요약</th>
+                <th class="px-3 py-2 text-right">점수</th>
+                <th class="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="r in scoringRules" :key="r.id">
+                <tr class="border-t hover:bg-gray-50" :class="r.enabled ? '' : 'opacity-40'">
+                  <td class="px-3 py-2">
+                    <input type="checkbox" :checked="r.enabled"
+                      @change="toggleScoringRule(r)" class="cursor-pointer" />
+                  </td>
+                  <td class="px-3 py-2 font-medium text-gray-700" x-text="r.name"></td>
+                  <td class="px-3 py-2 text-xs text-gray-500">
+                    <span x-text="scoringRuleTypeLabel(r.rule_type)"
+                      class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600"></span>
+                  </td>
+                  <td class="px-3 py-2 text-xs text-gray-500" x-text="scoringRuleCondSummary(r)"></td>
+                  <td class="px-3 py-2 text-right font-mono font-semibold"
+                    :class="r.score >= 0 ? 'text-emerald-600' : 'text-red-500'"
+                    x-text="(r.score >= 0 ? '+' : '') + r.score">
+                  </td>
+                  <td class="px-3 py-2 flex gap-2 justify-end">
+                    <button @click="openScoringModal(r)" class="text-blue-600 hover:underline text-xs">수정</button>
+                    <button @click="deleteScoringRule(r.id)" class="text-red-500 hover:underline text-xs">삭제</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -752,12 +808,15 @@
       <!-- 생성 중 타이머 + 진행바 -->
       <div x-show="generating" x-cloak class="mb-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
         <div class="flex items-center justify-between mb-1">
-          <span>예상 소요: <strong x-text="estimatedSeconds + '초 내외'"></strong></span>
+          <span>
+            예상 소요: <strong x-text="estimatedSeconds ? estimatedSeconds + '초 내외' : '계산 중…'"></strong>
+            <span class="text-blue-500 text-xs ml-1">(최대 20분, 해 발견 시 조기 종료)</span>
+          </span>
           <span>경과: <strong x-text="generateElapsed + '초'"></strong></span>
         </div>
         <div class="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
           <div class="bg-blue-600 h-2 rounded-full transition-all duration-1000"
-            :style="`width:${Math.min(100,Math.round(generateElapsed/Math.max(1,estimatedSeconds)*100))}%`">
+            :style="`width:${estimatedSeconds ? Math.min(100,Math.round(generateElapsed/estimatedSeconds*100)) : Math.min(100,Math.round(generateElapsed/1200*100))}%`">
           </div>
         </div>
       </div>
@@ -804,6 +863,8 @@
               <th class="border px-2 py-1 text-gray-500 sticky bg-gray-50 z-20 text-xs" style="top:27px">E</th>
               <th class="border px-2 py-1 text-gray-500 sticky bg-gray-50 z-20 text-xs" style="top:27px">N</th>
               <th class="border px-2 py-1 text-gray-500 sticky bg-gray-50 z-20 text-xs" style="top:27px">휴</th>
+              <th class="border px-2 py-1 text-pink-500 sticky bg-gray-50 z-20 text-xs" style="top:27px">생</th>
+              <th class="border px-2 py-1 text-indigo-600 sticky bg-gray-50 z-20 text-xs" style="top:27px">배점</th>
             </tr>
           </thead>
           <tbody>
@@ -834,6 +895,8 @@
                 <td class="border px-2 py-1 text-center" x-text="countShifts(nurse.id, ['EC','E'])"></td>
                 <td class="border px-2 py-1 text-center" x-text="countShifts(nurse.id, ['NC','N'])"></td>
                 <td class="border px-2 py-1 text-center" x-text="countShifts(nurse.id, ['OF','주'])"></td>
+                <td class="border px-2 py-1 text-center text-pink-600" x-text="countShifts(nurse.id, ['생']) || ''"></td>
+                <td class="border px-2 py-1 text-center text-indigo-600 font-semibold" x-text="nurseScore(nurse.id)"></td>
               </tr>
             </template>
           </tbody>
@@ -849,7 +912,7 @@
                              isCycleStart(day) && day.getDate()!==1 ? 'border-l-2 border-l-indigo-300' : '']"
                     x-text="getDayDutyCount(day, row.shifts) || ''"></td>
                 </template>
-                <td class="border" colspan="4"></td>
+                <td class="border" colspan="6"></td>
               </tr>
             </template>
           </tfoot>
@@ -1067,6 +1130,158 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
+     배점 규칙 추가/수정 모달
+══════════════════════════════════════════════════════════ -->
+<div x-show="scoringModal.open" x-cloak
+  class="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40"
+  @click.self="scoringModal.open=false">
+  <div class="bg-white w-full max-w-lg rounded-t-2xl md:rounded-2xl shadow-xl p-5 max-h-[90vh] overflow-y-auto">
+    <h3 class="font-bold text-lg mb-4" x-text="scoringModal.isNew ? '새 배점 규칙 추가' : '배점 규칙 수정'"></h3>
+    <div class="space-y-3">
+
+      <!-- 규칙 이름 -->
+      <div>
+        <label class="text-sm text-gray-600">규칙 이름 *</label>
+        <input x-model="scoringModal.data.name"
+          class="w-full border rounded px-3 py-2 mt-1" placeholder="예: 퐁당퐁당 페널티" />
+      </div>
+
+      <!-- 유형 -->
+      <div>
+        <label class="text-sm text-gray-600">유형 *</label>
+        <select x-model="scoringModal.data.rule_type"
+          @change="initScoringParams($event.target.value)"
+          class="w-full border rounded px-3 py-2 mt-1">
+          <option value="transition">전환 패턴 (2일 연속 근무 → 근무)</option>
+          <option value="pattern">N일 패턴 (퐁당퐁당 등)</option>
+          <option value="consecutive_same">연속 동일 period 쌍</option>
+          <option value="specific_shift">특정 근무 배정</option>
+          <option value="wish">희망 근무 반영</option>
+          <option value="night_fairness">야간 근무 공평성</option>
+        </select>
+      </div>
+
+      <!-- 점수 + 활성화 -->
+      <div class="flex gap-3 items-end">
+        <div class="flex-1">
+          <label class="text-sm text-gray-600">점수 <span class="text-xs text-gray-400">(음수=페널티, 양수=보상)</span></label>
+          <input type="number" x-model.number="scoringModal.data.score"
+            class="w-full border rounded px-3 py-2 mt-1 font-mono" />
+        </div>
+        <label class="flex items-center gap-2 text-sm pb-2">
+          <input type="checkbox" x-model="scoringModal.data.enabled" />
+          활성화
+        </label>
+      </div>
+
+      <!-- transition 전용 -->
+      <template x-if="scoringModal.data.rule_type === 'transition'">
+        <div class="p-3 bg-blue-50 rounded-lg space-y-2">
+          <div class="text-xs text-blue-700 font-medium mb-1">2일 연속 전환 조건</div>
+          <div class="flex items-center gap-2">
+            <div class="flex-1">
+              <label class="text-xs text-gray-500">이전 근무 그룹</label>
+              <select x-model="scoringModal.data.params.from" class="w-full border rounded px-2 py-1.5 mt-1 text-sm">
+                <template x-for="g in periodGroups" :key="g.value">
+                  <option :value="g.value" x-text="g.label"></option>
+                </template>
+              </select>
+            </div>
+            <span class="text-gray-400 mt-5">→</span>
+            <div class="flex-1">
+              <label class="text-xs text-gray-500">이후 근무 그룹</label>
+              <select x-model="scoringModal.data.params.to" class="w-full border rounded px-2 py-1.5 mt-1 text-sm">
+                <template x-for="g in periodGroups" :key="g.value">
+                  <option :value="g.value" x-text="g.label"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- pattern 전용 -->
+      <template x-if="scoringModal.data.rule_type === 'pattern'">
+        <div class="p-3 bg-purple-50 rounded-lg space-y-2">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-xs text-purple-700 font-medium">N일 패턴 빌더</div>
+            <button @click="scoringModal.data.params.pattern.push('work')"
+              class="text-xs bg-purple-600 text-white px-2 py-0.5 rounded hover:bg-purple-700">+ 단계 추가</button>
+          </div>
+          <div class="flex flex-wrap gap-2 items-center">
+            <template x-for="(step, idx) in scoringModal.data.params.pattern" :key="idx">
+              <div class="flex items-center gap-1">
+                <select :value="step"
+                  @change="scoringModal.data.params.pattern.splice(idx, 1, $event.target.value)"
+                  class="border rounded px-2 py-1 text-xs">
+                  <template x-for="g in periodGroups" :key="g.value">
+                    <option :value="g.value" x-text="g.label"></option>
+                  </template>
+                </select>
+                <button x-show="scoringModal.data.params.pattern.length > 2"
+                  @click="scoringModal.data.params.pattern.splice(idx, 1)"
+                  class="text-red-400 hover:text-red-600 text-xs">✕</button>
+                <span x-show="idx < scoringModal.data.params.pattern.length - 1"
+                  class="text-gray-400 text-xs">→</span>
+              </div>
+            </template>
+          </div>
+          <div class="text-xs text-purple-500 mt-1">예: 근무→휴무/휴가→근무 = 퐁당퐁당 패턴</div>
+        </div>
+      </template>
+
+      <!-- consecutive_same 전용 -->
+      <template x-if="scoringModal.data.rule_type === 'consecutive_same'">
+        <div class="p-3 bg-green-50 rounded-lg">
+          <label class="text-xs text-green-700 font-medium">연속 동일 period</label>
+          <select x-model="scoringModal.data.params.period" class="w-full border rounded px-2 py-1.5 mt-1 text-sm">
+            <template x-for="g in periodGroups" :key="g.value">
+              <option :value="g.value" x-text="g.label"></option>
+            </template>
+          </select>
+        </div>
+      </template>
+
+      <!-- specific_shift 전용 -->
+      <template x-if="scoringModal.data.rule_type === 'specific_shift'">
+        <div class="p-3 bg-amber-50 rounded-lg space-y-2">
+          <div>
+            <label class="text-xs text-amber-700 font-medium">근무 코드</label>
+            <select x-model="scoringModal.data.params.shift_code" class="w-full border rounded px-2 py-1.5 mt-1 text-sm">
+              <template x-for="s in shifts" :key="s.code">
+                <option :value="s.code" x-text="`${s.code} - ${s.name}`"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-amber-700 font-medium">적용 대상</label>
+            <select x-model="scoringModal.data.params.condition" class="w-full border rounded px-2 py-1.5 mt-1 text-sm">
+              <option value="all">전체 간호사</option>
+              <option value="female_only">여성 간호사만</option>
+            </select>
+          </div>
+        </div>
+      </template>
+
+      <!-- wish / night_fairness: 추가 파라미터 없음 -->
+      <template x-if="scoringModal.data.rule_type === 'wish' || scoringModal.data.rule_type === 'night_fairness'">
+        <div class="p-3 bg-gray-50 rounded-lg text-xs text-gray-500">
+          <span x-show="scoringModal.data.rule_type === 'wish'">간호사별 희망 근무 매칭 시 점수를 부여합니다.</span>
+          <span x-show="scoringModal.data.rule_type === 'night_fairness'">야간 근무 총량의 최대-최소 범위를 최소화하는 방향으로 점수를 부여합니다. (전체 지표, 개인 배점에는 미반영)</span>
+        </div>
+      </template>
+
+    </div>
+    <div class="flex gap-3 mt-5">
+      <button @click="scoringModal.open=false"
+        class="flex-1 border border-gray-300 py-2 rounded-lg text-sm">취소</button>
+      <button @click="saveScoringRule()"
+        class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-sm font-medium">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
      셀 편집 모달
 ══════════════════════════════════════════════════════════ -->
 <div x-show="shiftEdit.open" x-cloak
@@ -1127,7 +1342,7 @@ function app() {
       noNOD: true,
       avoidDN: true,
       maxConsecutiveWork: true,
-      maxConsecutiveWorkDays: 6,
+      maxConsecutiveWorkDays: 5,
       maxConsecutiveNight: true,
       maxConsecutiveNightDays: 3,
       patternOptimization: true,
@@ -1153,8 +1368,13 @@ function app() {
     shiftMgmtOpen: false,
     shiftModal: {open:false, isNew:true, data:{}},
 
+    scoringRules: [],  // DB에서 로드한 ScoringRule 목록
+    scoringMgmtOpen: false,
+    scoringModal: {open:false, isNew:true, data:{}},
+
     prevSchedule: {},   // {nurse_id: {'YYYY-MM-DD': shift}} 사전 고정 근무
     prevDayReqs: {},    // {'YYYY-MM-DD': {D:n, E:n, N:n}} 일별 필요인원 오버라이드
+    nurseScores: {},    // {nurse_id: score} 엔진 계산 배점
     holidays: [],       // ['YYYY-M-D', ...] 법정공휴일로 지정된 날짜 목록
 
     prevSaves: [],          // 저장된 사전입력 목록
@@ -1196,6 +1416,7 @@ function app() {
         this.loadRules(),
         this.loadRequirements(),
         this.loadShifts(),
+        this.loadScoringRules(),
         this.loadSavedList(),
         this.loadPrevSavesList(),
       ]);
@@ -1301,41 +1522,148 @@ function app() {
       await this.loadShifts();
     },
 
-    // ── 스케줄 생성 ──────────────────────────────────────────────────────────
-    calcEstimatedSeconds() {
-      const daysInMonth = new Date(this.year, this.month, 0).getDate();
-      const totalCells = this.nurses.length * daysInMonth;
-      const preFilled = Object.values(this.prevSchedule).reduce((s,d)=>s+Object.keys(d).length, 0);
-      return Math.max(5, Math.round((totalCells - preFilled) * 0.08));
+    // ── 배점 관리 ────────────────────────────────────────────────────────────
+    async loadScoringRules() {
+      this.scoringRules = await this.api('GET', '/api/scoring_rules');
     },
 
+    // period 그룹 옵션 목록 (모달 드롭다운용)
+    get periodGroups() {
+      const base = [
+        {value:'work',      label:'모든 근무'},
+        {value:'day',       label:'낮 근무 (D, DC, D1)'},
+        {value:'evening',   label:'저녁 근무 (E, EC, 중)'},
+        {value:'night',     label:'야간 근무 (N, NC)'},
+        {value:'rest',      label:'휴무 (OF, 주)'},
+        {value:'leave',     label:'휴가 (V, 생, 특...)'},
+        {value:'rest_leave',label:'휴무/휴가'},
+        {value:'any',       label:'전체'},
+      ];
+      // 특정 코드들도 추가
+      const specifics = this.shifts.map(s => ({
+        value: `specific:${s.code}`,
+        label: `특정: ${s.code} (${s.name})`,
+      }));
+      return [...base, ...specifics];
+    },
+
+    scoringRuleTypeLabel(rule_type) {
+      return {
+        transition:      '전환 패턴',
+        pattern:         'N일 패턴',
+        consecutive_same:'연속 동일',
+        specific_shift:  '특정 근무',
+        wish:            '희망 근무',
+        night_fairness:  '야간 공평성',
+      }[rule_type] || rule_type;
+    },
+
+    scoringRuleCondSummary(r) {
+      const p = r.params || {};
+      if (r.rule_type === 'transition') {
+        const gl = v => ({work:'모든근무',day:'낮',evening:'저녁',night:'야간',rest:'휴무',leave:'휴가',rest_leave:'휴무/휴가',any:'전체'})[v] || v;
+        return `${gl(p.from)} → ${gl(p.to)}`;
+      }
+      if (r.rule_type === 'pattern') {
+        const gl = v => ({work:'근무',day:'낮',evening:'저녁',night:'야간',rest:'휴무',leave:'휴가',rest_leave:'휴무/휴가',any:'전체'})[v] || v;
+        return (p.pattern || []).map(gl).join(' → ');
+      }
+      if (r.rule_type === 'consecutive_same') {
+        const gl = v => ({work:'모든근무',day:'낮',evening:'저녁',night:'야간',rest:'휴무',leave:'휴가',rest_leave:'휴무/휴가',any:'전체'})[v] || v;
+        return `연속 ${gl(p.period)} 쌍`;
+      }
+      if (r.rule_type === 'specific_shift') {
+        return `${p.shift_code || '-'}${p.condition === 'female_only' ? ' (여성)' : ''}`;
+      }
+      if (r.rule_type === 'wish') return '희망 근무 매칭';
+      if (r.rule_type === 'night_fairness') return '야간 range 최소화';
+      return '-';
+    },
+
+    openScoringModal(rule) {
+      this.scoringModal.isNew = !rule;
+      if (rule) {
+        this.scoringModal.data = JSON.parse(JSON.stringify(rule));
+      } else {
+        this.scoringModal.data = {
+          name: '', rule_type: 'transition', score: 0, enabled: true, sort_order: this.scoringRules.length,
+          params: {from: 'day', to: 'night'},
+        };
+      }
+      this.scoringModal.open = true;
+    },
+
+    // rule_type 변경 시 params 초기화
+    get _scoringRuleTypeWatcher() {
+      const rt = this.scoringModal.data.rule_type;
+      return rt;
+    },
+
+    initScoringParams(rt) {
+      if (rt === 'transition')       this.scoringModal.data.params = {from:'day', to:'night'};
+      else if (rt === 'pattern')     this.scoringModal.data.params = {pattern:['work','rest_leave','work']};
+      else if (rt === 'consecutive_same') this.scoringModal.data.params = {period:'day'};
+      else if (rt === 'specific_shift')   this.scoringModal.data.params = {shift_code: this.shifts[0]?.code || 'V', condition:'all'};
+      else                           this.scoringModal.data.params = {};
+    },
+
+    async saveScoringRule() {
+      const d = this.scoringModal.data;
+      if (!d.name.trim()) { alert('규칙 이름을 입력하세요.'); return; }
+      await this.api('POST', '/api/scoring_rules', d);
+      await this.loadScoringRules();
+      this.scoringModal.open = false;
+    },
+
+    async toggleScoringRule(rule) {
+      const updated = {...rule, enabled: !rule.enabled};
+      await this.api('POST', '/api/scoring_rules', updated);
+      await this.loadScoringRules();
+    },
+
+    async deleteScoringRule(id) {
+      if (!confirm('이 배점 규칙을 삭제하시겠습니까?')) return;
+      await this.api('DELETE', `/api/scoring_rules/${id}`);
+      await this.loadScoringRules();
+    },
+
+    // ── 스케줄 생성 ──────────────────────────────────────────────────────────
     async generate() {
       if (this.nurses.length === 0) { alert('간호사를 먼저 등록해주세요.'); return; }
       this.generating = true;
       this.statusMessage = '';
-      this.estimatedSeconds = this.calcEstimatedSeconds();
+      this.estimatedSeconds = 0;
       this.generateStartTime = Date.now();
       this.generateElapsed = 0;
       this.generateTimer = setInterval(() => {
         this.generateElapsed = Math.floor((Date.now() - this.generateStartTime) / 1000);
       }, 1000);
+
+      const payload = {
+        year: this.year,
+        month: this.month,
+        nurses: this.nurses,
+        requirements: this.requirements,
+        rules: this.rules,
+        prev_schedule: Object.keys(this.prevSchedule).length ? this.prevSchedule : null,
+        per_day_requirements: Object.keys(this.prevDayReqs).length ? this.prevDayReqs : null,
+        holidays: this.holidays,
+        shifts: this.shifts,
+      };
+
+      // 예상 소요시간 먼저 요청 (백그라운드, generate와 병렬)
+      this.api('POST', '/api/estimate', payload).then(est => {
+        if (est && est.estimated_seconds) this.estimatedSeconds = est.estimated_seconds;
+      }).catch(() => {});
+
       try {
-        const result = await this.api('POST', '/api/generate', {
-          year: this.year,
-          month: this.month,
-          nurses: this.nurses,
-          requirements: this.requirements,
-          rules: this.rules,
-          prev_schedule: Object.keys(this.prevSchedule).length ? this.prevSchedule : null,
-          per_day_requirements: Object.keys(this.prevDayReqs).length ? this.prevDayReqs : null,
-          holidays: this.holidays,
-          shifts: this.shifts,
-        });
+        const result = await this.api('POST', '/api/generate', payload);
         this.statusOk = result.success;
         this.statusMessage = result.message;
         if (result.success) {
           this.schedule = result.schedule;
           this.extendedSchedule = result.extended_schedule;
+          this.nurseScores = result.nurse_scores || {};
           this.activeTab = 'schedule';
           if (result.warning) {
               this.statusMessage = result.warning + '\n\n' + this.statusMessage;
@@ -1414,6 +1742,9 @@ function app() {
     countShifts(nurseId, shifts) {
       if (!this.schedule[nurseId]) return 0;
       return Object.values(this.schedule[nurseId]).filter(v => shifts.includes(v)).length;
+    },
+    nurseScore(nurseId) {
+      return this.nurseScores[nurseId] ?? '';
     },
     getDayDutyCount(day, shifts) {
       if (!this.schedule || Object.keys(this.schedule).length === 0) return 0;

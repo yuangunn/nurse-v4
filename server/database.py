@@ -75,6 +75,16 @@ def init_db():
                 color_text TEXT DEFAULT '#374151',
                 sort_order INTEGER DEFAULT 0
             );
+
+            CREATE TABLE IF NOT EXISTS scoring_rules (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                name       TEXT NOT NULL,
+                rule_type  TEXT NOT NULL,
+                params     TEXT NOT NULL DEFAULT '{}',
+                score      INTEGER NOT NULL DEFAULT 0,
+                enabled    INTEGER DEFAULT 1,
+                sort_order INTEGER DEFAULT 0
+            );
         """)
         # 기존 DB 호환: juhu 컬럼 마이그레이션
         try:
@@ -109,6 +119,11 @@ def init_db():
         existing_shifts = conn.execute("SELECT COUNT(*) FROM shifts").fetchone()[0]
         if existing_shifts == 0:
             _seed_shifts(conn)
+
+        # 기본 배점 규칙 시드 (scoring_rules 테이블이 비어 있을 때만)
+        existing_scoring = conn.execute("SELECT COUNT(*) FROM scoring_rules").fetchone()[0]
+        if existing_scoring == 0:
+            _seed_scoring_rules(conn)
 
 
 # ── 근무 시드 데이터 ─────────────────────────────────────────────────────────
@@ -359,6 +374,72 @@ def save_shift(code: str, name: str, period: str, is_charge: bool,
 def delete_shift(code: str) -> None:
     with get_conn() as conn:
         conn.execute("DELETE FROM shifts WHERE code=?", (code,))
+
+
+# ── Scoring Rules 시드 ────────────────────────────────────────────────────────
+
+def _seed_scoring_rules(conn: sqlite3.Connection):
+    """기본 배점 규칙 12종 삽입 (기존 하드코딩 W_* 상수와 동일)"""
+    rules = [
+        # name, rule_type, params, score, enabled, sort_order
+        ("D→N 전환 페널티",       "transition",       json.dumps({"from": "day",     "to": "night"}),                    -30,  1, 0),
+        ("N→공 전환 페널티",       "transition",       json.dumps({"from": "night",   "to": "specific:공"}),              -40,  1, 1),
+        ("V(연차) 사용 페널티",    "specific_shift",   json.dumps({"shift_code": "V", "condition": "all"}),              -500, 1, 2),
+        ("생리휴가 보상",           "specific_shift",   json.dumps({"shift_code": "생","condition": "female_only"}),      +80,  1, 3),
+        ("D→E 순방향 보상",        "transition",       json.dumps({"from": "day",     "to": "evening"}),                  +20, 1, 4),
+        ("E→N 순방향 보상",        "transition",       json.dumps({"from": "evening", "to": "night"}),                    +20, 1, 5),
+        ("연속 동일 낮 근무 보상",  "consecutive_same", json.dumps({"period": "day"}),                                     +15, 1, 6),
+        ("연속 동일 저녁 근무 보상","consecutive_same", json.dumps({"period": "evening"}),                                 +15, 1, 7),
+        ("연속 동일 야간 근무 보상","consecutive_same", json.dumps({"period": "night"}),                                   +15, 1, 8),
+        ("연속 휴일 보상",          "consecutive_same", json.dumps({"period": "rest"}),                                    +30, 1, 9),
+        ("희망 근무 반영 보상",     "wish",             json.dumps({}),                                                    +50, 1, 10),
+        ("야간 근무 공평성",        "night_fairness",   json.dumps({}),                                                    -50, 1, 11),
+    ]
+    conn.executemany(
+        "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
+        rules,
+    )
+
+
+# ── Scoring Rules CRUD ────────────────────────────────────────────────────────
+
+def list_scoring_rules() -> List[Dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM scoring_rules ORDER BY sort_order, id"
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["params"] = json.loads(d["params"])
+            d["enabled"] = bool(d["enabled"])
+            result.append(d)
+        return result
+
+
+def save_scoring_rule(
+    name: str, rule_type: str, params: dict, score: int,
+    enabled: bool, sort_order: int, rule_id: Optional[int] = None
+) -> int:
+    with get_conn() as conn:
+        if rule_id:
+            conn.execute("""
+                UPDATE scoring_rules
+                SET name=?, rule_type=?, params=?, score=?, enabled=?, sort_order=?
+                WHERE id=?
+            """, (name, rule_type, json.dumps(params), score, 1 if enabled else 0, sort_order, rule_id))
+            return rule_id
+        else:
+            cur = conn.execute("""
+                INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order)
+                VALUES (?,?,?,?,?,?)
+            """, (name, rule_type, json.dumps(params), score, 1 if enabled else 0, sort_order))
+            return cur.lastrowid
+
+
+def delete_scoring_rule(rule_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM scoring_rules WHERE id=?", (rule_id,))
 
 
 # ── 내부 헬퍼 ───────────────────────────────────────────────────────────────

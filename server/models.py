@@ -1,5 +1,15 @@
 from pydantic import BaseModel
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
+
+
+class ScoringRule(BaseModel):
+    id: Optional[int] = None
+    name: str
+    rule_type: str   # transition|pattern|consecutive_same|specific_shift|wish|night_fairness
+    params: Dict[str, Any] = {}
+    score: int = 0
+    enabled: bool = True
+    sort_order: int = 0
 
 
 class ShiftDef(BaseModel):
@@ -52,7 +62,7 @@ class Rules(BaseModel):
     noNOD: bool = True          # N→OF→D 금지
     avoidDN: bool = True         # D→N 회피 (soft)
     maxConsecutiveWork: bool = True
-    maxConsecutiveWorkDays: int = 6
+    maxConsecutiveWorkDays: int = 5
     maxConsecutiveNight: bool = True
     maxConsecutiveNightDays: int = 3
     restAfterNight: bool = True
@@ -71,6 +81,7 @@ class GenerateRequest(BaseModel):
     holidays: List[str] = []  # ['YYYY-M-D', ...] 법정공휴일 날짜 목록 (스케줄러는 참조용)
     shifts: List[ShiftDef] = []  # 근무 정의 목록 (비어있으면 DB에서 로드)
     per_day_requirements: Optional[Dict[str, Dict[str, int]]] = None  # {'YYYY-MM-DD': {'D':4,'E':5,'N':3}}
+    scoring_rules: List[ScoringRule] = []  # 배점 규칙 목록 (비어있으면 DB에서 로드)
 
 
 class ScheduleSave(BaseModel):

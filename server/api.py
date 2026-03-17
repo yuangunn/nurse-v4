@@ -6,7 +6,7 @@ from typing import List, Optional
 import json
 
 from . import database as db
-from .models import GenerateRequest, ScheduleSave
+from .models import GenerateRequest, ScheduleSave, ScoringRule
 from .scheduler import NurseScheduler
 
 app = FastAPI(title="NurseScheduler v2")
@@ -180,9 +180,31 @@ def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts
     return None
 
 
+@app.post("/api/estimate")
+def estimate(request: GenerateRequest):
+    """스케줄 생성 전 예상 소요시간(초) 반환."""
+    try:
+        if not request.scoring_rules:
+            raw = db.list_scoring_rules()
+            request.scoring_rules = [ScoringRule(**r) for r in raw]
+        if not request.shifts:
+            from .models import ShiftDef
+            raw = db.list_shifts()
+            request.shifts = [ShiftDef(**s) for s in raw]
+        scheduler = NurseScheduler(request)
+        return {"estimated_seconds": scheduler.estimate_seconds()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/generate")
 def generate(request: GenerateRequest):
     try:
+        # shifts가 비어있으면 DB에서 로드
+        if not request.scoring_rules:
+            raw = db.list_scoring_rules()
+            request.scoring_rules = [ScoringRule(**r) for r in raw]
+
         # shifts가 비어있으면 DB에서 로드
         if not request.shifts:
             from .models import ShiftDef
@@ -270,4 +292,31 @@ def load_prev_schedule(prev_id: int):
 @app.delete("/api/prev_schedules/{prev_id}")
 def delete_prev_schedule(prev_id: int):
     db.delete_prev_schedule(prev_id)
+    return {"ok": True}
+
+
+# ── 배점 규칙 API ─────────────────────────────────────────────────────────────
+
+@app.get("/api/scoring_rules")
+def get_scoring_rules():
+    return db.list_scoring_rules()
+
+
+@app.post("/api/scoring_rules")
+def save_scoring_rule(body: dict):
+    rid = db.save_scoring_rule(
+        name=body["name"],
+        rule_type=body["rule_type"],
+        params=body.get("params", {}),
+        score=body["score"],
+        enabled=body.get("enabled", True),
+        sort_order=body.get("sort_order", 0),
+        rule_id=body.get("id"),
+    )
+    return {"id": rid}
+
+
+@app.delete("/api/scoring_rules/{rule_id}")
+def delete_scoring_rule(rule_id: int):
+    db.delete_scoring_rule(rule_id)
     return {"ok": True}
