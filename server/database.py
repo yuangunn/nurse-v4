@@ -66,14 +66,15 @@ def init_db():
             );
 
             CREATE TABLE IF NOT EXISTS shifts (
-                code       TEXT PRIMARY KEY,
-                name       TEXT NOT NULL,
-                period     TEXT NOT NULL,
-                is_charge  INTEGER DEFAULT 0,
-                hours      TEXT DEFAULT '',
-                color_bg   TEXT DEFAULT '#f3f4f6',
-                color_text TEXT DEFAULT '#374151',
-                sort_order INTEGER DEFAULT 0
+                code        TEXT PRIMARY KEY,
+                name        TEXT NOT NULL,
+                period      TEXT NOT NULL,
+                is_charge   INTEGER DEFAULT 0,
+                hours       TEXT DEFAULT '',
+                color_bg    TEXT DEFAULT '#f3f4f6',
+                color_text  TEXT DEFAULT '#374151',
+                sort_order  INTEGER DEFAULT 0,
+                auto_assign INTEGER DEFAULT 1
             );
 
             CREATE TABLE IF NOT EXISTS scoring_rules (
@@ -95,6 +96,17 @@ def init_db():
             conn.execute("ALTER TABLE nurses ADD COLUMN juhu_auto_rotate INTEGER DEFAULT 1")
         except Exception:
             pass
+        # 기존 DB 호환: shifts.auto_assign 컬럼 마이그레이션
+        try:
+            conn.execute("ALTER TABLE shifts ADD COLUMN auto_assign INTEGER DEFAULT 1")
+        except Exception:
+            pass
+        # 사전입력 전용 근무 코드의 auto_assign=0 보장 (기존 시드 데이터 포함)
+        pre_input_only = ("D1", "중", "주", "특", "공", "법", "병")
+        conn.execute(
+            f"UPDATE shifts SET auto_assign=0 WHERE code IN ({','.join('?'*len(pre_input_only))})",
+            pre_input_only
+        )
 
         # 기본 요구사항 삽입 (D/E/N 통합 방식)
         existing = conn.execute("SELECT id FROM requirements WHERE id=1").fetchone()
@@ -130,29 +142,30 @@ def init_db():
 
 def _seed_shifts(conn: sqlite3.Connection):
     """기본 근무 16종 삽입"""
+    # auto_assign: 1=솔버 자동배정 가능, 0=사전입력 전용
     shifts = [
-        # code   name            period    is_charge  hours              color_bg   color_text  sort
-        ("DC", "Day Charge",    "day",     1, "06:00~14:00", "#bfdbfe", "#1d4ed8", 0),
-        ("D",  "Day",           "day",     0, "06:00~14:00", "#dbeafe", "#1d4ed8", 1),
-        ("D1", "Day1",          "day1",    0, "08:30~17:30", "#e0f2fe", "#0284c7", 2),
-        ("EC", "Evening Charge","evening", 1, "14:00~22:00", "#bbf7d0", "#15803d", 3),
-        ("E",  "Evening",       "evening", 0, "14:00~22:00", "#dcfce7", "#15803d", 4),
-        ("중", "중간번",         "middle",  0, "11:00~19:00", "#ccfbf1", "#0f766e", 5),
-        ("NC", "Night Charge",  "night",   1, "22:00~06:00", "#fde68a", "#92400e", 6),
-        ("N",  "Night",         "night",   0, "22:00~06:00", "#fef9c3", "#92400e", 7),
-        ("OF", "Off",           "rest",    0, "-",           "#f3f4f6", "#6b7280", 8),
-        ("주", "주휴",           "rest",    0, "-",           "#e0e7ff", "#4338ca", 9),
-        ("V",  "연차",           "leave",   0, "-",           "#fce7f3", "#be185d", 10),
-        ("생", "생리휴가",        "leave",   0, "-",           "#fdf2f8", "#be185d", 11),
-        ("특", "특별휴가",        "leave",   0, "-",           "#fdf4ff", "#7e22ce", 12),
-        ("공", "공적업무",        "leave",   0, "-",           "#ecfdf5", "#064e3b", 13),
-        ("법", "법정공휴일",      "leave",   0, "-",           "#fff7ed", "#c2410c", 14),
-        ("병", "병가",           "leave",   0, "-",           "#fef2f2", "#dc2626", 15),
+        # code   name            period    is_charge  hours              color_bg   color_text  sort  auto_assign
+        ("DC", "Day Charge",    "day",     1, "06:00~14:00", "#bfdbfe", "#1d4ed8", 0,  1),
+        ("D",  "Day",           "day",     0, "06:00~14:00", "#dbeafe", "#1d4ed8", 1,  1),
+        ("D1", "Day1",          "day1",    0, "08:30~17:30", "#e0f2fe", "#0284c7", 2,  0),
+        ("EC", "Evening Charge","evening", 1, "14:00~22:00", "#bbf7d0", "#15803d", 3,  1),
+        ("E",  "Evening",       "evening", 0, "14:00~22:00", "#dcfce7", "#15803d", 4,  1),
+        ("중", "중간번",         "middle",  0, "11:00~19:00", "#ccfbf1", "#0f766e", 5,  0),
+        ("NC", "Night Charge",  "night",   1, "22:00~06:00", "#fde68a", "#92400e", 6,  1),
+        ("N",  "Night",         "night",   0, "22:00~06:00", "#fef9c3", "#92400e", 7,  1),
+        ("OF", "Off",           "rest",    0, "-",           "#f3f4f6", "#6b7280", 8,  1),
+        ("주", "주휴",           "rest",    0, "-",           "#e0e7ff", "#4338ca", 9,  0),
+        ("V",  "연차",           "leave",   0, "-",           "#fce7f3", "#be185d", 10, 1),
+        ("생", "생리휴가",        "leave",   0, "-",           "#fdf2f8", "#be185d", 11, 1),
+        ("특", "특별휴가",        "leave",   0, "-",           "#fdf4ff", "#7e22ce", 12, 0),
+        ("공", "공적업무",        "leave",   0, "-",           "#ecfdf5", "#064e3b", 13, 0),
+        ("법", "법정공휴일",      "leave",   0, "-",           "#fff7ed", "#c2410c", 14, 0),
+        ("병", "병가",           "leave",   0, "-",           "#fef2f2", "#dc2626", 15, 0),
     ]
     conn.executemany(
         "INSERT OR IGNORE INTO shifts "
-        "(code, name, period, is_charge, hours, color_bg, color_text, sort_order) "
-        "VALUES (?,?,?,?,?,?,?,?)",
+        "(code, name, period, is_charge, hours, color_bg, color_text, sort_order, auto_assign) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
         shifts,
     )
 
@@ -355,20 +368,27 @@ def delete_prev_schedule(prev_id: int) -> None:
 def list_shifts() -> List[Dict]:
     with get_conn() as conn:
         rows = conn.execute("SELECT * FROM shifts ORDER BY sort_order, code").fetchall()
-        return [dict(r) for r in rows]
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["auto_assign"] = bool(d.get("auto_assign", 1))
+            result.append(d)
+        return result
 
 
 def save_shift(code: str, name: str, period: str, is_charge: bool,
-               hours: str, color_bg: str, color_text: str, sort_order: int) -> None:
+               hours: str, color_bg: str, color_text: str, sort_order: int,
+               auto_assign: bool = True) -> None:
     with get_conn() as conn:
         conn.execute("""
-            INSERT INTO shifts (code, name, period, is_charge, hours, color_bg, color_text, sort_order)
-            VALUES (?,?,?,?,?,?,?,?)
+            INSERT INTO shifts (code, name, period, is_charge, hours, color_bg, color_text, sort_order, auto_assign)
+            VALUES (?,?,?,?,?,?,?,?,?)
             ON CONFLICT(code) DO UPDATE SET
                 name=excluded.name, period=excluded.period, is_charge=excluded.is_charge,
                 hours=excluded.hours, color_bg=excluded.color_bg, color_text=excluded.color_text,
-                sort_order=excluded.sort_order
-        """, (code, name, period, 1 if is_charge else 0, hours, color_bg, color_text, sort_order))
+                sort_order=excluded.sort_order, auto_assign=excluded.auto_assign
+        """, (code, name, period, 1 if is_charge else 0, hours, color_bg, color_text, sort_order,
+              1 if auto_assign else 0))
 
 
 def delete_shift(code: str) -> None:

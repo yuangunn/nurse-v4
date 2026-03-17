@@ -118,6 +118,7 @@ def save_shift(body: dict):
         color_bg=body.get("color_bg", "#f3f4f6"),
         color_text=body.get("color_text", "#374151"),
         sort_order=body.get("sort_order", 0),
+        auto_assign=body.get("auto_assign", True),
     )
     return {"ok": True}
 

@@ -48,6 +48,7 @@ class NurseScheduler:
         self.rules = request.rules
         self.prev  = request.prev_schedule or {}
         self.per_day_req = request.per_day_requirements or {}
+        self.mip_gap = request.mip_gap
 
         # ── 근무 정의 → 카테고리 리스트 동적 구성 ─────────────────────────────
         shifts = [s.model_dump() for s in request.shifts] if request.shifts else []
@@ -67,6 +68,8 @@ class NurseScheduler:
                                self.EVENING_SHIFTS + self.MIDDLE_SHIFTS + self.NIGHT_SHIFTS)
         self.ALL_SHIFTS     = self.WORK_SHIFTS + self.REST_SHIFTS + self.LEAVE_SHIFTS
         self._shifts        = shifts   # 원본 리스트 (charge_seniority 등에서 사용)
+        # 솔버가 자유롭게 배정 가능한 근무 코드 집합 (auto_assign=True인 것만)
+        self.SOLVER_SHIFTS  = set(s["code"] for s in shifts if s.get("auto_assign", True))
 
         # 배점 규칙 (enabled만 필터링)
         self.scoring_rules: List[ScoringRule] = [
@@ -175,10 +178,18 @@ class NurseScheduler:
                 pre = self.prev.get(nid, {}).get(dt_str)
                 for s in self.ALL_SHIFTS:
                     if pre:
+                        # 사전입력 고정: 해당 근무만 1, 나머지 0
                         x[nid][d][s] = pulp.LpVariable(
                             f"x_{nid}_{d}_{s}",
                             lowBound=(1 if s == pre else 0),
                             upBound=(1 if s == pre else 0),
+                            cat="Integer"
+                        )
+                    elif s not in self.SOLVER_SHIFTS:
+                        # 사전입력 전용 근무: 솔버 자유 배정 불가 → 0 고정
+                        x[nid][d][s] = pulp.LpVariable(
+                            f"x_{nid}_{d}_{s}",
+                            lowBound=0, upBound=0,
                             cat="Integer"
                         )
                     else:
@@ -213,6 +224,7 @@ class NurseScheduler:
 
         solver = pulp.HiGHS(
             timeLimit=1200,
+            mip_rel_gap=self.mip_gap,
             msg=False,
         )
         status = prob.solve(solver)
@@ -411,35 +423,37 @@ class NurseScheduler:
                             )
 
     def _c_nod_pattern(self, prob, x):
-        """N→OF→D 금지: x[N/NC][d] + x[OF][d+1] + x[D/DC][d+2] <= 2"""
+        """N→휴무→D 금지: N/NC 다음날 REST_SHIFTS(OF, 주 등) 중 하나, 그 다음날 D/DC 금지"""
         for nurse in self.nurses:
             nid = nurse["id"]
             for d in range(self.T - 2):
                 for ns in self.NIGHT_SHIFTS:
-                    for ds in self.DAY_SHIFTS:
-                        prob += (
-                            x[nid][d][ns] + x[nid][d + 1]["OF"] + x[nid][d + 2][ds] <= 2,
-                            f"nod_{nid}_{d}_{ns}_{ds}"
-                        )
+                    for rs in self.REST_SHIFTS:
+                        for ds in self.DAY_SHIFTS:
+                            prob += (
+                                x[nid][d][ns] + x[nid][d + 1][rs] + x[nid][d + 2][ds] <= 2,
+                                f"nod_{nid}_{d}_{ns}_{rs}_{ds}"
+                            )
 
     def _c_weekly_off(self, prob, x):
         """
-        각 완전한 주에 주휴 1개 + OF 1개.
-        야간전담 간호사는 주휴만 적용, OF는 무제한.
+        각 완전한 주에 OF 1개.
+        주휴(주)는 사전입력 전용이므로 솔버 제약 없음.
+        야간전담 간호사는 OF 무제한.
         """
+        of_code = "OF"
+        if of_code not in self.SOLVER_SHIFTS:
+            return
         for nurse in self.nurses:
             nid = nurse["id"]
             is_night = nurse.get("is_night_shift", False)
+            if is_night:
+                continue
             for ws, we in self.weeks:
                 prob += (
-                    pulp.lpSum(x[nid][d]["주"] for d in range(ws, we + 1)) == 1,
-                    f"weekly_joo_{nid}_{ws}"
+                    pulp.lpSum(x[nid][d][of_code] for d in range(ws, we + 1)) == 1,
+                    f"weekly_of_{nid}_{ws}"
                 )
-                if not is_night:
-                    prob += (
-                        pulp.lpSum(x[nid][d]["OF"] for d in range(ws, we + 1)) == 1,
-                        f"weekly_of_{nid}_{ws}"
-                    )
 
     def _c_max_consecutive_work(self, prob, x, max_days: int):
         """최대 연속 근무일 제한"""

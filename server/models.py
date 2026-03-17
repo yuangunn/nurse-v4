@@ -21,6 +21,7 @@ class ShiftDef(BaseModel):
     color_bg: str = '#f3f4f6'
     color_text: str = '#374151'
     sort_order: int = 0
+    auto_assign: bool = True  # False = 사전입력 전용 (솔버 자동배정 불가)
 
 
 class Nurse(BaseModel):
@@ -82,6 +83,7 @@ class GenerateRequest(BaseModel):
     shifts: List[ShiftDef] = []  # 근무 정의 목록 (비어있으면 DB에서 로드)
     per_day_requirements: Optional[Dict[str, Dict[str, int]]] = None  # {'YYYY-MM-DD': {'D':4,'E':5,'N':3}}
     scoring_rules: List[ScoringRule] = []  # 배점 규칙 목록 (비어있으면 DB에서 로드)
+    mip_gap: float = 0.02  # MIP 오차 허용 범위 (0=완벽한 최적해, 0.02=2% 오차허용 조기종료)
 
 
 class ScheduleSave(BaseModel):
