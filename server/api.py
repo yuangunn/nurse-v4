@@ -156,7 +156,8 @@ def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts
     while cur <= last:
         dt_str = cur.strftime("%Y-%m-%d")
         weekday_key = weekday_keys[cur.weekday()]
-        day_req = req_dict.get(weekday_key, {})
+        per_day = request.per_day_requirements or {}
+        day_req = per_day.get(dt_str) or req_dict.get(weekday_key, {})
 
         unavailable = sum(
             1 for nurse in request.nurses

@@ -70,6 +70,7 @@ class GenerateRequest(BaseModel):
     prev_schedule: Optional[Dict[str, Dict[str, str]]] = None  # {nurse_id: {date_str: shift}}
     holidays: List[str] = []  # ['YYYY-M-D', ...] 법정공휴일 날짜 목록 (스케줄러는 참조용)
     shifts: List[ShiftDef] = []  # 근무 정의 목록 (비어있으면 DB에서 로드)
+    per_day_requirements: Optional[Dict[str, Dict[str, int]]] = None  # {'YYYY-MM-DD': {'D':4,'E':5,'N':3}}
 
 
 class ScheduleSave(BaseModel):

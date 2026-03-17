@@ -4,10 +4,139 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>간호사 스케줄러 v2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
   <style>
+    /* ═══ 용인세브란스병원 컬러스케일 토큰 ══════════════════════ */
+    :root {
+      --sev-1:        rgb(3, 90, 189);   /* 주 색상 */
+      --sev-2:        rgb(2, 72, 151);   /* 중간 */
+      --sev-3:        rgb(2, 54, 113);   /* 진한 */
+      --sev-1-light:  rgba(3,90,189,0.08);
+      --sev-1-mid:    rgba(3,90,189,0.15);
+      --bg-base:      #f0f4fa;
+      --bg-surface:   #f8fafd;
+      --bg-card:      #ffffff;
+      --text-primary:   #1a2540;
+      --text-secondary: #5a6a8a;
+      --border:         #d0ddf0;
+      --border-strong:  #b0c4e4;
+      --shadow-sm:      0 1px 4px rgba(2,54,113,0.1);
+      --shadow-md:      0 4px 16px rgba(2,54,113,0.12);
+    }
+
+    /* ═══ BASE ═══════════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: 'Manrope', 'Segoe UI', system-ui, sans-serif !important;
+      background: var(--bg-base) !important;
+      color: var(--text-primary) !important;
+      font-size: 15px !important;
+      margin: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+    h2, h3 { font-weight:700; letter-spacing:-0.2px; font-size:1rem; }
+    ::-webkit-scrollbar { width:6px; height:6px; }
+    ::-webkit-scrollbar-track { background:#f0f4fa; }
+    ::-webkit-scrollbar-thumb { background:var(--border-strong); border-radius:10px; }
+    ::-webkit-scrollbar-thumb:hover { background:var(--sev-1); }
+
+    /* ═══ x-cloak ════════════════════════════════════════════════ */
     [x-cloak] { display: none !important; }
+
+    /* ═══ APP SHELL ══════════════════════════════════════════════ */
+    .app-shell { display:flex; height:100vh; overflow:hidden; }
+
+    /* ═══ SIDEBAR ════════════════════════════════════════════════ */
+    .sidebar {
+      width:220px; flex-shrink:0;
+      background:var(--sev-3);
+      position:sticky; top:0; height:100vh;
+      overflow-y:auto;
+      display:flex; flex-direction:column;
+      z-index:40;
+    }
+    .sidebar-logo {
+      display:flex; align-items:center; gap:10px;
+      padding:20px 16px;
+      border-bottom:1px solid rgba(255,255,255,0.12);
+      font-family:'Manrope','Segoe UI',sans-serif;
+      font-weight:800; font-size:0.9rem; letter-spacing:-0.3px;
+      color:#ffffff;
+    }
+    .sidebar-logo svg { color:rgba(255,255,255,0.9); flex-shrink:0; }
+    .logo-ver {
+      margin-left:auto; font-size:0.6rem; font-weight:700;
+      color:var(--sev-3); background:rgba(255,255,255,0.9);
+      padding:2px 6px; border-radius:4px; letter-spacing:0.5px;
+    }
+    .sidebar-nav { flex:1; padding:8px 0; }
+    .sidebar-item {
+      display:flex; align-items:center; gap:12px;
+      padding:11px 16px;
+      cursor:pointer; font-size:0.9rem; font-weight:500;
+      color:rgba(255,255,255,0.65);
+      border-left:3px solid transparent;
+      transition:all 0.15s ease;
+      user-select:none; white-space:nowrap;
+    }
+    .sidebar-item:hover { background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.9); }
+    .sidebar-item.active {
+      border-left-color:#ffffff;
+      color:#ffffff;
+      background:rgba(255,255,255,0.15);
+      font-weight:700;
+    }
+    .nav-icon { font-size:1.1rem; flex-shrink:0; }
+
+    @media (min-width:768px) and (max-width:1023px) {
+      .sidebar { width:58px; }
+      .sidebar-logo { justify-content:center; padding:16px 0; }
+      .sidebar-logo > span, .logo-ver { display:none; }
+      .sidebar-item { justify-content:center; padding:12px 0; border-left:none; border-bottom:3px solid transparent; }
+      .sidebar-item.active { border-left-color:transparent; border-bottom-color:#fff; }
+      .nav-label { display:none; }
+    }
+    @media (max-width:767px) { .sidebar { display:none; } }
+
+    /* ═══ MAIN CONTENT ════════════════════════════════════════════ */
+    .main-content { flex:1; min-width:0; padding:1.5rem 1.25rem; height:100vh; overflow:hidden; display:flex; flex-direction:column; }
+    @media (max-width:767px) { .main-content { padding-bottom:5rem; } }
+
+    /* ═══ BOTTOM NAV (mobile) ══════════════════════════════════════ */
+    .bottom-nav {
+      display:none; position:fixed; bottom:0; left:0; right:0;
+      background:#ffffff; border-top:2px solid var(--border); z-index:50;
+      box-shadow:0 -2px 12px rgba(2,54,113,0.1);
+    }
+    @media (max-width:767px) { .bottom-nav { display:flex; } }
+    .bottom-nav-item {
+      flex:1; display:flex; flex-direction:column; align-items:center;
+      justify-content:center; padding:8px 4px;
+      font-size:0.65rem; font-weight:500; color:var(--text-secondary);
+      cursor:pointer; gap:3px; transition:color 0.15s; user-select:none; position:relative;
+    }
+    .bottom-nav-item:hover { color:var(--sev-1); }
+    .bottom-nav-item.active { color:var(--sev-1); font-weight:700; }
+    .bottom-nav-item.active::after {
+      content:''; position:absolute; bottom:0;
+      width:28px; height:3px; background:var(--sev-1); border-radius:2px 2px 0 0;
+    }
+    .bottom-nav-item .nav-icon { font-size:1.25rem; }
+
+    /* ═══ CARDS ═══════════════════════════════════════════════════ */
+    .glass-panel {
+      background:#ffffff;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:1.25rem;
+      box-shadow:var(--shadow-sm);
+    }
+
+    /* ═══ SHIFT CELLS ══════════════════════════════════════════════ */
     .shift-DC { background:#bfdbfe; color:#1d4ed8; }
     .shift-D  { background:#dbeafe; color:#1d4ed8; }
     .shift-D1 { background:#e0f2fe; color:#0284c7; }
@@ -24,55 +153,132 @@
     .shift-공 { background:#ecfdf5; color:#064e3b; }
     .shift-법 { background:#fff7ed; color:#c2410c; }
     .shift-병 { background:#fef2f2; color:#dc2626; }
-    .schedule-cell { min-width: 2rem; text-align:center; font-size:0.7rem; font-weight:600; border-radius:4px; padding:2px 0; cursor:pointer; user-select:none; }
-    .schedule-cell-text { min-width:2rem; text-align:center; font-size:0.7rem; font-weight:600; padding:2px 0; cursor:pointer; user-select:none; }
-    .loading-spin { animation: spin 1s linear infinite; }
+    .schedule-cell {
+      min-width:2.2rem; text-align:center; font-size:0.75rem; font-weight:700;
+      font-family:'Fira Code','Consolas','Courier New',monospace;
+      border-radius:4px; padding:3px 0; cursor:pointer; user-select:none;
+    }
+    .schedule-cell-text {
+      min-width:2.2rem; text-align:center; font-size:0.75rem; font-weight:700;
+      font-family:'Fira Code','Consolas','Courier New',monospace;
+      padding:3px 0; cursor:pointer; user-select:none;
+    }
+    .loading-spin { animation:spin 1s linear infinite; }
     @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+
+    /* ═══════════════════════════════════════════════════════════════
+       TAILWIND LIGHT OVERRIDES (세브란스 컬러 적용)
+    ═══════════════════════════════════════════════════════════════ */
+    body.bg-gray-100, .bg-gray-100 { background-color:var(--bg-base) !important; }
+    .bg-white   { background-color:#ffffff !important; }
+    .bg-gray-50 { background-color:var(--bg-surface) !important; }
+
+    .text-gray-800 { color:var(--text-primary)   !important; }
+    .text-gray-700 { color:var(--text-primary)   !important; }
+    .text-gray-600 { color:var(--text-secondary) !important; }
+    .text-gray-500 { color:var(--text-secondary) !important; }
+    .text-gray-400 { color:#9aacc4 !important; }
+
+    /* Blue CTA — 세브란스 primary */
+    .bg-blue-600  { background-color:var(--sev-1) !important; color:#fff !important; }
+    .bg-blue-700  { background-color:var(--sev-2) !important; color:#fff !important; }
+    .hover\:bg-blue-700:hover { background-color:var(--sev-2) !important; }
+    .disabled\:bg-blue-300:disabled { background-color:rgba(3,90,189,0.35) !important; }
+    .text-blue-600 { color:var(--sev-1) !important; }
+    .text-blue-500 { color:var(--sev-1) !important; }
+    .text-blue-700 { color:var(--sev-2) !important; }
+
+    /* Cycle headers */
+    .bg-blue-50    { background-color:rgba(3,90,189,0.07)  !important; }
+    .bg-purple-50  { background-color:rgba(139,92,246,0.07) !important; }
+    .text-purple-700 { color:#6d28d9 !important; }
+    .bg-orange-50  { background-color:rgba(249,115,22,0.07) !important; }
+    .text-orange-700 { color:#c2410c !important; }
+
+    /* Day header backgrounds — keep originals, they work on white */
+    /* Input focus ring — Severance blue */
+    input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
+      outline:none !important;
+      box-shadow:0 0 0 2px rgba(3,90,189,0.3) !important;
+      border-color:var(--sev-1) !important;
+    }
+    input[type="checkbox"], input[type="radio"] { accent-color:var(--sev-1); }
+    .bg-transparent { background:transparent !important; }
+
+    .hover\:bg-gray-50:hover  { background-color:var(--sev-1-light) !important; }
+    .hover\:brightness-95:hover { filter:brightness(0.97) !important; }
+    .hover\:bg-gray-200:hover { background-color:var(--sev-1-light) !important; }
+    .hover\:bg-gray-100:hover { background-color:var(--sev-1-light) !important; color:var(--sev-1) !important; }
+
+    /* Generating panel */
+    .bg-blue-50.rounded-lg {
+      background-color:rgba(3,90,189,0.06) !important;
+      border:1px solid rgba(3,90,189,0.2) !important;
+    }
+    .text-gray-200 { color:#c8d8ee !important; }
+
+    /* Indigo — save/load panel */
+    .bg-indigo-50  { background-color:rgba(3,90,189,0.05) !important; }
+    .bg-indigo-100 { background-color:rgba(3,90,189,0.1)  !important; }
+    .hover\:bg-indigo-200:hover { background-color:rgba(3,90,189,0.18) !important; }
+    .border-indigo-100 { border-color:rgba(3,90,189,0.2) !important; }
+    .border-indigo-200 { border-color:rgba(3,90,189,0.3) !important; }
+    .border-indigo-300 { border-color:rgba(3,90,189,0.4) !important; }
+    .text-indigo-600 { color:var(--sev-1) !important; }
+    .text-indigo-700 { color:var(--sev-2) !important; }
+    .bg-indigo-600   { background-color:var(--sev-1) !important; color:#fff !important; }
+    .hover\:bg-indigo-700:hover { background-color:var(--sev-2) !important; }
+    .hover\:bg-indigo-50:hover  { background-color:rgba(3,90,189,0.07) !important; }
+
+    .shadow    { box-shadow:var(--shadow-sm) !important; }
+    .shadow-lg { box-shadow:var(--shadow-md) !important; }
+    .shadow-xl { box-shadow:0 8px 32px rgba(2,54,113,0.18) !important; }
+
+    .bg-black\/40 { background-color:rgba(2,54,113,0.5) !important; }
+
+    /* ═══ TAB PANELS ══════════════════════════════════════════════ */
+    /* 설정/스케줄/저장 탭: 세로 스크롤 가능한 일반 패널 */
+    .tab-panel { flex:1; min-height:0; overflow-y:auto; }
+    /* 사전입력 탭: flex 컬럼 — 내부 테이블이 남은 공간 채움 */
+    .tab-panel-flex { flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
   </style>
 </head>
-<body class="bg-gray-100 text-gray-800 min-h-screen">
+<body>
 
-<!-- 헤더 -->
-<header class="bg-blue-700 text-white shadow-md sticky top-0 z-30">
-  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-      </svg>
-      <span class="font-bold text-lg">간호사 스케줄러 v2</span>
-    </div>
-    <!-- 탭 (데스크탑) -->
-    <nav class="hidden md:flex gap-1">
-      <template x-for="tab in tabs" :key="tab.id">
-        <button @click="activeTab=tab.id"
-          :class="activeTab===tab.id ? 'bg-white text-blue-700' : 'text-blue-100 hover:bg-blue-600'"
-          class="px-4 py-1.5 rounded-full text-sm font-medium transition"
-          x-text="tab.label"></button>
-      </template>
-    </nav>
+<div class="app-shell">
+
+<!-- ══ SIDEBAR (desktop) ══════════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+    </svg>
+    <span>간호사 스케줄러</span>
+    <span class="logo-ver">v2</span>
   </div>
-  <!-- 탭 (모바일) -->
-  <div class="md:hidden border-t border-blue-600 flex">
+  <nav class="sidebar-nav">
     <template x-for="tab in tabs" :key="tab.id">
-      <button @click="activeTab=tab.id"
-        :class="activeTab===tab.id ? 'bg-white text-blue-700' : 'text-blue-100'"
-        class="flex-1 py-2 text-xs font-medium"
-        x-text="tab.label"></button>
+      <div @click="activeTab=tab.id"
+        :class="activeTab===tab.id ? 'active' : ''"
+        class="sidebar-item">
+        <span class="nav-icon" x-text="tab.label.slice(0,2)"></span>
+        <span class="nav-label" x-text="tab.label.slice(3)"></span>
+      </div>
     </template>
-  </div>
-</header>
+  </nav>
+</aside>
 
-<main class="max-w-7xl mx-auto px-2 md:px-4 py-4">
+<div class="main-content">
+<main style="flex:1; min-height:0; display:flex; flex-direction:column;">
 
   <!-- ══════════════════════════════════════════════════════
        탭 1: 설정
   ══════════════════════════════════════════════════════ -->
-  <div x-show="activeTab==='settings'" x-cloak>
+  <div x-show="activeTab==='settings'" x-cloak class="tab-panel">
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 
       <!-- 년월 선택 -->
-      <div class="bg-white rounded-xl shadow p-4">
+      <div class="glass-panel">
         <h2 class="font-semibold text-gray-700 mb-3">📅 대상 년월</h2>
         <div class="flex gap-3 items-center">
           <input type="number" x-model.number="year" min="2020" max="2099"
@@ -85,7 +291,7 @@
       </div>
 
       <!-- 규칙 설정 -->
-      <div class="bg-white rounded-xl shadow p-4">
+      <div class="glass-panel">
         <h2 class="font-semibold text-gray-700 mb-3">📋 규칙 설정</h2>
         <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
 
@@ -145,7 +351,7 @@
       </div>
 
       <!-- 간호사 목록 -->
-      <div class="bg-white rounded-xl shadow p-4 md:col-span-2">
+      <div class="glass-panel md:col-span-2">
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-semibold text-gray-700">👩‍⚕️ 간호사 목록 <span class="text-blue-600 font-bold" x-text="`(${nurses.length}명)`"></span></h2>
           <button @click="openNurseModal(null)"
@@ -215,7 +421,7 @@
       </div>
 
       <!-- 요일별 필요 인원 -->
-      <div class="bg-white rounded-xl shadow p-4 md:col-span-2">
+      <div class="glass-panel md:col-span-2">
         <h2 class="font-semibold text-gray-700 mb-3">👥 요일별 필요 인원</h2>
         <div class="overflow-x-auto">
           <table class="w-full text-sm text-center">
@@ -252,7 +458,7 @@
       </div>
 
       <!-- 근무 관리 -->
-      <div class="bg-white rounded-xl shadow p-4 md:col-span-2">
+      <div class="glass-panel md:col-span-2">
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-semibold text-gray-700">🔧 근무 관리 <span class="text-xs text-gray-400 font-normal ml-1">근무 코드·이름·유형·색상 관리</span></h2>
           <div class="flex gap-2">
@@ -313,8 +519,8 @@
   <!-- ══════════════════════════════════════════════════════
        탭 2: 사전입력
   ══════════════════════════════════════════════════════ -->
-  <div x-show="activeTab==='preinput'" x-cloak>
-    <div class="bg-white rounded-xl shadow p-4">
+  <div x-show="activeTab==='preinput'" x-cloak class="tab-panel-flex">
+    <div class="glass-panel mb-4" style="flex-shrink:0">
       <div class="flex flex-wrap items-center gap-3 mb-3">
         <span class="font-semibold text-gray-700">📝 사전입력</span>
         <!-- 년월 선택기 -->
@@ -347,7 +553,7 @@
       </div>
 
       <!-- 사전입력 저장/불러오기 패널 -->
-      <div x-show="prevSavePanel" x-cloak class="mb-3 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+      <div x-show="prevSavePanel" x-cloak class="mb-3 p-3 border border-indigo-200 rounded-lg" style="background:rgba(3,90,189,0.05)">
         <!-- 저장 -->
         <div class="flex gap-2 mb-3">
           <input type="text" x-model="prevSaveName"
@@ -363,7 +569,7 @@
         <div x-show="prevSaves.length === 0" class="text-sm text-gray-400 text-center py-2">저장된 사전입력 없음</div>
         <div x-show="prevSaves.length > 0" class="space-y-1 max-h-48 overflow-y-auto">
           <template x-for="ps in prevSaves" :key="ps.id">
-            <div class="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-indigo-100">
+            <div class="flex items-center gap-2 rounded-lg px-3 py-2 border border-indigo-100" style="background:#fff">
               <div class="flex-1 min-w-0">
                 <span class="font-medium text-sm text-gray-700" x-text="ps.name || `${ps.year}년 ${ps.month}월`"></span>
                 <span class="ml-2 text-xs text-gray-400" x-text="`${ps.year}년 ${ps.month}월`"></span>
@@ -390,9 +596,10 @@
         <span class="text-gray-400 ml-2">빈칸 = 자동배정</span>
       </div>
 
-      <!-- 사전입력 그리드 -->
-      <!-- overflow-auto + max-height → thead sticky 작동 -->
-      <div x-show="nurses.length > 0" class="overflow-auto" style="max-height:calc(100vh - 14rem)">
+    </div><!-- /glass-panel (controls) -->
+
+  <!-- 사전입력 그리드 — flex:1로 남은 공간 채움, 단일 스크롤 컨테이너 -->
+  <div x-show="nurses.length > 0" style="flex:1; min-height:0; overflow:auto">
         <table class="text-xs border-collapse" style="min-width:700px">
           <thead>
             <!-- 주기 행 (sticky top-0) -->
@@ -462,29 +669,54 @@
               </tr>
             </template>
           </tbody>
+          <!-- 일별 필요인원 오버라이드 행: D / E / N -->
+          <tfoot>
+            <template x-for="row in [{type:'D',bg:'#dbeafe',color:'#1d4ed8'},{type:'E',bg:'#dcfce7',color:'#15803d'},{type:'N',bg:'#fef3c7',color:'#b45309'}]" :key="row.type">
+              <tr>
+                <td class="border px-1 py-0.5 sticky left-0 z-10 text-center font-bold text-xs"
+                    :style="`background:${row.bg}; color:${row.color}; border-top:2px solid #9ca3af`">
+                  <span x-text="row.type"></span>
+                </td>
+                <template x-for="day in scheduleDays" :key="day">
+                  <td class="border p-0"
+                      :class="day.getDay()===6 ? 'border-r-2 border-r-gray-500' : ''"
+                      :style="`background:${row.bg}; border-top:2px solid #9ca3af`">
+                    <input type="number" min="0" max="20"
+                      class="w-full text-center text-xs py-0.5 border-none outline-none bg-transparent"
+                      :class="getPrevDayReq(day, row.type) !== null ? 'font-bold' : 'text-gray-400'"
+                      :style="getPrevDayReq(day, row.type) !== null ? `color:${row.color}` : ''"
+                      :placeholder="getDefaultDayReq(day, row.type)"
+                      :value="getPrevDayReq(day, row.type) !== null ? getPrevDayReq(day, row.type) : ''"
+                      @change="setPrevDayReq(day, row.type, $event.target.value)"
+                      style="min-width:2rem; width:100%" />
+                  </td>
+                </template>
+                <td class="border px-1" :style="`background:${row.bg}; border-top:2px solid #9ca3af`"></td>
+              </tr>
+            </template>
+          </tfoot>
         </table>
       </div>
 
-      <p x-show="nurses.length===0" class="text-center text-gray-400 py-12 text-sm">
-        설정 탭에서 간호사를 먼저 등록해주세요.
-      </p>
+  <p x-show="nurses.length===0" class="text-center text-gray-400 py-12 text-sm">
+    설정 탭에서 간호사를 먼저 등록해주세요.
+  </p>
 
-      <!-- 하단 안내 -->
-      <div class="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-700 space-y-1">
-        <div>✅ <strong>사전입력 팁</strong></div>
-        <div>· V(연차), 생(생리휴가), 법(법정공휴일), 공(보수교육·예비군 등 공적 업무), 병(병가) 등 확정된 항목을 먼저 입력하세요.</div>
-        <div>· 공(공적업무)이 입력된 날 전날에는 야간(N/NC)이 자동으로 회피됩니다.</div>
-        <div>· 특정 날짜에 특정 근무(D/E/N)를 원하면 미리 고정할 수 있습니다.</div>
-        <div>· 사전입력이 많을수록 스케줄 생성이 빠르고 정확해집니다.</div>
-      </div>
-    </div>
+  <!-- 하단 안내 -->
+  <div class="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-700 space-y-1" style="flex-shrink:0">
+    <div>✅ <strong>사전입력 팁</strong></div>
+    <div>· V(연차), 생(생리휴가), 법(법정공휴일), 공(보수교육·예비군 등 공적 업무), 병(병가) 등 확정된 항목을 먼저 입력하세요.</div>
+    <div>· 공(공적업무)이 입력된 날 전날에는 야간(N/NC)이 자동으로 회피됩니다.</div>
+    <div>· 특정 날짜에 특정 근무(D/E/N)를 원하면 미리 고정할 수 있습니다.</div>
+    <div>· 사전입력이 많을수록 스케줄 생성이 빠르고 정확해집니다.</div>
   </div>
+</div>
 
   <!-- ══════════════════════════════════════════════════════
        탭 3: 스케줄
   ══════════════════════════════════════════════════════ -->
-  <div x-show="activeTab==='schedule'" x-cloak>
-    <div class="bg-white rounded-xl shadow p-4">
+  <div x-show="activeTab==='schedule'" x-cloak class="tab-panel">
+    <div class="glass-panel">
       <div class="flex flex-wrap items-center gap-3 mb-4">
         <span class="font-semibold text-gray-700">📅 근무표</span>
         <!-- 년월 선택기 -->
@@ -633,8 +865,8 @@
   <!-- ══════════════════════════════════════════════════════
        탭 3: 저장된 스케줄
   ══════════════════════════════════════════════════════ -->
-  <div x-show="activeTab==='saved'" x-cloak>
-    <div class="bg-white rounded-xl shadow p-4">
+  <div x-show="activeTab==='saved'" x-cloak class="tab-panel">
+    <div class="glass-panel">
       <div class="flex items-center justify-between mb-3">
         <h2 class="font-semibold text-gray-700">💾 저장된 스케줄</h2>
         <button @click="loadSavedList()" class="text-blue-600 text-sm hover:underline">새로고침</button>
@@ -660,6 +892,21 @@
   </div>
 
 </main>
+</div><!-- /main-content -->
+
+<!-- ══ BOTTOM NAV (mobile) ════════════════════════════════════ -->
+<nav class="bottom-nav">
+  <template x-for="tab in tabs" :key="tab.id">
+    <div @click="activeTab=tab.id"
+      :class="activeTab===tab.id ? 'active' : ''"
+      class="bottom-nav-item">
+      <span class="nav-icon" x-text="tab.label.slice(0,2)"></span>
+      <span x-text="tab.label.slice(3)"></span>
+    </div>
+  </template>
+</nav>
+
+</div><!-- /app-shell -->
 
 <!-- ══════════════════════════════════════════════════════════
      간호사 추가/수정 모달
@@ -907,6 +1154,7 @@ function app() {
     shiftModal: {open:false, isNew:true, data:{}},
 
     prevSchedule: {},   // {nurse_id: {'YYYY-MM-DD': shift}} 사전 고정 근무
+    prevDayReqs: {},    // {'YYYY-MM-DD': {D:n, E:n, N:n}} 일별 필요인원 오버라이드
     holidays: [],       // ['YYYY-M-D', ...] 법정공휴일로 지정된 날짜 목록
 
     prevSaves: [],          // 저장된 사전입력 목록
@@ -1079,6 +1327,7 @@ function app() {
           requirements: this.requirements,
           rules: this.rules,
           prev_schedule: Object.keys(this.prevSchedule).length ? this.prevSchedule : null,
+          per_day_requirements: Object.keys(this.prevDayReqs).length ? this.prevDayReqs : null,
           holidays: this.holidays,
           shifts: this.shifts,
         });
@@ -1203,6 +1452,7 @@ function app() {
     clearPrevSchedule() {
       if (!confirm('사전입력을 모두 초기화하시겠습니까?')) return;
       this.prevSchedule = {};
+      this.prevDayReqs = {};
     },
     countPrevEntries() {
       return Object.values(this.prevSchedule).reduce((s,v) => s + Object.keys(v).length, 0);
@@ -1211,6 +1461,31 @@ function app() {
       return Object.keys(this.prevSchedule[nurseId] || {}).length;
     },
     prevInputCount() { /* 버튼 텍스트용 더미 */ },
+
+    // ── 일별 필요인원 오버라이드 ─────────────────────────────────────────────
+    getDayWeekKey(day) {
+      return ['sun','mon','tue','wed','thu','fri','sat'][day.getDay()];
+    },
+    getDefaultDayReq(day, type) {
+      const key = this.getDayWeekKey(day);
+      return (this.requirements[key] || {})[type] ?? 0;
+    },
+    getPrevDayReq(day, type) {
+      const k = this.dayKey(day);
+      const v = (this.prevDayReqs[k] || {})[type];
+      return (v !== undefined && v !== null) ? v : null;
+    },
+    setPrevDayReq(day, type, val) {
+      const k = this.dayKey(day);
+      const num = parseInt(val);
+      if (!this.prevDayReqs[k]) this.prevDayReqs[k] = {};
+      if (isNaN(num) || val === '' || val === null) {
+        delete this.prevDayReqs[k][type];
+        if (Object.keys(this.prevDayReqs[k]).length === 0) delete this.prevDayReqs[k];
+      } else {
+        this.prevDayReqs[k][type] = num;
+      }
+    },
 
     // ── 공통 셀 편집 적용 ─────────────────────────────────────────────────────
     applyShiftEdit(shift) {
@@ -1350,7 +1625,10 @@ function app() {
         year: this.year,
         month: this.month,
         name,
-        data: this.prevSchedule,
+        data: {
+          schedule: this.prevSchedule,
+          day_reqs: this.prevDayReqs,
+        },
       });
       this.prevSaveName = '';
       await this.loadPrevSavesList();
@@ -1359,7 +1637,14 @@ function app() {
       const result = await this.api('GET', `/api/prev_schedules/${id}`);
       this.year = result.year;
       this.month = result.month;
-      this.prevSchedule = result.data;
+      // 신규 형식: {schedule, day_reqs} / 구 형식: {nurse_id: {date: shift}}
+      if (result.data && result.data.schedule !== undefined) {
+        this.prevSchedule = result.data.schedule;
+        this.prevDayReqs = result.data.day_reqs || {};
+      } else {
+        this.prevSchedule = result.data;
+        this.prevDayReqs = {};
+      }
       this.prevSavePanel = false;
     },
     async deletePrevSave(id) {

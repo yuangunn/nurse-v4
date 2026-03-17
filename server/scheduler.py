@@ -56,6 +56,7 @@ class NurseScheduler:
         self.req   = request.requirements
         self.rules = request.rules
         self.prev  = request.prev_schedule or {}
+        self.per_day_req = request.per_day_requirements or {}
 
         # ── 근무 정의 → 카테고리 리스트 동적 구성 ─────────────────────────────
         shifts = [s.model_dump() for s in request.shifts] if request.shifts else []
@@ -254,8 +255,9 @@ class NurseScheduler:
         for d, dt in enumerate(self.all_dates):
             if dt.month != self.month:
                 continue
+            date_key = dt.strftime('%Y-%m-%d')
             weekday_key = WEEKDAY_KEYS[dt.weekday()]
-            day_req = req_dict.get(weekday_key, {})
+            day_req = self.per_day_req.get(date_key) or req_dict.get(weekday_key, {})
             for period, shifts in period_map.items():
                 required = day_req.get(period, 0)
                 if required <= 0:
@@ -277,8 +279,9 @@ class NurseScheduler:
         for d, dt in enumerate(self.all_dates):
             if dt.month != self.month:
                 continue
+            date_key = dt.strftime('%Y-%m-%d')
             weekday_key = WEEKDAY_KEYS[dt.weekday()]
-            day_req = req_dict.get(weekday_key, {})
+            day_req = self.per_day_req.get(date_key) or req_dict.get(weekday_key, {})
             for s in charge_shifts:
                 req_key = period_to_req.get(s["period"])
                 if req_key and day_req.get(req_key, 0) > 0:
