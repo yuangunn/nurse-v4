@@ -177,7 +177,7 @@ function app() {
 
     // ── 배점 관리 ─────────────────────────────────────────────
     async loadScoringRules(){this.scoringRules=await this.api('GET','/api/scoring_rules')},
-    scoringRuleTypeLabel(rt){return{transition:'전환 패턴',pattern:'N일 패턴',consecutive_same:'연속 동일',specific_shift:'특정 근무',wish:'희망 근무',night_fairness:'야간 공평성'}[rt]||rt},
+    scoringRuleTypeLabel(rt){return{transition:'전환 패턴',pattern:'N일 패턴',consecutive_same:'연속 동일',specific_shift:'특정 근무',wish:'희망 근무',night_fairness:'야간 공평성',holiday_work:'공휴일 근무',weekend_work:'주말 근무',holiday_off:'공휴일 OFF'}[rt]||rt},
     scoringRuleCondSummary(r){
       const p=r.params||{};const gl=v=>({work:'모든근무',day:'낮',evening:'저녁',night:'야간',rest:'휴무',leave:'휴가',rest_leave:'휴무/휴가',any:'전체'})[v]||v;
       if(r.rule_type==='transition')return`${gl(p.from)} → ${gl(p.to)}`;
@@ -186,6 +186,9 @@ function app() {
       if(r.rule_type==='specific_shift')return`${p.shift_code||'-'}${p.condition==='female_only'?' (여성)':''}`;
       if(r.rule_type==='wish')return'희망 근무 매칭';
       if(r.rule_type==='night_fairness')return'야간 range 최소화';
+      if(r.rule_type==='holiday_work')return'공휴일 근무 시 가점';
+      if(r.rule_type==='holiday_off')return'공휴일 OFF 시 감점';
+      if(r.rule_type==='weekend_work'){const s=p.slots||[];const dnames=['월','화','수','목','금','토','일'];const pnames={day:'D',evening:'E',night:'N'};return s.map(sl=>`${dnames[sl.weekday]} ${(sl.periods||[]).map(pp=>pnames[pp]||pp).join('/')}`).join(', ')||'-'}
       return'-';
     },
     openScoringModal(rule){
@@ -199,6 +202,9 @@ function app() {
       else if(rt==='pattern')this.scoringModal.data.params={pattern:['work','rest_leave','work']};
       else if(rt==='consecutive_same')this.scoringModal.data.params={period:'day'};
       else if(rt==='specific_shift')this.scoringModal.data.params={shift_code:this.shifts[0]?.code||'V',condition:'all'};
+      else if(rt==='holiday_work')this.scoringModal.data.params={};
+      else if(rt==='holiday_off')this.scoringModal.data.params={};
+      else if(rt==='weekend_work')this.scoringModal.data.params={slots:[{weekday:5,periods:['evening','night']},{weekday:6,periods:['day']}]};
       else this.scoringModal.data.params={};
     },
     async saveScoringRule(){const d=this.scoringModal.data;if(!d.name.trim()){alert('규칙 이름을 입력하세요.');return}await this.api('POST','/api/scoring_rules',d);await this.loadScoringRules();this.scoringModal.open=false},
@@ -353,13 +359,13 @@ function app() {
     async savePrevToServer(){
       const name=this.prevSaveName.trim()||`${this.year}년 ${this.month}월 사전입력`;
       if(!Object.keys(this.prevSchedule).some(k=>Object.keys(this.prevSchedule[k]).length>0)){alert('저장할 사전입력 데이터가 없습니다.');return}
-      await this.api('POST','/api/prev_schedules',{year:this.year,month:this.month,name,data:{schedule:this.prevSchedule,day_reqs:this.prevDayReqs}});
+      await this.api('POST','/api/prev_schedules',{year:this.year,month:this.month,name,data:{schedule:this.prevSchedule,day_reqs:this.prevDayReqs,holidays:this.holidays,prev_month_nights:this.prevMonthNights}});
       this.prevSaveName='';await this.loadPrevSavesList();
     },
     async loadPrevFromServer(id){
       const result=await this.api('GET',`/api/prev_schedules/${id}`);this.year=result.year;this.month=result.month;
-      if(result.data&&result.data.schedule!==undefined){this.prevSchedule=result.data.schedule;this.prevDayReqs=result.data.day_reqs||{}}
-      else{this.prevSchedule=result.data;this.prevDayReqs={}}
+      if(result.data&&result.data.schedule!==undefined){this.prevSchedule=result.data.schedule;this.prevDayReqs=result.data.day_reqs||{};this.holidays=result.data.holidays||[];this.prevMonthNights=result.data.prev_month_nights||{}}
+      else{this.prevSchedule=result.data;this.prevDayReqs={};this.holidays=[];this.prevMonthNights={}}
       this.prevSavePanel=false;
     },
     async deletePrevSave(id){if(!confirm('삭제하시겠습니까?'))return;await this.api('DELETE',`/api/prev_schedules/${id}`);await this.loadPrevSavesList()},

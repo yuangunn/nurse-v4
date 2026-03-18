@@ -273,10 +273,10 @@ select option { background: var(--bg-card); color: var(--text); }
 
 /* ── Schedule Grid ───────────────────────────────────────── */
 /* 토/일 배경 */
-.g-sun { background: rgba(198,40,40,0.04); }
-.g-sat-bg { background: rgba(21,101,192,0.04); }
-html.dark .g-sun { background: rgba(198,40,40,0.06); }
-html.dark .g-sat-bg { background: rgba(21,101,192,0.06); }
+.g-sun { background: #faf0f0; }
+.g-sat-bg { background: #eef3fa; }
+html.dark .g-sun { background: #1a1012; }
+html.dark .g-sat-bg { background: #101520; }
 
 .g-cell { border: 1px solid var(--border-light); }
 .g-sat { border-right: 2px solid var(--border) !important; }
@@ -302,8 +302,8 @@ html.dark .g-sat-bg { background: rgba(21,101,192,0.06); }
 
 /* 근무 셀 — Outfit으로 깔끔하게 */
 .schedule-cell, .schedule-cell-text {
-  min-width: 2rem; text-align: center;
-  font-size: 0.72rem; font-weight: 600;
+  min-width: 1.5rem; text-align: center;
+  font-size: 0.65rem; font-weight: 600;
   font-family: 'Outfit', system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
@@ -311,11 +311,15 @@ html.dark .g-sat-bg { background: rgba(21,101,192,0.06); }
 }
 .schedule-cell { border-radius: 3px; }
 
-/* ── Cycle Colors ────────────────────────────────────────── */
-.cy-1 { background: rgba(92,159,212,0.05); color: #5c9fd4; }
-.cy-2 { background: rgba(107,158,109,0.05); color: #6b9e6d; }
-.cy-3 { background: rgba(156,116,179,0.05); color: #9c74b3; }
-.cy-4 { background: rgba(196,151,90,0.05); color: #c4975a; }
+/* ── Cycle Colors (불투명 — sticky 스크롤 대응) ──────────── */
+.cy-1 { background: #e8f1fa; color: #1565c0; }
+.cy-2 { background: #e8f2e9; color: #2e7d32; }
+.cy-3 { background: #f0e9f5; color: #7b1fa2; }
+.cy-4 { background: #f5efe8; color: #e65100; }
+html.dark .cy-1 { background: #0f1926; color: #5c9fd4; }
+html.dark .cy-2 { background: #0f1612; color: #6b9e6d; }
+html.dark .cy-3 { background: #131019; color: #9c74b3; }
+html.dark .cy-4 { background: #151109; color: #c4975a; }
 
 /* ── Modal ───────────────────────────────────────────────── */
 .modal-bg {

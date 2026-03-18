@@ -147,6 +147,9 @@ def init_db():
                 ("퐁당퐁당 회피", "pattern", json.dumps({"pattern": ["work", "rest_leave", "work"]}), -20, 1, 12)
             )
 
+        # 법정공휴일 + 주말 배점 규칙 마이그레이션
+        _migrate_holiday_weekend_rules(conn)
+
 
 # ── 근무 시드 데이터 ─────────────────────────────────────────────────────────
 
@@ -425,11 +428,60 @@ def _seed_scoring_rules(conn: sqlite3.Connection):
         ("희망 근무 반영 보상",     "wish",             json.dumps({}),                                                    +50, 1, 10),
         ("야간 근무 공평성",        "night_fairness",   json.dumps({}),                                                    -50, 1, 11),
         ("퐁당퐁당 회피",           "pattern",          json.dumps({"pattern": ["work", "rest_leave", "work"]}),           -20, 1, 12),
+        ("법정공휴일 휴가 보상",     "specific_shift",   json.dumps({"shift_code": "법", "condition": "all"}),               +30, 1, 13),
+        ("공휴일 근무 보상",         "holiday_work",     json.dumps({}),                                                     +20, 1, 14),
+        ("주말 경감근무 보상",       "weekend_work",     json.dumps({"slots": [{"weekday": 5, "periods": ["evening", "night"]}, {"weekday": 6, "periods": ["day"]}]}), +20, 1, 15),
+        ("공휴일 OFF 페널티",        "holiday_off",      json.dumps({}),                                                    -500, 1, 16),
     ]
     conn.executemany(
         "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
         rules,
     )
+
+
+def _migrate_holiday_weekend_rules(conn: sqlite3.Connection):
+    """법정공휴일/주말 배점 규칙 3종 마이그레이션 (기존 DB에 없을 경우 추가)"""
+    # 법정공휴일 휴가 보상
+    has_holiday_leave = conn.execute(
+        "SELECT COUNT(*) FROM scoring_rules WHERE name LIKE '%법정공휴일 휴가%'"
+    ).fetchone()[0]
+    if not has_holiday_leave:
+        conn.execute(
+            "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
+            ("법정공휴일 휴가 보상", "specific_shift", json.dumps({"shift_code": "법", "condition": "all"}), 30, 1, 13)
+        )
+
+    # 공휴일 근무 보상
+    has_holiday_work = conn.execute(
+        "SELECT COUNT(*) FROM scoring_rules WHERE rule_type='holiday_work'"
+    ).fetchone()[0]
+    if not has_holiday_work:
+        conn.execute(
+            "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
+            ("공휴일 근무 보상", "holiday_work", json.dumps({}), 20, 1, 14)
+        )
+
+    # 주말 경감근무 보상
+    has_weekend_work = conn.execute(
+        "SELECT COUNT(*) FROM scoring_rules WHERE rule_type='weekend_work'"
+    ).fetchone()[0]
+    if not has_weekend_work:
+        conn.execute(
+            "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
+            ("주말 경감근무 보상", "weekend_work",
+             json.dumps({"slots": [{"weekday": 5, "periods": ["evening", "night"]}, {"weekday": 6, "periods": ["day"]}]}),
+             20, 1, 15)
+        )
+
+    # 공휴일 OFF 페널티
+    has_holiday_off = conn.execute(
+        "SELECT COUNT(*) FROM scoring_rules WHERE rule_type='holiday_off'"
+    ).fetchone()[0]
+    if not has_holiday_off:
+        conn.execute(
+            "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
+            ("공휴일 OFF 페널티", "holiday_off", json.dumps({}), -500, 1, 16)
+        )
 
 
 # ── Scoring Rules CRUD ────────────────────────────────────────────────────────
