@@ -70,6 +70,10 @@ class Rules(BaseModel):
     patternOptimization: bool = True
     autoMenstrualLeave: bool = True
     maxVPerMonth: int = 1        # V(연차) 월 최대 사용 횟수 (hard)
+    maxNightPerMonth: bool = True
+    maxNightPerMonthCount: int = 6   # 월 최대 야간 횟수 (7회부터 수면OFF 발생)
+    maxNightTwoMonth: bool = False
+    maxNightTwoMonthCount: int = 11  # 홀짝월 합산 최대 야간 (12개이상 수면OFF 발생)
 
 
 class GenerateRequest(BaseModel):
@@ -83,6 +87,7 @@ class GenerateRequest(BaseModel):
     shifts: List[ShiftDef] = []  # 근무 정의 목록 (비어있으면 DB에서 로드)
     per_day_requirements: Optional[Dict[str, Dict[str, int]]] = None  # {'YYYY-MM-DD': {'D':4,'E':5,'N':3}}
     scoring_rules: List[ScoringRule] = []  # 배점 규칙 목록 (비어있으면 DB에서 로드)
+    prev_month_nights: Optional[Dict[str, int]] = None  # {nurse_id: 이전달 야간횟수} (홀짝월 합산용)
     mip_gap: float = 0.02  # MIP 오차 허용 범위 (0=완벽한 최적해, 0.02=2% 오차허용 조기종료)
     time_limit: int = 1200  # 솔버 타임리밋 (초, 기본 20분)
 

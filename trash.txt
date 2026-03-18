@@ -1,0 +1,15 @@
+솔버
+열	의미
+Src	해를 찾은 방법 — B(분기), C(중심점 반올림), F(Feasibility pump), H(휴리스틱), L(Sub-MIP), R(랜덤 반올림), S(LP풀이), T(노드 평가)
+Proc.	처리 완료된 노드 수
+InQueue	아직 탐색 대기 중인 노드 수
+Leaves	더 이상 분기하지 않는 말단 노드 수
+Expl.	탐색 트리 중 탐색 완료된 비율 (100%면 완전 탐색)
+BestBound	이론적 최적값 상한 (이보다 더 좋은 해는 없음)
+BestSol	지금까지 찾은 최선의 실행 가능한 해 (inf면 아직 못 찾음)
+Gap	(BestBound - BestSol) / BestSol — 0%면 최적해 증명 완료
+Cuts	생성된 절단면(cut) 총 수
+InLp	현재 LP에 활성화된 cut 수
+Confl.	충돌 분석으로 발견한 제약 수
+LpIters	누적 LP 반복 횟수
+Time	경과 시간

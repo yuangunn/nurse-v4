@@ -62,12 +62,14 @@ try:
 except ImportError:
     pass  # highspy 없으면 패스 (cancel/gap 기능 비활성화)
 
-app = FastAPI(title="NurseScheduler v2")
+app = FastAPI(title="NurseScheduler v3")
 
-# 정적 파일 서빙 (frontend/)
+# 정적 파일 서빙 (frontend/ 하위 css, js, lib)
 _frontend_dir = Path(__file__).parent.parent / "frontend"
-if _frontend_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(_frontend_dir)), name="static")
+for _subdir in ("css", "js", "lib", "fonts"):
+    _sub_path = _frontend_dir / _subdir
+    if _sub_path.exists():
+        app.mount(f"/{_subdir}", StaticFiles(directory=str(_sub_path)), name=_subdir)
 
 
 @app.on_event("startup")

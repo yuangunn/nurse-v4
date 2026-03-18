@@ -48,6 +48,7 @@ class NurseScheduler:
         self.rules = request.rules
         self.prev  = request.prev_schedule or {}
         self.per_day_req = request.per_day_requirements or {}
+        self.prev_month_nights = request.prev_month_nights or {}
         self.mip_gap = request.mip_gap
         self.time_limit = request.time_limit
 
@@ -81,25 +82,33 @@ class NurseScheduler:
 
     # ── 날짜 범위 계산 ────────────────────────────────────────────────────────
 
+    # 주기 기준일 (2026-03-01 = 1주기 시작)
+    _CYCLE_REF = date(2026, 3, 1)
+
+    def _cycle_day_offset(self, d: date) -> int:
+        """기준일로부터의 일수 (주기 계산용)"""
+        return (d - self._CYCLE_REF).days
+
     def _build_date_range(self):
-        """대상 월을 포함하는 완전한 주(일~토) 범위 계산"""
+        """대상 월을 포함하되 주기(7일 블록) 단위로 완성하는 범위 계산.
+        - 시작: 1일이 속한 주기의 첫째 날
+        - 종료: 말일이 속한 주기의 마지막 날
+        예) 2026-03: 3/1(1주기 1일) ~ 4/4(5주기 7일)
+        """
         first = date(self.year, self.month, 1)
         if self.month == 12:
             last = date(self.year + 1, 1, 1) - timedelta(days=1)
         else:
             last = date(self.year, self.month + 1, 1) - timedelta(days=1)
 
-        # 일요일(weekday=6)부터 시작, 토요일(weekday=5)로 끝
-        days_to_sunday = first.weekday() + 1 if first.weekday() != 6 else 0
-        if first.weekday() == 6:
-            days_to_sunday = 0
-        else:
-            days_to_sunday = (first.weekday() + 1) % 7
+        # 주기 블록 시작으로 정렬 (7일 단위, _CYCLE_REF 기준)
+        first_offset = self._cycle_day_offset(first)
+        start_offset = first_offset - (first_offset % 7)
+        self.schedule_start = self._CYCLE_REF + timedelta(days=start_offset)
 
-        days_to_saturday = (5 - last.weekday()) % 7
-
-        self.schedule_start = first - timedelta(days=days_to_sunday)
-        self.schedule_end   = last  + timedelta(days=days_to_saturday)
+        last_offset = self._cycle_day_offset(last)
+        end_offset = last_offset + (6 - last_offset % 7)
+        self.schedule_end = self._CYCLE_REF + timedelta(days=end_offset)
 
         self.all_dates: List[date] = []
         cur = self.schedule_start
@@ -110,7 +119,7 @@ class NurseScheduler:
         self.T = len(self.all_dates)
         self.date_to_idx = {d: i for i, d in enumerate(self.all_dates)}
 
-        # 완전한 주 목록 [(week_start_idx, week_end_idx), ...]
+        # 완전한 주(주기) 목록 [(week_start_idx, week_end_idx), ...]
         self.weeks: List[Tuple[int, int]] = []
         for i in range(0, self.T, 7):
             if i + 6 < self.T:
@@ -193,6 +202,13 @@ class NurseScheduler:
                             lowBound=0, upBound=0,
                             cat="Integer"
                         )
+                    elif s == "생" and nurse.get("gender") != "female":
+                        # 남성 간호사에게 생리휴가 배정 불가
+                        x[nid][d][s] = pulp.LpVariable(
+                            f"x_{nid}_{d}_{s}",
+                            lowBound=0, upBound=0,
+                            cat="Integer"
+                        )
                     else:
                         x[nid][d][s] = pulp.LpVariable(f"x_{nid}_{d}_{s}", cat="Binary")
 
@@ -213,6 +229,10 @@ class NurseScheduler:
         if self.rules.maxConsecutiveNight:
             self._c_max_consecutive_night(prob, x, self.rules.maxConsecutiveNightDays)
         self._c_max_v_per_month(prob, x)               # V 월 최대 횟수
+        if self.rules.maxNightPerMonth:
+            self._c_max_night_per_month(prob, x)       # 월 최대 야간 횟수
+        if self.rules.maxNightTwoMonth:
+            self._c_max_night_two_month(prob, x)       # 홀짝월 합산 야간
         self._c_menstrual_leave(prob, x)
         self._c_night_shift_nurses(prob, x)            # 야간전담 전용 규칙
 
@@ -506,6 +526,40 @@ class NurseScheduler:
             ]
             if v_vars:
                 prob += pulp.lpSum(v_vars) <= max_v, f"max_v_{nid}"
+
+    def _c_max_night_per_month(self, prob, x):
+        """월 최대 야간 횟수 제한 (수면OFF 최소화) — 야간전담 제외"""
+        max_n = self.rules.maxNightPerMonthCount
+        for nurse in self.nurses:
+            if nurse.get("is_night_shift"):
+                continue
+            nid = nurse["id"]
+            night_vars = [
+                x[nid][d][s]
+                for d, dt in enumerate(self.all_dates)
+                if dt.month == self.month and dt.year == self.year
+                for s in self.NIGHT_SHIFTS
+            ]
+            if night_vars:
+                prob += pulp.lpSum(night_vars) <= max_n, f"max_night_month_{nid}"
+
+    def _c_max_night_two_month(self, prob, x):
+        """홀짝월 합산 야간 제한 (이전달 야간 + 당월 야간 <= maxNightTwoMonthCount) — 야간전담 제외"""
+        max_n = self.rules.maxNightTwoMonthCount
+        prev_nights = getattr(self, 'prev_month_nights', None) or {}
+        for nurse in self.nurses:
+            if nurse.get("is_night_shift"):
+                continue
+            nid = nurse["id"]
+            prev_count = prev_nights.get(nid, 0)
+            night_vars = [
+                x[nid][d][s]
+                for d, dt in enumerate(self.all_dates)
+                if dt.month == self.month and dt.year == self.year
+                for s in self.NIGHT_SHIFTS
+            ]
+            if night_vars:
+                prob += pulp.lpSum(night_vars) <= max_n - prev_count, f"max_night_2mo_{nid}"
 
     def _c_menstrual_leave(self, prob, x):
         """생리휴가: 여성 간호사당 전체 기간 최대 1회 (코드 '생'이 있을 때만)"""
@@ -1310,6 +1364,39 @@ class NurseScheduler:
             lines.append("  [원인] 생리휴가 제약 충돌")
             lines.append("  해결: 사전입력에서 생리휴가(생) 입력을 확인하거나 규칙을 검토하세요.")
             return "\n".join(lines)
+
+        # ── Phase 12: 월 최대 야간 ─────────────────────────────────────────────
+        if self.rules.maxNightPerMonth:
+            p, x = _make_full_prob("diag12")
+            self._c_charge_seniority(p, x)
+            if self.rules.noNOD:
+                self._c_nod_pattern(p, x)
+            self._c_menstrual_leave(p, x)
+            self._c_max_night_per_month(p, x)
+            p += 0
+            if not _try(p):
+                max_n = self.rules.maxNightPerMonthCount
+                lines.append(f"  [원인] 월 최대 야간 {max_n}회 제약 충돌")
+                lines.append(f"  총 야간 슬롯 대비 간호사×{max_n}회가 부족합니다.")
+                lines.append(f"  해결: 월 최대 야간 횟수를 늘리거나, 야간 필요인원을 줄이세요.")
+                return "\n".join(lines)
+
+        # ── Phase 13: 홀짝월 합산 야간 ──────────────────────────────────────────
+        if self.rules.maxNightTwoMonth:
+            p, x = _make_full_prob("diag13")
+            self._c_charge_seniority(p, x)
+            if self.rules.noNOD:
+                self._c_nod_pattern(p, x)
+            self._c_menstrual_leave(p, x)
+            if self.rules.maxNightPerMonth:
+                self._c_max_night_per_month(p, x)
+            self._c_max_night_two_month(p, x)
+            p += 0
+            if not _try(p):
+                lines.append(f"  [원인] 홀짝월 합산 야간 {self.rules.maxNightTwoMonthCount}회 제약 충돌")
+                lines.append("  이전달 야간 횟수가 너무 많아 당월 배정이 불가능합니다.")
+                lines.append("  해결: 사전입력의 '전월N' 값을 확인하거나 합산 상한을 늘리세요.")
+                return "\n".join(lines)
 
         # ── 원인 불명 ────────────────────────────────────────────────────────
         lines.append("  [원인 불명] 개별 제약은 통과하지만 전체 조합이 Infeasible입니다.")

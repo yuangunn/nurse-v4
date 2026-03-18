@@ -1,2568 +1,452 @@
 <!DOCTYPE html>
 <html lang="ko" x-data="app()" x-init="init()">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>간호사 스케줄러 v2</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
-  <style>
-    /* ═══ 용인세브란스병원 컬러스케일 토큰 ══════════════════════ */
-    :root {
-      --sev-1:        rgb(3, 90, 189);   /* 주 색상 */
-      --sev-2:        rgb(2, 72, 151);   /* 중간 */
-      --sev-3:        rgb(2, 54, 113);   /* 진한 */
-      --sev-1-light:  rgba(3,90,189,0.08);
-      --sev-1-mid:    rgba(3,90,189,0.15);
-      --bg-base:      #f0f4fa;
-      --bg-surface:   #f8fafd;
-      --bg-card:      #ffffff;
-      --text-primary:   #1a2540;
-      --text-secondary: #5a6a8a;
-      --border:         #d0ddf0;
-      --border-strong:  #b0c4e4;
-      --shadow-sm:      0 1px 4px rgba(2,54,113,0.1);
-      --shadow-md:      0 4px 16px rgba(2,54,113,0.12);
-    }
-
-    /* ═══ BASE ═══════════════════════════════════════════════════ */
-    *, *::before, *::after { box-sizing: border-box; }
-    body {
-      font-family: 'Manrope', 'Segoe UI', system-ui, sans-serif !important;
-      background: var(--bg-base) !important;
-      color: var(--text-primary) !important;
-      font-size: 15px !important;
-      margin: 0;
-      -webkit-font-smoothing: antialiased;
-    }
-    h2, h3 { font-weight:700; letter-spacing:-0.2px; font-size:1rem; }
-    ::-webkit-scrollbar { width:6px; height:6px; }
-    ::-webkit-scrollbar-track { background:#f0f4fa; }
-    ::-webkit-scrollbar-thumb { background:var(--border-strong); border-radius:10px; }
-    ::-webkit-scrollbar-thumb:hover { background:var(--sev-1); }
-
-    /* ═══ x-cloak ════════════════════════════════════════════════ */
-    [x-cloak] { display: none !important; }
-
-    /* ═══ APP SHELL ══════════════════════════════════════════════ */
-    .app-shell { display:flex; height:100vh; overflow:hidden; }
-
-    /* ═══ SIDEBAR ════════════════════════════════════════════════ */
-    .sidebar {
-      width:220px; flex-shrink:0;
-      background:var(--sev-3);
-      position:sticky; top:0; height:100vh;
-      overflow-y:auto;
-      display:flex; flex-direction:column;
-      z-index:40;
-    }
-    .sidebar-logo {
-      display:flex; align-items:center; gap:10px;
-      padding:20px 16px;
-      border-bottom:1px solid rgba(255,255,255,0.12);
-      font-family:'Manrope','Segoe UI',sans-serif;
-      font-weight:800; font-size:0.9rem; letter-spacing:-0.3px;
-      color:#ffffff;
-    }
-    .sidebar-logo svg { color:rgba(255,255,255,0.9); flex-shrink:0; }
-    .logo-ver {
-      margin-left:auto; font-size:0.6rem; font-weight:700;
-      color:var(--sev-3); background:rgba(255,255,255,0.9);
-      padding:2px 6px; border-radius:4px; letter-spacing:0.5px;
-    }
-    .sidebar-nav { flex:1; padding:8px 0; }
-    .sidebar-item {
-      display:flex; align-items:center; gap:12px;
-      padding:11px 16px;
-      cursor:pointer; font-size:0.9rem; font-weight:500;
-      color:rgba(255,255,255,0.65);
-      border-left:3px solid transparent;
-      transition:all 0.15s ease;
-      user-select:none; white-space:nowrap;
-    }
-    .sidebar-item:hover { background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.9); }
-    .sidebar-item.active {
-      border-left-color:#ffffff;
-      color:#ffffff;
-      background:rgba(255,255,255,0.15);
-      font-weight:700;
-    }
-    .nav-icon { font-size:1.1rem; flex-shrink:0; }
-
-    @media (min-width:768px) and (max-width:1023px) {
-      .sidebar { width:58px; }
-      .sidebar-logo { justify-content:center; padding:16px 0; }
-      .sidebar-logo > span, .logo-ver { display:none; }
-      .sidebar-item { justify-content:center; padding:12px 0; border-left:none; border-bottom:3px solid transparent; }
-      .sidebar-item.active { border-left-color:transparent; border-bottom-color:#fff; }
-      .nav-label { display:none; }
-    }
-    @media (max-width:767px) { .sidebar { display:none; } }
-
-    /* ═══ MAIN CONTENT ════════════════════════════════════════════ */
-    .main-content { flex:1; min-width:0; padding:1.5rem 1.25rem; height:100vh; overflow:hidden; display:flex; flex-direction:column; }
-    @media (max-width:767px) { .main-content { padding-bottom:5rem; } }
-
-    /* ═══ BOTTOM NAV (mobile) ══════════════════════════════════════ */
-    .bottom-nav {
-      display:none; position:fixed; bottom:0; left:0; right:0;
-      background:#ffffff; border-top:2px solid var(--border); z-index:50;
-      box-shadow:0 -2px 12px rgba(2,54,113,0.1);
-    }
-    @media (max-width:767px) { .bottom-nav { display:flex; } }
-    .bottom-nav-item {
-      flex:1; display:flex; flex-direction:column; align-items:center;
-      justify-content:center; padding:8px 4px;
-      font-size:0.65rem; font-weight:500; color:var(--text-secondary);
-      cursor:pointer; gap:3px; transition:color 0.15s; user-select:none; position:relative;
-    }
-    .bottom-nav-item:hover { color:var(--sev-1); }
-    .bottom-nav-item.active { color:var(--sev-1); font-weight:700; }
-    .bottom-nav-item.active::after {
-      content:''; position:absolute; bottom:0;
-      width:28px; height:3px; background:var(--sev-1); border-radius:2px 2px 0 0;
-    }
-    .bottom-nav-item .nav-icon { font-size:1.25rem; }
-
-    /* ═══ CARDS ═══════════════════════════════════════════════════ */
-    .glass-panel {
-      background:#ffffff;
-      border:1px solid var(--border);
-      border-radius:12px;
-      padding:1.25rem;
-      box-shadow:var(--shadow-sm);
-    }
-
-    /* ═══ SHIFT CELLS ══════════════════════════════════════════════ */
-    .shift-DC { background:#bfdbfe; color:#1d4ed8; }
-    .shift-D  { background:#dbeafe; color:#1d4ed8; }
-    .shift-D1 { background:#e0f2fe; color:#0284c7; }
-    .shift-EC { background:#bbf7d0; color:#15803d; }
-    .shift-E  { background:#dcfce7; color:#15803d; }
-    .shift-중 { background:#ccfbf1; color:#0f766e; }
-    .shift-NC { background:#fde68a; color:#92400e; }
-    .shift-N  { background:#fef9c3; color:#92400e; }
-    .shift-OF { background:#f3f4f6; color:#6b7280; }
-    .shift-주 { background:#e0e7ff; color:#4338ca; }
-    .shift-V  { background:#fce7f3; color:#be185d; }
-    .shift-생 { background:#fdf2f8; color:#be185d; }
-    .shift-특 { background:#fdf4ff; color:#7e22ce; }
-    .shift-공 { background:#ecfdf5; color:#064e3b; }
-    .shift-법 { background:#fff7ed; color:#c2410c; }
-    .shift-병 { background:#fef2f2; color:#dc2626; }
-    .schedule-cell {
-      min-width:2.2rem; text-align:center; font-size:0.75rem; font-weight:700;
-      font-family:'Fira Code','Consolas','Courier New',monospace;
-      border-radius:4px; padding:3px 0; cursor:pointer; user-select:none;
-    }
-    .schedule-cell-text {
-      min-width:2.2rem; text-align:center; font-size:0.75rem; font-weight:700;
-      font-family:'Fira Code','Consolas','Courier New',monospace;
-      padding:3px 0; cursor:pointer; user-select:none;
-    }
-    .loading-spin { animation:spin 1s linear infinite; }
-    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-
-    /* ═══ STICKY HEADER — 투명도 방지 (solid 강제) ═══════════════ */
-    th.sticky.bg-blue-50   { background-color: #dbeafe !important; }
-    th.sticky.bg-green-50  { background-color: #dcfce7 !important; }
-    th.sticky.bg-purple-50 { background-color: #ede9fe !important; }
-    th.sticky.bg-orange-50 { background-color: #ffedd5 !important; }
-
-    /* ═══ DARK MODE ══════════════════════════════════════════════ */
-    html.dark {
-      --bg-base:        #0f1623;
-      --bg-surface:     #161e2e;
-      --bg-card:        #1c2840;
-      --text-primary:   #dce8f8;
-      --text-secondary: #8fa3c4;
-      --border:         #2a3d5a;
-      --border-strong:  #3a5570;
-      --shadow-sm:      0 1px 4px rgba(0,0,0,0.4);
-      --shadow-md:      0 4px 16px rgba(0,0,0,0.5);
-      --sev-1-light:    rgba(3,90,189,0.15);
-      --sev-1-mid:      rgba(3,90,189,0.25);
-    }
-    html.dark body { background: var(--bg-base) !important; color: var(--text-primary) !important; }
-    html.dark .bg-white { background-color: var(--bg-card) !important; }
-    html.dark .glass-panel { background: var(--bg-card) !important; border-color: var(--border) !important; }
-    html.dark .bg-gray-50 { background-color: var(--bg-surface) !important; }
-    html.dark .bg-gray-100 { background-color: #1a2235 !important; }
-
-    html.dark input[type="text"],
-    html.dark input[type="number"],
-    html.dark select,
-    html.dark textarea {
-      background-color: #152035 !important;
-      color: var(--text-primary) !important;
-      border-color: var(--border) !important;
-    }
-    html.dark input[type="range"] { background-color: transparent !important; }
-
-    html.dark .border   { border-color: var(--border) !important; }
-    html.dark .border-t { border-top-color: var(--border) !important; }
-    html.dark th, html.dark td { border-color: var(--border) !important; }
-
-    html.dark .text-gray-800, html.dark .text-gray-700 { color: var(--text-primary) !important; }
-    html.dark .text-gray-600, html.dark .text-gray-500 { color: var(--text-secondary) !important; }
-    html.dark .text-gray-400 { color: #5a7090 !important; }
-
-    html.dark .bottom-nav { background: var(--bg-card) !important; border-top-color: var(--border) !important; }
-    html.dark .bottom-nav-item { color: var(--text-secondary) !important; }
-
-    /* sticky 셀 다크 */
-    html.dark th.sticky, html.dark td.sticky { background-color: var(--bg-card) !important; }
-    html.dark th.sticky.bg-gray-50 { background-color: var(--bg-surface) !important; }
-
-    /* 다크에서 cycle 헤더 solid */
-    html.dark th.sticky.bg-blue-50   { background-color: #1a2e4a !important; }
-    html.dark th.sticky.bg-green-50  { background-color: #162c1e !important; }
-    html.dark th.sticky.bg-purple-50 { background-color: #211a3a !important; }
-    html.dark th.sticky.bg-orange-50 { background-color: #2a1f10 !important; }
-
-    /* 다크에서 shift 셀 (CSS 클래스 직접 적용 시 대비) */
-    html.dark .shift-DC { background:#1a2d50 !important; color:#93c5fd !important; }
-    html.dark .shift-D  { background:#1e3255 !important; color:#93c5fd !important; }
-    html.dark .shift-D1 { background:#0f2a40 !important; color:#7dd3fc !important; }
-    html.dark .shift-EC { background:#0f2d1f !important; color:#6ee7b7 !important; }
-    html.dark .shift-E  { background:#0f2d1a !important; color:#6ee7b7 !important; }
-    html.dark .shift-중 { background:#0c2820 !important; color:#5eead4 !important; }
-    html.dark .shift-NC { background:#2d2000 !important; color:#fcd34d !important; }
-    html.dark .shift-N  { background:#2a2000 !important; color:#fde68a !important; }
-    html.dark .shift-OF { background:#1e2227 !important; color:#9ca3af !important; }
-    html.dark .shift-주 { background:#1a1a3a !important; color:#a5b4fc !important; }
-    html.dark .shift-V  { background:#2d1022 !important; color:#f9a8d4 !important; }
-    html.dark .shift-생 { background:#2a0f20 !important; color:#f9a8d4 !important; }
-    html.dark .shift-특 { background:#250f35 !important; color:#d8b4fe !important; }
-    html.dark .shift-공 { background:#062015 !important; color:#6ee7b7 !important; }
-    html.dark .shift-법 { background:#2a1500 !important; color:#fdba74 !important; }
-    html.dark .shift-병 { background:#2d0f0f !important; color:#fca5a5 !important; }
-
-    /* 다크에서 hover */
-    html.dark .hover\:bg-gray-50:hover  { background-color: rgba(255,255,255,0.05) !important; }
-    html.dark .hover\:bg-gray-100:hover { background-color: rgba(255,255,255,0.07) !important; }
-    html.dark .hover\:brightness-95:hover { filter: brightness(1.15) !important; }
-
-    /* 다크에서 모달 배경 */
-    html.dark .bg-blue-50.rounded-lg {
-      background-color: rgba(3,90,189,0.15) !important;
-      border-color: rgba(3,90,189,0.3) !important;
-    }
-    html.dark .bg-indigo-50 { background-color: rgba(3,90,189,0.1) !important; }
-    html.dark .bg-indigo-100 { background-color: rgba(3,90,189,0.18) !important; }
-    html.dark .border-indigo-200 { border-color: rgba(3,90,189,0.3) !important; }
-    html.dark .border-indigo-100 { border-color: rgba(3,90,189,0.2) !important; }
-    html.dark .bg-black\/40 { background-color: rgba(0,0,0,0.7) !important; }
-
-    /* 다크 생성패널 */
-    html.dark .bg-green-50  { background-color: #0f2318 !important; }
-    html.dark .bg-red-50    { background-color: #2a0f0f !important; }
-    html.dark .border-green-200 { border-color: #1a4a2a !important; }
-    html.dark .border-red-200   { border-color: #4a1a1a !important; }
-    html.dark .bg-green-800 { color: #86efac !important; }
-    html.dark .bg-red-800   { color: #fca5a5 !important; }
-    html.dark .text-green-800 { color: #86efac !important; }
-    html.dark .text-red-800   { color: #fca5a5 !important; }
-
-    /* 다크 스크롤바 */
-    html.dark ::-webkit-scrollbar-track { background: var(--bg-surface) !important; }
-    html.dark ::-webkit-scrollbar-thumb { background: var(--border-strong) !important; }
-
-    /* ═══════════════════════════════════════════════════════════════
-       TAILWIND LIGHT OVERRIDES (세브란스 컬러 적용)
-    ═══════════════════════════════════════════════════════════════ */
-    body.bg-gray-100, .bg-gray-100 { background-color:var(--bg-base) !important; }
-    .bg-white   { background-color:#ffffff !important; }
-    .bg-gray-50 { background-color:var(--bg-surface) !important; }
-
-    .text-gray-800 { color:var(--text-primary)   !important; }
-    .text-gray-700 { color:var(--text-primary)   !important; }
-    .text-gray-600 { color:var(--text-secondary) !important; }
-    .text-gray-500 { color:var(--text-secondary) !important; }
-    .text-gray-400 { color:#9aacc4 !important; }
-
-    /* Blue CTA — 세브란스 primary */
-    .bg-blue-600  { background-color:var(--sev-1) !important; color:#fff !important; }
-    .bg-blue-700  { background-color:var(--sev-2) !important; color:#fff !important; }
-    .hover\:bg-blue-700:hover { background-color:var(--sev-2) !important; }
-    .disabled\:bg-blue-300:disabled { background-color:rgba(3,90,189,0.35) !important; }
-    .text-blue-600 { color:var(--sev-1) !important; }
-    .text-blue-500 { color:var(--sev-1) !important; }
-    .text-blue-700 { color:var(--sev-2) !important; }
-
-    /* Cycle headers */
-    .bg-blue-50    { background-color:rgba(3,90,189,0.07)  !important; }
-    .bg-purple-50  { background-color:rgba(139,92,246,0.07) !important; }
-    .text-purple-700 { color:#6d28d9 !important; }
-    .bg-orange-50  { background-color:rgba(249,115,22,0.07) !important; }
-    .text-orange-700 { color:#c2410c !important; }
-
-    /* Day header backgrounds — keep originals, they work on white */
-    /* Input focus ring — Severance blue */
-    input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
-      outline:none !important;
-      box-shadow:0 0 0 2px rgba(3,90,189,0.3) !important;
-      border-color:var(--sev-1) !important;
-    }
-    input[type="checkbox"], input[type="radio"] { accent-color:var(--sev-1); }
-    .bg-transparent { background:transparent !important; }
-
-    .hover\:bg-gray-50:hover  { background-color:var(--sev-1-light) !important; }
-    .hover\:brightness-95:hover { filter:brightness(0.97) !important; }
-    .hover\:bg-gray-200:hover { background-color:var(--sev-1-light) !important; }
-    .hover\:bg-gray-100:hover { background-color:var(--sev-1-light) !important; color:var(--sev-1) !important; }
-
-    /* Generating panel */
-    .bg-blue-50.rounded-lg {
-      background-color:rgba(3,90,189,0.06) !important;
-      border:1px solid rgba(3,90,189,0.2) !important;
-    }
-    .text-gray-200 { color:#c8d8ee !important; }
-
-    /* Indigo — save/load panel */
-    .bg-indigo-50  { background-color:rgba(3,90,189,0.05) !important; }
-    .bg-indigo-100 { background-color:rgba(3,90,189,0.1)  !important; }
-    .hover\:bg-indigo-200:hover { background-color:rgba(3,90,189,0.18) !important; }
-    .border-indigo-100 { border-color:rgba(3,90,189,0.2) !important; }
-    .border-indigo-200 { border-color:rgba(3,90,189,0.3) !important; }
-    .border-indigo-300 { border-color:rgba(3,90,189,0.4) !important; }
-    .text-indigo-600 { color:var(--sev-1) !important; }
-    .text-indigo-700 { color:var(--sev-2) !important; }
-    .bg-indigo-600   { background-color:var(--sev-1) !important; color:#fff !important; }
-    .hover\:bg-indigo-700:hover { background-color:var(--sev-2) !important; }
-    .hover\:bg-indigo-50:hover  { background-color:rgba(3,90,189,0.07) !important; }
-
-    .shadow    { box-shadow:var(--shadow-sm) !important; }
-    .shadow-lg { box-shadow:var(--shadow-md) !important; }
-    .shadow-xl { box-shadow:0 8px 32px rgba(2,54,113,0.18) !important; }
-
-    .bg-black\/40 { background-color:rgba(2,54,113,0.5) !important; }
-
-    /* ═══ TAB PANELS ══════════════════════════════════════════════ */
-    /* 설정/스케줄/저장 탭: 세로 스크롤 가능한 일반 패널 */
-    .tab-panel { flex:1; min-height:0; overflow-y:auto; }
-    /* 사전입력 탭: flex 컬럼 — 내부 테이블이 남은 공간 채움 */
-    .tab-panel-flex { flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
-  </style>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NurseScheduler v3</title>
+  <link rel="stylesheet" href="css/app.css"/>
+  <script src="lib/tailwindcss.js"></script>
+  <script defer src="lib/alpine.min.js"></script>
+  <script src="js/app.js"></script>
 </head>
 <body>
-
 <div class="app-shell">
 
-<!-- ══ SIDEBAR (desktop) ══════════════════════════════════════ -->
+<!-- ═══ SIDEBAR ═══════════════════════════════════════════ -->
 <aside class="sidebar">
   <div class="sidebar-logo">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-    </svg>
-    <span>간호사 스케줄러</span>
-    <span class="logo-ver">v2</span>
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+    <span>NurseScheduler</span>
+    <span class="logo-ver">v3</span>
   </div>
   <nav class="sidebar-nav">
     <template x-for="tab in tabs" :key="tab.id">
-      <div @click="activeTab=tab.id"
-        :class="activeTab===tab.id ? 'active' : ''"
-        class="sidebar-item">
-        <span class="nav-icon" x-text="tab.label.slice(0,2)"></span>
-        <span class="nav-label" x-text="tab.label.slice(3)"></span>
+      <div @click="activeTab=tab.id" :class="activeTab===tab.id?'active':''" class="sidebar-item">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <template x-if="tab.icon==='settings'"><g><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></g></template>
+          <template x-if="tab.icon==='edit-3'"><g><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></g></template>
+          <template x-if="tab.icon==='calendar'"><g><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></g></template>
+          <template x-if="tab.icon==='save'"><g><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></g></template>
+        </svg>
+        <span class="nav-label" x-text="tab.label"></span>
       </div>
     </template>
   </nav>
-  <!-- 다크모드 토글 -->
-  <div style="padding:12px 8px; border-top:1px solid rgba(255,255,255,0.1)">
-    <button @click="toggleDark()"
-      class="sidebar-item w-full"
-      style="border-left:none; border-radius:8px; padding:10px 12px"
-      :title="darkMode ? '라이트 모드로 전환' : '다크 모드로 전환'">
-      <span class="nav-icon" x-text="darkMode ? '☀️' : '🌙'"></span>
-      <span class="nav-label" x-text="darkMode ? '라이트 모드' : '다크 모드'"></span>
+  <div style="padding:8px;border-top:1px solid var(--border)">
+    <!-- 글자크기 -->
+    <div class="flex items-center gap-1 px-3 py-2" style="justify-content:center">
+      <button @click="setFontSize(Math.max(11,fontSize-1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.65rem">A-</button>
+      <span class="text-xs text-sub nav-label" style="min-width:28px;text-align:center" x-text="fontSize+'px'"></span>
+      <button @click="setFontSize(Math.min(20,fontSize+1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.75rem;font-weight:700">A+</button>
+    </div>
+    <!-- 다크모드 -->
+    <button @click="toggleDark()" class="sidebar-item w-full">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <template x-if="darkMode"><g><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></g></template>
+        <template x-if="!darkMode"><g><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></g></template>
+      </svg>
+      <span class="nav-label" x-text="darkMode?'라이트 모드':'다크 모드'"></span>
     </button>
   </div>
 </aside>
 
 <div class="main-content">
-<main style="flex:1; min-height:0; display:flex; flex-direction:column;">
+<main style="flex:1;min-height:0;display:flex;flex-direction:column">
 
-  <!-- ══════════════════════════════════════════════════════
-       탭 1: 설정
-  ══════════════════════════════════════════════════════ -->
-  <div x-show="activeTab==='settings'" x-cloak class="tab-panel">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-      <!-- 년월 선택 -->
-      <div class="glass-panel">
-        <h2 class="font-semibold text-gray-700 mb-3">📅 대상 년월</h2>
-        <div class="flex gap-3 items-center">
-          <input type="number" x-model.number="year" min="2020" max="2099"
-            class="border rounded px-3 py-2 w-24 text-center" />
-          <span>년</span>
-          <input type="number" x-model.number="month" min="1" max="12"
-            class="border rounded px-3 py-2 w-16 text-center" />
-          <span>월</span>
+<!-- ═══ TAB 1: 설정 ═══════════════════════════════════════ -->
+<div x-show="activeTab==='settings'" x-cloak class="content">
+  <div class="settings-2col">
+    <!-- 년월 -->
+    <div class="card" style="display:flex;flex-direction:column;justify-content:center">
+      <div class="section-title" style="margin-bottom:8px">대상 년월</div>
+      <div class="flex items-center gap-2">
+        <button @click="prevMonth()" class="ym-arrow">‹</button>
+        <div class="flex items-baseline gap-1">
+          <input type="number" x-model.number="year" min="2020" max="2099" class="ym-big-input text-bright" style="width:4.5rem"/>
+          <span class="text-dim" style="font-size:0.9rem">년</span>
+          <input type="number" x-model.number="month" min="1" max="12" class="ym-big-input ym-big-accent" style="width:2.5rem"/>
+          <span class="text-dim" style="font-size:0.9rem">월</span>
         </div>
+        <button @click="nextMonth()" class="ym-arrow">›</button>
       </div>
-
-      <!-- 요일별 필요 인원 -->
-      <div class="glass-panel md:col-span-2">
-        <h2 class="font-semibold text-gray-700 mb-3">👥 요일별 필요 인원</h2>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm text-center">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-2 py-2">근무</th>
-                <template x-for="(label, key) in weekdayLabels" :key="key">
-                  <th class="px-2 py-2" x-text="label"></th>
-                </template>
-              </tr>
-            </thead>
-            <tbody>
-              <template x-for="shift in workShifts" :key="shift">
-                <tr class="border-t">
-                  <td class="px-2 py-1.5 font-semibold">
-                    <span :style="getShiftStyle(shift)" class="px-2 py-0.5 rounded text-xs font-bold" x-text="shift"></span>
-                  </td>
-                  <template x-for="(label, key) in weekdayLabels" :key="key">
-                    <td class="px-1 py-1">
-                      <input type="number" min="0" max="20"
-                        :value="requirements[key][shift]"
-                        @change="requirements[key][shift] = parseInt($event.target.value) || 0"
-                        class="w-12 border rounded text-center py-1" />
-                    </td>
-                  </template>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-        </div>
-        <button @click="saveRequirements()" class="mt-3 w-full bg-green-600 hover:bg-green-700 text-white text-sm py-2 rounded-lg">
-          인원 설정 저장
-        </button>
-      </div>
-
-      <!-- 근무 관리 -->
-      <div class="glass-panel md:col-span-2">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="font-semibold text-gray-700">🔧 근무 관리 <span class="text-xs text-gray-400 font-normal ml-1">근무 코드·이름·유형·색상 관리</span></h2>
-          <div class="flex gap-2">
-            <button @click="openShiftModal(null)"
-              class="bg-purple-600 hover:bg-purple-700 text-white text-sm px-3 py-1.5 rounded-lg">
-              + 새 근무 추가
-            </button>
-            <button @click="shiftMgmtOpen=!shiftMgmtOpen"
-              :class="shiftMgmtOpen ? 'bg-gray-200 text-gray-700' : 'border border-gray-300 text-gray-500 hover:bg-gray-50'"
-              class="text-sm px-3 py-1.5 rounded-lg"
-              x-text="shiftMgmtOpen ? '접기' : '목록 보기'">
-            </button>
-          </div>
-        </div>
-        <div x-show="shiftMgmtOpen" x-cloak class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-3 py-2 text-left">미리보기</th>
-                <th class="px-3 py-2 text-left">코드</th>
-                <th class="px-3 py-2 text-left">이름</th>
-                <th class="px-3 py-2 text-left">유형</th>
-                <th class="px-3 py-2 text-left">근무시간</th>
-                <th class="px-3 py-2 text-left">차지</th>
-                <th class="px-3 py-2 text-left">배정</th>
-                <th class="px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <template x-for="s in shifts" :key="s.code">
-                <tr class="border-t hover:bg-gray-50">
-                  <td class="px-3 py-2">
-                    <span :style="getShiftStyle(s.code)"
-                      class="px-2 py-0.5 rounded text-xs font-bold" x-text="s.code"></span>
-                  </td>
-                  <td class="px-3 py-2 font-mono font-bold text-gray-700" x-text="s.code"></td>
-                  <td class="px-3 py-2 text-gray-700" x-text="s.name"></td>
-                  <td class="px-3 py-2 text-gray-500 text-xs">
-                    <span x-text="({day:'낮',day1:'낮(상근)',evening:'저녁',middle:'중간번',night:'야간',rest:'휴무',leave:'휴가'})[s.period]"></span>
-                  </td>
-                  <td class="px-3 py-2 text-gray-500 text-xs" x-text="s.hours || '-'"></td>
-                  <td class="px-3 py-2 text-center">
-                    <span x-show="s.is_charge" class="text-purple-600 font-bold text-xs">차지</span>
-                  </td>
-                  <td class="px-3 py-2 text-center">
-                    <span x-show="s.auto_assign" class="text-green-600 text-xs">자동</span>
-                    <span x-show="!s.auto_assign" class="text-gray-400 text-xs">수동</span>
-                  </td>
-                  <td class="px-3 py-2 flex gap-2 justify-end">
-                    <button @click="openShiftModal(s)" class="text-blue-600 hover:underline text-xs">수정</button>
-                    <button @click="deleteShift(s.code)" class="text-red-500 hover:underline text-xs">삭제</button>
-                  </td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- 규칙 관리 (하드 제약 + 소프트 배점 통합) -->
-      <div class="glass-panel md:col-span-2">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="font-semibold text-gray-700">📋 규칙 관리</h2>
-          <button @click="openScoringModal(null)"
-            class="bg-indigo-600 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-indigo-700">
-            + 배점 규칙 추가
-          </button>
-        </div>
-
-        <!-- 하드 제약 -->
-        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">하드 제약 (Hard Constraints)</p>
-        <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-sm mb-3">
-          <label class="flex items-center gap-2">
-            <input type="checkbox" x-model="rules.weeklyOff" />
-            주 2회 휴무 (주휴+OF)
-          </label>
-          <label class="flex items-center gap-2 text-gray-400">
-            <input type="checkbox" checked disabled />
-            E→D 금지 <span class="text-xs">(항상)</span>
-          </label>
-          <label class="flex items-center gap-2 text-gray-400">
-            <input type="checkbox" checked disabled />
-            N→E 금지 <span class="text-xs">(항상)</span>
-          </label>
-          <label class="flex items-center gap-2 text-gray-400">
-            <input type="checkbox" checked disabled />
-            N→D 금지 <span class="text-xs">(항상)</span>
-          </label>
-          <label class="flex items-center gap-2">
-            <input type="checkbox" x-model="rules.noNOD" />
-            N→휴무→D 금지
-          </label>
-          <label class="flex items-center gap-2 col-span-2">
-            <input type="checkbox" x-model="rules.maxConsecutiveWork" />
-            최대 연속 근무
-            <input type="number" x-model.number="rules.maxConsecutiveWorkDays"
-              min="1" max="10" class="w-12 border rounded px-1 text-center" />일
-          </label>
-          <label class="flex items-center gap-2 col-span-2">
-            <input type="checkbox" x-model="rules.maxConsecutiveNight" />
-            최대 연속 야간
-            <input type="number" x-model.number="rules.maxConsecutiveNightDays"
-              min="1" max="7" class="w-12 border rounded px-1 text-center" />일
-          </label>
-          <label class="flex items-center gap-2">
-            <input type="checkbox" x-model="rules.autoMenstrualLeave" />
-            여성 생휴 자동
-          </label>
-          <label class="flex items-center gap-2 col-span-2">
-            V(연차) 월 최대
-            <input type="number" x-model.number="rules.maxVPerMonth"
-              min="0" max="10" class="w-12 border rounded px-1 text-center" />회
-          </label>
-        </div>
-        <button @click="saveRules()" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 rounded-lg mb-4">
-          하드 제약 저장
-        </button>
-
-        <!-- 구분선 -->
-        <hr class="border-gray-200 mb-4" />
-
-        <!-- 소프트 배점 (접기/펼치기) -->
-        <div class="flex items-center justify-between mb-2">
-          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">소프트 배점 (Soft Scoring)</p>
-          <button @click="scoringRuleOpen=!scoringRuleOpen"
-            :class="scoringRuleOpen ? 'bg-gray-200 text-gray-700' : 'border border-gray-300 text-gray-500 hover:bg-gray-50'"
-            class="text-sm px-3 py-1.5 rounded-lg"
-            x-text="scoringRuleOpen ? '접기' : '펼치기'">
-          </button>
-        </div>
-        <div x-show="scoringRuleOpen" class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-3 py-2 text-left w-10">ON</th>
-                <th class="px-3 py-2 text-left">규칙 이름</th>
-                <th class="px-3 py-2 text-left">유형</th>
-                <th class="px-3 py-2 text-left">조건 요약</th>
-                <th class="px-3 py-2 text-right">점수</th>
-                <th class="px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <template x-for="r in scoringRules" :key="r.id">
-                <tr class="border-t hover:bg-gray-50" :class="r.enabled ? '' : 'opacity-40'">
-                  <td class="px-3 py-2">
-                    <input type="checkbox" :checked="r.enabled"
-                      @change="toggleScoringRule(r)" class="cursor-pointer" />
-                  </td>
-                  <td class="px-3 py-2 font-medium text-gray-700" x-text="r.name"></td>
-                  <td class="px-3 py-2 text-xs text-gray-500">
-                    <span x-text="scoringRuleTypeLabel(r.rule_type)"
-                      class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600"></span>
-                  </td>
-                  <td class="px-3 py-2 text-xs text-gray-500" x-text="scoringRuleCondSummary(r)"></td>
-                  <td class="px-3 py-2 text-right font-mono font-semibold"
-                    :class="r.score >= 0 ? 'text-emerald-600' : 'text-red-500'"
-                    x-text="(r.score >= 0 ? '+' : '') + r.score">
-                  </td>
-                  <td class="px-3 py-2 flex gap-2 justify-end">
-                    <button @click="openScoringModal(r)" class="text-blue-600 hover:underline text-xs">수정</button>
-                    <button @click="deleteScoringRule(r.id)" class="text-red-500 hover:underline text-xs">삭제</button>
-                  </td>
-                </tr>
-              </template>
-              <tr x-show="scoringRules.length === 0">
-                <td colspan="6" class="text-center py-4 text-gray-400 text-xs">배점 규칙이 없습니다.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- 간호사 목록 -->
-      <div class="glass-panel md:col-span-2">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="font-semibold text-gray-700">👩‍⚕️ 간호사 목록 <span class="text-blue-600 font-bold" x-text="`(${nurses.length}명)`"></span></h2>
-          <button @click="openNurseModal(null)"
-            class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1.5 rounded-lg">
-            + 추가
-          </button>
-        </div>
-
-        <!-- 모바일: 카드 -->
-        <div class="md:hidden space-y-2">
-          <template x-for="(nurse, idx) in nurses" :key="nurse.id">
-            <div class="border rounded-lg p-3 flex items-center justify-between">
-              <div>
-                <span class="font-medium" x-text="nurse.name"></span>
-                <span class="ml-2 text-xs text-gray-400" x-text="nurse.group"></span>
-                <div class="text-xs text-gray-500 mt-0.5"
-                  x-text="nurse.capable_shifts.join(' ')"></div>
-              </div>
-              <div class="flex gap-2">
-                <button @click="openNurseModal(nurse)" class="text-blue-600 text-sm">수정</button>
-                <button @click="removeNurse(nurse.id)" class="text-red-500 text-sm">삭제</button>
-              </div>
-            </div>
-          </template>
-          <p x-show="nurses.length===0" class="text-center text-gray-400 py-4 text-sm">간호사가 없습니다.</p>
-        </div>
-
-        <!-- 데스크탑: 테이블 -->
-        <div class="hidden md:block overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-3 py-2 text-left">#</th>
-                <th class="px-3 py-2 text-left">이름</th>
-                <th class="px-3 py-2 text-left">그룹</th>
-                <th class="px-3 py-2 text-left">성별</th>
-                <th class="px-3 py-2 text-left">가능 근무</th>
-                <th class="px-3 py-2 text-left">야간전담</th>
-                <th class="px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <template x-for="(nurse, idx) in nurses" :key="nurse.id">
-                <tr class="border-t hover:bg-gray-50">
-                  <td class="px-3 py-2 text-gray-400" x-text="idx+1"></td>
-                  <td class="px-3 py-2 font-medium" x-text="nurse.name"></td>
-                  <td class="px-3 py-2 text-gray-500" x-text="nurse.group"></td>
-                  <td class="px-3 py-2 text-gray-500" x-text="nurse.gender==='female'?'여':'남'"></td>
-                  <td class="px-3 py-2">
-                    <span class="text-xs text-gray-600" x-text="nurse.capable_shifts.join(', ')"></span>
-                  </td>
-                  <td class="px-3 py-2 text-center">
-                    <span x-show="nurse.is_night_shift" class="text-yellow-600 font-bold">야간</span>
-                  </td>
-                  <td class="px-3 py-2 flex gap-2 justify-end">
-                    <button @click="openNurseModal(nurse)" class="text-blue-600 hover:underline text-xs">수정</button>
-                    <button @click="removeNurse(nurse.id)" class="text-red-500 hover:underline text-xs">삭제</button>
-                  </td>
-                </tr>
-              </template>
-              <tr x-show="nurses.length===0">
-                <td colspan="7" class="text-center py-6 text-gray-400">간호사가 없습니다. + 추가 버튼을 눌러주세요.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-
     </div>
-  </div>
 
-  <!-- ══════════════════════════════════════════════════════
-       탭 2: 사전입력
-  ══════════════════════════════════════════════════════ -->
-  <div x-show="activeTab==='preinput'" x-cloak class="tab-panel-flex">
-    <div class="glass-panel mb-4" style="flex-shrink:0">
-      <div class="flex flex-wrap items-center gap-3 mb-3">
-        <span class="font-semibold text-gray-700">📝 사전입력</span>
-        <!-- 년월 선택기 -->
-        <div class="flex items-center gap-1 bg-gray-100 rounded-lg px-2 py-1">
-          <button @click="prevMonth()" class="w-6 h-6 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600 font-bold">‹</button>
-          <input type="number" x-model.number="year" min="2020" max="2099"
-            class="w-14 text-center text-sm font-semibold bg-transparent border-none outline-none" />
-          <span class="text-sm text-gray-500">년</span>
-          <input type="number" x-model.number="month" min="1" max="12"
-            class="w-8 text-center text-sm font-semibold bg-transparent border-none outline-none" />
-          <span class="text-sm text-gray-500">월</span>
-          <button @click="nextMonth()" class="w-6 h-6 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600 font-bold">›</button>
-        </div>
-        <span class="text-xs text-gray-400 hidden md:inline">V·생·특·공·병·OF·주·원하는근무를 미리 고정합니다.</span>
-        <div class="ml-auto flex gap-2">
-          <button @click="clearPrevSchedule()"
-            class="border border-red-300 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-sm">
-            전체 초기화
-          </button>
-          <button
-            class="border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-lg text-sm text-gray-600"
-            x-text="`${countPrevEntries()}건 입력됨`">
-          </button>
-          <button @click="prevSavePanel=!prevSavePanel"
-            :class="prevSavePanel ? 'bg-indigo-600 text-white' : 'border border-indigo-300 text-indigo-600 hover:bg-indigo-50'"
-            class="px-3 py-1.5 rounded-lg text-sm font-medium">
-            💾 저장/불러오기
-          </button>
-        </div>
+    <!-- 요일별 필요 인원 -->
+    <div class="card">
+      <div class="section-title">요일별 필요 인원</div>
+      <div class="overflow-x-auto">
+        <table class="tbl text-center"><thead><tr><th>근무</th><template x-for="(label,key) in weekdayLabels" :key="key"><th x-text="label"></th></template></tr></thead>
+        <tbody><template x-for="shift in workShifts" :key="shift"><tr>
+          <td class="font-semibold"><span :style="getShiftStyle(shift)" class="px-1.5 py-0.5 rounded text-xs font-bold" x-text="shift"></span></td>
+          <template x-for="(label,key) in weekdayLabels" :key="key"><td><input type="number" min="0" max="20" :value="requirements[key][shift]" @change="requirements[key][shift]=parseInt($event.target.value)||0" class="w-11 text-center py-1"/></td></template>
+        </tr></template></tbody></table>
       </div>
+      <button @click="saveRequirements()" class="btn btn-success btn-sm w-full mt-3">인원 설정 저장</button>
+    </div>
 
-      <!-- 사전입력 저장/불러오기 패널 -->
-      <div x-show="prevSavePanel" x-cloak class="mb-3 p-3 border border-indigo-200 rounded-lg" style="background:rgba(3,90,189,0.05)">
-        <!-- 저장 -->
-        <div class="flex gap-2 mb-3">
-          <input type="text" x-model="prevSaveName"
-            :placeholder="`${year}년 ${month}월 사전입력`"
-            class="flex-1 border border-indigo-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
-            @keydown.enter="savePrevToServer()" />
-          <button @click="savePrevToServer()"
-            class="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700">
-            현재 저장
-          </button>
-        </div>
-        <!-- 목록 -->
-        <div x-show="prevSaves.length === 0" class="text-sm text-gray-400 text-center py-2">저장된 사전입력 없음</div>
-        <div x-show="prevSaves.length > 0" class="space-y-1 max-h-48 overflow-y-auto">
-          <template x-for="ps in prevSaves" :key="ps.id">
-            <div class="flex items-center gap-2 rounded-lg px-3 py-2 border border-indigo-100" style="background:#fff">
-              <div class="flex-1 min-w-0">
-                <span class="font-medium text-sm text-gray-700" x-text="ps.name || `${ps.year}년 ${ps.month}월`"></span>
-                <span class="ml-2 text-xs text-gray-400" x-text="`${ps.year}년 ${ps.month}월`"></span>
-                <span class="ml-2 text-xs text-gray-400" x-text="ps.created_at.slice(0,16)"></span>
-              </div>
-              <button @click="loadPrevFromServer(ps.id)"
-                class="text-xs bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-2 py-1 rounded font-medium">
-                불러오기
-              </button>
-              <button @click="deletePrevSave(ps.id)"
-                class="text-xs bg-red-100 text-red-600 hover:bg-red-200 px-2 py-1 rounded font-medium">
-                삭제
-              </button>
-            </div>
-          </template>
+    <!-- 근무 관리 -->
+    <div class="card">
+      <div class="flex items-center justify-between mb-2"><div class="section-title" style="margin:0">근무 관리</div><div class="flex gap-2"><button @click="openShiftModal(null)" class="btn btn-sm btn-primary">+ 새 근무</button><button @click="shiftMgmtOpen=!shiftMgmtOpen" class="btn btn-xs btn-ghost" x-text="shiftMgmtOpen?'접기':'목록'"></button></div></div>
+      <div x-show="shiftMgmtOpen" x-cloak class="overflow-x-auto">
+        <table class="tbl"><thead><tr><th></th><th>코드</th><th>이름</th><th>유형</th><th>시간</th><th>차지</th><th>배정</th><th></th></tr></thead>
+        <tbody><template x-for="s in shifts" :key="s.code"><tr>
+          <td><span :style="getShiftStyle(s.code)" class="px-1.5 py-0.5 rounded text-xs font-bold" x-text="s.code"></span></td>
+          <td class="font-mono font-bold text-body" x-text="s.code"></td><td class="text-body" x-text="s.name"></td>
+          <td class="text-xs text-dim" x-text="({day:'낮',day1:'상근',evening:'저녁',middle:'중간번',night:'야간',rest:'휴무',leave:'휴가'})[s.period]"></td>
+          <td class="text-xs text-dim" x-text="s.hours||'-'"></td>
+          <td class="text-center"><span x-show="s.is_charge" class="text-pink text-xs font-bold">C</span></td>
+          <td class="text-center"><span x-show="s.auto_assign" class="text-xs text-green">자동</span><span x-show="!s.auto_assign" class="text-xs text-dim">수동</span></td>
+          <td class="flex gap-2 justify-end"><button @click="openShiftModal(s)" class="text-xs text-blue">수정</button><button @click="deleteShift(s.code)" class="text-xs text-red">삭제</button></td>
+        </tr></template></tbody></table>
+      </div>
+    </div>
+
+    <!-- 규칙 관리 -->
+    <div class="card">
+      <div class="flex items-center justify-between mb-3"><div class="section-title" style="margin:0">규칙 관리</div><button @click="openScoringModal(null)" class="btn btn-sm btn-primary">+ 배점 규칙</button></div>
+      <p class="text-xs font-semibold uppercase tracking-widest mb-2 text-dim">하드 제약</p>
+      <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-sm mb-3 text-sub">
+        <label class="flex items-center gap-2"><input type="checkbox" x-model="rules.weeklyOff"/>주 2회 휴무</label>
+        <label class="flex items-center gap-2 text-dim"><input type="checkbox" checked disabled/>E→D 금지</label>
+        <label class="flex items-center gap-2 text-dim"><input type="checkbox" checked disabled/>N→E 금지</label>
+        <label class="flex items-center gap-2 text-dim"><input type="checkbox" checked disabled/>N→D 금지</label>
+        <label class="flex items-center gap-2"><input type="checkbox" x-model="rules.noNOD"/>N→휴무→D 금지</label>
+        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxConsecutiveWork"/>최대 연속 근무 <input type="number" x-model.number="rules.maxConsecutiveWorkDays" min="1" max="10" class="w-11 text-center"/>일</label>
+        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxConsecutiveNight"/>최대 연속 야간 <input type="number" x-model.number="rules.maxConsecutiveNightDays" min="1" max="7" class="w-11 text-center"/>일</label>
+        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxNightPerMonth"/>월 최대 야간 <input type="number" x-model.number="rules.maxNightPerMonthCount" min="1" max="15" class="w-11 text-center"/>회 <span class="text-dim text-xs">(7회↑ 수면OFF 발생)</span></label>
+        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxNightTwoMonth"/>홀짝월 합산 야간 <input type="number" x-model.number="rules.maxNightTwoMonthCount" min="1" max="20" class="w-11 text-center"/>회 <span class="text-dim text-xs">(12회↑ 수면OFF 발생)</span></label>
+        <label class="flex items-center gap-2"><input type="checkbox" x-model="rules.autoMenstrualLeave"/>여성 생휴 자동</label>
+        <label class="flex items-center gap-2 col-span-2">V 월 최대 <input type="number" x-model.number="rules.maxVPerMonth" min="0" max="10" class="w-11 text-center"/>회</label>
+      </div>
+      <button @click="saveRules()" class="btn btn-sm btn-primary w-full mb-4">저장</button>
+      <div style="border-top:1px solid rgba(255,255,255,0.04)" class="pt-3">
+        <div class="flex items-center justify-between mb-2"><p class="text-xs font-semibold uppercase tracking-widest text-dim">소프트 배점</p><button @click="scoringRuleOpen=!scoringRuleOpen" class="btn btn-xs btn-ghost" x-text="scoringRuleOpen?'접기':'펼치기'"></button></div>
+        <div x-show="scoringRuleOpen" class="overflow-x-auto">
+          <table class="tbl"><thead><tr><th class="w-8">ON</th><th>이름</th><th>유형</th><th>조건</th><th class="text-right">점수</th><th></th></tr></thead>
+          <tbody><template x-for="r in scoringRules" :key="r.id"><tr :style="r.enabled?'':'opacity:0.25'">
+            <td><input type="checkbox" :checked="r.enabled" @change="toggleScoringRule(r)" class="cursor-pointer"/></td>
+            <td class="font-medium text-body" x-text="r.name"></td>
+            <td class="text-xs"><span class="pill" style="background:rgba(255,255,255,0.03)" x-text="scoringRuleTypeLabel(r.rule_type)"></span></td>
+            <td class="text-xs text-dim" x-text="scoringRuleCondSummary(r)"></td>
+            <td class="text-right font-mono font-semibold" :class="r.score>=0?'text-green':'text-red'" x-text="(r.score>=0?'+':'')+r.score"></td>
+            <td class="flex gap-2 justify-end"><button @click="openScoringModal(r)" class="text-xs text-blue">수정</button><button @click="deleteScoringRule(r.id)" class="text-xs text-red">삭제</button></td>
+          </tr></template>
+          <tr x-show="scoringRules.length===0"><td colspan="6" class="text-center py-3 text-xs text-dim">배점 규칙이 없습니다.</td></tr></tbody></table>
         </div>
       </div>
+    </div>
 
-      <!-- 범례 -->
-      <div class="flex flex-wrap gap-1 mb-3 text-xs">
-        <template x-for="s in prevShifts" :key="s">
-          <span :style="getShiftStyle(s)" class="px-2 py-0.5 rounded font-bold" x-text="s"></span>
-        </template>
-        <span class="text-gray-400 ml-2">빈칸 = 자동배정</span>
+    <!-- 간호사 -->
+    <div class="card span-2">
+      <div class="flex items-center justify-between mb-2"><div class="section-title" style="margin:0">간호사 <span class="text-blue" x-text="`${nurses.length}명`"></span></div><button @click="openNurseModal(null)" class="btn btn-sm btn-primary">+ 추가</button></div>
+      <div class="overflow-x-auto">
+        <table class="tbl"><thead><tr><th>#</th><th>이름</th><th>그룹</th><th>성별</th><th>가능 근무</th><th>야간전담</th><th></th></tr></thead>
+        <tbody><template x-for="(nurse,idx) in nurses" :key="nurse.id"><tr>
+          <td class="text-dim" x-text="idx+1"></td><td class="font-medium text-bright" x-text="nurse.name"></td><td class="text-dim" x-text="nurse.group"></td><td class="text-dim" x-text="nurse.gender==='female'?'여':'남'"></td>
+          <td><span class="text-xs text-sub" x-text="nurse.capable_shifts.join(', ')"></span></td>
+          <td class="text-center"><span x-show="nurse.is_night_shift" class="text-amber font-bold text-xs">야간</span></td>
+          <td class="flex gap-2 justify-end"><button @click="openNurseModal(nurse)" class="text-xs text-blue">수정</button><button @click="removeNurse(nurse.id)" class="text-xs text-red">삭제</button></td>
+        </tr></template>
+        <tr x-show="nurses.length===0"><td colspan="7" class="text-center py-6 text-dim">간호사가 없습니다.</td></tr></tbody></table>
       </div>
-
-    </div><!-- /glass-panel (controls) -->
-
-  <!-- 사전입력 그리드 — flex:1로 남은 공간 채움, 단일 스크롤 컨테이너 -->
-  <div x-show="nurses.length > 0" style="flex:1; min-height:0; overflow:auto">
-        <table class="text-xs border-collapse" style="min-width:700px">
-          <thead>
-            <!-- 주기 행 (sticky top-0) -->
-            <tr>
-              <th class="border px-2 py-1 sticky left-0 top-0 bg-white z-30 text-left text-gray-400 whitespace-nowrap text-xs">주기</th>
-              <template x-for="span in getCycleSpans()" :key="span.key">
-                <th :colspan="span.count"
-                    :class="getCycleClass(span.cycle)"
-                    class="border text-center text-xs font-bold py-1 sticky top-0 z-20"
-                    x-text="`${span.cycle}주기`">
-                </th>
-              </template>
-              <th class="border bg-white sticky top-0 z-20"></th>
-            </tr>
-            <!-- 날짜/요일 행 (sticky top-[27px]) -->
-            <tr>
-              <th class="border px-2 py-1 sticky left-0 bg-gray-50 z-30 text-left" style="top:27px">이름</th>
-              <template x-for="day in scheduleDays" :key="day">
-                <th class="border px-0.5 py-1 text-center sticky z-20 cursor-pointer select-none"
-                  :class="[getDayClass(day),
-                           isHoliday(day) ? 'bg-orange-100' : (day.getDay()===6 ? 'border-r-2 border-r-gray-500 bg-blue-100' : (day.getDay()===0 ? 'bg-red-100' : 'bg-gray-50')),
-                           day.getDay()===6 ? 'border-r-2 border-r-gray-500' : '',
-                           isCycleStart(day) && day.getDate()!==1 ? 'border-l-2 border-l-indigo-300' : '']"
-                  style="min-width:2rem; top:27px"
-                  @contextmenu.prevent="markHoliday(day)"
-                  :title="isHoliday(day) ? '우클릭: 법정공휴일 해제' : '우클릭: 법정공휴일 지정'">
-                  <div x-text="day.getDate()"></div>
-                  <div class="font-normal" x-text="['일','월','화','수','목','금','토'][day.getDay()]"></div>
-                  <div x-show="isHoliday(day)" class="text-orange-600 font-bold" style="font-size:0.6rem; line-height:1">법</div>
-                </th>
-              </template>
-              <th class="border px-2 py-1 text-gray-400 text-xs whitespace-nowrap sticky bg-gray-50 z-20" style="top:27px">입력수</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template x-for="nurse in nurses" :key="nurse.id">
-              <tr class="hover:brightness-95">
-                <td class="border px-2 py-1 font-medium sticky left-0 bg-white z-10 whitespace-nowrap text-xs">
-                  <div x-text="nurse.name"></div>
-                  <div class="text-gray-400 font-normal" x-text="nurse.group + '팀'"></div>
-                </td>
-                <template x-for="day in scheduleDays" :key="day">
-                  <td class="border p-0"
-                    :class="[
-                      getPrevShift(nurse.id, day)
-                        ? ''
-                        : (isHoliday(day) ? 'bg-orange-50' : (day.getDay()===6 ? 'bg-blue-50' : (day.getDay()===0 ? 'bg-red-50' : ''))),
-                      day.getDay()===6 ? 'border-r-2 border-r-gray-500' : '',
-                      isCycleStart(day) && day.getDate()!==1 ? 'border-l-2 border-l-indigo-300' : ''
-                    ]"
-                    :style="getPrevShift(nurse.id, day) ? getShiftStyle(getPrevShift(nurse.id, day)) : {}">
-                    <template x-if="getPrevShift(nurse.id, day)">
-                      <span class="schedule-cell-text block"
-                        x-text="getPrevShift(nurse.id, day)"
-                        @click="openPrevEdit(nurse, day)">
-                      </span>
-                    </template>
-                    <template x-if="!getPrevShift(nurse.id, day)">
-                      <span class="schedule-cell block text-gray-200 hover:bg-gray-100 p-0.5"
-                        @click="openPrevEdit(nurse, day)">+</span>
-                    </template>
-                  </td>
-                </template>
-                <td class="border px-2 py-1 text-center text-gray-500"
-                  x-text="countNursePrev(nurse.id)">
-                </td>
-              </tr>
-            </template>
-          </tbody>
-          <!-- 일별 필요인원 오버라이드 행: D / E / N -->
-          <tfoot>
-            <template x-for="row in [{type:'D',bg:'#dbeafe',color:'#1d4ed8'},{type:'E',bg:'#dcfce7',color:'#15803d'},{type:'N',bg:'#fef3c7',color:'#b45309'}]" :key="row.type">
-              <tr>
-                <td class="border px-1 py-0.5 sticky left-0 z-10 text-center font-bold text-xs"
-                    :style="`background:${row.bg}; color:${row.color}; border-top:2px solid #9ca3af`">
-                  <span x-text="row.type"></span>
-                </td>
-                <template x-for="day in scheduleDays" :key="day">
-                  <td class="border p-0"
-                      :class="day.getDay()===6 ? 'border-r-2 border-r-gray-500' : ''"
-                      :style="`background:${row.bg}; border-top:2px solid #9ca3af`">
-                    <input type="number" min="0" max="20"
-                      class="w-full text-center text-xs py-0.5 border-none outline-none bg-transparent"
-                      :class="getPrevDayReq(day, row.type) !== null ? 'font-bold' : 'text-gray-400'"
-                      :style="getPrevDayReq(day, row.type) !== null ? `color:${row.color}` : ''"
-                      :placeholder="getDefaultDayReq(day, row.type)"
-                      :value="getPrevDayReq(day, row.type) !== null ? getPrevDayReq(day, row.type) : ''"
-                      @change="setPrevDayReq(day, row.type, $event.target.value)"
-                      style="min-width:2rem; width:100%" />
-                  </td>
-                </template>
-                <td class="border px-1" :style="`background:${row.bg}; border-top:2px solid #9ca3af`"></td>
-              </tr>
-            </template>
-          </tfoot>
-        </table>
-      </div>
-
-  <p x-show="nurses.length===0" class="text-center text-gray-400 py-12 text-sm">
-    설정 탭에서 간호사를 먼저 등록해주세요.
-  </p>
-
-  <!-- 하단 안내 -->
-  <div class="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-700 space-y-1" style="flex-shrink:0">
-    <div>✅ <strong>사전입력 팁</strong></div>
-    <div>· V(연차), 생(생리휴가), 법(법정공휴일), 공(보수교육·예비군 등 공적 업무), 병(병가) 등 확정된 항목을 먼저 입력하세요.</div>
-    <div>· 공(공적업무)이 입력된 날 전날에는 야간(N/NC)이 자동으로 회피됩니다.</div>
-    <div>· 특정 날짜에 특정 근무(D/E/N)를 원하면 미리 고정할 수 있습니다.</div>
-    <div>· 사전입력이 많을수록 스케줄 생성이 빠르고 정확해집니다.</div>
+    </div>
   </div>
 </div>
 
-  <!-- ══════════════════════════════════════════════════════
-       탭 3: 스케줄
-  ══════════════════════════════════════════════════════ -->
-  <div x-show="activeTab==='schedule'" x-cloak class="tab-panel">
-    <div class="glass-panel">
-      <div class="flex flex-wrap items-center gap-3 mb-4">
-        <span class="font-semibold text-gray-700">📅 근무표</span>
-        <span x-show="mipGapPercent !== null" x-cloak
-          :class="mipGapPercent <= 0.1 ? 'bg-green-100 text-green-700' : mipGapPercent <= 2 ? 'bg-yellow-100 text-yellow-700' : 'bg-orange-100 text-orange-700'"
-          class="text-xs px-2 py-0.5 rounded-full font-medium"
-          :title="'최적해 대비 오차 (MIP Gap)'"
-          x-text="mipGapPercent <= 0.1 ? '✓ 최적해' : `최적 대비 ${mipGapPercent}% 오차`"></span>
-        <span x-show="scheduleStopped" x-cloak
-          class="text-xs px-2 py-0.5 rounded-full font-medium bg-orange-100 text-orange-700"
-          title="중지 요청으로 탐색 조기 종료됨">⏹ 중지됨</span>
-        <!-- 년월 선택기 -->
-        <div class="flex items-center gap-1 bg-gray-100 rounded-lg px-2 py-1">
-          <button @click="prevMonth()" class="w-6 h-6 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600 font-bold">‹</button>
-          <input type="number" x-model.number="year" min="2020" max="2099"
-            class="w-14 text-center text-sm font-semibold bg-transparent border-none outline-none" />
-          <span class="text-sm text-gray-500">년</span>
-          <input type="number" x-model.number="month" min="1" max="12"
-            class="w-8 text-center text-sm font-semibold bg-transparent border-none outline-none" />
-          <span class="text-sm text-gray-500">월</span>
-          <button @click="nextMonth()" class="w-6 h-6 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600 font-bold">›</button>
-        </div>
-        <button @click="generate()"
-          :disabled="generating"
-          class="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
-          <svg x-show="generating" class="w-4 h-4 loading-spin" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-          </svg>
-          <span x-text="generating ? '생성 중...' : '스케줄 생성'"></span>
-        </button>
-        <button @click="saveSchedule()" x-show="schedule && Object.keys(schedule).length > 0"
-          class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm">
-          저장
-        </button>
-        <button @click="activeTab='saved'"
-          class="border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">
-          불러오기
-        </button>
-        <button @click="carryOverToNextMonth()"
-          x-show="hasNextMonthData()"
-          x-cloak
-          class="border border-indigo-400 text-indigo-600 hover:bg-indigo-50 px-4 py-2 rounded-lg text-sm font-medium"
-          :title="'다음 달 첫 주 OF·주휴 배정을 사전입력으로 이어받기'">
-          ↪ 다음 달 사전입력 넘기기
-        </button>
-      </div>
-
-      <!-- 오차 허용 범위 -->
-      <div class="flex items-center gap-3 mb-3 px-1">
-        <span class="text-xs text-gray-500 shrink-0">오차 허용:</span>
-        <input type="range" min="0" max="0.1" step="0.01" x-model.number="mipGap"
-          class="flex-1 accent-blue-600" style="max-width:160px" />
-        <span class="text-xs font-mono w-10 text-gray-700" x-text="mipGap === 0 ? '정밀' : (mipGap*100).toFixed(0)+'%'"></span>
-        <div class="flex gap-1">
-          <button @click="mipGap=0"
-            :class="mipGap===0 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-            class="text-xs px-2 py-0.5 rounded">정밀</button>
-          <button @click="mipGap=0.02"
-            :class="mipGap===0.02 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-            class="text-xs px-2 py-0.5 rounded">2%</button>
-          <button @click="mipGap=0.05"
-            :class="mipGap===0.05 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-            class="text-xs px-2 py-0.5 rounded">5%</button>
-          <button @click="mipGap=0.1"
-            :class="mipGap===0.1 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-            class="text-xs px-2 py-0.5 rounded">10%</button>
-        </div>
-        <span class="text-xs text-gray-400 hidden sm:inline">
-          <template x-if="mipGap===0">정확한 최적해 (느림)</template>
-          <template x-if="mipGap>0">최적 대비 <span x-text="(mipGap*100).toFixed(0)"></span>% 이내 해 발견 시 조기종료</template>
-        </span>
-      </div>
-
-      <!-- 타임아웃 설정 -->
-      <div class="flex items-center gap-3 mb-3 px-1">
-        <span class="text-xs text-gray-500 shrink-0">최대 계산 시간:</span>
-        <input type="range" min="1" max="60" step="1" x-model.number="generateTimeout"
-          class="flex-1 accent-blue-600" style="max-width:160px" />
-        <span class="text-xs font-mono w-10 text-gray-700" x-text="generateTimeout + '분'"></span>
-        <div class="flex gap-1">
-          <button @click="generateTimeout=5"
-            :class="generateTimeout===5 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-            class="text-xs px-2 py-0.5 rounded">5분</button>
-          <button @click="generateTimeout=10"
-            :class="generateTimeout===10 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-            class="text-xs px-2 py-0.5 rounded">10분</button>
-          <button @click="generateTimeout=20"
-            :class="generateTimeout===20 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-            class="text-xs px-2 py-0.5 rounded">20분</button>
-          <button @click="generateTimeout=60"
-            :class="generateTimeout===60 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-            class="text-xs px-2 py-0.5 rounded">60분</button>
-        </div>
-      </div>
-
-      <!-- 생성 중 타이머 + 진행바 -->
-      <div x-show="generating" x-cloak class="mb-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-        <div class="flex items-center justify-between mb-1">
-          <span>
-            예상 소요: <strong x-text="estimatedSeconds ? estimatedSeconds + '초 내외' : '계산 중…'"></strong>
-          </span>
-          <div class="flex items-center gap-3">
-            <span>경과: <strong x-text="generateElapsed + '초'"></strong></span>
-            <button @click="stopGenerate()" :disabled="stopRequested"
-              :class="stopRequested ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'"
-              class="text-white text-xs px-3 py-1 rounded-lg font-medium transition-colors">
-              <span x-text="stopRequested ? '⏳ 중지 중...' : '⏹ 중지'"></span>
-            </button>
-          </div>
-        </div>
-        <div class="w-full bg-blue-200 rounded-full h-2 overflow-hidden mb-2">
-          <div class="bg-blue-600 h-2 rounded-full transition-all duration-1000"
-            :style="`width:${estimatedSeconds ? Math.min(100,Math.round(generateElapsed/estimatedSeconds*100)) : Math.min(100,Math.round(generateElapsed/(generateTimeout*60)*100))}%`">
-          </div>
-        </div>
-        <!-- 실시간 탐색 진행 상황 -->
-        <div class="text-xs text-blue-700 font-medium mt-1 min-h-[1.2em]">
-          <template x-if="solveProgress.has_solution">
-            <span>
-              🎯 현재 최적 대비 <strong x-text="solveProgress.gap_percent + '%'"></strong> 오차
-              &nbsp;|&nbsp; 노드 <strong x-text="solveProgress.nodes.toLocaleString('ko-KR')"></strong>개 탐색
-            </span>
-          </template>
-          <template x-if="!solveProgress.has_solution && solveProgress.nodes > 0">
-            <span>
-              🔍 초기 해 탐색 중...
-              &nbsp;|&nbsp; 노드 <strong x-text="solveProgress.nodes.toLocaleString('ko-KR')"></strong>개 탐색
-            </span>
-          </template>
-          <template x-if="!solveProgress.has_solution && solveProgress.nodes === 0 && solveProgress.is_running">
-            <span>⚙️ 최적화 계산 중... (경우의 수가 많아 시간이 걸립니다)</span>
-          </template>
-          <template x-if="!solveProgress.is_running && !solveProgress.has_solution && solveProgress.nodes === 0">
-            <span>🔄 솔버 연결 중...</span>
-          </template>
-        </div>
-        <div class="text-xs text-blue-500">
-          💡 최적의 해를 최대 <span x-text="generateTimeout"></span>분동안 계산합니다. 오래 생각할수록 더 좋은 근무표가 만들어지니 조금만 기다려주세요.
-        </div>
-        </div>
-      </div>
-
-      <!-- 메시지 -->
-      <div x-show="statusMessage" x-cloak
-        :class="statusOk ? 'bg-green-50 text-green-800 border-green-200' : 'bg-red-50 text-red-800 border-red-200'"
-        class="border rounded-lg px-4 py-3 mb-4 text-sm whitespace-pre-wrap">
-        <div class="flex items-start justify-between gap-4">
-          <span x-text="statusMessage"></span>
-          <span x-show="statusOk && generateFinalElapsed > 0" x-cloak
-            class="shrink-0 font-mono text-xs opacity-70 mt-0.5"
-            x-text="(()=>{ const m=Math.floor(generateFinalElapsed/60); const s=generateFinalElapsed%60; return (m>0?m+'분 ':'')+s+'초 만에 생성됨'; })()">
-          </span>
-        </div>
-      </div>
-
-      <!-- 솔버 로그 패널 (생성 완료/오류 후에도 유지) -->
-      <div x-show="solverLogs.length > 0" x-cloak class="mb-4">
-        <button @click="showLogPanel = !showLogPanel"
-          class="text-xs text-gray-400 hover:text-gray-600 underline">
-          🖥️ 솔버 로그 <span x-text="showLogPanel ? '숨기기' : '보기'"></span>
-          <span class="text-gray-300 ml-1" x-text="'(' + solverLogs.length + '줄)'"></span>
-        </button>
-        <div x-show="showLogPanel" x-cloak id="logPanel"
-          class="mt-1 p-2 bg-gray-900 text-green-400 text-xs font-mono rounded overflow-y-auto" style="max-height:420px">
-          <template x-for="line in solverLogs" :key="line.id">
-            <div x-text="line.msg" class="leading-snug whitespace-pre"></div>
-          </template>
-          <div x-show="solverLogs.length === 0" class="text-gray-500">솔버 로그 대기 중...</div>
-        </div>
-        <!-- B&B 헤더 설명 -->
-        <div x-show="showLogPanel" x-cloak class="mt-2 rounded border overflow-hidden" style="border-color:var(--border); font-size:0.7rem">
-          <div class="px-3 py-1.5 font-semibold" style="background:var(--sev-1-light); color:var(--sev-1)">
-            📊 Branch &amp; Bound 로그 헤더 설명
-          </div>
-          <table class="w-full text-left" style="font-size:0.7rem">
-            <tbody>
-              <tr class="border-t" style="border-color:var(--border)">
-                <td class="px-3 py-1 font-bold font-mono whitespace-nowrap" style="width:100px; color:var(--sev-1)">Src</td>
-                <td class="px-3 py-1" style="color:var(--text-secondary)">해를 찾은 방법 — <b>B</b> 분기, <b>C</b> 중심점 반올림, <b>F</b> Feasibility pump, <b>H</b> 휴리스틱, <b>L</b> Sub-MIP, <b>R</b> 랜덤 반올림, <b>S</b> LP풀이, <b>T</b> 노드 평가</td>
-              </tr>
-              <tr class="border-t" style="border-color:var(--border)">
-                <td class="px-3 py-1 font-bold font-mono" style="color:var(--sev-1)">Proc.</td>
-                <td class="px-3 py-1" style="color:var(--text-secondary)">처리 완료된 노드 수</td>
-              </tr>
-              <tr class="border-t" style="border-color:var(--border)">
-                <td class="px-3 py-1 font-bold font-mono" style="color:var(--sev-1)">InQueue</td>
-                <td class="px-3 py-1" style="color:var(--text-secondary)">탐색 대기 중인 노드 수</td>
-              </tr>
-              <tr class="border-t" style="border-color:var(--border)">
-                <td class="px-3 py-1 font-bold font-mono" style="color:var(--sev-1)">Leaves</td>
-                <td class="px-3 py-1" style="color:var(--text-secondary)">더 이상 분기하지 않는 말단 노드 수</td>
-              </tr>
-              <tr class="border-t" style="border-color:var(--border)">
-                <td class="px-3 py-1 font-bold font-mono" style="color:var(--sev-1)">Expl.</td>
-                <td class="px-3 py-1" style="color:var(--text-secondary)">탐색 트리 중 탐색 완료 비율 (100%면 완전 탐색)</td>
-              </tr>
-              <tr class="border-t" style="border-color:var(--border)">
-                <td class="px-3 py-1 font-bold font-mono" style="color:var(--sev-1)">BestBound</td>
-                <td class="px-3 py-1" style="color:var(--text-secondary)">이론적 최적값 상한 (이보다 더 좋은 해는 없음)</td>
-              </tr>
-              <tr class="border-t" style="border-color:var(--border)">
-                <td class="px-3 py-1 font-bold font-mono" style="color:var(--sev-1)">BestSol</td>
-                <td class="px-3 py-1" style="color:var(--text-secondary)">지금까지 찾은 최선의 실행 가능한 해 (<code style="color:var(--sev-1)">inf</code>면 아직 못 찾음)</td>
-              </tr>
-              <tr class="border-t" style="border-color:var(--border)">
-                <td class="px-3 py-1 font-bold font-mono" style="color:var(--sev-1)">Gap</td>
-                <td class="px-3 py-1" style="color:var(--text-secondary)">최적해 대비 오차 — 0%면 최적해 증명 완료, 설정한 허용 오차 이하가 되면 조기 종료</td>
-              </tr>
-              <tr class="border-t" style="border-color:var(--border)">
-                <td class="px-3 py-1 font-bold font-mono" style="color:var(--sev-1)">Cuts / InLp</td>
-                <td class="px-3 py-1" style="color:var(--text-secondary)">생성된 절단면 총 수 / 현재 LP에 활성화된 수</td>
-              </tr>
-              <tr class="border-t" style="border-color:var(--border)">
-                <td class="px-3 py-1 font-bold font-mono" style="color:var(--sev-1)">Confl.</td>
-                <td class="px-3 py-1" style="color:var(--text-secondary)">충돌 분석으로 발견한 제약 수</td>
-              </tr>
-              <tr class="border-t" style="border-color:var(--border)">
-                <td class="px-3 py-1 font-bold font-mono" style="color:var(--sev-1)">LpIters</td>
-                <td class="px-3 py-1" style="color:var(--text-secondary)">누적 LP 반복 횟수</td>
-              </tr>
-              <tr class="border-t" style="border-color:var(--border)">
-                <td class="px-3 py-1 font-bold font-mono" style="color:var(--sev-1)">Time</td>
-                <td class="px-3 py-1" style="color:var(--text-secondary)">경과 시간</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- 스케줄 그리드 -->
-      <div x-show="schedule && Object.keys(schedule).length > 0"
-           class="overflow-auto" style="max-height:calc(100vh - 14rem)">
-        <table class="text-xs border-collapse" style="min-width:700px">
-          <thead>
-            <!-- 주기 헤더 -->
-            <tr>
-              <th class="border px-2 py-1 sticky left-0 top-0 bg-white z-30 text-left text-gray-400 whitespace-nowrap text-xs">주기</th>
-              <template x-for="span in getCycleSpans()" :key="span.key">
-                <th :colspan="span.count"
-                    :class="getCycleClass(span.cycle)"
-                    class="border text-center text-xs font-bold py-1 sticky top-0 z-20"
-                    x-text="`${span.cycle}주기`">
-                </th>
-              </template>
-              <th class="border bg-gray-50 sticky top-0 z-20" colspan="4"></th>
-            </tr>
-            <!-- 날짜 헤더 -->
-            <tr>
-              <th class="border px-2 py-1 sticky left-0 bg-gray-50 z-30 text-left whitespace-nowrap" style="top:27px">이름</th>
-              <template x-for="day in scheduleDays" :key="day">
-                <th class="border px-0.5 py-1 text-center sticky z-20"
-                  :class="[getDayClass(day),
-                           isHoliday(day) ? 'bg-orange-100' : (day.getDay()===6 ? 'bg-blue-100' : (day.getDay()===0 ? 'bg-red-100' : 'bg-gray-50')),
-                           day.getDay()===6 ? 'border-r-2 border-r-gray-500' : '',
-                           isCycleStart(day) && day.getDate()!==1 ? 'border-l-2 border-l-indigo-300' : '']"
-                  style="min-width:2rem; top:27px">
-                  <div x-text="day.getDate()"></div>
-                  <div class="font-normal" x-text="['일','월','화','수','목','금','토'][day.getDay()]"></div>
-                </th>
-              </template>
-              <th class="border px-2 py-1 text-gray-500 sticky bg-gray-50 z-20 text-xs" style="top:27px">D</th>
-              <th class="border px-2 py-1 text-gray-500 sticky bg-gray-50 z-20 text-xs" style="top:27px">E</th>
-              <th class="border px-2 py-1 text-gray-500 sticky bg-gray-50 z-20 text-xs" style="top:27px">N</th>
-              <th class="border px-2 py-1 text-gray-500 sticky bg-gray-50 z-20 text-xs" style="top:27px">휴</th>
-              <th class="border px-2 py-1 text-pink-500 sticky bg-gray-50 z-20 text-xs" style="top:27px">생</th>
-              <th class="border px-2 py-1 text-indigo-600 sticky bg-gray-50 z-20 text-xs" style="top:27px">배점</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template x-for="nurse in nurses" :key="nurse.id">
-              <tr class="hover:brightness-95">
-                <td class="border px-2 py-1 font-medium sticky left-0 bg-white z-10 whitespace-nowrap text-xs">
-                  <div x-text="nurse.name"></div>
-                  <div class="text-gray-400 font-normal" x-text="nurse.group + '팀'"></div>
-                </td>
-                <template x-for="day in scheduleDays" :key="day">
-                  <td class="border p-0"
-                    :class="[
-                      getShift(nurse.id, day) !== '-'
-                        ? ''
-                        : (isHoliday(day) ? 'bg-orange-50' : (day.getDay()===6 ? 'bg-blue-50' : (day.getDay()===0 ? 'bg-red-50' : ''))),
-                      day.getDay()===6 ? 'border-r-2 border-r-gray-500' : '',
-                      isCycleStart(day) && day.getDate()!==1 ? 'border-l-2 border-l-indigo-300' : ''
-                    ]"
-                    :style="getShift(nurse.id, day) !== '-' ? getShiftStyle(getShift(nurse.id, day)) : {}">
-                    <span class="schedule-cell-text block"
-                      x-text="getShift(nurse.id, day) !== '-' ? getShift(nurse.id, day) : ''"
-                      @click="openShiftEdit(nurse, day)">
-                    </span>
-                  </td>
-                </template>
-                <!-- 통계 -->
-                <td class="border px-2 py-1 text-center" x-text="countShifts(nurse.id, ['DC','D'])"></td>
-                <td class="border px-2 py-1 text-center" x-text="countShifts(nurse.id, ['EC','E'])"></td>
-                <td class="border px-2 py-1 text-center" x-text="countShifts(nurse.id, ['NC','N'])"></td>
-                <td class="border px-2 py-1 text-center" x-text="countShifts(nurse.id, ['OF','주'])"></td>
-                <td class="border px-2 py-1 text-center text-pink-600" x-text="countShifts(nurse.id, ['생']) || ''"></td>
-                <td class="border px-2 py-1 text-center text-indigo-600 font-semibold cursor-pointer hover:bg-indigo-50 select-none"
-                  :title="'배점 상세 보기'"
-                  @click="openScoreDetail(nurse)"
-                  x-text="nurseScore(nurse.id)"></td>
-              </tr>
-            </template>
-          </tbody>
-          <tfoot>
-            <template x-for="row in footerRows" :key="row.label">
-              <tr class="bg-gray-50">
-                <td class="border px-2 py-0.5 font-medium sticky left-0 bg-gray-50 z-10 whitespace-nowrap text-xs"
-                  :class="row.color" x-text="row.label"></td>
-                <template x-for="day in scheduleDays" :key="day">
-                  <td class="border text-center py-0.5 text-xs font-semibold"
-                    :class="[row.color,
-                             day.getDay()===6 ? 'border-r-2 border-r-gray-500' : '',
-                             isCycleStart(day) && day.getDate()!==1 ? 'border-l-2 border-l-indigo-300' : '']"
-                    x-text="getDayDutyCount(day, row.shifts) || ''"></td>
-                </template>
-                <td class="border" colspan="6"></td>
-              </tr>
-            </template>
-          </tfoot>
-        </table>
-      </div>
-
-      <p x-show="!schedule || Object.keys(schedule).length === 0" class="text-center text-gray-400 py-12">
-        스케줄 생성 버튼을 눌러 근무표를 만들어주세요.
-      </p>
+<!-- ═══ TAB 2: 사전입력 ═══════════════════════════════════ -->
+<div x-show="activeTab==='preinput'" x-cloak class="content-flex">
+  <div class="flex flex-wrap items-center gap-3 mb-3" style="flex-shrink:0">
+    <div class="section-title" style="margin:0">사전입력</div>
+    <div class="ym">
+      <button @click="prevMonth()" class="ym-nav">‹</button>
+      <input type="number" x-model.number="year" min="2020" max="2099" style="width:3rem"/>
+      <span class="ym-lbl">년</span>
+      <input type="number" x-model.number="month" min="1" max="12" style="width:1.6rem"/>
+      <span class="ym-lbl">월</span>
+      <button @click="nextMonth()" class="ym-nav">›</button>
+    </div>
+    <div class="ml-auto flex gap-2">
+      <button @click="clearPrevSchedule()" class="btn btn-xs btn-ghost text-red">초기화</button>
+      <span class="pill text-dim" style="background:rgba(255,255,255,0.03)" x-text="`${countPrevEntries()}건`"></span>
+      <button @click="prevSavePanel=!prevSavePanel" :class="prevSavePanel?'btn-primary':'btn-ghost'" class="btn btn-xs">저장/불러오기</button>
     </div>
   </div>
+  <div x-show="prevSavePanel" x-cloak class="card-sm mb-3" style="flex-shrink:0">
+    <div class="flex gap-2 mb-2"><input type="text" x-model="prevSaveName" :placeholder="`${year}년 ${month}월`" class="flex-1" @keydown.enter="savePrevToServer()"/><button @click="savePrevToServer()" class="btn btn-xs btn-primary">저장</button></div>
+    <div x-show="prevSaves.length===0" class="text-xs text-center py-2 text-dim">저장된 사전입력 없음</div>
+    <div x-show="prevSaves.length>0" class="space-y-1 max-h-36 overflow-y-auto"><template x-for="ps in prevSaves" :key="ps.id">
+      <div class="flex items-center gap-2 card-sm" style="padding:5px 8px">
+        <span class="flex-1 text-xs text-body" x-text="ps.name||`${ps.year}년 ${ps.month}월`"></span>
+        <span class="text-xs text-dim" x-text="ps.created_at.slice(0,16)"></span>
+        <button @click="loadPrevFromServer(ps.id)" class="btn btn-xs btn-primary">불러오기</button>
+        <button @click="deletePrevSave(ps.id)" class="btn btn-xs btn-ghost text-red">삭제</button>
+      </div>
+    </template></div>
+  </div>
+  <div class="flex flex-wrap gap-1 text-xs mb-2" style="flex-shrink:0"><template x-for="s in prevShifts" :key="s"><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></template><span class="text-dim ml-1">빈칸=자동</span></div>
+  <!-- 그리드 -->
+  <div x-show="nurses.length>0" style="flex:1;min-height:0;overflow:auto">
+    <table class="text-xs border-collapse" style="min-width:680px">
+      <thead>
+        <tr><th class="g-cell px-1.5 py-1 sticky left-0 top-0 z-30 text-left text-xs g-fix text-dim">주기</th><template x-for="span in getCycleSpans()" :key="span.key"><th :colspan="span.count" :class="getCycleClass(span.cycle)" class="g-cell text-center text-xs font-bold py-1 sticky top-0 z-20" x-text="`${span.cycle}주기`"></th></template><th class="g-cell sticky top-0 z-20 g-fix" :colspan="rules.maxNightTwoMonth?2:1"></th></tr>
+        <tr><th class="g-cell px-1.5 py-1 sticky left-0 z-30 text-left g-fix" style="top:23px">이름</th>
+          <template x-for="day in scheduleDays" :key="day"><th class="g-cell px-0 py-1 text-center sticky z-20 cursor-pointer select-none g-fix" :class="[getDayClass(day),day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow-header':'']" style="min-width:1.9rem;top:23px" @contextmenu.prevent="markHoliday(day)">
+            <div x-text="day.getDate()"></div><div class="font-normal text-dim" x-text="['일','월','화','수','목','금','토'][day.getDay()]"></div>
+            <div x-show="isHoliday(day)" class="text-amber" style="font-size:0.45rem">법</div>
+          </th></template>
+          <th class="g-cell px-1.5 py-1 text-xs sticky z-20 text-dim g-fix" style="top:23px">건수</th>
+          <th x-show="rules.maxNightTwoMonth" class="g-cell px-1.5 py-1 text-xs sticky z-20 g-fix" style="top:23px;color:var(--t-amber)">전월N</th>
+        </tr>
+      </thead>
+      <tbody><template x-for="nurse in nurses" :key="nurse.id"><tr class="hover:bg-white/[0.015]">
+        <td class="g-cell name-cell"><span class="nurse-name" x-text="nurse.name"></span> <span class="nurse-group" x-text="nurse.group"></span></td>
+        <template x-for="day in scheduleDays" :key="day">
+          <td class="g-cell p-0" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'']" :style="getPrevShift(nurse.id,day)?getShiftStyle(getPrevShift(nurse.id,day)):{}">
+            <template x-if="getPrevShift(nurse.id,day)"><span class="schedule-cell-text block" x-text="getPrevShift(nurse.id,day)" @click="openPrevEdit(nurse,day)"></span></template>
+            <template x-if="!getPrevShift(nurse.id,day)"><span class="schedule-cell block" style="color:rgba(255,255,255,0.05)" @click="openPrevEdit(nurse,day)">·</span></template>
+          </td>
+        </template>
+        <td class="g-cell px-1.5 py-0.5 text-center text-dim" x-text="countNursePrev(nurse.id)||''"></td>
+        <td x-show="rules.maxNightTwoMonth" class="g-cell p-0">
+          <input type="number" min="0" max="15"
+            :value="prevMonthNights[nurse.id]||''"
+            @change="prevMonthNights[nurse.id]=parseInt($event.target.value)||0"
+            class="w-full text-center py-0.5 border-none outline-none" style="background:transparent;color:var(--t-amber);font-size:0.72rem;font-weight:600;min-width:2rem"
+            placeholder="0"/>
+        </td>
+      </tr></template></tbody>
+      <tfoot><template x-for="row in [{type:'D',bg:'rgba(33,150,243,0.07)',color:'#64b5f6'},{type:'E',bg:'rgba(46,125,50,0.07)',color:'#81c784'},{type:'N',bg:'rgba(255,152,0,0.07)',color:'#ffb74d'}]" :key="row.type"><tr>
+        <td class="g-cell px-1 py-0.5 sticky left-0 z-10 text-center font-bold text-xs" :style="`background:${row.bg};color:${row.color}`" x-text="row.type"></td>
+        <template x-for="day in scheduleDays" :key="day"><td class="g-cell p-0" :class="day.getDay()===6?'g-sat':''" :style="`background:${row.bg}`">
+          <input type="number" min="0" max="20" class="w-full text-center text-xs py-0.5 border-none outline-none bg-transparent" :class="getPrevDayReq(day,row.type)!==null?'font-bold':''" :style="getPrevDayReq(day,row.type)!==null?`color:${row.color}`:'color:rgba(255,255,255,0.12)'" :placeholder="getDefaultDayReq(day,row.type)" :value="getPrevDayReq(day,row.type)!==null?getPrevDayReq(day,row.type):''" @change="setPrevDayReq(day,row.type,$event.target.value)" style="min-width:1.9rem;width:100%"/>
+        </td></template>
+        <td class="g-cell px-1" :style="`background:${row.bg}`"></td>
+      </tr></template></tfoot>
+    </table>
+  </div>
+  <p x-show="nurses.length===0" class="text-center py-12 text-sm text-dim">설정 탭에서 간호사를 먼저 등록해주세요.</p>
+</div>
 
-  <!-- ══════════════════════════════════════════════════════
-       탭 3: 저장된 스케줄
-  ══════════════════════════════════════════════════════ -->
-  <div x-show="activeTab==='saved'" x-cloak class="tab-panel">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="glass-panel md:col-span-1">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="font-semibold text-gray-700">💾 저장된 스케줄</h2>
-          <button @click="loadSavedList()" class="text-blue-600 text-sm hover:underline">새로고침</button>
-        </div>
-        <div class="space-y-2">
-          <template x-for="item in savedSchedules" :key="item.id">
-            <div class="border rounded-lg p-3 flex items-center justify-between">
-              <div>
-                <span class="font-medium" x-text="item.name || `${item.year}년 ${item.month}월`"></span>
-                <span class="ml-2 text-xs text-gray-400" x-text="item.created_at"></span>
-              </div>
-              <div class="flex gap-2">
-                <button @click="loadSaved(item.id)"
-                  class="bg-blue-600 text-white text-xs px-3 py-1 rounded">불러오기</button>
-                <button @click="deleteSaved(item.id)"
-                  class="text-red-500 text-xs hover:underline">삭제</button>
-              </div>
-            </div>
-          </template>
-          <p x-show="savedSchedules.length===0" class="text-center text-gray-400 py-8">저장된 스케줄이 없습니다.</p>
-        </div>
+<!-- ═══ TAB 3: 스케줄 ═════════════════════════════════════ -->
+<div x-show="activeTab==='schedule'" x-cloak class="content">
+  <!-- 컨트롤 -->
+  <div class="flex flex-wrap items-center gap-3 mb-3">
+    <div class="section-title" style="margin:0">근무표</div>
+    <span x-show="mipGapPercent!==null" x-cloak class="pill" :style="mipGapPercent<=0.1?'background:rgba(46,125,50,0.1);color:#81c784':mipGapPercent<=2?'background:rgba(255,152,0,0.1);color:#ffb74d':'background:rgba(230,81,0,0.1);color:#ff8a65'" x-text="mipGapPercent<=0.1?'최적해':`${mipGapPercent}%`"></span>
+    <span x-show="scheduleStopped" x-cloak class="pill" style="background:rgba(230,81,0,0.1);color:#ff8a65">중지됨</span>
+    <div class="ym">
+      <button @click="prevMonth()" class="ym-nav">‹</button>
+      <input type="number" x-model.number="year" min="2020" max="2099" style="width:3rem"/>
+      <span class="ym-lbl">년</span>
+      <input type="number" x-model.number="month" min="1" max="12" style="width:1.6rem"/>
+      <span class="ym-lbl">월</span>
+      <button @click="nextMonth()" class="ym-nav">›</button>
+    </div>
+    <button @click="generate()" :disabled="generating" class="btn btn-primary btn-sm" :style="generating?'opacity:0.5':''">
+      <svg x-show="generating" class="w-3.5 h-3.5 spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+      <span x-text="generating?'생성 중...':'생성'"></span>
+    </button>
+    <button @click="saveSchedule()" x-show="schedule&&Object.keys(schedule).length>0" class="btn btn-xs btn-success">저장</button>
+    <button @click="activeTab='saved'" class="btn btn-xs btn-ghost">불러오기</button>
+    <button @click="carryOverToNextMonth()" x-show="hasNextMonthData()" x-cloak class="btn btn-xs btn-ghost text-blue">↪ 다음달 이월</button>
+  </div>
+  <!-- 슬라이더 -->
+  <div class="flex items-center gap-3 mb-1.5">
+    <span class="text-xs text-dim w-8">오차</span>
+    <input type="range" min="0" max="0.1" step="0.01" x-model.number="mipGap" class="flex-1" style="max-width:110px;accent-color:#1976d2"/>
+    <span class="text-xs font-mono w-8" x-text="mipGap===0?'정밀':(mipGap*100).toFixed(0)+'%'"></span>
+    <div class="flex gap-1"><template x-for="v in [0,0.02,0.05,0.1]" :key="v"><button @click="mipGap=v" :class="mipGap===v?'btn-primary':'btn-ghost'" class="btn btn-xs" x-text="v===0?'정밀':(v*100)+'%'"></button></template></div>
+  </div>
+  <div class="flex items-center gap-3 mb-3">
+    <span class="text-xs text-dim w-8">시간</span>
+    <input type="range" min="1" max="60" step="1" x-model.number="generateTimeout" class="flex-1" style="max-width:110px;accent-color:#1976d2"/>
+    <span class="text-xs font-mono w-8" x-text="generateTimeout+'분'"></span>
+    <div class="flex gap-1"><template x-for="v in [5,10,20,60]" :key="v"><button @click="generateTimeout=v" :class="generateTimeout===v?'btn-primary':'btn-ghost'" class="btn btn-xs" x-text="v+'분'"></button></template></div>
+  </div>
+  <!-- 생성 중 -->
+  <div x-show="generating" x-cloak class="card-sm mb-3" style="border-color:rgba(33,150,243,0.1)">
+    <div class="flex items-center justify-between mb-1.5 text-xs">
+      <span class="text-sub">예상 <strong class="text-blue" x-text="estimatedSeconds?estimatedSeconds+'초':'…'"></strong></span>
+      <div class="flex items-center gap-3"><span class="text-sub">경과 <strong class="text-blue" x-text="generateElapsed+'초'"></strong></span>
+        <button @click="stopGenerate()" :disabled="stopRequested" class="btn btn-xs" :style="stopRequested?'background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.3)':'background:#e65100;color:#fff'" x-text="stopRequested?'중지 중':'중지'"></button>
       </div>
     </div>
+    <div class="w-full rounded-full h-1 overflow-hidden mb-1.5" style="background:rgba(255,255,255,0.04)"><div style="background:linear-gradient(90deg,#1565c0,#42a5f5)" class="h-1 rounded-full transition-all duration-1000" :style="`width:${estimatedSeconds?Math.min(100,Math.round(generateElapsed/estimatedSeconds*100)):Math.min(100,Math.round(generateElapsed/(generateTimeout*60)*100))}%`"></div></div>
+    <div class="text-xs min-h-[1em] text-dim">
+      <template x-if="solveProgress.has_solution"><span class="text-blue">최적 대비 <strong x-text="solveProgress.gap_percent+'%'"></strong> | 노드 <strong x-text="solveProgress.nodes.toLocaleString('ko-KR')"></strong></span></template>
+      <template x-if="!solveProgress.has_solution&&solveProgress.nodes>0"><span>탐색 중… 노드 <strong x-text="solveProgress.nodes.toLocaleString('ko-KR')"></strong></span></template>
+      <template x-if="!solveProgress.has_solution&&solveProgress.nodes===0&&solveProgress.is_running"><span>계산 중…</span></template>
+      <template x-if="!solveProgress.is_running&&!solveProgress.has_solution&&solveProgress.nodes===0"><span>연결 중…</span></template>
+    </div>
   </div>
+  <!-- 메시지 -->
+  <div x-show="statusMessage" x-cloak class="card-sm text-sm whitespace-pre-wrap mb-2" :style="statusOk?'border-color:var(--green);color:var(--t-green)':'border-color:var(--red);color:var(--t-red)'">
+    <div class="flex items-center justify-between gap-4">
+      <span x-text="statusMessage"></span>
+      <span x-show="statusOk&&generateFinalElapsed>0" x-cloak class="shrink-0 font-mono text-xs opacity-60" x-text="(()=>{const m=Math.floor(generateFinalElapsed/60);const s=generateFinalElapsed%60;return(m>0?m+'분 ':'')+s+'초'})()"></span>
+    </div>
+  </div>
+  <!-- 로그 -->
+  <div x-show="solverLogs.length>0" x-cloak class="mb-3">
+    <button @click="showLogPanel=!showLogPanel" class="btn btn-xs btn-ghost">솔버 로그 <span x-text="showLogPanel?'▾':'▸'"></span> <span class="text-sub" x-text="solverLogs.length+'줄'"></span></button>
+    <button x-show="showLogPanel" @click="navigator.clipboard.writeText(solverLogs.map(l=>l.msg).join('\n')).then(()=>$el.textContent='복사됨').catch(()=>{})" class="btn btn-xs btn-ghost ml-1">복사</button>
+    <div x-show="showLogPanel" x-cloak id="logPanel" class="log-box mt-1.5"><template x-for="line in solverLogs" :key="line.id"><div x-text="line.msg" class="leading-snug whitespace-pre"></div></template></div>
+    <div x-show="showLogPanel" x-cloak class="card-sm mt-1.5" style="padding:0;overflow:hidden">
+      <div class="px-3 py-1.5 text-xs font-semibold" style="background:rgba(33,150,243,0.05);color:#64b5f6">Branch &amp; Bound 헤더 설명</div>
+      <table class="w-full text-left" style="font-size:0.62rem">
+        <tr style="border-top:1px solid rgba(255,255,255,0.03)"><td class="px-3 py-1 font-bold font-mono text-blue" style="width:75px">Src</td><td class="px-3 py-1 text-dim"><b>B</b>분기 <b>C</b>중심점 <b>F</b>Pump <b>H</b>휴리스틱 <b>L</b>Sub-MIP <b>R</b>랜덤 <b>S</b>LP <b>T</b>평가</td></tr>
+        <tr style="border-top:1px solid rgba(255,255,255,0.03)"><td class="px-3 py-1 font-bold font-mono text-blue">Proc.</td><td class="px-3 py-1 text-dim">처리 완료 노드 수</td></tr>
+        <tr style="border-top:1px solid rgba(255,255,255,0.03)"><td class="px-3 py-1 font-bold font-mono text-blue">InQueue</td><td class="px-3 py-1 text-dim">탐색 대기 노드 수</td></tr>
+        <tr style="border-top:1px solid rgba(255,255,255,0.03)"><td class="px-3 py-1 font-bold font-mono text-blue">Leaves</td><td class="px-3 py-1 text-dim">말단 노드 수</td></tr>
+        <tr style="border-top:1px solid rgba(255,255,255,0.03)"><td class="px-3 py-1 font-bold font-mono text-blue">Expl.</td><td class="px-3 py-1 text-dim">탐색 완료 비율 (100%=완전 탐색)</td></tr>
+        <tr style="border-top:1px solid rgba(255,255,255,0.03)"><td class="px-3 py-1 font-bold font-mono text-blue">BestBound</td><td class="px-3 py-1 text-dim">이론적 최적값 상한</td></tr>
+        <tr style="border-top:1px solid rgba(255,255,255,0.03)"><td class="px-3 py-1 font-bold font-mono text-blue">BestSol</td><td class="px-3 py-1 text-dim">현재 최선의 해 (inf=미발견)</td></tr>
+        <tr style="border-top:1px solid rgba(255,255,255,0.03)"><td class="px-3 py-1 font-bold font-mono text-blue">Gap</td><td class="px-3 py-1 text-dim">최적해 대비 오차 (0%=최적, 허용치 이하→종료)</td></tr>
+        <tr style="border-top:1px solid rgba(255,255,255,0.03)"><td class="px-3 py-1 font-bold font-mono text-blue">Cuts/InLp</td><td class="px-3 py-1 text-dim">절단면 총수 / LP 활성 수</td></tr>
+        <tr style="border-top:1px solid rgba(255,255,255,0.03)"><td class="px-3 py-1 font-bold font-mono text-blue">Confl.</td><td class="px-3 py-1 text-dim">충돌 분석 제약 수</td></tr>
+        <tr style="border-top:1px solid rgba(255,255,255,0.03)"><td class="px-3 py-1 font-bold font-mono text-blue">LpIters</td><td class="px-3 py-1 text-dim">누적 LP 반복</td></tr>
+        <tr style="border-top:1px solid rgba(255,255,255,0.03)"><td class="px-3 py-1 font-bold font-mono text-blue">Time</td><td class="px-3 py-1 text-dim">경과 시간</td></tr>
+      </table>
+    </div>
+  </div>
+  <!-- 스케줄 그리드 -->
+  <div x-show="schedule&&Object.keys(schedule).length>0" class="overflow-auto" style="max-height:calc(100vh - 13rem)">
+    <table class="text-xs border-collapse" style="min-width:680px">
+      <thead>
+        <tr><th class="g-cell px-1.5 py-1 sticky left-0 top-0 z-30 text-left text-xs g-fix text-dim">주기</th><template x-for="span in getCycleSpans()" :key="span.key"><th :colspan="span.count" :class="getCycleClass(span.cycle)" class="g-cell text-center text-xs font-bold py-1 sticky top-0 z-20" x-text="`${span.cycle}주기`"></th></template><th class="g-cell sticky top-0 z-20 g-fix" colspan="6"></th></tr>
+        <tr><th class="g-cell px-1.5 py-1 sticky left-0 z-30 text-left g-fix" style="top:23px">이름</th>
+          <template x-for="day in scheduleDays" :key="day"><th class="g-cell px-0 py-1 text-center sticky z-20 g-fix" :class="[getDayClass(day),day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow-header':'']" style="min-width:1.9rem;top:23px"><div x-text="day.getDate()"></div><div class="font-normal text-dim" x-text="['일','월','화','수','목','금','토'][day.getDay()]"></div></th></template>
+          <th class="g-cell px-1 py-1 sticky z-20 text-xs text-dim g-fix" style="top:23px">D</th><th class="g-cell px-1 py-1 sticky z-20 text-xs text-dim g-fix" style="top:23px">E</th><th class="g-cell px-1 py-1 sticky z-20 text-xs text-dim g-fix" style="top:23px">N</th><th class="g-cell px-1 py-1 sticky z-20 text-xs text-dim g-fix" style="top:23px">휴</th><th class="g-cell px-1 py-1 sticky z-20 text-xs text-pink g-fix" style="top:23px">생</th><th class="g-cell px-1 py-1 sticky z-20 text-xs text-blue g-fix" style="top:23px">점</th>
+        </tr>
+      </thead>
+      <tbody><template x-for="nurse in nurses" :key="nurse.id"><tr class="hover:bg-white/[0.015]">
+        <td class="g-cell name-cell"><span class="nurse-name" x-text="nurse.name"></span> <span class="nurse-group" x-text="nurse.group"></span></td>
+        <template x-for="day in scheduleDays" :key="day"><td class="g-cell p-0" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'']" :style="getShift(nurse.id,day)!=='-'?getShiftStyle(getShift(nurse.id,day)):{}"><span class="schedule-cell-text block" x-text="getShift(nurse.id,day)!=='-'?getShift(nurse.id,day):''" @click="openShiftEdit(nurse,day)"></span></td></template>
+        <td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['DC','D'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['EC','E'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['NC','N'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['OF','주'])"></td>
+        <td class="g-cell px-1 py-0.5 text-center text-pink" x-text="countShifts(nurse.id,['생'])||''"></td>
+        <td class="g-cell px-1 py-0.5 text-center font-semibold cursor-pointer select-none text-blue" @click="openScoreDetail(nurse)" x-text="nurseScore(nurse.id)"></td>
+      </tr></template></tbody>
+      <tfoot><template x-for="row in footerRows" :key="row.label"><tr style="background:rgba(255,255,255,0.015)">
+        <td class="g-cell px-1.5 py-0.5 font-medium sticky left-0 z-10 text-xs g-fix" :class="row.color" x-text="row.label"></td>
+        <template x-for="day in scheduleDays" :key="day"><td class="g-cell text-center py-0.5 text-xs font-semibold" :class="[row.color,day.getDay()===6?'g-sat':'']" x-text="getDayDutyCount(day,row.shifts)||''"></td></template>
+        <td class="g-cell" colspan="6"></td>
+      </tr></template></tfoot>
+    </table>
+  </div>
+  <p x-show="!schedule||Object.keys(schedule).length===0" class="text-center py-16 text-dim text-sm">스케줄 생성 버튼을 눌러주세요.</p>
+</div>
+
+<!-- ═══ TAB 4: 저장 ═══════════════════════════════════════ -->
+<div x-show="activeTab==='saved'" x-cloak class="content">
+  <div style="max-width:36rem">
+    <div class="flex items-center justify-between mb-3"><div class="section-title" style="margin:0">저장된 스케줄</div><button @click="loadSavedList()" class="text-xs text-blue">새로고침</button></div>
+    <div class="space-y-2"><template x-for="item in savedSchedules" :key="item.id">
+      <div class="card-sm flex items-center justify-between">
+        <div><span class="text-body font-medium" x-text="item.name||`${item.year}년 ${item.month}월`"></span><span class="ml-2 text-xs text-dim" x-text="item.created_at"></span></div>
+        <div class="flex gap-2"><button @click="loadSaved(item.id)" class="btn btn-xs btn-primary">불러오기</button><button @click="deleteSaved(item.id)" class="text-xs text-red">삭제</button></div>
+      </div>
+    </template>
+    <p x-show="savedSchedules.length===0" class="text-center py-8 text-dim">저장된 스케줄이 없습니다.</p>
+    </div>
+  </div>
+</div>
 
 </main>
 </div><!-- /main-content -->
 
-<!-- ══ BOTTOM NAV (mobile) ════════════════════════════════════ -->
+<!-- ═══ BOTTOM NAV (mobile) ══════════════════════════════ -->
 <nav class="bottom-nav">
-  <template x-for="tab in tabs" :key="tab.id">
-    <div @click="activeTab=tab.id"
-      :class="activeTab===tab.id ? 'active' : ''"
-      class="bottom-nav-item">
-      <span class="nav-icon" x-text="tab.label.slice(0,2)"></span>
-      <span x-text="tab.label.slice(3)"></span>
-    </div>
-  </template>
-  <div @click="toggleDark()" class="bottom-nav-item">
-    <span class="nav-icon" x-text="darkMode ? '☀️' : '🌙'"></span>
-    <span x-text="darkMode ? '라이트' : '다크'"></span>
-  </div>
+  <template x-for="tab in tabs" :key="tab.id"><div @click="activeTab=tab.id" :class="activeTab===tab.id?'active':''" class="bottom-nav-item">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <template x-if="tab.icon==='settings'"><g><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></g></template>
+      <template x-if="tab.icon==='edit-3'"><g><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></g></template>
+      <template x-if="tab.icon==='calendar'"><g><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></g></template>
+      <template x-if="tab.icon==='save'"><g><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></g></template>
+    </svg>
+    <span x-text="tab.label"></span>
+  </div></template>
 </nav>
 
 </div><!-- /app-shell -->
 
-<!-- ══════════════════════════════════════════════════════════
-     간호사 추가/수정 모달
-══════════════════════════════════════════════════════════ -->
-<div x-show="nurseModal.open" x-cloak
-  class="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40"
-  @click.self="nurseModal.open=false">
-  <div class="bg-white w-full max-w-lg rounded-t-2xl md:rounded-2xl shadow-xl p-5 max-h-[90vh] overflow-y-auto">
-    <h3 class="font-bold text-lg mb-4" x-text="nurseModal.isNew ? '간호사 추가' : '간호사 수정'"></h3>
-
+<!-- ═══ 모달: 간호사 ═════════════════════════════════════ -->
+<div x-show="nurseModal.open" x-cloak class="modal-bg" @click.self="nurseModal.open=false">
+  <div class="modal" style="max-width:28rem">
+    <h3 class="font-bold mb-4 text-bright" x-text="nurseModal.isNew?'간호사 추가':'간호사 수정'"></h3>
     <div class="space-y-3">
+      <div class="flex gap-3"><div class="flex-1"><label class="text-xs text-dim">이름 *</label><input x-model="nurseModal.data.name" class="w-full mt-1" placeholder="홍길동"/></div><div class="flex-1"><label class="text-xs text-dim">그룹</label><input x-model="nurseModal.data.group" class="w-full mt-1" placeholder="A"/></div></div>
+      <div><label class="text-xs text-dim">성별</label><div class="flex gap-4 mt-1.5 text-sm"><label class="flex items-center gap-2"><input type="radio" x-model="nurseModal.data.gender" value="female"/>여</label><label class="flex items-center gap-2"><input type="radio" x-model="nurseModal.data.gender" value="male"/>남</label></div></div>
+      <div><label class="text-xs text-dim">가능 근무</label><div class="flex flex-wrap gap-1.5 mt-1.5"><template x-for="s in allWorkShifts" :key="s"><label class="flex items-center gap-1 text-xs"><input type="checkbox" :checked="nurseModal.data.capable_shifts.includes(s)" @change="toggleShift(s)"/><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></label></template></div></div>
+      <label class="flex items-center gap-2 text-xs"><input type="checkbox" x-model="nurseModal.data.is_night_shift"/>야간전담</label>
+      <div><label class="text-xs text-dim">시니어리티</label><input type="number" x-model.number="nurseModal.data.seniority" min="0" max="100" class="w-20 mt-1"/></div>
+    </div>
+    <div class="flex gap-2 mt-5"><button @click="nurseModal.open=false" class="btn btn-ghost flex-1">취소</button><button @click="saveNurse()" class="btn btn-primary flex-1">저장</button></div>
+  </div>
+</div>
+
+<!-- ═══ 모달: 근무 ═══════════════════════════════════════ -->
+<div x-show="shiftModal.open" x-cloak class="modal-bg" @click.self="shiftModal.open=false">
+  <div class="modal" style="max-width:24rem">
+    <h3 class="font-bold text-lg mb-5 text-bright" x-text="shiftModal.isNew?'새 근무 추가':'근무 수정'"></h3>
+    <div class="space-y-4">
       <div class="flex gap-3">
-        <div class="flex-1">
-          <label class="text-sm text-gray-600">이름 *</label>
-          <input x-model="nurseModal.data.name" class="w-full border rounded px-3 py-2 mt-1" placeholder="홍길동" />
-        </div>
-        <div class="flex-1">
-          <label class="text-sm text-gray-600">그룹</label>
-          <input x-model="nurseModal.data.group" class="w-full border rounded px-3 py-2 mt-1" placeholder="A팀" />
-        </div>
+        <div class="flex-1"><label>코드 *</label><input x-model="shiftModal.data.code" :disabled="!shiftModal.isNew" :style="!shiftModal.isNew?'opacity:0.4':''" class="w-full mt-1.5 font-mono uppercase" maxlength="4" placeholder="예: XX"/></div>
+        <div class="flex-1"><label>이름 *</label><input x-model="shiftModal.data.name" class="w-full mt-1.5" placeholder="예: 특수낮번"/></div>
       </div>
-
-      <div>
-        <label class="text-sm text-gray-600">성별</label>
-        <div class="flex gap-3 mt-1">
-          <label class="flex items-center gap-1">
-            <input type="radio" x-model="nurseModal.data.gender" value="female" /> 여성
-          </label>
-          <label class="flex items-center gap-1">
-            <input type="radio" x-model="nurseModal.data.gender" value="male" /> 남성
-          </label>
-        </div>
+      <div><label>유형</label><select x-model="shiftModal.data.period" class="w-full mt-1.5"><option value="day">낮 (D 요구사항)</option><option value="day1">낮-상근 (D1)</option><option value="evening">저녁 (E 요구사항)</option><option value="middle">중간번</option><option value="night">야간 (N 요구사항)</option><option value="rest">휴무</option><option value="leave">휴가</option></select></div>
+      <div class="flex gap-6"><label class="flex items-center gap-2"><input type="checkbox" x-model="shiftModal.data.is_charge"/>차지 근무</label><label class="flex items-center gap-2"><input type="checkbox" x-model="shiftModal.data.auto_assign"/>자동배정</label></div>
+      <div><label>근무시간</label><input x-model="shiftModal.data.hours" class="w-full mt-1.5" placeholder="06:00~14:00"/></div>
+      <div class="flex gap-4">
+        <div class="flex-1"><label>배경색</label><div class="flex gap-2 mt-1.5 items-center"><input type="color" x-model="shiftModal.data.color_bg" class="w-9 h-9 rounded cursor-pointer" style="border:1px solid var(--border)"/><input type="text" x-model="shiftModal.data.color_bg" class="flex-1 font-mono"/></div></div>
+        <div class="flex-1"><label>글자색</label><div class="flex gap-2 mt-1.5 items-center"><input type="color" x-model="shiftModal.data.color_text" class="w-9 h-9 rounded cursor-pointer" style="border:1px solid var(--border)"/><input type="text" x-model="shiftModal.data.color_text" class="flex-1 font-mono"/></div></div>
       </div>
-
-      <div>
-        <label class="text-sm text-gray-600">가능 근무 (복수 선택)</label>
-        <div class="flex flex-wrap gap-2 mt-1">
-          <template x-for="s in allWorkShifts" :key="s">
-            <label class="flex items-center gap-1 text-sm">
-              <input type="checkbox"
-                :checked="nurseModal.data.capable_shifts.includes(s)"
-                @change="toggleShift(s)" />
-              <span :style="getShiftStyle(s)" class="px-2 py-0.5 rounded text-xs font-bold" x-text="s"></span>
-            </label>
-          </template>
-        </div>
-      </div>
-
-      <label class="flex items-center gap-2 text-sm">
-        <input type="checkbox" x-model="nurseModal.data.is_night_shift" />
-        야간전담 간호사
-      </label>
-
-      <div class="p-2 bg-blue-50 rounded text-xs text-blue-700">
-        💡 주휴 요일은 <strong>사전입력 탭</strong>에서 1주기 날짜에 '주'를 입력하면 나머지 주기가 자동 계산됩니다.
-      </div>
-
-      <div>
-        <label class="text-sm text-gray-600">시니어리티 (낮을수록 선임)</label>
-        <input type="number" x-model.number="nurseModal.data.seniority"
-          min="0" max="100" class="w-24 border rounded px-3 py-2 mt-1" />
+      <div class="card-sm flex items-center gap-3">
+        <span class="text-sub text-xs">미리보기</span>
+        <span :style="{background:shiftModal.data.color_bg,color:shiftModal.data.color_text}" class="px-3 py-1 rounded font-bold" x-text="shiftModal.data.code||'코드'"></span>
+        <span class="text-body" x-text="shiftModal.data.name||'이름'"></span>
+        <span class="text-dim text-xs" x-text="shiftModal.data.hours||''"></span>
       </div>
     </div>
-
-    <div class="flex gap-3 mt-5">
-      <button @click="nurseModal.open=false"
-        class="flex-1 border border-gray-300 py-2 rounded-lg text-sm">취소</button>
-      <button @click="saveNurse()"
-        class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium">저장</button>
-    </div>
+    <div class="flex gap-3 mt-6"><button @click="shiftModal.open=false" class="btn btn-ghost flex-1">취소</button><button @click="saveShift()" class="btn btn-primary flex-1">저장</button></div>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
-     근무 추가/수정 모달
-══════════════════════════════════════════════════════════ -->
-<div x-show="shiftModal.open" x-cloak
-  class="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40"
-  @click.self="shiftModal.open=false">
-  <div class="bg-white w-full max-w-md rounded-t-2xl md:rounded-2xl shadow-xl p-5 max-h-[90vh] overflow-y-auto">
-    <h3 class="font-bold text-lg mb-4" x-text="shiftModal.isNew ? '새 근무 추가' : '근무 수정'"></h3>
+<!-- ═══ 모달: 배점 규칙 ══════════════════════════════════ -->
+<div x-show="scoringModal.open" x-cloak class="modal-bg" @click.self="scoringModal.open=false">
+  <div class="modal" style="max-width:28rem">
+    <h3 class="font-bold mb-4 text-bright" x-text="scoringModal.isNew?'새 배점 규칙':'배점 규칙 수정'"></h3>
     <div class="space-y-3">
-      <!-- 코드 -->
-      <div>
-        <label class="text-sm text-gray-600">코드 * <span class="text-xs text-gray-400">(최대 4자, 고유 식별자)</span></label>
-        <input x-model="shiftModal.data.code" :disabled="!shiftModal.isNew"
-          :class="!shiftModal.isNew ? 'bg-gray-100 text-gray-400' : ''"
-          class="w-full border rounded px-3 py-2 mt-1 font-mono uppercase"
-          maxlength="4" placeholder="예: XX" />
-      </div>
-      <!-- 이름 -->
-      <div>
-        <label class="text-sm text-gray-600">이름 *</label>
-        <input x-model="shiftModal.data.name"
-          class="w-full border rounded px-3 py-2 mt-1" placeholder="예: 특수낮번" />
-      </div>
-      <!-- 유형 -->
-      <div>
-        <label class="text-sm text-gray-600">유형 * <span class="text-xs text-gray-400">(스케줄링 엔진 분류)</span></label>
-        <select x-model="shiftModal.data.period" class="w-full border rounded px-3 py-2 mt-1">
-          <option value="day">낮 (D 요구사항 충족, E/N→낮 금지 전환 적용)</option>
-          <option value="day1">낮(상근) (D 요구사항, E/N→상근 금지 전환 적용)</option>
-          <option value="evening">저녁 (E 요구사항, N→저녁 금지 전환 적용)</option>
-          <option value="middle">중간번 (E 요구사항, N→중간 금지 전환 적용)</option>
-          <option value="night">야간 (N 요구사항)</option>
-          <option value="rest">휴무 (주 1회 OF/주휴 대상)</option>
-          <option value="leave">휴가 (V·생·공 등, 연속 근무 미포함)</option>
-        </select>
-      </div>
-      <!-- 차지 여부 -->
-      <label class="flex items-center gap-2 text-sm">
-        <input type="checkbox" x-model="shiftModal.data.is_charge" />
-        차지 근무 <span class="text-xs text-gray-400">(해당 유형에서 매일 정확히 1명 배정)</span>
-      </label>
-      <!-- 자동배정 여부 -->
-      <label class="flex items-center gap-2 text-sm">
-        <input type="checkbox" x-model="shiftModal.data.auto_assign" />
-        자동배정 가능 <span class="text-xs text-gray-400">(OFF = 사전입력 전용, 솔버가 직접 배정하지 않음)</span>
-      </label>
-      <!-- 근무시간 -->
-      <div>
-        <label class="text-sm text-gray-600">근무시간 <span class="text-xs text-gray-400">(표시용, 예: 06:00~14:00)</span></label>
-        <input x-model="shiftModal.data.hours"
-          class="w-full border rounded px-3 py-2 mt-1" placeholder="예: 06:00~14:00" />
-      </div>
-      <!-- 색상 -->
-      <div class="flex gap-4 items-end">
-        <div class="flex-1">
-          <label class="text-sm text-gray-600">배경색</label>
-          <div class="flex gap-2 mt-1 items-center">
-            <input type="color" x-model="shiftModal.data.color_bg"
-              class="w-10 h-10 rounded border cursor-pointer p-0.5" />
-            <input type="text" x-model="shiftModal.data.color_bg"
-              class="flex-1 border rounded px-2 py-1.5 text-sm font-mono" />
-          </div>
-        </div>
-        <div class="flex-1">
-          <label class="text-sm text-gray-600">글자색</label>
-          <div class="flex gap-2 mt-1 items-center">
-            <input type="color" x-model="shiftModal.data.color_text"
-              class="w-10 h-10 rounded border cursor-pointer p-0.5" />
-            <input type="text" x-model="shiftModal.data.color_text"
-              class="flex-1 border rounded px-2 py-1.5 text-sm font-mono" />
-          </div>
-        </div>
-      </div>
-      <!-- 미리보기 -->
-      <div class="text-sm text-gray-600">미리보기</div>
-      <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-        <span :style="{background: shiftModal.data.color_bg, color: shiftModal.data.color_text}"
-          class="px-3 py-1 rounded font-bold text-sm" x-text="shiftModal.data.code || '코드'"></span>
-        <span class="text-sm text-gray-600" x-text="shiftModal.data.name || '이름'"></span>
-        <span class="text-xs text-gray-400" x-text="shiftModal.data.hours || ''"></span>
-      </div>
+      <div><label class="text-xs text-dim">이름 *</label><input x-model="scoringModal.data.name" class="w-full mt-1"/></div>
+      <div><label class="text-xs text-dim">유형</label><select x-model="scoringModal.data.rule_type" @change="initScoringParams($event.target.value)" class="w-full mt-1"><option value="transition">전환 패턴</option><option value="pattern">N일 패턴</option><option value="consecutive_same">연속 동일</option><option value="specific_shift">특정 근무</option><option value="wish">희망 근무</option><option value="night_fairness">야간 공평성</option></select></div>
+      <div class="flex gap-3 items-end"><div class="flex-1"><label class="text-xs text-dim">점수</label><input type="number" x-model.number="scoringModal.data.score" class="w-full mt-1 font-mono"/></div><label class="flex items-center gap-2 text-xs pb-1"><input type="checkbox" x-model="scoringModal.data.enabled"/>활성화</label></div>
+      <template x-if="scoringModal.data.rule_type==='transition'"><div class="card-sm"><div class="text-xs text-blue mb-1.5">전환 조건</div><div class="flex items-center gap-2"><div class="flex-1"><select x-model="scoringModal.data.params.from" class="w-full text-xs"><template x-for="g in periodGroups" :key="g.value"><option :value="g.value" x-text="g.label"></option></template></select></div><span class="text-dim">→</span><div class="flex-1"><select x-model="scoringModal.data.params.to" class="w-full text-xs"><template x-for="g in periodGroups" :key="g.value"><option :value="g.value" x-text="g.label"></option></template></select></div></div></div></template>
+      <template x-if="scoringModal.data.rule_type==='pattern'"><div class="card-sm"><div class="flex items-center justify-between mb-1.5"><span class="text-xs text-pink">N일 패턴</span><button @click="scoringModal.data.params.pattern.push('work')" class="btn btn-xs btn-primary">+</button></div><div class="flex flex-wrap gap-1.5 items-center"><template x-for="(step,idx) in scoringModal.data.params.pattern" :key="idx"><div class="flex items-center gap-1"><select :value="step" @change="scoringModal.data.params.pattern.splice(idx,1,$event.target.value)" class="text-xs" style="padding:3px 5px"><template x-for="g in periodGroups" :key="g.value"><option :value="g.value" x-text="g.label"></option></template></select><button x-show="scoringModal.data.params.pattern.length>2" @click="scoringModal.data.params.pattern.splice(idx,1)" class="text-xs text-red">✕</button><span x-show="idx<scoringModal.data.params.pattern.length-1" class="text-dim">→</span></div></template></div></div></template>
+      <template x-if="scoringModal.data.rule_type==='consecutive_same'"><div class="card-sm"><label class="text-xs text-dim">연속 period</label><select x-model="scoringModal.data.params.period" class="w-full mt-1 text-xs"><template x-for="g in periodGroups" :key="g.value"><option :value="g.value" x-text="g.label"></option></template></select></div></template>
+      <template x-if="scoringModal.data.rule_type==='specific_shift'"><div class="card-sm space-y-2"><div class="flex gap-3"><div class="flex-1"><label class="text-xs text-dim">코드</label><select x-model="scoringModal.data.params.shift_code" class="w-full mt-1 text-xs"><template x-for="s in shifts" :key="s.code"><option :value="s.code" x-text="`${s.code} (${s.name})`"></option></template></select></div><div class="flex-1"><label class="text-xs text-dim">조건</label><select x-model="scoringModal.data.params.condition" class="w-full mt-1 text-xs"><option value="all">전체</option><option value="female_only">여성만</option></select></div></div></div></template>
     </div>
-    <div class="flex gap-3 mt-5">
-      <button @click="shiftModal.open=false"
-        class="flex-1 border border-gray-300 py-2 rounded-lg text-sm">취소</button>
-      <button @click="saveShift()"
-        class="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg text-sm font-medium">저장</button>
-    </div>
+    <div class="flex gap-2 mt-5"><button @click="scoringModal.open=false" class="btn btn-ghost flex-1">취소</button><button @click="saveScoringRule()" class="btn btn-primary flex-1">저장</button></div>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
-     배점 규칙 추가/수정 모달
-══════════════════════════════════════════════════════════ -->
-<div x-show="scoringModal.open" x-cloak
-  class="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40"
-  @click.self="scoringModal.open=false">
-  <div class="bg-white w-full max-w-lg rounded-t-2xl md:rounded-2xl shadow-xl p-5 max-h-[90vh] overflow-y-auto">
-    <h3 class="font-bold text-lg mb-4" x-text="scoringModal.isNew ? '새 배점 규칙 추가' : '배점 규칙 수정'"></h3>
-    <div class="space-y-3">
-
-      <!-- 규칙 이름 -->
-      <div>
-        <label class="text-sm text-gray-600">규칙 이름 *</label>
-        <input x-model="scoringModal.data.name"
-          class="w-full border rounded px-3 py-2 mt-1" placeholder="예: 퐁당퐁당 페널티" />
-      </div>
-
-      <!-- 유형 -->
-      <div>
-        <label class="text-sm text-gray-600">유형 *</label>
-        <select x-model="scoringModal.data.rule_type"
-          @change="initScoringParams($event.target.value)"
-          class="w-full border rounded px-3 py-2 mt-1">
-          <option value="transition">전환 패턴 (2일 연속 근무 → 근무)</option>
-          <option value="pattern">N일 패턴 (퐁당퐁당 등)</option>
-          <option value="consecutive_same">연속 동일 period 쌍</option>
-          <option value="specific_shift">특정 근무 배정</option>
-          <option value="wish">희망 근무 반영</option>
-          <option value="night_fairness">야간 근무 공평성</option>
-        </select>
-      </div>
-
-      <!-- 점수 + 활성화 -->
-      <div class="flex gap-3 items-end">
-        <div class="flex-1">
-          <label class="text-sm text-gray-600">점수 <span class="text-xs text-gray-400">(음수=페널티, 양수=보상)</span></label>
-          <input type="number" x-model.number="scoringModal.data.score"
-            class="w-full border rounded px-3 py-2 mt-1 font-mono" />
-        </div>
-        <label class="flex items-center gap-2 text-sm pb-2">
-          <input type="checkbox" x-model="scoringModal.data.enabled" />
-          활성화
-        </label>
-      </div>
-
-      <!-- transition 전용 -->
-      <template x-if="scoringModal.data.rule_type === 'transition'">
-        <div class="p-3 bg-blue-50 rounded-lg space-y-2">
-          <div class="text-xs text-blue-700 font-medium mb-1">2일 연속 전환 조건</div>
-          <div class="flex items-center gap-2">
-            <div class="flex-1">
-              <label class="text-xs text-gray-500">이전 근무 그룹</label>
-              <select x-model="scoringModal.data.params.from" class="w-full border rounded px-2 py-1.5 mt-1 text-sm">
-                <template x-for="g in periodGroups" :key="g.value">
-                  <option :value="g.value" x-text="g.label"></option>
-                </template>
-              </select>
-            </div>
-            <span class="text-gray-400 mt-5">→</span>
-            <div class="flex-1">
-              <label class="text-xs text-gray-500">이후 근무 그룹</label>
-              <select x-model="scoringModal.data.params.to" class="w-full border rounded px-2 py-1.5 mt-1 text-sm">
-                <template x-for="g in periodGroups" :key="g.value">
-                  <option :value="g.value" x-text="g.label"></option>
-                </template>
-              </select>
-            </div>
-          </div>
-        </div>
-      </template>
-
-      <!-- pattern 전용 -->
-      <template x-if="scoringModal.data.rule_type === 'pattern'">
-        <div class="p-3 bg-purple-50 rounded-lg space-y-2">
-          <div class="flex items-center justify-between mb-1">
-            <div class="text-xs text-purple-700 font-medium">N일 패턴 빌더</div>
-            <button @click="scoringModal.data.params.pattern.push('work')"
-              class="text-xs bg-purple-600 text-white px-2 py-0.5 rounded hover:bg-purple-700">+ 단계 추가</button>
-          </div>
-          <div class="flex flex-wrap gap-2 items-center">
-            <template x-for="(step, idx) in scoringModal.data.params.pattern" :key="idx">
-              <div class="flex items-center gap-1">
-                <select :value="step"
-                  @change="scoringModal.data.params.pattern.splice(idx, 1, $event.target.value)"
-                  class="border rounded px-2 py-1 text-xs">
-                  <template x-for="g in periodGroups" :key="g.value">
-                    <option :value="g.value" x-text="g.label"></option>
-                  </template>
-                </select>
-                <button x-show="scoringModal.data.params.pattern.length > 2"
-                  @click="scoringModal.data.params.pattern.splice(idx, 1)"
-                  class="text-red-400 hover:text-red-600 text-xs">✕</button>
-                <span x-show="idx < scoringModal.data.params.pattern.length - 1"
-                  class="text-gray-400 text-xs">→</span>
-              </div>
-            </template>
-          </div>
-          <div class="text-xs text-purple-500 mt-1">예: 근무→휴무/휴가→근무 = 퐁당퐁당 패턴</div>
-        </div>
-      </template>
-
-      <!-- consecutive_same 전용 -->
-      <template x-if="scoringModal.data.rule_type === 'consecutive_same'">
-        <div class="p-3 bg-green-50 rounded-lg">
-          <label class="text-xs text-green-700 font-medium">연속 동일 period</label>
-          <select x-model="scoringModal.data.params.period" class="w-full border rounded px-2 py-1.5 mt-1 text-sm">
-            <template x-for="g in periodGroups" :key="g.value">
-              <option :value="g.value" x-text="g.label"></option>
-            </template>
-          </select>
-        </div>
-      </template>
-
-      <!-- specific_shift 전용 -->
-      <template x-if="scoringModal.data.rule_type === 'specific_shift'">
-        <div class="p-3 bg-amber-50 rounded-lg space-y-2">
-          <div>
-            <label class="text-xs text-amber-700 font-medium">근무 코드</label>
-            <select x-model="scoringModal.data.params.shift_code" class="w-full border rounded px-2 py-1.5 mt-1 text-sm">
-              <template x-for="s in shifts" :key="s.code">
-                <option :value="s.code" x-text="`${s.code} - ${s.name}`"></option>
-              </template>
-            </select>
-          </div>
-          <div>
-            <label class="text-xs text-amber-700 font-medium">적용 대상</label>
-            <select x-model="scoringModal.data.params.condition" class="w-full border rounded px-2 py-1.5 mt-1 text-sm">
-              <option value="all">전체 간호사</option>
-              <option value="female_only">여성 간호사만</option>
-            </select>
-          </div>
-        </div>
-      </template>
-
-      <!-- wish / night_fairness: 추가 파라미터 없음 -->
-      <template x-if="scoringModal.data.rule_type === 'wish' || scoringModal.data.rule_type === 'night_fairness'">
-        <div class="p-3 bg-gray-50 rounded-lg text-xs text-gray-500">
-          <span x-show="scoringModal.data.rule_type === 'wish'">간호사별 희망 근무 매칭 시 점수를 부여합니다.</span>
-          <span x-show="scoringModal.data.rule_type === 'night_fairness'">야간 근무 총량의 최대-최소 범위를 최소화하는 방향으로 점수를 부여합니다. (전체 지표, 개인 배점에는 미반영)</span>
-        </div>
-      </template>
-
-    </div>
-    <div class="flex gap-3 mt-5">
-      <button @click="scoringModal.open=false"
-        class="flex-1 border border-gray-300 py-2 rounded-lg text-sm">취소</button>
-      <button @click="saveScoringRule()"
-        class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-sm font-medium">저장</button>
-    </div>
+<!-- ═══ 모달: 셀 편집 ════════════════════════════════════ -->
+<div x-show="shiftEdit.open" x-cloak class="modal-bg" @click.self="shiftEdit.open=false">
+  <div class="modal" style="max-width:18rem;min-width:auto">
+    <div class="font-bold text-sm mb-2"><span class="text-bright" x-text="shiftEdit.nurse?.name"></span> <span class="text-dim font-normal" x-text="shiftEdit.dateLabel"></span><span x-show="shiftEdit.mode==='prev'" class="text-xs text-blue ml-1">[사전]</span></div>
+    <div class="flex flex-wrap gap-1.5 mb-3"><template x-for="s in (shiftEdit.mode==='prev'?prevShifts:allShifts)" :key="s"><button @click="applyShiftEdit(s)" :style="getShiftStyle(s)" class="px-2.5 py-1 rounded text-xs font-bold cursor-pointer hover:opacity-80" style="border:1px solid rgba(255,255,255,0.08)" x-text="s"></button></template></div>
+    <button x-show="shiftEdit.mode==='prev'&&getPrevShift(shiftEdit.nurse?.id,shiftEdit.day)" @click="applyShiftEdit('__CLEAR__')" class="w-full mb-2 py-1 rounded text-xs text-red" style="border:1px solid rgba(239,83,80,0.15)">초기화</button>
+    <button @click="shiftEdit.open=false" class="btn btn-ghost w-full btn-sm">취소</button>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
-     셀 편집 모달
-══════════════════════════════════════════════════════════ -->
-<div x-show="shiftEdit.open" x-cloak
-  class="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40"
-  @click.self="shiftEdit.open=false">
-  <div class="bg-white w-full max-w-xs rounded-t-2xl md:rounded-2xl shadow-xl p-5">
-    <h3 class="font-bold mb-1 text-sm">
-      <span x-text="shiftEdit.nurse?.name"></span>
-      <span class="font-normal text-gray-500 ml-1" x-text="shiftEdit.dateLabel"></span>
-      <span x-show="shiftEdit.mode==='prev'" class="ml-1 text-xs text-blue-500">[사전입력]</span>
-    </h3>
-    <div class="flex flex-wrap gap-2 mb-3">
-      <template x-for="s in (shiftEdit.mode==='prev' ? prevShifts : allShifts)" :key="s">
-        <button @click="applyShiftEdit(s)"
-          :style="getShiftStyle(s)"
-          class="px-3 py-1.5 rounded text-xs font-bold border hover:opacity-80"
-          x-text="s"></button>
-      </template>
-    </div>
-    <!-- 사전입력 모드: 해당 셀 초기화 버튼 -->
-    <button x-show="shiftEdit.mode==='prev' && getPrevShift(shiftEdit.nurse?.id, shiftEdit.day)"
-      @click="applyShiftEdit('__CLEAR__')"
-      class="w-full mb-2 border border-red-300 text-red-500 hover:bg-red-50 py-1.5 rounded-lg text-sm">
-      이 날 초기화 (자동배정으로)
-    </button>
-    <button @click="shiftEdit.open=false"
-      class="w-full border border-gray-300 py-2 rounded-lg text-sm">취소</button>
+<!-- ═══ 모달: 배점 상세 ══════════════════════════════════ -->
+<div x-show="scoreDetailModal.open" x-cloak class="modal-bg" @click.self="scoreDetailModal.open=false">
+  <div class="modal" style="max-width:24rem">
+    <div class="flex items-center justify-between mb-3"><div class="font-bold text-bright"><span x-text="scoreDetailModal.nurseName"></span> <span class="font-normal text-sm text-dim">배점</span></div><span class="text-lg font-bold" :class="(scoreDetailModal.total||0)>=0?'text-green':'text-red'" x-text="((scoreDetailModal.total||0)>=0?'+':'')+(scoreDetailModal.total||0)"></span></div>
+    <template x-if="scoreDetailModal.rows&&scoreDetailModal.rows.length>0"><table class="tbl mb-3"><thead><tr><th>규칙</th><th class="text-center">N</th><th class="text-right">단가</th><th class="text-right">합</th></tr></thead><tbody><template x-for="row in scoreDetailModal.rows" :key="row.name"><tr><td class="text-xs" x-text="row.name"></td><td class="text-center text-xs font-mono" x-text="row.count"></td><td class="text-right font-mono text-xs" :class="row.score_per>=0?'text-green':'text-red'" x-text="(row.score_per>=0?'+':'')+row.score_per"></td><td class="text-right font-mono font-bold text-xs" :class="row.total>=0?'text-green':'text-red'" x-text="(row.total>=0?'+':'')+row.total"></td></tr></template></tbody><tfoot><tr style="border-top:1px solid rgba(255,255,255,0.06)"><td class="font-bold" colspan="3">합계</td><td class="text-right font-bold" :class="(scoreDetailModal.total||0)>=0?'text-green':'text-red'" x-text="((scoreDetailModal.total||0)>=0?'+':'')+(scoreDetailModal.total||0)"></td></tr></tfoot></table></template>
+    <template x-if="!scoreDetailModal.rows||scoreDetailModal.rows.length===0"><p class="text-center text-xs py-4 mb-3 text-dim">해당 없음</p></template>
+    <button @click="scoreDetailModal.open=false" class="btn btn-ghost w-full btn-sm">닫기</button>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
-     배점 상세내역 모달
-══════════════════════════════════════════════════════════ -->
-<div x-show="scoreDetailModal.open" x-cloak
-  class="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40"
-  @click.self="scoreDetailModal.open=false">
-  <div class="bg-white w-full max-w-md rounded-t-2xl md:rounded-2xl shadow-xl p-5 max-h-[80vh] overflow-y-auto">
-    <div class="flex items-center justify-between mb-3">
-      <h3 class="font-bold text-base">
-        <span x-text="scoreDetailModal.nurseName"></span>
-        <span class="text-gray-400 font-normal text-sm ml-2">배점 상세</span>
-      </h3>
-      <span class="text-xl font-bold"
-        :class="(scoreDetailModal.total||0) >= 0 ? 'text-emerald-600' : 'text-red-500'"
-        x-text="((scoreDetailModal.total||0) >= 0 ? '+' : '') + (scoreDetailModal.total||0)"></span>
-    </div>
-
-    <!-- 규칙별 내역 테이블 -->
-    <template x-if="scoreDetailModal.rows && scoreDetailModal.rows.length > 0">
-      <table class="w-full text-sm mb-3">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-3 py-2 text-left text-xs text-gray-500">규칙</th>
-            <th class="px-3 py-2 text-center text-xs text-gray-500">횟수</th>
-            <th class="px-3 py-2 text-right text-xs text-gray-500">단가</th>
-            <th class="px-3 py-2 text-right text-xs text-gray-500">합계</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template x-for="row in scoreDetailModal.rows" :key="row.name">
-            <tr class="border-t">
-              <td class="px-3 py-1.5 text-gray-700 text-xs" x-text="row.name"></td>
-              <td class="px-3 py-1.5 text-center text-gray-500 text-xs font-mono" x-text="row.count"></td>
-              <td class="px-3 py-1.5 text-right font-mono text-xs"
-                :class="row.score_per >= 0 ? 'text-emerald-600' : 'text-red-500'"
-                x-text="(row.score_per >= 0 ? '+' : '') + row.score_per"></td>
-              <td class="px-3 py-1.5 text-right font-mono font-bold text-xs"
-                :class="row.total >= 0 ? 'text-emerald-600' : 'text-red-500'"
-                x-text="(row.total >= 0 ? '+' : '') + row.total"></td>
-            </tr>
-          </template>
-        </tbody>
-        <tfoot class="border-t-2">
-          <tr>
-            <td class="px-3 py-2 font-bold text-sm text-gray-700" colspan="3">합계</td>
-            <td class="px-3 py-2 text-right font-bold text-base"
-              :class="(scoreDetailModal.total||0) >= 0 ? 'text-emerald-600' : 'text-red-500'"
-              x-text="((scoreDetailModal.total||0) >= 0 ? '+' : '') + (scoreDetailModal.total||0)"></td>
-          </tr>
-        </tfoot>
-      </table>
-    </template>
-
-    <template x-if="!scoreDetailModal.rows || scoreDetailModal.rows.length === 0">
-      <p class="text-center text-gray-400 text-sm py-4 mb-3">해당 규칙에 해당하는 항목이 없습니다.</p>
-    </template>
-
-    <button @click="scoreDetailModal.open=false"
-      class="w-full border border-gray-300 py-2 rounded-lg text-sm">닫기</button>
-  </div>
-</div>
-
-<script>
-function app() {
-  return {
-    // ── 상태 ──────────────────────────────────────────────────────────────
-    tabs: [
-      {id:'settings', label:'⚙️ 설정'},
-      {id:'preinput', label:'📝 사전입력'},
-      {id:'schedule', label:'📅 스케줄'},
-      {id:'saved',    label:'💾 저장'},
-    ],
-    activeTab: 'settings',
-
-    year:  new Date().getFullYear(),
-    month: new Date().getMonth() + 1,
-
-    nurses: [],
-    requirements: {
-      mon:{DC:1,D:2,EC:1,E:2,NC:1,N:2},
-      tue:{DC:1,D:2,EC:1,E:2,NC:1,N:2},
-      wed:{DC:1,D:2,EC:1,E:2,NC:1,N:2},
-      thu:{DC:1,D:2,EC:1,E:2,NC:1,N:2},
-      fri:{DC:1,D:2,EC:1,E:2,NC:1,N:2},
-      sat:{DC:1,D:1,EC:1,E:1,NC:1,N:1},
-      sun:{DC:1,D:1,EC:1,E:1,NC:1,N:1},
-    },
-    rules: {
-      weeklyOff: true,
-      noNOD: true,
-      avoidDN: true,
-      maxConsecutiveWork: true,
-      maxConsecutiveWorkDays: 5,
-      maxConsecutiveNight: true,
-      maxConsecutiveNightDays: 3,
-      patternOptimization: true,
-      autoMenstrualLeave: true,
-      maxVPerMonth: 1,
-    },
-
-    schedule: {},
-    extendedSchedule: {},
-    generating: false,
-    generateStartTime: null,
-    generateElapsed: 0,
-    generateFinalElapsed: 0,
-    generateTimer: null,
-    sseSource: null,
-    solverLogs: [],
-    showLogPanel: false,
-    solveProgress: { gap_percent: null, nodes: 0, has_solution: false, is_running: false },
-    stopRequested: false,
-    mipGap: 0.02,
-    generateTimeout: 20,
-    mipGapPercent: null,
-    scheduleStopped: false,
-    estimatedSeconds: 0,
-    statusMessage: '',
-    statusOk: true,
-    savedSchedules: [],
-    darkMode: localStorage.getItem('darkMode') === 'true',
-
-    weekdayLabels: {mon:'월',tue:'화',wed:'수',thu:'목',fri:'금',sat:'토',sun:'일'},
-    workShifts: ['D','E','N'],   // 요구사항 테이블 표시용
-
-    shifts: [],  // DB에서 로드한 ShiftDef 목록
-    shiftMgmtOpen: false,
-    scoringRuleOpen: true,
-    shiftModal: {open:false, isNew:true, data:{}},
-
-    scoringRules: [],  // DB에서 로드한 ScoringRule 목록
-    scoringMgmtOpen: false,
-    scoringModal: {open:false, isNew:true, data:{}},
-
-    prevSchedule: {},   // {nurse_id: {'YYYY-MM-DD': shift}} 사전 고정 근무
-    prevDayReqs: {},    // {'YYYY-MM-DD': {D:n, E:n, N:n}} 일별 필요인원 오버라이드
-    nurseScores: {},       // {nurse_id: score} 엔진 계산 배점
-    nurseScoreDetails: {}, // {nurse_id: [{name,rule_type,count,score_per,total}]}
-    scoreDetailModal: { open: false, nurseName: '', rows: [], total: 0 },
-    holidays: [],       // ['YYYY-M-D', ...] 법정공휴일로 지정된 날짜 목록
-
-    prevSaves: [],          // 저장된 사전입력 목록
-    prevSavePanel: false,   // 저장/불러오기 패널 표시 여부
-    prevSaveName: '',       // 저장 이름 입력값
-
-    nurseModal: {open:false, isNew:true, data:{}},
-    shiftEdit:  {open:false, nurse:null, day:null, dateLabel:'', mode:'schedule'},
-    // mode: 'schedule' = 결과 근무표 편집 / 'prev' = 사전입력 편집
-
-    // ── 동적 근무 computed ──────────────────────────────────────────────────
-    get allWorkShifts() {
-      return this.shifts.filter(s => ['day','day1','evening','middle','night'].includes(s.period)).map(s => s.code);
-    },
-    get allShifts() {
-      return this.shifts.map(s => s.code);
-    },
-    get prevShifts() {
-      // 사전입력 모달: charge 제외한 근무 + 휴무 + 휴가
-      return this.shifts.filter(s => !s.is_charge).map(s => s.code);
-    },
-    get footerRows() {
-      const dayShifts     = this.shifts.filter(s => s.period === 'day').map(s => s.code);
-      const eveningShifts = this.shifts.filter(s => ['evening','middle'].includes(s.period)).map(s => s.code);
-      const nightShifts   = this.shifts.filter(s => s.period === 'night').map(s => s.code);
-      const restShifts    = this.shifts.filter(s => s.period === 'rest').map(s => s.code);
-      return [
-        { label: '낮',   shifts: dayShifts,     color: 'text-blue-700'  },
-        { label: '저녁', shifts: eveningShifts,  color: 'text-green-700' },
-        { label: '야간', shifts: nightShifts,    color: 'text-amber-700' },
-        { label: '휴무', shifts: restShifts,     color: 'text-gray-600'  },
-      ];
-    },
-
-    // ── 초기화 ──────────────────────────────────────────────────────────────
-    async init() {
-      if (this.darkMode) document.documentElement.classList.add('dark');
-      await Promise.all([
-        this.loadNurses(),
-        this.loadRules(),
-        this.loadRequirements(),
-        this.loadShifts(),
-        this.loadScoringRules(),
-        this.loadSavedList(),
-        this.loadPrevSavesList(),
-      ]);
-      // 새로고침 복구: 생성 진행 중이면 SSE 재접속, 완료됐으면 결과 복원
-      this._checkPendingGenerate();
-    },
-
-    async _checkPendingGenerate() {
-      try {
-        const res = await this.api('GET', '/api/generate/result');
-        if (res.status === 'running') {
-          // 솔버가 아직 돌고 있음 → SSE 재접속 + 폴링으로 결과 대기
-          this.generating = true;
-          this.generateStartTime = Date.now();
-          this.generateElapsed = 0;
-          this.generateTimer = setInterval(() => {
-            this.generateElapsed = Math.floor((Date.now() - this.generateStartTime) / 1000);
-          }, 1000);
-          this.solverLogs = [];
-          this._logSeq = 0;
-          this.solveProgress = { gap_percent: null, nodes: 0, has_solution: false, is_running: true };
-          this.sseSource = new EventSource('/api/generate/stream');
-          this.sseSource.onmessage = (e) => {
-            const data = JSON.parse(e.data);
-            if (data.type === 'log') {
-              this.solverLogs.push({ id: ++this._logSeq, msg: data.msg });
-              if (this.solverLogs.length > 300) this.solverLogs = this.solverLogs.slice(-200);
-              this.$nextTick(() => {
-                const el = document.getElementById('logPanel');
-                if (el) el.scrollTop = el.scrollHeight;
-              });
-            } else if (data.type === 'progress') {
-              this.solveProgress = data;
-            } else if (data.type === 'done') {
-              this.sseSource.close(); this.sseSource = null;
-            }
-          };
-          this.activeTab = 'schedule';
-          this.statusMessage = '이전 생성이 진행 중입니다. 완료될 때까지 대기합니다...';
-          this.statusOk = true;
-          // 결과 폴링 (2초 간격)
-          this._recoverPoll = setInterval(async () => {
-            const pollResult = this._recoverPoll;
-            try {
-              const r = await this.api('GET', '/api/generate/result');
-              if (r.status === 'done' && r.result) {
-                clearInterval(pollResult);
-                if (this.generateTimer) { clearInterval(this.generateTimer); this.generateTimer = null; }
-                if (this.sseSource) { this.sseSource.close(); this.sseSource = null; }
-                this.generating = false;
-                this.generateFinalElapsed = this.generateElapsed;
-                const result = r.result;
-                this.statusOk = result.success;
-                this.statusMessage = result.message;
-                if (result.success) {
-                  this.schedule = result.schedule;
-                  this.extendedSchedule = result.extended_schedule;
-                  this.nurseScores = result.nurse_scores || {};
-                  this.nurseScoreDetails = result.nurse_score_details || {};
-                  this.mipGapPercent = result.mip_gap_percent !== undefined ? result.mip_gap_percent : null;
-                  this.scheduleStopped = result.stopped === true;
-                }
-              }
-            } catch (e) { /* 폴링 실패 무시 */ }
-          }, 2000);
-        } else if (res.status === 'done' && res.result) {
-          // 방금 완료된 결과가 있음 → 즉시 복원
-          const result = res.result;
-          this.statusOk = result.success;
-          this.statusMessage = result.message + '\n(이전 생성 결과 복원됨)';
-          if (result.success) {
-            this.schedule = result.schedule;
-            this.extendedSchedule = result.extended_schedule;
-            this.nurseScores = result.nurse_scores || {};
-            this.nurseScoreDetails = result.nurse_score_details || {};
-            this.mipGapPercent = result.mip_gap_percent !== undefined ? result.mip_gap_percent : null;
-            this.scheduleStopped = result.stopped === true;
-            this.activeTab = 'schedule';
-          }
-        }
-      } catch (e) { /* 서버 미응답 등 무시 */ }
-    },
-
-    // ── API 헬퍼 ────────────────────────────────────────────────────────────
-    async api(method, url, body, extraOpts = {}) {
-      const opts = {method, headers:{'Content-Type':'application/json'}, ...extraOpts};
-      if (body !== undefined) opts.body = JSON.stringify(body);
-      const res = await fetch(url, opts);
-      if (!res.ok) throw new Error(await res.text());
-      return res.json();
-    },
-
-    // ── 간호사 ──────────────────────────────────────────────────────────────
-    async loadNurses() {
-      this.nurses = await this.api('GET', '/api/nurses');
-    },
-    openNurseModal(nurse) {
-      this.nurseModal.isNew = !nurse;
-      this.nurseModal.data = nurse ? JSON.parse(JSON.stringify(nurse)) : {
-        id: crypto.randomUUID(),
-        name: '',
-        group: '',
-        gender: 'female',
-        capable_shifts: ['DC','D','EC','E','NC','N'],
-        is_night_shift: false,
-        seniority: this.nurses.length,
-        wishes: {},
-        juhu_day: null,
-        juhu_auto_rotate: true,
-      };
-      this.nurseModal.open = true;
-    },
-    toggleShift(s) {
-      const arr = this.nurseModal.data.capable_shifts;
-      const idx = arr.indexOf(s);
-      if (idx >= 0) arr.splice(idx, 1); else arr.push(s);
-    },
-    async saveNurse() {
-      if (!this.nurseModal.data.name.trim()) { alert('이름을 입력하세요.'); return; }
-      await this.api('POST', '/api/nurses', this.nurseModal.data);
-      await this.loadNurses();
-      this.nurseModal.open = false;
-    },
-    async removeNurse(id) {
-      if (!confirm('삭제하시겠습니까?')) return;
-      await this.api('DELETE', `/api/nurses/${id}`);
-      await this.loadNurses();
-    },
-
-    // ── 규칙 ────────────────────────────────────────────────────────────────
-    async loadRules() {
-      this.rules = await this.api('GET', '/api/rules');
-    },
-    async saveRules() {
-      await this.api('POST', '/api/rules', this.rules);
-      alert('규칙이 저장되었습니다.');
-    },
-
-    // ── 요구사항 ────────────────────────────────────────────────────────────
-    async loadRequirements() {
-      this.requirements = await this.api('GET', '/api/requirements');
-    },
-    async saveRequirements() {
-      await this.api('POST', '/api/requirements', this.requirements);
-      alert('인원 설정이 저장되었습니다.');
-    },
-
-    // ── 근무 관리 ────────────────────────────────────────────────────────────
-    async loadShifts() {
-      this.shifts = await this.api('GET', '/api/shifts');
-    },
-    getShiftStyle(code) {
-      const s = this.shifts.find(x => x.code === code);
-      if (!s) return {};
-      if (!this.darkMode) return { background: s.color_bg, color: s.color_text };
-      return { background: this._shiftDarkBg(s.color_bg), color: this._shiftDarkText(s.color_text) };
-    },
-    _hexToHsl(hex) {
-      if (!hex || !hex.startsWith('#') || hex.length < 7) return [0, 0, 50];
-      const r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
-      const max = Math.max(r,g,b), min = Math.min(r,g,b);
-      let h=0, s=0, l=(max+min)/2;
-      if (max !== min) {
-        const d = max-min;
-        s = l>0.5 ? d/(2-max-min) : d/(max+min);
-        switch(max) {
-          case r: h=((g-b)/d+(g<b?6:0))/6; break;
-          case g: h=((b-r)/d+2)/6; break;
-          case b: h=((r-g)/d+4)/6; break;
-        }
-      }
-      return [h*360, s*100, l*100];
-    },
-    _shiftDarkBg(hex) {
-      // 파스텔(밝은 배경) → 진하고 어두운 배경으로 변환
-      const [h, s] = this._hexToHsl(hex);
-      return `hsl(${h},${Math.max(s*0.8,35)}%,20%)`;
-    },
-    _shiftDarkText(hex) {
-      // 어두운 글자색 → 밝은 글자색으로 변환
-      const [h, s] = this._hexToHsl(hex);
-      return `hsl(${h},${Math.min(s*1.2,80)}%,78%)`;
-    },
-    openShiftModal(shift) {
-      this.shiftModal.isNew = !shift;
-      this.shiftModal.data = shift ? JSON.parse(JSON.stringify(shift)) : {
-        code: '', name: '', period: 'day', is_charge: false, auto_assign: true,
-        hours: '', color_bg: '#dbeafe', color_text: '#1d4ed8', sort_order: this.shifts.length,
-      };
-      this.shiftModal.open = true;
-    },
-    async saveShift() {
-      const d = this.shiftModal.data;
-      if (!d.code.trim()) { alert('코드를 입력하세요.'); return; }
-      if (!d.name.trim()) { alert('이름을 입력하세요.'); return; }
-      await this.api('POST', '/api/shifts', d);
-      await this.loadShifts();
-      this.shiftModal.open = false;
-    },
-    async deleteShift(code) {
-      const PROTECTED = ['DC','D','D1','EC','E','중','NC','N','OF','주'];
-      if (PROTECTED.includes(code)) {
-        alert('기본 근무(DC·D·D1·EC·E·중·NC·N·OF·주)는 삭제할 수 없습니다.');
-        return;
-      }
-      if (!confirm(`'${code}' 근무를 삭제하시겠습니까?`)) return;
-      await this.api('DELETE', `/api/shifts/${code}`);
-      await this.loadShifts();
-    },
-
-    // ── 배점 관리 ────────────────────────────────────────────────────────────
-    async loadScoringRules() {
-      this.scoringRules = await this.api('GET', '/api/scoring_rules');
-    },
-
-    // period 그룹 옵션 목록 (모달 드롭다운용)
-    get periodGroups() {
-      const base = [
-        {value:'work',      label:'모든 근무'},
-        {value:'day',       label:'낮 근무 (D, DC, D1)'},
-        {value:'evening',   label:'저녁 근무 (E, EC, 중)'},
-        {value:'night',     label:'야간 근무 (N, NC)'},
-        {value:'rest',      label:'휴무 (OF, 주)'},
-        {value:'leave',     label:'휴가 (V, 생, 특...)'},
-        {value:'rest_leave',label:'휴무/휴가'},
-        {value:'any',       label:'전체'},
-      ];
-      // 특정 코드들도 추가
-      const specifics = this.shifts.map(s => ({
-        value: `specific:${s.code}`,
-        label: `특정: ${s.code} (${s.name})`,
-      }));
-      return [...base, ...specifics];
-    },
-
-    scoringRuleTypeLabel(rule_type) {
-      return {
-        transition:      '전환 패턴',
-        pattern:         'N일 패턴',
-        consecutive_same:'연속 동일',
-        specific_shift:  '특정 근무',
-        wish:            '희망 근무',
-        night_fairness:  '야간 공평성',
-      }[rule_type] || rule_type;
-    },
-
-    scoringRuleCondSummary(r) {
-      const p = r.params || {};
-      if (r.rule_type === 'transition') {
-        const gl = v => ({work:'모든근무',day:'낮',evening:'저녁',night:'야간',rest:'휴무',leave:'휴가',rest_leave:'휴무/휴가',any:'전체'})[v] || v;
-        return `${gl(p.from)} → ${gl(p.to)}`;
-      }
-      if (r.rule_type === 'pattern') {
-        const gl = v => ({work:'근무',day:'낮',evening:'저녁',night:'야간',rest:'휴무',leave:'휴가',rest_leave:'휴무/휴가',any:'전체'})[v] || v;
-        return (p.pattern || []).map(gl).join(' → ');
-      }
-      if (r.rule_type === 'consecutive_same') {
-        const gl = v => ({work:'모든근무',day:'낮',evening:'저녁',night:'야간',rest:'휴무',leave:'휴가',rest_leave:'휴무/휴가',any:'전체'})[v] || v;
-        return `연속 ${gl(p.period)} 쌍`;
-      }
-      if (r.rule_type === 'specific_shift') {
-        return `${p.shift_code || '-'}${p.condition === 'female_only' ? ' (여성)' : ''}`;
-      }
-      if (r.rule_type === 'wish') return '희망 근무 매칭';
-      if (r.rule_type === 'night_fairness') return '야간 range 최소화';
-      return '-';
-    },
-
-    openScoringModal(rule) {
-      this.scoringModal.isNew = !rule;
-      if (rule) {
-        this.scoringModal.data = JSON.parse(JSON.stringify(rule));
-      } else {
-        this.scoringModal.data = {
-          name: '', rule_type: 'transition', score: 0, enabled: true, sort_order: this.scoringRules.length,
-          params: {from: 'day', to: 'night'},
-        };
-      }
-      this.scoringModal.open = true;
-    },
-
-    // rule_type 변경 시 params 초기화
-    get _scoringRuleTypeWatcher() {
-      const rt = this.scoringModal.data.rule_type;
-      return rt;
-    },
-
-    initScoringParams(rt) {
-      if (rt === 'transition')       this.scoringModal.data.params = {from:'day', to:'night'};
-      else if (rt === 'pattern')     this.scoringModal.data.params = {pattern:['work','rest_leave','work']};
-      else if (rt === 'consecutive_same') this.scoringModal.data.params = {period:'day'};
-      else if (rt === 'specific_shift')   this.scoringModal.data.params = {shift_code: this.shifts[0]?.code || 'V', condition:'all'};
-      else                           this.scoringModal.data.params = {};
-    },
-
-    async saveScoringRule() {
-      const d = this.scoringModal.data;
-      if (!d.name.trim()) { alert('규칙 이름을 입력하세요.'); return; }
-      await this.api('POST', '/api/scoring_rules', d);
-      await this.loadScoringRules();
-      this.scoringModal.open = false;
-    },
-
-    async toggleScoringRule(rule) {
-      const updated = {...rule, enabled: !rule.enabled};
-      await this.api('POST', '/api/scoring_rules', updated);
-      await this.loadScoringRules();
-    },
-
-    async deleteScoringRule(id) {
-      if (!confirm('이 배점 규칙을 삭제하시겠습니까?')) return;
-      await this.api('DELETE', `/api/scoring_rules/${id}`);
-      await this.loadScoringRules();
-    },
-
-    // ── 스케줄 생성 ──────────────────────────────────────────────────────────
-    async generate() {
-      if (this.nurses.length === 0) { alert('간호사를 먼저 등록해주세요.'); return; }
-      // 복구 폴링 정리
-      if (this._recoverPoll) { clearInterval(this._recoverPoll); this._recoverPoll = null; }
-      this.generating = true;
-      this.stopRequested = false;
-      this.mipGapPercent = null;
-      this.scheduleStopped = false;
-      this.statusMessage = '';
-      this.estimatedSeconds = 0;
-      this.generateStartTime = Date.now();
-      this.generateElapsed = 0;
-      this.generateTimer = setInterval(() => {
-        this.generateElapsed = Math.floor((Date.now() - this.generateStartTime) / 1000);
-      }, 1000);
-      this.solveProgress = { gap_percent: null, nodes: 0, has_solution: false, is_running: false };
-      this.solverLogs = [];
-      this._logSeq = 0;
-      this.sseSource = new EventSource('/api/generate/stream');
-      this.sseSource.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        if (data.type === 'log') {
-          this.solverLogs.push({ id: ++this._logSeq, msg: data.msg });
-          if (this.solverLogs.length > 300) this.solverLogs = this.solverLogs.slice(-200);
-          this.$nextTick(() => {
-            const el = document.getElementById('logPanel');
-            if (el) el.scrollTop = el.scrollHeight;
-          });
-        } else if (data.type === 'progress') {
-          this.solveProgress = data;
-        } else if (data.type === 'done') {
-          this.sseSource.close(); this.sseSource = null;
-        }
-      };
-
-      const payload = {
-        year: this.year,
-        month: this.month,
-        nurses: this.nurses,
-        requirements: this.requirements,
-        rules: this.rules,
-        prev_schedule: Object.keys(this.prevSchedule).length ? this.prevSchedule : null,
-        per_day_requirements: Object.keys(this.prevDayReqs).length ? this.prevDayReqs : null,
-        holidays: this.holidays,
-        shifts: this.shifts,
-        mip_gap: this.mipGap,
-        time_limit: this.generateTimeout * 60,
-      };
-
-      // 예상 소요시간 먼저 요청 (백그라운드, generate와 병렬)
-      this.api('POST', '/api/estimate', payload).then(est => {
-        if (est && est.estimated_seconds) this.estimatedSeconds = est.estimated_seconds;
-      }).catch(() => {});
-
-      try {
-        const result = await this.api('POST', '/api/generate', payload);
-        this.statusOk = result.success;
-        this.statusMessage = result.message;
-        if (result.success) {
-          this.schedule = result.schedule;
-          this.extendedSchedule = result.extended_schedule;
-          this.nurseScores = result.nurse_scores || {};
-          this.nurseScoreDetails = result.nurse_score_details || {};
-          this.mipGapPercent = result.mip_gap_percent !== undefined ? result.mip_gap_percent : null;
-          this.scheduleStopped = result.stopped === true;
-          this.activeTab = 'schedule';
-          if (result.stopped) {
-            this.statusMessage += '\n⏹ 중지 요청으로 탐색 종료 — 현재까지 찾은 최선의 해를 표시합니다.';
-          }
-          if (result.warning) {
-              this.statusMessage = result.warning + '\n\n' + this.statusMessage;
-              this.statusOk = false;
-          }
-        }
-      } catch(e) {
-        this.statusOk = false;
-        this.statusMessage = '서버 오류: ' + e.message;
-      } finally {
-        this.generating = false;
-        this.stopRequested = false;
-        if (this.generateTimer) { clearInterval(this.generateTimer); this.generateTimer = null; }
-        if (this.sseSource) { this.sseSource.close(); this.sseSource = null; }
-        this.generateFinalElapsed = this.generateElapsed;
-      }
-    },
-
-    async stopGenerate() {
-      if (this.stopRequested) return;
-      this.stopRequested = true;
-      if (this.generateTimer) { clearInterval(this.generateTimer); this.generateTimer = null; }
-      if (this.sseSource) { this.sseSource.close(); this.sseSource = null; }
-      try {
-        await fetch('/api/generate/stop', { method: 'POST' });
-      } catch (e) {
-        // 서버 응답 무시 — 메인 generate fetch가 완료되면 결과 처리
-      }
-    },
-
-    // ── 스케줄 표시 헬퍼 ────────────────────────────────────────────────────
-    get scheduleDays() {
-      const days = [];
-      const d = new Date(this.year, this.month - 1, 1);
-      while (d.getMonth() === this.month - 1) {
-        days.push(new Date(d));
-        d.setDate(d.getDate() + 1);
-      }
-      return days;
-    },
-    getShift(nurseId, day) {
-      const key = `${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`;
-      return (this.schedule[nurseId] && this.schedule[nurseId][key]) || '-';
-    },
-    getDayClass(day) {
-      const dow = day.getDay();
-      if (dow === 0) return 'text-red-500';
-      if (dow === 6) return 'text-blue-500';
-      return '';
-    },
-
-    // ── 주기 헬퍼 ────────────────────────────────────────────────────────────
-    // 기준일: 2026-03-01 = 1주기 시작. 7일마다 주기 전환, 4주기 후 다시 1주기.
-    _CYCLE_REF: new Date(2026, 2, 1),   // 2026-03-01 (month 0-indexed)
-
-    _daysSinceRef(day) {
-      return Math.round((day - this._CYCLE_REF) / 86400000);
-    },
-    getCycleNum(day) {
-      const d = this._daysSinceRef(day);
-      return Math.floor(((d % 28) + 28) % 28 / 7) + 1;  // 1~4 순환
-    },
-    // Alpine.js getter는 반응형이 아니라 method로 선언
-    getCycleSpans() {
-      const days = this.scheduleDays;
-      if (!days.length) return [];
-      const result = [];
-      let cur = { cycle: this.getCycleNum(days[0]), count: 0, key: days[0].getDate() };
-      for (const d of days) {
-        const c = this.getCycleNum(d);
-        if (c !== cur.cycle) {
-          result.push(cur);
-          cur = { cycle: c, count: 0, key: d.getDate() };
-        }
-        cur.count++;
-      }
-      result.push(cur);
-      return result;
-    },
-    getCycleClass(cycle) {
-      return [
-        'bg-blue-50 text-blue-700',
-        'bg-green-50 text-green-700',
-        'bg-purple-50 text-purple-700',
-        'bg-orange-50 text-orange-700',
-      ][cycle - 1];
-    },
-    isCycleStart(day) {
-      return ((this._daysSinceRef(day) % 7) + 7) % 7 === 0;
-    },
-    countShifts(nurseId, shifts) {
-      if (!this.schedule[nurseId]) return 0;
-      return Object.values(this.schedule[nurseId]).filter(v => shifts.includes(v)).length;
-    },
-    nurseScore(nurseId) {
-      return this.nurseScores[nurseId] ?? '';
-    },
-    openScoreDetail(nurse) {
-      const rows = this.nurseScoreDetails[nurse.id] || [];
-      const total = this.nurseScores[nurse.id] ?? 0;
-      this.scoreDetailModal = { open: true, nurseName: nurse.name, rows, total };
-    },
-
-    // ── 다크모드 ─────────────────────────────────────────────────────────────
-    toggleDark() {
-      this.darkMode = !this.darkMode;
-      document.documentElement.classList.toggle('dark', this.darkMode);
-      localStorage.setItem('darkMode', this.darkMode);
-    },
-    getDayDutyCount(day, shifts) {
-      if (!this.schedule || Object.keys(this.schedule).length === 0) return 0;
-      const k = this.dayKey(day);
-      return Object.values(this.schedule).filter(ns => shifts.includes(ns[k])).length;
-    },
-
-    // ── 년월 이동 ────────────────────────────────────────────────────────────
-    prevMonth() {
-      if (this.month === 1) { this.month = 12; this.year--; }
-      else this.month--;
-    },
-    nextMonth() {
-      if (this.month === 12) { this.month = 1; this.year++; }
-      else this.month++;
-    },
-
-    // ── 날짜 키 헬퍼 ──────────────────────────────────────────────────────────
-    dayKey(day) {
-      return `${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`;
-    },
-
-    // ── 결과 근무표 셀 편집 ───────────────────────────────────────────────────
-    openShiftEdit(nurse, day) {
-      this.shiftEdit = {open:true, nurse, day, dateLabel:`${day.getMonth()+1}/${day.getDate()}`, mode:'schedule'};
-    },
-
-    // ── 사전입력 셀 편집 ──────────────────────────────────────────────────────
-    openPrevEdit(nurse, day) {
-      this.shiftEdit = {open:true, nurse, day, dateLabel:`${day.getMonth()+1}/${day.getDate()}`, mode:'prev'};
-    },
-    getPrevShift(nurseId, day) {
-      const k = this.dayKey(day);
-      return this.prevSchedule[nurseId]?.[k] || '';
-    },
-    clearPrevSchedule() {
-      if (!confirm('사전입력을 모두 초기화하시겠습니까?')) return;
-      this.prevSchedule = {};
-      this.prevDayReqs = {};
-    },
-    countPrevEntries() {
-      return Object.values(this.prevSchedule).reduce((s,v) => s + Object.keys(v).length, 0);
-    },
-    countNursePrev(nurseId) {
-      return Object.keys(this.prevSchedule[nurseId] || {}).length;
-    },
-    prevInputCount() { /* 버튼 텍스트용 더미 */ },
-
-    // ── 일별 필요인원 오버라이드 ─────────────────────────────────────────────
-    getDayWeekKey(day) {
-      return ['sun','mon','tue','wed','thu','fri','sat'][day.getDay()];
-    },
-    getDefaultDayReq(day, type) {
-      const key = this.getDayWeekKey(day);
-      return (this.requirements[key] || {})[type] ?? 0;
-    },
-    getPrevDayReq(day, type) {
-      const k = this.dayKey(day);
-      const v = (this.prevDayReqs[k] || {})[type];
-      return (v !== undefined && v !== null) ? v : null;
-    },
-    setPrevDayReq(day, type, val) {
-      const k = this.dayKey(day);
-      const num = parseInt(val);
-      if (!this.prevDayReqs[k]) this.prevDayReqs[k] = {};
-      if (isNaN(num) || val === '' || val === null) {
-        delete this.prevDayReqs[k][type];
-        if (Object.keys(this.prevDayReqs[k]).length === 0) delete this.prevDayReqs[k];
-      } else {
-        this.prevDayReqs[k][type] = num;
-      }
-    },
-
-    // ── 공통 셀 편집 적용 ─────────────────────────────────────────────────────
-    applyShiftEdit(shift) {
-      const nid = this.shiftEdit.nurse.id;
-      const k   = this.dayKey(this.shiftEdit.day);
-      if (this.shiftEdit.mode === 'prev') {
-        if (shift === '__CLEAR__') {
-          if (this.prevSchedule[nid]) delete this.prevSchedule[nid][k];
-          this.shiftEdit.open = false;
-        } else if (shift === '주') {
-          // 주휴 자동배분: 현재 주기 기준으로 나머지 주기 자동 계산
-          this.autoFillJuhu(this.shiftEdit.nurse, this.shiftEdit.day);
-          // autoFillJuhu 내에서 모달 닫음
-        } else {
-          if (!this.prevSchedule[nid]) this.prevSchedule[nid] = {};
-          this.prevSchedule[nid][k] = shift;
-          this.shiftEdit.open = false;
-        }
-      } else {
-        if (!this.schedule[nid]) this.schedule[nid] = {};
-        this.schedule[nid][k] = shift;
-        this.shiftEdit.open = false;
-      }
-    },
-
-    // ── 법정공휴일 지정/해제 (날짜 헤더 우클릭) ──────────────────────────────
-    isHoliday(day) {
-      return this.holidays.includes(this.dayKey(day));
-    },
-    markHoliday(day) {
-      const k = this.dayKey(day);
-      const dn = ['일','월','화','수','목','금','토'];
-      const label = `${day.getMonth()+1}/${day.getDate()}(${dn[day.getDay()]})`;
-      if (this.isHoliday(day)) {
-        if (!confirm(`${label} 법정공휴일 지정을 해제합니다. 계속하시겠습니까?`)) return;
-        this.holidays = this.holidays.filter(h => h !== k);
-      } else {
-        if (!confirm(`${label}을(를) 법정공휴일로 지정합니다.\n이 날에 각 간호사에게 개별적으로 '법'을 배정할 수 있습니다. 계속하시겠습니까?`)) return;
-        this.holidays.push(k);
-      }
-    },
-
-    // ── 주휴 자동배분 ─────────────────────────────────────────────────────────
-    // 규칙: 4주기(28일) 블록 안에서는 매주 같은 요일, 블록이 넘어가면 1일 당김
-    // 예) 3월 1주기~4주기: 월요일 → 3월 29일(1주기, 새 블록): 일요일
-    autoFillJuhu(nurse, baseDay) {
-      const nid = nurse.id;
-      const dayNames = ['일','월','화','수','목','금','토'];
-
-      // 기준 week index, period, 요일
-      const baseWi     = Math.floor(this._daysSinceRef(baseDay) / 7);
-      const basePeriod = Math.floor(baseWi / 4);   // 28일 블록 번호
-      const W          = baseDay.getDay();          // 기준 요일 (0=일~6=토)
-
-      // 이번 달의 각 week에 대해 기대 요일 계산
-      const seen = new Set();
-      const toFill = [];
-
-      for (const d of this.scheduleDays) {
-        const wi = Math.floor(this._daysSinceRef(d) / 7);
-        if (seen.has(wi)) continue;
-        seen.add(wi);
-
-        const period    = Math.floor(wi / 4);
-        // 블록이 넘어갈 때마다 1일 당김 (같은 블록 내에서는 동일 요일 유지)
-        const expectedW = ((W - (period - basePeriod)) % 7 + 7) % 7;
-
-        const match = this.scheduleDays.find(day =>
-          Math.floor(this._daysSinceRef(day) / 7) === wi && day.getDay() === expectedW
-        );
-        if (match) toFill.push({ day: match, cycle: (wi % 4) + 1, dow: expectedW });
-      }
-
-      toFill.sort((a, b) => a.day - b.day);
-      const preview = toFill
-        .map(f => `${f.cycle}주기: ${f.day.getDate()}일(${dayNames[f.dow]})`)
-        .join('\n');
-
-      if (!confirm(`${nurse.name}의 주휴를 아래와 같이 입력합니다:\n\n${preview}\n\n이미 입력된 날은 덮어씁니다. 계속하시겠습니까?`)) {
-        this.shiftEdit.open = false;
-        return;
-      }
-
-      if (!this.prevSchedule[nid]) this.prevSchedule[nid] = {};
-      for (const { day } of toFill) {
-        this.prevSchedule[nid][this.dayKey(day)] = '주';
-      }
-      this.shiftEdit.open = false;
-    },
-
-    // ── 다음 달 사전입력 넘기기 ──────────────────────────────────────────────
-    hasNextMonthData() {
-      if (!this.extendedSchedule || !Object.keys(this.extendedSchedule).length) return false;
-      const nextYear  = this.month === 12 ? this.year + 1 : this.year;
-      const nextMonth = this.month === 12 ? 1 : this.month + 1;
-      const prefix = `${nextYear}-${String(nextMonth).padStart(2,'0')}-`;
-      return Object.values(this.extendedSchedule).some(days =>
-        Object.keys(days).some(k => k.startsWith(prefix))
-      );
-    },
-    carryOverToNextMonth() {
-      const nextYear  = this.month === 12 ? this.year + 1 : this.year;
-      const nextMonth = this.month === 12 ? 1 : this.month + 1;
-      const prefix = `${nextYear}-${String(nextMonth).padStart(2,'0')}-`;
-      let count = 0;
-      for (const [nid, days] of Object.entries(this.extendedSchedule)) {
-        for (const [dateStr, shift] of Object.entries(days)) {
-          if (!dateStr.startsWith(prefix)) continue;
-          if (!this.prevSchedule[nid]) this.prevSchedule[nid] = {};
-          this.prevSchedule[nid][dateStr] = shift;
-          count++;
-        }
-      }
-      if (count === 0) { alert('다음 달로 넘길 데이터가 없습니다.'); return; }
-      this.year  = nextYear;
-      this.month = nextMonth;
-      this.activeTab = 'preinput';
-      alert(`${nextYear}년 ${nextMonth}월 사전입력에 ${count}건이 추가되었습니다.\n사전입력 탭에서 확인하세요.`);
-    },
-
-    // ── 저장/불러오기 ────────────────────────────────────────────────────────
-    async saveSchedule() {
-      const name = prompt('저장 이름을 입력하세요 (선택)', `${this.year}년 ${this.month}월`);
-      if (name === null) return;
-      await this.api('POST', '/api/schedules', {
-        year: this.year,
-        month: this.month,
-        nurses: this.nurses,
-        requirements: this.requirements,
-        rules: this.rules,
-        schedule: this.schedule,
-        name: name || null,
-      });
-      await this.loadSavedList();
-      alert('저장되었습니다.');
-    },
-    async loadSavedList() {
-      this.savedSchedules = await this.api('GET', '/api/schedules');
-    },
-    async loadSaved(id) {
-      const data = await this.api('GET', `/api/schedules/${id}`);
-      this.year  = data.data.year || data.year;
-      this.month = data.data.month || data.month;
-      this.nurses = data.data.nurses || [];
-      this.requirements = data.data.requirements || this.requirements;
-      this.rules = data.data.rules || this.rules;
-      this.schedule = data.data.schedule || {};
-      this.activeTab = 'schedule';
-    },
-    async deleteSaved(id) {
-      if (!confirm('삭제하시겠습니까?')) return;
-      await this.api('DELETE', `/api/schedules/${id}`);
-      await this.loadSavedList();
-    },
-
-    // ── 사전입력 저장/불러오기 ──────────────────────────────────────────────
-    async loadPrevSavesList() {
-      this.prevSaves = await this.api('GET', '/api/prev_schedules');
-    },
-    async savePrevToServer() {
-      const name = this.prevSaveName.trim() || `${this.year}년 ${this.month}월 사전입력`;
-      if (!Object.keys(this.prevSchedule).some(k => Object.keys(this.prevSchedule[k]).length > 0)) {
-        alert('저장할 사전입력 데이터가 없습니다.');
-        return;
-      }
-      await this.api('POST', '/api/prev_schedules', {
-        year: this.year,
-        month: this.month,
-        name,
-        data: {
-          schedule: this.prevSchedule,
-          day_reqs: this.prevDayReqs,
-        },
-      });
-      this.prevSaveName = '';
-      await this.loadPrevSavesList();
-    },
-    async loadPrevFromServer(id) {
-      const result = await this.api('GET', `/api/prev_schedules/${id}`);
-      this.year = result.year;
-      this.month = result.month;
-      // 신규 형식: {schedule, day_reqs} / 구 형식: {nurse_id: {date: shift}}
-      if (result.data && result.data.schedule !== undefined) {
-        this.prevSchedule = result.data.schedule;
-        this.prevDayReqs = result.data.day_reqs || {};
-      } else {
-        this.prevSchedule = result.data;
-        this.prevDayReqs = {};
-      }
-      this.prevSavePanel = false;
-    },
-    async deletePrevSave(id) {
-      if (!confirm('삭제하시겠습니까?')) return;
-      await this.api('DELETE', `/api/prev_schedules/${id}`);
-      await this.loadPrevSavesList();
-    },
-  };
-}
-</script>
 </body>
 </html>
