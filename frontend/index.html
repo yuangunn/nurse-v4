@@ -263,6 +263,11 @@
     <span class="text-xs font-mono w-8" x-text="generateTimeout+'분'"></span>
     <div class="flex gap-1"><template x-for="v in [5,10,20,60]" :key="v"><button @click="generateTimeout=v" :class="generateTimeout===v?'btn-primary':'btn-ghost'" class="btn btn-xs" x-text="v+'분'"></button></template></div>
   </div>
+  <div class="flex items-center gap-3 text-xs mb-3 flex-wrap">
+    <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="allowPreRelax"/><span class="text-dim">사전입력 완화</span></label>
+    <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="unlimitedV"/><span class="text-dim">V 무제한</span></label>
+    <span x-show="unlimitedV" class="text-xs text-dim">(번표 생성이 안 될 때 사용 — V 사용 시 큰 감점 적용)</span>
+  </div>
   <!-- 생성 중 -->
   <div x-show="generating" x-cloak class="card-sm mb-3" style="border-color:rgba(33,150,243,0.1)">
     <div class="flex items-center justify-between mb-1.5 text-xs">
@@ -321,7 +326,7 @@
       </thead>
       <tbody><template x-for="nurse in nurses" :key="nurse.id"><tr class="hover:bg-white/[0.015]">
         <td class="g-cell name-cell"><span class="nurse-name" x-text="nurse.name"></span> <span class="nurse-group" x-text="nurse.group"></span></td>
-        <template x-for="day in scheduleDays" :key="day"><td class="g-cell p-0" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'']" :style="getShift(nurse.id,day)!=='-'?getShiftStyle(getShift(nurse.id,day)):{}"><span class="schedule-cell-text block" x-text="getShift(nurse.id,day)!=='-'?getShift(nurse.id,day):''" @click="openShiftEdit(nurse,day)"></span></td></template>
+        <template x-for="day in scheduleDays" :key="day"><td class="g-cell p-0" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',isRelaxed(nurse.id,day)?'g-relaxed':'',getScheduleCellClass(nurse.id,day)]"><span class="schedule-cell-text block" x-text="getShift(nurse.id,day)!=='-'?getShift(nurse.id,day):''" @click="openShiftEdit(nurse,day)"></span></td></template>
         <td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['DC','D'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['EC','E'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['NC','N'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['OF','주'])"></td>
         <td class="g-cell px-1 py-0.5 text-center text-pink" x-text="countShifts(nurse.id,['생'])||''"></td>
         <td class="g-cell px-1 py-0.5 text-center font-semibold cursor-pointer select-none text-blue" @click="openScoreDetail(nurse)" x-text="nurseScore(nurse.id)"></td>

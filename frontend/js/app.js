@@ -30,7 +30,7 @@ function app() {
     generating:false, generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,
     generateTimer:null, sseSource:null, solverLogs:[], showLogPanel:true,
     solveProgress:{gap_percent:null,nodes:0,has_solution:false,is_running:false},
-    stopRequested:false, mipGap:0.02, generateTimeout:20,
+    stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, unlimitedV:false, relaxedCells:{},
     mipGapPercent:null, scheduleStopped:false, estimatedSeconds:0,
     statusMessage:'', statusOk:true, savedSchedules:[],
     darkMode: localStorage.getItem('darkMode')==='true',
@@ -77,6 +77,7 @@ function app() {
       return days;
     },
     isOverflow(day){return day.getMonth()!==this.month-1||day.getFullYear()!==this.year},
+    isRelaxed(nurseId,day){return !!(this.relaxedCells[nurseId]&&this.relaxedCells[nurseId][this.dayKey(day)])},
 
     // ── init ──────────────────────────────────────────────────
     async init(){
@@ -112,7 +113,7 @@ function app() {
           },2000);
         }else if(res.status==='done'&&res.result){
           const result=res.result;this.statusOk=result.success;this.statusMessage=result.message+'\n(이전 생성 결과 복원됨)';
-          if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.activeTab='schedule'}
+          if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.activeTab='schedule'}
         }
       }catch(e){}
     },
@@ -149,6 +150,17 @@ function app() {
       const s=this.shifts.find(x=>x.code===code);if(!s)return {};
       if(!this.darkMode)return{background:s.color_bg,color:s.color_text};
       return{background:this._shiftGlassBg(s.color_bg),color:this._shiftGlassText(s.color_text)};
+    },
+    // 스케줄 탭용: 근무=파란, 휴무=회색, 사전입력=노란 배경
+    getScheduleCellClass(nurseId, day){
+      const k=this.dayKey(day);const shift=this.schedule?.[nurseId]?.[k];
+      if(!shift||shift==='-')return '';
+      const isPre=!!(this.prevSchedule[nurseId]&&this.prevSchedule[nurseId][k]);
+      if(isPre)return 'g-cell-pre';
+      const s=this.shifts.find(x=>x.code===shift);
+      if(!s)return '';
+      if(s.period==='rest'||s.period==='leave')return 'g-cell-rest';
+      return 'g-cell-work';
     },
     _hexToHsl(hex){
       if(!hex||!hex.startsWith('#')||hex.length<7)return[0,0,50];
@@ -227,7 +239,7 @@ function app() {
         else if(data.type==='progress')this.solveProgress=data;
         else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
       };
-      const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60};
+      const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60,allow_pre_relax:this.allowPreRelax,unlimited_v:this.unlimitedV};
       this.api('POST','/api/estimate',payload).then(est=>{if(est&&est.estimated_seconds)this.estimatedSeconds=est.estimated_seconds}).catch(()=>{});
       try{
         const result=await this.api('POST','/api/generate',payload);
@@ -276,7 +288,7 @@ function app() {
     openShiftEdit(nurse,day){this.shiftEdit={open:true,nurse,day,dateLabel:`${day.getMonth()+1}/${day.getDate()}`,mode:'schedule'}},
     openPrevEdit(nurse,day){this.shiftEdit={open:true,nurse,day,dateLabel:`${day.getMonth()+1}/${day.getDate()}`,mode:'prev'}},
     getPrevShift(nurseId,day){return this.prevSchedule[nurseId]?.[this.dayKey(day)]||''},
-    clearPrevSchedule(){if(!confirm('사전입력을 모두 초기화하시겠습니까?'))return;this.prevSchedule={};this.prevDayReqs={}},
+    clearPrevSchedule(){if(!confirm(`${this.year}년 ${this.month}월 사전입력을 초기화하시겠습니까?`))return;const prefix=`${this.year}-${String(this.month).padStart(2,'0')}-`;for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(k.startsWith(prefix))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(!k.startsWith(prefix))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>!h.startsWith(prefix))},
     countPrevEntries(){return Object.values(this.prevSchedule).reduce((s,v)=>s+Object.keys(v).length,0)},
     countNursePrev(nurseId){return Object.keys(this.prevSchedule[nurseId]||{}).length},
 

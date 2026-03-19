@@ -90,6 +90,8 @@ class GenerateRequest(BaseModel):
     prev_month_nights: Optional[Dict[str, int]] = None  # {nurse_id: 이전달 야간횟수} (홀짝월 합산용)
     mip_gap: float = 0.02  # MIP 오차 허용 범위 (0=완벽한 최적해, 0.02=2% 오차허용 조기종료)
     time_limit: int = 1200  # 솔버 타임리밋 (초, 기본 20분)
+    allow_pre_relax: bool = False  # infeasible 시 사전입력 완화 허용
+    unlimited_v: bool = False  # V 무제한 모드 (해를 못 찾을 때 사용)
 
 
 class ScheduleSave(BaseModel):

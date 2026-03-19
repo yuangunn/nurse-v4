@@ -54,6 +54,8 @@ class NurseScheduler:
         # 법정공휴일: 당월 날짜만 필터링 (다른 달 공휴일은 무시)
         month_prefix = f"{self.year}-{self.month:02d}-"
         self.holidays = set(h for h in (request.holidays or []) if h.startswith(month_prefix))
+        self.allow_pre_relax = request.allow_pre_relax
+        self.unlimited_v = request.unlimited_v
 
         # ── 근무 정의 → 카테고리 리스트 동적 구성 ─────────────────────────────
         shifts = [s.model_dump() for s in request.shifts] if request.shifts else []
@@ -82,6 +84,13 @@ class NurseScheduler:
         ]
 
         self._build_date_range()
+
+        # prev_schedule을 스케줄 범위(all_dates)로 필터링 — 범위 밖 날짜 무시
+        valid_dates = set(dt.strftime("%Y-%m-%d") for dt in self.all_dates)
+        self.prev = {
+            nid: {dt: s for dt, s in days.items() if dt in valid_dates}
+            for nid, days in self.prev.items()
+        }
 
     # ── 날짜 범위 계산 ────────────────────────────────────────────────────────
 
@@ -316,6 +325,11 @@ class NurseScheduler:
                 "estimated_seconds": self.estimate_seconds(),
             }
         elif status_str == "Infeasible":
+            # ── 사전입력 완화 재시도 ────────────────────────────────────
+            if self.allow_pre_relax and self.prev:
+                relax_result = self._solve_with_relaxed_pre()
+                if relax_result:
+                    return relax_result
             # 즉시 판정된 Infeasible → 진단 실행 (각 단계 10초 이내)
             diagnosis = self._diagnose_infeasibility()
             return {
@@ -326,6 +340,10 @@ class NurseScheduler:
             }
         else:
             # Not Solved = 타임아웃 또는 해 없이 중단
+            if self.allow_pre_relax and self.prev:
+                relax_result = self._solve_with_relaxed_pre()
+                if relax_result:
+                    return relax_result
             return {
                 "success": False,
                 "schedule": {},
@@ -338,6 +356,139 @@ class NurseScheduler:
                     "  · 사전 고정된 V/생 요청이 특정 날짜에 몰려 있지 않은지 확인하세요."
                 ),
             }
+
+    # ── 사전입력 완화 재시도 ──────────────────────────────────────────────────
+
+    def _solve_with_relaxed_pre(self) -> Optional[Dict]:
+        """
+        사전입력을 소프트 제약(큰 보너스)으로 전환하여 재시도.
+        성공 시 relaxed_cells 포함 결과 반환, 실패 시 None.
+        """
+        prob = pulp.LpProblem("nurse_schedule_relaxed", pulp.LpMaximize)
+        pre_bonus_terms = []
+        PRE_BONUS = 2000  # 사전입력 유지 보너스 (매우 큼)
+
+        x: Dict[str, Dict[int, Dict[str, pulp.LpVariable]]] = {}
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            x[nid] = {}
+            for d in range(self.T):
+                dt = self.all_dates[d]
+                dt_str = dt.strftime("%Y-%m-%d")
+                x[nid][d] = {}
+                pre = self.prev.get(nid, {}).get(dt_str)
+                for s in self.ALL_SHIFTS:
+                    # 주휴는 절대 변경 불가 — relaxed에서도 하드 고정
+                    if pre == "주":
+                        x[nid][d][s] = pulp.LpVariable(
+                            f"r_{nid}_{d}_{s}",
+                            lowBound=(1 if s == "주" else 0),
+                            upBound=(1 if s == "주" else 0),
+                            cat="Integer"
+                        )
+                        continue
+                    # 법/생/V/성별/auto_assign 차단은 그대로 유지
+                    if s == "법" and nurse.get("is_night_shift"):
+                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
+                    elif s == "법" and dt_str not in self.holidays:
+                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
+                    elif s == "법" and dt_str in self.holidays:
+                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+                    elif s in ("생", "V") and dt_str in self.holidays and not nurse.get("is_night_shift"):
+                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
+                    elif s not in self.SOLVER_SHIFTS and s != "법":
+                        # 사전입력 전용 근무도 relaxed 모드에서는 사전입력된 것만 허용
+                        if pre and s == pre:
+                            x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+                        else:
+                            x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
+                    elif s == "생" and nurse.get("gender") != "female":
+                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
+                    else:
+                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+
+                # 사전입력 보너스 (소프트: 유지하면 +PRE_BONUS)
+                if pre:
+                    pre_flex = self._PRE_FLEX.get(pre, {pre})
+                    for s in pre_flex:
+                        if s in x[nid][d] and x[nid][d][s].upBound != 0:
+                            pre_bonus_terms.append(PRE_BONUS * x[nid][d][s])
+
+        # 제약 (동일)
+        self._c_one_shift_per_day(prob, x)
+        self._c_shift_eligibility(prob, x)
+        self._c_daily_requirements(prob, x)
+        self._c_charge_requirements(prob, x)
+        self._c_charge_seniority(prob, x)
+        self._c_forbidden_transitions(prob, x)
+        if self.rules.noNOD:
+            self._c_nod_pattern(prob, x)
+        if self.rules.weeklyOff:
+            self._c_weekly_off(prob, x)
+        if self.rules.maxConsecutiveWork:
+            self._c_max_consecutive_work(prob, x, self.rules.maxConsecutiveWorkDays)
+        if self.rules.maxConsecutiveNight:
+            self._c_max_consecutive_night(prob, x, self.rules.maxConsecutiveNightDays)
+        self._c_max_v_per_month(prob, x)
+        if self.rules.maxNightPerMonth:
+            self._c_max_night_per_month(prob, x)
+        if self.rules.maxNightTwoMonth:
+            self._c_max_night_two_month(prob, x)
+        self._c_menstrual_leave(prob, x)
+        self._c_night_shift_nurses(prob, x)
+
+        # 목적함수: 기본 배점 + 사전입력 유지 보너스
+        obj = self._build_objective(prob, x)
+        prob += obj + pulp.lpSum(pre_bonus_terms)
+
+        solver = pulp.HiGHS(timeLimit=self.time_limit, mip_rel_gap=self.mip_gap, msg=False)
+        try:
+            prob.solve(solver)
+        except Exception:
+            pass
+
+        status_str = pulp.constants.LpStatus.get(prob.status, "Unknown")
+        has_solution = any(
+            v.varValue is not None and v.varValue > 0.5
+            for v in prob.variables() if v.name.startswith("r_")
+        )
+
+        if status_str in ("Optimal", "Feasible") or (has_solution and status_str != "Infeasible"):
+            schedule, extended = self._extract_solution(x)
+            nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
+
+            # 사전입력과 다르게 배정된 셀 찾기
+            relaxed_cells: Dict[str, Dict[str, Dict[str, str]]] = {}
+            for nid, days in self.prev.items():
+                for dt_str, pre_shift in days.items():
+                    assigned = schedule.get(nid, {}).get(dt_str)
+                    if assigned and assigned != pre_shift:
+                        # D→DC 등 PRE_FLEX 내 변환은 relaxed로 안 봄
+                        pre_flex = self._PRE_FLEX.get(pre_shift, {pre_shift})
+                        if assigned not in pre_flex:
+                            if nid not in relaxed_cells:
+                                relaxed_cells[nid] = {}
+                            relaxed_cells[nid][dt_str] = {
+                                "original": pre_shift,
+                                "assigned": assigned,
+                            }
+
+            label = "중지" if status_str not in ("Optimal", "Feasible") else status_str
+            relax_count = sum(len(v) for v in relaxed_cells.values())
+            return {
+                "success": True,
+                "schedule": schedule,
+                "extended_schedule": extended,
+                "nurse_scores": nurse_scores,
+                "nurse_score_details": nurse_score_details,
+                "relaxed_cells": relaxed_cells,
+                "message": (
+                    f"근무표가 생성되었습니다. (상태: {label})\n"
+                    f"⚠ 사전입력 완화: {relax_count}건의 사전입력이 변경되었습니다."
+                ),
+                "estimated_seconds": self.estimate_seconds(),
+            }
+        return None
 
     # ── Hard Constraint 구현 ──────────────────────────────────────────────────
 
@@ -570,12 +721,13 @@ class NurseScheduler:
                 )
 
     def _c_max_v_per_month(self, prob, x):
-        """V(연차) 당월 최대 사용 횟수 (hard constraint) + 익월에서 V 사용 금지"""
+        """V(연차) 당월 최대 사용 횟수 (hard constraint) + 익월에서 V 사용 금지
+        unlimited_v=True일 때는 당월 V 상한 제거 (목적함수 페널티로 대체)"""
         max_v = self.rules.maxVPerMonth
         for nurse in self.nurses:
             nid = nurse["id"]
-            # 당월 V 제한
-            if max_v > 0:
+            # 당월 V 제한 (unlimited_v면 상한 제거)
+            if max_v > 0 and not self.unlimited_v:
                 v_vars = [
                     x[nid][d]["V"]
                     for d, dt in enumerate(self.all_dates)
@@ -640,7 +792,7 @@ class NurseScheduler:
             nid = nurse["id"]
             if nurse.get("gender") != "female":
                 continue
-            # 당월만 최대 1회
+            # 당월만 최대 1회 (항상 하드 제약)
             month_vars = [x[nid][d]["생"] for d, dt in enumerate(self.all_dates)
                           if dt.month == self.month and dt.year == self.year]
             if month_vars:
@@ -923,6 +1075,43 @@ class NurseScheduler:
                 nid = nurse["id"]
                 for d in overflow_days:
                     terms.append(-500 * x[nid][d]["V"])
+
+        # ── V 무제한 모드: 점진적 페널티 (1번째 -500, 2번째 -1000, 3번째+ -5000) ──
+        if self.unlimited_v and "V" in self.ALL_SHIFTS:
+            for nurse in self.nurses:
+                nid = nurse["id"]
+                v_month = [x[nid][d]["V"] for d, dt in enumerate(self.all_dates)
+                           if dt.month == self.month and dt.year == self.year]
+                if not v_month:
+                    continue
+                v_total = pulp.lpSum(v_month)
+                # v2 = max(0, v_total - 1): 2번째 이상 V 수
+                v2 = pulp.LpVariable(f"v2_{nid}", lowBound=0, cat="Integer")
+                prob += v2 >= v_total - 1, f"v2_ge_{nid}"
+                # v3 = max(0, v_total - 2): 3번째 이상 V 수
+                v3 = pulp.LpVariable(f"v3_{nid}", lowBound=0, cat="Integer")
+                prob += v3 >= v_total - 2, f"v3_ge_{nid}"
+                # 1번째: -500 (기존 specific_shift 규칙에서 처리)
+                # 2번째: 추가 -500 (총 -1000)
+                terms.append(-500 * v2)
+                # 3번째+: 추가 -4000 (총 -5000)
+                terms.append(-4000 * v3)
+
+        # ── 생리휴가 2회 이상 방지 페널티 (항상 적용, 하드제약 <= 1과 별개 안전장치) ──
+        if "생" in self.ALL_SHIFTS:
+            for nurse in self.nurses:
+                if nurse.get("gender") != "female":
+                    continue
+                nid = nurse["id"]
+                m_vars = [x[nid][d]["생"] for d, dt in enumerate(self.all_dates)
+                          if dt.month == self.month and dt.year == self.year]
+                if not m_vars:
+                    continue
+                m_total = pulp.lpSum(m_vars)
+                m2 = pulp.LpVariable(f"m2_{nid}", lowBound=0, cat="Integer")
+                prob += m2 >= m_total - 1, f"m2_ge_{nid}"
+                # 2회부터: -20000 (1회 +100 보상 대비 압도적 감점)
+                terms.append(-20100 * m2)
 
         return pulp.lpSum(terms)
 
