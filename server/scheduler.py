@@ -51,7 +51,9 @@ class NurseScheduler:
         self.prev_month_nights = request.prev_month_nights or {}
         self.mip_gap = request.mip_gap
         self.time_limit = request.time_limit
-        self.holidays = set(request.holidays or [])  # 법정공휴일 날짜 set (YYYY-M-D)
+        # 법정공휴일: 당월 날짜만 필터링 (다른 달 공휴일은 무시)
+        month_prefix = f"{self.year}-{self.month:02d}-"
+        self.holidays = set(h for h in (request.holidays or []) if h.startswith(month_prefix))
 
         # ── 근무 정의 → 카테고리 리스트 동적 구성 ─────────────────────────────
         shifts = [s.model_dump() for s in request.shifts] if request.shifts else []
@@ -85,6 +87,16 @@ class NurseScheduler:
 
     # 주기 기준일 (2026-03-01 = 1주기 시작)
     _CYCLE_REF = date(2026, 3, 1)
+
+    # 사전입력 유연화: D→D/DC, E→E/EC, N→N/NC (Charge 자동 배정 허용)
+    _PRE_FLEX = {
+        "D":  {"D", "DC"},
+        "DC": {"D", "DC"},
+        "E":  {"E", "EC"},
+        "EC": {"E", "EC"},
+        "N":  {"N", "NC"},
+        "NC": {"N", "NC"},
+    }
 
     def _cycle_day_offset(self, d: date) -> int:
         """기준일로부터의 일수 (주기 계산용)"""
@@ -187,15 +199,18 @@ class NurseScheduler:
                 dt_str = dt.strftime("%Y-%m-%d")
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
+                pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 for s in self.ALL_SHIFTS:
                     if pre:
-                        # 사전입력 고정: 해당 근무만 1, 나머지 0
-                        x[nid][d][s] = pulp.LpVariable(
-                            f"x_{nid}_{d}_{s}",
-                            lowBound=(1 if s == pre else 0),
-                            upBound=(1 if s == pre else 0),
-                            cat="Integer"
-                        )
+                        if s in pre_flex:
+                            # 사전입력과 같은 시간대: 솔버가 일반/Charge 선택 가능
+                            x[nid][d][s] = pulp.LpVariable(f"x_{nid}_{d}_{s}", cat="Binary")
+                        else:
+                            x[nid][d][s] = pulp.LpVariable(
+                                f"x_{nid}_{d}_{s}",
+                                lowBound=0, upBound=0,
+                                cat="Integer"
+                            )
                     elif s == "법" and nurse.get("is_night_shift"):
                         # 야간전담 간호사에게 법정공휴일 휴가 배정 불가
                         x[nid][d][s] = pulp.LpVariable(
@@ -365,16 +380,17 @@ class NurseScheduler:
             "E": self.EVENING_SHIFTS + self.MIDDLE_SHIFTS,
             "N": self.NIGHT_SHIFTS,
         }
+        first_of_month = date(self.year, self.month, 1)
         for d, dt in enumerate(self.all_dates):
+            # 이전달 overflow는 인원 제약 skip
+            if dt < first_of_month:
+                continue
             date_key = dt.strftime('%Y-%m-%d')
             weekday_key = WEEKDAY_KEYS[dt.weekday()]
-            # 당월: 기본값 + 사전입력 오버라이드 병합, 익월: 기본 요일별 요구사항
             base_req = req_dict.get(weekday_key, {})
-            override = self.per_day_req.get(date_key, {}) if (dt.month == self.month and dt.year == self.year) else {}
-            if override:
-                day_req = {**base_req, **override}  # 기본값 위에 오버라이드 덮어쓰기
-            else:
-                day_req = base_req
+            is_cur = (dt.month == self.month and dt.year == self.year)
+            override = self.per_day_req.get(date_key, {}) if is_cur else {}
+            day_req = {**base_req, **override} if override else base_req
             for period, shifts in period_map.items():
                 required = day_req.get(period, 0)
                 if required <= 0:
@@ -393,11 +409,16 @@ class NurseScheduler:
         # period → 요구사항 키 매핑 (day/day1 모두 "D" 요구사항에 포함)
         period_to_req = {"day": "D", "evening": "E", "night": "N"}
         charge_shifts = [s for s in self._shifts if s["is_charge"]]
+        first_of_month = date(self.year, self.month, 1)
         for d, dt in enumerate(self.all_dates):
+            # 이전달 overflow는 charge 제약 skip
+            if dt < first_of_month:
+                continue
             date_key = dt.strftime('%Y-%m-%d')
             weekday_key = WEEKDAY_KEYS[dt.weekday()]
             base_req = req_dict.get(weekday_key, {})
-            override = self.per_day_req.get(date_key, {}) if (dt.month == self.month and dt.year == self.year) else {}
+            is_cur = (dt.month == self.month and dt.year == self.year)
+            override = self.per_day_req.get(date_key, {}) if is_cur else {}
             day_req = {**base_req, **override} if override else base_req
             for s in charge_shifts:
                 req_key = period_to_req.get(s["period"])
@@ -504,18 +525,25 @@ class NurseScheduler:
         각 완전한 주에 OF 1개.
         주휴(주)는 사전입력 전용이므로 솔버 제약 없음.
         야간전담 간호사는 OF 무제한.
+        이전달 overflow 날짜는 제외 (다른 달 야간전담 상태의 사전입력이 있을 수 있음).
         """
         of_code = "OF"
         if of_code not in self.SOLVER_SHIFTS:
             return
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             is_night = nurse.get("is_night_shift", False)
             if is_night:
                 continue
             for ws, we in self.weeks:
+                # 이전달 overflow 제외: 당월 이후 날짜만으로 OF 카운트
+                week_days = [d for d in range(ws, we + 1)
+                             if self.all_dates[d] >= first_of_month]
+                if not week_days:
+                    continue
                 prob += (
-                    pulp.lpSum(x[nid][d][of_code] for d in range(ws, we + 1)) == 1,
+                    pulp.lpSum(x[nid][d][of_code] for d in week_days) == 1,
                     f"weekly_of_{nid}_{ws}"
                 )
 
@@ -555,11 +583,20 @@ class NurseScheduler:
                 ]
                 if v_vars:
                     prob += pulp.lpSum(v_vars) <= max_v, f"max_v_{nid}"
-            # 익월 날짜에서 V 사용 금지
+            # 이전달 overflow: V 금지
+            first_of_month = date(self.year, self.month, 1)
             for d, dt in enumerate(self.all_dates):
-                if dt.month != self.month or dt.year != self.year:
+                if dt < first_of_month:
                     if "V" in self.ALL_SHIFTS:
                         prob += x[nid][d]["V"] == 0, f"no_v_overflow_{nid}_{d}"
+            # 이후달 overflow: V 최대 1회
+            next_v_vars = [
+                x[nid][d]["V"]
+                for d, dt in enumerate(self.all_dates)
+                if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month
+            ]
+            if next_v_vars:
+                prob += pulp.lpSum(next_v_vars) <= 1, f"max_v_next_{nid}"
 
     def _c_max_night_per_month(self, prob, x):
         """월 최대 야간 횟수 제한 (수면OFF 최소화) — 야간전담 제외"""
@@ -608,10 +645,19 @@ class NurseScheduler:
                           if dt.month == self.month and dt.year == self.year]
             if month_vars:
                 prob += pulp.lpSum(month_vars) <= 1, f"menstrual_{nid}"
-            # 익월에서 생 금지
+            # 이전달 overflow: 생 금지
+            first_of_month = date(self.year, self.month, 1)
             for d, dt in enumerate(self.all_dates):
-                if dt.month != self.month or dt.year != self.year:
+                if dt < first_of_month:
                     prob += x[nid][d]["생"] == 0, f"no_menstrual_overflow_{nid}_{d}"
+            # 이후달 overflow: 생 최대 1회
+            next_m_vars = [
+                x[nid][d]["생"]
+                for d, dt in enumerate(self.all_dates)
+                if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month
+            ]
+            if next_m_vars:
+                prob += pulp.lpSum(next_m_vars) <= 1, f"max_menstrual_next_{nid}"
 
     def _c_night_shift_nurses(self, prob, x):
         """
@@ -629,7 +675,8 @@ class NurseScheduler:
 
         import calendar
         month_days = calendar.monthrange(self.year, self.month)[1]
-        month_idxs = [d for d, dt in enumerate(self.all_dates) if dt.month == self.month]
+        month_idxs = [d for d, dt in enumerate(self.all_dates)
+                      if dt.month == self.month and dt.year == self.year]
 
         # 야간 제외 근무 코드 목록 (휴무·휴가 제외, 근무 shift만)
         non_night_work = [
@@ -640,18 +687,19 @@ class NurseScheduler:
         for nurse in night_nurses:
             nid = nurse["id"]
 
-            # ── 1. N/NC 외 모든 근무 금지 ─────────────────────────────────
-            for d in range(self.T):
+            # ── 1. N/NC 외 모든 근무 금지 (당월만, overflow 제외) ──────────
+            for d in month_idxs:
                 for s in non_night_work:
                     if s in x[nid][d]:
                         prob += x[nid][d][s] == 0, f"night_only_{nid}_{d}_{s}"
 
-            # ── 2. 5일 윈도우 <= 3 (3연속+2휴무 보장) ────────────────────
-            for start in range(self.T - 4):
+            # ── 2. 5일 윈도우 <= 3 (당월 범위만) ─────────────────────────
+            for start in range(month_idxs[0], month_idxs[-1] - 3):
                 prob += (
                     pulp.lpSum(
                         x[nid][d][s]
                         for d in range(start, start + 5)
+                        if d < self.T
                         for s in self.NIGHT_SHIFTS
                     ) <= 3,
                     f"night_5day_{nid}_{start}",
@@ -866,6 +914,16 @@ class NurseScheduler:
                             if dt.strftime("%Y-%m-%d") in self.holidays:
                                 terms.append(sc * x[nid][d]["OF"])
 
+        # ── 이후달 overflow V 사용 페널티 (scoring_rules 무관, 항상 적용) ────
+        first_of_month = date(self.year, self.month, 1)
+        overflow_days = [d for d, dt in enumerate(self.all_dates)
+                         if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month]
+        if overflow_days and "V" in self.ALL_SHIFTS:
+            for nurse in self.nurses:
+                nid = nurse["id"]
+                for d in overflow_days:
+                    terms.append(-500 * x[nid][d]["V"])
+
         return pulp.lpSum(terms)
 
     def _compute_nurse_scores(self, schedule: Dict):
@@ -1056,15 +1114,14 @@ class NurseScheduler:
                 for d in range(self.T):
                     dt_str = self.all_dates[d].strftime("%Y-%m-%d")
                     pre = self.prev.get(nid, {}).get(dt_str)
+                    pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                     xx[nid][d] = {}
                     for s in self.ALL_SHIFTS:
                         if pre:
-                            xx[nid][d][s] = pulp.LpVariable(
-                                f"dx_{nid}_{d}_{s}",
-                                lowBound=(1 if s == pre else 0),
-                                upBound=(1 if s == pre else 0),
-                                cat="Integer",
-                            )
+                            if s in pre_flex:
+                                xx[nid][d][s] = pulp.LpVariable(f"dx_{nid}_{d}_{s}", cat="Binary")
+                            else:
+                                xx[nid][d][s] = pulp.LpVariable(f"dx_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
                         elif s == "생" and nurse.get("gender") != "female":
                             xx[nid][d][s] = pulp.LpVariable(f"dx_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
                         elif s == "법" and nurse.get("is_night_shift"):
@@ -1220,9 +1277,18 @@ class NurseScheduler:
 
             # ── 원인 1: 같은 주에 OF 또는 주휴 중복 사전입력 ─────────────────
             dup_found = []
+            first_of_month = date(self.year, self.month, 1)
             for wi, (ws, we) in enumerate(self.weeks):
-                week_dates = [self.all_dates[d].strftime("%Y-%m-%d") for d in range(ws, we + 1)]
+                # 이전달 overflow 제외
+                week_dates = [self.all_dates[d].strftime("%Y-%m-%d")
+                              for d in range(ws, we + 1)
+                              if self.all_dates[d] >= first_of_month]
+                if not week_dates:
+                    continue
                 for nurse in self.nurses:
+                    # 야간전담은 OF 무제한이므로 skip
+                    if nurse.get("is_night_shift"):
+                        continue
                     nid, nname = nurse["id"], nurse["name"]
                     prev_week = {dt: self.prev.get(nid, {}).get(dt, "") for dt in week_dates}
                     of_days  = [dt for dt, s in prev_week.items() if s == "OF"]
