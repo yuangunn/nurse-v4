@@ -30,7 +30,8 @@ class Nurse(BaseModel):
     group: str = ""
     gender: str = "female"  # female | male
     capable_shifts: List[str] = ["DC", "D", "D1", "EC", "E", "중", "NC", "N"]
-    is_night_shift: bool = False  # 야간전담 여부
+    is_night_shift: bool = False  # 야간전담 여부 (기본값, night_months 없을 때 사용)
+    night_months: Dict[str, bool] = {}  # 월별 야간전담: {"2026-03": true, "2026-04": false}
     seniority: int = 0  # 0 = 낮음(시니어), 숫자 클수록 경력 낮음
     wishes: Dict[str, str] = {}  # {"1": "D", "15": "OFF", ...}
     juhu_day: Optional[int] = None  # 주휴 요일: 0=일,1=월,...,6=토. None=임의

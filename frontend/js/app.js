@@ -55,7 +55,7 @@ function app() {
     get prevShifts(){return this.shifts.filter(s=>!s.is_charge).map(s=>s.code)},
     get footerRows(){
       const d=this.shifts.filter(s=>s.period==='day').map(s=>s.code);
-      const e=this.shifts.filter(s=>['evening','middle'].includes(s.period)).map(s=>s.code);
+      const e=this.shifts.filter(s=>s.period==='evening').map(s=>s.code);
       const n=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
       const r=this.shifts.filter(s=>s.period==='rest').map(s=>s.code);
       return [{label:'낮',shifts:d,color:'text-blue-700'},{label:'저녁',shifts:e,color:'text-green-700'},{label:'야간',shifts:n,color:'text-amber-700'},{label:'휴무',shifts:r,color:'text-gray-600'}];
@@ -127,9 +127,12 @@ function app() {
 
     // ── 간호사 ────────────────────────────────────────────────
     async loadNurses(){this.nurses=await this.api('GET','/api/nurses')},
+    _monthKey(){return `${this.year}-${String(this.month).padStart(2,'0')}`},
+    isNightThisMonth(nurse){const mk=this._monthKey();const nm=nurse.night_months||{};return Object.keys(nm).length>0?!!nm[mk]:nurse.is_night_shift},
+    toggleNightMonthModal(m,checked){const mk=`${this.year}-${String(m).padStart(2,'0')}`;if(!this.nurseModal.data.night_months)this.nurseModal.data.night_months={};if(checked)this.nurseModal.data.night_months[mk]=true;else delete this.nurseModal.data.night_months[mk]},
     openNurseModal(nurse){
       this.nurseModal.isNew=!nurse;
-      this.nurseModal.data=nurse?JSON.parse(JSON.stringify(nurse)):{id:crypto.randomUUID(),name:'',group:'',gender:'female',capable_shifts:['DC','D','EC','E','NC','N'],is_night_shift:false,seniority:this.nurses.length,wishes:{},juhu_day:null,juhu_auto_rotate:true};
+      this.nurseModal.data=nurse?JSON.parse(JSON.stringify(nurse)):{id:crypto.randomUUID(),name:'',group:'',gender:'female',capable_shifts:['DC','D','EC','E','NC','N'],is_night_shift:false,night_months:{},seniority:this.nurses.length,wishes:{},juhu_day:null,juhu_auto_rotate:true};
       this.nurseModal.open=true;
     },
     toggleShift(s){const arr=this.nurseModal.data.capable_shifts;const idx=arr.indexOf(s);if(idx>=0)arr.splice(idx,1);else arr.push(s)},
@@ -151,16 +154,33 @@ function app() {
       if(!this.darkMode)return{background:s.color_bg,color:s.color_text};
       return{background:this._shiftGlassBg(s.color_bg),color:this._shiftGlassText(s.color_text)};
     },
-    // 스케줄 탭용: 근무=파란, 휴무=회색, 사전입력=노란 배경
+    // 스케줄 탭용 셀 스타일
+    hideCharge:false, colorByShift:false,
     getScheduleCellClass(nurseId, day){
       const k=this.dayKey(day);const shift=this.schedule?.[nurseId]?.[k];
       if(!shift||shift==='-')return '';
       const isPre=!!(this.prevSchedule[nurseId]&&this.prevSchedule[nurseId][k]);
       if(isPre)return 'g-cell-pre';
+      if(this.colorByShift)return '';
       const s=this.shifts.find(x=>x.code===shift);
       if(!s)return '';
       if(s.period==='rest'||s.period==='leave')return 'g-cell-rest';
       return 'g-cell-work';
+    },
+    getScheduleCellStyle(nurseId, day){
+      if(!this.colorByShift)return {};
+      const k=this.dayKey(day);let shift=this.schedule?.[nurseId]?.[k];
+      if(!shift||shift==='-')return {};
+      const isPre=!!(this.prevSchedule[nurseId]&&this.prevSchedule[nurseId][k]);
+      if(isPre)return {};
+      if(this.hideCharge){if(shift==='DC')shift='D';if(shift==='EC')shift='E';if(shift==='NC')shift='N'}
+      return this.getShiftStyle(shift);
+    },
+    displayShift(nurseId, day){
+      const k=this.dayKey(day);let shift=this.schedule?.[nurseId]?.[k];
+      if(!shift||shift==='-')return '';
+      if(this.hideCharge){if(shift==='DC')shift='D';if(shift==='EC')shift='E';if(shift==='NC')shift='N'}
+      return shift;
     },
     _hexToHsl(hex){
       if(!hex||!hex.startsWith('#')||hex.length<7)return[0,0,50];
@@ -288,7 +308,9 @@ function app() {
     openShiftEdit(nurse,day){this.shiftEdit={open:true,nurse,day,dateLabel:`${day.getMonth()+1}/${day.getDate()}`,mode:'schedule'}},
     openPrevEdit(nurse,day){this.shiftEdit={open:true,nurse,day,dateLabel:`${day.getMonth()+1}/${day.getDate()}`,mode:'prev'}},
     getPrevShift(nurseId,day){return this.prevSchedule[nurseId]?.[this.dayKey(day)]||''},
-    clearPrevSchedule(){if(!confirm(`${this.year}년 ${this.month}월 사전입력을 초기화하시겠습니까?`))return;const prefix=`${this.year}-${String(this.month).padStart(2,'0')}-`;for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(k.startsWith(prefix))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(!k.startsWith(prefix))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>!h.startsWith(prefix))},
+    _cycleDateKeys(){const keys=new Set();for(const d of this.scheduleDays){keys.add(this.dayKey(d))}return keys},
+    clearPrevSchedule(){if(!confirm(`${this.year}년 ${this.month}월 사전입력을 초기화하시겠습니까?\n(해당 월의 모든 주기 포함)`))return;const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(!keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>!keys.has(h))},
+    clearPrevOtherMonths(){if(!confirm(`${this.year}년 ${this.month}월 주기 이외의 데이터를 정리합니다. 계속하시겠습니까?`))return;const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(!keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>keys.has(h))},
     countPrevEntries(){return Object.values(this.prevSchedule).reduce((s,v)=>s+Object.keys(v).length,0)},
     countNursePrev(nurseId){return Object.keys(this.prevSchedule[nurseId]||{}).length},
 
@@ -359,11 +381,11 @@ function app() {
     // ── 저장/불러오기 ────────────────────────────────────────
     async saveSchedule(){
       const name=prompt('저장 이름을 입력하세요 (선택)',`${this.year}년 ${this.month}월`);if(name===null)return;
-      await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name:name||null});
+      await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name:name||null,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails});
       await this.loadSavedList();alert('저장되었습니다.');
     },
     async loadSavedList(){this.savedSchedules=await this.api('GET','/api/schedules')},
-    async loadSaved(id){const data=await this.api('GET',`/api/schedules/${id}`);this.year=data.data.year||data.year;this.month=data.data.month||data.month;this.nurses=data.data.nurses||[];this.requirements=data.data.requirements||this.requirements;this.rules=data.data.rules||this.rules;this.schedule=data.data.schedule||{};this.activeTab='schedule'},
+    async loadSaved(id){const data=await this.api('GET',`/api/schedules/${id}`);this.year=data.data.year||data.year;this.month=data.data.month||data.month;this.nurses=data.data.nurses||[];this.requirements=data.data.requirements||this.requirements;this.rules=data.data.rules||this.rules;this.schedule=data.data.schedule||{};this.prevSchedule=data.data.prev_schedule||{};this.nurseScores=data.data.nurse_scores||{};this.nurseScoreDetails=data.data.nurse_score_details||{};const log=data.data.solver_log||'';if(log){this.solverLogs=log.split('\n').map((m,i)=>({id:i+1,msg:m}))}this.activeTab='schedule'},
     async deleteSaved(id){if(!confirm('삭제하시겠습니까?'))return;await this.api('DELETE',`/api/schedules/${id}`);await this.loadSavedList()},
 
     // ── 사전입력 저장 ────────────────────────────────────────

@@ -96,6 +96,11 @@ def init_db():
             conn.execute("ALTER TABLE nurses ADD COLUMN juhu_auto_rotate INTEGER DEFAULT 1")
         except Exception:
             pass
+        # 기존 DB 호환: night_months 컬럼 마이그레이션
+        try:
+            conn.execute("ALTER TABLE nurses ADD COLUMN night_months TEXT DEFAULT '{}'")
+        except Exception:
+            pass
         # 기존 DB 호환: shifts.auto_assign 컬럼 마이그레이션
         try:
             conn.execute("ALTER TABLE shifts ADD COLUMN auto_assign INTEGER DEFAULT 1")
@@ -233,15 +238,16 @@ def upsert_nurse(nurse: Dict) -> None:
         conn.execute("""
             INSERT INTO nurses
                 (id, name, grp, gender, capable_shifts, is_night_shift, seniority, wishes,
-                 juhu_day, juhu_auto_rotate)
+                 juhu_day, juhu_auto_rotate, night_months)
             VALUES
                 (:id, :name, :grp, :gender, :capable_shifts, :is_night_shift, :seniority, :wishes,
-                 :juhu_day, :juhu_auto_rotate)
+                 :juhu_day, :juhu_auto_rotate, :night_months)
             ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name, grp=excluded.grp, gender=excluded.gender,
                 capable_shifts=excluded.capable_shifts, is_night_shift=excluded.is_night_shift,
                 seniority=excluded.seniority, wishes=excluded.wishes,
-                juhu_day=excluded.juhu_day, juhu_auto_rotate=excluded.juhu_auto_rotate
+                juhu_day=excluded.juhu_day, juhu_auto_rotate=excluded.juhu_auto_rotate,
+                night_months=excluded.night_months
         """, {
             "id": nurse["id"],
             "name": nurse["name"],
@@ -253,6 +259,7 @@ def upsert_nurse(nurse: Dict) -> None:
             "wishes": json.dumps(nurse.get("wishes", {})),
             "juhu_day": nurse.get("juhu_day"),  # None or 0-6
             "juhu_auto_rotate": 1 if nurse.get("juhu_auto_rotate", True) else 0,
+            "night_months": json.dumps(nurse.get("night_months", {})),
         })
 
 
@@ -540,4 +547,5 @@ def _nurse_row_to_dict(row: sqlite3.Row) -> Dict:
         "wishes": json.loads(d["wishes"]),
         "juhu_day": d.get("juhu_day"),           # None or 0-6
         "juhu_auto_rotate": bool(d.get("juhu_auto_rotate", 1)),
+        "night_months": json.loads(d.get("night_months", "{}") or "{}"),
     }

@@ -44,6 +44,13 @@ class NurseScheduler:
         self.year  = request.year
         self.month = request.month
         self.nurses: List[Dict] = [n.model_dump() for n in request.nurses]
+        # 월별 야간전담: night_months에 설정이 있으면 해당 월만 사용, 없으면 is_night_shift 폴백
+        month_key = f"{self.year}-{self.month:02d}"
+        for nurse in self.nurses:
+            nm = nurse.get("night_months", {})
+            if nm:  # night_months에 하나라도 있으면 해당 월 기준
+                nurse["is_night_shift"] = bool(nm.get(month_key, False))
+            # nm이 비어있으면 기존 is_night_shift 유지
         self.req   = request.requirements
         self.rules = request.rules
         self.prev  = request.prev_schedule or {}
@@ -527,9 +534,9 @@ class NurseScheduler:
         """
         req_dict = self.req.model_dump()
         period_map = {
-            "D": self.DAY_SHIFTS + self.DAY1_SHIFTS,
-            "E": self.EVENING_SHIFTS + self.MIDDLE_SHIFTS,
-            "N": self.NIGHT_SHIFTS,
+            "D": self.DAY_SHIFTS,      # DC, D
+            "E": self.EVENING_SHIFTS,   # EC, E
+            "N": self.NIGHT_SHIFTS,     # NC, N
         }
         first_of_month = date(self.year, self.month, 1)
         for d, dt in enumerate(self.all_dates):

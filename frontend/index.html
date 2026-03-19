@@ -144,7 +144,7 @@
         <tbody><template x-for="(nurse,idx) in nurses" :key="nurse.id"><tr>
           <td class="text-dim" x-text="idx+1"></td><td class="font-medium text-bright" x-text="nurse.name"></td><td class="text-dim" x-text="nurse.group"></td><td class="text-dim" x-text="nurse.gender==='female'?'여':'남'"></td>
           <td><span class="text-xs text-sub" x-text="nurse.capable_shifts.join(', ')"></span></td>
-          <td class="text-center"><span x-show="nurse.is_night_shift" class="text-amber font-bold text-xs">야간</span></td>
+          <td class="text-center"><span x-show="isNightThisMonth(nurse)" class="text-amber font-bold text-xs" x-text="month+'월 야간전담'"></span></td>
           <td class="flex gap-2 justify-end"><button @click="openNurseModal(nurse)" class="text-xs text-blue">수정</button><button @click="removeNurse(nurse.id)" class="text-xs text-red">삭제</button></td>
         </tr></template>
         <tr x-show="nurses.length===0"><td colspan="7" class="text-center py-6 text-dim">간호사가 없습니다.</td></tr></tbody></table>
@@ -166,7 +166,8 @@
       <button @click="nextMonth()" class="ym-nav">›</button>
     </div>
     <div class="ml-auto flex gap-2">
-      <button @click="clearPrevSchedule()" class="btn btn-xs btn-ghost text-red">초기화</button>
+      <button @click="clearPrevSchedule()" class="btn btn-xs btn-ghost text-red">이번달 초기화</button>
+      <button @click="clearPrevOtherMonths()" class="btn btn-xs btn-ghost text-dim">다른달 정리</button>
       <span class="pill text-dim" style="background:rgba(255,255,255,0.03)" x-text="`${countPrevEntries()}건`"></span>
       <button @click="prevSavePanel=!prevSavePanel" :class="prevSavePanel?'btn-primary':'btn-ghost'" class="btn btn-xs">저장/불러오기</button>
     </div>
@@ -314,6 +315,11 @@
       </table>
     </div>
   </div>
+  <!-- 표시 옵션 -->
+  <div x-show="schedule&&Object.keys(schedule).length>0" class="flex items-center gap-4 text-xs mb-2">
+    <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="hideCharge"/><span class="text-dim">Charge 숨기기</span></label>
+    <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="colorByShift"/><span class="text-dim">근무별 색상</span></label>
+  </div>
   <!-- 스케줄 그리드 -->
   <div x-show="schedule&&Object.keys(schedule).length>0" class="overflow-auto" style="max-height:calc(100vh - 13rem)">
     <table class="text-xs border-collapse" style="min-width:680px">
@@ -326,7 +332,7 @@
       </thead>
       <tbody><template x-for="nurse in nurses" :key="nurse.id"><tr class="hover:bg-white/[0.015]">
         <td class="g-cell name-cell"><span class="nurse-name" x-text="nurse.name"></span> <span class="nurse-group" x-text="nurse.group"></span></td>
-        <template x-for="day in scheduleDays" :key="day"><td class="g-cell p-0" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',isRelaxed(nurse.id,day)?'g-relaxed':'',getScheduleCellClass(nurse.id,day)]"><span class="schedule-cell-text block" x-text="getShift(nurse.id,day)!=='-'?getShift(nurse.id,day):''" @click="openShiftEdit(nurse,day)"></span></td></template>
+        <template x-for="day in scheduleDays" :key="day"><td class="g-cell p-0" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',isRelaxed(nurse.id,day)?'g-relaxed':'',getScheduleCellClass(nurse.id,day)]" :style="getScheduleCellStyle(nurse.id,day)"><span class="schedule-cell-text block" x-text="displayShift(nurse.id,day)" @click="openShiftEdit(nurse,day)"></span></td></template>
         <td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['DC','D'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['EC','E'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['NC','N'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['OF','주'])"></td>
         <td class="g-cell px-1 py-0.5 text-center text-pink" x-text="countShifts(nurse.id,['생'])||''"></td>
         <td class="g-cell px-1 py-0.5 text-center font-semibold cursor-pointer select-none text-blue" @click="openScoreDetail(nurse)" x-text="nurseScore(nurse.id)"></td>
@@ -382,7 +388,7 @@
       <div class="flex gap-3"><div class="flex-1"><label class="text-xs text-dim">이름 *</label><input x-model="nurseModal.data.name" class="w-full mt-1" placeholder="홍길동"/></div><div class="flex-1"><label class="text-xs text-dim">그룹</label><input x-model="nurseModal.data.group" class="w-full mt-1" placeholder="A"/></div></div>
       <div><label class="text-xs text-dim">성별</label><div class="flex gap-4 mt-1.5 text-sm"><label class="flex items-center gap-2"><input type="radio" x-model="nurseModal.data.gender" value="female"/>여</label><label class="flex items-center gap-2"><input type="radio" x-model="nurseModal.data.gender" value="male"/>남</label></div></div>
       <div><label class="text-xs text-dim">가능 근무</label><div class="flex flex-wrap gap-1.5 mt-1.5"><template x-for="s in allWorkShifts" :key="s"><label class="flex items-center gap-1 text-xs"><input type="checkbox" :checked="nurseModal.data.capable_shifts.includes(s)" @change="toggleShift(s)"/><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></label></template></div></div>
-      <label class="flex items-center gap-2 text-xs"><input type="checkbox" x-model="nurseModal.data.is_night_shift"/>야간전담</label>
+      <div><label class="text-xs text-dim">야간전담 월</label><div class="flex flex-wrap gap-1.5 mt-1.5"><template x-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :key="m"><label class="flex items-center gap-1 text-xs"><input type="checkbox" :checked="nurseModal.data.night_months?.[year+'-'+String(m).padStart(2,'0')]" @change="toggleNightMonthModal(m, $event.target.checked)"/><span x-text="m+'월'" class="text-dim"></span></label></template></div></div>
       <div><label class="text-xs text-dim">시니어리티</label><input type="number" x-model.number="nurseModal.data.seniority" min="0" max="100" class="w-20 mt-1"/></div>
     </div>
     <div class="flex gap-2 mt-5"><button @click="nurseModal.open=false" class="btn btn-ghost flex-1">취소</button><button @click="saveNurse()" class="btn btn-primary flex-1">저장</button></div>
