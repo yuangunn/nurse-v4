@@ -10,8 +10,8 @@ function app() {
     ],
     activeTab: 'settings',
     fontSize: parseInt(localStorage.getItem('fontSize'))||20,
-    year:  new Date().getFullYear(),
-    month: new Date().getMonth() + 1,
+    year:  new Date().getMonth()===11 ? new Date().getFullYear()+1 : new Date().getFullYear(),
+    month: (new Date().getMonth()+1)%12+1,
     nurses: [],
     requirements: {
       mon:{DC:1,D:2,EC:1,E:2,NC:1,N:2},tue:{DC:1,D:2,EC:1,E:2,NC:1,N:2},
