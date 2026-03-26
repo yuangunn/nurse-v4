@@ -123,27 +123,33 @@
 
 <!-- 개발자 설정 모달 -->
 <div :style="devSettingsOpen?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="devSettingsOpen=false">
-  <div style="max-width:380px;width:90vw;background:var(--card,#fff);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
-    <h3 style="margin-bottom:16px;font-weight:700">개발자 설정</h3>
-    <div class="card" style="padding:12px;margin-bottom:12px">
-      <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px">마스터 비밀번호</h4>
-      <p class="text-xs text-sub" style="margin-bottom:8px" x-text="hasMasterPassword?'현재 설정됨':'미설정'"></p>
+  <div style="max-width:380px;width:90vw;background:var(--card,#fff);color:var(--text,#1f2937);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+    <h3 style="margin-bottom:16px;font-weight:700;color:var(--text,#1f2937)">🔧 개발자 설정</h3>
+    <div style="padding:14px;margin-bottom:12px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--bg,#f9fafb)">
+      <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text,#1f2937)">🔑 마스터 비밀번호</h4>
+      <p style="margin-bottom:8px;font-size:0.78rem;color:var(--text-sub,#6b7280)" x-text="hasMasterPassword?'✅ 현재 설정됨':'⚠️ 미설정'"></p>
       <template x-if="!hasMasterPassword">
         <div>
-          <input type="password" x-model="devMasterPw" class="input w-full" placeholder="마스터 비밀번호" style="margin-bottom:6px">
-          <input type="password" x-model="devMasterPwConfirm" class="input w-full" placeholder="비밀번호 확인" style="margin-bottom:8px">
-          <button @click="setDevMasterPassword()" class="btn btn-primary btn-sm w-full">설정</button>
+          <input type="password" x-model="devMasterPw" placeholder="마스터 비밀번호"
+                 style="width:100%;padding:8px 12px;margin-bottom:6px;border:1px solid var(--border,#d1d5db);border-radius:8px;background:var(--card,#fff);color:var(--text,#1f2937);font-size:0.84rem">
+          <input type="password" x-model="devMasterPwConfirm" placeholder="비밀번호 확인"
+                 style="width:100%;padding:8px 12px;margin-bottom:8px;border:1px solid var(--border,#d1d5db);border-radius:8px;background:var(--card,#fff);color:var(--text,#1f2937);font-size:0.84rem">
+          <button @click="setDevMasterPassword()"
+                  style="width:100%;padding:8px;border:none;border-radius:8px;background:var(--accent,#3b82f6);color:#fff;font-weight:600;font-size:0.8rem;cursor:pointer">설정</button>
         </div>
       </template>
       <template x-if="hasMasterPassword">
-        <button @click="removeDevMasterPassword()" class="btn btn-outline btn-sm" style="color:var(--red)">마스터 비밀번호 제거</button>
+        <button @click="removeDevMasterPassword()"
+                style="padding:8px 14px;border:1px solid var(--red,#ef4444);border-radius:8px;background:transparent;color:var(--red,#ef4444);font-size:0.8rem;cursor:pointer">마스터 비밀번호 제거</button>
       </template>
     </div>
-    <div class="card" style="padding:12px;margin-bottom:12px">
-      <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px">프로필 관리</h4>
-      <button @click="switchProfile();devSettingsOpen=false" class="btn btn-outline btn-sm w-full">프로필 전환</button>
+    <div style="padding:14px;margin-bottom:12px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--bg,#f9fafb)">
+      <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text,#1f2937)">👤 프로필 관리</h4>
+      <button @click="switchProfile();devSettingsOpen=false"
+              style="width:100%;padding:8px;border:1px solid var(--border,#d1d5db);border-radius:8px;background:transparent;color:var(--text,#1f2937);font-size:0.8rem;cursor:pointer">프로필 전환</button>
     </div>
-    <button @click="devSettingsOpen=false" class="btn btn-ghost w-full">닫기</button>
+    <button @click="devSettingsOpen=false"
+            style="width:100%;padding:10px;border:none;border-radius:8px;background:transparent;color:var(--text-sub,#6b7280);font-size:0.85rem;cursor:pointer">닫기</button>
   </div>
 </div>
 
