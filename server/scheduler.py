@@ -390,16 +390,11 @@ class NurseScheduler:
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
                 for s in self.ALL_SHIFTS:
-                    # 주휴 처리
+                    # 주휴 처리: 사전입력된 주휴는 항상 고정 (주→OF 전환 불필요)
+                    # allow_juhu_relax는 사전입력 없는 날에 주휴를 배치할지 말지만 제어
                     if pre == "주":
-                        if self.allow_juhu_relax:
-                            v = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
-                            x[nid][d][s] = v
-                            _free_vars_r.append(v)
-                            continue
-                        else:
-                            x[nid][d][s] = 1 if s == "주" else 0
-                            continue
+                        x[nid][d][s] = 1 if s == "주" else 0
+                        continue
                     # 법/생/V/성별/auto_assign 차단
                     if s == "법" and is_night:
                         x[nid][d][s] = 0
