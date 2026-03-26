@@ -217,7 +217,12 @@ function app() {
     },
 
     async confirmDeleteProfile(profileId){
-      if(!confirm('이 프로필과 모든 데이터가 삭제됩니다. 계속하시겠습니까?'))return;
+      const profile=this.profiles.find(p=>p.id===profileId);
+      if(!profile)return;
+      const name=profile.name;
+      const input=prompt(`이 프로필과 모든 데이터가 영구 삭제됩니다.\n삭제하려면 "${name}"을(를) 입력하세요:`);
+      if(input===null)return; // 취소
+      if(input.trim()!==name){this._toast('프로필 이름이 일치하지 않습니다.','error');return}
       try{
         await this.api('DELETE',`/api/profiles/${profileId}`);
         await this._loadProfiles();
