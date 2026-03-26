@@ -125,12 +125,15 @@ function app() {
       this.profileScreen=true;
 
       // 전역 키보드 단축키
-      document.addEventListener('keydown',(e)=>{
-        if(this.profileScreen)return;
-        if(e.key==='?'&&!e.ctrlKey&&!e.metaKey&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){this.showShortcutHelp=!this.showShortcutHelp;e.preventDefault();return}
-        if(this.activeTab==='preinput'&&this._focusedCell&&!this.shiftEdit.open&&!this.noteEdit.open&&!this.juhuOptionModal.open){this.onGridKeyDown(e)}
-        else if((e.ctrlKey||e.metaKey)&&e.key==='z'&&this.activeTab==='preinput'){e.shiftKey?this.redo():this.undo();e.preventDefault()}
-      });
+      if(!window._nsKeydownBound){
+        window._nsKeydownBound=true;
+        document.addEventListener('keydown',(e)=>{
+          if(this.profileScreen)return;
+          if(e.key==='?'&&!e.ctrlKey&&!e.metaKey&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){this.showShortcutHelp=!this.showShortcutHelp;e.preventDefault();return}
+          if(this.activeTab==='preinput'&&this._focusedCell&&!this.shiftEdit.open&&!this.noteEdit.open&&!this.juhuOptionModal.open){this.onGridKeyDown(e)}
+          else if((e.ctrlKey||e.metaKey)&&e.key==='z'&&this.activeTab==='preinput'){e.shiftKey?this.redo():this.undo();e.preventDefault()}
+        });
+      }
       window.addEventListener('beforeunload',()=>{this._saveFullState();this._closeCurrentProfile()});
       document.addEventListener('mouseup',()=>{if(this._isDragging)this.onCellMouseUp()});
       this.$nextTick(()=>{if(window.lucide)lucide.createIcons()});
