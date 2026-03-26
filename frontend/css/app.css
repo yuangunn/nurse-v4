@@ -720,7 +720,8 @@ html.dark .juhu-new {
 
 /* ── Manual Edit indicator ───────────────────────────────── */
 .g-edited {
-  border-bottom: 2px solid var(--amber) !important;
+  outline: 2px solid var(--red, #ef4444) !important;
+  outline-offset: -2px;
 }
 
 /* ── Print Styles ────────────────────────────────────────── */
