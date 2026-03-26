@@ -36,6 +36,9 @@ class Nurse(BaseModel):
     wishes: Dict[str, str] = {}  # {"1": "D", "15": "OFF", ...}
     juhu_day: Optional[int] = None  # 주휴 요일: 0=일,1=월,...,6=토. None=임의
     juhu_auto_rotate: bool = True   # True: 4주마다 1일 자동 당기기
+    is_trainee: bool = False        # 신규간호사 (트레이닝 중)
+    training_end_date: Optional[str] = None  # 트레이닝 종료일 'YYYY-MM-DD'
+    preceptor_id: Optional[str] = None       # 프리셉터 간호사 ID
 
 
 class DayRequirement(BaseModel):
@@ -92,6 +95,7 @@ class GenerateRequest(BaseModel):
     mip_gap: float = 0.02  # MIP 오차 허용 범위 (0=완벽한 최적해, 0.02=2% 오차허용 조기종료)
     time_limit: int = 1200  # 솔버 타임리밋 (초, 기본 20분)
     allow_pre_relax: bool = False  # infeasible 시 사전입력 완화 허용
+    allow_juhu_relax: bool = False  # 주휴 재배치 허용
     unlimited_v: bool = False  # V 무제한 모드 (해를 못 찾을 때 사용)
 
 

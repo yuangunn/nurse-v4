@@ -5,14 +5,20 @@ from pathlib import Path
 from typing import List, Optional
 import json
 import queue
+import logging
+import traceback
+import threading
+
+logger = logging.getLogger(__name__)
 
 from . import database as db
-from .models import GenerateRequest, ScheduleSave, ScoringRule
+from .models import GenerateRequest, ScheduleSave, ScoringRule, Nurse, Rules
 from .scheduler import NurseScheduler
 
 # ── HiGHS 인스턴스 추적 (중지 기능용) ────────────────────────────────────────
 # PuLP의 HiGHS 솔버가 내부적으로 생성하는 highspy.Highs 인스턴스를 가로채
 # cancelSolve() 호출과 mip_gap 캡처를 가능하게 함.
+_solve_lock = threading.Lock()
 _current_highs_instance = None
 _last_mip_gap: Optional[float] = None
 _solve_cancelled: bool = False
@@ -102,8 +108,8 @@ def get_nurses():
 
 
 @app.post("/api/nurses")
-def upsert_nurse(nurse: dict):
-    db.upsert_nurse(nurse)
+def upsert_nurse(nurse: Nurse):
+    db.upsert_nurse(nurse.model_dump())
     return {"ok": True}
 
 
@@ -250,7 +256,8 @@ def estimate(request: GenerateRequest):
         scheduler = NurseScheduler(request)
         return {"estimated_seconds": scheduler.estimate_seconds()}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Server error: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail="서버 오류가 발생했습니다. 다시 시도해주세요.")
 
 
 @app.post("/api/generate/stop")
@@ -376,7 +383,8 @@ def generate(request: GenerateRequest):
     except Exception as e:
         _solve_progress["is_running"] = False
         _last_generate_result = {"success": False, "message": str(e), "schedule": {}}
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Server error: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail="서버 오류가 발생했습니다. 다시 시도해주세요.")
 
 
 @app.get("/api/generate/result")

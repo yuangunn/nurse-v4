@@ -6,6 +6,7 @@ function app() {
       {id:'preinput', label:'사전입력', icon:'edit-3'},
       {id:'schedule', label:'스케줄',   icon:'calendar'},
       {id:'saved',    label:'저장',     icon:'save'},
+      {id:'analysis', label:'분석',     icon:'bar-chart-2'},
     ],
     activeTab: 'settings',
     fontSize: parseInt(localStorage.getItem('fontSize'))||20,
@@ -30,13 +31,13 @@ function app() {
     generating:false, generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,
     generateTimer:null, sseSource:null, solverLogs:[], showLogPanel:true,
     solveProgress:{gap_percent:null,nodes:0,has_solution:false,is_running:false},
-    stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, unlimitedV:false, relaxedCells:{},
+    stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, unlimitedV:false, relaxedCells:{},
     mipGapPercent:null, scheduleStopped:false, estimatedSeconds:0,
     statusMessage:'', statusOk:true, savedSchedules:[],
     darkMode: localStorage.getItem('darkMode')==='true',
     weekdayLabels:{mon:'월',tue:'화',wed:'수',thu:'목',fri:'금',sat:'토',sun:'일'},
-    workShifts:['D','E','N'],
-    shifts:[], shiftMgmtOpen:true, scoringRuleOpen:true,
+    // workShifts removed (use allWorkShifts computed instead)
+    shifts:[], shiftMgmtOpen:true, scoringRuleOpen:false,
     shiftModal:{open:false,isNew:true,data:{}},
     scoringRules:[], scoringMgmtOpen:false,
     scoringModal:{open:false,isNew:true,data:{}},
@@ -48,8 +49,22 @@ function app() {
     nurseModal:{open:false,isNew:true,data:{}},
     shiftEdit:{open:false,nurse:null,day:null,dateLabel:'',mode:'schedule'},
     _logSeq:0,
+    analysisResult:null, juhuRecommendation:null, analysisRunning:false,
+    // ── 사전입력 향상 기능 ──
+    _undoStack:[], _redoStack:[], _maxUndo:40,
+    _autoSaveTimer:null, _autoSaveKey:'ns_prev_autosave',
+    prevViolations:[], _violationSet:new Set(),
+    _dragStart:null, _dragCells:[], _isDragging:false,
+    _focusedCell:null, // {nIdx, dIdx}
+    lockedCells:{}, // nurseId → {dateKey: true}
+    cellNotes:{},   // nurseId → {dateKey: 'text'}
+    showNotes:false, noteEdit:{open:false,nurseId:'',dk:'',text:''},
+    presetPanel:false,
+    copySource:null, // nurseId
+    juhuOptionModal:{open:false,nurse:null,day:null},
 
     // ── computed ──────────────────────────────────────────────
+    get shiftMap(){const m=new Map();for(const s of this.shifts)m.set(s.code,s);return m},
     get allWorkShifts(){return this.shifts.filter(s=>['day','day1','evening','middle','night'].includes(s.period)).map(s=>s.code)},
     get allShifts(){return this.shifts.map(s=>s.code)},
     get prevShifts(){return this.shifts.filter(s=>!s.is_charge).map(s=>s.code)},
@@ -85,6 +100,21 @@ function app() {
       document.documentElement.style.fontSize=this.fontSize+'px';
       await Promise.all([this.loadNurses(),this.loadRules(),this.loadRequirements(),this.loadShifts(),this.loadScoringRules(),this.loadSavedList(),this.loadPrevSavesList()]);
       this._checkPendingGenerate();
+      this._restoreFullState()||this._restoreAutoSave();
+      this._startAutoSave();
+      this.initAutoDark();
+      this.loadTemplates();
+      this._initScoringSliders();
+      // 전역 키보드 단축키
+      document.addEventListener('keydown',(e)=>{
+        if(e.key==='?'&&!e.ctrlKey&&!e.metaKey&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){this.showShortcutHelp=!this.showShortcutHelp;e.preventDefault();return}
+        if(this.activeTab==='preinput'&&this._focusedCell&&!this.shiftEdit.open&&!this.noteEdit.open&&!this.juhuOptionModal.open){this.onGridKeyDown(e)}
+        else if((e.ctrlKey||e.metaKey)&&e.key==='z'&&this.activeTab==='preinput'){e.shiftKey?this.redo():this.undo();e.preventDefault()}
+      });
+      // 페이지 종료 시 상태 저장
+      window.addEventListener('beforeunload',()=>this._saveFullState());
+      // 드래그 종료 (window level)
+      document.addEventListener('mouseup',()=>{if(this._isDragging)this.onCellMouseUp()});
       this.$nextTick(()=>{if(window.lucide)lucide.createIcons()});
     },
     setFontSize(size){this.fontSize=size;localStorage.setItem('fontSize',size);document.documentElement.style.fontSize=size+'px'},
@@ -132,25 +162,32 @@ function app() {
     toggleNightMonthModal(m,checked){const mk=`${this.year}-${String(m).padStart(2,'0')}`;if(!this.nurseModal.data.night_months)this.nurseModal.data.night_months={};if(checked)this.nurseModal.data.night_months[mk]=true;else delete this.nurseModal.data.night_months[mk]},
     openNurseModal(nurse){
       this.nurseModal.isNew=!nurse;
-      this.nurseModal.data=nurse?JSON.parse(JSON.stringify(nurse)):{id:crypto.randomUUID(),name:'',group:'',gender:'female',capable_shifts:['DC','D','EC','E','NC','N'],is_night_shift:false,night_months:{},seniority:this.nurses.length,wishes:{},juhu_day:null,juhu_auto_rotate:true};
+      this.nurseModal.data=nurse?JSON.parse(JSON.stringify(nurse)):{id:crypto.randomUUID(),name:'',group:'',gender:'female',capable_shifts:['DC','D','EC','E','NC','N'],is_night_shift:false,night_months:{},seniority:this.nurses.length,wishes:{},juhu_day:null,juhu_auto_rotate:true,is_trainee:false,training_end_date:null,preceptor_id:null};
       this.nurseModal.open=true;
     },
     toggleShift(s){const arr=this.nurseModal.data.capable_shifts;const idx=arr.indexOf(s);if(idx>=0)arr.splice(idx,1);else arr.push(s)},
-    async saveNurse(){if(!this.nurseModal.data.name.trim()){alert('이름을 입력하세요.');return}await this.api('POST','/api/nurses',this.nurseModal.data);await this.loadNurses();this.nurseModal.open=false},
+    async saveNurse(){if(!this.nurseModal.data.name.trim()){this.toast('이름을 입력하세요','error');return}await this.api('POST','/api/nurses',this.nurseModal.data);await this.loadNurses();this.nurseModal.open=false},
     async removeNurse(id){if(!confirm('삭제하시겠습니까?'))return;await this.api('DELETE',`/api/nurses/${id}`);await this.loadNurses()},
 
     // ── 규칙 ──────────────────────────────────────────────────
     async loadRules(){this.rules=await this.api('GET','/api/rules')},
-    async saveRules(){await this.api('POST','/api/rules',this.rules);alert('규칙이 저장되었습니다.')},
+    async saveRules(){await this.api('POST','/api/rules',this.rules);this.toast('규칙이 저장되었습니다','info')},
 
     // ── 요구사항 ──────────────────────────────────────────────
     async loadRequirements(){this.requirements=await this.api('GET','/api/requirements')},
-    async saveRequirements(){await this.api('POST','/api/requirements',this.requirements);alert('인원 설정이 저장되었습니다.')},
+    async saveRequirements(){await this.api('POST','/api/requirements',this.requirements);this.toast('인원 설정이 저장되었습니다','info')},
 
     // ── 근무 관리 ─────────────────────────────────────────────
     async loadShifts(){this.shifts=await this.api('GET','/api/shifts')},
     getShiftStyle(code){
-      const s=this.shifts.find(x=>x.code===code);if(!s)return {};
+      // 트레이니 /D → D로 매핑
+      const baseCode=code?.startsWith('/')?code.slice(1):code;
+      const s=this.shiftMap.get(baseCode);if(!s)return {};
+      if(code?.startsWith('/')){
+        // 트레이니: 반투명 스타일
+        if(!this.darkMode)return{background:s.color_bg+'80',color:s.color_text+'99',fontStyle:'italic'};
+        return{background:this._shiftGlassBg(s.color_bg),color:this._shiftGlassText(s.color_text),opacity:'0.6',fontStyle:'italic'};
+      }
       if(!this.darkMode)return{background:s.color_bg,color:s.color_text};
       return{background:this._shiftGlassBg(s.color_bg),color:this._shiftGlassText(s.color_text)};
     },
@@ -200,10 +237,10 @@ function app() {
       this.shiftModal.data=shift?JSON.parse(JSON.stringify(shift)):{code:'',name:'',period:'day',is_charge:false,auto_assign:true,hours:'',color_bg:'#dbeafe',color_text:'#1d4ed8',sort_order:this.shifts.length};
       this.shiftModal.open=true;
     },
-    async saveShift(){const d=this.shiftModal.data;if(!d.code.trim()){alert('코드를 입력하세요.');return}if(!d.name.trim()){alert('이름을 입력하세요.');return}await this.api('POST','/api/shifts',d);await this.loadShifts();this.shiftModal.open=false},
+    async saveShift(){const d=this.shiftModal.data;if(!d.code.trim()){this.toast('코드를 입력하세요','error');return}if(!d.name.trim()){this.toast('이름을 입력하세요','error');return}await this.api('POST','/api/shifts',d);await this.loadShifts();this.shiftModal.open=false},
     async deleteShift(code){
       const PROTECTED=['DC','D','D1','EC','E','중','NC','N','OF','주'];
-      if(PROTECTED.includes(code)){alert('기본 근무(DC·D·D1·EC·E·중·NC·N·OF·주)는 삭제할 수 없습니다.');return}
+      if(PROTECTED.includes(code)){this.toast('기본 근무는 삭제할 수 없습니다','error');return}
       if(!confirm(`'${code}' 근무를 삭제하시겠습니까?`))return;await this.api('DELETE',`/api/shifts/${code}`);await this.loadShifts();
     },
 
@@ -239,13 +276,13 @@ function app() {
       else if(rt==='weekend_work')this.scoringModal.data.params={slots:[{weekday:5,periods:['evening','night']},{weekday:6,periods:['day']}]};
       else this.scoringModal.data.params={};
     },
-    async saveScoringRule(){const d=this.scoringModal.data;if(!d.name.trim()){alert('규칙 이름을 입력하세요.');return}await this.api('POST','/api/scoring_rules',d);await this.loadScoringRules();this.scoringModal.open=false},
+    async saveScoringRule(){const d=this.scoringModal.data;if(!d.name.trim()){this.toast('규칙 이름을 입력하세요','error');return}await this.api('POST','/api/scoring_rules',d);await this.loadScoringRules();this.scoringModal.open=false},
     async toggleScoringRule(rule){await this.api('POST','/api/scoring_rules',{...rule,enabled:!rule.enabled});await this.loadScoringRules()},
     async deleteScoringRule(id){if(!confirm('이 배점 규칙을 삭제하시겠습니까?'))return;await this.api('DELETE',`/api/scoring_rules/${id}`);await this.loadScoringRules()},
 
     // ── 스케줄 생성 ──────────────────────────────────────────
     async generate(){
-      if(this.nurses.length===0){alert('간호사를 먼저 등록해주세요.');return}
+      if(this.nurses.length===0){this.toast('간호사를 먼저 등록해주세요','error');return}
       if(this._recoverPoll){clearInterval(this._recoverPoll);this._recoverPoll=null}
       this.generating=true;this.stopRequested=false;this.mipGapPercent=null;this.scheduleStopped=false;
       this.statusMessage='';this.estimatedSeconds=0;this.generateStartTime=Date.now();this.generateElapsed=0;
@@ -259,13 +296,27 @@ function app() {
         else if(data.type==='progress')this.solveProgress=data;
         else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
       };
-      const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60,allow_pre_relax:this.allowPreRelax,unlimited_v:this.unlimitedV};
+      const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60,allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,unlimited_v:this.unlimitedV};
       this.api('POST','/api/estimate',payload).then(est=>{if(est&&est.estimated_seconds)this.estimatedSeconds=est.estimated_seconds}).catch(()=>{});
       try{
         const result=await this.api('POST','/api/generate',payload);
         this.statusOk=result.success;this.statusMessage=result.message;
-        if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.activeTab='schedule';
+        if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.activeTab='schedule';
           if(result.stopped)this.statusMessage+='\n⏹ 중지 요청으로 탐색 종료 — 현재까지 찾은 최선의 해를 표시합니다.';
+          // 완화된 셀 상세 메시지
+          if(Object.keys(this.relaxedCells).length>0){
+            const details=[];
+            for(const[nid,cells]of Object.entries(this.relaxedCells)){
+              const nurse=this.nurses.find(n=>n.id===nid);
+              const name=nurse?nurse.name:nid;
+              for(const[dk,info]of Object.entries(cells)){
+                const dateStr=dk.slice(5).replace('-','/');
+                details.push(`  ${name} ${dateStr}: ${info.original} → ${info.assigned}`);
+              }
+            }
+            this.statusMessage+='\n\n📋 변경 상세:\n'+details.join('\n');
+          }
+          this.trackEdits();
           if(result.warning){this.statusMessage=result.warning+'\n\n'+this.statusMessage;this.statusOk=false}}
       }catch(e){this.statusOk=false;this.statusMessage='서버 오류: '+e.message}
       finally{this.generating=false;this.stopRequested=false;if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generateFinalElapsed=this.generateElapsed}
@@ -330,9 +381,9 @@ function app() {
       const nid=this.shiftEdit.nurse.id;const k=this.dayKey(this.shiftEdit.day);
       if(this.shiftEdit.mode==='prev'){
         if(shift==='__CLEAR__'){if(this.prevSchedule[nid])delete this.prevSchedule[nid][k];this.shiftEdit.open=false}
-        else if(shift==='주'){this.autoFillJuhu(this.shiftEdit.nurse,this.shiftEdit.day)}
+        else if(shift==='주'){this.shiftEdit.open=false;this.juhuOptionModal={open:true,nurse:this.shiftEdit.nurse,day:this.shiftEdit.day}}
         else{if(!this.prevSchedule[nid])this.prevSchedule[nid]={};this.prevSchedule[nid][k]=shift;this.shiftEdit.open=false}
-      }else{if(!this.schedule[nid])this.schedule[nid]={};this.schedule[nid][k]=shift;this.shiftEdit.open=false}
+      }else{if(!this.schedule[nid])this.schedule[nid]={};this.schedule[nid][k]=shift;this.shiftEdit.open=false;this.checkScheduleViolations()}
     },
 
     // ── 법정공휴일 ───────────────────────────────────────────
@@ -357,9 +408,33 @@ function app() {
       toFill.sort((a,b)=>a.day-b.day);
       const preview=toFill.map(f=>`${f.cycle}주기: ${f.day.getDate()}일(${dayNames[f.dow]})`).join('\n');
       if(!confirm(`${nurse.name}의 주휴를 아래와 같이 입력합니다:\n\n${preview}\n\n이미 입력된 날은 덮어씁니다. 계속하시겠습니까?`)){this.shiftEdit.open=false;return}
+      this._pushUndo();
       if(!this.prevSchedule[nid])this.prevSchedule[nid]={};
       for(const{day}of toFill)this.prevSchedule[nid][this.dayKey(day)]='주';
       this.shiftEdit.open=false;
+    },
+    // 고정 요일 자동배분 (로테이션 없이 매주 같은 요일)
+    autoFillJuhuFixed(nurse,baseDay){
+      const nid=nurse.id;const dayNames=['일','월','화','수','목','금','토'];
+      const W=baseDay.getDay();
+      const seen=new Set();const toFill=[];
+      for(const d of this.scheduleDays){
+        const wi=Math.floor(this._daysSinceRef(d)/7);
+        if(seen.has(wi))continue;seen.add(wi);
+        const match=this.scheduleDays.find(day=>Math.floor(this._daysSinceRef(day)/7)===wi&&day.getDay()===W);
+        if(match)toFill.push({day:match,cycle:(wi%4)+1,dow:W});
+      }
+      toFill.sort((a,b)=>a.day-b.day);
+      this._pushUndo();
+      if(!this.prevSchedule[nid])this.prevSchedule[nid]={};
+      for(const{day}of toFill)this.prevSchedule[nid][this.dayKey(day)]='주';
+    },
+    // 이 셀만 주휴 배정
+    fillJuhuSingle(nurse,day){
+      const nid=nurse.id;const dk=this.dayKey(day);
+      this._pushUndo();
+      if(!this.prevSchedule[nid])this.prevSchedule[nid]={};
+      this.prevSchedule[nid][dk]='주';
     },
 
     // ── 다음 달 이월 ──────────────────────────────────────
@@ -373,16 +448,16 @@ function app() {
       const ny=this.month===12?this.year+1:this.year;const nm=this.month===12?1:this.month+1;
       const prefix=`${ny}-${String(nm).padStart(2,'0')}-`;let count=0;
       for(const[nid,days]of Object.entries(this.schedule)){for(const[dateStr,shift]of Object.entries(days)){if(!dateStr.startsWith(prefix))continue;if(!this.prevSchedule[nid])this.prevSchedule[nid]={};this.prevSchedule[nid][dateStr]=shift;count++}}
-      if(count===0){alert('다음 달로 넘길 데이터가 없습니다.');return}
+      if(count===0){this.toast('다음 달로 넘길 데이터가 없습니다','info');return}
       this.year=ny;this.month=nm;this.activeTab='preinput';
-      alert(`${ny}년 ${nm}월 사전입력에 ${count}건이 추가되었습니다.\n사전입력 탭에서 확인하세요.`);
+      this.toast(`${ny}년 ${nm}월 사전입력에 ${count}건 추가`,'info');
     },
 
     // ── 저장/불러오기 ────────────────────────────────────────
     async saveSchedule(){
       const name=prompt('저장 이름을 입력하세요 (선택)',`${this.year}년 ${this.month}월`);if(name===null)return;
       await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name:name||null,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails});
-      await this.loadSavedList();alert('저장되었습니다.');
+      await this.loadSavedList();this.toast('저장되었습니다','info');
     },
     async loadSavedList(){this.savedSchedules=await this.api('GET','/api/schedules')},
     async loadSaved(id){const data=await this.api('GET',`/api/schedules/${id}`);this.year=data.data.year||data.year;this.month=data.data.month||data.month;this.nurses=data.data.nurses||[];this.requirements=data.data.requirements||this.requirements;this.rules=data.data.rules||this.rules;this.schedule=data.data.schedule||{};this.prevSchedule=data.data.prev_schedule||{};this.nurseScores=data.data.nurse_scores||{};this.nurseScoreDetails=data.data.nurse_score_details||{};const log=data.data.solver_log||'';if(log){this.solverLogs=log.split('\n').map((m,i)=>({id:i+1,msg:m}))}this.activeTab='schedule'},
@@ -392,7 +467,7 @@ function app() {
     async loadPrevSavesList(){this.prevSaves=await this.api('GET','/api/prev_schedules')},
     async savePrevToServer(){
       const name=this.prevSaveName.trim()||`${this.year}년 ${this.month}월 사전입력`;
-      if(!Object.keys(this.prevSchedule).some(k=>Object.keys(this.prevSchedule[k]).length>0)){alert('저장할 사전입력 데이터가 없습니다.');return}
+      if(!Object.keys(this.prevSchedule).some(k=>Object.keys(this.prevSchedule[k]).length>0)){this.toast('저장할 사전입력 데이터가 없습니다','info');return}
       await this.api('POST','/api/prev_schedules',{year:this.year,month:this.month,name,data:{schedule:this.prevSchedule,day_reqs:this.prevDayReqs,holidays:this.holidays,prev_month_nights:this.prevMonthNights}});
       this.prevSaveName='';await this.loadPrevSavesList();
     },
@@ -403,5 +478,1073 @@ function app() {
       this.prevSavePanel=false;
     },
     async deletePrevSave(id){if(!confirm('삭제하시겠습니까?'))return;await this.api('DELETE',`/api/prev_schedules/${id}`);await this.loadPrevSavesList()},
+
+    // ── 트레이니 근무 목록 ───────────────────────────────────
+    isTraineeInTraining(nurse,day){
+      if(!nurse?.is_trainee)return false;
+      if(!nurse.training_end_date)return true; // 종료일 미설정 = 계속 트레이닝
+      const end=new Date(nurse.training_end_date);
+      return day<=end;
+    },
+    get traineeShifts(){
+      // /D, /E, /N, /주, /OF, /D1 + 여성이면 /생
+      const base=['/D','/E','/N','/주','/OF','/D1'];
+      if(this.shiftEdit.nurse?.gender==='female')base.push('/생');
+      return base;
+    },
+    getEditShifts(){
+      const nurse=this.shiftEdit.nurse;
+      const day=this.shiftEdit.day;
+      if(this.shiftEdit.mode==='prev'&&nurse&&this.isTraineeInTraining(nurse,day)){
+        return this.traineeShifts;
+      }
+      if(this.shiftEdit.mode==='prev_multi')return this.prevShifts;
+      if(this.shiftEdit.mode==='prev')return this.prevShifts;
+      return this.allShifts;
+    },
+
+    // ── Undo/Redo ────────────────────────────────────────────
+    _pushUndo(){
+      this._undoStack.push(JSON.stringify({ps:this.prevSchedule,dr:this.prevDayReqs,hd:this.holidays,lk:this.lockedCells,nt:this.cellNotes}));
+      if(this._undoStack.length>this._maxUndo)this._undoStack.shift();
+      this._redoStack=[];
+    },
+    undo(){
+      if(!this._undoStack.length)return;
+      this._redoStack.push(JSON.stringify({ps:this.prevSchedule,dr:this.prevDayReqs,hd:this.holidays,lk:this.lockedCells,nt:this.cellNotes}));
+      const state=JSON.parse(this._undoStack.pop());
+      this.prevSchedule=state.ps;this.prevDayReqs=state.dr;this.holidays=state.hd;
+      this.lockedCells=state.lk||{};this.cellNotes=state.nt||{};
+      this._checkViolations();
+    },
+    redo(){
+      if(!this._redoStack.length)return;
+      this._undoStack.push(JSON.stringify({ps:this.prevSchedule,dr:this.prevDayReqs,hd:this.holidays,lk:this.lockedCells,nt:this.cellNotes}));
+      const state=JSON.parse(this._redoStack.pop());
+      this.prevSchedule=state.ps;this.prevDayReqs=state.dr;this.holidays=state.hd;
+      this.lockedCells=state.lk||{};this.cellNotes=state.nt||{};
+      this._checkViolations();
+    },
+
+    // ── Auto-save ──────────────────────────────────────────
+    _startAutoSave(){
+      if(this._autoSaveTimer)return;
+      this._autoSaveTimer=setInterval(()=>{
+        try{localStorage.setItem(this._autoSaveKey,JSON.stringify({y:this.year,m:this.month,ps:this.prevSchedule,dr:this.prevDayReqs,hd:this.holidays,lk:this.lockedCells,nt:this.cellNotes,t:Date.now()}))}catch(e){}
+      },30000);
+    },
+    _restoreAutoSave(){
+      try{
+        const raw=localStorage.getItem(this._autoSaveKey);
+        if(!raw)return false;
+        const d=JSON.parse(raw);
+        if(Date.now()-d.t>86400000)return false; // 24시간 초과 무시
+        if(Object.keys(this.prevSchedule).some(k=>Object.keys(this.prevSchedule[k]).length>0))return false; // 이미 데이터 있으면 무시
+        this.year=d.y;this.month=d.m;this.prevSchedule=d.ps;this.prevDayReqs=d.dr||{};this.holidays=d.hd||[];
+        this.lockedCells=d.lk||{};this.cellNotes=d.nt||{};
+        return true;
+      }catch(e){return false}
+    },
+
+    // ── 실시간 제약 위반 경고 ──────────────────────────────
+    _checkViolations(){
+      const v=[];
+      const days=this.scheduleDays;
+      const dayNames=['일','월','화','수','목','금','토'];
+      const eveningCodes=this.shifts.filter(s=>s.period==='evening'||s.period==='middle').map(s=>s.code);
+      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
+      const dayCodes=this.shifts.filter(s=>s.period==='day'||s.period==='day1').map(s=>s.code);
+
+      for(const nurse of this.nurses){
+        const nid=nurse.id;
+        for(let i=0;i<days.length-1;i++){
+          const dk1=this.dayKey(days[i]);
+          const dk2=this.dayKey(days[i+1]);
+          const s1=(this.prevSchedule[nid]||{})[dk1];
+          const s2=(this.prevSchedule[nid]||{})[dk2];
+          if(!s1||!s2)continue;
+
+          const d1=days[i].getDate(),d2=days[i+1].getDate();
+          const dn1=dayNames[days[i].getDay()],dn2=dayNames[days[i+1].getDay()];
+
+          if(eveningCodes.includes(s1)&&dayCodes.includes(s2))
+            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (E→D 금지)`});
+          if(nightCodes.includes(s1)&&dayCodes.includes(s2))
+            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (N→D 금지)`});
+          if(nightCodes.includes(s1)&&eveningCodes.includes(s2))
+            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (N→E 금지)`});
+        }
+      }
+      this.prevViolations=v;
+      this._violationSet=new Set(v.map(x=>`${x.nid}|${x.dk}`));
+    },
+    hasViolation(nurseId,day){
+      return this._violationSet?.has(`${nurseId}|${this.dayKey(day)}`)||false;
+    },
+
+    // ── 드래그 다중 선택 ───────────────────────────────────
+    onCellMouseDown(nurse,day,event){
+      if(event.button!==0)return;
+      this._isDragging=true;
+      this._dragStart={nid:nurse.id,day};
+      this._dragCells=[{nid:nurse.id,day,dk:this.dayKey(day)}];
+    },
+    onCellMouseOver(nurse,day){
+      if(!this._isDragging)return;
+      const dk=this.dayKey(day);
+      if(!this._dragCells.some(c=>c.nid===nurse.id&&c.dk===dk)){
+        this._dragCells.push({nid:nurse.id,day,dk});
+      }
+    },
+    onCellMouseUp(){
+      if(!this._isDragging)return;
+      this._isDragging=false;
+      if(this._dragCells.length>1){
+        // 다중 선택 → 근무 선택 모달
+        this.shiftEdit={open:true,nurse:this._dragCells[0],day:this._dragCells[0].day,dateLabel:`${this._dragCells.length}셀 선택`,mode:'prev_multi'};
+      }else if(this._dragCells.length===1){
+        const c=this._dragCells[0];
+        const nurse=this.nurses.find(n=>n.id===c.nid);
+        if(nurse)this.openPrevEdit(nurse,c.day);
+      }
+      this._dragStart=null;
+    },
+    isDragSelected(nurseId,day){
+      if(!this._isDragging)return false;
+      const dk=this.dayKey(day);
+      return this._dragCells.some(c=>c.nid===nurseId&&c.dk===dk);
+    },
+    applyMultiShiftEdit(shift){
+      if(shift==='__CLEAR__'){
+        this._pushUndo();
+        for(const c of this._dragCells){
+          if(this.prevSchedule[c.nid])delete this.prevSchedule[c.nid][c.dk];
+        }
+      }else{
+        this._pushUndo();
+        for(const c of this._dragCells){
+          if(!this.prevSchedule[c.nid])this.prevSchedule[c.nid]={};
+          this.prevSchedule[c.nid][c.dk]=shift;
+        }
+      }
+      this._dragCells=[];
+      this.shiftEdit.open=false;
+      this._checkViolations();
+    },
+
+    // ── 키보드 네비게이션 ──────────────────────────────────
+    onGridKeyDown(event){
+      if(!this._focusedCell)return;
+      const{nIdx,dIdx}=this._focusedCell;
+      const days=this.scheduleDays;
+      let newN=nIdx,newD=dIdx;
+
+      if(event.key==='ArrowRight'){newD=Math.min(days.length-1,dIdx+1);event.preventDefault()}
+      else if(event.key==='ArrowLeft'){newD=Math.max(0,dIdx-1);event.preventDefault()}
+      else if(event.key==='ArrowDown'){newN=Math.min(this.nurses.length-1,nIdx+1);event.preventDefault()}
+      else if(event.key==='ArrowUp'){newN=Math.max(0,nIdx-1);event.preventDefault()}
+      else if(event.key==='Delete'||event.key==='Backspace'){
+        const nurse=this.nurses[nIdx];const dk=this.dayKey(days[dIdx]);
+        if(nurse&&this.prevSchedule[nurse.id]?.[dk]){this._pushUndo();delete this.prevSchedule[nurse.id][dk];this._checkViolations()}
+        event.preventDefault();return;
+      }
+      else if(event.key==='z'&&(event.ctrlKey||event.metaKey)){event.shiftKey?this.redo():this.undo();event.preventDefault();return}
+      else{
+        // 근무코드 직접 입력
+        const key=event.key.toUpperCase();
+        const shiftMap={'D':'D','E':'E','N':'N','V':'V','O':'OF'};
+        const hangulMap={'ㅈ':'주','ㅂ':'병','ㅅ':'생','ㅌ':'특','ㄱ':'공','ㅂ':'법'};
+        let code=shiftMap[key]||hangulMap[event.key];
+        if(!code){
+          const match=this.shifts.find(s=>s.code.toUpperCase()===key);
+          if(match)code=match.code;
+        }
+        if(code){
+          const nurse=this.nurses[nIdx];const dk=this.dayKey(days[dIdx]);
+          if(nurse){this._pushUndo();if(!this.prevSchedule[nurse.id])this.prevSchedule[nurse.id]={};this.prevSchedule[nurse.id][dk]=code;this._checkViolations()}
+          event.preventDefault();return;
+        }
+        return;
+      }
+      this._focusedCell={nIdx:newN,dIdx:newD};
+    },
+    focusCell(nIdx,dIdx){this._focusedCell={nIdx,dIdx}},
+    isFocused(nIdx,dIdx){return this._focusedCell?.nIdx===nIdx&&this._focusedCell?.dIdx===dIdx},
+
+    // ── 셀 잠금 ────────────────────────────────────────────
+    toggleLock(nurseId,day){
+      const dk=this.dayKey(day);
+      if(!this.lockedCells[nurseId])this.lockedCells[nurseId]={};
+      if(this.lockedCells[nurseId][dk])delete this.lockedCells[nurseId][dk];
+      else this.lockedCells[nurseId][dk]=true;
+      if(Object.keys(this.lockedCells[nurseId]).length===0)delete this.lockedCells[nurseId];
+    },
+    isLocked(nurseId,day){return !!(this.lockedCells[nurseId]?.[this.dayKey(day)])},
+
+    // ── 간호사 메모 ────────────────────────────────────────
+    openNote(nurseId,day){
+      const dk=this.dayKey(day);
+      this.noteEdit={open:true,nurseId,dk,text:(this.cellNotes[nurseId]?.[dk])||''};
+    },
+    saveNote(){
+      const{nurseId,dk,text}=this.noteEdit;
+      if(!this.cellNotes[nurseId])this.cellNotes[nurseId]={};
+      if(text.trim())this.cellNotes[nurseId][dk]=text.trim();
+      else{delete this.cellNotes[nurseId][dk];if(!Object.keys(this.cellNotes[nurseId]).length)delete this.cellNotes[nurseId]}
+      this.noteEdit.open=false;
+    },
+    hasNote(nurseId,day){return !!(this.cellNotes[nurseId]?.[this.dayKey(day)])},
+    getNote(nurseId,day){return this.cellNotes[nurseId]?.[this.dayKey(day)]||''},
+
+    // ── 행 복사 ────────────────────────────────────────────
+    setCopySource(nurseId){this.copySource=nurseId},
+    pasteRow(targetNurseId){
+      if(!this.copySource||this.copySource===targetNurseId)return;
+      this._pushUndo();
+      const src=this.prevSchedule[this.copySource]||{};
+      const keys=this._cycleDateKeys();
+      if(!this.prevSchedule[targetNurseId])this.prevSchedule[targetNurseId]={};
+      for(const k of keys){
+        if(src[k])this.prevSchedule[targetNurseId][k]=src[k];
+        else delete this.prevSchedule[targetNurseId][k];
+      }
+      this.copySource=null;
+      this._checkViolations();
+    },
+
+    // ── 희망근무 표시 ──────────────────────────────────────
+    hasWish(nurseId,day){
+      const nurse=this.nurses.find(n=>n.id===nurseId);
+      if(!nurse||!nurse.wishes)return false;
+      const dk=this.dayKey(day);
+      return !!(nurse.wishes[dk]);
+    },
+    getWish(nurseId,day){
+      const nurse=this.nurses.find(n=>n.id===nurseId);
+      if(!nurse||!nurse.wishes)return '';
+      return nurse.wishes[this.dayKey(day)]||'';
+    },
+
+    // ── 프리셋 패턴 ────────────────────────────────────────
+    get presets(){
+      return [
+        {name:'주말 OFF',desc:'토/일을 OF로 설정',apply:(nid)=>{
+          this._pushUndo();
+          for(const d of this.scheduleDays){if(d.getDay()===0||d.getDay()===6){if(!this.prevSchedule[nid])this.prevSchedule[nid]={};this.prevSchedule[nid][this.dayKey(d)]='OF'}}
+          this._checkViolations();
+        }},
+        {name:'주휴 자동',desc:'주휴 4주 순환 배분',apply:(nid)=>{
+          const nurse=this.nurses.find(n=>n.id===nid);
+          if(nurse){
+            const firstSat=this.scheduleDays.find(d=>d.getDay()===6);
+            if(firstSat)this.autoFillJuhu(nurse,firstSat);
+          }
+        }},
+        {name:'야간전담',desc:'모든 근무일을 N으로',apply:(nid)=>{
+          this._pushUndo();
+          for(const d of this.scheduleDays){
+            const dk=this.dayKey(d);
+            const existing=(this.prevSchedule[nid]||{})[dk];
+            if(!existing||existing===''){if(!this.prevSchedule[nid])this.prevSchedule[nid]={};this.prevSchedule[nid][dk]='N'}
+          }
+          this._checkViolations();
+        }},
+        {name:'전체 초기화',desc:'이 간호사의 사전입력 삭제',apply:(nid)=>{
+          this._pushUndo();
+          const keys=this._cycleDateKeys();
+          if(this.prevSchedule[nid]){for(const k of keys)delete this.prevSchedule[nid][k]}
+          this._checkViolations();
+        }},
+      ];
+    },
+    applyPreset(presetIdx,nurseId){this.presets[presetIdx].apply(nurseId);this.presetPanel=false},
+
+    // ── 야간 카운터 ────────────────────────────────────────
+    countPrevNights(nurseId){
+      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
+      const ps=this.prevSchedule[nurseId]||{};
+      return Object.values(ps).filter(v=>nightCodes.includes(v)).length;
+    },
+
+    // ── 사전입력 편집 래핑 (undo 지원) ────────────────────
+    applyShiftEditWithUndo(shift){
+      this._pushUndo();
+      if(this.shiftEdit.mode==='prev_multi'){
+        this.applyMultiShiftEdit(shift);return;
+      }
+      this.applyShiftEdit(shift);
+      this._checkViolations();
+    },
+
+    // ── 사전입력 배정 카운트 ──────────────────────────────────
+    getPrevAssignedCount(day, type){
+      // type: 'D','E','N' — 해당 시간대에 배정된 사전입력 간호사 수
+      const dk=this.dayKey(day);
+      const periodShifts={
+        D: this.shifts.filter(s=>s.period==='day'||s.period==='day1').map(s=>s.code),
+        E: this.shifts.filter(s=>s.period==='evening'||s.period==='middle').map(s=>s.code),
+        N: this.shifts.filter(s=>s.period==='night').map(s=>s.code),
+      };
+      const codes=periodShifts[type]||[];
+      let count=0;
+      for(const nurse of this.nurses){
+        const val=(this.prevSchedule[nurse.id]||{})[dk];
+        if(val&&codes.includes(val))count++;
+      }
+      return count;
+    },
+    getPrevRemaining(day, type){
+      const assigned=this.getPrevAssignedCount(day,type);
+      const req=this.getPrevDayReq(day,type);
+      const needed=req!==null?req:this.getDefaultDayReq(day,type);
+      return Math.max(0,needed-assigned);
+    },
+
+    // ── 분석 탭 ─────────────────────────────────────────────
+    runAnalysis(){
+      this.analysisRunning=true;
+      try{
+        this.analysisResult=this._analyzeStaffing();
+        this.juhuRecommendation=this._recommendJuhu(this.analysisResult);
+      }catch(e){console.error('Analysis error:',e);this.analysisResult=null;this.juhuRecommendation=null}
+      this.analysisRunning=false;
+    },
+
+    _getReqForDay(day){
+      const wk=this.getDayWeekKey(day);
+      const base=this.requirements[wk]||{};
+      const dk=this.dayKey(day);
+      const override=this.prevDayReqs[dk]||{};
+      const D=(override.D!==undefined?override.D:base.D)||0;
+      const E=(override.E!==undefined?override.E:base.E)||0;
+      const N=(override.N!==undefined?override.N:base.N)||0;
+      return {D,E,N,total:D+E+N};
+    },
+
+    _analyzeStaffing(){
+      const days=this.scheduleDays;
+      const totalNurses=this.nurses.length;
+      const first=new Date(this.year,this.month-1,1);
+      const last=new Date(this.year,this.month,0);
+      const dayNames=['일','월','화','수','목','금','토'];
+
+      // 시프트 분류
+      const restCodes=this.shifts.filter(s=>s.period==='rest').map(s=>s.code);
+      const leaveCodes=this.shifts.filter(s=>s.period==='leave').map(s=>s.code);
+      const offCodes=[...restCodes,...leaveCodes];
+
+      const dayAnalysis=[];
+      for(const day of days){
+        const isThisMonth=day.getMonth()===this.month-1&&day.getFullYear()===this.year;
+        const dk=this.dayKey(day);
+        const req=this._getReqForDay(day);
+
+        // 사전입력 카운트
+        let preWork=0,preRest=0,preLeave=0,preJuhu=0,preOF=0;
+        for(const nurse of this.nurses){
+          const val=(this.prevSchedule[nurse.id]||{})[dk];
+          if(!val)continue;
+          if(val==='주')preJuhu++;
+          else if(val==='OF')preOF++;
+          else if(restCodes.includes(val))preRest++;
+          else if(leaveCodes.includes(val))preLeave++;
+          else preWork++;
+        }
+        const preFixed=preWork+preRest+preLeave+preJuhu+preOF;
+        const freeNurses=totalNurses-preFixed;
+        const remainReq=Math.max(0,req.total-preWork);
+        const slack=freeNurses-remainReq;
+
+        dayAnalysis.push({
+          day, dk, isThisMonth,
+          date:day.getDate(),
+          dow:day.getDay(),
+          dowName:dayNames[day.getDay()],
+          reqD:req.D, reqE:req.E, reqN:req.N, reqTotal:req.total,
+          preWork, preRest, preLeave, preJuhu, preOF, preFixed,
+          freeNurses, remainReq, slack,
+          weekIdx:Math.floor(this._daysSinceRef(day)/7),
+          cycle:this.getCycleNum(day),
+        });
+      }
+
+      // 주별 집계 (모든 주기 날짜 포함 — overflow 포함)
+      const weekMap=new Map();
+      for(const da of dayAnalysis){
+        if(!weekMap.has(da.weekIdx))weekMap.set(da.weekIdx,{weekIdx:da.weekIdx,cycle:da.cycle,days:[],totalReq:0,totalSlack:0,juhuAssigned:0,ofAssigned:0});
+        const w=weekMap.get(da.weekIdx);
+        w.days.push(da);
+        w.totalReq+=da.reqTotal;w.totalSlack+=da.slack;w.juhuAssigned+=da.preJuhu;w.ofAssigned+=da.preOF;
+      }
+      const weeks=[...weekMap.values()].sort((a,b)=>a.weekIdx-b.weekIdx);
+
+      // 경고 (모든 날짜 대상)
+      const warnings=[];
+      for(const da of dayAnalysis){
+        if(da.slack<0)warnings.push({type:'danger',msg:`${da.day.getMonth()+1}/${da.date}(${da.dowName}) 인원 부족: 필요 ${da.reqTotal}명, 가용 ${da.freeNurses+da.preWork}명`});
+        else if(da.slack<2)warnings.push({type:'warn',msg:`${da.day.getMonth()+1}/${da.date}(${da.dowName}) 여유 부족 (${da.slack}명) — 주휴/OF 배치 공간 빡빡`});
+      }
+
+      return {days:dayAnalysis, weeks, warnings, totalNurses};
+    },
+
+    _recommendJuhu(analysis){
+      if(!analysis)return null;
+      const {days,weeks,totalNurses}=analysis;
+      const nurses=this.nurses;
+      const assignments={};
+      const warnings=[];
+
+      // 일자별 동적 여유도 (추천할 때마다 갱신)
+      const daySlack={};
+      for(const da of days){
+        daySlack[da.dk]={...da,currentSlack:da.slack};
+      }
+
+      // 주를 4주 period로 그룹핑
+      const periodMap=new Map();
+      for(const week of weeks){
+        const period=Math.floor(week.weekIdx/4);
+        if(!periodMap.has(period))periodMap.set(period,[]);
+        periodMap.get(period).push(week);
+      }
+      const periods=[...periodMap.entries()].sort((a,b)=>a[0]-b[0]);
+
+      // 1단계: 이미 사전입력된 주휴 수집
+      const nurseExistingJuhu={};  // nurseId → Set of weekIdx
+      for(const nurse of nurses){
+        nurseExistingJuhu[nurse.id]=new Set();
+        for(const week of weeks){
+          for(const wd of week.days){
+            const val=(this.prevSchedule[nurse.id]||{})[wd.dk];
+            if(val==='주'){
+              nurseExistingJuhu[nurse.id].add(week.weekIdx);
+              if(!assignments[nurse.id])assignments[nurse.id]=[];
+              assignments[nurse.id].push({day:wd.day,dk:wd.dk,date:wd.date,dow:wd.dow,dowName:wd.dowName,cycle:wd.cycle,weekIdx:week.weekIdx,existing:true});
+            }
+          }
+        }
+      }
+
+      // 2단계: juhu_day 설정된 간호사 — 4주 동일 요일 + period 간 -1 시프트
+      const nurseAssignedWeeks={};  // nurseId → Set of weekIdx (배정 완료)
+      for(const n of nurses)nurseAssignedWeeks[n.id]=new Set(nurseExistingJuhu[n.id]);
+
+      for(const nurse of nurses){
+        const jd=nurse.juhu_day;
+        if(jd===null||jd===undefined)continue;
+
+        for(const[periodIdx,periodWeeks]of periods){
+          for(const week of periodWeeks){
+            if(nurseAssignedWeeks[nurse.id].has(week.weekIdx))continue;
+            const weekDays=week.days;
+            if(!weekDays.length)continue;
+
+            let effectiveDay=jd;
+            if(nurse.juhu_auto_rotate!==false){
+              effectiveDay=((jd-periodIdx)%7+7)%7;
+            }
+            const target=weekDays.find(d=>d.dow===effectiveDay);
+            if(target&&daySlack[target.dk]&&daySlack[target.dk].currentSlack>0){
+              if(!assignments[nurse.id])assignments[nurse.id]=[];
+              assignments[nurse.id].push({day:target.day,dk:target.dk,date:target.date,dow:target.dow,dowName:target.dowName,cycle:target.cycle,weekIdx:week.weekIdx,existing:false});
+              daySlack[target.dk].currentSlack--;
+              nurseAssignedWeeks[nurse.id].add(week.weekIdx);
+            }
+          }
+        }
+      }
+
+      // 3단계: juhu_day 없는 간호사 — 첫 period에서 최적 요일 선정 후 4주 유지, 다음 period에서 -1
+      const unsetNurses=nurses.filter(n=>n.juhu_day===null||n.juhu_day===undefined);
+
+      // 첫 period에서 요일별 여유도 합산 → 가장 여유로운 요일부터 배정
+      if(unsetNurses.length>0&&periods.length>0){
+        const firstPeriodIdx=periods[0][0];
+        const firstPeriodWeeks=periods[0][1];
+
+        // 요일별 누적 여유도 계산 (첫 period 기준)
+        const dowSlackSum={};  // dow → 총 여유도
+        for(let dow=0;dow<7;dow++)dowSlackSum[dow]=0;
+        for(const week of firstPeriodWeeks){
+          for(const wd of week.days){
+            dowSlackSum[wd.dow]+=(daySlack[wd.dk]?.currentSlack||0);
+          }
+        }
+
+        // 각 간호사에게 요일 배정 (여유도 + 그룹 균형 고려)
+        const dowAssignCount={};  // dow → 배정된 간호사 수
+        const dowGroupCount={};   // dow → { groupName → count }
+        for(let dow=0;dow<7;dow++){dowAssignCount[dow]=0;dowGroupCount[dow]={}}
+
+        // 간호사를 미배정 주 많은 순으로 정렬
+        const sortedUnset=[...unsetNurses].sort((a,b)=>{
+          const aUnassigned=weeks.filter(w=>!nurseAssignedWeeks[a.id].has(w.weekIdx)&&w.days.length>0).length;
+          const bUnassigned=weeks.filter(w=>!nurseAssignedWeeks[b.id].has(w.weekIdx)&&w.days.length>0).length;
+          return bUnassigned-aUnassigned;
+        });
+
+        for(const nurse of sortedUnset){
+          // 이미 모든 주에 주휴 배정 완료된 간호사는 스킵
+          const hasUnassigned=weeks.some(w=>!nurseAssignedWeeks[nurse.id].has(w.weekIdx)&&w.days.length>0);
+          if(!hasUnassigned)continue;
+
+          const nurseGroup=nurse.group||'';
+          const candidates=[];
+          for(let dow=0;dow<7;dow++){
+            let feasibleWeeks=0;
+            for(const[periodIdx,periodWeeks]of periods){
+              const shiftedDow=((dow-(periodIdx-firstPeriodIdx))%7+7)%7;
+              for(const week of periodWeeks){
+                if(nurseAssignedWeeks[nurse.id].has(week.weekIdx))continue;
+                const wd=week.days.find(d=>d.dow===shiftedDow);
+                if(wd&&daySlack[wd.dk]&&daySlack[wd.dk].currentSlack>0)feasibleWeeks++;
+              }
+            }
+            if(feasibleWeeks===0)continue;
+
+            // 점수: 여유도 합 - 총 배정 수 페널티 - 같은 그룹 배정 수 페널티 (그룹 균형)
+            const sameGroupOnDow=dowGroupCount[dow][nurseGroup]||0;
+            const score=dowSlackSum[dow]-dowAssignCount[dow]*2-sameGroupOnDow*4;
+            candidates.push({dow,score,feasibleWeeks});
+          }
+
+          if(candidates.length===0){
+            warnings.push({type:'danger',msg:`${nurse.name}: 주휴 배정 가능한 요일이 없습니다`});
+            continue;
+          }
+
+          // 최고 점수 요일 선택
+          candidates.sort((a,b)=>b.score-a.score||b.feasibleWeeks-a.feasibleWeeks);
+          const chosenDow=candidates[0].dow;
+          dowAssignCount[chosenDow]++;
+          if(!dowGroupCount[chosenDow][nurseGroup])dowGroupCount[chosenDow][nurseGroup]=0;
+          dowGroupCount[chosenDow][nurseGroup]++;
+
+          // 모든 period에 걸쳐 배정 (4주 동일 요일, period 간 -1 시프트)
+          for(const[periodIdx,periodWeeks]of periods){
+            const shiftedDow=((chosenDow-(periodIdx-firstPeriodIdx))%7+7)%7;
+            for(const week of periodWeeks){
+              if(nurseAssignedWeeks[nurse.id].has(week.weekIdx))continue;
+              const weekDays=week.days;
+              if(!weekDays.length)continue;
+
+              const target=weekDays.find(d=>d.dow===shiftedDow);
+              if(target&&daySlack[target.dk]&&daySlack[target.dk].currentSlack>0){
+                if(!assignments[nurse.id])assignments[nurse.id]=[];
+                assignments[nurse.id].push({day:target.day,dk:target.dk,date:target.date,dow:target.dow,dowName:target.dowName,cycle:target.cycle,weekIdx:week.weekIdx,existing:false});
+                daySlack[target.dk].currentSlack--;
+                nurseAssignedWeeks[nurse.id].add(week.weekIdx);
+              }else if(target){
+                // 여유 없으면 같은 주 다른 날 중 가장 여유로운 날 대체
+                const fallback=weekDays
+                  .filter(d=>daySlack[d.dk]&&daySlack[d.dk].currentSlack>0)
+                  .sort((a,b)=>daySlack[b.dk].currentSlack-daySlack[a.dk].currentSlack);
+                if(fallback.length>0){
+                  const fb=fallback[0];
+                  if(!assignments[nurse.id])assignments[nurse.id]=[];
+                  assignments[nurse.id].push({day:fb.day,dk:fb.dk,date:fb.date,dow:fb.dow,dowName:fb.dowName,cycle:fb.cycle,weekIdx:week.weekIdx,existing:false});
+                  daySlack[fb.dk].currentSlack--;
+                  nurseAssignedWeeks[nurse.id].add(week.weekIdx);
+                  warnings.push({type:'warn',msg:`${nurse.name}: ${fb.cycle}주기 ${fb.date}일 — 요일 변경 (여유 부족)`});
+                }else{
+                  warnings.push({type:'danger',msg:`${nurse.name}: ${week.cycle}주기에 주휴 배정 불가`});
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 추천 후 일별 주휴 수 집계
+      const juhuPerDay={};
+      for(const[nid,list]of Object.entries(assignments)){
+        for(const a of list){
+          if(!juhuPerDay[a.dk])juhuPerDay[a.dk]=0;
+          juhuPerDay[a.dk]++;
+        }
+      }
+
+      // 배정 정렬 (날짜순)
+      for(const nid of Object.keys(assignments)){
+        assignments[nid].sort((a,b)=>a.day-b.day);
+      }
+
+      return {assignments,warnings,juhuPerDay};
+    },
+
+    applyRecommendedJuhu(){
+      if(!this.juhuRecommendation)return;
+      const{assignments}=this.juhuRecommendation;
+      let count=0;
+      for(const[nid,list]of Object.entries(assignments)){
+        for(const a of list){
+          if(a.existing)continue;
+          if(!this.prevSchedule[nid])this.prevSchedule[nid]={};
+          this.prevSchedule[nid][a.dk]='주';
+          count++;
+        }
+      }
+      if(count===0){this.toast('이미 모든 주휴가 반영되어 있습니다','info');return}
+      this.toast(`${count}건의 주휴가 사전입력에 적용되었습니다`,'info');
+    },
+
+    getSlackClass(slack){
+      if(slack>=4)return'slack-good';
+      if(slack>=3)return'slack-ok';
+      if(slack>=2)return'slack-tight';
+      if(slack>=1)return'slack-warn';
+      return'slack-danger';
+    },
+    getSlackLabel(slack){
+      if(slack>=4)return'여유';
+      if(slack>=3)return'양호';
+      if(slack>=2)return'적정';
+      if(slack>=1)return'빡빡';
+      return'부족';
+    },
+
+    // ═══ 1. 엑셀 내보내기 ═══════════════════════════════════
+    exportToCSV(){
+      if(!this.schedule||!Object.keys(this.schedule).length)return;
+      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
+      const dayNames=['일','월','화','수','목','금','토'];
+      let csv='\uFEFF'; // BOM for Korean
+      // 헤더
+      csv+='이름,그룹,'+days.map(d=>`${d.getMonth()+1}/${d.getDate()}(${dayNames[d.getDay()]})`).join(',')+',D,E,N,휴무\n';
+      // 데이터
+      for(const nurse of this.nurses){
+        const shifts=days.map(d=>{
+          const s=this.schedule[nurse.id]?.[this.dayKey(d)]||'';
+          return this.hideCharge?s.replace('DC','D').replace('EC','E').replace('NC','N'):s;
+        });
+        const dCnt=this.countShifts(nurse.id,['DC','D']);
+        const eCnt=this.countShifts(nurse.id,['EC','E']);
+        const nCnt=this.countShifts(nurse.id,['NC','N']);
+        const restCnt=this.countShifts(nurse.id,['OF','주']);
+        csv+=`${nurse.name},${nurse.group},${shifts.join(',')},${dCnt},${eCnt},${nCnt},${restCnt}\n`;
+      }
+      const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download=`근무표_${this.year}년${this.month}월.csv`;
+      a.click();URL.revokeObjectURL(url);
+    },
+
+    // ═══ 2. 인쇄 ═══════════════════════════════════════════
+    printSchedule(){window.print()},
+
+    // ═══ 3. 스케줄 비교 ═══════════════════════════════════
+    compareMode:false, compareSchedule:null, compareName:'',
+    async loadCompare(id){
+      const data=await this.api('GET',`/api/schedules/${id}`);
+      this.compareSchedule=data.data.schedule||{};
+      this.compareName=data.data.name||`${data.data.year||data.year}년 ${data.data.month||data.month}월`;
+      this.compareMode=true;
+    },
+    closeCompare(){this.compareMode=false;this.compareSchedule=null;this.compareName=''},
+    getCompareDiff(nurseId,day){
+      if(!this.compareSchedule)return null;
+      const dk=this.dayKey(day);
+      const cur=this.schedule[nurseId]?.[dk]||'';
+      const prev=this.compareSchedule[nurseId]?.[dk]||'';
+      if(cur===prev)return null;
+      return{from:prev,to:cur};
+    },
+
+    // ═══ 4. 수동 편집 추적 ═══════════════════════════════
+    _originalSchedule:null,
+    trackEdits(){
+      this._originalSchedule=JSON.parse(JSON.stringify(this.schedule));
+    },
+    isManuallyEdited(nurseId,day){
+      if(!this._originalSchedule)return false;
+      const dk=this.dayKey(day);
+      const orig=this._originalSchedule[nurseId]?.[dk]||'';
+      const cur=this.schedule[nurseId]?.[dk]||'';
+      return orig!==cur;
+    },
+    getManualEditCount(){
+      if(!this._originalSchedule)return 0;
+      let count=0;
+      for(const nid of Object.keys(this.schedule)){
+        for(const[dk,val]of Object.entries(this.schedule[nid]||{})){
+          if((this._originalSchedule[nid]?.[dk]||'')!==val)count++;
+        }
+      }
+      return count;
+    },
+
+    // ═══ 5. 간호사별 월간 요약 ═══════════════════════════
+    showNurseSummary:false,
+    get nurseSummaryData(){
+      if(!this.schedule||!Object.keys(this.schedule).length)return[];
+      const dayCodes=this.shifts.filter(s=>s.period==='day').map(s=>s.code);
+      const eveCodes=this.shifts.filter(s=>s.period==='evening').map(s=>s.code);
+      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
+      const restCodes=this.shifts.filter(s=>s.period==='rest').map(s=>s.code);
+      const leaveCodes=this.shifts.filter(s=>s.period==='leave').map(s=>s.code);
+      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
+      return this.nurses.map(nurse=>{
+        const nid=nurse.id;
+        const sc=this.schedule[nid]||{};
+        let d=0,e=0,n=0,rest=0,leave=0,weekendWork=0;
+        for(const day of days){
+          const dk=this.dayKey(day);
+          const val=sc[dk];if(!val)continue;
+          if(dayCodes.includes(val))d++;
+          else if(eveCodes.includes(val))e++;
+          else if(nightCodes.includes(val))n++;
+          else if(restCodes.includes(val))rest++;
+          else if(leaveCodes.includes(val))leave++;
+          if((day.getDay()===0||day.getDay()===6)&&[...dayCodes,...eveCodes,...nightCodes].includes(val))weekendWork++;
+        }
+        return{name:nurse.name,group:nurse.group,d,e,n,rest,leave,weekendWork,total:d+e+n,score:this.nurseScores[nid]??0};
+      });
+    },
+
+    // ═══ 6. 이전달 스케줄 자동 연동 ══════════════════════
+    async loadPrevMonthSchedule(){
+      const py=this.month===1?this.year-1:this.year;
+      const pm=this.month===1?12:this.month-1;
+      const list=await this.api('GET','/api/schedules');
+      const prev=list.find(s=>s.year===py&&s.month===pm);
+      if(!prev){this.toast(`${py}년 ${pm}월 저장된 스케줄이 없습니다`,'error');return}
+      const data=await this.api('GET',`/api/schedules/${prev.id}`);
+      const schedule=data.data.schedule||{};
+      // 마지막 주기의 데이터를 현재 달 사전입력에 이월
+      let count=0;
+      const monthPrefix=`${this.year}-${String(this.month).padStart(2,'0')}-`;
+      for(const[nid,days]of Object.entries(schedule)){
+        for(const[dk,shift]of Object.entries(days)){
+          // 이전달 스케줄에서 현재 달에 해당하는 overflow 날짜만
+          if(!dk.startsWith(monthPrefix))continue;
+          if(!this.prevSchedule[nid])this.prevSchedule[nid]={};
+          this.prevSchedule[nid][dk]=shift;count++;
+        }
+      }
+      if(count>0)this.toast(`${py}년 ${pm}월에서 ${count}건 이월 완료`,'info');
+      else this.toast('이월할 데이터가 없습니다','info');
+    },
+
+    // ═══ 7. 간호사 희망근무 입력 ══════════════════════════
+    wishEditMode:false,
+    wishEditNurse:null,
+    openWishEdit(nurse){this.wishEditNurse=nurse;this.wishEditMode=true},
+    closeWishEdit(){this.wishEditMode=false;this.wishEditNurse=null},
+    setWish(nurseId,day,shift){
+      const nurse=this.nurses.find(n=>n.id===nurseId);
+      if(!nurse)return;
+      if(!nurse.wishes)nurse.wishes={};
+      const dk=this.dayKey(day);
+      if(shift)nurse.wishes[dk]=shift;
+      else delete nurse.wishes[dk];
+    },
+    clearWish(nurseId,day){
+      const nurse=this.nurses.find(n=>n.id===nurseId);
+      if(!nurse||!nurse.wishes)return;
+      delete nurse.wishes[this.dayKey(day)];
+    },
+
+    // ═══ 9. 다중 솔버 비교 ═══════════════════════════════
+    multiSolveResults:[],
+    async generateMultiple(count=2){
+      this.multiSolveResults=[];
+      for(let i=0;i<count;i++){
+        const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:Math.max(0.02,this.mipGap+i*0.02),time_limit:Math.min(this.generateTimeout*60,120),allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,unlimited_v:this.unlimitedV};
+        try{
+          const result=await this.api('POST','/api/generate',payload);
+          if(result.success)this.multiSolveResults.push({idx:i+1,schedule:result.schedule,scores:result.nurse_scores||{},gap:result.mip_gap_percent,msg:result.message});
+        }catch(e){}
+      }
+      if(this.multiSolveResults.length>0)this.toast(`${this.multiSolveResults.length}개의 해 생성 완료`,'info');
+      else this.toast('해를 생성하지 못했습니다','error');
+    },
+    selectMultiResult(idx){
+      const r=this.multiSolveResults[idx];
+      if(!r)return;
+      this.schedule=r.schedule;this.nurseScores=r.scores;this.mipGapPercent=r.gap;
+      this.statusMessage=r.msg;this.statusOk=true;
+      this.trackEdits();
+    },
+
+    // ═══ 10. 템플릿 저장/불러오기 ════════════════════════
+    templates:[],
+    async loadTemplates(){
+      try{const raw=localStorage.getItem('ns_templates');this.templates=raw?JSON.parse(raw):[]}catch(e){this.templates=[]}
+    },
+    saveTemplate(){
+      const name=prompt('템플릿 이름을 입력하세요','기본 템플릿');if(!name)return;
+      this.templates.push({name,nurses:JSON.parse(JSON.stringify(this.nurses)),requirements:JSON.parse(JSON.stringify(this.requirements)),rules:JSON.parse(JSON.stringify(this.rules)),shifts:JSON.parse(JSON.stringify(this.shifts)),created:new Date().toISOString().slice(0,16)});
+      localStorage.setItem('ns_templates',JSON.stringify(this.templates));
+    },
+    loadTemplate(idx){
+      const t=this.templates[idx];if(!t)return;
+      if(!confirm(`'${t.name}' 템플릿을 불러오시겠습니까?\n현재 간호사/규칙/인원 설정이 교체됩니다.`))return;
+      this.nurses=t.nurses;this.requirements=t.requirements;this.rules=t.rules;
+      if(t.shifts)this.shifts=t.shifts;
+    },
+    deleteTemplate(idx){this.templates.splice(idx,1);localStorage.setItem('ns_templates',JSON.stringify(this.templates))},
+
+    // ═══ 11. 변경 이력 ════════════════════════════════════
+    changeHistory:[],
+    _maxHistory:100,
+    addHistory(action,detail){
+      this.changeHistory.unshift({time:new Date().toLocaleTimeString(),action,detail});
+      if(this.changeHistory.length>this._maxHistory)this.changeHistory.pop();
+    },
+
+    // ═══ 12. 간호사 그룹별 필터 ══════════════════════════
+    groupFilter:'all',
+    get filteredNurses(){
+      if(this.groupFilter==='all')return this.nurses;
+      return this.nurses.filter(n=>n.group===this.groupFilter);
+    },
+    get nurseGroups(){
+      const groups=[...new Set(this.nurses.map(n=>n.group).filter(Boolean))];
+      return groups.sort();
+    },
+
+    // ═══ 13. 생성 결과 경고 요약 ═════════════════════════
+    get scheduleWarnings(){
+      if(!this.schedule||!Object.keys(this.schedule).length)return[];
+      const warns=[];
+      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
+      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
+      const workCodes=this.shifts.filter(s=>['day','day1','evening','middle','night'].includes(s.period)).map(s=>s.code);
+      const dayNames=['일','월','화','수','목','금','토'];
+
+      for(const nurse of this.nurses){
+        const nid=nurse.id;
+        // 연속 근무 체크
+        let consec=0,maxConsec=0;
+        for(const day of days){
+          const val=this.schedule[nid]?.[this.dayKey(day)];
+          if(val&&workCodes.includes(val)){consec++;maxConsec=Math.max(maxConsec,consec)}
+          else consec=0;
+        }
+        if(maxConsec>=6)warns.push({type:'warn',nurse:nurse.name,msg:`연속 ${maxConsec}일 근무`});
+
+        // 야간 편중
+        const nCount=Object.values(this.schedule[nid]||{}).filter(v=>nightCodes.includes(v)).length;
+        if(nCount>=8)warns.push({type:'warn',nurse:nurse.name,msg:`야간 ${nCount}회 (편중)`});
+
+        // 주말 근무 편중
+        let weekendWork=0;
+        for(const day of days){
+          if(day.getDay()!==0&&day.getDay()!==6)continue;
+          const val=this.schedule[nid]?.[this.dayKey(day)];
+          if(val&&workCodes.includes(val))weekendWork++;
+        }
+        if(weekendWork>=6)warns.push({type:'info',nurse:nurse.name,msg:`주말 근무 ${weekendWork}회`});
+      }
+      return warns;
+    },
+
+    // ═══ 14. 다크모드 자동 전환 ══════════════════════════
+    autoDarkMode:false,
+    initAutoDark(){
+      if(!window.matchMedia)return;
+      const mq=window.matchMedia('(prefers-color-scheme: dark)');
+      if(localStorage.getItem('autoDarkMode')==='true'){
+        this.autoDarkMode=true;
+        this.darkMode=mq.matches;
+        document.documentElement.classList.toggle('dark',this.darkMode);
+      }
+      mq.addEventListener('change',e=>{
+        if(this.autoDarkMode){this.darkMode=e.matches;document.documentElement.classList.toggle('dark',this.darkMode)}
+      });
+    },
+    toggleAutoDark(){
+      this.autoDarkMode=!this.autoDarkMode;
+      localStorage.setItem('autoDarkMode',this.autoDarkMode);
+      if(this.autoDarkMode){
+        const mq=window.matchMedia('(prefers-color-scheme: dark)');
+        this.darkMode=mq.matches;
+        document.documentElement.classList.toggle('dark',this.darkMode);
+      }
+    },
+
+    // ═══ 배점 슬라이더 시스템 ═════════════════════════════
+    scoringSliders:{
+      continuity:5,    // 근무 연속성 0~10
+      forward:5,       // 순방향 전환 0~10
+      nightFairness:5, // 야간 공평성 0~10
+      weekendFairness:5,// 주말 공평성 0~10
+      wishWeight:5,    // 희망 반영도 0~10
+    },
+    showScoringSliders:false,
+    _initScoringSliders(){
+      try{const raw=localStorage.getItem('ns_scoring_sliders');if(raw)this.scoringSliders=JSON.parse(raw)}catch(e){}
+    },
+    _saveScoringSliders(){
+      try{localStorage.setItem('ns_scoring_sliders',JSON.stringify(this.scoringSliders))}catch(e){}
+    },
+    applyScoringSliders(){
+      // 슬라이더 값을 기존 scoringRules의 점수에 반영
+      const s=this.scoringSliders;
+      const map={
+        // rule name → {slider, base, multiplier}
+        '연속 동일 근무 보상':{slider:s.continuity, base:15, field:'score'},
+        '순방향 D→E':{slider:s.forward, base:20, field:'score'},
+        '순방향 E→N':{slider:s.forward, base:20, field:'score'},
+        'D→N 전환 페널티':{slider:s.forward, base:-30, field:'score'},
+        '야간 공평성':{slider:s.nightFairness, base:-10, field:'score'},
+        '희망 근무 반영':{slider:s.wishWeight, base:50, field:'score'},
+        '연속 휴일 보상':{slider:s.continuity, base:30, field:'score'},
+      };
+      let updated=0;
+      for(const rule of this.scoringRules){
+        const m=map[rule.name];
+        if(m){
+          const newScore=Math.round(m.base*(m.slider/5));
+          if(rule.score!==newScore){rule.score=newScore;updated++}
+        }
+      }
+      // 주말 공평성 규칙이 없으면 생성은 안 하고 안내만
+      this._saveScoringSliders();
+      if(updated>0)this.toast(`배점 ${updated}건 조정됨`,'info');
+      // 서버에 저장
+      for(const rule of this.scoringRules){
+        this.api('POST','/api/scoring_rules',rule).catch(()=>{});
+      }
+    },
+
+    // ═══ 토스트 알림 시스템 ══════════════════════════════
+    _toasts:[],
+    _toastId:0,
+    toast(msg,type='info',duration=3000){
+      const id=++this._toastId;
+      this._toasts.push({id,msg,type});
+      setTimeout(()=>{this._toasts=this._toasts.filter(t=>t.id!==id)},duration);
+    },
+
+    // ═══ 스케줄 탭 제약 위반 체크 ═════════════════════════
+    scheduleViolations:[],
+    checkScheduleViolations(){
+      const v=[];
+      const days=this.scheduleDays;
+      const dayNames=['일','월','화','수','목','금','토'];
+      const eveningCodes=this.shifts.filter(s=>s.period==='evening'||s.period==='middle').map(s=>s.code);
+      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
+      const dayCodes=this.shifts.filter(s=>s.period==='day'||s.period==='day1').map(s=>s.code);
+      for(const nurse of this.nurses){
+        const nid=nurse.id;
+        for(let i=0;i<days.length-1;i++){
+          const dk1=this.dayKey(days[i]),dk2=this.dayKey(days[i+1]);
+          const s1=(this.schedule[nid]||{})[dk1],s2=(this.schedule[nid]||{})[dk2];
+          if(!s1||!s2)continue;
+          const d1=days[i].getDate(),dn1=dayNames[days[i].getDay()];
+          const d2=days[i+1].getDate(),dn2=dayNames[days[i+1].getDay()];
+          if(eveningCodes.includes(s1)&&dayCodes.includes(s2))
+            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (E→D)`});
+          if(nightCodes.includes(s1)&&dayCodes.includes(s2))
+            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (N→D)`});
+          if(nightCodes.includes(s1)&&eveningCodes.includes(s2))
+            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (N→E)`});
+        }
+      }
+      this.scheduleViolations=v;
+    },
+    hasScheduleViolation(nurseId,day){return this.scheduleViolations.some(v=>v.nid===nurseId&&v.dk===this.dayKey(day))},
+
+    // ═══ 분석 탭 자동실행 ═════════════════════════════════
+    _lastAnalysisKey:'',
+    autoRunAnalysis(){
+      const key=`${this.year}-${this.month}-${this.countPrevEntries()}`;
+      if(key!==this._lastAnalysisKey){this._lastAnalysisKey=key;this.runAnalysis()}
+    },
+
+    // ═══ 단축키 도움말 ════════════════════════════════════
+    showShortcutHelp:false,
+
+    // ═══ 설정 탭 섹션 접기 ════════════════════════════════
+    settingsCollapse:{yearMonth:false,requirements:false,shifts:false,rules:false,nurses:false},
+    toggleSection(key){this.settingsCollapse[key]=!this.settingsCollapse[key]},
+
+    // ═══ 사전입력 ↔ 스케줄 교차 표시 ═════════════════════
+    isPrevMatched(nurseId,day){
+      const dk=this.dayKey(day);
+      const pre=(this.prevSchedule[nurseId]||{})[dk];
+      const sched=(this.schedule[nurseId]||{})[dk];
+      if(!pre||!sched)return null;
+      if(pre===sched)return'match';
+      const flex=this._getPreFlex(pre);
+      if(flex.includes(sched))return'match';
+      return'changed';
+    },
+    _getPreFlex(code){
+      const map={'D':['D','DC'],'E':['E','EC'],'N':['N','NC']};
+      return map[code]||[code];
+    },
+
+    // ═══ 최근 작업 복원 확장 ══════════════════════════════
+    _saveFullState(){
+      try{
+        localStorage.setItem('ns_full_state',JSON.stringify({
+          y:this.year,m:this.month,tab:this.activeTab,
+          ps:this.prevSchedule,dr:this.prevDayReqs,hd:this.holidays,
+          lk:this.lockedCells,nt:this.cellNotes,mn:this.prevMonthNights,
+          t:Date.now()
+        }));
+      }catch(e){}
+    },
+    _restoreFullState(){
+      try{
+        const raw=localStorage.getItem('ns_full_state');
+        if(!raw)return false;
+        const d=JSON.parse(raw);
+        if(Date.now()-d.t>172800000)return false; // 48시간 초과 무시
+        if(Object.keys(this.prevSchedule).some(k=>Object.keys(this.prevSchedule[k]).length>0))return false;
+        this.year=d.y;this.month=d.m;this.activeTab=d.tab||'settings';
+        this.prevSchedule=d.ps||{};this.prevDayReqs=d.dr||{};this.holidays=d.hd||[];
+        this.lockedCells=d.lk||{};this.cellNotes=d.nt||{};this.prevMonthNights=d.mn||{};
+        return true;
+      }catch(e){return false}
+    },
+
+    // ═══ PDF 내보내기 (인쇄 기반) ═════════════════════════
+    exportToPDF(){
+      // 인쇄 다이얼로그를 열어 PDF로 저장 안내
+      this.toast('인쇄 대화상자에서 "PDF로 저장"을 선택하세요','info',4000);
+      setTimeout(()=>window.print(),500);
+    },
+
+    // ═══ 간호사 순서 드래그 정렬 ═════════════════════════
+    _dragNurseIdx:null,
+    onNurseDragStart(idx){this._dragNurseIdx=idx},
+    onNurseDragOver(idx,event){event.preventDefault()},
+    onNurseDrop(idx){
+      if(this._dragNurseIdx===null||this._dragNurseIdx===idx)return;
+      const moved=this.nurses.splice(this._dragNurseIdx,1)[0];
+      this.nurses.splice(idx,0,moved);
+      this._dragNurseIdx=null;
+      // 서버에 순서 저장
+      this.api('POST','/api/nurses/reorder',{order:this.nurses.map(n=>n.id)}).catch(()=>{});
+      this.toast('간호사 순서가 변경되었습니다','info');
+    },
+
+    // ═══ 8. 공정성 대시보드 (간이 버전) ══════════════════
+    get fairnessData(){
+      if(!this.schedule||!Object.keys(this.schedule).length)return null;
+      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
+      const workCodes=this.shifts.filter(s=>['day','day1','evening','middle','night'].includes(s.period)).map(s=>s.code);
+      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
+      const stats=this.nurses.map(nurse=>{
+        const nid=nurse.id;
+        let nights=0,weekends=0,holidays=0;
+        for(const day of days){
+          const dk=this.dayKey(day);
+          const val=this.schedule[nid]?.[dk];if(!val)continue;
+          if(nightCodes.includes(val))nights++;
+          if((day.getDay()===0||day.getDay()===6)&&workCodes.includes(val))weekends++;
+          if(this.holidays.includes(dk)&&workCodes.includes(val))holidays++;
+        }
+        return{name:nurse.name,group:nurse.group,nights,weekends,holidays,score:this.nurseScores[nid]??0};
+      });
+      const avgNights=stats.reduce((s,n)=>s+n.nights,0)/stats.length;
+      const avgWeekends=stats.reduce((s,n)=>s+n.weekends,0)/stats.length;
+      return{stats,avgNights:avgNights.toFixed(1),avgWeekends:avgWeekends.toFixed(1)};
+    },
   };
 }

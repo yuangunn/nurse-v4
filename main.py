@@ -39,7 +39,7 @@ def main():
         # sys.path에 패키지 경로 추가 (번들 환경 대응)
         sys.path.insert(0, get_resource_path("."))
         from server.api import app
-        uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
+        uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
     server_thread = threading.Thread(target=run_server, daemon=True)
     server_thread.start()

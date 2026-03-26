@@ -43,7 +43,27 @@ class NurseScheduler:
     def __init__(self, request: GenerateRequest):
         self.year  = request.year
         self.month = request.month
-        self.nurses: List[Dict] = [n.model_dump() for n in request.nurses]
+        all_nurses: List[Dict] = [n.model_dump() for n in request.nurses]
+        # 트레이니 분리: 종료일이 당월 1일 이전이면 자동 전환 (일반 간호사 취급)
+        first_of_month = date(self.year, self.month, 1)
+        self._all_nurses = all_nurses
+        self._trainees = []
+        self.nurses: List[Dict] = []
+        for n in all_nurses:
+            if not n.get("is_trainee"):
+                self.nurses.append(n)
+            else:
+                end_str = n.get("training_end_date")
+                if end_str:
+                    try:
+                        end_dt = date.fromisoformat(end_str)
+                        if end_dt < first_of_month:
+                            # 트레이닝 이미 종료 → 일반 간호사로 전환
+                            self.nurses.append(n)
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+                self._trainees.append(n)
         # 월별 야간전담: night_months에 설정이 있으면 해당 월만 사용, 없으면 is_night_shift 폴백
         month_key = f"{self.year}-{self.month:02d}"
         for nurse in self.nurses:
@@ -62,6 +82,7 @@ class NurseScheduler:
         month_prefix = f"{self.year}-{self.month:02d}-"
         self.holidays = set(h for h in (request.holidays or []) if h.startswith(month_prefix))
         self.allow_pre_relax = request.allow_pre_relax
+        self.allow_juhu_relax = request.allow_juhu_relax
         self.unlimited_v = request.unlimited_v
 
         # ── 근무 정의 → 카테고리 리스트 동적 구성 ─────────────────────────────
@@ -385,15 +406,21 @@ class NurseScheduler:
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 for s in self.ALL_SHIFTS:
-                    # 주휴는 절대 변경 불가 — relaxed에서도 하드 고정
+                    # 주휴 처리
                     if pre == "주":
-                        x[nid][d][s] = pulp.LpVariable(
-                            f"r_{nid}_{d}_{s}",
-                            lowBound=(1 if s == "주" else 0),
-                            upBound=(1 if s == "주" else 0),
-                            cat="Integer"
-                        )
-                        continue
+                        if self.allow_juhu_relax:
+                            # 주휴 재배치 허용: 모든 시프트 Binary
+                            x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+                            continue
+                        else:
+                            # 주휴 하드 고정 (기본)
+                            x[nid][d][s] = pulp.LpVariable(
+                                f"r_{nid}_{d}_{s}",
+                                lowBound=(1 if s == "주" else 0),
+                                upBound=(1 if s == "주" else 0),
+                                cat="Integer"
+                            )
+                            continue
                     # 법/생/V/성별/auto_assign 차단은 그대로 유지
                     if s == "법" and nurse.get("is_night_shift"):
                         x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
@@ -403,6 +430,9 @@ class NurseScheduler:
                         x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
                     elif s in ("생", "V") and dt_str in self.holidays and not nurse.get("is_night_shift"):
                         x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
+                    elif s == "주" and self.allow_juhu_relax:
+                        # 주휴 재배치: 사전입력 아닌 날짜에도 주휴 배정 가능
+                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
                     elif s not in self.SOLVER_SHIFTS and s != "법":
                         # 사전입력 전용 근무도 relaxed 모드에서는 사전입력된 것만 허용
                         if pre and s == pre:
@@ -432,6 +462,23 @@ class NurseScheduler:
             self._c_nod_pattern(prob, x)
         if self.rules.weeklyOff:
             self._c_weekly_off(prob, x)
+        # 주휴 재배치: 주당 주휴 정확히 1개 하드 제약
+        if self.allow_juhu_relax and "주" in self.ALL_SHIFTS:
+            first_of_month = date(self.year, self.month, 1)
+            for nurse in self.nurses:
+                nid = nurse["id"]
+                if nurse.get("is_night_shift"):
+                    continue
+                for ws, we in self.weeks:
+                    week_days = [d for d in range(ws, we + 1)
+                                 if self.all_dates[d] >= first_of_month]
+                    if not week_days:
+                        continue
+                    if "주" in x[nid][week_days[0]]:
+                        prob += (
+                            pulp.lpSum(x[nid][d]["주"] for d in week_days) <= 1,
+                            f"weekly_juhu_{nid}_{ws}"
+                        )
         if self.rules.maxConsecutiveWork:
             self._c_max_consecutive_work(prob, x, self.rules.maxConsecutiveWorkDays)
         if self.rules.maxConsecutiveNight:
@@ -459,6 +506,7 @@ class NurseScheduler:
             v.varValue is not None and v.varValue > 0.5
             for v in prob.variables() if v.name.startswith("r_")
         )
+
 
         if status_str in ("Optimal", "Feasible") or (has_solution and status_str != "Infeasible"):
             schedule, extended = self._extract_solution(x)
@@ -505,6 +553,26 @@ class NurseScheduler:
             nid = nurse["id"]
             for d in range(self.T):
                 prob += pulp.lpSum(x[nid][d][s] for s in self.ALL_SHIFTS) == 1, f"one_{nid}_{d}"
+
+    def _add_weekly_juhu(self, prob, x):
+        """주휴 재배치 시 주당 주휴 정확히 1개"""
+        if not self.allow_juhu_relax or "주" not in self.ALL_SHIFTS:
+            return
+        first_of_month = date(self.year, self.month, 1)
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            if nurse.get("is_night_shift"):
+                continue
+            for ws, we in self.weeks:
+                week_days = [d for d in range(ws, we + 1)
+                             if self.all_dates[d] >= first_of_month]
+                if not week_days:
+                    continue
+                if "주" in x[nid][week_days[0]]:
+                    prob += (
+                        pulp.lpSum(x[nid][d]["주"] for d in week_days) <= 1,
+                        f"wj2_{nid}_{ws}"
+                    )
 
     def _c_shift_eligibility(self, prob, x):
         """간호사별 가능한 근무만 배정.
@@ -1301,8 +1369,11 @@ class NurseScheduler:
             prob.solve(QUICK)
             return pulp.LpStatus[prob.status] in ("Optimal", "Feasible")
 
+        _phase_counter = [0]
         def _fresh_x():
             """prev_schedule 적용한 변수 재생성 (공휴일/성별 차단 포함)"""
+            _phase_counter[0] += 1
+            pfx = f"d{_phase_counter[0]}"
             xx = {}
             for nurse in self.nurses:
                 nid = nurse["id"]
@@ -1313,23 +1384,24 @@ class NurseScheduler:
                     pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                     xx[nid][d] = {}
                     for s in self.ALL_SHIFTS:
+                        vname = f"{pfx}_{nid}_{d}_{s}"
                         if pre:
                             if s in pre_flex:
-                                xx[nid][d][s] = pulp.LpVariable(f"dx_{nid}_{d}_{s}", cat="Binary")
+                                xx[nid][d][s] = pulp.LpVariable(vname, cat="Binary")
                             else:
-                                xx[nid][d][s] = pulp.LpVariable(f"dx_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
+                                xx[nid][d][s] = pulp.LpVariable(vname, lowBound=0, upBound=0, cat="Integer")
                         elif s == "생" and nurse.get("gender") != "female":
-                            xx[nid][d][s] = pulp.LpVariable(f"dx_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
+                            xx[nid][d][s] = pulp.LpVariable(vname, lowBound=0, upBound=0, cat="Integer")
                         elif s == "법" and nurse.get("is_night_shift"):
-                            xx[nid][d][s] = pulp.LpVariable(f"dx_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
+                            xx[nid][d][s] = pulp.LpVariable(vname, lowBound=0, upBound=0, cat="Integer")
                         elif s == "법" and dt_str not in self.holidays:
-                            xx[nid][d][s] = pulp.LpVariable(f"dx_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
+                            xx[nid][d][s] = pulp.LpVariable(vname, lowBound=0, upBound=0, cat="Integer")
                         elif s == "법" and dt_str in self.holidays:
-                            xx[nid][d][s] = pulp.LpVariable(f"dx_{nid}_{d}_{s}", cat="Binary")
+                            xx[nid][d][s] = pulp.LpVariable(vname, cat="Binary")
                         elif s in ("생", "V") and dt_str in self.holidays and not nurse.get("is_night_shift"):
-                            xx[nid][d][s] = pulp.LpVariable(f"dx_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
+                            xx[nid][d][s] = pulp.LpVariable(vname, lowBound=0, upBound=0, cat="Integer")
                         else:
-                            xx[nid][d][s] = pulp.LpVariable(f"dx_{nid}_{d}_{s}", cat="Binary")
+                            xx[nid][d][s] = pulp.LpVariable(vname, cat="Binary")
             return xx
 
         lines = ["근무표 생성 실패 - 원인 진단 결과:"]
@@ -1738,6 +1810,15 @@ class NurseScheduler:
                     dates_sorted = sorted(prev_nurse.keys())
                     for i in range(len(dates_sorted) - 2):
                         d0, d1, d2 = dates_sorted[i], dates_sorted[i+1], dates_sorted[i+2]
+                        # 실제 연속 3일인지 확인
+                        try:
+                            dt0 = date.fromisoformat(d0)
+                            dt1 = date.fromisoformat(d1)
+                            dt2 = date.fromisoformat(d2)
+                        except (ValueError, TypeError):
+                            continue
+                        if (dt1 - dt0).days != 1 or (dt2 - dt1).days != 1:
+                            continue
                         s0, s1, s2 = prev_nurse[d0], prev_nurse[d1], prev_nurse[d2]
                         if (s0 in self.NIGHT_SHIFTS and
                                 s1 in self.REST_SHIFTS and
@@ -1828,5 +1909,30 @@ class NurseScheduler:
                         break
                 extended[nid][dt_str] = assigned
                 schedule[nid][dt_str] = assigned
+
+        # 트레이니: 프리셉터 스케줄 복사 + /접두어
+        for trainee in self._trainees:
+            tid = trainee["id"]
+            pid = trainee.get("preceptor_id")
+            end_date_str = trainee.get("training_end_date")
+            end_date = None
+            if end_date_str:
+                try:
+                    end_date = date.fromisoformat(end_date_str)
+                except (ValueError, TypeError):
+                    pass
+
+            schedule[tid] = {}
+            extended[tid] = {}
+            for dt in self.all_dates:
+                dt_str = dt.strftime("%Y-%m-%d")
+                if end_date and dt > end_date:
+                    # 트레이닝 종료 후: 솔버에 포함 안 되었으므로 빈칸 (수동 배정 필요)
+                    continue
+                if pid and pid in schedule:
+                    preceptor_shift = schedule[pid].get(dt_str, "")
+                    if preceptor_shift:
+                        schedule[tid][dt_str] = "/" + preceptor_shift
+                        extended[tid][dt_str] = "/" + preceptor_shift
 
         return dict(schedule), dict(extended)
