@@ -234,9 +234,23 @@ def open_profile(profile_id: str, password: str = "") -> Dict:
     # 게스트: 임시 DB 사용
     if profile.get("is_guest"):
         guest_db = _db_path_for_profile("_guest_temp")
-        # 기존 게스트 DB 삭제 후 새로 생성
+        # 기존 게스트 DB가 있으면 삭제 시도, 잠겨있으면 테이블만 초기화
         if guest_db.exists():
-            guest_db.unlink()
+            try:
+                guest_db.unlink()
+            except (PermissionError, OSError):
+                # 파일 잠금 — 테이블 내용만 지움
+                import sqlite3
+                try:
+                    c = sqlite3.connect(str(guest_db))
+                    tables = [r[0] for r in c.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+                    for t in tables:
+                        c.execute(f"DELETE FROM {t}")
+                    c.commit()
+                    c.close()
+                except Exception:
+                    pass
         from . import database as db
         original_fn = db.get_db_path
         db.get_db_path = lambda: str(guest_db)
@@ -288,7 +302,10 @@ def close_profile(profile_id: str, password: str = ""):
         # 게스트 DB 삭제
         guest_db = _db_path_for_profile("_guest_temp")
         if guest_db.exists():
-            guest_db.unlink()
+            try:
+                guest_db.unlink()
+            except PermissionError:
+                pass  # 파일 잠금 시 무시 (다음 열기 시 덮어씀)
         return
 
     # 비밀번호가 있으면 암호화
