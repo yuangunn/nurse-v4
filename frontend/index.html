@@ -11,7 +11,7 @@
 </head>
 <body>
 <!-- ═══ 프로필 선택 화면 (app-shell 외부) ═══════════════════ -->
-<div x-show="profileScreen" :style="profileScreen?'position:fixed;inset:0;z-index:9999;background:var(--bg,#fff);display:flex;align-items:center;justify-content:center':'display:none'" class="profile-overlay">
+<div :style="profileScreen?'position:fixed;inset:0;z-index:9999;background:var(--bg,#fff);display:flex;align-items:center;justify-content:center':'display:none'" class="profile-overlay">
   <div style="width:420px;max-width:95vw;background:var(--card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:16px;padding:32px;box-shadow:0 8px 32px rgba(0,0,0,0.12)">
     <div style="text-align:center;margin-bottom:24px">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
@@ -63,15 +63,17 @@
     <div x-show="profileError" class="text-xs" style="color:var(--red);margin-bottom:8px;text-align:center" x-text="profileError"></div>
 
     <!-- 프로필 추가 -->
-    <button @click="openProfileCreate()" class="btn btn-outline w-full" style="font-size:0.8rem">
+    <button @click="openProfileCreate()" style="width:100%;padding:10px;font-size:0.8rem;border:1px dashed var(--border,#d1d5db);border-radius:10px;background:transparent;color:var(--text-sub,#6b7280);cursor:pointer;transition:all 0.15s"
+            onmouseover="this.style.borderColor='var(--accent,#3b82f6)';this.style.color='var(--accent,#3b82f6)'"
+            onmouseout="this.style.borderColor='var(--border,#d1d5db)';this.style.color='var(--text-sub,#6b7280)'">
       + 새 프로필 만들기
     </button>
   </div>
 </div>
 
 <!-- 프로필 생성 모달 -->
-<div x-show="profileCreateModal.open" x-cloak class="modal-backdrop" @click.self="profileCreateModal.open=false">
-  <div class="modal" style="max-width:380px">
+<div :style="profileCreateModal.open?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileCreateModal.open=false">
+  <div style="max-width:380px;width:90vw;background:var(--card,#fff);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
     <h3 style="margin-bottom:16px;font-weight:700">새 프로필 만들기</h3>
     <div style="display:flex;flex-direction:column;gap:12px">
       <div>
@@ -100,8 +102,8 @@
 </div>
 
 <!-- 비밀번호 변경 모달 -->
-<div x-show="profileChangePwModal.open" x-cloak class="modal-backdrop" @click.self="profileChangePwModal.open=false">
-  <div class="modal" style="max-width:350px">
+<div :style="profileChangePwModal.open?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileChangePwModal.open=false">
+  <div style="max-width:350px;width:90vw;background:var(--card,#fff);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
     <h3 style="margin-bottom:16px;font-weight:700">비밀번호 변경</h3>
     <div style="display:flex;flex-direction:column;gap:12px">
       <div><label class="text-xs text-sub">현재 비밀번호</label>
@@ -120,8 +122,8 @@
 </div>
 
 <!-- 개발자 설정 모달 -->
-<div x-show="devSettingsOpen" x-cloak class="modal-backdrop" @click.self="devSettingsOpen=false">
-  <div class="modal" style="max-width:380px">
+<div :style="devSettingsOpen?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="devSettingsOpen=false">
+  <div style="max-width:380px;width:90vw;background:var(--card,#fff);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
     <h3 style="margin-bottom:16px;font-weight:700">개발자 설정</h3>
     <div class="card" style="padding:12px;margin-bottom:12px">
       <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px">마스터 비밀번호</h4>
