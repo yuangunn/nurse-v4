@@ -3,3 +3,4 @@ uvicorn[standard]==0.30.6
 pulp==2.9.0
 highspy==1.8.1
 pydantic==2.9.2
+cryptography>=42.0.0

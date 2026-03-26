@@ -10,6 +10,141 @@
   <script src="js/app.js"></script>
 </head>
 <body>
+<!-- ═══ 프로필 선택 화면 (app-shell 외부) ═══════════════════ -->
+<div x-show="profileScreen" :style="profileScreen?'position:fixed;inset:0;z-index:9999;background:var(--bg,#fff);display:flex;align-items:center;justify-content:center':'display:none'" class="profile-overlay">
+  <div style="width:420px;max-width:95vw;background:var(--card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:16px;padding:32px;box-shadow:0 8px 32px rgba(0,0,0,0.12)">
+    <div style="text-align:center;margin-bottom:24px">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      <h2 style="margin:8px 0 4px;font-size:1.3rem;font-weight:700">NurseScheduler</h2>
+      <p class="text-sub" style="font-size:0.8rem">프로필을 선택하세요</p>
+    </div>
+
+    <!-- 마스터 비밀번호 (설정된 경우) -->
+    <template x-if="hasMasterPassword">
+      <div style="margin-bottom:16px">
+        <label class="text-xs text-sub" style="display:block;margin-bottom:4px">마스터 비밀번호</label>
+        <input type="password" x-model="profileMasterInput" placeholder="마스터 비밀번호"
+               class="input" style="width:100%" @keydown.enter="profileError=''">
+      </div>
+    </template>
+
+    <!-- 프로필 목록 -->
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+      <template x-for="p in profiles" :key="p.id">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;border:1px solid var(--border,#e5e7eb);background:var(--bg,#f9fafb);transition:all 0.15s" :style="p.is_guest?'border-style:dashed;opacity:0.8':''"
+             @mouseenter="$el.style.borderColor='var(--accent,#3b82f6)'" @mouseleave="$el.style.borderColor='var(--border,#e5e7eb)'"
+        >
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:0.95rem" x-text="p.name"></div>
+            <div class="text-sub" style="font-size:0.7rem" x-text="p.is_guest?'게스트 (종료 시 데이터 삭제)':'ID: '+p.id"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <template x-if="p.has_password">
+              <input type="password" x-model="profilePasswordInput" placeholder="비밀번호"
+                     class="input" style="width:120px;height:28px;font-size:0.75rem"
+                     @keydown.enter="selectProfile(p)">
+            </template>
+            <button @click="selectProfile(p)" class="btn btn-primary btn-sm"
+                    x-text="p.is_guest?'시작':'열기'" style="height:28px;font-size:0.75rem"></button>
+            <template x-if="!p.is_guest">
+              <div style="display:flex;gap:2px">
+                <button @click="openChangePw(p.id)" class="btn btn-ghost btn-xs" title="비밀번호 변경"
+                        style="padding:2px 4px;font-size:0.65rem">PW</button>
+                <button @click="confirmDeleteProfile(p.id)" class="btn btn-ghost btn-xs" title="삭제"
+                        style="padding:2px 4px;color:var(--red);font-size:0.65rem">X</button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- 에러 메시지 -->
+    <div x-show="profileError" class="text-xs" style="color:var(--red);margin-bottom:8px;text-align:center" x-text="profileError"></div>
+
+    <!-- 프로필 추가 -->
+    <button @click="openProfileCreate()" class="btn btn-outline w-full" style="font-size:0.8rem">
+      + 새 프로필 만들기
+    </button>
+  </div>
+</div>
+
+<!-- 프로필 생성 모달 -->
+<div x-show="profileCreateModal.open" x-cloak class="modal-backdrop" @click.self="profileCreateModal.open=false">
+  <div class="modal" style="max-width:380px">
+    <h3 style="margin-bottom:16px;font-weight:700">새 프로필 만들기</h3>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label class="text-xs text-sub">프로필 ID (영문/숫자)</label>
+        <input type="text" x-model="profileCreateModal.id" class="input w-full" placeholder="예: ward101">
+      </div>
+      <div>
+        <label class="text-xs text-sub">병동 이름</label>
+        <input type="text" x-model="profileCreateModal.name" class="input w-full" placeholder="예: 101병동">
+      </div>
+      <div>
+        <label class="text-xs text-sub">비밀번호 (선택)</label>
+        <input type="password" x-model="profileCreateModal.password" class="input w-full" placeholder="비밀번호">
+      </div>
+      <div>
+        <label class="text-xs text-sub">비밀번호 확인</label>
+        <input type="password" x-model="profileCreateModal.passwordConfirm" class="input w-full" placeholder="비밀번호 확인"
+               @keydown.enter="createProfile()">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      <button @click="profileCreateModal.open=false" class="btn btn-ghost">취소</button>
+      <button @click="createProfile()" class="btn btn-primary">만들기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 비밀번호 변경 모달 -->
+<div x-show="profileChangePwModal.open" x-cloak class="modal-backdrop" @click.self="profileChangePwModal.open=false">
+  <div class="modal" style="max-width:350px">
+    <h3 style="margin-bottom:16px;font-weight:700">비밀번호 변경</h3>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><label class="text-xs text-sub">현재 비밀번호</label>
+        <input type="password" x-model="profileChangePwModal.oldPw" class="input w-full"></div>
+      <div><label class="text-xs text-sub">새 비밀번호</label>
+        <input type="password" x-model="profileChangePwModal.newPw" class="input w-full"></div>
+      <div><label class="text-xs text-sub">새 비밀번호 확인</label>
+        <input type="password" x-model="profileChangePwModal.newPwConfirm" class="input w-full"
+               @keydown.enter="changeProfilePassword()"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      <button @click="profileChangePwModal.open=false" class="btn btn-ghost">취소</button>
+      <button @click="changeProfilePassword()" class="btn btn-primary">변경</button>
+    </div>
+  </div>
+</div>
+
+<!-- 개발자 설정 모달 -->
+<div x-show="devSettingsOpen" x-cloak class="modal-backdrop" @click.self="devSettingsOpen=false">
+  <div class="modal" style="max-width:380px">
+    <h3 style="margin-bottom:16px;font-weight:700">개발자 설정</h3>
+    <div class="card" style="padding:12px;margin-bottom:12px">
+      <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px">마스터 비밀번호</h4>
+      <p class="text-xs text-sub" style="margin-bottom:8px" x-text="hasMasterPassword?'현재 설정됨':'미설정'"></p>
+      <template x-if="!hasMasterPassword">
+        <div>
+          <input type="password" x-model="devMasterPw" class="input w-full" placeholder="마스터 비밀번호" style="margin-bottom:6px">
+          <input type="password" x-model="devMasterPwConfirm" class="input w-full" placeholder="비밀번호 확인" style="margin-bottom:8px">
+          <button @click="setDevMasterPassword()" class="btn btn-primary btn-sm w-full">설정</button>
+        </div>
+      </template>
+      <template x-if="hasMasterPassword">
+        <button @click="removeDevMasterPassword()" class="btn btn-outline btn-sm" style="color:var(--red)">마스터 비밀번호 제거</button>
+      </template>
+    </div>
+    <div class="card" style="padding:12px;margin-bottom:12px">
+      <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px">프로필 관리</h4>
+      <button @click="switchProfile();devSettingsOpen=false" class="btn btn-outline btn-sm w-full">프로필 전환</button>
+    </div>
+    <button @click="devSettingsOpen=false" class="btn btn-ghost w-full">닫기</button>
+  </div>
+</div>
+
 <div class="app-shell">
 
 <!-- ═══ SIDEBAR ═══════════════════════════════════════════ -->
@@ -21,7 +156,7 @@
   </div>
   <nav class="sidebar-nav">
     <template x-for="tab in tabs" :key="tab.id">
-      <div @click="activeTab=tab.id" :class="activeTab===tab.id?'active':''" class="sidebar-item">
+      <div @click="activeTab=tab.id;if(tab.id==='settings')trackSettingsClick()" :class="activeTab===tab.id?'active':''" class="sidebar-item">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <template x-if="tab.icon==='settings'"><g><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></g></template>
           <template x-if="tab.icon==='edit-3'"><g><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></g></template>

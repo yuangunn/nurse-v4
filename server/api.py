@@ -12,8 +12,13 @@ import threading
 logger = logging.getLogger(__name__)
 
 from . import database as db
+from . import profiles as prof
 from .models import GenerateRequest, ScheduleSave, ScoringRule, Nurse, Rules
 from .scheduler import NurseScheduler
+
+# ── 현재 활성 프로필 ──────────────────────────────────────────────────────────
+_current_profile_id: Optional[str] = None
+_current_profile_password: Optional[str] = None
 
 # ── HiGHS 인스턴스 추적 (중지 기능용) ────────────────────────────────────────
 # PuLP의 HiGHS 솔버가 내부적으로 생성하는 highspy.Highs 인스턴스를 가로채
@@ -71,7 +76,7 @@ except ImportError:
 app = FastAPI(title="NurseScheduler v3")
 
 # 정적 파일 서빙 (frontend/ 하위 css, js, lib)
-_frontend_dir = Path(__file__).parent.parent / "frontend"
+_frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
 for _subdir in ("css", "js", "lib", "fonts"):
     _sub_path = _frontend_dir / _subdir
     if _sub_path.exists():
@@ -80,7 +85,125 @@ for _subdir in ("css", "js", "lib", "fonts"):
 
 @app.on_event("startup")
 def startup():
+    prof.init_default_profiles()
+    # 기본 DB 초기화 (프로필 전환 전 폴백)
     db.init_db()
+
+
+# ── 프로필 API ────────────────────────────────────────────────────────────────
+
+@app.get("/api/profiles")
+def get_profiles():
+    return {
+        "profiles": prof.list_profiles(),
+        "has_master_password": prof.has_master_password(),
+        "current_profile": _current_profile_id,
+    }
+
+
+@app.post("/api/profiles/create")
+def create_profile(body: dict):
+    profile_id = body.get("id", "").strip()
+    name = body.get("name", "").strip()
+    password = body.get("password", "")
+    is_guest = body.get("is_guest", False)
+    if not profile_id or not name:
+        raise HTTPException(400, "프로필 ID와 이름을 입력해주세요.")
+    result = prof.create_profile(profile_id, name, password, is_guest)
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("error", "프로필 생성 실패"))
+    return result
+
+
+@app.post("/api/profiles/open")
+def open_profile(body: dict):
+    global _current_profile_id, _current_profile_password
+    profile_id = body.get("id", "")
+    password = body.get("password", "")
+
+    # 마스터 비밀번호 확인
+    if prof.has_master_password():
+        master_pw = body.get("master_password", "")
+        if not master_pw:
+            return {"ok": False, "need_master_password": True,
+                    "error": "마스터 비밀번호를 입력해주세요."}
+        if not prof.verify_master_password(master_pw):
+            return {"ok": False, "error": "마스터 비밀번호가 틀렸습니다."}
+
+    # 현재 프로필 닫기
+    if _current_profile_id:
+        prof.close_profile(_current_profile_id, _current_profile_password or "")
+
+    result = prof.open_profile(profile_id, password)
+    if not result.get("ok"):
+        return result
+
+    # DB 경로 전환
+    db_path = result["db_path"]
+    db.get_db_path = lambda: db_path
+    db.init_db()
+
+    _current_profile_id = profile_id
+    _current_profile_password = password if not result.get("is_guest") else ""
+
+    return {"ok": True, "profile_id": profile_id,
+            "is_guest": result.get("is_guest", False)}
+
+
+@app.post("/api/profiles/close")
+def close_profile():
+    global _current_profile_id, _current_profile_password
+    if _current_profile_id:
+        prof.close_profile(_current_profile_id, _current_profile_password or "")
+        _current_profile_id = None
+        _current_profile_password = None
+    return {"ok": True}
+
+
+@app.delete("/api/profiles/{profile_id}")
+def delete_profile(profile_id: str):
+    result = prof.delete_profile(profile_id)
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("error"))
+    return result
+
+
+@app.post("/api/profiles/change-password")
+def change_profile_password(body: dict):
+    profile_id = body.get("id", "")
+    old_password = body.get("old_password", "")
+    new_password = body.get("new_password", "")
+    if not new_password:
+        raise HTTPException(400, "새 비밀번호를 입력해주세요.")
+    result = prof.change_password(profile_id, old_password, new_password)
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("error"))
+    # 현재 열린 프로필이면 비밀번호 업데이트
+    global _current_profile_password
+    if _current_profile_id == profile_id:
+        _current_profile_password = new_password
+    return result
+
+
+@app.post("/api/profiles/master-password")
+def set_master_password(body: dict):
+    action = body.get("action", "set")
+    if action == "set":
+        password = body.get("password", "")
+        if not password:
+            raise HTTPException(400, "비밀번호를 입력해주세요.")
+        prof.set_master_password(password)
+        return {"ok": True}
+    elif action == "remove":
+        current = body.get("current_password", "")
+        if prof.has_master_password() and not prof.verify_master_password(current):
+            raise HTTPException(400, "현재 마스터 비밀번호가 틀렸습니다.")
+        prof.remove_master_password()
+        return {"ok": True}
+    elif action == "verify":
+        password = body.get("password", "")
+        return {"ok": prof.verify_master_password(password)}
+    raise HTTPException(400, "알 수 없는 action")
 
 
 # ── 헬스체크 ─────────────────────────────────────────────────────────────────

@@ -63,6 +63,27 @@ function app() {
     copySource:null, // nurseId
     juhuOptionModal:{open:false,nurse:null,day:null},
 
+    // ── 프로필 시스템 ──
+    profileScreen:true,   // 프로필 선택 화면 표시 여부
+    profiles:[],
+    currentProfile:null,
+    hasMasterPassword:false,
+    profileCreateModal:{open:false,id:'',name:'',password:'',passwordConfirm:''},
+    profilePasswordInput:'',
+    profileMasterInput:'',
+    profileError:'',
+    profileDeleteConfirm:null,
+    profileChangePwModal:{open:false,id:'',oldPw:'',newPw:'',newPwConfirm:''},
+
+    // ── 개발자 모드 ──
+    developerMode:false,
+    _devModeUnlocked:localStorage.getItem('devMode')==='true',
+    _darkToggleTimestamps:[],
+    _settingsClickTimestamps:[],
+    devSettingsOpen:false,
+    devMasterPw:'',
+    devMasterPwConfirm:'',
+
     // ── computed ──────────────────────────────────────────────
     get shiftMap(){const m=new Map();for(const s of this.shifts)m.set(s.code,s);return m},
     get allWorkShifts(){return this.shifts.filter(s=>['day','day1','evening','middle','night'].includes(s.period)).map(s=>s.code)},
@@ -98,6 +119,25 @@ function app() {
     async init(){
       if(this.darkMode)document.documentElement.classList.add('dark');
       document.documentElement.style.fontSize=this.fontSize+'px';
+
+      // 프로필 목록 로드 → 프로필 선택 화면 표시
+      await this._loadProfiles();
+      this.profileScreen=true;
+
+      // 전역 키보드 단축키
+      document.addEventListener('keydown',(e)=>{
+        if(this.profileScreen)return;
+        if(e.key==='?'&&!e.ctrlKey&&!e.metaKey&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){this.showShortcutHelp=!this.showShortcutHelp;e.preventDefault();return}
+        if(this.activeTab==='preinput'&&this._focusedCell&&!this.shiftEdit.open&&!this.noteEdit.open&&!this.juhuOptionModal.open){this.onGridKeyDown(e)}
+        else if((e.ctrlKey||e.metaKey)&&e.key==='z'&&this.activeTab==='preinput'){e.shiftKey?this.redo():this.undo();e.preventDefault()}
+      });
+      window.addEventListener('beforeunload',()=>{this._saveFullState();this._closeCurrentProfile()});
+      document.addEventListener('mouseup',()=>{if(this._isDragging)this.onCellMouseUp()});
+      this.$nextTick(()=>{if(window.lucide)lucide.createIcons()});
+    },
+
+    async _initApp(){
+      // 프로필 열린 후 앱 데이터 로드
       await Promise.all([this.loadNurses(),this.loadRules(),this.loadRequirements(),this.loadShifts(),this.loadScoringRules(),this.loadSavedList(),this.loadPrevSavesList()]);
       this._checkPendingGenerate();
       this._restoreFullState()||this._restoreAutoSave();
@@ -105,17 +145,144 @@ function app() {
       this.initAutoDark();
       this.loadTemplates();
       this._initScoringSliders();
-      // 전역 키보드 단축키
-      document.addEventListener('keydown',(e)=>{
-        if(e.key==='?'&&!e.ctrlKey&&!e.metaKey&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){this.showShortcutHelp=!this.showShortcutHelp;e.preventDefault();return}
-        if(this.activeTab==='preinput'&&this._focusedCell&&!this.shiftEdit.open&&!this.noteEdit.open&&!this.juhuOptionModal.open){this.onGridKeyDown(e)}
-        else if((e.ctrlKey||e.metaKey)&&e.key==='z'&&this.activeTab==='preinput'){e.shiftKey?this.redo():this.undo();e.preventDefault()}
-      });
-      // 페이지 종료 시 상태 저장
-      window.addEventListener('beforeunload',()=>this._saveFullState());
-      // 드래그 종료 (window level)
-      document.addEventListener('mouseup',()=>{if(this._isDragging)this.onCellMouseUp()});
       this.$nextTick(()=>{if(window.lucide)lucide.createIcons()});
+    },
+
+    // ── 프로필 관리 ──
+    async _loadProfiles(){
+      try{
+        const res=await this.api('GET','/api/profiles');
+        this.profiles=res.profiles||[];
+        this.hasMasterPassword=res.has_master_password||false;
+        this.currentProfile=res.current_profile;
+      }catch(e){this.profiles=[];this.hasMasterPassword=false}
+    },
+
+    async selectProfile(profile){
+      this.profileError='';
+      if(profile.has_password||this.hasMasterPassword){
+        // 비밀번호 입력 필요 — 이미 입력된 상태에서 호출됨
+        if(profile.has_password&&!this.profilePasswordInput){
+          this.profileError='비밀번호를 입력해주세요.';return;
+        }
+      }
+      const body={id:profile.id,password:this.profilePasswordInput||''};
+      if(this.hasMasterPassword)body.master_password=this.profileMasterInput||'';
+
+      try{
+        const res=await this.api('POST','/api/profiles/open',body);
+        if(!res.ok){
+          if(res.need_master_password){this.profileError='마스터 비밀번호를 입력해주세요.';return}
+          this.profileError=res.error||'프로필 열기 실패';return;
+        }
+        this.currentProfile=profile.id;
+        this.profilePasswordInput='';
+        this.profileMasterInput='';
+        this.profileScreen=false;
+        await this._initApp();
+      }catch(e){this.profileError=e.message||'서버 오류'}
+    },
+
+    async _closeCurrentProfile(){
+      if(!this.currentProfile)return;
+      try{await this.api('POST','/api/profiles/close')}catch(e){}
+    },
+
+    async switchProfile(){
+      await this._closeCurrentProfile();
+      this.currentProfile=null;
+      this.profileScreen=true;
+      this.profilePasswordInput='';
+      this.profileMasterInput='';
+      this.profileError='';
+      // 상태 초기화
+      this.nurses=[];this.schedule={};this.prevSchedule={};
+      await this._loadProfiles();
+    },
+
+    openProfileCreate(){
+      this.profileCreateModal={open:true,id:'',name:'',password:'',passwordConfirm:''};
+    },
+
+    async createProfile(){
+      const m=this.profileCreateModal;
+      if(!m.id.trim()||!m.name.trim()){this._toast('ID와 이름을 입력해주세요.','error');return}
+      if(m.password&&m.password!==m.passwordConfirm){this._toast('비밀번호가 일치하지 않습니다.','error');return}
+      try{
+        await this.api('POST','/api/profiles/create',{id:m.id.trim(),name:m.name.trim(),password:m.password});
+        m.open=false;
+        await this._loadProfiles();
+        this._toast(`프로필 "${m.name}" 생성 완료`);
+      }catch(e){this._toast(e.message||'생성 실패','error')}
+    },
+
+    async confirmDeleteProfile(profileId){
+      if(!confirm('이 프로필과 모든 데이터가 삭제됩니다. 계속하시겠습니까?'))return;
+      try{
+        await this.api('DELETE',`/api/profiles/${profileId}`);
+        await this._loadProfiles();
+        this._toast('프로필 삭제 완료');
+      }catch(e){this._toast(e.message||'삭제 실패','error')}
+    },
+
+    openChangePw(profileId){
+      this.profileChangePwModal={open:true,id:profileId,oldPw:'',newPw:'',newPwConfirm:''};
+    },
+
+    async changeProfilePassword(){
+      const m=this.profileChangePwModal;
+      if(!m.newPw){this._toast('새 비밀번호를 입력해주세요.','error');return}
+      if(m.newPw!==m.newPwConfirm){this._toast('새 비밀번호가 일치하지 않습니다.','error');return}
+      try{
+        await this.api('POST','/api/profiles/change-password',{id:m.id,old_password:m.oldPw,new_password:m.newPw});
+        m.open=false;
+        this._toast('비밀번호 변경 완료');
+      }catch(e){this._toast(e.message||'변경 실패','error')}
+    },
+
+    // ── 개발자 모드 이스터에그 ──
+    trackDarkToggle(){
+      const now=Date.now();
+      this._darkToggleTimestamps.push(now);
+      this._darkToggleTimestamps=this._darkToggleTimestamps.filter(t=>now-t<10000);
+      if(this._darkToggleTimestamps.length>=10){
+        this._devModeUnlocked=true;
+        localStorage.setItem('devMode','true');
+        this._toast('개발자 모드가 활성화되었습니다!','info');
+        this._darkToggleTimestamps=[];
+      }
+    },
+
+    trackSettingsClick(){
+      if(!this._devModeUnlocked)return;
+      const now=Date.now();
+      this._settingsClickTimestamps.push(now);
+      this._settingsClickTimestamps=this._settingsClickTimestamps.filter(t=>now-t<5000);
+      if(this._settingsClickTimestamps.length>=5){
+        this.devSettingsOpen=true;
+        this._settingsClickTimestamps=[];
+      }
+    },
+
+    async setDevMasterPassword(){
+      if(!this.devMasterPw){this._toast('비밀번호를 입력해주세요.','error');return}
+      if(this.devMasterPw!==this.devMasterPwConfirm){this._toast('비밀번호가 일치하지 않습니다.','error');return}
+      try{
+        await this.api('POST','/api/profiles/master-password',{action:'set',password:this.devMasterPw});
+        this.hasMasterPassword=true;
+        this.devMasterPw='';this.devMasterPwConfirm='';
+        this._toast('마스터 비밀번호 설정 완료');
+      }catch(e){this._toast(e.message||'설정 실패','error')}
+    },
+
+    async removeDevMasterPassword(){
+      const current=prompt('현재 마스터 비밀번호를 입력하세요:');
+      if(!current)return;
+      try{
+        await this.api('POST','/api/profiles/master-password',{action:'remove',current_password:current});
+        this.hasMasterPassword=false;
+        this._toast('마스터 비밀번호 제거 완료');
+      }catch(e){this._toast(e.message||'제거 실패','error')}
     },
     setFontSize(size){this.fontSize=size;localStorage.setItem('fontSize',size);document.documentElement.style.fontSize=size+'px'},
 
@@ -347,7 +514,7 @@ function app() {
     openScoreDetail(nurse){this.scoreDetailModal={open:true,nurseName:nurse.name,rows:this.nurseScoreDetails[nurse.id]||[],total:this.nurseScores[nurse.id]??0}},
 
     // ── 다크모드 ──────────────────────────────────────────────
-    toggleDark(){this.darkMode=!this.darkMode;document.documentElement.classList.toggle('dark',this.darkMode);localStorage.setItem('darkMode',this.darkMode)},
+    toggleDark(){this.darkMode=!this.darkMode;document.documentElement.classList.toggle('dark',this.darkMode);localStorage.setItem('darkMode',this.darkMode);this.trackDarkToggle()},
     getDayDutyCount(day,shifts){if(!this.schedule||Object.keys(this.schedule).length===0)return 0;const k=this.dayKey(day);return Object.values(this.schedule).filter(ns=>shifts.includes(ns[k])).length},
 
     // ── 년월 이동 ─────────────────────────────────────────────
