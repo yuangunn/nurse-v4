@@ -226,68 +226,48 @@ class NurseScheduler:
         nurse_ids = [n["id"] for n in self.nurses]
         prob = pulp.LpProblem("nurse_schedule", pulp.LpMaximize)
 
-        # 변수 생성: x[nurse_id][day_idx][shift] ∈ {0,1}
-        x: Dict[str, Dict[int, Dict[str, pulp.LpVariable]]] = {}
+        # 변수 생성: x[nurse_id][day_idx][shift] ∈ {0,1} 또는 상수 0
+        # 성능 최적화: 항상 0인 변수는 LpVariable 대신 정수 0 사용
+        x: Dict[str, Dict[int, Dict[str, object]]] = {}
+        _free_vars: list = []  # has_solution 스캔용 (Finding 5)
         for nurse in self.nurses:
             nid = nurse["id"]
             x[nid] = {}
+            is_night = nurse.get("is_night_shift")
+            is_male = nurse.get("gender") != "female"
             for d in range(self.T):
                 dt = self.all_dates[d]
                 dt_str = dt.strftime("%Y-%m-%d")
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
+                is_holiday = dt_str in self.holidays
                 for s in self.ALL_SHIFTS:
                     if pre:
                         if s in pre_flex:
-                            # 사전입력과 같은 시간대: 솔버가 일반/Charge 선택 가능
-                            x[nid][d][s] = pulp.LpVariable(f"x_{nid}_{d}_{s}", cat="Binary")
+                            v = pulp.LpVariable(f"x_{nid}_{d}_{s}", cat="Binary")
+                            x[nid][d][s] = v
+                            _free_vars.append(v)
                         else:
-                            x[nid][d][s] = pulp.LpVariable(
-                                f"x_{nid}_{d}_{s}",
-                                lowBound=0, upBound=0,
-                                cat="Integer"
-                            )
-                    elif s == "법" and nurse.get("is_night_shift"):
-                        # 야간전담 간호사에게 법정공휴일 휴가 배정 불가
-                        x[nid][d][s] = pulp.LpVariable(
-                            f"x_{nid}_{d}_{s}",
-                            lowBound=0, upBound=0,
-                            cat="Integer"
-                        )
-                    elif s == "법" and dt_str not in self.holidays:
-                        # 법은 공휴일 날짜에만 부여 가능 (비공휴일 차단)
-                        x[nid][d][s] = pulp.LpVariable(
-                            f"x_{nid}_{d}_{s}",
-                            lowBound=0, upBound=0,
-                            cat="Integer"
-                        )
-                    elif s == "법" and dt_str in self.holidays:
-                        # 법은 공휴일에 솔버 자동 배정 허용 (auto_assign 무시)
-                        x[nid][d][s] = pulp.LpVariable(f"x_{nid}_{d}_{s}", cat="Binary")
-                    elif s in ("생", "V") and dt_str in self.holidays and not nurse.get("is_night_shift"):
-                        # 공휴일에 생, V 부여 불가 (야간전담 제외)
-                        x[nid][d][s] = pulp.LpVariable(
-                            f"x_{nid}_{d}_{s}",
-                            lowBound=0, upBound=0,
-                            cat="Integer"
-                        )
+                            x[nid][d][s] = 0
+                    elif s == "법" and is_night:
+                        x[nid][d][s] = 0
+                    elif s == "법" and not is_holiday:
+                        x[nid][d][s] = 0
+                    elif s == "법" and is_holiday:
+                        v = pulp.LpVariable(f"x_{nid}_{d}_{s}", cat="Binary")
+                        x[nid][d][s] = v
+                        _free_vars.append(v)
+                    elif s in ("생", "V") and is_holiday and not is_night:
+                        x[nid][d][s] = 0
                     elif s not in self.SOLVER_SHIFTS:
-                        # 사전입력 전용 근무: 솔버 자유 배정 불가 → 0 고정
-                        x[nid][d][s] = pulp.LpVariable(
-                            f"x_{nid}_{d}_{s}",
-                            lowBound=0, upBound=0,
-                            cat="Integer"
-                        )
-                    elif s == "생" and nurse.get("gender") != "female":
-                        # 남성 간호사에게 생리휴가 배정 불가
-                        x[nid][d][s] = pulp.LpVariable(
-                            f"x_{nid}_{d}_{s}",
-                            lowBound=0, upBound=0,
-                            cat="Integer"
-                        )
+                        x[nid][d][s] = 0
+                    elif s == "생" and is_male:
+                        x[nid][d][s] = 0
                     else:
-                        x[nid][d][s] = pulp.LpVariable(f"x_{nid}_{d}_{s}", cat="Binary")
+                        v = pulp.LpVariable(f"x_{nid}_{d}_{s}", cat="Binary")
+                        x[nid][d][s] = v
+                        _free_vars.append(v)
 
         # ── Hard Constraints ─────────────────────────────────────────────────
 
@@ -333,10 +313,10 @@ class NurseScheduler:
 
         status_str = pulp.constants.LpStatus.get(prob.status, "Unknown")
 
-        # feasible solution 존재 여부: 변수에 값이 할당되어 있는지 확인
+        # feasible solution 존재 여부 (최적화: free 변수만 스캔)
         has_solution = any(
             v.varValue is not None and v.varValue > 0.5
-            for v in prob.variables() if v.name.startswith("x_")
+            for v in _free_vars
         )
 
         if status_str in ("Optimal", "Feasible") or (has_solution and status_str != "Infeasible"):
@@ -396,60 +376,66 @@ class NurseScheduler:
         pre_bonus_terms = []
         PRE_BONUS = 2000  # 사전입력 유지 보너스 (매우 큼)
 
-        x: Dict[str, Dict[int, Dict[str, pulp.LpVariable]]] = {}
+        x: Dict[str, Dict[int, Dict[str, object]]] = {}
+        _free_vars_r: list = []
         for nurse in self.nurses:
             nid = nurse["id"]
             x[nid] = {}
+            is_night = nurse.get("is_night_shift")
+            is_male = nurse.get("gender") != "female"
             for d in range(self.T):
                 dt = self.all_dates[d]
                 dt_str = dt.strftime("%Y-%m-%d")
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
+                is_holiday = dt_str in self.holidays
                 for s in self.ALL_SHIFTS:
                     # 주휴 처리
                     if pre == "주":
                         if self.allow_juhu_relax:
-                            # 주휴 재배치 허용: 모든 시프트 Binary
-                            x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+                            v = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+                            x[nid][d][s] = v
+                            _free_vars_r.append(v)
                             continue
                         else:
-                            # 주휴 하드 고정 (기본)
-                            x[nid][d][s] = pulp.LpVariable(
-                                f"r_{nid}_{d}_{s}",
-                                lowBound=(1 if s == "주" else 0),
-                                upBound=(1 if s == "주" else 0),
-                                cat="Integer"
-                            )
+                            x[nid][d][s] = 1 if s == "주" else 0
                             continue
-                    # 법/생/V/성별/auto_assign 차단은 그대로 유지
-                    if s == "법" and nurse.get("is_night_shift"):
-                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
-                    elif s == "법" and dt_str not in self.holidays:
-                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
-                    elif s == "법" and dt_str in self.holidays:
-                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
-                    elif s in ("생", "V") and dt_str in self.holidays and not nurse.get("is_night_shift"):
-                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
+                    # 법/생/V/성별/auto_assign 차단
+                    if s == "법" and is_night:
+                        x[nid][d][s] = 0
+                    elif s == "법" and not is_holiday:
+                        x[nid][d][s] = 0
+                    elif s == "법" and is_holiday:
+                        v = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+                        x[nid][d][s] = v
+                        _free_vars_r.append(v)
+                    elif s in ("생", "V") and is_holiday and not is_night:
+                        x[nid][d][s] = 0
                     elif s == "주" and self.allow_juhu_relax:
-                        # 주휴 재배치: 사전입력 아닌 날짜에도 주휴 배정 가능
-                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+                        v = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+                        x[nid][d][s] = v
+                        _free_vars_r.append(v)
                     elif s not in self.SOLVER_SHIFTS and s != "법":
-                        # 사전입력 전용 근무도 relaxed 모드에서는 사전입력된 것만 허용
                         if pre and s == pre:
-                            x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+                            v = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+                            x[nid][d][s] = v
+                            _free_vars_r.append(v)
                         else:
-                            x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
-                    elif s == "생" and nurse.get("gender") != "female":
-                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", lowBound=0, upBound=0, cat="Integer")
+                            x[nid][d][s] = 0
+                    elif s == "생" and is_male:
+                        x[nid][d][s] = 0
                     else:
-                        x[nid][d][s] = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+                        v = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+                        x[nid][d][s] = v
+                        _free_vars_r.append(v)
 
                 # 사전입력 보너스 (소프트: 유지하면 +PRE_BONUS)
                 if pre:
                     pre_flex = self._PRE_FLEX.get(pre, {pre})
                     for s in pre_flex:
-                        if s in x[nid][d] and x[nid][d][s].upBound != 0:
-                            pre_bonus_terms.append(PRE_BONUS * x[nid][d][s])
+                        v = x[nid][d].get(s)
+                        if isinstance(v, pulp.LpVariable):
+                            pre_bonus_terms.append(PRE_BONUS * v)
 
         # 제약 (동일)
         self._c_one_shift_per_day(prob, x)
@@ -504,7 +490,7 @@ class NurseScheduler:
         status_str = pulp.constants.LpStatus.get(prob.status, "Unknown")
         has_solution = any(
             v.varValue is not None and v.varValue > 0.5
-            for v in prob.variables() if v.name.startswith("r_")
+            for v in _free_vars_r
         )
 
 
@@ -579,7 +565,6 @@ class NurseScheduler:
         자격 체크는 day/evening/night period 근무에만 적용.
         day1(상근)·middle(중간번)은 누구나 배정 가능 — UI에 체크박스 없음.
         """
-        # 자격 체크 대상: day1·middle 제외한 근무 시프트
         eligible_check = [
             s["code"] for s in self._shifts
             if s["period"] in ("day", "evening", "night")
@@ -590,7 +575,9 @@ class NurseScheduler:
             impossible = [s for s in eligible_check if s not in capable]
             for d in range(self.T):
                 for s in impossible:
-                    prob += x[nid][d][s] == 0, f"elig_{nid}_{d}_{s}"
+                    v = x[nid][d][s]
+                    if isinstance(v, pulp.LpVariable):
+                        prob += v == 0, f"elig_{nid}_{d}_{s}"
 
     def _c_daily_requirements(self, prob, x):
         """
@@ -679,34 +666,41 @@ class NurseScheduler:
                         if r["period"] in peers and not r["is_charge"]]
             charge_regular_map[s["code"]] = regulars
 
+        # 성능 최적화: eligible pairs를 미리 계산 (O(N²) → 1회)
+        eligible_pairs = []
+        for i_nurse in self.nurses:
+            for j_nurse in self.nurses:
+                if i_nurse["id"] == j_nurse["id"]:
+                    continue
+                if i_nurse.get("seniority", 0) <= j_nurse.get("seniority", 0):
+                    continue
+                nid_i = i_nurse["id"]
+                nid_j = j_nurse["id"]
+                j_capable = set(j_nurse.get("capable_shifts", []))
+                for charge_s, regulars in charge_regular_map.items():
+                    if charge_s not in j_capable:
+                        continue
+                    eligible_pairs.append((nid_i, nid_j, charge_s, regulars))
+
         for d, dt in enumerate(self.all_dates):
             if dt.month != self.month:
                 continue
             dt_str = dt.strftime("%Y-%m-%d")
-            for i_nurse in self.nurses:
-                for j_nurse in self.nurses:
-                    if i_nurse["id"] == j_nurse["id"]:
+            for nid_i, nid_j, charge_s, regulars in eligible_pairs:
+                j_fixed = self.prev.get(nid_j, {}).get(dt_str)
+                if j_fixed and j_fixed != charge_s:
+                    continue
+                v_charge = x[nid_i][d][charge_s]
+                if not isinstance(v_charge, pulp.LpVariable):
+                    continue
+                for regular_s in regulars:
+                    v_reg = x[nid_j][d][regular_s]
+                    if not isinstance(v_reg, pulp.LpVariable):
                         continue
-                    if i_nurse.get("seniority", 0) <= j_nurse.get("seniority", 0):
-                        continue
-                    nid_i = i_nurse["id"]
-                    nid_j = j_nurse["id"]
-                    j_capable = set(j_nurse.get("capable_shifts", []))
-                    # 선임(j)의 당일 사전입력 고정 근무
-                    j_fixed = self.prev.get(nid_j, {}).get(dt_str)
-                    for charge_s, regulars in charge_regular_map.items():
-                        # 선임(j)이 charge를 수행할 수 없으면 제약 불필요
-                        if charge_s not in j_capable:
-                            continue
-                        # 선임(j)이 다른 근무로 사전입력 고정되어 있으면
-                        # j는 charge를 맡을 수 없으므로 제약 불필요
-                        if j_fixed and j_fixed != charge_s:
-                            continue
-                        for regular_s in regulars:
-                            prob += (
-                                x[nid_i][d][charge_s] + x[nid_j][d][regular_s] <= 1,
-                                f"seniority_{nid_i}_{nid_j}_{d}_{charge_s}_{regular_s}"
-                            )
+                    prob += (
+                        v_charge + v_reg <= 1,
+                        f"seniority_{nid_i}_{nid_j}_{d}_{charge_s}_{regular_s}"
+                    )
 
     def _c_forbidden_transitions(self, prob, x):
         """
@@ -727,9 +721,15 @@ class NurseScheduler:
             for d in range(self.T - 1):
                 for first_group, second_group in forbidden:
                     for s1 in first_group:
+                        v1 = x[nid][d][s1]
+                        if not isinstance(v1, pulp.LpVariable):
+                            continue
                         for s2 in second_group:
+                            v2 = x[nid][d + 1][s2]
+                            if not isinstance(v2, pulp.LpVariable):
+                                continue
                             prob += (
-                                x[nid][d][s1] + x[nid][d + 1][s2] <= 1,
+                                v1 + v2 <= 1,
                                 f"forbid_{nid}_{d}_{s1}_{s2}"
                             )
 
@@ -739,10 +739,19 @@ class NurseScheduler:
             nid = nurse["id"]
             for d in range(self.T - 2):
                 for ns in self.NIGHT_SHIFTS:
+                    vn = x[nid][d][ns]
+                    if not isinstance(vn, pulp.LpVariable):
+                        continue
                     for rs in self.REST_SHIFTS:
+                        vr = x[nid][d + 1][rs]
+                        if not isinstance(vr, pulp.LpVariable):
+                            continue
                         for ds in self.DAY_SHIFTS:
+                            vd = x[nid][d + 2][ds]
+                            if not isinstance(vd, pulp.LpVariable):
+                                continue
                             prob += (
-                                x[nid][d][ns] + x[nid][d + 1][rs] + x[nid][d + 2][ds] <= 2,
+                                vn + vr + vd <= 2,
                                 f"nod_{nid}_{d}_{ns}_{rs}_{ds}"
                             )
 
@@ -917,8 +926,9 @@ class NurseScheduler:
             # ── 1. N/NC 외 모든 근무 금지 (당월만, overflow 제외) ──────────
             for d in month_idxs:
                 for s in non_night_work:
-                    if s in x[nid][d]:
-                        prob += x[nid][d][s] == 0, f"night_only_{nid}_{d}_{s}"
+                    v = x[nid][d].get(s)
+                    if isinstance(v, pulp.LpVariable):
+                        prob += v == 0, f"night_only_{nid}_{d}_{s}"
 
             # ── 2. 5일 윈도우 <= 3 (당월 범위만) ─────────────────────────
             for start in range(month_idxs[0], month_idxs[-1] - 3):
@@ -1371,37 +1381,39 @@ class NurseScheduler:
 
         _phase_counter = [0]
         def _fresh_x():
-            """prev_schedule 적용한 변수 재생성 (공휴일/성별 차단 포함)"""
+            """prev_schedule 적용한 변수 재생성 (공휴일/성별 차단 포함, zero→상수 0)"""
             _phase_counter[0] += 1
             pfx = f"d{_phase_counter[0]}"
             xx = {}
             for nurse in self.nurses:
                 nid = nurse["id"]
                 xx[nid] = {}
+                is_night = nurse.get("is_night_shift")
+                is_male = nurse.get("gender") != "female"
                 for d in range(self.T):
                     dt_str = self.all_dates[d].strftime("%Y-%m-%d")
                     pre = self.prev.get(nid, {}).get(dt_str)
                     pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
+                    is_holiday = dt_str in self.holidays
                     xx[nid][d] = {}
                     for s in self.ALL_SHIFTS:
-                        vname = f"{pfx}_{nid}_{d}_{s}"
                         if pre:
                             if s in pre_flex:
-                                xx[nid][d][s] = pulp.LpVariable(vname, cat="Binary")
+                                xx[nid][d][s] = pulp.LpVariable(f"{pfx}_{nid}_{d}_{s}", cat="Binary")
                             else:
-                                xx[nid][d][s] = pulp.LpVariable(vname, lowBound=0, upBound=0, cat="Integer")
-                        elif s == "생" and nurse.get("gender") != "female":
-                            xx[nid][d][s] = pulp.LpVariable(vname, lowBound=0, upBound=0, cat="Integer")
-                        elif s == "법" and nurse.get("is_night_shift"):
-                            xx[nid][d][s] = pulp.LpVariable(vname, lowBound=0, upBound=0, cat="Integer")
-                        elif s == "법" and dt_str not in self.holidays:
-                            xx[nid][d][s] = pulp.LpVariable(vname, lowBound=0, upBound=0, cat="Integer")
-                        elif s == "법" and dt_str in self.holidays:
-                            xx[nid][d][s] = pulp.LpVariable(vname, cat="Binary")
-                        elif s in ("생", "V") and dt_str in self.holidays and not nurse.get("is_night_shift"):
-                            xx[nid][d][s] = pulp.LpVariable(vname, lowBound=0, upBound=0, cat="Integer")
+                                xx[nid][d][s] = 0
+                        elif s == "생" and is_male:
+                            xx[nid][d][s] = 0
+                        elif s == "법" and is_night:
+                            xx[nid][d][s] = 0
+                        elif s == "법" and not is_holiday:
+                            xx[nid][d][s] = 0
+                        elif s == "법" and is_holiday:
+                            xx[nid][d][s] = pulp.LpVariable(f"{pfx}_{nid}_{d}_{s}", cat="Binary")
+                        elif s in ("생", "V") and is_holiday and not is_night:
+                            xx[nid][d][s] = 0
                         else:
-                            xx[nid][d][s] = pulp.LpVariable(vname, cat="Binary")
+                            xx[nid][d][s] = pulp.LpVariable(f"{pfx}_{nid}_{d}_{s}", cat="Binary")
             return xx
 
         lines = ["근무표 생성 실패 - 원인 진단 결과:"]
@@ -1903,7 +1915,11 @@ class NurseScheduler:
                 dt_str = dt.strftime("%Y-%m-%d")
                 assigned = self.REST_SHIFTS[0] if self.REST_SHIFTS else "OF"
                 for s in self.ALL_SHIFTS:
-                    val = pulp.value(x[nid][d][s])
+                    v = x[nid][d][s]
+                    if isinstance(v, (int, float)):
+                        val = v
+                    else:
+                        val = pulp.value(v)
                     if val is not None and round(val) == 1:
                         assigned = s
                         break

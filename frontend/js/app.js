@@ -199,7 +199,7 @@ function app() {
       const isPre=!!(this.prevSchedule[nurseId]&&this.prevSchedule[nurseId][k]);
       if(isPre)return 'g-cell-pre';
       if(this.colorByShift)return '';
-      const s=this.shifts.find(x=>x.code===shift);
+      const s=this.shiftMap.get(shift);
       if(!s)return '';
       if(s.period==='rest'||s.period==='leave')return 'g-cell-rest';
       return 'g-cell-work';
