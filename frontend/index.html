@@ -122,7 +122,7 @@
 </div>
 
 <!-- 프로필 전환 모달 -->
-<div x-show="profileSwitchModal" x-cloak :style="'position:fixed;inset:0;z-index:9998;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center'" @click.self="profileSwitchModal=false">
+<div :style="profileSwitchModal?'position:fixed;inset:0;z-index:9998;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileSwitchModal=false">
   <div style="width:420px;max-width:95vw;background:var(--card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:16px;padding:28px;box-shadow:0 8px 32px rgba(0,0,0,0.15);position:relative">
     <button @click="profileSwitchModal=false" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.2rem;color:var(--text-sub,#6b7280);cursor:pointer;line-height:1">&times;</button>
     <h3 style="margin-bottom:16px;font-weight:700;font-size:1.1rem">프로필 전환</h3>
