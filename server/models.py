@@ -71,6 +71,8 @@ class Rules(BaseModel):
     maxConsecutiveNight: bool = True
     maxConsecutiveNightDays: int = 3
     restAfterNight: bool = True
+    restAfterNightDays: int = 2          # 연속야간 후 보장할 휴무 일수
+    restAfterNightMinConsec: int = 2     # 최소 연속야간 횟수 (이 이상이면 휴무 부여)
     patternOptimization: bool = True
     autoMenstrualLeave: bool = True
     maxVPerMonth: int = 1        # V(연차) 월 최대 사용 횟수 (hard)

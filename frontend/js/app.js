@@ -23,6 +23,7 @@ function app() {
       weeklyOff:true, noNOD:true, avoidDN:true,
       maxConsecutiveWork:true, maxConsecutiveWorkDays:5,
       maxConsecutiveNight:true, maxConsecutiveNightDays:3,
+      restAfterNight:true, restAfterNightDays:2, restAfterNightMinConsec:2,
       maxNightPerMonth:true, maxNightPerMonthCount:6,
       maxNightTwoMonth:false, maxNightTwoMonthCount:11,
       patternOptimization:true, autoMenstrualLeave:true, maxVPerMonth:1,

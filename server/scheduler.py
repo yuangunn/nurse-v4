@@ -285,6 +285,8 @@ class NurseScheduler:
             self._c_max_consecutive_work(prob, x, self.rules.maxConsecutiveWorkDays)
         if self.rules.maxConsecutiveNight:
             self._c_max_consecutive_night(prob, x, self.rules.maxConsecutiveNightDays)
+        if getattr(self.rules, 'restAfterNight', False):
+            self._c_rest_after_night(prob, x)           # 연속야간 후 휴무 보장
         self._c_max_v_per_month(prob, x)               # V 월 최대 횟수
         if self.rules.maxNightPerMonth:
             self._c_max_night_per_month(prob, x)       # 월 최대 야간 횟수
@@ -473,6 +475,8 @@ class NurseScheduler:
             self._c_max_consecutive_work(prob, x, self.rules.maxConsecutiveWorkDays)
         if self.rules.maxConsecutiveNight:
             self._c_max_consecutive_night(prob, x, self.rules.maxConsecutiveNightDays)
+        if getattr(self.rules, 'restAfterNight', False):
+            self._c_rest_after_night(prob, x)
         self._c_max_v_per_month(prob, x)
         if self.rules.maxNightPerMonth:
             self._c_max_night_per_month(prob, x)
@@ -807,6 +811,73 @@ class NurseScheduler:
                     pulp.lpSum(x[nid][d][s] for d in window for s in self.NIGHT_SHIFTS) <= max_nights,
                     f"consec_night_{nid}_{start}"
                 )
+
+    def _c_rest_after_night(self, prob, x):
+        """연속 야간 후 연속 휴무 보장.
+        min_consec 이상 연속 야간 근무 후, rest_days 일간 근무 불가.
+        제약: sum_N(d) + sum_N(d+1) - sum_N(d+2) + sum_W(d+k) <= 2
+        """
+        min_consec = getattr(self.rules, 'restAfterNightMinConsec', 2)
+        rest_days = getattr(self.rules, 'restAfterNightDays', 2)
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            if nurse.get("is_night_shift"):
+                continue  # 야간전담은 제외
+            for d in range(self.T - min_consec):
+                # 연속 야간 min_consec일 체크 (마지막 야간 다음날이 야간 아닐 때)
+                night_sum = [
+                    x[nid][d + i][s]
+                    for i in range(min_consec)
+                    for s in self.NIGHT_SHIFTS
+                    if not isinstance(x[nid][d + i][s], (int, float))
+                ]
+                night_sum_fixed = sum(
+                    x[nid][d + i][s]
+                    for i in range(min_consec)
+                    for s in self.NIGHT_SHIFTS
+                    if isinstance(x[nid][d + i][s], (int, float))
+                )
+                if not night_sum and night_sum_fixed < min_consec:
+                    continue  # 모든 변수가 고정이고 야간이 아님 → 스킵
+
+                next_d = d + min_consec  # 연속야간 바로 다음날
+                if next_d >= self.T:
+                    continue
+                # next_d가 야간이면 아직 연속 중이므로 패스 (다음 d에서 처리)
+                night_next = [
+                    x[nid][next_d][s]
+                    for s in self.NIGHT_SHIFTS
+                    if not isinstance(x[nid][next_d][s], (int, float))
+                ]
+
+                for k in range(rest_days):
+                    rest_d = next_d + k
+                    if rest_d >= self.T:
+                        break
+                    work_vars = [
+                        x[nid][rest_d][s]
+                        for s in self.WORK_SHIFTS
+                        if s not in self.NIGHT_SHIFTS
+                        and not isinstance(x[nid][rest_d][s], (int, float))
+                    ]
+                    if not work_vars:
+                        continue
+                    # sum_N(d..d+min_consec-1) - sum_N(next_d) + sum_W(rest_d) <= min_consec
+                    lhs = pulp.lpSum(night_sum) + night_sum_fixed
+                    if night_next:
+                        lhs -= pulp.lpSum(night_next)
+                    else:
+                        # night_next 고정값 빼기
+                        lhs -= sum(
+                            x[nid][next_d][s]
+                            for s in self.NIGHT_SHIFTS
+                            if isinstance(x[nid][next_d][s], (int, float))
+                        )
+                    lhs += pulp.lpSum(work_vars)
+                    prob += (
+                        lhs <= min_consec,
+                        f"rest_after_night_{nid}_{d}_{k}"
+                    )
 
     def _c_max_v_per_month(self, prob, x):
         """V(연차) 당월 최대 사용 횟수 (hard constraint) + 익월에서 V 사용 금지
