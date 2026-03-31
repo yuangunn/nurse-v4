@@ -6,7 +6,6 @@ function app() {
       {id:'preinput', label:'사전입력'},
       {id:'schedule', label:'스케줄'},
       {id:'saved',    label:'저장'},
-      {id:'analysis', label:'분석'},
     ],
     activeTab: 'settings',
     fontSize: parseInt(localStorage.getItem('fontSize'))||20,
@@ -89,6 +88,7 @@ function app() {
     scheduleGenOptions:true,        // #5 모바일 옵션 접기
     showPrevHint:false,             // #3 이전달 이월 힌트
     generatePhase:'',               // #12 진행단계 ('building'|'solving'|'extracting'|'done')
+    showAnalysisPanel:false,         // 사전입력 내 분석 패널
     analysisWarnings:[],            // #7 분석 경고 요약
     resetConfirmStep:0,             // #14 초기화 2단계
 
