@@ -534,18 +534,18 @@
               <div class="text-xs" :class="w.type==='danger'?'text-red':'text-amber'" x-text="(w.type==='danger'?'⚠ ':'⚡ ')+w.msg"></div>
             </template>
           </div>
-          <div class="overflow-x-auto" style="max-height:200px;overflow-y:auto">
+          <div class="overflow-x-auto">
             <table class="tbl" style="font-size:0.7rem">
-              <thead><tr><th>이름</th>
-                <template x-for="week in analysisResult?.weeks||[]" :key="'jh'+week.weekIdx"><th class="text-center" :class="getCycleClass(week.cycle)" x-text="week.cycle+'주기'"></th></template>
+              <thead><tr><th style="min-width:50px">주기</th>
+                <template x-for="nurse in nurses" :key="'jh'+nurse.id"><th class="text-center" style="min-width:50px;font-size:0.65rem" x-text="nurse.name"></th></template>
               </tr></thead>
-              <tbody><template x-for="nurse in nurses" :key="'jr'+nurse.id"><tr>
-                <td class="font-medium text-bright" x-text="nurse.name"></td>
-                <template x-for="week in analysisResult?.weeks||[]" :key="'jc'+nurse.id+week.weekIdx">
+              <tbody><template x-for="week in analysisResult?.weeks||[]" :key="'jw'+week.weekIdx"><tr>
+                <td class="font-medium" :class="getCycleClass(week.cycle)" x-text="week.cycle+'주기'"></td>
+                <template x-for="nurse in nurses" :key="'jc'+week.weekIdx+nurse.id">
                   <td class="text-center">
                     <template x-if="(juhuRecommendation?.assignments?.[nurse.id]||[]).find(a=>a.weekIdx===week.weekIdx)">
                       <span class="juhu-badge" :class="(juhuRecommendation.assignments[nurse.id]||[]).find(a=>a.weekIdx===week.weekIdx)?.existing?'juhu-existing':'juhu-new'"
-                        x-text="((a=(juhuRecommendation.assignments[nurse.id]||[]).find(a=>a.weekIdx===week.weekIdx))=>a?a.date+'일('+a.dowName+')':'')()"></span>
+                        x-text="((a=(juhuRecommendation.assignments[nurse.id]||[]).find(a=>a.weekIdx===week.weekIdx))=>a?a.date+'('+a.dowName+')':'')()"></span>
                     </template>
                   </td>
                 </template>
