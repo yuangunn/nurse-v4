@@ -38,7 +38,7 @@ function app() {
     darkMode: localStorage.getItem('darkMode')==='true',
     weekdayLabels:{mon:'월',tue:'화',wed:'수',thu:'목',fri:'금',sat:'토',sun:'일'},
     // workShifts removed (use allWorkShifts computed instead)
-    shifts:[], shiftMgmtOpen:true, scoringRuleOpen:false,
+    shifts:[], shiftMgmtOpen:false, scoringRuleOpen:false,
     shiftModal:{open:false,isNew:true,data:{}},
     scoringRules:[], scoringMgmtOpen:false,
     scoringModal:{open:false,isNew:true,data:{}},
@@ -84,6 +84,13 @@ function app() {
     devSettingsOpen:false,
     devMasterPw:'',
     devMasterPwConfirm:'',
+
+    // ── UX 개선 ──
+    scheduleGenOptions:true,        // #5 모바일 옵션 접기
+    showPrevHint:false,             // #3 이전달 이월 힌트
+    generatePhase:'',               // #12 진행단계 ('building'|'solving'|'extracting'|'done')
+    analysisWarnings:[],            // #7 분석 경고 요약
+    resetConfirmStep:0,             // #14 초기화 2단계
 
     // ── computed ──────────────────────────────────────────────
     get shiftMap(){const m=new Map();for(const s of this.shifts)m.set(s.code,s);return m},
@@ -149,6 +156,7 @@ function app() {
       this.initAutoDark();
       this.loadTemplates();
       this._initScoringSliders();
+      this._checkPrevMonthCarryover();  // #3
       this.$nextTick(()=>{if(window.lucide)lucide.createIcons()});
     },
 
@@ -295,6 +303,91 @@ function app() {
     },
     setFontSize(size){this.fontSize=size;localStorage.setItem('fontSize',size);document.documentElement.style.fontSize=size+'px'},
 
+    // #2 스케줄 인원 부족 체크
+    isScheduleStaffShort(day, period){
+      if(!this.schedule||!Object.keys(this.schedule).length)return false;
+      const wd=['sun','mon','tue','wed','thu','fri','sat'][day.getDay()];
+      const req=this.requirements[wd];if(!req)return false;
+      const k=this.dayKey(day);
+      const count=Object.values(this.schedule).filter(ns=>{
+        const s=ns[k];if(!s)return false;
+        const info=this.shiftMap.get(s);
+        return info&&info.period===period;
+      }).length;
+      const extCount=Object.values(this.extendedSchedule||{}).filter(ns=>{
+        const s=ns[k];if(!s)return false;
+        const info=this.shiftMap.get(s);
+        return info&&info.period===period;
+      }).length;
+      const total=Math.max(count,extCount);
+      const needed=(req.D||0)+(req.DC||0);
+      if(period==='day')return total<needed;
+      if(period==='evening')return total<(req.E||0)+(req.EC||0);
+      if(period==='night')return total<(req.N||0)+(req.NC||0);
+      return false;
+    },
+
+    // #3 이전달 스케줄 자동 감지
+    async _checkPrevMonthCarryover(){
+      if(Object.keys(this.prevSchedule).length>0)return; // 이미 사전입력 있으면 스킵
+      try{
+        const pm=this.month===1?12:this.month-1;
+        const py=this.month===1?this.year-1:this.year;
+        const res=await this.api('GET','/api/schedules');
+        const has=res.some(s=>s.year===py&&s.month===pm);
+        if(has)this.showPrevHint=true;
+      }catch(e){}
+    },
+
+    // #7 분석 경고 수집
+    collectAnalysisWarnings(){
+      if(!this.analysisResult)return;
+      const w=[];
+      const days=this.analysisResult.days||[];
+      for(const d of days){
+        if(d.余裕<=0)w.push(`${d.date}: 인원 부족 (여유 ${d.余裕})`);
+      }
+      this.analysisWarnings=w.slice(0,5);
+    },
+
+    // #13 스케줄 자동 저장
+    async _autoSaveSchedule(){
+      if(!this.schedule||!Object.keys(this.schedule).length)return;
+      try{
+        const name=`자동저장 ${this.year}-${String(this.month).padStart(2,'0')}`;
+        await this.api('POST','/api/schedules',{year:this.year,month:this.month,data:{schedule:this.schedule,extended:this.extendedSchedule,scores:this.nurseScores,scoreDetails:this.nurseScoreDetails,relaxed:this.relaxedCells},name});
+        this._toast('스케줄 자동 저장됨','info');
+        this.loadSavedList();
+      }catch(e){}
+    },
+
+    // #14 초기화 2단계 확인
+    confirmReset(){
+      if(this.resetConfirmStep===0){
+        this.resetConfirmStep=1;
+        this._toast('한 번 더 누르면 초기화됩니다','warn');
+        setTimeout(()=>{this.resetConfirmStep=0},3000);
+        return false;
+      }
+      this.resetConfirmStep=0;
+      return true;
+    },
+
+    // #4 사전입력 진행률
+    get prevInputProgress(){
+      if(!this.nurses.length)return 0;
+      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
+      const total=this.nurses.length*days.length;
+      if(!total)return 0;
+      let filled=0;
+      for(const n of this.nurses){
+        for(const d of days){
+          if(this.prevSchedule[n.id]?.[this.dayKey(d)])filled++;
+        }
+      }
+      return Math.round(filled/total*100);
+    },
+
     async _checkPendingGenerate(){
       try{
         const res=await this.api('GET','/api/generate/result');
@@ -314,7 +407,7 @@ function app() {
           this._recoverPoll=setInterval(async()=>{
             const pollRef=this._recoverPoll;
             try{const r=await this.api('GET','/api/generate/result');
-              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.trackEdits()}}
+              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.trackEdits();this._autoSaveSchedule()}}
             }catch(e){}
           },2000);
         }else if(res.status==='done'&&res.result){

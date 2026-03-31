@@ -36,7 +36,7 @@
         >
           <div style="flex:1">
             <div style="font-weight:600;font-size:0.95rem" x-text="p.name"></div>
-            <div class="text-sub" style="font-size:0.7rem" x-text="p.is_guest?'게스트 (종료 시 데이터 삭제)':'ID: '+p.id"></div>
+            <div class="text-sub" style="font-size:0.7rem" x-text="p.is_guest?'게스트 (종료 시 데이터 삭제)':p.created_at?p.id+' · 생성: '+p.created_at.slice(0,10):'ID: '+p.id"></div>
           </div>
           <div style="display:flex;align-items:center;gap:6px">
             <template x-if="p.has_password">
@@ -191,6 +191,13 @@
       </svg>
       <span class="nav-label" x-text="darkMode?'라이트 모드':'다크 모드'"></span>
     </button>
+    <!-- #11 현재 프로필 표시 -->
+    <template x-if="currentProfile">
+      <div style="margin-top:6px;padding:6px 10px;border-top:1px solid var(--border);text-align:center">
+        <div class="nav-label text-xs text-sub" style="font-weight:600" x-text="profiles.find(p=>p.id===currentProfile)?.name||currentProfile"></div>
+        <button @click="switchProfile()" class="btn btn-xs btn-ghost nav-label" style="font-size:0.6rem;margin-top:2px;opacity:0.7">전환</button>
+      </div>
+    </template>
   </div>
 </aside>
 
@@ -328,9 +335,9 @@
       <button @click="loadPrevMonthSchedule()" class="btn btn-xs btn-ghost text-blue" title="이전달 스케줄 이월">📅 전달이월</button>
       <button @click="undo()" class="btn btn-xs btn-ghost" title="Ctrl+Z" :style="_undoStack.length?'':'opacity:0.3'">↩ 되돌리기</button>
       <button @click="redo()" class="btn btn-xs btn-ghost" title="Ctrl+Shift+Z" :style="_redoStack.length?'':'opacity:0.3'">↪ 다시</button>
-      <button @click="clearPrevSchedule()" class="btn btn-xs btn-ghost text-red">초기화</button>
+      <button @click="if(confirmReset())clearPrevSchedule()" class="btn btn-xs btn-ghost text-red" :style="resetConfirmStep?'color:white;background:var(--red)':''">초기화</button>
       <button @click="clearPrevOtherMonths()" class="btn btn-xs btn-ghost text-dim">다른달 정리</button>
-      <span class="pill text-dim" style="background:rgba(255,255,255,0.03)" x-text="`${countPrevEntries()}건`"></span>
+      <span class="pill text-dim" style="background:rgba(255,255,255,0.03)" x-text="`${countPrevEntries()}건 (${prevInputProgress}%)`"></span>
       <button @click="showNotes=!showNotes" :class="showNotes?'btn-primary':'btn-ghost'" class="btn btn-xs">메모</button>
       <button @click="prevSavePanel=!prevSavePanel" :class="prevSavePanel?'btn-primary':'btn-ghost'" class="btn btn-xs">저장/불러오기</button>
     </div>
@@ -362,6 +369,17 @@
     <template x-for="s in prevShifts" :key="s"><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></template>
     <span class="text-dim ml-1">빈칸=자동</span>
     <span class="text-dim ml-2">| 키보드: 방향키 이동, D/E/N/V 직접 입력, Del 삭제</span>
+  </div>
+  <!-- #3 이전달 이월 힌트 -->
+  <div x-show="showPrevHint" class="card-sm mb-2" style="flex-shrink:0;padding:8px 14px;display:flex;align-items:center;gap:10px;border-left:3px solid var(--accent)">
+    <span class="text-xs">이전달 스케줄이 있습니다. 이월하시겠습니까?</span>
+    <button @click="loadPrevMonthSchedule();showPrevHint=false" class="btn btn-xs btn-primary">이월하기</button>
+    <button @click="showPrevHint=false" class="btn btn-xs btn-ghost">닫기</button>
+  </div>
+  <!-- #4 온보딩 힌트 -->
+  <div x-show="nurses.length>0&&countPrevEntries()===0&&!showPrevHint" class="card-sm mb-2" style="flex-shrink:0;padding:8px 14px;border-left:3px solid var(--amber);opacity:0.85">
+    <span class="text-xs">사전입력이 비어 있습니다. <strong>분석 탭</strong>에서 주휴 추천 배분을 먼저 적용하면 효율적입니다.</span>
+    <button @click="activeTab='analysis'" class="btn btn-xs btn-ghost text-blue ml-2">분석 탭으로</button>
   </div>
   <!-- 그리드 -->
   <div x-show="nurses.length>0" style="flex:1;min-height:0;overflow:auto">
@@ -446,8 +464,8 @@
       <span class="ym-lbl">월</span>
       <button @click="nextMonth()" class="ym-nav">›</button>
     </div>
-    <button @click="generate()" :disabled="generating" class="btn btn-primary btn-sm" :style="generating?'opacity:0.5':''">
-      <svg x-show="generating" class="w-3.5 h-3.5 spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+    <button @click="generate()" :disabled="generating" class="btn btn-primary" style="padding:6px 20px;font-size:0.9rem;font-weight:700" :style="generating?'opacity:0.5':''">
+      <svg x-show="generating" class="w-4 h-4 spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
       <span x-text="generating?'생성 중...':'생성'"></span>
     </button>
     <button @click="saveSchedule()" x-show="schedule&&Object.keys(schedule).length>0" class="btn btn-xs btn-success">저장</button>
@@ -457,7 +475,14 @@
     <button @click="printSchedule()" x-show="schedule&&Object.keys(schedule).length>0" class="btn btn-xs btn-ghost">🖨 인쇄</button>
     <button @click="showNurseSummary=!showNurseSummary" x-show="schedule&&Object.keys(schedule).length>0" :class="showNurseSummary?'btn-primary':'btn-ghost'" class="btn btn-xs">📊 요약</button>
   </div>
-  <!-- 슬라이더 -->
+  <!-- #7 분석 경고 요약 (스케줄 탭) -->
+  <div x-show="analysisWarnings.length>0&&!generating" x-cloak class="card-sm mb-2" style="padding:6px 12px;border-left:3px solid var(--amber)">
+    <div class="text-xs font-semibold text-amber mb-1">분석 경고</div>
+    <template x-for="w in analysisWarnings" :key="w"><div class="text-xs text-dim" x-text="w"></div></template>
+  </div>
+  <!-- 슬라이더 (#5 모바일 접기) -->
+  <button @click="scheduleGenOptions=!scheduleGenOptions" class="btn btn-xs btn-ghost mb-1 md-hide" x-text="scheduleGenOptions?'▾ 옵션 접기':'▸ 옵션 펼치기'" style="display:none"></button>
+  <div :class="scheduleGenOptions?'':'mobile-hidden'" class="gen-options">
   <div class="flex items-center gap-3 mb-1.5">
     <span class="text-xs text-dim w-8">오차</span>
     <input type="range" min="0" max="0.1" step="0.01" x-model.number="mipGap" class="flex-1" style="max-width:110px;accent-color:#1976d2"/>
@@ -516,6 +541,7 @@
       <p class="text-xs text-dim mt-2 text-center">슬라이더 조정 후 '배점 적용' → '생성' 순으로 진행. 설정 탭에서 세부 규칙도 직접 수정 가능.</p>
     </div>
   </div>
+  </div><!-- /gen-options -->
   <!-- 생성 중 -->
   <div x-show="generating" x-cloak class="card-sm mb-3" style="border-color:rgba(33,150,243,0.1)">
     <div class="flex items-center justify-between mb-1.5 text-xs">
@@ -528,8 +554,8 @@
     <div class="text-xs min-h-[1em] text-dim">
       <template x-if="solveProgress.has_solution"><span class="text-blue">최적 대비 <strong x-text="solveProgress.gap_percent+'%'"></strong> | 노드 <strong x-text="solveProgress.nodes.toLocaleString('ko-KR')"></strong></span></template>
       <template x-if="!solveProgress.has_solution&&solveProgress.nodes>0"><span>탐색 중… 노드 <strong x-text="solveProgress.nodes.toLocaleString('ko-KR')"></strong></span></template>
-      <template x-if="!solveProgress.has_solution&&solveProgress.nodes===0&&solveProgress.is_running"><span>계산 중…</span></template>
-      <template x-if="!solveProgress.is_running&&!solveProgress.has_solution&&solveProgress.nodes===0"><span>연결 중…</span></template>
+      <template x-if="!solveProgress.has_solution&&solveProgress.nodes===0&&solveProgress.is_running"><span>모델 구축 → 최적화 중…</span></template>
+      <template x-if="!solveProgress.is_running&&!solveProgress.has_solution&&solveProgress.nodes===0"><span>모델 구축 중…</span></template>
     </div>
   </div>
   <!-- 메시지 -->
@@ -647,7 +673,7 @@
       </tr></template></tbody>
       <tfoot><template x-for="row in footerRows" :key="row.label"><tr style="background:rgba(255,255,255,0.015)">
         <td class="g-cell px-1.5 py-0.5 font-medium sticky left-0 z-10 text-xs g-fix" :class="row.color" x-text="row.label"></td>
-        <template x-for="day in scheduleDays" :key="day"><td class="g-cell text-center py-0.5 text-xs font-semibold" :class="[row.color,day.getDay()===6?'g-sat':'']" x-text="getDayDutyCount(day,row.shifts)||''"></td></template>
+        <template x-for="day in scheduleDays" :key="day"><td class="g-cell text-center py-0.5 text-xs font-semibold" :class="[row.color,day.getDay()===6?'g-sat':'',row.label==='낮'&&isScheduleStaffShort(day,'day')?'staff-short':'',row.label==='저녁'&&isScheduleStaffShort(day,'evening')?'staff-short':'',row.label==='야간'&&isScheduleStaffShort(day,'night')?'staff-short':'']" x-text="getDayDutyCount(day,row.shifts)||''"></td></template>
         <td class="g-cell" colspan="6"></td>
       </tr></template></tfoot>
     </table>

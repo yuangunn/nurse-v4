@@ -400,10 +400,19 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .tbl tbody tr:last-child td { border-bottom: none; }
 
 /* ── Schedule Grid ───────────────────────────────────────── */
-.g-sun { background: #fef2f2; }
+.g-sun { background: #fef2f2; border-left: 1.5px solid #fca5a5 !important; }
 .g-sat-bg { background: #eff6ff; }
-html.dark .g-sun { background: #1a1012; }
+html.dark .g-sun { background: #1a1012; border-left: 1.5px solid #7f1d1d !important; }
 html.dark .g-sat-bg { background: #101520; }
+
+/* #2 인원 부족 표시 */
+.staff-short { color: var(--red) !important; font-weight: 700 !important; }
+
+/* #5 모바일 생성 옵션 접기 */
+@media (max-width: 768px) {
+  .md-hide { display: inline-flex !important; }
+  .mobile-hidden { display: none !important; }
+}
 
 .g-cell { border: 1px solid var(--border-light); }
 .g-sat { border-right: 2.5px solid var(--border) !important; }
