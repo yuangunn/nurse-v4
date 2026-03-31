@@ -369,9 +369,16 @@ function app() {
     },
     // 스케줄 탭용 셀 스타일
     hideCharge:false, colorByShift:false,
+    _getShift(nurseId, day){
+      const k=this.dayKey(day);
+      const s=this.schedule?.[nurseId]?.[k];
+      if(s)return s;
+      return this.extendedSchedule?.[nurseId]?.[k]||'';
+    },
     getScheduleCellClass(nurseId, day){
-      const k=this.dayKey(day);const shift=this.schedule?.[nurseId]?.[k];
+      const shift=this._getShift(nurseId,day);
       if(!shift||shift==='-')return '';
+      const k=this.dayKey(day);
       const isPre=!!(this.prevSchedule[nurseId]&&this.prevSchedule[nurseId][k]);
       if(isPre)return 'g-cell-pre';
       if(this.colorByShift)return '';
@@ -382,15 +389,16 @@ function app() {
     },
     getScheduleCellStyle(nurseId, day){
       if(!this.colorByShift)return {};
-      const k=this.dayKey(day);let shift=this.schedule?.[nurseId]?.[k];
+      let shift=this._getShift(nurseId,day);
       if(!shift||shift==='-')return {};
+      const k=this.dayKey(day);
       const isPre=!!(this.prevSchedule[nurseId]&&this.prevSchedule[nurseId][k]);
       if(isPre)return {};
       if(this.hideCharge){if(shift==='DC')shift='D';if(shift==='EC')shift='E';if(shift==='NC')shift='N'}
       return this.getShiftStyle(shift);
     },
     displayShift(nurseId, day){
-      const k=this.dayKey(day);let shift=this.schedule?.[nurseId]?.[k];
+      let shift=this._getShift(nurseId,day);
       if(!shift||shift==='-')return '';
       if(this.hideCharge){if(shift==='DC')shift='D';if(shift==='EC')shift='E';if(shift==='NC')shift='N'}
       return shift;
