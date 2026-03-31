@@ -539,8 +539,8 @@
               <thead><tr><th style="min-width:50px">주기</th>
                 <template x-for="nurse in nurses" :key="'jh'+nurse.id"><th class="text-center" style="min-width:50px;font-size:0.65rem" x-text="nurse.name"></th></template>
               </tr></thead>
-              <tbody><template x-for="week in analysisResult?.weeks||[]" :key="'jw'+week.weekIdx"><tr>
-                <td class="font-medium" :class="getCycleClass(week.cycle)" x-text="week.cycle+'주기'"></td>
+              <tbody><template x-for="week in analysisResult?.weeks||[]" :key="'jw'+week.weekIdx"><tr :class="getCycleClass(week.cycle)">
+                <td class="font-medium" x-text="week.cycle+'주기'"></td>
                 <template x-for="nurse in nurses" :key="'jc'+week.weekIdx+nurse.id">
                   <td class="text-center">
                     <template x-if="(juhuRecommendation?.assignments?.[nurse.id]||[]).find(a=>a.weekIdx===week.weekIdx)">
