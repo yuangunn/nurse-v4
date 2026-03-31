@@ -173,6 +173,13 @@ def change_profile_password(body: dict):
     profile_id = body.get("id", "")
     old_password = body.get("old_password", "")
     new_password = body.get("new_password", "")
+    force_reset = body.get("force_reset", False)
+    if force_reset:
+        # 개발자 모드: 비밀번호 강제 초기화 (제거)
+        result = prof.force_reset_password(profile_id)
+        if not result.get("ok"):
+            raise HTTPException(400, result.get("error"))
+        return result
     if not new_password:
         raise HTTPException(400, "새 비밀번호를 입력해주세요.")
     result = prof.change_password(profile_id, old_password, new_password)
@@ -204,6 +211,43 @@ def set_master_password(body: dict):
         password = body.get("password", "")
         return {"ok": prof.verify_master_password(password)}
     raise HTTPException(400, "알 수 없는 action")
+
+
+# ── 개발자 API ────────────────────────────────────────────────────────────────
+
+@app.get("/api/dev/info")
+def dev_info():
+    """현재 DB 경로, 크기, 간호사 수"""
+    import os
+    db_path = db.get_db_path()
+    size_bytes = os.path.getsize(db_path) if os.path.exists(db_path) else 0
+    if size_bytes < 1024:
+        size_str = f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        size_str = f"{size_bytes / 1024:.1f} KB"
+    else:
+        size_str = f"{size_bytes / 1024 / 1024:.1f} MB"
+    nurses = db.get_nurses()
+    return {"path": db_path, "size": size_str, "nurses": len(nurses)}
+
+
+@app.post("/api/dev/reset-seed")
+def dev_reset_seed():
+    """예시 데이터(18명) 재생성"""
+    with db.get_conn() as conn:
+        conn.execute("DELETE FROM nurses")
+    from .database import _seed_nurses
+    _seed_nurses(db.get_conn())
+    return {"ok": True}
+
+
+@app.get("/api/dev/download-db")
+def dev_download_db():
+    """현재 DB 파일 다운로드"""
+    from fastapi.responses import FileResponse as FR
+    db_path = db.get_db_path()
+    return FR(db_path, media_type="application/octet-stream",
+              filename="nurse_backup.db")
 
 
 # ── 헬스체크 ─────────────────────────────────────────────────────────────────

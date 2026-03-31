@@ -123,33 +123,80 @@
 
 <!-- 개발자 설정 모달 -->
 <div :style="devSettingsOpen?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="devSettingsOpen=false">
-  <div style="max-width:380px;width:90vw;background:var(--card,#fff);color:var(--text,#1f2937);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
-    <h3 style="margin-bottom:16px;font-weight:700;color:var(--text,#1f2937)">🔧 개발자 설정</h3>
-    <div style="padding:14px;margin-bottom:12px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--bg,#f9fafb)">
-      <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text,#1f2937)">🔑 마스터 비밀번호</h4>
-      <p style="margin-bottom:8px;font-size:0.78rem;color:var(--text-sub,#6b7280)" x-text="hasMasterPassword?'✅ 현재 설정됨':'⚠️ 미설정'"></p>
-      <template x-if="!hasMasterPassword">
-        <div>
-          <input type="password" x-model="devMasterPw" placeholder="마스터 비밀번호"
-                 style="width:100%;padding:8px 12px;margin-bottom:6px;border:1px solid var(--border,#d1d5db);border-radius:8px;background:var(--card,#fff);color:var(--text,#1f2937);font-size:0.84rem">
-          <input type="password" x-model="devMasterPwConfirm" placeholder="비밀번호 확인"
-                 style="width:100%;padding:8px 12px;margin-bottom:8px;border:1px solid var(--border,#d1d5db);border-radius:8px;background:var(--card,#fff);color:var(--text,#1f2937);font-size:0.84rem">
-          <button @click="setDevMasterPassword()"
-                  style="width:100%;padding:8px;border:none;border-radius:8px;background:var(--accent,#3b82f6);color:#fff;font-weight:600;font-size:0.8rem;cursor:pointer">설정</button>
+  <div style="max-width:480px;width:95vw;max-height:85vh;overflow-y:auto;background:var(--card,#fff);color:var(--text,#1f2937);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+    <h3 style="margin-bottom:16px;font-weight:700;color:var(--text,#1f2937)">개발자 설정</h3>
+
+    <!-- 보안 -->
+    <div style="padding:14px;margin-bottom:10px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--bg,#f9fafb)">
+      <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text,#1f2937)">보안</h4>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <p style="font-size:0.75rem;color:var(--text-sub,#6b7280)" x-text="'마스터 비밀번호: '+(hasMasterPassword?'설정됨':'미설정')"></p>
+        <template x-if="!hasMasterPassword">
+          <div style="display:flex;gap:4px">
+            <input type="password" x-model="devMasterPw" placeholder="비밀번호" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem">
+            <input type="password" x-model="devMasterPwConfirm" placeholder="확인" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem">
+            <button @click="setDevMasterPassword()" class="btn btn-xs btn-primary">설정</button>
+          </div>
+        </template>
+        <template x-if="hasMasterPassword">
+          <button @click="removeDevMasterPassword()" class="btn btn-xs btn-ghost" style="color:var(--red);align-self:flex-start">마스터 비밀번호 제거</button>
+        </template>
+        <!-- 프로필 비밀번호 초기화 -->
+        <div style="margin-top:4px">
+          <p style="font-size:0.72rem;color:var(--text-sub);margin-bottom:4px">프로필 비밀번호 초기화:</p>
+          <div style="display:flex;gap:4px;flex-wrap:wrap">
+            <template x-for="p in profiles.filter(p=>!p.is_guest&&p.has_password)" :key="p.id">
+              <button @click="devResetProfilePassword(p.id)" class="btn btn-xs btn-ghost" style="font-size:0.65rem" x-text="p.name"></button>
+            </template>
+            <span x-show="!profiles.some(p=>!p.is_guest&&p.has_password)" style="font-size:0.7rem;color:var(--text-sub)">비밀번호 설정된 프로필 없음</span>
+          </div>
         </div>
-      </template>
-      <template x-if="hasMasterPassword">
-        <button @click="removeDevMasterPassword()"
-                style="padding:8px 14px;border:1px solid var(--red,#ef4444);border-radius:8px;background:transparent;color:var(--red,#ef4444);font-size:0.8rem;cursor:pointer">마스터 비밀번호 제거</button>
-      </template>
+        <!-- localStorage 삭제 -->
+        <button @click="devClearLocalStorage()" class="btn btn-xs btn-ghost" style="color:var(--red);align-self:flex-start;margin-top:4px">localStorage 전체 삭제</button>
+      </div>
     </div>
-    <div style="padding:14px;margin-bottom:12px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--bg,#f9fafb)">
-      <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text,#1f2937)">👤 프로필 관리</h4>
-      <button @click="switchProfile();devSettingsOpen=false"
-              style="width:100%;padding:8px;border:1px solid var(--border,#d1d5db);border-radius:8px;background:transparent;color:var(--text,#1f2937);font-size:0.8rem;cursor:pointer">프로필 전환</button>
+
+    <!-- 데이터 -->
+    <div style="padding:14px;margin-bottom:10px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--bg,#f9fafb)">
+      <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text,#1f2937)">데이터</h4>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button @click="devDownloadDb()" class="btn btn-xs btn-ghost">DB 백업 다운로드</button>
+          <button @click="devResetSeedData()" class="btn btn-xs btn-ghost" style="color:var(--red)">예시 데이터 초기화</button>
+        </div>
+        <template x-if="devDbInfo">
+          <div style="font-size:0.7rem;color:var(--text-sub);margin-top:4px;font-family:monospace">
+            <div x-text="'경로: '+devDbInfo.path"></div>
+            <div x-text="'크기: '+devDbInfo.size"></div>
+            <div x-text="'간호사: '+devDbInfo.nurses+'명'"></div>
+          </div>
+        </template>
+      </div>
     </div>
-    <button @click="devSettingsOpen=false"
-            style="width:100%;padding:10px;border:none;border-radius:8px;background:transparent;color:var(--text-sub,#6b7280);font-size:0.85rem;cursor:pointer">닫기</button>
+
+    <!-- 디버그 -->
+    <div style="padding:14px;margin-bottom:10px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--bg,#f9fafb)">
+      <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text,#1f2937)">디버그</h4>
+      <div style="font-size:0.7rem;color:var(--text-sub);font-family:monospace">
+        <div x-text="'포트: '+location.port"></div>
+        <div x-text="'프로필: '+(currentProfile||'없음')"></div>
+        <div x-text="'간호사: '+nurses.length+'명'"></div>
+        <div x-text="'사전입력: '+countPrevEntries()+'건'"></div>
+        <div x-text="'스케줄: '+(schedule&&Object.keys(schedule).length?'있음':'없음')"></div>
+      </div>
+    </div>
+
+    <!-- UI -->
+    <div style="padding:14px;margin-bottom:10px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--bg,#f9fafb)">
+      <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text,#1f2937)">UI</h4>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:0.75rem;color:var(--text-sub)">글자 크기 범위:</span>
+        <input type="number" x-model.number="fontSize" min="8" max="24" style="width:50px;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem;text-align:center" @change="setFontSize(fontSize)">
+        <span style="font-size:0.7rem;color:var(--text-sub)">(8~24px)</span>
+      </div>
+    </div>
+
+    <button @click="devSettingsOpen=false" style="width:100%;padding:10px;border:none;border-radius:8px;background:transparent;color:var(--text-sub,#6b7280);font-size:0.85rem;cursor:pointer">닫기</button>
   </div>
 </div>
 
@@ -160,11 +207,11 @@
   <div class="sidebar-logo">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
     <span>NurseScheduler</span>
-    <span class="logo-ver">v4</span>
+    <span class="logo-ver" @click="trackVersionClick()" style="cursor:pointer;user-select:none">v4</span>
   </div>
   <nav class="sidebar-nav">
     <template x-for="tab in tabs" :key="tab.id">
-      <div @click="activeTab=tab.id;if(tab.id==='settings')trackSettingsClick()" :class="activeTab===tab.id?'active':''" class="sidebar-item">
+      <div @click="activeTab=tab.id" :class="activeTab===tab.id?'active':''" class="sidebar-item">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <template x-if="tab.icon==='settings'"><g><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></g></template>
           <template x-if="tab.icon==='edit-3'"><g><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></g></template>
@@ -195,7 +242,10 @@
     <template x-if="currentProfile">
       <div style="margin-top:6px;padding:6px 10px;border-top:1px solid var(--border);text-align:center">
         <div class="nav-label text-xs text-sub" style="font-weight:600" x-text="profiles.find(p=>p.id===currentProfile)?.name||currentProfile"></div>
-        <button @click="switchProfile()" class="btn btn-xs btn-ghost nav-label" style="font-size:0.6rem;margin-top:2px;opacity:0.7">전환</button>
+        <div class="nav-label" style="display:flex;gap:4px;justify-content:center;margin-top:2px">
+          <button @click="switchProfile()" class="btn btn-xs btn-ghost" style="font-size:0.6rem;opacity:0.7">전환</button>
+          <button x-show="_devModeUnlocked" @click="devSettingsOpen=true;loadDevDbInfo()" class="btn btn-xs btn-ghost" style="font-size:0.6rem;opacity:0.7;color:var(--amber)">개발자</button>
+        </div>
       </div>
     </template>
   </div>

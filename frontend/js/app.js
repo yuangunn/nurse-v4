@@ -79,11 +79,11 @@ function app() {
     // ── 개발자 모드 ──
     developerMode:false,
     _devModeUnlocked:localStorage.getItem('devMode')==='true',
-    _darkToggleTimestamps:[],
-    _settingsClickTimestamps:[],
+    _versionClickTimestamps:[],
     devSettingsOpen:false,
     devMasterPw:'',
     devMasterPwConfirm:'',
+    devDbInfo:null, // DB 경로/크기
 
     // ── UX 개선 ──
     scheduleGenOptions:true,        // #5 모바일 옵션 접기
@@ -258,27 +258,68 @@ function app() {
     },
 
     // ── 개발자 모드 이스터에그 ──
-    trackDarkToggle(){
+    trackVersionClick(){
       const now=Date.now();
-      this._darkToggleTimestamps.push(now);
-      this._darkToggleTimestamps=this._darkToggleTimestamps.filter(t=>now-t<10000);
-      if(this._darkToggleTimestamps.length>=10){
-        this._devModeUnlocked=true;
-        localStorage.setItem('devMode','true');
-        this._toast('개발자 모드가 활성화되었습니다!','info');
-        this._darkToggleTimestamps=[];
+      this._versionClickTimestamps.push(now);
+      this._versionClickTimestamps=this._versionClickTimestamps.filter(t=>now-t<5000);
+      if(this._versionClickTimestamps.length>=5){
+        if(this._devModeUnlocked){
+          // 이미 활성화 → 해제
+          this._devModeUnlocked=false;
+          localStorage.removeItem('devMode');
+          this._toast('개발자 권한이 해제되었습니다','info');
+        }else{
+          this._devModeUnlocked=true;
+          localStorage.setItem('devMode','true');
+          this._toast('개발자 모드가 활성화되었습니다!','info');
+        }
+        this._versionClickTimestamps=[];
       }
     },
 
-    trackSettingsClick(){
-      if(!this._devModeUnlocked)return;
-      const now=Date.now();
-      this._settingsClickTimestamps.push(now);
-      this._settingsClickTimestamps=this._settingsClickTimestamps.filter(t=>now-t<5000);
-      if(this._settingsClickTimestamps.length>=5){
-        this.devSettingsOpen=true;
-        this._settingsClickTimestamps=[];
-      }
+    async loadDevDbInfo(){
+      try{
+        const res=await this.api('GET','/api/dev/info');
+        this.devDbInfo=res;
+      }catch(e){this.devDbInfo=null}
+    },
+
+    async devResetProfilePassword(profileId){
+      const name=this.profiles.find(p=>p.id===profileId)?.name||profileId;
+      if(!confirm(`"${name}" 프로필의 비밀번호를 초기화하시겠습니까?`))return;
+      try{
+        await this.api('POST','/api/profiles/change-password',{id:profileId,old_password:'',new_password:'',force_reset:true});
+        this._toast(`${name} 비밀번호 초기화 완료`);
+        await this._loadProfiles();
+      }catch(e){this._toast(e.message||'초기화 실패','error')}
+    },
+
+    devClearLocalStorage(){
+      if(!confirm('브라우저 로컬 데이터를 모두 삭제하시겠습니까?'))return;
+      localStorage.clear();
+      this._toast('localStorage 삭제 완료. 새로고침합니다.');
+      setTimeout(()=>location.reload(),1000);
+    },
+
+    async devResetSeedData(){
+      if(!confirm('현재 프로필의 간호사를 예시 데이터(18명)로 초기화하시겠습니까?\n기존 간호사 데이터가 삭제됩니다.'))return;
+      try{
+        await this.api('POST','/api/dev/reset-seed');
+        await this.loadNurses();
+        this._toast('예시 데이터 초기화 완료');
+      }catch(e){this._toast(e.message||'초기화 실패','error')}
+    },
+
+    async devDownloadDb(){
+      try{
+        const res=await fetch('/api/dev/download-db');
+        const blob=await res.blob();
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(blob);
+        a.download=`${this.currentProfile||'nurse'}_backup.db`;
+        a.click();URL.revokeObjectURL(a.href);
+        this._toast('DB 백업 다운로드 완료');
+      }catch(e){this._toast('다운로드 실패','error')}
     },
 
     async setDevMasterPassword(){
@@ -624,7 +665,7 @@ function app() {
     openScoreDetail(nurse){this.scoreDetailModal={open:true,nurseName:nurse.name,rows:this.nurseScoreDetails[nurse.id]||[],total:this.nurseScores[nurse.id]??0}},
 
     // ── 다크모드 ──────────────────────────────────────────────
-    toggleDark(){this.darkMode=!this.darkMode;document.documentElement.classList.toggle('dark',this.darkMode);localStorage.setItem('darkMode',this.darkMode);this.trackDarkToggle()},
+    toggleDark(){this.darkMode=!this.darkMode;document.documentElement.classList.toggle('dark',this.darkMode);localStorage.setItem('darkMode',this.darkMode)},
     getDayDutyCount(day,shifts){if(!this.schedule||Object.keys(this.schedule).length===0)return 0;const k=this.dayKey(day);return Object.values(this.schedule).filter(ns=>shifts.includes(ns[k])).length},
 
     // ── 년월 이동 ─────────────────────────────────────────────

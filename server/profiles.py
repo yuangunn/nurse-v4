@@ -349,6 +349,36 @@ def change_password(profile_id: str, old_password: str,
     return {"ok": True}
 
 
+def force_reset_password(profile_id: str) -> Dict:
+    """개발자 모드: 비밀번호 강제 제거"""
+    data = _load_profiles()
+    profile = None
+    for p in data["profiles"]:
+        if p["id"] == profile_id:
+            profile = p
+            break
+    if not profile:
+        return {"ok": False, "error": "프로필을 찾을 수 없습니다."}
+
+    # 암호화된 DB가 있으면 복호화 불가능하므로, 평문 DB가 있는 경우에만 처리
+    enc_path = _enc_path_for_profile(profile_id)
+    db_path = _db_path_for_profile(profile_id)
+    if enc_path.exists() and not db_path.exists():
+        return {"ok": False, "error": "암호화된 DB가 있어 비밀번호 제거 불가. 먼저 프로필을 열어야 합니다."}
+
+    profile["password_hash"] = None
+    profile["password_salt"] = None
+    profile["enc_salt"] = None
+    data["profiles"][data["profiles"].index(profile)] = profile
+    _save_profiles(data)
+
+    # 암호화 파일 삭제 (평문 DB 유지)
+    if enc_path.exists():
+        enc_path.unlink()
+
+    return {"ok": True}
+
+
 # ── 암호화/복호화 헬퍼 ─────────────────────────────────────────────────
 
 
