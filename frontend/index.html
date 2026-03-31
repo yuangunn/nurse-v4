@@ -537,12 +537,12 @@
           <div class="overflow-x-auto">
             <table class="tbl" style="font-size:0.7rem">
               <thead><tr><th style="min-width:50px">주기</th>
-                <template x-for="nurse in nurses" :key="'jh'+nurse.id"><th class="text-center" style="min-width:50px;font-size:0.65rem" x-text="nurse.name"></th></template>
+                <template x-for="(nurse,ni) in nurses" :key="'jh'+nurse.id"><th class="text-center" :style="ni%2===0?'min-width:50px;font-size:0.65rem':'min-width:50px;font-size:0.65rem;background:rgba(0,0,0,0.03)'" x-text="nurse.name"></th></template>
               </tr></thead>
-              <tbody><template x-for="week in analysisResult?.weeks||[]" :key="'jw'+week.weekIdx"><tr :class="getCycleClass(week.cycle)">
-                <td class="font-medium" x-text="week.cycle+'주기'"></td>
-                <template x-for="nurse in nurses" :key="'jc'+week.weekIdx+nurse.id">
-                  <td class="text-center">
+              <tbody><template x-for="week in analysisResult?.weeks||[]" :key="'jw'+week.weekIdx"><tr>
+                <td class="font-medium" :class="getCycleClass(week.cycle)" x-text="week.cycle+'주기'"></td>
+                <template x-for="(nurse,ni) in nurses" :key="'jc'+week.weekIdx+nurse.id">
+                  <td class="text-center" :style="ni%2===0?'':'background:rgba(0,0,0,0.03)'">
                     <template x-if="(juhuRecommendation?.assignments?.[nurse.id]||[]).find(a=>a.weekIdx===week.weekIdx)">
                       <span class="juhu-badge" :class="(juhuRecommendation.assignments[nurse.id]||[]).find(a=>a.weekIdx===week.weekIdx)?.existing?'juhu-existing':'juhu-new'"
                         x-text="((a=(juhuRecommendation.assignments[nurse.id]||[]).find(a=>a.weekIdx===week.weekIdx))=>a?a.date+'('+a.dowName+')':'')()"></span>
