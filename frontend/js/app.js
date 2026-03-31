@@ -2,11 +2,11 @@ function app() {
   return {
     // ── 상태 ──────────────────────────────────────────────────
     tabs: [
-      {id:'settings', label:'설정',     icon:'settings'},
-      {id:'preinput', label:'사전입력', icon:'edit-3'},
-      {id:'schedule', label:'스케줄',   icon:'calendar'},
-      {id:'saved',    label:'저장',     icon:'save'},
-      {id:'analysis', label:'분석',     icon:'bar-chart-2'},
+      {id:'settings', label:'설정'},
+      {id:'preinput', label:'사전입력'},
+      {id:'schedule', label:'스케줄'},
+      {id:'saved',    label:'저장'},
+      {id:'analysis', label:'분석'},
     ],
     activeTab: 'settings',
     fontSize: parseInt(localStorage.getItem('fontSize'))||20,
@@ -146,6 +146,7 @@ function app() {
       document.addEventListener('mouseup',()=>{if(this._isDragging)this.onCellMouseUp()});
       this.$nextTick(()=>{if(window.lucide)lucide.createIcons()});
     },
+
 
     async _initApp(){
       // 프로필 열린 후 앱 데이터 로드
