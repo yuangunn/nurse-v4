@@ -200,16 +200,32 @@ function app() {
       try{await this.api('POST','/api/profiles/close')}catch(e){}
     },
 
+    profileSwitchModal:false,
     async switchProfile(){
-      await this._closeCurrentProfile();
-      this.currentProfile=null;
-      this.profileScreen=true;
       this.profilePasswordInput='';
       this.profileMasterInput='';
       this.profileError='';
-      // 상태 초기화
-      this.nurses=[];this.schedule={};this.prevSchedule={};
       await this._loadProfiles();
+      this.profileSwitchModal=true;
+    },
+    async switchToProfile(profile){
+      this.profileError='';
+      if(profile.has_password&&!this.profilePasswordInput){
+        this.profileError='비밀번호를 입력해주세요.';return;
+      }
+      const body={id:profile.id,password:this.profilePasswordInput||''};
+      if(this.hasMasterPassword)body.master_password=this.profileMasterInput||'';
+      try{
+        await this._closeCurrentProfile();
+        const res=await this.api('POST','/api/profiles/open',body);
+        if(!res.ok){this.profileError=res.error||'프로필 열기 실패';return}
+        this.currentProfile=profile.id;
+        this.profilePasswordInput='';
+        this.profileMasterInput='';
+        this.profileSwitchModal=false;
+        this.nurses=[];this.schedule={};this.prevSchedule={};
+        await this._initApp();
+      }catch(e){this.profileError=e.message||'서버 오류'}
     },
 
     openProfileCreate(){
