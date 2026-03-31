@@ -385,7 +385,7 @@
       <button @click="loadPrevMonthSchedule()" class="btn btn-xs btn-ghost text-blue" title="이전달 스케줄 이월">📅 전달이월</button>
       <button @click="undo()" class="btn btn-xs btn-ghost" title="Ctrl+Z" :style="_undoStack.length?'':'opacity:0.3'">↩ 되돌리기</button>
       <button @click="redo()" class="btn btn-xs btn-ghost" title="Ctrl+Shift+Z" :style="_redoStack.length?'':'opacity:0.3'">↪ 다시</button>
-      <button @click="clearPrevSchedule()" class="btn btn-xs btn-ghost text-red" :style="resetConfirmStep?'color:white;background:var(--red)':''">초기화</button>
+      <button @click="clearPrevSchedule()" class="btn btn-xs btn-ghost text-red">초기화</button>
       <button @click="clearPrevOtherMonths()" class="btn btn-xs btn-ghost text-dim">다른달 정리</button>
       <span class="pill text-dim" style="background:rgba(255,255,255,0.03)" x-text="`${countPrevEntries()}건 (${prevInputProgress}%)`"></span>
       <button @click="showNotes=!showNotes" :class="showNotes?'btn-primary':'btn-ghost'" class="btn btn-xs">메모</button>

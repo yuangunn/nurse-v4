@@ -404,14 +404,8 @@ function app() {
 
     // #14 초기화 2단계 확인
     confirmReset(){
-      if(this.resetConfirmStep===0){
-        this.resetConfirmStep=1;
-        this._toast('한 번 더 누르면 초기화됩니다','warn');
-        setTimeout(()=>{this.resetConfirmStep=0},3000);
-        return false;
-      }
-      this.resetConfirmStep=0;
-      return true;
+      const cnt=this.countPrevEntries();
+      return confirm(`${this.year}년 ${this.month}월 사전입력을 초기화하시겠습니까?\n\n현재 ${cnt}건의 사전입력이 삭제됩니다.\n(해당 월의 모든 주기 포함)`);
     },
 
     // #4 사전입력 진행률
