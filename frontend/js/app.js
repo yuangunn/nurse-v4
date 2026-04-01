@@ -94,7 +94,7 @@ function app() {
 
     // ── computed ──────────────────────────────────────────────
     get shiftMap(){const m=new Map();for(const s of this.shifts)m.set(s.code,s);return m},
-    get allWorkShifts(){return this.shifts.filter(s=>['day','day1','evening','middle','night'].includes(s.period)).map(s=>s.code)},
+    get allWorkShifts(){return this.shifts.filter(s=>['day','evening','middle','night'].includes(s.period)).map(s=>s.code)},
     get allShifts(){return this.shifts.map(s=>s.code)},
     get prevShifts(){return this.shifts.filter(s=>!s.is_charge).map(s=>s.code)},
     get footerRows(){
