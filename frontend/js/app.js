@@ -526,8 +526,8 @@ function app() {
       if(!shift||shift==='-')return '';
       const k=this.dayKey(day);
       const isPre=!!(this.prevSchedule[nurseId]&&this.prevSchedule[nurseId][k]);
+      if(this.colorByShift)return '';  // 근무별 색상 모드: class 없이 style로 처리
       if(isPre)return 'g-cell-pre';
-      if(this.colorByShift)return '';
       const s=this.shiftMap.get(shift);
       if(!s)return '';
       if(s.period==='rest'||s.period==='leave')return 'g-cell-rest';
@@ -537,9 +537,6 @@ function app() {
       if(!this.colorByShift)return {};
       let shift=this._getShift(nurseId,day);
       if(!shift||shift==='-')return {};
-      const k=this.dayKey(day);
-      const isPre=!!(this.prevSchedule[nurseId]&&this.prevSchedule[nurseId][k]);
-      if(isPre)return {};
       if(this.hideCharge){if(shift==='DC')shift='D';if(shift==='EC')shift='E';if(shift==='NC')shift='N'}
       return this.getShiftStyle(shift);
     },
