@@ -171,10 +171,10 @@
       <div style="display:flex;flex-direction:column;gap:6px">
         <p style="font-size:0.75rem;color:var(--text-sub,#6b7280)" x-text="'마스터 비밀번호: '+(hasMasterPassword?'설정됨':'미설정')"></p>
         <template x-if="!hasMasterPassword">
-          <div style="display:flex;gap:4px">
-            <input type="password" x-model="devMasterPw" placeholder="비밀번호" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem">
-            <input type="password" x-model="devMasterPwConfirm" placeholder="확인" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem">
-            <button @click="setDevMasterPassword()" class="btn btn-xs btn-primary">설정</button>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <input type="password" x-model="devMasterPw" placeholder="비밀번호" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem">
+            <input type="password" x-model="devMasterPwConfirm" placeholder="비밀번호 확인" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem">
+            <button @click="setDevMasterPassword()" class="btn btn-xs btn-primary" style="align-self:flex-end">설정</button>
           </div>
         </template>
         <template x-if="hasMasterPassword">
