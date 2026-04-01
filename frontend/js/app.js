@@ -192,6 +192,7 @@ function app() {
         this.profilePasswordInput='';
         this.profileMasterInput='';
         this.profileScreen=false;
+        this.profileSwitchModal=false;
         await this._initApp();
       }catch(e){this.profileError=e.message||'서버 오류'}
     },
