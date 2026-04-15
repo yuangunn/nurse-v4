@@ -82,6 +82,10 @@ class Rules(BaseModel):
     maxNightPerMonthCount: int = 6   # 월 최대 야간 횟수 (7회부터 수면OFF 발생)
     maxNightTwoMonth: bool = False
     maxNightTwoMonthCount: int = 11  # 홀짝월 합산 최대 야간 (12개이상 수면OFF 발생)
+    # 사전입력 완화 차등 보너스
+    preBonusLeave: int = 5000  # V/생/특/공/법/병 (휴가) 유지 보너스 — 간호사 요청 사항
+    preBonusWork: int = 500    # D/E/N/DC/EC/NC/중/D1 (근무) 유지 보너스 — 교체 가능
+    preBonusRest: int = 300    # OF/주 (쉬는 날) 유지 보너스 — 교체 가능
 
 
 class GenerateRequest(BaseModel):

@@ -677,9 +677,36 @@
   </div>
   <div class="flex items-center gap-3 text-xs mb-3 flex-wrap">
     <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="allowPreRelax"/><span class="text-dim">사전입력 완화</span></label>
+    <button x-show="allowPreRelax" @click="showPreBonusSettings=!showPreBonusSettings" class="btn btn-xs btn-ghost" style="padding:1px 6px;font-size:0.65rem" x-text="showPreBonusSettings?'▾ 완화 설정':'▸ 완화 설정'"></button>
     <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="allowJuhuRelax"/><span class="text-dim">주휴 무시</span></label>
     <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="unlimitedV"/><span class="text-dim">V 무제한</span></label>
     <span x-show="unlimitedV" class="text-xs text-dim">(번표 생성이 안 될 때 사용 — V 사용 시 큰 감점 적용)</span>
+  </div>
+  <!-- 사전입력 완화 차등 보너스 설정 -->
+  <div x-show="allowPreRelax&&showPreBonusSettings" x-cloak class="card-sm mb-3" style="border-left:3px solid var(--accent)">
+    <div class="text-xs text-sub mb-2">사전입력 종류별 유지 보너스 점수 (높을수록 해당 입력이 유지됨)</div>
+    <div class="space-y-2">
+      <div class="flex items-center gap-2">
+        <span class="text-xs w-24 text-pink">휴가 (V/생/특/공/법/병)</span>
+        <input type="range" min="0" max="10000" step="100" x-model.number="rules.preBonusLeave" class="flex-1" style="max-width:200px;accent-color:#ec4899"/>
+        <span class="text-xs font-mono w-14 text-right" x-text="rules.preBonusLeave"></span>
+        <span class="text-xs text-dim">(기본 5000)</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs w-24 text-blue">근무 (D/E/N/...)</span>
+        <input type="range" min="0" max="5000" step="50" x-model.number="rules.preBonusWork" class="flex-1" style="max-width:200px;accent-color:#3b82f6"/>
+        <span class="text-xs font-mono w-14 text-right" x-text="rules.preBonusWork"></span>
+        <span class="text-xs text-dim">(기본 500)</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs w-24 text-dim">쉬는 날 (OF/주)</span>
+        <input type="range" min="0" max="5000" step="50" x-model.number="rules.preBonusRest" class="flex-1" style="max-width:200px;accent-color:#6b7280"/>
+        <span class="text-xs font-mono w-14 text-right" x-text="rules.preBonusRest"></span>
+        <span class="text-xs text-dim">(기본 300)</span>
+      </div>
+    </div>
+    <p class="text-xs text-dim mt-2">• <strong class="text-pink">휴가</strong>는 간호사의 요청 사항이므로 높게 유지 권장. 낮추면 솔버가 연차/생휴를 무시할 수 있음.<br/>
+      • <strong class="text-blue">근무</strong>와 <strong>쉬는 날</strong>은 낮을수록 솔버가 유연하게 교체 → infeasible 회피에 도움.</p>
   </div>
   <!-- 배점 슬라이더 -->
   <div class="mb-3">

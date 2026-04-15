@@ -26,6 +26,7 @@ function app() {
       maxNightPerMonth:true, maxNightPerMonthCount:6,
       maxNightTwoMonth:false, maxNightTwoMonthCount:11,
       patternOptimization:true, autoMenstrualLeave:true, maxVPerMonth:1,
+      preBonusLeave:5000, preBonusWork:500, preBonusRest:300,
     },
     schedule:{}, extendedSchedule:{},
     generating:false, generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,
@@ -85,6 +86,7 @@ function app() {
     devDbInfo:null, // DB 경로/크기
 
     // ── UX 개선 ──
+    showPreBonusSettings:false,     // 사전입력 완화 차등 보너스 설정 패널
     scheduleGenOptions:true,        // #5 모바일 옵션 접기
     showPrevHint:false,             // #3 이전달 이월 힌트
     generatePhase:'',               // #12 진행단계 ('building'|'solving'|'extracting'|'done')
@@ -492,7 +494,11 @@ function app() {
     async removeNurse(id){if(!confirm('삭제하시겠습니까?'))return;await this.api('DELETE',`/api/nurses/${id}`);await this.loadNurses()},
 
     // ── 규칙 ──────────────────────────────────────────────────
-    async loadRules(){this.rules=await this.api('GET','/api/rules')},
+    async loadRules(){
+      // DB 값으로 기본값을 덮어쓰기 (없는 필드는 기본값 유지)
+      const loaded=await this.api('GET','/api/rules');
+      this.rules={...this.rules,...loaded};
+    },
     async saveRules(){await this.api('POST','/api/rules',this.rules);this.toast('규칙이 저장되었습니다','info')},
 
     // ── 요구사항 ──────────────────────────────────────────────

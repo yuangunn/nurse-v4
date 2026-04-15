@@ -406,7 +406,19 @@ class NurseScheduler:
         """
         prob = pulp.LpProblem("nurse_schedule_relaxed", pulp.LpMaximize)
         pre_bonus_terms = []
-        PRE_BONUS = 2000  # 사전입력 유지 보너스 (매우 큼)
+        # 차등 보너스: 휴가(V/생/...)는 높게, 근무는 중간, 쉬는 날은 낮게
+        PRE_BONUS_LEAVE = getattr(self.rules, 'preBonusLeave', 5000)
+        PRE_BONUS_WORK = getattr(self.rules, 'preBonusWork', 500)
+        PRE_BONUS_REST = getattr(self.rules, 'preBonusRest', 300)
+        LEAVE_CODES = {"V", "생", "특", "공", "법", "병"}
+        REST_CODES = {"OF", "주"}
+
+        def _pre_bonus_for(code: str) -> int:
+            if code in LEAVE_CODES:
+                return PRE_BONUS_LEAVE
+            if code in REST_CODES:
+                return PRE_BONUS_REST
+            return PRE_BONUS_WORK
 
         x: Dict[str, Dict[int, Dict[str, object]]] = {}
         _free_vars_r: list = []
@@ -470,13 +482,14 @@ class NurseScheduler:
                         x[nid][d][s] = v
                         _free_vars_r.append(v)
 
-                # 사전입력 보너스 (소프트: 유지하면 +PRE_BONUS)
+                # 사전입력 보너스 (소프트: 유지하면 +종류별 차등 보너스)
                 if pre:
                     pre_flex = self._PRE_FLEX.get(pre, {pre})
+                    bonus_amount = _pre_bonus_for(pre)
                     for s in pre_flex:
                         v = x[nid][d].get(s)
                         if isinstance(v, pulp.LpVariable):
-                            pre_bonus_terms.append(PRE_BONUS * v)
+                            pre_bonus_terms.append(bonus_amount * v)
 
         # 제약 (동일)
         self._c_one_shift_per_day(prob, x)
