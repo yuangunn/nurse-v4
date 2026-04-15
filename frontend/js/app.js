@@ -6,6 +6,7 @@ function app() {
       {id:'preinput', label:'사전입력'},
       {id:'schedule', label:'스케줄'},
       {id:'saved',    label:'저장'},
+      {id:'analysis', label:'분석'},
     ],
     activeTab: 'settings',
     fontSize: parseInt(localStorage.getItem('fontSize'))||20,
