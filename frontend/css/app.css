@@ -766,6 +766,7 @@ html.dark .juhu-new {
 
 /* Make cells position relative for indicators */
 .g-cell { position: relative; min-width: 1.8em; }
+.g-cell.sticky { white-space: nowrap; }
 
 /* 사전입력 필요인원 입력 - 좁은 셀에 맞게 패딩 제거 */
 .prev-req-input {

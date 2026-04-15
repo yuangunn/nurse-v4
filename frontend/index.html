@@ -933,21 +933,21 @@
           <tbody>
             <!-- D 필요 -->
             <tr>
-              <td class="g-cell px-2 py-1 sticky left-0 z-10 g-fix font-semibold" style="color:var(--t-blue)">D 필요</td>
+              <td class="g-cell px-2 py-1 sticky left-0 z-10 g-fix font-semibold" style="color:var(--t-blue);white-space:nowrap">D필요</td>
               <template x-for="da in analysisResult?.days||[]" :key="'d'+da.dk">
                 <td class="g-cell text-center py-1" :class="da.isThisMonth?'':'g-overflow'" x-text="da.reqD"></td>
               </template>
             </tr>
             <!-- E 필요 -->
             <tr>
-              <td class="g-cell px-2 py-1 sticky left-0 z-10 g-fix font-semibold" style="color:var(--t-green)">E 필요</td>
+              <td class="g-cell px-2 py-1 sticky left-0 z-10 g-fix font-semibold" style="color:var(--t-green);white-space:nowrap">E필요</td>
               <template x-for="da in analysisResult?.days||[]" :key="'e'+da.dk">
                 <td class="g-cell text-center py-1" :class="da.isThisMonth?'':'g-overflow'" x-text="da.reqE"></td>
               </template>
             </tr>
             <!-- N 필요 -->
             <tr>
-              <td class="g-cell px-2 py-1 sticky left-0 z-10 g-fix font-semibold" style="color:var(--t-amber)">N 필요</td>
+              <td class="g-cell px-2 py-1 sticky left-0 z-10 g-fix font-semibold" style="color:var(--t-amber);white-space:nowrap">N필요</td>
               <template x-for="da in analysisResult?.days||[]" :key="'n'+da.dk">
                 <td class="g-cell text-center py-1" :class="da.isThisMonth?'':'g-overflow'" x-text="da.reqN"></td>
               </template>
