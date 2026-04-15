@@ -784,7 +784,7 @@
     </div>
   </div>
   <!-- 스케줄 그리드 -->
-  <div x-show="schedule&&Object.keys(schedule).length>0" style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 13rem)">
+  <div x-show="schedule&&Object.keys(schedule).length>0" style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 13rem);max-width:100%">
     <table class="text-xs border-collapse" style="min-width:680px">
       <thead>
         <tr><th class="g-cell px-1.5 py-1 sticky left-0 top-0 z-30 text-left text-xs g-fix text-dim">주기</th><template x-for="span in getCycleSpans()" :key="span.key"><th :colspan="span.count" :class="getCycleClass(span.cycle)" class="g-cell text-center text-xs font-bold py-1 sticky top-0 z-20" x-text="`${span.cycle}주기`"></th></template><th class="g-cell sticky top-0 z-20 g-fix" colspan="6"></th></tr>
