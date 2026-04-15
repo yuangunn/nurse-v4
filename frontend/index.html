@@ -1356,7 +1356,7 @@
 </div>
 
 <!-- ═══ 온보딩 슬라이드 ══════════════════════════════════ -->
-<div x-show="showOnboarding" x-cloak :style="'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center'">
+<div :style="showOnboarding?'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center':'display:none'">
   <div style="width:520px;max-width:95vw;background:var(--card,#fff);border-radius:16px;padding:32px;box-shadow:0 8px 40px rgba(0,0,0,0.25);position:relative">
     <!-- 슬라이드 내용 -->
     <div style="text-align:center;min-height:220px;display:flex;flex-direction:column;justify-content:center">
@@ -1576,7 +1576,12 @@
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">PuLP + HiGHS 수리최적화 솔버 기반</p>
         <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
-          <button @click="showOnboarding=true;onboardingStep=0;showHelpModal=false" class="btn btn-xs btn-ghost">🔄 온보딩 다시 보기</button>
+          <p class="text-xs text-sub mb-2">개발: <strong>yuangunn</strong></p>
+          <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+            <a href="https://github.com/yuangunn/nurse-v4" target="_blank" class="btn btn-xs btn-ghost" style="text-decoration:none">📂 GitHub 저장소</a>
+            <a href="https://github.com/yuangunn/nurse-v4/releases" target="_blank" class="btn btn-xs btn-ghost" style="text-decoration:none">📥 최신 릴리즈</a>
+          </div>
+          <button @click="showOnboarding=true;onboardingStep=0;showHelpModal=false" class="btn btn-xs btn-ghost mt-3">🔄 온보딩 다시 보기</button>
         </div>
       </div>
     </div>
