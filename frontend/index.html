@@ -1125,7 +1125,8 @@
 </nav>
 
 <!-- 모바일 더보기 메뉴 -->
-<div :style="showMobileMore?'position:fixed;bottom:56px;left:0;right:0;z-index:180;background:var(--bg-sidebar);border-top:1px solid var(--border);padding:12px 16px;box-shadow:0 -4px 12px rgba(0,0,0,0.1)':'display:none'" @click.outside="showMobileMore=false">
+<div x-show="showMobileMore" @click="showMobileMore=false" style="position:fixed;top:0;left:0;right:0;bottom:56px;z-index:179;background:transparent"></div>
+<div :style="showMobileMore?'position:fixed;bottom:56px;left:0;right:0;z-index:180;background:var(--bg-sidebar);border-top:1px solid var(--border);padding:12px 16px;box-shadow:0 -4px 12px rgba(0,0,0,0.1)':'display:none'">
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
     <!-- 글꼴 크기 -->
     <div style="display:flex;align-items:center;gap:6px;justify-content:center">
