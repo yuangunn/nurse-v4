@@ -135,7 +135,7 @@ body {
 .sidebar-item {
   display: flex; align-items: center; gap: 11px;
   padding: 10px 14px; margin-bottom: 3px;
-  cursor: pointer; font-size: clamp(12px, 0.82rem, 14px); font-weight: 500;
+  cursor: pointer; font-size: 0.82rem; font-weight: 500;
   color: var(--text-dim);
   border-radius: 10px;
   transition: all 0.2s ease;
