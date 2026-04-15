@@ -255,12 +255,14 @@ def dev_download_db():
 _NURSE_CSV_HEADER = [
     "id", "이름", "그룹", "성별", "가능근무",
     "야간전담", "시니어리티", "주휴요일", "주휴로테이션",
-    "트레이닝", "트레이닝종료일", "프리셉터ID"
+    "트레이닝", "트레이닝종료일", "프리셉터ID",
+    "전입일", "전출일",
 ]
 _NURSE_CSV_EXAMPLE = [
-    ["n001", "김지현", "A", "female", "DC,D,EC,E,NC,N", "N", "0", "", "Y", "N", "", ""],
-    ["n002", "이수진", "A", "female", "DC,D,EC,E,NC,N", "N", "1", "목", "Y", "N", "", ""],
-    ["n003", "박민지", "B", "male", "D,E,N", "Y", "5", "", "N", "N", "", ""],
+    ["n001", "김지현", "A", "female", "DC,D,EC,E,NC,N", "N", "0", "", "Y", "N", "", "", "", ""],
+    ["n002", "이수진", "A", "female", "DC,D,EC,E,NC,N", "N", "1", "목", "Y", "N", "", "", "2026-04-01", ""],
+    ["n003", "박민지", "B", "male", "D,E,N", "Y", "5", "", "N", "N", "", "", "", "2026-06-30"],
+    ["n004", "신입간호사", "C", "female", "D,E,N", "N", "20", "", "Y", "Y", "2026-04-30", "n001", "2026-04-01", ""],
 ]
 _NURSE_CSV_GUIDE = [
     ["# 작성 방법:"],
@@ -276,6 +278,8 @@ _NURSE_CSV_GUIDE = [
     ["# 트레이닝 — Y(신규) 또는 N"],
     ["# 트레이닝종료일 — YYYY-MM-DD (트레이닝=Y일 때)"],
     ["# 프리셉터ID — 트레이닝=Y일 때 담당 프리셉터의 id"],
+    ["# 전입일 — YYYY-MM-DD (이 날부터 근무 가능, 빈칸=상시 근무)"],
+    ["# 전출일 — YYYY-MM-DD (이 날까지 근무 가능, 빈칸=상시 근무)"],
     ["#"],
     ["# 주의: #으로 시작하는 행은 무시됩니다. 헤더 행과 데이터 행만 남기고 사용하세요."],
     ["#"],
@@ -343,6 +347,8 @@ def nurse_export():
             "Y" if n.get("is_trainee") else "N",
             n.get("training_end_date") or "",
             n.get("preceptor_id") or "",
+            n.get("start_date") or "",
+            n.get("end_date") or "",
         ])
 
     content = buf.getvalue().encode("utf-8")
@@ -446,6 +452,8 @@ def nurse_import(body: dict):
                 "is_trainee": yn(col(row, "트레이닝"), False),
                 "training_end_date": col(row, "트레이닝종료일") or None,
                 "preceptor_id": col(row, "프리셉터ID") or None,
+                "start_date": col(row, "전입일") or None,
+                "end_date": col(row, "전출일") or None,
             }
             nurses_to_save.append(nurse)
         except Exception as e:

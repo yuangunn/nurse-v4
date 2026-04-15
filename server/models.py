@@ -39,6 +39,8 @@ class Nurse(BaseModel):
     is_trainee: bool = False        # 신규간호사 (트레이닝 중)
     training_end_date: Optional[str] = None  # 트레이닝 종료일 'YYYY-MM-DD'
     preceptor_id: Optional[str] = None       # 프리셉터 간호사 ID
+    start_date: Optional[str] = None         # 전입일 'YYYY-MM-DD' (None=상시 근무)
+    end_date: Optional[str] = None           # 전출일 'YYYY-MM-DD' (None=상시 근무)
 
 
 class DayRequirement(BaseModel):

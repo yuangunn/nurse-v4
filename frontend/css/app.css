@@ -408,6 +408,20 @@ html.dark .g-sat-bg { background: #101520; }
 /* #2 인원 부족 표시 */
 .staff-short { color: var(--red) !important; font-weight: 700 !important; }
 
+/* 전입/전출 범위 밖 셀 */
+.g-inactive {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(128,128,128,0.15),
+    rgba(128,128,128,0.15) 3px,
+    transparent 3px,
+    transparent 6px
+  ) !important;
+  color: rgba(128,128,128,0.6) !important;
+  cursor: not-allowed !important;
+}
+.g-inactive::before { content: attr(data-marker); font-size: 0.6rem; font-weight: 700; }
+
 /* #5 모바일 생성 옵션 접기 */
 @media (max-width: 768px) {
   .md-hide { display: inline-flex !important; }

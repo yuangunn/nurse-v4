@@ -583,7 +583,7 @@
           <span x-show="copySource&&copySource!==nurse.id" @click="pasteRow(nurse.id)" class="text-xs text-green ml-1 cursor-pointer" title="붙여넣기">📥</span>
         </td>
         <template x-for="(day,dIdx) in scheduleDays" :key="day">
-          <td class="g-cell p-0" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',hasViolation(nurse.id,day)?'g-violation':'',isDragSelected(nurse.id,day)?'g-drag-sel':'',isFocused(nIdx,dIdx)?'g-focused':'',isLocked(nurse.id,day)?'g-locked':'']" :style="getPrevShift(nurse.id,day)?getShiftStyle(getPrevShift(nurse.id,day)):{}"
+          <td class="g-cell p-0" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',hasViolation(nurse.id,day)?'g-violation':'',isDragSelected(nurse.id,day)?'g-drag-sel':'',isFocused(nIdx,dIdx)?'g-focused':'',isLocked(nurse.id,day)?'g-locked':'',isNurseInactive(nurse,day)?'g-inactive':'']" :style="getPrevShift(nurse.id,day)?getShiftStyle(getPrevShift(nurse.id,day)):{}" :title="isNurseInactive(nurse,day)==='before'?'전입 전':(isNurseInactive(nurse,day)==='after'?'전출 후':'')"
             @mousedown="onCellMouseDown(nurse,day,$event)" @mouseover="onCellMouseOver(nurse,day)" @click="focusCell(nIdx,dIdx)" @dblclick="openPrevEdit(nurse,day)" @contextmenu.prevent="openNote(nurse.id,day)">
             <template x-if="getPrevShift(nurse.id,day)"><span class="schedule-cell-text block" x-text="getPrevShift(nurse.id,day)"></span></template>
             <template x-if="!getPrevShift(nurse.id,day)"><span class="schedule-cell block" :style="hasWish(nurse.id,day)?'color:var(--accent);opacity:0.3':'color:rgba(255,255,255,0.05)'" x-text="hasWish(nurse.id,day)?'★':'·'"></span></template>
@@ -846,7 +846,7 @@
       </thead>
       <tbody><template x-for="nurse in filteredNurses" :key="nurse.id"><tr :class="nurse.is_trainee?'trainee-row hover:bg-white/[0.015]':'hover:bg-white/[0.015]'">
         <td class="g-cell name-cell"><span class="nurse-name" x-text="nurse.name"></span> <span class="nurse-group" x-text="nurse.group"></span></td>
-        <template x-for="day in scheduleDays" :key="day"><td class="g-cell p-0" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',isRelaxed(nurse.id,day)?'g-relaxed':'',isManuallyEdited(nurse.id,day)?'g-edited':'',hasScheduleViolation(nurse.id,day)?'g-violation':'',getScheduleCellClass(nurse.id,day)]" :style="getScheduleCellStyle(nurse.id,day)" :title="isRelaxed(nurse.id,day)?`완화: ${relaxedCells[nurse.id]?.[dayKey(day)]?.original} → ${relaxedCells[nurse.id]?.[dayKey(day)]?.assigned}`:''"><span class="schedule-cell-text block" x-text="displayShift(nurse.id,day)" @click="openShiftEdit(nurse,day)"></span></td></template>
+        <template x-for="day in scheduleDays" :key="day"><td class="g-cell p-0" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',isRelaxed(nurse.id,day)?'g-relaxed':'',isManuallyEdited(nurse.id,day)?'g-edited':'',hasScheduleViolation(nurse.id,day)?'g-violation':'',isNurseInactive(nurse,day)?'g-inactive':'',getScheduleCellClass(nurse.id,day)]" :style="getScheduleCellStyle(nurse.id,day)" :title="isNurseInactive(nurse,day)==='before'?'전입 전':(isNurseInactive(nurse,day)==='after'?'전출 후':(isRelaxed(nurse.id,day)?`완화: ${relaxedCells[nurse.id]?.[dayKey(day)]?.original} → ${relaxedCells[nurse.id]?.[dayKey(day)]?.assigned}`:''))"><span class="schedule-cell-text block" x-text="isNurseInactive(nurse,day)?'':displayShift(nurse.id,day)" @click="openShiftEdit(nurse,day)"></span></td></template>
         <td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['DC','D'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['EC','E'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['NC','N'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['OF','주'])"></td>
         <td class="g-cell px-1 py-0.5 text-center text-pink" x-text="countShifts(nurse.id,['생'])||''"></td>
         <td class="g-cell px-1 py-0.5 text-center font-semibold cursor-pointer select-none text-blue" @click="openScoreDetail(nurse)" x-text="nurseScore(nurse.id)"></td>
@@ -1134,6 +1134,22 @@
           </div>
           <p class="text-xs text-dim">프리셉터의 근무표를 그대로 따라가며, 인력으로 집계되지 않습니다. 종료일 이후 자동 전환됩니다.</p>
         </div>
+      </div>
+
+      <!-- 전입/전출 로테이션 -->
+      <div class="card-sm" style="border-left:3px solid var(--amber)">
+        <div class="text-sm font-semibold mb-2">로테이션 (전입 / 전출)</div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-xs text-dim">전입일</label>
+            <input type="date" x-model="nurseModal.data.start_date" class="w-full mt-1"/>
+          </div>
+          <div>
+            <label class="text-xs text-dim">전출일</label>
+            <input type="date" x-model="nurseModal.data.end_date" class="w-full mt-1"/>
+          </div>
+        </div>
+        <p class="text-xs text-dim mt-2">전입일 이전 / 전출일 이후는 스케줄에 배정되지 않고 회색으로 표시됩니다. 빈칸 = 상시 근무.</p>
       </div>
     </div>
     <div class="flex gap-2 mt-5"><button @click="nurseModal.open=false" class="btn btn-ghost flex-1">취소</button><button @click="saveNurse()" class="btn btn-primary flex-1">저장</button></div>

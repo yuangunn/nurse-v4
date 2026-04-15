@@ -484,7 +484,7 @@ function app() {
     toggleNightMonthModal(m,checked){const mk=`${this.year}-${String(m).padStart(2,'0')}`;if(!this.nurseModal.data.night_months)this.nurseModal.data.night_months={};if(checked)this.nurseModal.data.night_months[mk]=true;else delete this.nurseModal.data.night_months[mk]},
     openNurseModal(nurse){
       this.nurseModal.isNew=!nurse;
-      this.nurseModal.data=nurse?JSON.parse(JSON.stringify(nurse)):{id:crypto.randomUUID(),name:'',group:'',gender:'female',capable_shifts:['DC','D','EC','E','NC','N'],is_night_shift:false,night_months:{},seniority:this.nurses.length,wishes:{},juhu_day:null,juhu_auto_rotate:true,is_trainee:false,training_end_date:null,preceptor_id:null};
+      this.nurseModal.data=nurse?JSON.parse(JSON.stringify(nurse)):{id:crypto.randomUUID(),name:'',group:'',gender:'female',capable_shifts:['DC','D','EC','E','NC','N'],is_night_shift:false,night_months:{},seniority:this.nurses.length,wishes:{},juhu_day:null,juhu_auto_rotate:true,is_trainee:false,training_end_date:null,preceptor_id:null,start_date:null,end_date:null};
       this.nurseModal.open=true;
     },
     toggleShift(s){const arr=this.nurseModal.data.capable_shifts;const idx=arr.indexOf(s);if(idx>=0)arr.splice(idx,1);else arr.push(s)},
@@ -515,6 +515,15 @@ function app() {
     },
     // 스케줄 탭용 셀 스타일
     hideCharge:false, colorByShift:false,
+    // 전입/전출 범위 체크
+    isNurseInactive(nurse, day){
+      if(!nurse)return false;
+      const ymd=this.dayKey(day);
+      if(nurse.start_date&&ymd<nurse.start_date)return 'before';  // 전입 전
+      if(nurse.end_date&&ymd>nurse.end_date)return 'after';       // 전출 후
+      return false;
+    },
+
     _getShift(nurseId, day){
       const k=this.dayKey(day);
       const s=this.schedule?.[nurseId]?.[k];
@@ -1150,7 +1159,6 @@ function app() {
 
     _analyzeStaffing(){
       const days=this.scheduleDays;
-      const totalNurses=this.nurses.length;
       const first=new Date(this.year,this.month-1,1);
       const last=new Date(this.year,this.month,0);
       const dayNames=['일','월','화','수','목','금','토'];
@@ -1166,9 +1174,13 @@ function app() {
         const dk=this.dayKey(day);
         const req=this._getReqForDay(day);
 
-        // 사전입력 카운트
+        // 날짜별 재적 간호사만 카운트 (전입/전출 범위 내)
+        const activeNurses=this.nurses.filter(n=>!this.isNurseInactive(n,day));
+        const totalNurses=activeNurses.length;
+
+        // 사전입력 카운트 (재적 간호사만)
         let preWork=0,preRest=0,preLeave=0,preJuhu=0,preOF=0;
-        for(const nurse of this.nurses){
+        for(const nurse of activeNurses){
           const val=(this.prevSchedule[nurse.id]||{})[dk];
           if(!val)continue;
           if(val==='주')preJuhu++;

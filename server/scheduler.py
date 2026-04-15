@@ -175,6 +175,31 @@ class NurseScheduler:
             if i + 6 < self.T:
                 self.weeks.append((i, i + 6))
 
+    # ── 전입/전출일 유틸리티 ─────────────────────────────────────────────────
+    def _nurse_active_on(self, nurse: dict, dt: date) -> bool:
+        """해당 날짜에 간호사가 재적 중인지 (전입일 ≤ dt ≤ 전출일)"""
+        sd = nurse.get("start_date")
+        ed = nurse.get("end_date")
+        if sd:
+            try:
+                start = date.fromisoformat(sd)
+                if dt < start:
+                    return False
+            except (ValueError, TypeError):
+                pass
+        if ed:
+            try:
+                end = date.fromisoformat(ed)
+                if dt > end:
+                    return False
+            except (ValueError, TypeError):
+                pass
+        return True
+
+    def _nurse_active_idx(self, nurse: dict, d: int) -> bool:
+        """인덱스로 재적 여부 확인"""
+        return self._nurse_active_on(nurse, self.all_dates[d])
+
     # ── 예상 소요시간 추정 ────────────────────────────────────────────────────
 
     def estimate_seconds(self) -> int:
@@ -242,6 +267,11 @@ class NurseScheduler:
                 pre = self.prev.get(nid, {}).get(dt_str)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 is_holiday = dt_str in self.holidays
+                # 전입/전출일 범위 밖: 모든 shift 0으로 고정
+                if not self._nurse_active_on(nurse, dt):
+                    for s in self.ALL_SHIFTS:
+                        x[nid][d][s] = 0
+                    continue
                 for s in self.ALL_SHIFTS:
                     if pre:
                         if s in pre_flex:
@@ -391,6 +421,11 @@ class NurseScheduler:
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
+                # 전입/전출일 범위 밖: 모든 shift 0으로 고정
+                if not self._nurse_active_on(nurse, dt):
+                    for s in self.ALL_SHIFTS:
+                        x[nid][d][s] = 0
+                    continue
                 for s in self.ALL_SHIFTS:
                     # 주휴 처리
                     if pre == "주":
@@ -542,10 +577,12 @@ class NurseScheduler:
     # ── Hard Constraint 구현 ──────────────────────────────────────────────────
 
     def _c_one_shift_per_day(self, prob, x):
-        """하루에 정확히 1개의 근무/휴무"""
+        """하루에 정확히 1개의 근무/휴무 (전입/전출 범위 밖은 제외)"""
         for nurse in self.nurses:
             nid = nurse["id"]
             for d in range(self.T):
+                if not self._nurse_active_idx(nurse, d):
+                    continue  # 재적 중 아님 → 제약 없음 (모든 변수 이미 0)
                 prob += pulp.lpSum(x[nid][d][s] for s in self.ALL_SHIFTS) == 1, f"one_{nid}_{d}"
 
     def _add_weekly_juhu(self, prob, x):
@@ -780,15 +817,24 @@ class NurseScheduler:
             if is_night:
                 continue
             for ws, we in self.weeks:
-                # 이전달 overflow 제외: 당월 이후 날짜만으로 OF 카운트
+                # 이전달 overflow 제외 + 전입/전출 범위 밖 제외
                 week_days = [d for d in range(ws, we + 1)
-                             if self.all_dates[d] >= first_of_month]
+                             if self.all_dates[d] >= first_of_month
+                             and self._nurse_active_idx(nurse, d)]
                 if not week_days:
                     continue
-                prob += (
-                    pulp.lpSum(x[nid][d][of_code] for d in week_days) == 1,
-                    f"weekly_of_{nid}_{ws}"
-                )
+                # 재적 기간이 일주일 전체가 아니면 OF 강제 안 함 (<=1로 완화)
+                full_week = (we - ws + 1) == len(week_days) and ws >= 0
+                if len(week_days) >= 7:
+                    prob += (
+                        pulp.lpSum(x[nid][d][of_code] for d in week_days) == 1,
+                        f"weekly_of_{nid}_{ws}"
+                    )
+                else:
+                    prob += (
+                        pulp.lpSum(x[nid][d][of_code] for d in week_days) <= 1,
+                        f"weekly_of_{nid}_{ws}"
+                    )
 
     def _c_max_consecutive_work(self, prob, x, max_days: int):
         """최대 연속 근무일 제한"""

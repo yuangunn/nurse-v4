@@ -107,6 +107,12 @@ def init_db():
                 conn.execute(f"ALTER TABLE nurses ADD COLUMN {col} TEXT DEFAULT {default}")
             except Exception:
                 pass
+        # 기존 DB 호환: 전입/전출일 컬럼 마이그레이션
+        for col in ("start_date", "end_date"):
+            try:
+                conn.execute(f"ALTER TABLE nurses ADD COLUMN {col} TEXT DEFAULT NULL")
+            except Exception:
+                pass
         # 기존 DB 호환: shifts.auto_assign 컬럼 마이그레이션
         try:
             conn.execute("ALTER TABLE shifts ADD COLUMN auto_assign INTEGER DEFAULT 1")
@@ -245,11 +251,13 @@ def upsert_nurse(nurse: Dict) -> None:
             INSERT INTO nurses
                 (id, name, grp, gender, capable_shifts, is_night_shift, seniority, wishes,
                  juhu_day, juhu_auto_rotate, night_months,
-                 is_trainee, training_end_date, preceptor_id)
+                 is_trainee, training_end_date, preceptor_id,
+                 start_date, end_date)
             VALUES
                 (:id, :name, :grp, :gender, :capable_shifts, :is_night_shift, :seniority, :wishes,
                  :juhu_day, :juhu_auto_rotate, :night_months,
-                 :is_trainee, :training_end_date, :preceptor_id)
+                 :is_trainee, :training_end_date, :preceptor_id,
+                 :start_date, :end_date)
             ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name, grp=excluded.grp, gender=excluded.gender,
                 capable_shifts=excluded.capable_shifts, is_night_shift=excluded.is_night_shift,
@@ -257,7 +265,8 @@ def upsert_nurse(nurse: Dict) -> None:
                 juhu_day=excluded.juhu_day, juhu_auto_rotate=excluded.juhu_auto_rotate,
                 night_months=excluded.night_months,
                 is_trainee=excluded.is_trainee, training_end_date=excluded.training_end_date,
-                preceptor_id=excluded.preceptor_id
+                preceptor_id=excluded.preceptor_id,
+                start_date=excluded.start_date, end_date=excluded.end_date
         """, {
             "id": nurse["id"],
             "name": nurse["name"],
@@ -273,6 +282,8 @@ def upsert_nurse(nurse: Dict) -> None:
             "is_trainee": 1 if nurse.get("is_trainee") else 0,
             "training_end_date": nurse.get("training_end_date"),
             "preceptor_id": nurse.get("preceptor_id"),
+            "start_date": nurse.get("start_date"),
+            "end_date": nurse.get("end_date"),
         })
 
 
@@ -564,4 +575,6 @@ def _nurse_row_to_dict(row: sqlite3.Row) -> Dict:
         "is_trainee": d.get("is_trainee") in (1, "1", True),
         "training_end_date": d.get("training_end_date"),
         "preceptor_id": d.get("preceptor_id"),
+        "start_date": d.get("start_date"),
+        "end_date": d.get("end_date"),
     }
