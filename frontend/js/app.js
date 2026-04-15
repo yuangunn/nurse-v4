@@ -355,15 +355,17 @@ function app() {
       }catch(e){this.toast(e.message||'설정 실패','error')}
     },
 
+    devRemovePwInput:'',
+    devRemovePwShow:false,
     async removeDevMasterPassword(){
-      const current=prompt('현재 마스터 비밀번호를 입력하세요:');
-      if(current===null||current==='')return;  // 취소 또는 빈 입력
+      if(!this.devRemovePwInput){this.toast('현재 마스터 비밀번호를 입력해주세요','error');return}
       try{
-        await this.api('POST','/api/profiles/master-password',{action:'remove',current_password:current});
+        await this.api('POST','/api/profiles/master-password',{action:'remove',current_password:this.devRemovePwInput});
         this.hasMasterPassword=false;
+        this.devRemovePwInput='';
+        this.devRemovePwShow=false;
         this.toast('마스터 비밀번호 제거 완료');
       }catch(e){
-        // FastAPI 에러 메시지 파싱
         let msg='제거 실패';
         try{const d=JSON.parse(e.message);msg=d.detail||msg}catch(_){}
         this.toast(msg,'error');

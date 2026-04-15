@@ -178,7 +178,18 @@
           </div>
         </template>
         <template x-if="hasMasterPassword">
-          <button @click="removeDevMasterPassword()" class="btn btn-xs btn-ghost" style="color:var(--red);align-self:flex-start">마스터 비밀번호 제거</button>
+          <div>
+            <button x-show="!devRemovePwShow" @click="devRemovePwShow=true" class="btn btn-xs btn-ghost" style="color:var(--red)">마스터 비밀번호 제거</button>
+            <div x-show="devRemovePwShow" style="display:flex;flex-direction:column;gap:4px">
+              <input type="password" x-model="devRemovePwInput" placeholder="현재 마스터 비밀번호 입력"
+                     style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem"
+                     @keydown.enter="removeDevMasterPassword()">
+              <div style="display:flex;gap:4px">
+                <button @click="removeDevMasterPassword()" class="btn btn-xs" style="background:var(--red);color:#fff">제거</button>
+                <button @click="devRemovePwShow=false;devRemovePwInput=''" class="btn btn-xs btn-ghost">취소</button>
+              </div>
+            </div>
+          </div>
         </template>
         <!-- 프로필 비밀번호 초기화 -->
         <div style="margin-top:4px">
