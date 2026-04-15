@@ -119,7 +119,7 @@ body {
   padding: 20px 14px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap; overflow: hidden;
-  font-size: clamp(13px, 1rem, 15px);  /* 루트 글꼴 따라가되 13~15px 범위 제한 */
+  font-size: clamp(19px, 1.1rem, 21px);
   font-weight: 700; font-size: 0.88rem;
   color: var(--text);
   letter-spacing: -0.02em;
