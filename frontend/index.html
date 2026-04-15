@@ -368,7 +368,20 @@
         <label class="flex items-center gap-2"><input type="checkbox" x-model="rules.autoMenstrualLeave"/>여성 생휴 자동</label>
         <label class="flex items-center gap-2 col-span-2">V 월 최대 <input type="number" x-model.number="rules.maxVPerMonth" min="0" max="10" class="w-11 text-center"/>회</label>
       </div>
-      <button @click="saveRules()" class="btn btn-sm btn-primary w-full mb-4">저장</button>
+      <div class="flex gap-2 mb-4">
+        <button @click="saveRules()" class="btn btn-sm btn-primary flex-1">저장</button>
+        <button @click="saveRulePreset()" class="btn btn-xs btn-ghost" title="현재 규칙을 프리셋으로 저장">💾 프리셋 저장</button>
+        <button @click="showRulePresets=!showRulePresets" class="btn btn-xs btn-ghost" x-text="'📂 프리셋 ('+rulePresets.length+')'"></button>
+      </div>
+      <div x-show="showRulePresets&&rulePresets.length>0" class="card-sm mb-3" style="max-height:120px;overflow-y:auto">
+        <template x-for="(p,i) in rulePresets" :key="i">
+          <div class="flex items-center justify-between text-xs py-1" style="border-bottom:1px solid var(--border-light)">
+            <span class="text-body" x-text="p.name"></span>
+            <div class="flex gap-2"><button @click="loadRulePreset(i)" class="text-blue">적용</button><button @click="deleteRulePreset(i)" class="text-red">삭제</button></div>
+          </div>
+        </template>
+      </div>
+      <button style="display:none" @click="saveRules()" class="btn btn-sm btn-primary w-full mb-4">저장</button>
       <div style="border-top:1px solid rgba(255,255,255,0.04)" class="pt-3">
         <div class="flex items-center justify-between mb-2"><p class="text-xs font-semibold uppercase tracking-widest text-dim">소프트 배점</p><button @click="scoringRuleOpen=!scoringRuleOpen" class="btn btn-xs btn-ghost" x-text="scoringRuleOpen?'접기':'펼치기'"></button></div>
         <div x-show="scoringRuleOpen" class="overflow-x-auto">
@@ -576,6 +589,14 @@
     <button @click="exportToCSV()" x-show="schedule&&Object.keys(schedule).length>0" class="btn btn-xs btn-ghost">📥 CSV</button>
     <button @click="printSchedule()" x-show="schedule&&Object.keys(schedule).length>0" class="btn btn-xs btn-ghost">🖨 인쇄</button>
     <button @click="showNurseSummary=!showNurseSummary" x-show="schedule&&Object.keys(schedule).length>0" :class="showNurseSummary?'btn-primary':'btn-ghost'" class="btn btn-xs">📊 요약</button>
+    <div x-show="schedule&&Object.keys(schedule).length>0&&savedSchedules.length>0" class="relative" style="display:inline-block">
+      <button @click="showCompareMenu=!showCompareMenu" class="btn btn-xs btn-ghost">🔀 비교</button>
+      <div x-show="showCompareMenu" x-cloak @click.outside="showCompareMenu=false" class="card-sm" style="position:absolute;top:100%;left:0;z-index:50;min-width:180px;max-height:150px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.15)">
+        <template x-for="item in savedSchedules" :key="'cmp'+item.id">
+          <button @click="compareWithSaved(item.id);showCompareMenu=false" class="text-xs text-body block w-full text-left py-1 px-2 hover:bg-white/10 rounded" x-text="item.name||`${item.year}년 ${item.month}월`"></button>
+        </template>
+      </div>
+    </div>
   </div>
   <!-- #7 분석 경고 요약 (스케줄 탭) -->
   <div x-show="analysisWarnings.length>0&&!generating" x-cloak class="card-sm mb-2" style="padding:6px 12px;border-left:3px solid var(--amber)">
@@ -850,6 +871,7 @@
       분석 실행
     </button>
     <span class="text-xs text-dim">간호사 <strong class="text-blue" x-text="nurses.length+'명'"></strong></span>
+    <button x-show="analysisResult" @click="window.print()" class="btn btn-xs btn-ghost">🖨 인쇄</button>
   </div>
 
   <!-- 분석 미실행 -->
@@ -1040,6 +1062,29 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- #1/#5 생성 결과 간호사 요약 (스케줄이 있을 때만) -->
+    <div x-show="schedule&&Object.keys(schedule).length>0" class="card mb-4">
+      <div class="flex items-center justify-between mb-3">
+        <div class="section-title" style="margin:0">생성 결과 — 간호사별 요약</div>
+        <span x-show="fairnessData" class="text-xs text-dim" x-text="`평균 야간 ${fairnessData?.avgNights}회 | 주말 ${fairnessData?.avgWeekends}회`"></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="tbl"><thead><tr><th>이름</th><th>그룹</th><th class="text-center">D</th><th class="text-center">E</th><th class="text-center">N</th><th class="text-center">휴무</th><th class="text-center">휴가</th><th class="text-center">주말</th><th class="text-center">합계</th><th class="text-right">점수</th></tr></thead>
+        <tbody><template x-for="ns in nurseSummaryData" :key="'asum'+ns.name"><tr>
+          <td class="font-medium text-bright" x-text="ns.name"></td>
+          <td class="text-dim" x-text="ns.group"></td>
+          <td class="text-center" x-text="ns.d"></td>
+          <td class="text-center" x-text="ns.e"></td>
+          <td class="text-center font-semibold" :class="ns.n>=(fairnessData?.avgNights*1.3)?'text-red':ns.n<=(fairnessData?.avgNights*0.7)?'text-green':''" x-text="ns.n"></td>
+          <td class="text-center" x-text="ns.rest"></td>
+          <td class="text-center" x-text="ns.leave||''"></td>
+          <td class="text-center" :class="ns.weekendWork>=6?'text-amber':''" x-text="ns.weekendWork"></td>
+          <td class="text-center font-semibold" x-text="ns.total"></td>
+          <td class="text-right font-mono" :class="ns.score>=0?'text-green':'text-red'" x-text="(ns.score>=0?'+':'')+ns.score"></td>
+        </tr></template></tbody></table>
       </div>
     </div>
   </div>
@@ -1234,6 +1279,35 @@
     </div>
   </template>
   <button x-show="_toastHistory.length>0" @click="showToastHistory=!showToastHistory" class="toast-history-btn" :title="`이전 알림 ${_toastHistory.length}개`">🕑 <span x-text="_toastHistory.length"></span></button>
+</div>
+
+<!-- #8 스케줄 비교 결과 모달 -->
+<div x-show="compareResult" x-cloak class="modal-bg" @click.self="compareResult=null">
+  <div class="modal" style="max-width:36rem;max-height:70vh;display:flex;flex-direction:column">
+    <div class="flex items-center justify-between mb-3">
+      <div class="font-bold text-lg text-bright">스케줄 비교</div>
+      <button @click="compareResult=null" style="background:none;border:none;font-size:1.2rem;color:var(--text-sub);cursor:pointer">&times;</button>
+    </div>
+    <p class="text-xs text-sub mb-3">현재 스케줄 vs <strong x-text="compareResult?.savedName"></strong> — <strong class="text-blue" x-text="compareResult?.totalDiffs+'건'"></strong> 차이</p>
+    <div style="flex:1;overflow-y:auto">
+      <table class="tbl" style="font-size:0.75rem">
+        <thead><tr><th>간호사</th><th>날짜</th><th>현재</th><th></th><th>비교대상</th></tr></thead>
+        <tbody>
+          <template x-for="(d,i) in compareResult?.diffs||[]" :key="i">
+            <tr>
+              <td class="font-medium text-bright" x-text="d.name"></td>
+              <td class="text-dim" x-text="d.dk"></td>
+              <td class="text-center"><span :style="getShiftStyle(d.current)" class="px-1.5 py-0.5 rounded text-xs font-bold" x-text="d.current"></span></td>
+              <td class="text-center text-dim">→</td>
+              <td class="text-center"><span :style="getShiftStyle(d.saved)" class="px-1.5 py-0.5 rounded text-xs font-bold" x-text="d.saved"></span></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <p x-show="compareResult?.hasMore" class="text-xs text-dim text-center mt-2">외 <span x-text="compareResult?.totalDiffs-50"></span>건 생략...</p>
+    </div>
+    <button @click="compareResult=null" class="btn btn-ghost btn-sm w-full mt-3">닫기</button>
+  </div>
 </div>
 
 <!-- CSV 가져오기 결과 모달 -->

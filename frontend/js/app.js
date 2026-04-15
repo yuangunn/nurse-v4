@@ -502,6 +502,58 @@ function app() {
     },
     async saveRules(){await this.api('POST','/api/rules',this.rules);this.toast('규칙이 저장되었습니다','info')},
 
+    // ── 규칙 프리셋 ──────────────────────────────────────────
+    rulePresets:JSON.parse(localStorage.getItem('ns_rule_presets')||'[]'),
+    showRulePresets:false,
+    saveRulePreset(){
+      const name=prompt('프리셋 이름을 입력하세요 (예: 엄격/유연/야간 중심)');
+      if(!name)return;
+      this.rulePresets.push({name,rules:JSON.parse(JSON.stringify(this.rules)),created:new Date().toISOString().slice(0,16)});
+      localStorage.setItem('ns_rule_presets',JSON.stringify(this.rulePresets));
+      this.toast(`규칙 프리셋 "${name}" 저장 완료`);
+    },
+    loadRulePreset(idx){
+      const p=this.rulePresets[idx];if(!p)return;
+      if(!confirm(`"${p.name}" 프리셋을 불러오시겠습니까?\n현재 규칙 설정이 교체됩니다.`))return;
+      this.rules={...this.rules,...p.rules};
+      this.toast(`프리셋 "${p.name}" 적용됨. '저장' 버튼으로 서버에 반영하세요.`,'info',5000);
+    },
+    deleteRulePreset(idx){
+      this.rulePresets.splice(idx,1);
+      localStorage.setItem('ns_rule_presets',JSON.stringify(this.rulePresets));
+    },
+
+    // ── 스케줄 비교 ──────────────────────────────────────────
+    compareResult:null,
+    async compareWithSaved(savedId){
+      try{
+        const savedData=await this.api('GET',`/api/schedules/${savedId}`);
+        const saved=savedData.data?.schedule||savedData.data||{};
+        const current=this.schedule||{};
+        const diffs=[];
+        const allNurses=new Set([...Object.keys(current),...Object.keys(saved)]);
+        for(const nid of allNurses){
+          const curDays=current[nid]||{};
+          const savDays=saved[nid]||{};
+          const allDays=new Set([...Object.keys(curDays),...Object.keys(savDays)]);
+          for(const dk of allDays){
+            const c=curDays[dk]||'-';
+            const s=savDays[dk]||'-';
+            if(c!==s){
+              const nurse=this.nurses.find(n=>n.id===nid);
+              diffs.push({nid,name:nurse?.name||nid,dk,current:c,saved:s});
+            }
+          }
+        }
+        this.compareResult={
+          savedName:savedData.name||`${savedData.year}년 ${savedData.month}월`,
+          totalDiffs:diffs.length,
+          diffs:diffs.slice(0,50),
+          hasMore:diffs.length>50,
+        };
+      }catch(e){this.toast('비교 실패: '+e.message,'error')}
+    },
+
     // ── 요구사항 ──────────────────────────────────────────────
     async loadRequirements(){this.requirements=await this.api('GET','/api/requirements')},
     async saveRequirements(){await this.api('POST','/api/requirements',this.requirements);this.toast('인원 설정이 저장되었습니다','info')},
@@ -521,7 +573,7 @@ function app() {
       return{background:this._shiftGlassBg(s.color_bg),color:this._shiftGlassText(s.color_text)};
     },
     // 스케줄 탭용 셀 스타일
-    hideCharge:true, colorByShift:true,
+    hideCharge:true, colorByShift:true, showCompareMenu:false,
     // 전입/전출 범위 체크
     isNurseInactive(nurse, day){
       if(!nurse)return false;
