@@ -115,10 +115,11 @@ body {
   box-shadow: 1px 0 4px rgba(0,0,0,0.03);
 }
 .sidebar-logo {
-  display: flex; align-items: center; gap: 10px;
-  padding: 20px 18px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 20px 14px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap; overflow: hidden;
+  font-size: 14px !important;  /* 루트 글꼴에 영향 안 받도록 고정 */
   font-weight: 700; font-size: 0.88rem;
   color: var(--text);
   letter-spacing: -0.02em;
@@ -134,7 +135,7 @@ body {
 .sidebar-item {
   display: flex; align-items: center; gap: 11px;
   padding: 10px 14px; margin-bottom: 3px;
-  cursor: pointer; font-size: 0.82rem; font-weight: 500;
+  cursor: pointer; font-size: 13px; font-weight: 500;
   color: var(--text-dim);
   border-radius: 10px;
   transition: all 0.2s ease;

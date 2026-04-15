@@ -1134,7 +1134,7 @@
       <div><label class="text-xs text-dim">성별</label><div class="flex gap-4 mt-1.5 text-sm"><label class="flex items-center gap-2"><input type="radio" x-model="nurseModal.data.gender" value="female"/>여</label><label class="flex items-center gap-2"><input type="radio" x-model="nurseModal.data.gender" value="male"/>남</label></div></div>
       <div><label class="text-xs text-dim">가능 근무</label><div class="flex flex-wrap gap-1.5 mt-1.5"><template x-for="s in allWorkShifts" :key="s"><label class="flex items-center gap-1 text-xs"><input type="checkbox" :checked="nurseModal.data.capable_shifts.includes(s)" @change="toggleShift(s)"/><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></label></template></div></div>
       <div><label class="text-xs text-dim">야간전담 월</label><div class="flex flex-wrap gap-1.5 mt-1.5"><template x-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :key="m"><label class="flex items-center gap-1 text-xs"><input type="checkbox" :checked="nurseModal.data.night_months?.[year+'-'+String(m).padStart(2,'0')]" @change="toggleNightMonthModal(m, $event.target.checked)"/><span x-text="m+'월'" class="text-dim"></span></label></template></div></div>
-      <div><label class="text-xs text-dim">시니어리티</label><input type="number" x-model.number="nurseModal.data.seniority" min="0" max="100" class="w-20 mt-1"/></div>
+      <!-- 시니어리티는 목록 순서(드래그)로 자동 결정 — 별도 입력 불필요 -->
       <!-- 신규간호사 (트레이니) -->
       <div class="card-sm" style="border-left:3px solid var(--accent)">
         <label class="flex items-center gap-2 text-sm mb-2"><input type="checkbox" x-model="nurseModal.data.is_trainee"/><span class="font-semibold">신규간호사 (트레이닝 중)</span></label>
@@ -1557,6 +1557,10 @@
         <div>
           <h4 class="font-semibold text-bright">❓ 간호사를 한번에 등록하려면?</h4>
           <p class="text-xs mt-1">설정 탭 → "📥 템플릿" 다운로드 → 엑셀에서 편집 → "📤 가져오기"로 업로드</p>
+        </div>
+        <div>
+          <h4 class="font-semibold text-bright">❓ 차지(Charge) 순서는 어떻게 결정되나요?</h4>
+          <p class="text-xs mt-1">간호사 목록 순서(위=선임, 아래=후임)가 시니어리티입니다. 드래그로 순서를 변경하세요. 선임이 DC/EC/NC(차지)를 우선 배정받습니다.</p>
         </div>
         <div>
           <h4 class="font-semibold text-bright">❓ 다크 모드는 어디서?</h4>
