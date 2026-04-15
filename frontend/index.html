@@ -272,10 +272,10 @@
   </nav>
   <div style="padding:8px;border-top:1px solid var(--border)">
     <!-- 글자크기 -->
-    <div class="flex items-center gap-1 px-3 py-2 sidebar-bottom-extra" style="justify-content:center">
-      <button @click="setFontSize(Math.max(11,fontSize-1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.65rem">A-</button>
-      <span class="text-xs text-sub nav-label" style="min-width:28px;text-align:center" x-text="fontSize+'px'"></span>
-      <button @click="setFontSize(Math.min(20,fontSize+1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.75rem;font-weight:700">A+</button>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0">
+      <button @click="setFontSize(Math.min(20,fontSize+1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.7rem;font-weight:700;width:36px">A+</button>
+      <span class="text-xs text-sub" style="font-size:0.6rem" x-text="fontSize+'px'"></span>
+      <button @click="setFontSize(Math.max(11,fontSize-1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.6rem;width:36px">A-</button>
     </div>
     <!-- 도움말 -->
     <button @click="showHelpModal=true" class="sidebar-item w-full">
@@ -292,11 +292,11 @@
     </button>
     <!-- #11 현재 프로필 표시 -->
     <template x-if="currentProfile">
-      <div class="sidebar-bottom-extra" style="margin-top:6px;padding:6px 10px;border-top:1px solid var(--border);text-align:center">
+      <div style="margin-top:6px;padding:4px 4px;border-top:1px solid var(--border);text-align:center">
         <div class="nav-label text-xs text-sub" style="font-weight:600" x-text="profiles.find(p=>p.id===currentProfile)?.name||currentProfile"></div>
-        <div class="nav-label" style="display:flex;gap:4px;justify-content:center;margin-top:2px">
-          <button @click="switchProfile()" class="btn btn-xs btn-ghost" style="font-size:0.6rem;opacity:0.7">전환</button>
-          <button x-show="_devModeUnlocked" @click="devSettingsOpen=true;loadDevDbInfo()" class="btn btn-xs btn-ghost" style="font-size:0.6rem;opacity:0.7;color:var(--amber)">개발자</button>
+        <div style="display:flex;flex-direction:column;gap:2px;align-items:center;margin-top:2px">
+          <button @click="switchProfile()" class="btn btn-xs btn-ghost" style="font-size:0.55rem;opacity:0.7;padding:2px 4px">전환</button>
+          <button x-show="_devModeUnlocked" @click="devSettingsOpen=true;loadDevDbInfo()" class="btn btn-xs btn-ghost" style="font-size:0.55rem;opacity:0.7;color:var(--amber);padding:2px 4px">개발자</button>
         </div>
       </div>
     </template>
