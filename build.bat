@@ -47,6 +47,7 @@ REM 5. Inno Setup 설치파일 빌드 (설치되어 있으면)
 echo [5/5] Inno Setup 설치파일 빌드 중...
 set "ISCC=C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 if not exist "%ISCC%" set "ISCC=C:\Program Files\Inno Setup 6\ISCC.exe"
+if not exist "%ISCC%" set "ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
 if exist "%ISCC%" (
     "%ISCC%" installer\setup.iss
     echo       완료: dist\installer\NurseScheduler_Setup_v4.0.exe
