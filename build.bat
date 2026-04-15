@@ -53,7 +53,7 @@ if not exist node_modules (
 
 REM 5. Electron 패키지 빌드
 echo [5/6] Electron 앱 패키지 중...
-call node_modules\.bin\electron-packager.cmd . NurseScheduler --platform=win32 --arch=x64 --out=..\dist\electron --overwrite --app-version=4.0.0 --app-copyright="Hospital Nursing Team" --extra-resource=..\dist\NurseScheduler
+call node_modules\.bin\electron-packager.cmd . NurseScheduler --platform=win32 --arch=x64 --out=..\dist\electron --overwrite --app-version=4.0.0 --app-copyright="Hospital Nursing Team" --icon=..\build\icon.ico --extra-resource=..\dist\NurseScheduler
 if errorlevel 1 (
     echo ✗ Electron 패키지 실패
     cd ..

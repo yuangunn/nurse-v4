@@ -5,7 +5,8 @@ __pycache__/
 .Python
 *.egg-info/
 dist/
-build/
+# build/ 중 PyInstaller 산출물은 제외, 아이콘 소스는 포함
+build/NurseScheduler/
 # *.spec — 빌드 스펙은 버전 관리
 data/
 *.db

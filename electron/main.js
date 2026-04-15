@@ -106,12 +106,16 @@ function waitForServerReady(port, maxAttempts = 60) {
 }
 
 function createWindow(port) {
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, '..', 'resources', 'app.asar', 'icon.ico')
+    : path.join(__dirname, '..', 'build', 'icon.ico');
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1024,
     minHeight: 600,
     title: 'NurseScheduler v4',
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
     autoHideMenuBar: true,
     backgroundColor: '#f8f9fb',
     webPreferences: {

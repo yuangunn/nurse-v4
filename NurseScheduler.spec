@@ -77,7 +77,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon='build/icon.ico',
 )
 
 coll = COLLECT(

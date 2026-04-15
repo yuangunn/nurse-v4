@@ -28,6 +28,7 @@ PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayName={#AppName} v{#AppVersion}
 UninstallDisplayIcon={app}\{#AppExeName}
+SetupIconFile=..\build\icon.ico
 
 [Languages]
 Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
