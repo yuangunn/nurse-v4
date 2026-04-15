@@ -309,6 +309,52 @@ def nurse_template():
     )
 
 
+@app.get("/api/nurses/export")
+def nurse_export():
+    """현재 등록된 간호사 목록을 템플릿 형식 CSV로 내보내기"""
+    import io
+    import csv
+    from fastapi.responses import Response
+
+    nurses = db.get_nurses()
+    buf = io.StringIO()
+    buf.write("\ufeff")  # UTF-8 BOM
+    writer = csv.writer(buf)
+    writer.writerow(_NURSE_CSV_HEADER)
+
+    juhu_rev = {0: "일", 1: "월", 2: "화", 3: "수", 4: "목", 5: "금", 6: "토"}
+    for n in nurses:
+        capable = n.get("capable_shifts", [])
+        if isinstance(capable, str):
+            capable = [capable]
+        juhu_day = n.get("juhu_day")
+        juhu_ko = juhu_rev.get(juhu_day, "") if juhu_day is not None else ""
+
+        writer.writerow([
+            n.get("id", ""),
+            n.get("name", ""),
+            n.get("group", ""),
+            n.get("gender", ""),
+            ",".join(capable),
+            "Y" if n.get("is_night_shift") else "N",
+            str(n.get("seniority", 0)),
+            juhu_ko,
+            "Y" if n.get("juhu_auto_rotate", True) else "N",
+            "Y" if n.get("is_trainee") else "N",
+            n.get("training_end_date") or "",
+            n.get("preceptor_id") or "",
+        ])
+
+    content = buf.getvalue().encode("utf-8")
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="nurses_current.csv"'
+        },
+    )
+
+
 @app.post("/api/nurses/import")
 def nurse_import(body: dict):
     """

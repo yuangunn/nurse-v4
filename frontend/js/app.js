@@ -1629,6 +1629,22 @@ function app() {
       }catch(e){this._toast(e.message||'다운로드 실패','error')}
     },
 
+    async exportNursesToCSV(){
+      if(!this.nurses.length){this._toast('내보낼 간호사가 없습니다','warn');return}
+      try{
+        const res=await fetch('/api/nurses/export');
+        if(!res.ok)throw new Error('내보내기 실패');
+        const blob=await res.blob();
+        const url=URL.createObjectURL(blob);
+        const ymd=new Date().toISOString().slice(0,10);
+        const a=document.createElement('a');
+        a.href=url;a.download=`nurses_${ymd}.csv`;
+        document.body.appendChild(a);a.click();
+        document.body.removeChild(a);URL.revokeObjectURL(url);
+        this._toast(`${this.nurses.length}명 내보내기 완료`,'info');
+      }catch(e){this._toast(e.message||'내보내기 실패','error')}
+    },
+
     async importNursesFromCSV(event){
       const file=event.target.files?.[0];
       if(!file){return}
