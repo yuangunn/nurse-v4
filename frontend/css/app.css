@@ -119,7 +119,7 @@ body {
   padding: 20px 14px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap; overflow: hidden;
-  font-size: 20px !important;
+  font-size: 18px !important;
   font-weight: 700; font-size: 0.88rem;
   color: var(--text);
   letter-spacing: -0.02em;
