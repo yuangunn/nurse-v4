@@ -160,7 +160,8 @@ function app() {
       this.initAutoDark();
       this.loadTemplates();
       this._initScoringSliders();
-      this._checkPrevMonthCarryover();  // #3
+      this._checkPrevMonthCarryover();
+      this.checkFirstRun();
       this.$nextTick(()=>{if(window.lucide)lucide.createIcons()});
     },
 
@@ -1941,8 +1942,30 @@ function app() {
       if(key!==this._lastAnalysisKey){this._lastAnalysisKey=key;this.runAnalysis()}
     },
 
-    // ═══ 단축키 도움말 ════════════════════════════════════
+    // ═══ 온보딩 + 도움말 ════════════════════════════════════
     showShortcutHelp:false,
+    showOnboarding:false,
+    onboardingStep:0,
+    showHelpModal:false,
+    helpTab:'workflow',
+
+    checkFirstRun(){
+      if(!localStorage.getItem('ns_onboarding_done')){
+        this.showOnboarding=true;
+        this.onboardingStep=0;
+      }
+    },
+    finishOnboarding(){
+      this.showOnboarding=false;
+      localStorage.setItem('ns_onboarding_done','1');
+    },
+    nextOnboarding(){
+      if(this.onboardingStep>=6)this.finishOnboarding();
+      else this.onboardingStep++;
+    },
+    prevOnboarding(){
+      if(this.onboardingStep>0)this.onboardingStep--;
+    },
 
     // ═══ 설정 탭 섹션 접기 ════════════════════════════════
     settingsCollapse:{yearMonth:false,requirements:false,shifts:false,rules:false,nurses:false},

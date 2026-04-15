@@ -277,6 +277,11 @@
       <span class="text-xs text-sub nav-label" style="min-width:28px;text-align:center" x-text="fontSize+'px'"></span>
       <button @click="setFontSize(Math.min(20,fontSize+1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.75rem;font-weight:700">A+</button>
     </div>
+    <!-- 도움말 -->
+    <button @click="showHelpModal=true" class="sidebar-item w-full">
+      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span class="nav-label">도움말</span>
+    </button>
     <!-- 다크모드 -->
     <button @click="toggleDark()" class="sidebar-item w-full">
       <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1347,6 +1352,234 @@
       </template>
     </div>
     <button @click="showToastHistory=false" class="btn btn-ghost btn-sm w-full mt-3">닫기</button>
+  </div>
+</div>
+
+<!-- ═══ 온보딩 슬라이드 ══════════════════════════════════ -->
+<div x-show="showOnboarding" x-cloak :style="'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center'">
+  <div style="width:520px;max-width:95vw;background:var(--card,#fff);border-radius:16px;padding:32px;box-shadow:0 8px 40px rgba(0,0,0,0.25);position:relative">
+    <!-- 슬라이드 내용 -->
+    <div style="text-align:center;min-height:220px;display:flex;flex-direction:column;justify-content:center">
+      <template x-if="onboardingStep===0">
+        <div>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 16px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          <h2 style="font-size:1.3rem;font-weight:700;margin-bottom:8px">NurseScheduler에 오신 것을 환영합니다</h2>
+          <p class="text-sub" style="font-size:0.9rem">간호사 3교대 근무표를 자동으로 생성하는 앱입니다.<br/>간단한 사용법을 안내해 드릴게요.</p>
+        </div>
+      </template>
+      <template x-if="onboardingStep===1">
+        <div>
+          <div style="font-size:2rem;margin-bottom:12px">⚙️</div>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">1단계: 설정</h3>
+          <p class="text-sub" style="font-size:0.85rem">간호사 등록 (CSV로 일괄 등록 가능), 요일별 필요 인원,<br/>규칙 관리(하드 제약 + 소프트 배점)를 설정합니다.</p>
+        </div>
+      </template>
+      <template x-if="onboardingStep===2">
+        <div>
+          <div style="font-size:2rem;margin-bottom:12px">✏️</div>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">2단계: 사전입력</h3>
+          <p class="text-sub" style="font-size:0.85rem">주휴, 연차, 희망 근무 등을 미리 입력합니다.<br/>셀 클릭 또는 키보드(D/E/N/V)로 직접 입력할 수 있습니다.<br/><strong>빈 셀은 솔버가 자동으로 채웁니다.</strong></p>
+        </div>
+      </template>
+      <template x-if="onboardingStep===3">
+        <div>
+          <div style="font-size:2rem;margin-bottom:12px">📊</div>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">3단계: 분석</h3>
+          <p class="text-sub" style="font-size:0.85rem">일자별 인원 과부족을 확인하고<br/><strong>주휴 추천 배분</strong>을 자동으로 계산합니다.<br/>"사전입력에 적용" 버튼으로 한 번에 반영 가능합니다.</p>
+        </div>
+      </template>
+      <template x-if="onboardingStep===4">
+        <div>
+          <div style="font-size:2rem;margin-bottom:12px">📅</div>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">4단계: 스케줄 생성</h3>
+          <p class="text-sub" style="font-size:0.85rem"><strong>"생성" 버튼</strong>을 클릭하면 솔버가 근무표를 자동 생성합니다.<br/>생성이 안 될 경우 "사전입력 완화"를 체크해 보세요.<br/>완성된 근무표는 셀 클릭으로 수동 수정도 가능합니다.</p>
+        </div>
+      </template>
+      <template x-if="onboardingStep===5">
+        <div>
+          <div style="font-size:2rem;margin-bottom:12px">💾</div>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">5단계: 저장 & 내보내기</h3>
+          <p class="text-sub" style="font-size:0.85rem">생성된 근무표를 저장하고 CSV/인쇄로 내보낼 수 있습니다.<br/>저장 탭에서 이전 스케줄을 불러올 수도 있습니다.</p>
+        </div>
+      </template>
+      <template x-if="onboardingStep===6">
+        <div>
+          <div style="font-size:2rem;margin-bottom:12px">✅</div>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">준비 완료!</h3>
+          <p class="text-sub" style="font-size:0.85rem">언제든 사이드바의 <strong>"도움말"</strong> 버튼으로<br/>상세 사용법을 확인할 수 있습니다.<br/><br/>키보드 <kbd>?</kbd>를 누르면 단축키 목록도 볼 수 있어요.</p>
+        </div>
+      </template>
+    </div>
+
+    <!-- 진행 표시 -->
+    <div style="display:flex;justify-content:center;gap:6px;margin:20px 0 16px">
+      <template x-for="i in 7" :key="i">
+        <div style="width:8px;height:8px;border-radius:50%" :style="(i-1)===onboardingStep?'background:var(--accent)':'background:var(--border)'"></div>
+      </template>
+    </div>
+
+    <!-- 네비게이션 -->
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <button @click="finishOnboarding()" class="btn btn-ghost btn-sm" style="opacity:0.6">건너뛰기</button>
+      <div style="display:flex;gap:8px">
+        <button x-show="onboardingStep>0" @click="prevOnboarding()" class="btn btn-ghost btn-sm">이전</button>
+        <button @click="nextOnboarding()" class="btn btn-primary btn-sm" x-text="onboardingStep>=6?'시작하기':'다음'"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 도움말 모달 ═════════════════════════════════════════ -->
+<div x-show="showHelpModal" x-cloak class="modal-bg" @click.self="showHelpModal=false">
+  <div class="modal" style="max-width:640px;max-height:85vh;display:flex;flex-direction:column">
+    <div class="flex items-center justify-between mb-4">
+      <div class="font-bold text-lg text-bright">도움말</div>
+      <button @click="showHelpModal=false" style="background:none;border:none;font-size:1.3rem;color:var(--text-sub);cursor:pointer">&times;</button>
+    </div>
+
+    <!-- 탭 -->
+    <div style="display:flex;gap:4px;margin-bottom:16px;flex-shrink:0;border-bottom:1px solid var(--border);padding-bottom:8px">
+      <button @click="helpTab='workflow'" :class="helpTab==='workflow'?'btn-primary':'btn-ghost'" class="btn btn-xs">워크플로우</button>
+      <button @click="helpTab='tabs'" :class="helpTab==='tabs'?'btn-primary':'btn-ghost'" class="btn btn-xs">탭별 기능</button>
+      <button @click="helpTab='faq'" :class="helpTab==='faq'?'btn-primary':'btn-ghost'" class="btn btn-xs">FAQ</button>
+      <button @click="helpTab='shortcuts'" :class="helpTab==='shortcuts'?'btn-primary':'btn-ghost'" class="btn btn-xs">단축키</button>
+      <button @click="helpTab='about'" :class="helpTab==='about'?'btn-primary':'btn-ghost'" class="btn btn-xs">정보</button>
+    </div>
+
+    <!-- 내용 -->
+    <div style="flex:1;overflow-y:auto" class="text-sm text-sub">
+      <!-- 워크플로우 -->
+      <div x-show="helpTab==='workflow'">
+        <h3 class="text-bright font-semibold mb-2">근무표 작성 순서</h3>
+        <div class="space-y-3">
+          <div class="card-sm" style="padding:10px 14px;border-left:3px solid var(--accent)">
+            <div class="font-semibold text-bright">① 설정</div>
+            <p class="text-xs mt-1">간호사 등록 → 요일별 필요인원 설정 → 규칙 관리</p>
+          </div>
+          <div class="card-sm" style="padding:10px 14px;border-left:3px solid #22c55e">
+            <div class="font-semibold text-bright">② 사전입력</div>
+            <p class="text-xs mt-1">주휴(주) → 연차(V) → 생리휴가(생) → 희망 근무 순으로 입력. 빈 셀은 솔버가 자동 배정합니다.</p>
+          </div>
+          <div class="card-sm" style="padding:10px 14px;border-left:3px solid #a855f7">
+            <div class="font-semibold text-bright">③ 분석</div>
+            <p class="text-xs mt-1">인원 과부족 확인 → 주휴 추천 배분 → "사전입력에 적용" 클릭</p>
+          </div>
+          <div class="card-sm" style="padding:10px 14px;border-left:3px solid #f59e0b">
+            <div class="font-semibold text-bright">④ 스케줄 생성</div>
+            <p class="text-xs mt-1">"생성" 버튼 클릭 → 솔버가 최적 근무표 자동 생성 (5~20분 소요)</p>
+          </div>
+          <div class="card-sm" style="padding:10px 14px;border-left:3px solid #ef4444">
+            <div class="font-semibold text-bright">⑤ 확인 & 수정</div>
+            <p class="text-xs mt-1">생성 결과 확인 → 셀 클릭으로 수동 수정 → CSV/인쇄로 내보내기</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 탭별 기능 -->
+      <div x-show="helpTab==='tabs'" class="space-y-3">
+        <div>
+          <h4 class="font-semibold text-bright">⚙️ 설정 탭</h4>
+          <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
+            <li>간호사 추가/수정/삭제 (드래그로 순서 변경)</li>
+            <li>CSV 템플릿 다운로드 → 엑셀에서 편집 → 일괄 가져오기</li>
+            <li>요일별 D/E/N 필요 인원 설정</li>
+            <li>하드 제약 (연속 근무, 역순 전환 금지 등)</li>
+            <li>소프트 배점 (순방향 전환 보상, 야간 공평성 등)</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold text-bright">✏️ 사전입력 탭</h4>
+          <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
+            <li>셀 클릭 → 근무 선택 팝업</li>
+            <li>키보드 직접 입력: D/E/N/V + 방향키 이동</li>
+            <li>드래그 선택: 여러 셀을 드래그 후 한 번에 채우기</li>
+            <li>주휴 클릭 시 자동 배분 옵션 (로테이션/고정/이번만)</li>
+            <li>날짜 우클릭: 법정공휴일 지정</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold text-bright">📊 분석 탭</h4>
+          <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
+            <li>일자별 D/E/N 필요인원 + 여유 히트맵</li>
+            <li>주휴 추천 배분 → "사전입력에 적용" 한 번에 반영</li>
+            <li>경고: 인원 부족/빡빡한 날짜 표시</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold text-bright">📅 스케줄 탭</h4>
+          <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
+            <li>오차(MIP Gap) 조절 — 정밀(0%)~10%</li>
+            <li>사전입력 완화 / 주휴 무시 / V 무제한 옵션</li>
+            <li>완화 설정: 휴가/근무/쉬는날 유지 보너스 조절</li>
+            <li>생성 후 셀 클릭으로 수동 수정 (빨간 테두리 표시)</li>
+            <li>Charge 숨기기 / 근무별 색상 토글</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold text-bright">💾 저장 탭</h4>
+          <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
+            <li>생성된 스케줄 저장/불러오기/삭제</li>
+            <li>생성 완료 시 자동 저장</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- FAQ -->
+      <div x-show="helpTab==='faq'" class="space-y-4">
+        <div>
+          <h4 class="font-semibold text-bright">❓ 근무표 생성이 실패합니다 (Infeasible)</h4>
+          <p class="text-xs mt-1">1. <strong>사전입력 완화</strong> 체크 → 재시도<br/>2. 실패 시 <strong>주휴 무시</strong> 추가<br/>3. 실패 시 <strong>V 무제한</strong> 추가<br/>4. 그래도 실패 시 에러 메시지의 원인 확인 → 해당 규칙 완화 (설정 탭)</p>
+        </div>
+        <div>
+          <h4 class="font-semibold text-bright">❓ 사전입력 완화란?</h4>
+          <p class="text-xs mt-1">사전입력한 근무를 솔버가 변경할 수 있게 허용합니다. 휴가(V/생)는 높은 보너스로 거의 유지되고, 일반 근무(D/E/N)는 유연하게 교체됩니다. "완화 설정"에서 보너스를 조절할 수 있습니다.</p>
+        </div>
+        <div>
+          <h4 class="font-semibold text-bright">❓ 생성 시간이 너무 오래 걸립니다</h4>
+          <p class="text-xs mt-1">오차를 2%~5%로 올리면 훨씬 빠르게 생성됩니다. 정밀(0%)은 최적해를 찾으려 시간이 오래 걸립니다.</p>
+        </div>
+        <div>
+          <h4 class="font-semibold text-bright">❓ 간호사를 한번에 등록하려면?</h4>
+          <p class="text-xs mt-1">설정 탭 → "📥 템플릿" 다운로드 → 엑셀에서 편집 → "📤 가져오기"로 업로드</p>
+        </div>
+        <div>
+          <h4 class="font-semibold text-bright">❓ 다크 모드는 어디서?</h4>
+          <p class="text-xs mt-1">사이드바 하단 "다크 모드" 버튼을 클릭하세요.</p>
+        </div>
+        <div>
+          <h4 class="font-semibold text-bright">❓ 데이터는 어디에 저장되나요?</h4>
+          <p class="text-xs mt-1">모든 프로필과 DB는 <code>%APPDATA%\NurseScheduler\</code>에 저장됩니다. 앱을 삭제해도 데이터는 보존됩니다.</p>
+        </div>
+      </div>
+
+      <!-- 단축키 -->
+      <div x-show="helpTab==='shortcuts'">
+        <table class="tbl">
+          <tbody>
+            <tr><td class="font-mono text-xs"><kbd>?</kbd></td><td>단축키 도움말 토글</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd></td><td>사전입력 셀 이동</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>V</kbd></td><td>사전입력 직접 입력</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>Del</kbd></td><td>사전입력 셀 삭제</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>Ctrl+Z</kbd></td><td>되돌리기</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>Ctrl+Shift+Z</kbd></td><td>다시 실행</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>F5</kbd></td><td>새로고침</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>F11</kbd></td><td>전체화면</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 정보 -->
+      <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
+        <p class="text-dim text-xs" x-text="'v4.0.2 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
+        <p class="text-dim text-xs mt-1">PuLP + HiGHS 수리최적화 솔버 기반</p>
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+          <button @click="showOnboarding=true;onboardingStep=0;showHelpModal=false" class="btn btn-xs btn-ghost">🔄 온보딩 다시 보기</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
