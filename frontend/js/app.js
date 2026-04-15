@@ -4,9 +4,9 @@ function app() {
     tabs: [
       {id:'settings', label:'설정'},
       {id:'preinput', label:'사전입력'},
+      {id:'analysis', label:'분석'},
       {id:'schedule', label:'스케줄'},
       {id:'saved',    label:'저장'},
-      {id:'analysis', label:'분석'},
     ],
     activeTab: 'settings',
     fontSize: parseInt(localStorage.getItem('fontSize'))||20,
