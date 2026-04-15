@@ -6,5 +6,5 @@ const { contextBridge } = require('electron');
 
 contextBridge.exposeInMainWorld('electronInfo', {
   isElectron: true,
-  version: '4.0.0',
+  version: '4.0.1',
 });
