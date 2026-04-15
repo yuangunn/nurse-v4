@@ -1230,7 +1230,7 @@ function app() {
         else if(da.slack<2)warnings.push({type:'warn',msg:`${da.day.getMonth()+1}/${da.date}(${da.dowName}) 여유 부족 (${da.slack}명) — 주휴/OF 배치 공간 빡빡`});
       }
 
-      return {days:dayAnalysis, weeks, warnings, totalNurses};
+      return {days:dayAnalysis, weeks, warnings, totalNurses:this.nurses.length};
     },
 
     _recommendJuhu(analysis){
