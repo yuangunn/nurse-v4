@@ -534,7 +534,7 @@
         <template x-for="row in [{type:'D',bg:'#d9e9ff',color:'#1e40af'},{type:'E',bg:'#d6f5e3',color:'#166534'},{type:'N',bg:'#ffe6c7',color:'#9a4b00'}]" :key="row.type"><tr>
           <td class="g-cell px-1 py-0.5 sticky left-0 z-10 text-center font-bold text-xs" :style="`background:${row.bg};color:${row.color}`" x-text="row.type"></td>
           <template x-for="day in scheduleDays" :key="day"><td class="g-cell p-0" :class="day.getDay()===6?'g-sat':''" :style="`background:${row.bg}`">
-            <input type="number" min="0" max="20" class="w-full text-center text-xs py-0.5 border-none outline-none bg-transparent" :class="getPrevDayReq(day,row.type)!==null?'font-bold':''" :style="getPrevDayReq(day,row.type)!==null?`color:${row.color}`:'color:rgba(255,255,255,0.12)'" :placeholder="getDefaultDayReq(day,row.type)" :value="getPrevDayReq(day,row.type)!==null?getPrevDayReq(day,row.type):''" @change="setPrevDayReq(day,row.type,$event.target.value)" style="min-width:1.5rem;width:100%"/>
+            <input type="number" min="0" max="20" class="prev-req-input w-full text-center text-xs py-0.5 border-none outline-none bg-transparent" :class="getPrevDayReq(day,row.type)!==null?'font-bold':''" :style="`color:${row.color};${getPrevDayReq(day,row.type)===null?'opacity:0.5':''}`" :value="getPrevDayReq(day,row.type)!==null?getPrevDayReq(day,row.type):getDefaultDayReq(day,row.type)" @change="setPrevDayReq(day,row.type,$event.target.value)" style="min-width:1.5rem;width:100%"/>
           </td></template>
           <td class="g-cell px-1" :style="`background:${row.bg}`"></td>
         </tr></template>

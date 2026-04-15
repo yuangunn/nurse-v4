@@ -715,8 +715,14 @@ function app() {
     setPrevDayReq(day,type,val){
       const k=this.dayKey(day);const num=parseInt(val);
       if(!this.prevDayReqs[k])this.prevDayReqs[k]={};
-      if(isNaN(num)||val===''||val===null){delete this.prevDayReqs[k][type];if(Object.keys(this.prevDayReqs[k]).length===0)delete this.prevDayReqs[k]}
-      else this.prevDayReqs[k][type]=num;
+      const defaultVal=this.getDefaultDayReq(day,type);
+      // 빈값 또는 기본값과 같으면 override 제거
+      if(isNaN(num)||val===''||val===null||num===defaultVal){
+        delete this.prevDayReqs[k][type];
+        if(Object.keys(this.prevDayReqs[k]).length===0)delete this.prevDayReqs[k];
+      }else{
+        this.prevDayReqs[k][type]=num;
+      }
     },
 
     // ── 셀 편집 적용 ─────────────────────────────────────────
