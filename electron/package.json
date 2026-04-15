@@ -1,0 +1,73 @@
+{
+  "name": "nurse-scheduler",
+  "version": "4.0.0",
+  "description": "NurseScheduler v4 — 간호사 3교대 근무표 자동 생성 앱",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:dir": "electron-builder --dir"
+  },
+  "author": "Hospital Nursing Team",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@electron/packager": "^19.1.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.nursescheduler.v4",
+    "productName": "NurseScheduler",
+    "copyright": "Copyright © 2026 Hospital Nursing Team",
+    "directories": {
+      "output": "../dist/electron",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist/NurseScheduler",
+        "to": "python_server",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "NurseScheduler_${version}_${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NurseScheduler",
+      "installerLanguages": [
+        "ko_KR"
+      ],
+      "language": "1042"
+    },
+    "portable": {
+      "artifactName": "NurseScheduler_${version}_portable.${ext}"
+    }
+  }
+}
