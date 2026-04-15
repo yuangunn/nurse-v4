@@ -156,12 +156,13 @@ body {
 .sidebar-item.active .nav-icon { opacity: 0.9; }
 
 @media (min-width:768px) and (max-width:1023px) {
-  .sidebar { width: 56px; }
+  .sidebar { width: 56px; overflow: hidden; }
   .sidebar-logo { justify-content: center; padding: 16px 0; }
   .sidebar-logo>span, .logo-ver { display: none; }
   .sidebar-item { justify-content: center; padding: 12px 0; }
   .sidebar-item.active { box-shadow: inset 3px 0 0 var(--accent); }
   .nav-label { display: none; }
+  .sidebar-bottom-extra { display: none; }
 }
 @media (max-width:767px) { .sidebar { display: none; } }
 

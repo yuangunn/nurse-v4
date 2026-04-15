@@ -272,7 +272,7 @@
   </nav>
   <div style="padding:8px;border-top:1px solid var(--border)">
     <!-- 글자크기 -->
-    <div class="flex items-center gap-1 px-3 py-2" style="justify-content:center">
+    <div class="flex items-center gap-1 px-3 py-2 sidebar-bottom-extra" style="justify-content:center">
       <button @click="setFontSize(Math.max(11,fontSize-1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.65rem">A-</button>
       <span class="text-xs text-sub nav-label" style="min-width:28px;text-align:center" x-text="fontSize+'px'"></span>
       <button @click="setFontSize(Math.min(20,fontSize+1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.75rem;font-weight:700">A+</button>
@@ -292,7 +292,7 @@
     </button>
     <!-- #11 현재 프로필 표시 -->
     <template x-if="currentProfile">
-      <div style="margin-top:6px;padding:6px 10px;border-top:1px solid var(--border);text-align:center">
+      <div class="sidebar-bottom-extra" style="margin-top:6px;padding:6px 10px;border-top:1px solid var(--border);text-align:center">
         <div class="nav-label text-xs text-sub" style="font-weight:600" x-text="profiles.find(p=>p.id===currentProfile)?.name||currentProfile"></div>
         <div class="nav-label" style="display:flex;gap:4px;justify-content:center;margin-top:2px">
           <button @click="switchProfile()" class="btn btn-xs btn-ghost" style="font-size:0.6rem;opacity:0.7">전환</button>
