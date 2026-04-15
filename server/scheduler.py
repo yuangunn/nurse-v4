@@ -640,20 +640,30 @@ class NurseScheduler:
     def _c_daily_requirements(self, prob, x):
         """
         일별 시프트 인원 충족.
-        요구사항은 D/E/N 시간대 총 인원 (charge 포함).
-          D=3 → DC+D 합계 >= 3
-          E=3 → EC+E 합계 >= 3
-          N=3 → NC+N 합계 >= 3
+        요구사항은 D/E/N 시간대 총 인원 (charge 포함) + 추가 자동배정 근무.
+          D=3 → DC+D 합계 == 3
+          E=3 → EC+E 합계 == 3
+          N=3 → NC+N 합계 == 3
+          중=1 → 중 합계 == 1 (auto_assign이고 별도 코드인 경우)
         """
         req_dict = self.req.model_dump()
+        # 기본 D/E/N 그룹
         period_map = {
             "D": self.DAY_SHIFTS,      # DC, D
             "E": self.EVENING_SHIFTS,   # EC, E
             "N": self.NIGHT_SHIFTS,     # NC, N
         }
+        # auto_assign이고 D/E/N 그룹에 속하지 않는 근무 코드 → 개별 제약
+        grouped_codes = set()
+        for shifts in period_map.values():
+            grouped_codes.update(shifts)
+        for s in self._shifts:
+            code = s["code"]
+            if s.get("auto_assign", True) and code in self.SOLVER_SHIFTS and code not in grouped_codes:
+                period_map[code] = [code]  # 예: 중 → [중]
+
         first_of_month = date(self.year, self.month, 1)
         for d, dt in enumerate(self.all_dates):
-            # 이전달 overflow는 인원 제약 skip
             if dt < first_of_month:
                 continue
             date_key = dt.strftime('%Y-%m-%d')

@@ -98,6 +98,27 @@ function app() {
     // ── computed ──────────────────────────────────────────────
     get shiftMap(){const m=new Map();for(const s of this.shifts)m.set(s.code,s);return m},
     get allWorkShifts(){return this.shifts.filter(s=>['day','evening','middle','night'].includes(s.period)).map(s=>s.code)},
+    // 요일별 필요인원 행에 표시할 코드: D/E/N + auto_assign이고 D/E/N 그룹 외인 근무
+    get reqShiftCodes(){
+      const base=['D','E','N'];
+      const grouped=new Set();
+      this.shifts.filter(s=>['day','evening','night'].includes(s.period)).forEach(s=>grouped.add(s.code));
+      const extra=this.shifts.filter(s=>s.auto_assign && !s.is_charge && !grouped.has(s.code) && !['rest','leave'].includes(s.period)).map(s=>s.code);
+      return [...base,...extra];
+    },
+    // 사전입력 tfoot 행 데이터 (동적 — reqShiftCodes 기반)
+    get reqFooterRows(){
+      const colorMap={
+        D:{bg:'#d9e9ff',bgLight:'#eaf4ff',color:'#1e40af'},
+        E:{bg:'#d6f5e3',bgLight:'#eafaf0',color:'#166534'},
+        N:{bg:'#ffe6c7',bgLight:'#fff4e4',color:'#9a4b00'},
+      };
+      const defaultColor={bg:'#e8e8f0',bgLight:'#f0f0f8',color:'#4b5563'};
+      return this.reqShiftCodes.map(code=>({
+        type:code,
+        ...(colorMap[code]||defaultColor),
+      }));
+    },
     get allShifts(){return this.shifts.map(s=>s.code)},
     get prevShifts(){return this.shifts.filter(s=>!s.is_charge).map(s=>s.code)},
     get footerRows(){
