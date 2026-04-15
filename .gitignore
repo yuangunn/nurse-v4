@@ -6,6 +6,6 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-*.spec
+# *.spec — 빌드 스펙은 버전 관리
 data/
 *.db
