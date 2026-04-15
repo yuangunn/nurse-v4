@@ -463,7 +463,7 @@ function app() {
           this._recoverPoll=setInterval(async()=>{
             const pollRef=this._recoverPoll;
             try{const r=await this.api('GET','/api/generate/result');
-              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.trackEdits();this._autoSaveSchedule()}}
+              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
             }catch(e){}
           },2000);
         }else if(res.status==='done'&&res.result){
@@ -1438,7 +1438,9 @@ function app() {
         }
       }
       if(count===0){this.toast('이미 모든 주휴가 반영되어 있습니다','info');return}
-      this.toast(`${count}건의 주휴가 사전입력에 적용되었습니다`,'info');
+      // 적용 후 자동 재분석 + 사전입력 탭으로 이동
+      this.runAnalysis();
+      this.toast(`${count}건의 주휴가 사전입력에 적용되었습니다. 분석이 자동으로 갱신됩니다.`,'info',5000);
     },
 
     getSlackClass(slack){
@@ -1670,6 +1672,7 @@ function app() {
       }catch(e){this.toast(e.message||'내보내기 실패','error')}
     },
 
+    csvImportResult:{open:false,imported:0,errors:[],filename:''},
     async importNursesFromCSV(event){
       const file=event.target.files?.[0];
       if(!file){return}
@@ -1682,19 +1685,28 @@ function app() {
         `[취소]: 기존 간호사에 추가/업데이트 (병합)`
       );
 
+      const loadingId=this.toast(`'${file.name}' 가져오는 중...`,'loading');
       try{
         const text=await file.text();
         const res=await this.api('POST','/api/nurses/import',{
           csv:text, replace_all:replaceAll
         });
+        this.dismissToast(loadingId);
         if(res.ok){
           await this.loadNurses();
-          let msg=`${res.imported}명 가져오기 완료`;
-          if(res.replaced)msg+=' (기존 교체)';
-          if(res.errors?.length)msg+=`\n오류 ${res.errors.length}건: ${res.errors.slice(0,3).join('; ')}`;
-          this.toast(msg,res.errors?.length?'warn':'info');
+          if(res.errors?.length){
+            // 에러가 있으면 상세 모달 열기
+            this.csvImportResult={
+              open:true, imported:res.imported,
+              errors:res.errors, filename:file.name,
+              replaced:res.replaced,
+            };
+          }else{
+            this.toast(`${file.name}: ${res.imported}명 가져오기 완료${res.replaced?' (기존 교체)':''}`,'info');
+          }
         }
       }catch(e){
+        this.dismissToast(loadingId);
         this.toast(e.message||'가져오기 실패','error');
       }
     },
@@ -1826,11 +1838,20 @@ function app() {
     // ═══ 토스트 알림 시스템 ══════════════════════════════
     _toasts:[],
     _toastId:0,
+    _toastHistory:[],  // 최근 20개 보관
+    showToastHistory:false,
     toast(msg,type='info',duration=3000){
       const id=++this._toastId;
-      this._toasts.push({id,msg,type});
-      setTimeout(()=>{this._toasts=this._toasts.filter(t=>t.id!==id)},duration);
+      const ts=new Date().toLocaleTimeString('ko-KR',{hour12:false});
+      this._toasts.push({id,msg,type,ts});
+      this._toastHistory.unshift({id,msg,type,ts});
+      if(this._toastHistory.length>20)this._toastHistory.pop();
+      if(type!=='loading'){
+        setTimeout(()=>{this._toasts=this._toasts.filter(t=>t.id!==id)},duration);
+      }
+      return id;  // loading 토스트 해제용
     },
+    dismissToast(id){this._toasts=this._toasts.filter(t=>t.id!==id)},
 
     // ═══ 스케줄 탭 제약 위반 체크 ═════════════════════════
     scheduleViolations:[],

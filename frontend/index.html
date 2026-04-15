@@ -434,8 +434,8 @@
     </div>
     <div class="ml-auto flex gap-2 flex-wrap">
       <button @click="loadPrevMonthSchedule()" class="btn btn-xs btn-ghost text-blue" title="이전달 스케줄 이월">📅 전달이월</button>
-      <button @click="undo()" class="btn btn-xs btn-ghost" title="Ctrl+Z" :style="_undoStack.length?'':'opacity:0.3'">↩ 되돌리기</button>
-      <button @click="redo()" class="btn btn-xs btn-ghost" title="Ctrl+Shift+Z" :style="_redoStack.length?'':'opacity:0.3'">↪ 다시</button>
+      <button @click="undo()" class="btn btn-xs btn-ghost" :title="`Ctrl+Z (${_undoStack.length}회 가능)`" :style="_undoStack.length?'':'opacity:0.3'">↩ 되돌리기 <span x-show="_undoStack.length>0" class="text-xs" style="margin-left:2px;font-size:0.6rem;opacity:0.6" x-text="'('+_undoStack.length+')'"></span></button>
+      <button @click="redo()" class="btn btn-xs btn-ghost" :title="`Ctrl+Shift+Z (${_redoStack.length}회 가능)`" :style="_redoStack.length?'':'opacity:0.3'">↪ 다시 <span x-show="_redoStack.length>0" class="text-xs" style="margin-left:2px;font-size:0.6rem;opacity:0.6" x-text="'('+_redoStack.length+')'"></span></button>
       <button @click="clearPrevSchedule()" class="btn btn-xs btn-ghost text-red">초기화</button>
       <button @click="clearPrevOtherMonths()" class="btn btn-xs btn-ghost text-dim">다른달 정리</button>
       <span class="pill text-dim" style="background:rgba(255,255,255,0.03)" x-text="`${countPrevEntries()}건 (${prevInputProgress}%)`"></span>
@@ -469,7 +469,7 @@
   <div class="flex flex-wrap gap-1 text-xs mb-2 items-center" style="flex-shrink:0">
     <template x-for="s in prevShifts" :key="s"><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></template>
     <span class="text-dim ml-1">빈칸=자동</span>
-    <span class="text-dim ml-2">| 키보드: 방향키 이동, D/E/N/V 직접 입력, Del 삭제</span>
+    <span class="text-dim ml-2">| ← ↑ ↓ → <kbd>D</kbd><kbd>E</kbd><kbd>N</kbd><kbd>V</kbd> 입력 · <kbd>Del</kbd> 삭제 · <kbd>Ctrl+Z</kbd> 되돌리기 · <kbd>?</kbd> 전체 단축키</span>
   </div>
   <!-- #3 이전달 이월 힌트 -->
   <div x-show="showPrevHint" class="card-sm mb-2" style="flex-shrink:0;padding:8px 14px;display:flex;align-items:center;gap:10px;border-left:3px solid var(--accent)">
@@ -1227,8 +1227,53 @@
 <!-- ═══ 토스트 컨테이너 ════════════════════════════════ -->
 <div class="toast-container">
   <template x-for="t in _toasts" :key="t.id">
-    <div class="toast" :class="'toast-'+t.type" x-text="t.msg" x-transition></div>
+    <div class="toast" :class="'toast-'+t.type" x-transition>
+      <svg x-show="t.type==='loading'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="spin" style="margin-right:6px;vertical-align:middle"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+      <span x-text="t.msg"></span>
+      <button @click="dismissToast(t.id)" style="margin-left:10px;background:none;border:none;color:inherit;opacity:0.7;cursor:pointer">&times;</button>
+    </div>
   </template>
+  <button x-show="_toastHistory.length>0" @click="showToastHistory=!showToastHistory" class="toast-history-btn" :title="`이전 알림 ${_toastHistory.length}개`">🕑 <span x-text="_toastHistory.length"></span></button>
+</div>
+
+<!-- CSV 가져오기 결과 모달 -->
+<div x-show="csvImportResult.open" x-cloak class="modal-bg" @click.self="csvImportResult.open=false">
+  <div class="modal" style="max-width:32rem;max-height:70vh;display:flex;flex-direction:column">
+    <div class="font-bold text-lg mb-2 text-bright">CSV 가져오기 결과</div>
+    <p class="text-xs text-sub mb-3">
+      <strong x-text="csvImportResult.filename"></strong>에서
+      <strong class="text-blue" x-text="csvImportResult.imported+'명'"></strong> 가져옴
+      <span x-show="csvImportResult.replaced"> (기존 데이터 교체)</span>
+    </p>
+    <div x-show="csvImportResult.errors?.length" class="card-sm mb-2" style="border-left:3px solid var(--amber);padding:10px">
+      <div class="text-xs font-semibold text-amber mb-2">⚠ 오류 <span x-text="csvImportResult.errors.length"></span>건 — 해당 행은 건너뜀</div>
+      <div style="flex:1;overflow-y:auto;max-height:40vh">
+        <template x-for="(err,i) in csvImportResult.errors" :key="i">
+          <div class="text-xs text-red font-mono" style="padding:4px 0;border-bottom:1px solid var(--border-light)" x-text="err"></div>
+        </template>
+      </div>
+    </div>
+    <button @click="csvImportResult.open=false" class="btn btn-primary btn-sm w-full mt-2">확인</button>
+  </div>
+</div>
+
+<!-- 토스트 히스토리 패널 -->
+<div x-show="showToastHistory" x-cloak class="modal-bg" @click.self="showToastHistory=false">
+  <div class="modal" style="max-width:28rem;max-height:70vh;display:flex;flex-direction:column">
+    <div class="flex items-center justify-between mb-3">
+      <div class="font-bold text-lg text-bright">이전 알림</div>
+      <button @click="_toastHistory=[];showToastHistory=false" class="btn btn-xs btn-ghost text-red">모두 지우기</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px">
+      <template x-for="t in _toastHistory" :key="t.id">
+        <div class="card-sm" style="padding:8px 12px;display:flex;align-items:center;gap:10px" :class="'toast-hist-'+t.type">
+          <span class="text-xs text-dim" x-text="t.ts" style="min-width:60px"></span>
+          <span class="text-xs" x-text="t.msg" style="flex:1"></span>
+        </div>
+      </template>
+    </div>
+    <button @click="showToastHistory=false" class="btn btn-ghost btn-sm w-full mt-3">닫기</button>
+  </div>
 </div>
 
 <!-- ═══ 모달: 단축키 도움말 ══════════════════════════════ -->

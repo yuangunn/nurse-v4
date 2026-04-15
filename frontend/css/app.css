@@ -569,6 +569,29 @@ html.dark .cy-4 { background: #151109; color: #fbbf24; }
 .profile-item:hover { border-color: var(--accent); }
 .profile-guest { border-style: dashed; opacity: 0.8; }
 
+kbd {
+  display: inline-block; padding: 1px 5px; margin: 0 1px;
+  font-size: 0.7em; font-family: 'Cascadia Code','Consolas',monospace;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 3px; color: var(--text-sub);
+  box-shadow: 0 1px 0 var(--border);
+}
+
+/* 토스트 히스토리 버튼 */
+.toast-history-btn {
+  position: fixed; bottom: 18px; right: 18px; z-index: 199;
+  padding: 6px 10px; border-radius: 20px; border: 1px solid var(--border);
+  background: var(--card); color: var(--text-sub);
+  font-size: 0.7rem; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  display: flex; align-items: center; gap: 4px;
+}
+.toast-history-btn:hover { background: var(--bg); }
+.toast-hist-error { border-left: 3px solid var(--red); }
+.toast-hist-warn { border-left: 3px solid var(--amber); }
+.toast-hist-info { border-left: 3px solid var(--accent); }
+.toast-hist-loading { border-left: 3px solid var(--text-sub); }
+.toast-loading { background: rgba(59,130,246,0.1); color: var(--accent); border-left: 3px solid var(--accent); }
+
 /* ── Toast Notification ──────────────────────────────────── */
 .toast-container {
   position: fixed; top: 20px; right: 20px; z-index: 200;
