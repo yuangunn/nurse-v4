@@ -250,6 +250,184 @@ def dev_download_db():
               filename="nurse_backup.db")
 
 
+# ── 간호사 CSV 템플릿/임포트 ──────────────────────────────────────────────
+
+_NURSE_CSV_HEADER = [
+    "id", "이름", "그룹", "성별", "가능근무",
+    "야간전담", "시니어리티", "주휴요일", "주휴로테이션",
+    "트레이닝", "트레이닝종료일", "프리셉터ID"
+]
+_NURSE_CSV_EXAMPLE = [
+    ["n001", "김지현", "A", "female", "DC,D,EC,E,NC,N", "N", "0", "", "Y", "N", "", ""],
+    ["n002", "이수진", "A", "female", "DC,D,EC,E,NC,N", "N", "1", "목", "Y", "N", "", ""],
+    ["n003", "박민지", "B", "male", "D,E,N", "Y", "5", "", "N", "N", "", ""],
+]
+_NURSE_CSV_GUIDE = [
+    ["# 작성 방법:"],
+    ["# id — 고유 ID (영문/숫자, 중복 불가)"],
+    ["# 이름 — 간호사 이름"],
+    ["# 그룹 — A/B/C 등 자유 입력"],
+    ["# 성별 — female 또는 male"],
+    ["# 가능근무 — 쉼표로 구분 (예: DC,D,EC,E,NC,N)"],
+    ["# 야간전담 — Y(야간전담) 또는 N(일반)"],
+    ["# 시니어리티 — 숫자 (작을수록 선임, 차지 우선 배정)"],
+    ["# 주휴요일 — 일/월/화/수/목/금/토 중 하나, 또는 빈칸(임의)"],
+    ["# 주휴로테이션 — Y(4주마다 당김) 또는 N(고정)"],
+    ["# 트레이닝 — Y(신규) 또는 N"],
+    ["# 트레이닝종료일 — YYYY-MM-DD (트레이닝=Y일 때)"],
+    ["# 프리셉터ID — 트레이닝=Y일 때 담당 프리셉터의 id"],
+    ["#"],
+    ["# 주의: #으로 시작하는 행은 무시됩니다. 헤더 행과 데이터 행만 남기고 사용하세요."],
+    ["#"],
+]
+
+
+@app.get("/api/nurses/template")
+def nurse_template():
+    """간호사 일괄 등록용 CSV 템플릿 다운로드"""
+    import io
+    import csv
+    from fastapi.responses import Response
+
+    buf = io.StringIO()
+    # UTF-8 BOM (한글 엑셀 호환)
+    buf.write("\ufeff")
+    writer = csv.writer(buf)
+    for row in _NURSE_CSV_GUIDE:
+        writer.writerow(row)
+    writer.writerow(_NURSE_CSV_HEADER)
+    for row in _NURSE_CSV_EXAMPLE:
+        writer.writerow(row)
+
+    content = buf.getvalue().encode("utf-8")
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="nurses_template.csv"'
+        },
+    )
+
+
+@app.post("/api/nurses/import")
+def nurse_import(body: dict):
+    """
+    CSV 본문(text)을 받아 파싱 후 일괄 등록/업데이트.
+    body: {"csv": "<파일내용>", "replace_all": false}
+    """
+    import io
+    import csv
+    import json as _json
+
+    csv_text = body.get("csv", "")
+    replace_all = bool(body.get("replace_all", False))
+
+    if not csv_text:
+        raise HTTPException(400, "CSV 내용이 비어 있습니다.")
+
+    # BOM 제거
+    if csv_text.startswith("\ufeff"):
+        csv_text = csv_text[1:]
+
+    # 주석(#) 행 제거
+    lines = [ln for ln in csv_text.splitlines() if not ln.lstrip().startswith("#")]
+    cleaned = "\n".join(lines)
+    reader = csv.reader(io.StringIO(cleaned))
+    rows = [r for r in reader if any(c.strip() for c in r)]
+
+    if len(rows) < 2:
+        raise HTTPException(400, "헤더 + 최소 1명의 데이터 행이 필요합니다.")
+
+    header = [c.strip() for c in rows[0]]
+    data_rows = rows[1:]
+
+    # 헤더 검증
+    required = {"id", "이름"}
+    if not required.issubset(set(header)):
+        raise HTTPException(400, f"필수 열 누락: {required - set(header)}")
+
+    def col(row, name, default=""):
+        if name in header:
+            try:
+                return row[header.index(name)].strip()
+            except IndexError:
+                return default
+        return default
+
+    nurses_to_save = []
+    errors = []
+    for idx, row in enumerate(data_rows, start=2):
+        try:
+            nid = col(row, "id")
+            name = col(row, "이름")
+            if not nid or not name:
+                errors.append(f"{idx}행: id 또는 이름 비어 있음")
+                continue
+
+            capable_str = col(row, "가능근무", "DC,D,EC,E,NC,N")
+            capable = [s.strip() for s in capable_str.split(",") if s.strip()]
+
+            juhu_day_ko = col(row, "주휴요일")
+            juhu_day_map = {"일": 0, "월": 1, "화": 2, "수": 3, "목": 4, "금": 5, "토": 6}
+            juhu_day = juhu_day_map.get(juhu_day_ko) if juhu_day_ko else None
+
+            def yn(val, default=False):
+                v = (val or "").strip().upper()
+                if v in ("Y", "YES", "TRUE", "1", "O"):
+                    return True
+                if v in ("N", "NO", "FALSE", "0", "X"):
+                    return False
+                return default
+
+            seniority_str = col(row, "시니어리티", "0")
+            try:
+                seniority = int(seniority_str)
+            except ValueError:
+                seniority = 0
+
+            nurse = {
+                "id": nid,
+                "name": name,
+                "group": col(row, "그룹"),
+                "gender": col(row, "성별", "female").lower(),
+                "capable_shifts": capable,
+                "is_night_shift": yn(col(row, "야간전담"), False),
+                "seniority": seniority,
+                "wishes": {},
+                "juhu_day": juhu_day,
+                "juhu_auto_rotate": yn(col(row, "주휴로테이션"), True),
+                "night_months": {},
+                "is_trainee": yn(col(row, "트레이닝"), False),
+                "training_end_date": col(row, "트레이닝종료일") or None,
+                "preceptor_id": col(row, "프리셉터ID") or None,
+            }
+            nurses_to_save.append(nurse)
+        except Exception as e:
+            errors.append(f"{idx}행: {e}")
+
+    if not nurses_to_save:
+        raise HTTPException(400, f"유효한 행이 없습니다. 오류: {'; '.join(errors)}")
+
+    # 저장
+    try:
+        if replace_all:
+            # 기존 간호사 전체 삭제 후 삽입
+            existing = db.get_nurses()
+            for n in existing:
+                db.delete_nurse(n["id"])
+        for nurse in nurses_to_save:
+            db.upsert_nurse(nurse)
+    except Exception as e:
+        raise HTTPException(500, f"DB 저장 실패: {e}")
+
+    return {
+        "ok": True,
+        "imported": len(nurses_to_save),
+        "errors": errors,
+        "replaced": replace_all,
+    }
+
+
 # ── 헬스체크 ─────────────────────────────────────────────────────────────────
 
 @app.get("/health")

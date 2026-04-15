@@ -391,6 +391,9 @@
           <template x-for="(t,i) in templates" :key="'tpl'+i">
             <button @click="loadTemplate(i)" class="btn btn-xs btn-ghost" :title="t.name" x-text="'📂 '+t.name"></button>
           </template>
+          <button @click="downloadNurseTemplate()" class="btn btn-xs btn-ghost" title="CSV 템플릿 다운로드">📥 템플릿</button>
+          <button @click="$refs.nurseCsvInput.click()" class="btn btn-xs btn-ghost" title="CSV 파일로 일괄 등록">📤 가져오기</button>
+          <input type="file" x-ref="nurseCsvInput" accept=".csv,.txt" style="display:none" @change="importNursesFromCSV($event)"/>
           <button @click="openNurseModal(null)" class="btn btn-sm btn-primary">+ 추가</button>
         </div>
       </div>

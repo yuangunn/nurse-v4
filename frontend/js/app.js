@@ -1614,6 +1614,50 @@ function app() {
     },
     deleteTemplate(idx){this.templates.splice(idx,1);localStorage.setItem('ns_templates',JSON.stringify(this.templates))},
 
+    // ═══ 간호사 CSV 템플릿 다운로드/업로드 ═══════════════════
+    async downloadNurseTemplate(){
+      try{
+        const res=await fetch('/api/nurses/template');
+        if(!res.ok)throw new Error('템플릿 다운로드 실패');
+        const blob=await res.blob();
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');
+        a.href=url;a.download='nurses_template.csv';
+        document.body.appendChild(a);a.click();
+        document.body.removeChild(a);URL.revokeObjectURL(url);
+        this._toast('템플릿 다운로드 완료','info');
+      }catch(e){this._toast(e.message||'다운로드 실패','error')}
+    },
+
+    async importNursesFromCSV(event){
+      const file=event.target.files?.[0];
+      if(!file){return}
+      // 파일 초기화
+      event.target.value='';
+
+      const replaceAll=confirm(
+        `'${file.name}' 파일로 간호사를 등록합니다.\n\n` +
+        `[확인]: 기존 간호사를 모두 삭제하고 파일의 내용으로 교체\n` +
+        `[취소]: 기존 간호사에 추가/업데이트 (병합)`
+      );
+
+      try{
+        const text=await file.text();
+        const res=await this.api('POST','/api/nurses/import',{
+          csv:text, replace_all:replaceAll
+        });
+        if(res.ok){
+          await this.loadNurses();
+          let msg=`${res.imported}명 가져오기 완료`;
+          if(res.replaced)msg+=' (기존 교체)';
+          if(res.errors?.length)msg+=`\n오류 ${res.errors.length}건: ${res.errors.slice(0,3).join('; ')}`;
+          this._toast(msg,res.errors?.length?'warn':'info');
+        }
+      }catch(e){
+        this._toast(e.message||'가져오기 실패','error');
+      }
+    },
+
     // ═══ 11. 변경 이력 ════════════════════════════════════
     changeHistory:[],
     _maxHistory:100,
