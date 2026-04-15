@@ -324,9 +324,9 @@
       <div class="section-title">요일별 필요 인원</div>
       <div class="overflow-x-auto">
         <table class="tbl text-center"><thead><tr><th>근무</th><template x-for="(label,key) in weekdayLabels" :key="key"><th x-text="label"></th></template></tr></thead>
-        <tbody><template x-for="shift in workShifts" :key="shift"><tr>
+        <tbody><template x-for="shift in ['D','E','N']" :key="shift"><tr>
           <td class="font-semibold"><span :style="getShiftStyle(shift)" class="px-1.5 py-0.5 rounded text-xs font-bold" x-text="shift"></span></td>
-          <template x-for="(label,key) in weekdayLabels" :key="key"><td><input type="number" min="0" max="20" :value="requirements[key][shift]" @change="requirements[key][shift]=parseInt($event.target.value)||0" class="w-11 text-center py-1"/></td></template>
+          <template x-for="(label,key) in weekdayLabels" :key="key"><td><input type="number" min="0" max="20" :value="(requirements[key]||{})[shift]||0" @change="if(!requirements[key])requirements[key]={};requirements[key][shift]=parseInt($event.target.value)||0" class="w-11 text-center py-1"/></td></template>
         </tr></template></tbody></table>
       </div>
       <button @click="saveRequirements()" class="btn btn-success btn-sm w-full mt-3">인원 설정 저장</button>

@@ -239,14 +239,14 @@ function app() {
 
     async createProfile(){
       const m=this.profileCreateModal;
-      if(!m.id.trim()||!m.name.trim()){this._toast('ID와 이름을 입력해주세요.','error');return}
-      if(m.password&&m.password!==m.passwordConfirm){this._toast('비밀번호가 일치하지 않습니다.','error');return}
+      if(!m.id.trim()||!m.name.trim()){this.toast('ID와 이름을 입력해주세요.','error');return}
+      if(m.password&&m.password!==m.passwordConfirm){this.toast('비밀번호가 일치하지 않습니다.','error');return}
       try{
         await this.api('POST','/api/profiles/create',{id:m.id.trim(),name:m.name.trim(),password:m.password});
         m.open=false;
         await this._loadProfiles();
-        this._toast(`프로필 "${m.name}" 생성 완료`);
-      }catch(e){this._toast(e.message||'생성 실패','error')}
+        this.toast(`프로필 "${m.name}" 생성 완료`);
+      }catch(e){this.toast(e.message||'생성 실패','error')}
     },
 
     async confirmDeleteProfile(profileId){
@@ -255,12 +255,12 @@ function app() {
       const name=profile.name;
       const input=prompt(`이 프로필과 모든 데이터가 영구 삭제됩니다.\n삭제하려면 "${name}"을(를) 입력하세요:`);
       if(input===null)return; // 취소
-      if(input.trim()!==name){this._toast('프로필 이름이 일치하지 않습니다.','error');return}
+      if(input.trim()!==name){this.toast('프로필 이름이 일치하지 않습니다.','error');return}
       try{
         await this.api('DELETE',`/api/profiles/${profileId}`);
         await this._loadProfiles();
-        this._toast('프로필 삭제 완료');
-      }catch(e){this._toast(e.message||'삭제 실패','error')}
+        this.toast('프로필 삭제 완료');
+      }catch(e){this.toast(e.message||'삭제 실패','error')}
     },
 
     openChangePw(profileId){
@@ -269,13 +269,13 @@ function app() {
 
     async changeProfilePassword(){
       const m=this.profileChangePwModal;
-      if(!m.newPw){this._toast('새 비밀번호를 입력해주세요.','error');return}
-      if(m.newPw!==m.newPwConfirm){this._toast('새 비밀번호가 일치하지 않습니다.','error');return}
+      if(!m.newPw){this.toast('새 비밀번호를 입력해주세요.','error');return}
+      if(m.newPw!==m.newPwConfirm){this.toast('새 비밀번호가 일치하지 않습니다.','error');return}
       try{
         await this.api('POST','/api/profiles/change-password',{id:m.id,old_password:m.oldPw,new_password:m.newPw});
         m.open=false;
-        this._toast('비밀번호 변경 완료');
-      }catch(e){this._toast(e.message||'변경 실패','error')}
+        this.toast('비밀번호 변경 완료');
+      }catch(e){this.toast(e.message||'변경 실패','error')}
     },
 
     // ── 개발자 모드 이스터에그 ──
@@ -288,11 +288,11 @@ function app() {
           // 이미 활성화 → 해제
           this._devModeUnlocked=false;
           localStorage.removeItem('devMode');
-          this._toast('개발자 권한이 해제되었습니다','info');
+          this.toast('개발자 권한이 해제되었습니다','info');
         }else{
           this._devModeUnlocked=true;
           localStorage.setItem('devMode','true');
-          this._toast('개발자 모드가 활성화되었습니다!','info');
+          this.toast('개발자 모드가 활성화되었습니다!','info');
         }
         this._versionClickTimestamps=[];
       }
@@ -310,15 +310,15 @@ function app() {
       if(!confirm(`"${name}" 프로필의 비밀번호를 초기화하시겠습니까?`))return;
       try{
         await this.api('POST','/api/profiles/change-password',{id:profileId,old_password:'',new_password:'',force_reset:true});
-        this._toast(`${name} 비밀번호 초기화 완료`);
+        this.toast(`${name} 비밀번호 초기화 완료`);
         await this._loadProfiles();
-      }catch(e){this._toast(e.message||'초기화 실패','error')}
+      }catch(e){this.toast(e.message||'초기화 실패','error')}
     },
 
     devClearLocalStorage(){
       if(!confirm('브라우저 로컬 데이터를 모두 삭제하시겠습니까?'))return;
       localStorage.clear();
-      this._toast('localStorage 삭제 완료. 새로고침합니다.');
+      this.toast('localStorage 삭제 완료. 새로고침합니다.');
       setTimeout(()=>location.reload(),1000);
     },
 
@@ -327,8 +327,8 @@ function app() {
       try{
         await this.api('POST','/api/dev/reset-seed');
         await this.loadNurses();
-        this._toast('예시 데이터 초기화 완료');
-      }catch(e){this._toast(e.message||'초기화 실패','error')}
+        this.toast('예시 데이터 초기화 완료');
+      }catch(e){this.toast(e.message||'초기화 실패','error')}
     },
 
     async devDownloadDb(){
@@ -339,19 +339,19 @@ function app() {
         a.href=URL.createObjectURL(blob);
         a.download=`${this.currentProfile||'nurse'}_backup.db`;
         a.click();URL.revokeObjectURL(a.href);
-        this._toast('DB 백업 다운로드 완료');
-      }catch(e){this._toast('다운로드 실패','error')}
+        this.toast('DB 백업 다운로드 완료');
+      }catch(e){this.toast('다운로드 실패','error')}
     },
 
     async setDevMasterPassword(){
-      if(!this.devMasterPw){this._toast('비밀번호를 입력해주세요.','error');return}
-      if(this.devMasterPw!==this.devMasterPwConfirm){this._toast('비밀번호가 일치하지 않습니다.','error');return}
+      if(!this.devMasterPw){this.toast('비밀번호를 입력해주세요.','error');return}
+      if(this.devMasterPw!==this.devMasterPwConfirm){this.toast('비밀번호가 일치하지 않습니다.','error');return}
       try{
         await this.api('POST','/api/profiles/master-password',{action:'set',password:this.devMasterPw});
         this.hasMasterPassword=true;
         this.devMasterPw='';this.devMasterPwConfirm='';
-        this._toast('마스터 비밀번호 설정 완료');
-      }catch(e){this._toast(e.message||'설정 실패','error')}
+        this.toast('마스터 비밀번호 설정 완료');
+      }catch(e){this.toast(e.message||'설정 실패','error')}
     },
 
     async removeDevMasterPassword(){
@@ -360,8 +360,8 @@ function app() {
       try{
         await this.api('POST','/api/profiles/master-password',{action:'remove',current_password:current});
         this.hasMasterPassword=false;
-        this._toast('마스터 비밀번호 제거 완료');
-      }catch(e){this._toast(e.message||'제거 실패','error')}
+        this.toast('마스터 비밀번호 제거 완료');
+      }catch(e){this.toast(e.message||'제거 실패','error')}
     },
     setFontSize(size){this.fontSize=size;localStorage.setItem('fontSize',size);document.documentElement.style.fontSize=size+'px'},
 
@@ -418,7 +418,7 @@ function app() {
       try{
         const name=`자동저장 ${this.year}-${String(this.month).padStart(2,'0')}`;
         await this.api('POST','/api/schedules',{year:this.year,month:this.month,data:{schedule:this.schedule,extended:this.extendedSchedule,scores:this.nurseScores,scoreDetails:this.nurseScoreDetails,relaxed:this.relaxedCells},name});
-        this._toast('스케줄 자동 저장됨','info');
+        this.toast('스케줄 자동 저장됨','info');
         this.loadSavedList();
       }catch(e){}
     },
@@ -1650,12 +1650,12 @@ function app() {
         a.href=url;a.download='nurses_template.csv';
         document.body.appendChild(a);a.click();
         document.body.removeChild(a);URL.revokeObjectURL(url);
-        this._toast('템플릿 다운로드 완료','info');
-      }catch(e){this._toast(e.message||'다운로드 실패','error')}
+        this.toast('템플릿 다운로드 완료','info');
+      }catch(e){this.toast(e.message||'다운로드 실패','error')}
     },
 
     async exportNursesToCSV(){
-      if(!this.nurses.length){this._toast('내보낼 간호사가 없습니다','warn');return}
+      if(!this.nurses.length){this.toast('내보낼 간호사가 없습니다','warn');return}
       try{
         const res=await fetch('/api/nurses/export');
         if(!res.ok)throw new Error('내보내기 실패');
@@ -1666,8 +1666,8 @@ function app() {
         a.href=url;a.download=`nurses_${ymd}.csv`;
         document.body.appendChild(a);a.click();
         document.body.removeChild(a);URL.revokeObjectURL(url);
-        this._toast(`${this.nurses.length}명 내보내기 완료`,'info');
-      }catch(e){this._toast(e.message||'내보내기 실패','error')}
+        this.toast(`${this.nurses.length}명 내보내기 완료`,'info');
+      }catch(e){this.toast(e.message||'내보내기 실패','error')}
     },
 
     async importNursesFromCSV(event){
@@ -1692,10 +1692,10 @@ function app() {
           let msg=`${res.imported}명 가져오기 완료`;
           if(res.replaced)msg+=' (기존 교체)';
           if(res.errors?.length)msg+=`\n오류 ${res.errors.length}건: ${res.errors.slice(0,3).join('; ')}`;
-          this._toast(msg,res.errors?.length?'warn':'info');
+          this.toast(msg,res.errors?.length?'warn':'info');
         }
       }catch(e){
-        this._toast(e.message||'가져오기 실패','error');
+        this.toast(e.message||'가져오기 실패','error');
       }
     },
 
