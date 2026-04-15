@@ -503,7 +503,7 @@
   <div class="flex flex-wrap gap-1 text-xs mb-2 items-center" style="flex-shrink:0">
     <template x-for="s in prevShifts" :key="s"><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></template>
     <span class="text-dim ml-1">빈칸=자동</span>
-    <span class="text-dim ml-2">| ← ↑ ↓ → <kbd>D</kbd><kbd>E</kbd><kbd>N</kbd><kbd>V</kbd> 입력 · <kbd>Del</kbd> 삭제 · <kbd>Ctrl+Z</kbd> 되돌리기 · <kbd>?</kbd> 전체 단축키</span>
+    <span class="text-dim ml-2">| ← ↑ ↓ → <kbd>D</kbd><kbd>E</kbd><kbd>N</kbd><kbd>V</kbd><kbd>O</kbd>=OF 입력 · <kbd>Del</kbd> 삭제 · <kbd>Ctrl+Z</kbd> 되돌리기 · <kbd>?</kbd> 전체 단축키</span>
   </div>
   <!-- #3 이전달 이월 힌트 -->
   <div x-show="showPrevHint" class="card-sm mb-2" style="flex-shrink:0;padding:8px 14px;display:flex;align-items:center;gap:10px;border-left:3px solid var(--accent)">
@@ -1574,7 +1574,7 @@
           <tbody>
             <tr><td class="font-mono text-xs"><kbd>?</kbd></td><td>단축키 도움말 토글</td></tr>
             <tr><td class="font-mono text-xs"><kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd></td><td>사전입력 셀 이동</td></tr>
-            <tr><td class="font-mono text-xs"><kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>V</kbd></td><td>사전입력 직접 입력</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>V</kbd> <kbd>O</kbd></td><td>사전입력 직접 입력 (O=OF)</td></tr>
             <tr><td class="font-mono text-xs"><kbd>Del</kbd></td><td>사전입력 셀 삭제</td></tr>
             <tr><td class="font-mono text-xs"><kbd>Ctrl+Z</kbd></td><td>되돌리기</td></tr>
             <tr><td class="font-mono text-xs"><kbd>Ctrl+Shift+Z</kbd></td><td>다시 실행</td></tr>
