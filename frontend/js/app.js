@@ -105,7 +105,7 @@ function app() {
       const e=this.shifts.filter(s=>s.period==='evening').map(s=>s.code);
       const n=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
       const r=this.shifts.filter(s=>s.period==='rest').map(s=>s.code);
-      return [{label:'낮',shifts:d,color:'text-blue-700'},{label:'저녁',shifts:e,color:'text-green-700'},{label:'야간',shifts:n,color:'text-amber-700'},{label:'휴무',shifts:r,color:'text-gray-600'}];
+      return [{label:'D',shifts:d,color:'text-blue-700'},{label:'E',shifts:e,color:'text-green-700'},{label:'N',shifts:n,color:'text-amber-700'},{label:'휴무',shifts:r,color:'text-gray-600'}];
     },
     get periodGroups(){
       const base=[{value:'work',label:'모든 근무'},{value:'day',label:'낮 근무 (D, DC, D1)'},{value:'evening',label:'저녁 근무 (E, EC, 중)'},{value:'night',label:'야간 근무 (N, NC)'},{value:'rest',label:'휴무 (OF, 주)'},{value:'leave',label:'휴가 (V, 생, 특...)'},{value:'rest_leave',label:'휴무/휴가'},{value:'any',label:'전체'}];

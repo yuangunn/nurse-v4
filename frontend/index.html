@@ -802,7 +802,7 @@
       </tr></template></tbody>
       <tfoot><template x-for="row in footerRows" :key="row.label"><tr style="background:rgba(255,255,255,0.015)">
         <td class="g-cell px-1.5 py-0.5 font-medium sticky left-0 z-10 text-xs g-fix" :class="row.color" x-text="row.label"></td>
-        <template x-for="day in scheduleDays" :key="day"><td class="g-cell text-center py-0.5 text-xs font-semibold" :class="[row.color,day.getDay()===6?'g-sat':'',row.label==='낮'&&isScheduleStaffShort(day,'day')?'staff-short':'',row.label==='저녁'&&isScheduleStaffShort(day,'evening')?'staff-short':'',row.label==='야간'&&isScheduleStaffShort(day,'night')?'staff-short':'']" x-text="getDayDutyCount(day,row.shifts)||''"></td></template>
+        <template x-for="day in scheduleDays" :key="day"><td class="g-cell text-center py-0.5 text-xs font-semibold" :class="[row.color,day.getDay()===6?'g-sat':'',row.label==='D'&&isScheduleStaffShort(day,'day')?'staff-short':'',row.label==='E'&&isScheduleStaffShort(day,'evening')?'staff-short':'',row.label==='N'&&isScheduleStaffShort(day,'night')?'staff-short':'']" x-text="getDayDutyCount(day,row.shifts)||''"></td></template>
         <td class="g-cell" colspan="6"></td>
       </tr></template></tfoot>
     </table>
