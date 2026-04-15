@@ -525,13 +525,13 @@
       </tr></template></tbody>
       <tfoot>
         <!-- 배정된 인원 행 -->
-        <template x-for="row in [{type:'D',bg:'rgba(33,150,243,0.04)',color:'#64b5f6',label:'D배정'},{type:'E',bg:'rgba(46,125,50,0.04)',color:'#81c784',label:'E배정'},{type:'N',bg:'rgba(255,152,0,0.04)',color:'#ffb74d',label:'N배정'}]" :key="'a'+row.type"><tr>
-          <td class="g-cell px-1 py-0.5 sticky left-0 z-10 text-center text-xs font-medium" :style="`background:${row.bg};color:${row.color};opacity:0.7`" x-text="row.label"></td>
+        <template x-for="row in [{type:'D',bg:'#eaf4ff',color:'#1e40af',label:'D배정'},{type:'E',bg:'#eafaf0',color:'#166534',label:'E배정'},{type:'N',bg:'#fff4e4',color:'#9a4b00',label:'N배정'}]" :key="'a'+row.type"><tr>
+          <td class="g-cell px-1 py-0.5 sticky left-0 z-10 text-center text-xs font-medium" :style="`background:${row.bg};color:${row.color}`" x-text="row.label"></td>
           <template x-for="day in scheduleDays" :key="'pa'+row.type+day"><td class="g-cell p-0 text-center text-xs py-0.5" :class="day.getDay()===6?'g-sat':''" :style="`background:${row.bg};color:${row.color}`" x-text="getPrevAssignedCount(day,row.type)||''"></td></template>
           <td class="g-cell px-1" :style="`background:${row.bg}`"></td>
         </tr></template>
         <!-- 필요 인원 행 (남은) -->
-        <template x-for="row in [{type:'D',bg:'rgba(33,150,243,0.07)',color:'#64b5f6'},{type:'E',bg:'rgba(46,125,50,0.07)',color:'#81c784'},{type:'N',bg:'rgba(255,152,0,0.07)',color:'#ffb74d'}]" :key="row.type"><tr>
+        <template x-for="row in [{type:'D',bg:'#d9e9ff',color:'#1e40af'},{type:'E',bg:'#d6f5e3',color:'#166534'},{type:'N',bg:'#ffe6c7',color:'#9a4b00'}]" :key="row.type"><tr>
           <td class="g-cell px-1 py-0.5 sticky left-0 z-10 text-center font-bold text-xs" :style="`background:${row.bg};color:${row.color}`" x-text="row.type"></td>
           <template x-for="day in scheduleDays" :key="day"><td class="g-cell p-0" :class="day.getDay()===6?'g-sat':''" :style="`background:${row.bg}`">
             <input type="number" min="0" max="20" class="w-full text-center text-xs py-0.5 border-none outline-none bg-transparent" :class="getPrevDayReq(day,row.type)!==null?'font-bold':''" :style="getPrevDayReq(day,row.type)!==null?`color:${row.color}`:'color:rgba(255,255,255,0.12)'" :placeholder="getDefaultDayReq(day,row.type)" :value="getPrevDayReq(day,row.type)!==null?getPrevDayReq(day,row.type):''" @change="setPrevDayReq(day,row.type,$event.target.value)" style="min-width:1.5rem;width:100%"/>
