@@ -241,8 +241,8 @@
       <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text,#1f2937)">UI</h4>
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.75rem;color:var(--text-sub)">글자 크기 범위:</span>
-        <input type="number" x-model.number="fontSize" min="8" max="24" style="width:50px;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem;text-align:center" @change="setFontSize(fontSize)">
-        <span style="font-size:0.7rem;color:var(--text-sub)">(8~24px)</span>
+        <input type="number" x-model.number="fontSize" min="8" max="30" style="width:50px;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem;text-align:center" @change="setFontSize(fontSize)">
+        <span style="font-size:0.7rem;color:var(--text-sub)">(개발자: 8~30px, 일반: 16~24px)</span>
       </div>
     </div>
 
@@ -282,11 +282,16 @@
     </div>
   </nav>
   <div style="padding:8px;border-top:1px solid var(--border)">
-    <!-- 글자크기 -->
-    <div style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0">
-      <button @click="setFontSize(Math.min(20,fontSize+1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.7rem;font-weight:700;width:36px">A+</button>
+    <!-- 글자크기: 펼침=가로, 접힘=세로 -->
+    <div class="sidebar-fontsize-h flex items-center gap-1 px-3 py-2" style="justify-content:center">
+      <button @click="setFontSize(Math.max(_devModeUnlocked?8:16,fontSize-1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.65rem">A-</button>
+      <span class="text-xs text-sub" style="min-width:28px;text-align:center" x-text="fontSize+'px'"></span>
+      <button @click="setFontSize(Math.min(_devModeUnlocked?30:24,fontSize+1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.75rem;font-weight:700">A+</button>
+    </div>
+    <div class="sidebar-fontsize-v" style="display:none;flex-direction:column;align-items:center;gap:2px;padding:6px 0">
+      <button @click="setFontSize(Math.min(_devModeUnlocked?30:24,fontSize+1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.7rem;font-weight:700;width:36px">A+</button>
       <span class="text-xs text-sub" style="font-size:0.6rem" x-text="fontSize+'px'"></span>
-      <button @click="setFontSize(Math.max(11,fontSize-1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.6rem;width:36px">A-</button>
+      <button @click="setFontSize(Math.max(_devModeUnlocked?8:16,fontSize-1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.6rem;width:36px">A-</button>
     </div>
     <!-- 도움말 -->
     <button @click="showHelpModal=true" class="sidebar-item w-full">

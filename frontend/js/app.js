@@ -9,7 +9,7 @@ function app() {
       {id:'saved',    label:'저장'},
     ],
     activeTab: 'settings',
-    fontSize: parseInt(localStorage.getItem('fontSize'))||20,
+    fontSize: parseInt(localStorage.getItem('fontSize'))||18,
     year:  new Date().getMonth()===11 ? new Date().getFullYear()+1 : new Date().getFullYear(),
     month: (new Date().getMonth()+1)%12+1,
     nurses: [],

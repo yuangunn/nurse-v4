@@ -163,6 +163,8 @@ body {
   .sidebar-item.active { box-shadow: inset 3px 0 0 var(--accent); }
   .nav-label { display: none; }
   .sidebar-bottom-extra { display: none; }
+  .sidebar-fontsize-h { display: none !important; }
+  .sidebar-fontsize-v { display: flex !important; }
 }
 @media (max-width:767px) { .sidebar { display: none; } }
 
@@ -763,7 +765,7 @@ html.dark .juhu-new {
 }
 
 /* Make cells position relative for indicators */
-.g-cell { position: relative; }
+.g-cell { position: relative; min-width: 1.8em; }
 
 /* 사전입력 필요인원 입력 - 좁은 셀에 맞게 패딩 제거 */
 .prev-req-input {
