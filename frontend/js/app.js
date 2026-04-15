@@ -981,9 +981,25 @@ function app() {
       const v=[];
       const days=this.scheduleDays;
       const dayNames=['일','월','화','수','목','금','토'];
-      const eveningCodes=this.shifts.filter(s=>s.period==='evening'||s.period==='middle').map(s=>s.code);
+      const eveningCodes=this.shifts.filter(s=>s.period==='evening').map(s=>s.code);
+      const middleCodes=this.shifts.filter(s=>s.period==='middle').map(s=>s.code);
       const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
-      const dayCodes=this.shifts.filter(s=>s.period==='day'||s.period==='day1').map(s=>s.code);
+      const dayCodes=this.shifts.filter(s=>s.period==='day').map(s=>s.code);
+      const day1Codes=this.shifts.filter(s=>s.period==='day1').map(s=>s.code);
+      const allDayCodes=[...dayCodes,...day1Codes];
+
+      // 금지 전환 목록: [from코드들, to코드들, 라벨]
+      const forbidden=[
+        [eveningCodes, dayCodes,    'E→D'],
+        [eveningCodes, day1Codes,   'E→D1'],
+        [eveningCodes, middleCodes, 'E→중'],
+        [nightCodes,   eveningCodes,'N→E'],
+        [nightCodes,   dayCodes,    'N→D'],
+        [nightCodes,   day1Codes,   'N→D1'],
+        [nightCodes,   middleCodes, 'N→중'],
+        [middleCodes,  dayCodes,    '중→D'],
+        [middleCodes,  day1Codes,   '중→D1'],
+      ];
 
       for(const nurse of this.nurses){
         const nid=nurse.id;
@@ -997,12 +1013,10 @@ function app() {
           const d1=days[i].getDate(),d2=days[i+1].getDate();
           const dn1=dayNames[days[i].getDay()],dn2=dayNames[days[i+1].getDay()];
 
-          if(eveningCodes.includes(s1)&&dayCodes.includes(s2))
-            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (E→D 금지)`});
-          if(nightCodes.includes(s1)&&dayCodes.includes(s2))
-            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (N→D 금지)`});
-          if(nightCodes.includes(s1)&&eveningCodes.includes(s2))
-            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (N→E 금지)`});
+          for(const[fromCodes,toCodes,label]of forbidden){
+            if(fromCodes.includes(s1)&&toCodes.includes(s2))
+              v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (${label} 금지)`});
+          }
         }
       }
       this.prevViolations=v;
@@ -1208,14 +1222,15 @@ function app() {
 
     // ── 사전입력 배정 카운트 ──────────────────────────────────
     getPrevAssignedCount(day, type){
-      // type: 'D','E','N' — 해당 시간대에 배정된 사전입력 간호사 수
+      // type: 'D','E','N','중' 등 — 해당 코드에 배정된 사전입력 간호사 수
       const dk=this.dayKey(day);
       const periodShifts={
-        D: this.shifts.filter(s=>s.period==='day'||s.period==='day1').map(s=>s.code),
-        E: this.shifts.filter(s=>s.period==='evening'||s.period==='middle').map(s=>s.code),
+        D: this.shifts.filter(s=>s.period==='day').map(s=>s.code),
+        E: this.shifts.filter(s=>s.period==='evening').map(s=>s.code),
         N: this.shifts.filter(s=>s.period==='night').map(s=>s.code),
       };
-      const codes=periodShifts[type]||[];
+      // D/E/N 그룹에 없으면 개별 코드로 매칭
+      const codes=periodShifts[type]||[type];
       let count=0;
       for(const nurse of this.nurses){
         const val=(this.prevSchedule[nurse.id]||{})[dk];
@@ -1248,7 +1263,15 @@ function app() {
       const D=(override.D!==undefined?override.D:base.D)||0;
       const E=(override.E!==undefined?override.E:base.E)||0;
       const N=(override.N!==undefined?override.N:base.N)||0;
-      return {D,E,N,total:D+E+N};
+      const result={D,E,N,total:D+E+N};
+      // 추가 자동배정 근무의 요구사항
+      for(const code of this.reqShiftCodes){
+        if(code==='D'||code==='E'||code==='N')continue;
+        const val=(override[code]!==undefined?override[code]:base[code])||0;
+        result[code]=val;
+        result.total+=val;
+      }
+      return result;
     },
 
     _analyzeStaffing(){
@@ -1293,7 +1316,7 @@ function app() {
           date:day.getDate(),
           dow:day.getDay(),
           dowName:dayNames[day.getDay()],
-          reqD:req.D, reqE:req.E, reqN:req.N, reqTotal:req.total,
+          reqD:req.D, reqE:req.E, reqN:req.N, reqTotal:req.total, reqExtra:req,
           preWork, preRest, preLeave, preJuhu, preOF, preFixed,
           freeNurses, remainReq, slack,
           weekIdx:Math.floor(this._daysSinceRef(day)/7),

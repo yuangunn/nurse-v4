@@ -952,6 +952,15 @@
                 <td class="g-cell text-center py-1" :class="da.isThisMonth?'':'g-overflow'" x-text="da.reqN"></td>
               </template>
             </tr>
+            <!-- 추가 자동배정 근무 필요 (동적) -->
+            <template x-for="code in reqShiftCodes.filter(c=>c!=='D'&&c!=='E'&&c!=='N')" :key="'xr'+code">
+              <tr>
+                <td class="g-cell px-2 py-1 sticky left-0 z-10 g-fix font-semibold" style="white-space:nowrap;color:var(--text-sub)" x-text="code+'필요'"></td>
+                <template x-for="da in analysisResult?.days||[]" :key="'xd'+code+da.dk">
+                  <td class="g-cell text-center py-1" :class="da.isThisMonth?'':'g-overflow'" x-text="da.reqExtra?.[code]||0"></td>
+                </template>
+              </tr>
+            </template>
             <!-- 합계 -->
             <tr style="border-top:2px solid var(--border)">
               <td class="g-cell px-2 py-1 sticky left-0 z-10 g-fix font-bold text-bright">합계</td>

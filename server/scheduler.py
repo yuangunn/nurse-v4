@@ -777,12 +777,15 @@ class NurseScheduler:
         a + b <= 1  (두 변수 동시에 1이 될 수 없음)
         """
         forbidden = [
-            (self.EVENING_SHIFTS, self.DAY_SHIFTS),
-            (self.EVENING_SHIFTS, self.DAY1_SHIFTS),
-            (self.NIGHT_SHIFTS,   self.EVENING_SHIFTS),
-            (self.NIGHT_SHIFTS,   self.DAY_SHIFTS),
-            (self.NIGHT_SHIFTS,   self.DAY1_SHIFTS),
-            (self.NIGHT_SHIFTS,   self.MIDDLE_SHIFTS),
+            (self.EVENING_SHIFTS, self.DAY_SHIFTS),     # E→D 금지 (22:00→06:00 = 8h)
+            (self.EVENING_SHIFTS, self.DAY1_SHIFTS),     # E→D1 금지
+            (self.EVENING_SHIFTS, self.MIDDLE_SHIFTS),   # E→중 금지 (22:00→11:00 = 13h)
+            (self.NIGHT_SHIFTS,   self.EVENING_SHIFTS),  # N→E 금지
+            (self.NIGHT_SHIFTS,   self.DAY_SHIFTS),      # N→D 금지
+            (self.NIGHT_SHIFTS,   self.DAY1_SHIFTS),     # N→D1 금지
+            (self.NIGHT_SHIFTS,   self.MIDDLE_SHIFTS),   # N→중 금지
+            (self.MIDDLE_SHIFTS,  self.DAY_SHIFTS),      # 중→D 금지 (19:00→06:00 = 11h)
+            (self.MIDDLE_SHIFTS,  self.DAY1_SHIFTS),     # 중→D1 금지 (19:00→08:30 = 13.5h)
         ]
         for nurse in self.nurses:
             nid = nurse["id"]
