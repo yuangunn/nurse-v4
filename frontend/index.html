@@ -1121,7 +1121,26 @@
   <div @click="activeTab='analysis'" :class="activeTab==='analysis'?'active':''" class="bottom-nav-item"><svg width="17" height="17" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>분석</span></div>
   <div @click="activeTab='schedule'" :class="activeTab==='schedule'?'active':''" class="bottom-nav-item"><svg width="17" height="17" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>스케줄</span></div>
   <div @click="activeTab='saved'" :class="activeTab==='saved'?'active':''" class="bottom-nav-item"><svg width="17" height="17" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><span>저장</span></div>
+  <div @click="showMobileMore=!showMobileMore" :class="showMobileMore?'active':''" class="bottom-nav-item"><svg width="17" height="17" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg><span>더보기</span></div>
 </nav>
+
+<!-- 모바일 더보기 메뉴 -->
+<div :style="showMobileMore?'position:fixed;bottom:56px;left:0;right:0;z-index:180;background:var(--bg-sidebar);border-top:1px solid var(--border);padding:12px 16px;box-shadow:0 -4px 12px rgba(0,0,0,0.1)':'display:none'" @click.outside="showMobileMore=false">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <!-- 글꼴 크기 -->
+    <div style="display:flex;align-items:center;gap:6px;justify-content:center">
+      <button @click="setFontSize(Math.max(_devModeUnlocked?8:16,fontSize-1))" class="btn btn-xs btn-ghost" style="padding:4px 8px">A-</button>
+      <span class="text-xs text-sub" x-text="fontSize+'px'" style="min-width:30px;text-align:center"></span>
+      <button @click="setFontSize(Math.min(_devModeUnlocked?30:24,fontSize+1))" class="btn btn-xs btn-ghost" style="padding:4px 8px;font-weight:700">A+</button>
+    </div>
+    <!-- 다크모드 -->
+    <button @click="toggleDark()" class="btn btn-sm btn-ghost" style="font-size:0.75rem" x-text="darkMode?'☀ 라이트':'🌙 다크'"></button>
+    <!-- 도움말 -->
+    <button @click="showHelpModal=true;showMobileMore=false" class="btn btn-sm btn-ghost" style="font-size:0.75rem">❓ 도움말</button>
+    <!-- 프로필 전환 -->
+    <button @click="switchProfile();showMobileMore=false" class="btn btn-sm btn-ghost" style="font-size:0.75rem" x-text="'👤 '+(profiles.find(p=>p.id===currentProfile)?.name||'전환')"></button>
+  </div>
+</div>
 
 </div><!-- /app-shell -->
 
