@@ -521,7 +521,7 @@ function app() {
       return{background:this._shiftGlassBg(s.color_bg),color:this._shiftGlassText(s.color_text)};
     },
     // 스케줄 탭용 셀 스타일
-    hideCharge:false, colorByShift:false,
+    hideCharge:true, colorByShift:true,
     // 전입/전출 범위 체크
     isNurseInactive(nurse, day){
       if(!nurse)return false;
