@@ -241,7 +241,7 @@
       <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text,#1f2937)">UI</h4>
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.75rem;color:var(--text-sub)">글자 크기 범위:</span>
-        <input type="number" x-model.number="fontSize" min="8" max="30" style="width:50px;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem;text-align:center" @change="setFontSize(fontSize)">
+        <input type="number" x-model.number="fontSize" min="8" max="30" style="width:4em;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem;text-align:center" @change="setFontSize(fontSize)">
         <span style="font-size:0.7rem;color:var(--text-sub)">(개발자: 8~30px, 일반: 16~24px)</span>
       </div>
     </div>
@@ -331,9 +331,9 @@
       <div class="flex items-center gap-2">
         <button @click="prevMonth()" class="ym-arrow">‹</button>
         <div class="flex items-baseline gap-1">
-          <input type="number" x-model.number="year" min="2020" max="2099" class="ym-big-input text-bright" style="width:4.5rem"/>
+          <input type="number" x-model.number="year" min="2020" max="2099" class="ym-big-input text-bright" style="width:4.5em"/>
           <span class="text-dim" style="font-size:0.9rem">년</span>
-          <input type="number" x-model.number="month" min="1" max="12" class="ym-big-input ym-big-accent" style="width:2.5rem"/>
+          <input type="number" x-model.number="month" min="1" max="12" class="ym-big-input ym-big-accent" style="width:3em"/>
           <span class="text-dim" style="font-size:0.9rem">월</span>
         </div>
         <button @click="nextMonth()" class="ym-arrow">›</button>
@@ -347,7 +347,7 @@
         <table class="tbl text-center"><thead><tr><th>근무</th><template x-for="(label,key) in weekdayLabels" :key="key"><th x-text="label"></th></template></tr></thead>
         <tbody><template x-for="shift in reqShiftCodes" :key="shift"><tr>
           <td class="font-semibold"><span :style="getShiftStyle(shift)" class="px-1.5 py-0.5 rounded text-xs font-bold" x-text="shift"></span></td>
-          <template x-for="(label,key) in weekdayLabels" :key="key"><td><input type="number" min="0" max="20" :value="(requirements[key]||{})[shift]||0" @change="if(!requirements[key])requirements[key]={};requirements[key][shift]=parseInt($event.target.value)||0" class="w-11 text-center py-1"/></td></template>
+          <template x-for="(label,key) in weekdayLabels" :key="key"><td><input type="number" min="0" max="20" :value="(requirements[key]||{})[shift]||0" @change="if(!requirements[key])requirements[key]={};requirements[key][shift]=parseInt($event.target.value)||0" class="text-center" style="width:3.5em py-1"/></td></template>
         </tr></template></tbody></table>
       </div>
       <button @click="saveRequirements()" class="btn btn-success btn-sm w-full mt-3">인원 설정 저장</button>
@@ -381,13 +381,13 @@
         <label class="flex items-center gap-2 text-dim"><input type="checkbox" checked disabled/>N→E 금지</label>
         <label class="flex items-center gap-2 text-dim"><input type="checkbox" checked disabled/>N→D 금지</label>
         <label class="flex items-center gap-2"><input type="checkbox" x-model="rules.noNOD"/>N→휴무→D 금지</label>
-        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxConsecutiveWork"/>최대 연속 근무 <input type="number" x-model.number="rules.maxConsecutiveWorkDays" min="1" max="10" class="w-11 text-center"/>일</label>
-        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxConsecutiveNight"/>최대 연속 야간 <input type="number" x-model.number="rules.maxConsecutiveNightDays" min="1" max="7" class="w-11 text-center"/>일</label>
-        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.restAfterNight"/>연속야간 <input type="number" x-model.number="rules.restAfterNightMinConsec" min="2" max="5" class="w-11 text-center"/>회↑ 후 <input type="number" x-model.number="rules.restAfterNightDays" min="1" max="4" class="w-11 text-center"/>일 휴무</label>
-        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxNightPerMonth"/>월 최대 야간 <input type="number" x-model.number="rules.maxNightPerMonthCount" min="1" max="15" class="w-11 text-center"/>회 <span class="text-dim text-xs">(7회↑ 수면OFF 발생)</span></label>
-        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxNightTwoMonth"/>홀짝월 합산 야간 <input type="number" x-model.number="rules.maxNightTwoMonthCount" min="1" max="20" class="w-11 text-center"/>회 <span class="text-dim text-xs">(12회↑ 수면OFF 발생)</span></label>
+        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxConsecutiveWork"/>최대 연속 근무 <input type="number" x-model.number="rules.maxConsecutiveWorkDays" min="1" max="10" class="text-center" style="width:3.5em"/>일</label>
+        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxConsecutiveNight"/>최대 연속 야간 <input type="number" x-model.number="rules.maxConsecutiveNightDays" min="1" max="7" class="text-center" style="width:3.5em"/>일</label>
+        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.restAfterNight"/>연속야간 <input type="number" x-model.number="rules.restAfterNightMinConsec" min="2" max="5" class="text-center" style="width:3.5em"/>회↑ 후 <input type="number" x-model.number="rules.restAfterNightDays" min="1" max="4" class="text-center" style="width:3.5em"/>일 휴무</label>
+        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxNightPerMonth"/>월 최대 야간 <input type="number" x-model.number="rules.maxNightPerMonthCount" min="1" max="15" class="text-center" style="width:3.5em"/>회 <span class="text-dim text-xs">(7회↑ 수면OFF 발생)</span></label>
+        <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxNightTwoMonth"/>홀짝월 합산 야간 <input type="number" x-model.number="rules.maxNightTwoMonthCount" min="1" max="20" class="text-center" style="width:3.5em"/>회 <span class="text-dim text-xs">(12회↑ 수면OFF 발생)</span></label>
         <label class="flex items-center gap-2"><input type="checkbox" x-model="rules.autoMenstrualLeave"/>여성 생휴 자동</label>
-        <label class="flex items-center gap-2 col-span-2">V 월 최대 <input type="number" x-model.number="rules.maxVPerMonth" min="0" max="10" class="w-11 text-center"/>회</label>
+        <label class="flex items-center gap-2 col-span-2">V 월 최대 <input type="number" x-model.number="rules.maxVPerMonth" min="0" max="10" class="text-center" style="width:3.5em"/>회</label>
       </div>
       <div class="flex gap-2 mb-4">
         <button @click="saveRules()" class="btn btn-sm btn-primary flex-1">저장</button>
@@ -460,9 +460,9 @@
     <div class="section-title" style="margin:0">사전입력</div>
     <div class="ym">
       <button @click="prevMonth()" class="ym-nav">‹</button>
-      <input type="number" x-model.number="year" min="2020" max="2099" style="width:3rem"/>
+      <input type="number" x-model.number="year" min="2020" max="2099" style="width:4.5em"/>
       <span class="ym-lbl">년</span>
-      <input type="number" x-model.number="month" min="1" max="12" style="width:1.6rem"/>
+      <input type="number" x-model.number="month" min="1" max="12" style="width:3em"/>
       <span class="ym-lbl">월</span>
       <button @click="nextMonth()" class="ym-nav">›</button>
     </div>
@@ -594,9 +594,9 @@
     <span x-show="scheduleStopped" x-cloak class="status-badge status-stopped">중지됨</span>
     <div class="ym">
       <button @click="prevMonth()" class="ym-nav">‹</button>
-      <input type="number" x-model.number="year" min="2020" max="2099" style="width:3rem"/>
+      <input type="number" x-model.number="year" min="2020" max="2099" style="width:4.5em"/>
       <span class="ym-lbl">년</span>
-      <input type="number" x-model.number="month" min="1" max="12" style="width:1.6rem"/>
+      <input type="number" x-model.number="month" min="1" max="12" style="width:3em"/>
       <span class="ym-lbl">월</span>
       <button @click="nextMonth()" class="ym-nav">›</button>
     </div>
@@ -881,9 +881,9 @@
     <div class="section-title" style="margin:0">인원 분석</div>
     <div class="ym">
       <button @click="prevMonth()" class="ym-nav">‹</button>
-      <input type="number" x-model.number="year" min="2020" max="2099" style="width:3rem"/>
+      <input type="number" x-model.number="year" min="2020" max="2099" style="width:4.5em"/>
       <span class="ym-lbl">년</span>
-      <input type="number" x-model.number="month" min="1" max="12" style="width:1.6rem"/>
+      <input type="number" x-model.number="month" min="1" max="12" style="width:3em"/>
       <span class="ym-lbl">월</span>
       <button @click="nextMonth()" class="ym-nav">›</button>
     </div>
