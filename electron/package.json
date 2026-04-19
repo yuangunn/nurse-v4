@@ -1,6 +1,6 @@
 {
   "name": "nurse-scheduler",
-  "version": "4.0.4",
+  "version": "4.0.5",
   "description": "NurseScheduler v4 — 간호사 3교대 근무표 자동 생성 앱",
   "main": "main.js",
   "scripts": {
