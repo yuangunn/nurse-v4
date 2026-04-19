@@ -11,10 +11,12 @@
 
 - **근무표 자동 생성** — MIP 솔버가 하드/소프트 제약을 만족하는 최적 배정 계산
 - **사전입력 시스템** — 주휴, 연차, 희망근무를 미리 입력하면 나머지를 솔버가 자동 채움
+- **셀 단위 잠금** — 사전입력 셀 우클릭 → 메모 + "완화 시 고정" 토글 (보수교육·원내교육 등)
 - **인원 분석 + 주휴 추천** — 일자별 과부족 히트맵 + 최적 주휴 배분 자동 계산
+- **infeasible 진단** — 솔버 실패 시 strict 기준 일별/주간 분석, 완화가능 인원, 재적(전입/전출) 반영 수치 제공
 - **프로필 시스템** — 병동별 DB 분리 + Fernet 암호화 (비밀번호 보호)
-- **간호사 관리** — CSV 일괄 등록, 야간전담, 트레이닝(프리셉터 연동), 전입/전출 로테이션
-- **사전입력 완화** — 생성 실패 시 종류별 차등 보너스로 유연하게 해결
+- **간호사 관리** — CSV 일괄 등록, 야간전담(월별 지정), 트레이닝(프리셉터 연동), 전입/전출 로테이션
+- **사전입력 완화** — 생성 실패 시 종류별 차등 보너스로 유연하게 해결. 공휴일 OF는 하드 금지
 - **Electron 데스크톱 앱** — 브라우저 없이 독립 창으로 실행
 - **다크 모드, 키보드 단축키, 모바일 대응**
 
@@ -22,12 +24,12 @@
 
 ## 다운로드
 
-> **최신 버전: v4.0.3** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases)
+> **최신 버전: v4.0.6** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases)
 
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_Setup_v4.0.3.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.0.3/NurseScheduler_Setup_v4.0.3.exe) | 설치 마법사 (권장) | 137 MB |
-| [**NurseScheduler_v4.0.3_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.0.3/NurseScheduler_v4.0.3_portable.zip) | 포터블 (설치 불필요) | 195 MB |
+| [**NurseScheduler_Setup_v4.0.6.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.0.6/NurseScheduler_Setup_v4.0.6.exe) | 설치 마법사 (권장) | ~143 MB |
+| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.0.6/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~204 MB |
 
 ### 시스템 요구사항
 - Windows 10/11 (64bit)
@@ -78,8 +80,8 @@ build.bat
 
 결과물:
 - `dist/electron/NurseScheduler-win32-x64/` — Electron 번들
-- `dist/NurseScheduler_v4.0.3_portable.zip` — 포터블 ZIP
-- `dist/installer/NurseScheduler_Setup_v4.0.3.exe` — 설치 마법사
+- `dist/NurseScheduler_v4_portable.zip` — 포터블 ZIP
+- `dist/installer/NurseScheduler_Setup_v4.0.6.exe` — 설치 마법사
 
 자세한 빌드 가이드는 [BUILD.md](BUILD.md)를 참고하세요.
 
