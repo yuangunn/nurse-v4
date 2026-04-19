@@ -1302,6 +1302,10 @@
   <div class="modal" style="max-width:20rem;min-width:auto">
     <div class="font-bold text-sm mb-3 text-bright">메모</div>
     <textarea x-model="noteEdit.text" class="w-full" rows="3" placeholder="메모를 입력하세요"></textarea>
+    <label class="flex items-center gap-2 mt-3 text-xs text-sub cursor-pointer">
+      <input type="checkbox" x-model="noteEdit.locked"/>
+      <span>🔒 완화 시 이 셀 고정 (보수교육·원내교육 등)</span>
+    </label>
     <div class="flex gap-2 mt-3">
       <button @click="noteEdit.open=false" class="btn btn-ghost flex-1 btn-sm">취소</button>
       <button @click="saveNote()" class="btn btn-primary flex-1 btn-sm">저장</button>

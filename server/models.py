@@ -95,6 +95,7 @@ class GenerateRequest(BaseModel):
     requirements: Requirements
     rules: Rules
     prev_schedule: Optional[Dict[str, Dict[str, str]]] = None  # {nurse_id: {date_str: shift}}
+    locked_cells: Optional[Dict[str, Dict[str, bool]]] = None  # {nurse_id: {date_str: true}} — 완화 모드에서도 고정할 셀
     holidays: List[str] = []  # ['YYYY-M-D', ...] 법정공휴일 날짜 목록 (스케줄러는 참조용)
     shifts: List[ShiftDef] = []  # 근무 정의 목록 (비어있으면 DB에서 로드)
     per_day_requirements: Optional[Dict[str, Dict[str, int]]] = None  # {'YYYY-MM-DD': {'D':4,'E':5,'N':3}}

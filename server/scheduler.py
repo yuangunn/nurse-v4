@@ -76,6 +76,7 @@ class NurseScheduler:
         self.prev  = request.prev_schedule or {}
         self.per_day_req = request.per_day_requirements or {}
         self.prev_month_nights = request.prev_month_nights or {}
+        self.locked_cells = request.locked_cells or {}  # {nurse_id: {date_str: true}} — 완화 시에도 고정
         self.mip_gap = request.mip_gap
         self.time_limit = request.time_limit
         # 법정공휴일: 당월 날짜만 필터링 (다른 달 공휴일은 무시)
@@ -114,9 +115,18 @@ class NurseScheduler:
         self._build_date_range()
 
         # prev_schedule을 스케줄 범위(all_dates)로 필터링 — 범위 밖 날짜 무시
+        # 트레이니 표시용 "/" 접두어는 스트립 (프리셉터 근무가 자동 적용되므로 무시)
         valid_dates = set(dt.strftime("%Y-%m-%d") for dt in self.all_dates)
+        def _normalize_pre(s: str) -> str:
+            if not s:
+                return s
+            # "/D" → "" (트레이니 표시용, 솔버는 프리셉터 기반 자동 배정)
+            if s.startswith("/"):
+                return ""
+            return s
         self.prev = {
-            nid: {dt: s for dt, s in days.items() if dt in valid_dates}
+            nid: {dt: _normalize_pre(s) for dt, s in days.items()
+                  if dt in valid_dates and _normalize_pre(s)}
             for nid, days in self.prev.items()
         }
 
@@ -265,14 +275,21 @@ class NurseScheduler:
                 dt_str = dt.strftime("%Y-%m-%d")
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
-                pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 is_holiday = dt_str in self.holidays
+                # 공휴일에 OF 사전입력은 무시 — 솔버가 유효한 근무(법/근무 등) 선택
+                if pre == "OF" and is_holiday:
+                    pre = None
+                pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 # 전입/전출일 범위 밖: 모든 shift 0으로 고정
                 if not self._nurse_active_on(nurse, dt):
                     for s in self.ALL_SHIFTS:
                         x[nid][d][s] = 0
                     continue
                 for s in self.ALL_SHIFTS:
+                    # OF는 공휴일에 배정 불가 (하드 제약)
+                    if s == "OF" and is_holiday:
+                        x[nid][d][s] = 0
+                        continue
                     if pre:
                         if s in pre_flex:
                             v = pulp.LpVariable(f"x_{nid}_{d}_{s}", cat="Binary")
@@ -433,12 +450,25 @@ class NurseScheduler:
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
+                # 공휴일에 OF 사전입력은 무시 — 완화 모드에서도 OF 재배치 대상
+                if pre == "OF" and is_holiday:
+                    pre = None
                 # 전입/전출일 범위 밖: 모든 shift 0으로 고정
                 if not self._nurse_active_on(nurse, dt):
                     for s in self.ALL_SHIFTS:
                         x[nid][d][s] = 0
                     continue
+                # 잠긴 셀: 완화 모드에서도 사전입력 하드 고정 (보수교육 등)
+                is_locked = bool(self.locked_cells.get(nid, {}).get(dt_str))
+                if is_locked and pre:
+                    for s in self.ALL_SHIFTS:
+                        x[nid][d][s] = 1 if s == pre else 0
+                    continue
                 for s in self.ALL_SHIFTS:
+                    # OF는 공휴일에 배정 불가 (하드 제약, 완화 모드 포함)
+                    if s == "OF" and is_holiday:
+                        x[nid][d][s] = 0
+                        continue
                     # 주휴 처리
                     if pre == "주":
                         if self.allow_juhu_relax:
@@ -1540,10 +1570,17 @@ class NurseScheduler:
                 for d in range(self.T):
                     dt_str = self.all_dates[d].strftime("%Y-%m-%d")
                     pre = self.prev.get(nid, {}).get(dt_str)
-                    pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                     is_holiday = dt_str in self.holidays
+                    # 공휴일에 OF 사전입력은 무시 (진단도 동일 규칙)
+                    if pre == "OF" and is_holiday:
+                        pre = None
+                    pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                     xx[nid][d] = {}
                     for s in self.ALL_SHIFTS:
+                        # OF는 공휴일에 배정 불가 (하드 제약)
+                        if s == "OF" and is_holiday:
+                            xx[nid][d][s] = 0
+                            continue
                         if pre:
                             if s in pre_flex:
                                 xx[nid][d][s] = pulp.LpVariable(f"{pfx}_{nid}_{d}_{s}", cat="Binary")
@@ -1585,7 +1622,8 @@ class NurseScheduler:
                     dt_str = dt.strftime("%Y-%m-%d")
                     pre = self.prev.get(nid, {}).get(dt_str)
                     if pre and pre not in known:
-                        bad.append(f"    · {nname}({nid}) {dt_str}: \"{pre}\" (현재 근무 목록에 없음)")
+                        hint = " — 트레이니 표시용 코드, 사전입력에서 제거 필요" if pre.startswith("/") else " (현재 근무 목록에 없음)"
+                        bad.append(f"    · {nname}({nid}) {dt_str}: \"{pre}\"{hint}")
             if bad:
                 lines.append("  문제가 된 항목:")
                 lines.extend(bad[:10])
@@ -1699,7 +1737,7 @@ class NurseScheduler:
         if not _try(p):
             lines.append("  [원인] 주휴/OF 배정과 인원 요구사항이 충돌합니다.")
             if self.holidays:
-                lines.append(f"    ※ 법정공휴일 {len(self.holidays)}일 지정됨 — 공휴일에는 생/V 배정이 차단됩니다.")
+                lines.append(f"    ※ 법정공휴일 {len(self.holidays)}일 지정됨 — 공휴일에는 OF/생/V 배정이 차단됩니다.")
             DAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
 
             # ── 원인 1: 같은 주에 OF 또는 주휴 중복 사전입력 ─────────────────
@@ -1874,17 +1912,24 @@ class NurseScheduler:
             if not _try(p):
                 import calendar
                 month_days = calendar.monthrange(self.year, self.month)[1]
-                lines.append("  [원인] 야간전담 간호사 제약 충돌")
+                lines.append("  [원인] 솔버가 실제 시도 후 실패 — 야간전담 설정 + 복합 제약 충돌")
+                lines.append("    (strict 모드 + 완화 모드 양쪽 다 infeasible. 아래는 strict 기준 분석)")
                 lines.append(f"    야간전담 간호사 {len(night_nurses)}명: "
                              f"{', '.join(n['name'] for n in night_nurses)}")
                 lines.append(f"    이 간호사들은 N/NC만 배정되므로, 나머지 {N - len(night_nurses)}명이")
                 lines.append("    모든 D/E 시간대를 커버해야 합니다.")
 
-                # ── 일별 D/E 부족 분석 ────────────────────────────────────
+                # ── 일별 D/E 부족/압박 분석 ────────────────────────────────
+                # 사전입력을 카테고리별로 분류해서 D/E 가용 인원을 정확히 계산
                 regular_nurses = [n for n in self.nurses if not n.get("is_night_shift")]
-                off_shifts = self.LEAVE_SHIFTS + self.REST_SHIFTS
+                day_cover = set(self.DAY_SHIFTS)            # D, DC — D 요구 커버
+                evening_cover = set(self.EVENING_SHIFTS)     # E, EC — E 요구 커버
+                # 사전배정되면 D/E에 쓸 수 없는 근무들 (N/NC/D1/중 + 모든 휴무/휴가)
+                busy_shifts = (set(self.NIGHT_SHIFTS) | set(self.DAY1_SHIFTS)
+                               | set(self.MIDDLE_SHIFTS)
+                               | set(self.REST_SHIFTS) | set(self.LEAVE_SHIFTS))
                 DAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
-                short_days = []
+                day_rows = []
                 for d, dt in enumerate(self.all_dates):
                     if dt.month != self.month:
                         continue
@@ -1895,30 +1940,131 @@ class NurseScheduler:
                     day_req = {**base_r, **ovr} if ovr else base_r
                     d_req = day_req.get("D", 0)
                     e_req = day_req.get("E", 0)
-                    de_req = d_req + e_req
-                    if de_req == 0:
+                    if d_req + e_req == 0:
                         continue
-                    # 정규 간호사 중 당일 휴가/휴무 사전고정된 인원 제외
-                    fixed_off = sum(
-                        1 for n in regular_nurses
-                        if self.prev.get(n["id"], {}).get(dt_str, "") in off_shifts
-                    )
-                    avail = len(regular_nurses) - fixed_off
-                    if avail < de_req:
-                        short_days.append((dt, DAY_KR[dt.weekday()], d_req, e_req, de_req, avail))
+                    pre_d = pre_e = pre_busy = 0
+                    pre_relaxable = 0  # 완화 시 D/E로 전환 가능한 사전배정 수
+                    relaxable_codes = set(self.REST_SHIFTS) | set(self.NIGHT_SHIFTS) \
+                                      | set(self.DAY1_SHIFTS) | set(self.MIDDLE_SHIFTS) \
+                                      | {"V"}  # OF/주/N/NC/D1/중/V는 이동 가능
+                    # 고정성 강한 pre: 법(공휴일 귀속), 생(생리휴가), 공(공적업무), 특, 병
+                    active_count = 0
+                    for n in regular_nurses:
+                        if not self._nurse_active_idx(n, d):
+                            continue  # 재적 중 아님 (전출/미전입) → 제외
+                        active_count += 1
+                        pre = self.prev.get(n["id"], {}).get(dt_str, "")
+                        if pre in day_cover:
+                            pre_d += 1
+                        elif pre in evening_cover:
+                            pre_e += 1
+                        elif pre in busy_shifts:
+                            pre_busy += 1
+                            if pre in relaxable_codes:
+                                pre_relaxable += 1
+                    free = active_count - pre_d - pre_e - pre_busy
+                    # 아직 채워야 할 D/E 인원
+                    still_d = max(0, d_req - pre_d)
+                    still_e = max(0, e_req - pre_e)
+                    still_need = still_d + still_e
+                    shortage = still_need - free  # >0이면 부족
+                    day_rows.append((dt, DAY_KR[dt.weekday()], d_req, e_req,
+                                     pre_d, pre_e, pre_busy, free, still_need, shortage,
+                                     pre_relaxable))
 
-                if short_days:
-                    lines.append(f"    [D/E 인원 부족 날짜 — {len(short_days)}일]")
-                    for dt, kr, d_req, e_req, de_req, avail in short_days[:10]:
-                        lines.append(
-                            f"      {dt.strftime('%m/%d')}({kr}): "
-                            f"D={d_req}+E={e_req}={de_req}명 필요 / 정규간호사 가용 {avail}명 "
-                            f"(부족 {de_req - avail}명)"
-                        )
-                    if len(short_days) > 10:
-                        lines.append(f"      ... 외 {len(short_days)-10}일")
+                # 부족한 날짜 우선, 없으면 여유 적은 순으로 top 10
+                day_rows.sort(key=lambda r: (-r[9], -(r[8] - r[7] if r[7] else 0)))
+                shortage_days = [r for r in day_rows if r[9] > 0]
+                if shortage_days:
+                    lines.append(f"    [D/E 인원 부족 날짜 — {len(shortage_days)}일]")
+                    top = shortage_days[:10]
                 else:
-                    lines.append("    (단순 인원 부족이 아닌 복합 제약 충돌일 수 있습니다)")
+                    lines.append("    [D/E 여유 가장 적은 날짜 (직접 부족은 없지만 다른 제약과 충돌 가능)]")
+                    top = day_rows[:10]
+                for dt, kr, d_req, e_req, pre_d, pre_e, pre_busy, free, still_need, shortage, pre_relaxable in top:
+                    parts = [f"필요 D={d_req}/E={e_req}"]
+                    if pre_d or pre_e:
+                        parts.append(f"사전배정 D={pre_d}/E={pre_e}")
+                    if pre_busy:
+                        parts.append(f"타근무/휴무 {pre_busy}명(완화가능 {pre_relaxable})")
+                    parts.append(f"가용 {free}명")
+                    parts.append(f"남은필요 {still_need}명")
+                    if shortage > 0:
+                        parts.append(f"▲부족 {shortage}명")
+                        # 완화 모드에서 해결 가능한지 힌트
+                        if pre_relaxable >= shortage:
+                            parts.append(f"(완화 시 {pre_relaxable}명 이동 가능, 다른 제약과 충돌해 infeasible)")
+                    lines.append(f"      {dt.strftime('%m/%d')}({kr}): " + ", ".join(parts))
+                if len(top) < len(shortage_days):
+                    lines.append(f"      ... 외 {len(shortage_days)-len(top)}일")
+
+                # ── 주간 총량 검산 (주휴 1 + OF 1 의무 반영, 전입/전출 고려) ─────
+                # 정규간호사별 주간 D/E 커버 가능량:
+                #   active_days - (pre가 OF/주/N/D1/중/휴가/V/생 등 D/E 아닌 근무) -
+                #   (주휴+OF 의무 중 pre로 아직 못 채운 잔여)
+                # 부분 주는 active_days가 그만큼 작으므로 자동 반영 (의무 OF는 proportional).
+                rest_shifts_set = set(self.REST_SHIFTS)  # OF, 주
+                first_of_month = date(self.year, self.month, 1)
+                week_warnings = []
+                for wi, (ws, we) in enumerate(self.weeks):
+                    week_dates_idx = [d for d in range(ws, we + 1)
+                                      if self.all_dates[d] >= first_of_month]
+                    if not week_dates_idx:
+                        continue
+                    week_len = len(week_dates_idx)
+                    # 주간 D+E 수요
+                    week_de_need = 0
+                    for d in week_dates_idx:
+                        dt = self.all_dates[d]
+                        dt_str = dt.strftime("%Y-%m-%d")
+                        wk = WEEKDAY_KEYS[dt.weekday()]
+                        base_r = req_dict.get(wk, {})
+                        ovr = self.per_day_req.get(dt_str, {})
+                        day_req = {**base_r, **ovr} if ovr else base_r
+                        week_de_need += day_req.get("D", 0) + day_req.get("E", 0)
+                    # 정규간호사별 D/E 공급 합산
+                    total_supply = 0
+                    active_nurse_count = 0
+                    for n in regular_nurses:
+                        nid = n["id"]
+                        active_days = sum(
+                            1 for d in week_dates_idx
+                            if self._nurse_active_idx(n, d)
+                        )
+                        if active_days == 0:
+                            continue  # 이 주에 재적 안 함 → 전출/미전입
+                        active_nurse_count += 1
+                        pre_de = pre_off = pre_busy_non_off = 0
+                        for d in week_dates_idx:
+                            if not self._nurse_active_idx(n, d):
+                                continue
+                            dt_str = self.all_dates[d].strftime("%Y-%m-%d")
+                            pre = self.prev.get(nid, {}).get(dt_str, "")
+                            if pre in day_cover or pre in evening_cover:
+                                pre_de += 1
+                            elif pre in rest_shifts_set:
+                                pre_off += 1
+                            elif pre in busy_shifts:  # N/NC/D1/중/휴가 (휴무 제외)
+                                pre_busy_non_off += 1
+                        # 의무 주휴+OF: 완전한 주일 때 2, 부분 주는 (active_days * 2 / 7) 올림 근사
+                        required_off = 2 if active_days >= 7 else (active_days * 2 + 6) // 7
+                        off_shortfall = max(0, required_off - pre_off)
+                        free_days = active_days - pre_de - pre_off - pre_busy_non_off
+                        # D/E 공급 = 이미 배정된 DE + (남은 자유일 - 아직 못 채운 off 의무)
+                        de_capacity = pre_de + max(0, free_days - off_shortfall)
+                        total_supply += de_capacity
+                    if week_de_need > total_supply:
+                        ws_dt = self.all_dates[week_dates_idx[0]]
+                        we_dt = self.all_dates[week_dates_idx[-1]]
+                        week_warnings.append(
+                            f"      주{wi+1} ({ws_dt.strftime('%m/%d')}~{we_dt.strftime('%m/%d')}, "
+                            f"{week_len}일, 재적 정규 {active_nurse_count}명): "
+                            f"D+E 주간 수요 {week_de_need}명 > 공급 {total_supply}명 "
+                            f"(부족 {week_de_need - total_supply}명)"
+                        )
+                if week_warnings:
+                    lines.append("    [주간 총량 부족 (주휴+OF 의무 + 전입/전출 반영)]")
+                    lines.extend(week_warnings)
 
                 lines.append("    해결 방법:")
                 lines.append("      1. 야간전담이 아닌 간호사를 추가하세요.")

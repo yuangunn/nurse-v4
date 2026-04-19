@@ -721,7 +721,7 @@ function app() {
         else if(data.type==='progress')this.solveProgress=data;
         else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
       };
-      const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60,allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,unlimited_v:this.unlimitedV};
+      const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60,allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,unlimited_v:this.unlimitedV};
       this.api('POST','/api/estimate',payload).then(est=>{if(est&&est.estimated_seconds)this.estimatedSeconds=est.estimated_seconds}).catch(()=>{});
       try{
         const result=await this.api('POST','/api/generate',payload);
@@ -1129,13 +1129,25 @@ function app() {
     // ── 간호사 메모 ────────────────────────────────────────
     openNote(nurseId,day){
       const dk=this.dayKey(day);
-      this.noteEdit={open:true,nurseId,dk,text:(this.cellNotes[nurseId]?.[dk])||''};
+      this.noteEdit={
+        open:true,nurseId,dk,
+        text:(this.cellNotes[nurseId]?.[dk])||'',
+        locked:!!(this.lockedCells[nurseId]?.[dk]),
+      };
     },
     saveNote(){
-      const{nurseId,dk,text}=this.noteEdit;
+      const{nurseId,dk,text,locked}=this.noteEdit;
       if(!this.cellNotes[nurseId])this.cellNotes[nurseId]={};
       if(text.trim())this.cellNotes[nurseId][dk]=text.trim();
       else{delete this.cellNotes[nurseId][dk];if(!Object.keys(this.cellNotes[nurseId]).length)delete this.cellNotes[nurseId]}
+      // 잠금 상태 반영 (완화 시에도 고정)
+      if(locked){
+        if(!this.lockedCells[nurseId])this.lockedCells[nurseId]={};
+        this.lockedCells[nurseId][dk]=true;
+      }else if(this.lockedCells[nurseId]){
+        delete this.lockedCells[nurseId][dk];
+        if(!Object.keys(this.lockedCells[nurseId]).length)delete this.lockedCells[nurseId];
+      }
       this.noteEdit.open=false;
     },
     hasNote(nurseId,day){return !!(this.cellNotes[nurseId]?.[this.dayKey(day)])},
