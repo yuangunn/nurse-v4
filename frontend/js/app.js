@@ -1106,7 +1106,7 @@ function app() {
       else{
         // 근무코드 직접 입력
         const key=event.key.toUpperCase();
-        const shiftMap={'D':'D','E':'E','N':'N','V':'V','O':'OF'};
+        const shiftMap={'D':'D','E':'E','N':'N','V':'V','O':'OF','W':'주'};
         const hangulMap={'ㅈ':'주','ㅂ':'병','ㅅ':'생','ㅌ':'특','ㄱ':'공','ㅂ':'법'};
         let code=shiftMap[key]||hangulMap[event.key];
         if(!code){

@@ -503,7 +503,7 @@
   <div class="flex flex-wrap gap-1 text-xs mb-2 items-center" style="flex-shrink:0">
     <template x-for="s in prevShifts" :key="s"><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></template>
     <span class="text-dim ml-1">빈칸=자동</span>
-    <span class="text-dim ml-2">| ← ↑ ↓ → <kbd>D</kbd><kbd>E</kbd><kbd>N</kbd><kbd>V</kbd><kbd>O</kbd>=OF 입력 · <kbd>Del</kbd> 삭제 · <kbd>Ctrl+Z</kbd> 되돌리기 · <kbd>?</kbd> 전체 단축키</span>
+    <span class="text-dim ml-2">| ← ↑ ↓ → <kbd>D</kbd><kbd>E</kbd><kbd>N</kbd><kbd>V</kbd><kbd>O</kbd>=OF <kbd>W</kbd>=주 입력 · <kbd>Del</kbd> 삭제 · <kbd>Ctrl+Z</kbd> 되돌리기 · <kbd>?</kbd> 전체 단축키</span>
   </div>
   <!-- #3 이전달 이월 힌트 -->
   <div x-show="showPrevHint" class="card-sm mb-2" style="flex-shrink:0;padding:8px 14px;display:flex;align-items:center;gap:10px;border-left:3px solid var(--accent)">
@@ -1427,7 +1427,7 @@
         <div>
           <div style="font-size:2rem;margin-bottom:12px">✏️</div>
           <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">2단계: 사전입력</h3>
-          <p class="text-sub" style="font-size:0.85rem">주휴, 연차, 희망 근무 등을 미리 입력합니다.<br/>셀 클릭 또는 키보드(D/E/N/V)로 직접 입력할 수 있습니다.<br/><strong>빈 셀은 솔버가 자동으로 채웁니다.</strong></p>
+          <p class="text-sub" style="font-size:0.85rem">주휴, 연차, 희망 근무 등을 미리 입력합니다.<br/>셀 클릭 또는 키보드(D/E/N/V/O/W)로 직접 입력할 수 있습니다.<br/><strong>빈 셀은 솔버가 자동으로 채웁니다.</strong></p>
         </div>
       </template>
       <template x-if="onboardingStep===3">
@@ -1540,7 +1540,7 @@
           <h4 class="font-semibold text-bright">✏️ 사전입력 탭</h4>
           <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
             <li>셀 클릭 → 근무 선택 팝업</li>
-            <li>키보드 직접 입력: D/E/N/V + 방향키 이동</li>
+            <li>키보드 직접 입력: D/E/N/V/O(=OF)/W(=주) + 방향키 이동</li>
             <li>드래그 선택: 여러 셀을 드래그 후 한 번에 채우기</li>
             <li>주휴 클릭 시 자동 배분 옵션 (로테이션/고정/이번만)</li>
             <li>날짜 우클릭: 법정공휴일 지정</li>
@@ -1611,7 +1611,7 @@
           <tbody>
             <tr><td class="font-mono text-xs"><kbd>?</kbd></td><td>단축키 도움말 토글</td></tr>
             <tr><td class="font-mono text-xs"><kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd></td><td>사전입력 셀 이동</td></tr>
-            <tr><td class="font-mono text-xs"><kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>V</kbd> <kbd>O</kbd></td><td>사전입력 직접 입력 (O=OF)</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>V</kbd> <kbd>O</kbd> <kbd>W</kbd></td><td>사전입력 직접 입력 (O=OF, W=주)</td></tr>
             <tr><td class="font-mono text-xs"><kbd>Del</kbd></td><td>사전입력 셀 삭제</td></tr>
             <tr><td class="font-mono text-xs"><kbd>Ctrl+Z</kbd></td><td>되돌리기</td></tr>
             <tr><td class="font-mono text-xs"><kbd>Ctrl+Shift+Z</kbd></td><td>다시 실행</td></tr>
