@@ -114,13 +114,15 @@ class NurseScheduler:
 
         self._build_date_range()
 
-        # prev_schedule을 스케줄 범위(all_dates)로 필터링 — 범위 밖 날짜 무시
-        # 트레이니 표시용 "/" 접두어는 스트립 (프리셉터 근무가 자동 적용되므로 무시)
+        # prev_schedule 정규화:
+        #  1) 유효한 nurse_id (현 간호사 목록 + 트레이니)만 통과 — 삭제된 간호사(유령) 제거
+        #  2) 당월 날짜 범위만 통과 — 범위 밖 날짜 무시
+        #  3) "/" 접두어는 트레이니 표시용이라 스트립 (프리셉터 근무가 자동 적용)
         valid_dates = set(dt.strftime("%Y-%m-%d") for dt in self.all_dates)
+        valid_nurse_ids = set(n["id"] for n in self._all_nurses)
         def _normalize_pre(s: str) -> str:
             if not s:
                 return s
-            # "/D" → "" (트레이니 표시용, 솔버는 프리셉터 기반 자동 배정)
             if s.startswith("/"):
                 return ""
             return s
@@ -128,6 +130,13 @@ class NurseScheduler:
             nid: {dt: _normalize_pre(s) for dt, s in days.items()
                   if dt in valid_dates and _normalize_pre(s)}
             for nid, days in self.prev.items()
+            if nid in valid_nurse_ids
+        }
+        # locked_cells도 동일하게 정규화 (유령 + 범위 밖 날짜 제거)
+        self.locked_cells = {
+            nid: {dt: v for dt, v in cells.items() if dt in valid_dates and v}
+            for nid, cells in self.locked_cells.items()
+            if nid in valid_nurse_ids
         }
 
     # ── 날짜 범위 계산 ────────────────────────────────────────────────────────
@@ -2206,7 +2215,10 @@ class NurseScheduler:
             nid = nurse["id"]
             for d, dt in enumerate(self.all_dates):
                 dt_str = dt.strftime("%Y-%m-%d")
-                assigned = self.REST_SHIFTS[0] if self.REST_SHIFTS else "OF"
+                # 재적 밖 날짜(전입 전/전출 후): 스케줄에서 빈 셀로 두어 "OF로 근무" 오인 방지
+                if not self._nurse_active_on(nurse, dt):
+                    continue
+                assigned = None
                 for s in self.ALL_SHIFTS:
                     v = x[nid][d][s]
                     if isinstance(v, (int, float)):
@@ -2216,6 +2228,9 @@ class NurseScheduler:
                     if val is not None and round(val) == 1:
                         assigned = s
                         break
+                if assigned is None:
+                    # 제약상 어떤 shift도 1이 아닌 경우 — 방어적 fallback
+                    assigned = self.REST_SHIFTS[0] if self.REST_SHIFTS else "OF"
                 extended[nid][dt_str] = assigned
                 schedule[nid][dt_str] = assigned
 

@@ -288,8 +288,63 @@ def upsert_nurse(nurse: Dict) -> None:
 
 
 def delete_nurse(nurse_id: str) -> None:
+    """간호사 삭제 + 저장된 prev_schedules / schedules JSON에서 해당 간호사 엔트리 캐스케이드 정리."""
+    NURSE_KEYED_KEYS = (
+        "schedule", "extended_schedule", "prev_schedule",
+        "nurse_scores", "nurse_score_details", "prev_month_nights",
+        "locked_cells", "cell_notes",
+    )
     with get_conn() as conn:
         conn.execute("DELETE FROM nurses WHERE id=?", (nurse_id,))
+        # prev_schedules, schedules 양쪽에서 캐스케이드 정리
+        for table in ("prev_schedules", "schedules"):
+            for row in conn.execute(f"SELECT id, data FROM {table}").fetchall():
+                try:
+                    data = json.loads(row["data"])
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                changed = False
+                for key in NURSE_KEYED_KEYS:
+                    sub = data.get(key)
+                    if isinstance(sub, dict) and nurse_id in sub:
+                        del sub[nurse_id]
+                        changed = True
+                if changed:
+                    conn.execute(f"UPDATE {table} SET data=? WHERE id=?",
+                                 (json.dumps(data, ensure_ascii=False), row["id"]))
+
+
+def cleanup_orphan_nurse_refs() -> int:
+    """모든 저장본 스캔하여 현재 nurses 테이블에 없는 간호사 ID 엔트리 제거.
+    시작 시 한 번 호출하여 기존 유령 정리. 반환: 제거된 엔트리 수."""
+    NURSE_KEYED_KEYS = (
+        "schedule", "extended_schedule", "prev_schedule",
+        "nurse_scores", "nurse_score_details", "prev_month_nights",
+        "locked_cells", "cell_notes",
+    )
+    removed = 0
+    with get_conn() as conn:
+        valid = set(r["id"] for r in conn.execute("SELECT id FROM nurses").fetchall())
+        for table in ("prev_schedules", "schedules"):
+            for row in conn.execute(f"SELECT id, data FROM {table}").fetchall():
+                try:
+                    data = json.loads(row["data"])
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                changed = False
+                for key in NURSE_KEYED_KEYS:
+                    sub = data.get(key)
+                    if isinstance(sub, dict):
+                        orphans = [k for k in sub if k not in valid]
+                        for k in orphans:
+                            del sub[k]
+                            removed += 1
+                        if orphans:
+                            changed = True
+                if changed:
+                    conn.execute(f"UPDATE {table} SET data=? WHERE id=?",
+                                 (json.dumps(data, ensure_ascii=False), row["id"]))
+    return removed
 
 
 def reorder_nurses(ordered_ids: List[str]) -> None:

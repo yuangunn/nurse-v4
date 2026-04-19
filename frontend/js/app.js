@@ -887,11 +887,11 @@ function app() {
     // ── 저장/불러오기 ────────────────────────────────────────
     async saveSchedule(){
       const name=prompt('저장 이름을 입력하세요 (선택)',`${this.year}년 ${this.month}월`);if(name===null)return;
-      await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name:name||null,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails});
+      await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name:name||null,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights});
       await this.loadSavedList();this.toast('저장되었습니다','info');
     },
     async loadSavedList(){this.savedSchedules=await this.api('GET','/api/schedules')},
-    async loadSaved(id){const data=await this.api('GET',`/api/schedules/${id}`);this.year=data.data.year||data.year;this.month=data.data.month||data.month;this.nurses=data.data.nurses||[];this.requirements=data.data.requirements||this.requirements;this.rules=data.data.rules||this.rules;this.schedule=data.data.schedule||{};this.prevSchedule=data.data.prev_schedule||{};this.nurseScores=data.data.nurse_scores||{};this.nurseScoreDetails=data.data.nurse_score_details||{};const log=data.data.solver_log||'';if(log){this.solverLogs=log.split('\n').map((m,i)=>({id:i+1,msg:m}))}this.activeTab='schedule'},
+    async loadSaved(id){const data=await this.api('GET',`/api/schedules/${id}`);this.year=data.data.year||data.year;this.month=data.data.month||data.month;this.nurses=data.data.nurses||[];this.requirements=data.data.requirements||this.requirements;this.rules=data.data.rules||this.rules;this.schedule=data.data.schedule||{};this.prevSchedule=data.data.prev_schedule||{};this.nurseScores=data.data.nurse_scores||{};this.nurseScoreDetails=data.data.nurse_score_details||{};this.lockedCells=data.data.locked_cells||{};this.cellNotes=data.data.cell_notes||{};this.holidays=data.data.holidays||this.holidays;this.prevDayReqs=data.data.prev_day_reqs||{};this.prevMonthNights=data.data.prev_month_nights||{};const log=data.data.solver_log||'';if(log){this.solverLogs=log.split('\n').map((m,i)=>({id:i+1,msg:m}))}this.activeTab='schedule'},
     async deleteSaved(id){if(!confirm('삭제하시겠습니까?'))return;await this.api('DELETE',`/api/schedules/${id}`);await this.loadSavedList()},
 
     // ── 사전입력 저장 ────────────────────────────────────────
@@ -899,13 +899,22 @@ function app() {
     async savePrevToServer(){
       const name=this.prevSaveName.trim()||`${this.year}년 ${this.month}월 사전입력`;
       if(!Object.keys(this.prevSchedule).some(k=>Object.keys(this.prevSchedule[k]).length>0)){this.toast('저장할 사전입력 데이터가 없습니다','info');return}
-      await this.api('POST','/api/prev_schedules',{year:this.year,month:this.month,name,data:{schedule:this.prevSchedule,day_reqs:this.prevDayReqs,holidays:this.holidays,prev_month_nights:this.prevMonthNights}});
+      await this.api('POST','/api/prev_schedules',{year:this.year,month:this.month,name,data:{schedule:this.prevSchedule,day_reqs:this.prevDayReqs,holidays:this.holidays,prev_month_nights:this.prevMonthNights,locked_cells:this.lockedCells,cell_notes:this.cellNotes}});
       this.prevSaveName='';await this.loadPrevSavesList();
     },
     async loadPrevFromServer(id){
       const result=await this.api('GET',`/api/prev_schedules/${id}`);this.year=result.year;this.month=result.month;
-      if(result.data&&result.data.schedule!==undefined){this.prevSchedule=result.data.schedule;this.prevDayReqs=result.data.day_reqs||{};this.holidays=result.data.holidays||[];this.prevMonthNights=result.data.prev_month_nights||{}}
-      else{this.prevSchedule=result.data;this.prevDayReqs={};this.holidays=[];this.prevMonthNights={}}
+      if(result.data&&result.data.schedule!==undefined){
+        this.prevSchedule=result.data.schedule;
+        this.prevDayReqs=result.data.day_reqs||{};
+        this.holidays=result.data.holidays||[];
+        this.prevMonthNights=result.data.prev_month_nights||{};
+        this.lockedCells=result.data.locked_cells||{};
+        this.cellNotes=result.data.cell_notes||{};
+      } else {
+        this.prevSchedule=result.data;this.prevDayReqs={};this.holidays=[];this.prevMonthNights={};
+        this.lockedCells={};this.cellNotes={};
+      }
       this.prevSavePanel=false;
     },
     async deletePrevSave(id){if(!confirm('삭제하시겠습니까?'))return;await this.api('DELETE',`/api/prev_schedules/${id}`);await this.loadPrevSavesList()},

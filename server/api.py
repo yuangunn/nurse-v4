@@ -143,6 +143,14 @@ def open_profile(body: dict):
     db.get_db_path = lambda: db_path
     db.init_db()
 
+    # 한 번 열릴 때 유령 간호사 참조 정리 (과거 데이터 호환)
+    try:
+        removed = db.cleanup_orphan_nurse_refs()
+        if removed:
+            print(f"[cleanup] {removed} orphan nurse references removed from saved data")
+    except Exception as e:
+        print(f"[cleanup] failed: {e}")
+
     _current_profile_id = profile_id
     _current_profile_password = password if not result.get("is_guest") else ""
 
@@ -162,6 +170,11 @@ def close_profile():
 
 @app.delete("/api/profiles/{profile_id}")
 def delete_profile(profile_id: str):
+    global _current_profile_id, _current_profile_password
+    # 현재 열린 프로필이면 먼저 close 상태로 전환 (삭제 중 암호화 시도 방지)
+    if _current_profile_id == profile_id:
+        _current_profile_id = None
+        _current_profile_password = None
     result = prof.delete_profile(profile_id)
     if not result.get("ok"):
         raise HTTPException(400, result.get("error"))
@@ -842,10 +855,17 @@ def list_prev_schedules():
 
 @app.post("/api/prev_schedules")
 def save_prev_schedule(body: dict):
+    # 저장 전 정규화: 삭제된 간호사(유령) 엔트리 제거
+    data = body.get("data") or {}
+    valid_ids = set(n["id"] for n in db.get_nurses())
+    for key in ("schedule", "prev_month_nights", "locked_cells", "cell_notes"):
+        sub = data.get(key)
+        if isinstance(sub, dict):
+            data[key] = {k: v for k, v in sub.items() if k in valid_ids}
     pid = db.save_prev_schedule(
         year=body["year"],
         month=body["month"],
-        data=body["data"],
+        data=data,
         name=body.get("name"),
     )
     return {"id": pid}
