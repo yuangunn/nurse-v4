@@ -12,7 +12,7 @@
 <body>
 <!-- ═══ 프로필 선택 화면 (app-shell 외부) ═══════════════════ -->
 <div :style="profileScreen?'position:fixed;inset:0;z-index:9999;background:var(--bg,#fff);display:flex;align-items:center;justify-content:center':'display:none'" class="profile-overlay">
-  <div style="width:420px;max-width:95vw;background:var(--card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:16px;padding:32px;box-shadow:0 8px 32px rgba(0,0,0,0.12)">
+  <div style="width:420px;max-width:95vw;background:var(--bg-card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:16px;padding:32px;box-shadow:0 8px 32px rgba(0,0,0,0.12)">
     <div style="text-align:center;margin-bottom:24px">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
       <h2 style="margin:8px 0 4px;font-size:1.3rem;font-weight:700">NurseScheduler</h2>
@@ -73,7 +73,7 @@
 
 <!-- 프로필 생성 모달 -->
 <div :style="profileCreateModal.open?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileCreateModal.open=false">
-  <div style="max-width:380px;width:90vw;background:var(--card,#fff);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+  <div style="max-width:380px;width:90vw;background:var(--bg-card,#fff);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
     <h3 style="margin-bottom:16px;font-weight:700">새 프로필 만들기</h3>
     <div style="display:flex;flex-direction:column;gap:12px">
       <div>
@@ -103,7 +103,7 @@
 
 <!-- 비밀번호 변경 모달 -->
 <div :style="profileChangePwModal.open?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileChangePwModal.open=false">
-  <div style="max-width:350px;width:90vw;background:var(--card,#fff);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+  <div style="max-width:350px;width:90vw;background:var(--bg-card,#fff);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
     <h3 style="margin-bottom:16px;font-weight:700">비밀번호 변경</h3>
     <div style="display:flex;flex-direction:column;gap:12px">
       <div><label class="text-xs text-sub">현재 비밀번호</label>
@@ -123,7 +123,7 @@
 
 <!-- 프로필 전환 모달 -->
 <div x-cloak :style="profileSwitchModal?'position:fixed;inset:0;z-index:9998;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileSwitchModal=false">
-  <div style="width:420px;max-width:95vw;background:var(--card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:16px;padding:28px;box-shadow:0 8px 32px rgba(0,0,0,0.15);position:relative">
+  <div style="width:420px;max-width:95vw;background:var(--bg-card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:16px;padding:28px;box-shadow:0 8px 32px rgba(0,0,0,0.15);position:relative">
     <button @click="profileSwitchModal=false" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.2rem;color:var(--text-sub,#6b7280);cursor:pointer;line-height:1">&times;</button>
     <h3 style="margin-bottom:16px;font-weight:700;font-size:1.1rem">프로필 전환</h3>
 
@@ -162,7 +162,7 @@
 
 <!-- 개발자 설정 모달 -->
 <div :style="devSettingsOpen?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="devSettingsOpen=false">
-  <div style="max-width:480px;width:95vw;max-height:85vh;overflow-y:auto;background:var(--card,#fff);color:var(--text,#1f2937);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+  <div style="max-width:480px;width:95vw;max-height:85vh;overflow-y:auto;background:var(--bg-card,#fff);color:var(--text,#1f2937);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
     <h3 style="margin-bottom:16px;font-weight:700;color:var(--text,#1f2937)">개발자 설정</h3>
 
     <!-- 보안 -->
@@ -172,8 +172,8 @@
         <p style="font-size:0.75rem;color:var(--text-sub,#6b7280)" x-text="'마스터 비밀번호: '+(hasMasterPassword?'설정됨':'미설정')"></p>
         <template x-if="!hasMasterPassword">
           <div style="display:flex;flex-direction:column;gap:4px">
-            <input type="password" x-model="devMasterPw" placeholder="비밀번호" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem">
-            <input type="password" x-model="devMasterPwConfirm" placeholder="비밀번호 확인" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem">
+            <input type="password" x-model="devMasterPw" placeholder="비밀번호" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);color:var(--text);font-size:0.8rem">
+            <input type="password" x-model="devMasterPwConfirm" placeholder="비밀번호 확인" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);color:var(--text);font-size:0.8rem">
             <button @click="setDevMasterPassword()" class="btn btn-xs btn-primary" style="align-self:flex-end">설정</button>
           </div>
         </template>
@@ -182,7 +182,7 @@
             <button x-show="!devRemovePwShow" @click="devRemovePwShow=true" class="btn btn-xs btn-ghost" style="color:var(--red)">마스터 비밀번호 제거</button>
             <div x-show="devRemovePwShow" style="display:flex;flex-direction:column;gap:4px">
               <input type="password" x-model="devRemovePwInput" placeholder="현재 마스터 비밀번호 입력"
-                     style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem"
+                     style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);color:var(--text);font-size:0.8rem"
                      @keydown.enter="removeDevMasterPassword()">
               <div style="display:flex;gap:4px">
                 <button @click="removeDevMasterPassword()" class="btn btn-xs" style="background:var(--red);color:#fff">제거</button>
@@ -241,7 +241,7 @@
       <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text,#1f2937)">UI</h4>
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:0.75rem;color:var(--text-sub)">글자 크기 범위:</span>
-        <input type="number" x-model.number="fontSize" min="8" max="30" style="width:4em;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:0.8rem;text-align:center" @change="setFontSize(fontSize)">
+        <input type="number" x-model.number="fontSize" min="8" max="30" style="width:4em;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);color:var(--text);font-size:0.8rem;text-align:center" @change="setFontSize(fontSize)">
         <span style="font-size:0.7rem;color:var(--text-sub)">(개발자: 8~30px, 일반: 16~24px)</span>
       </div>
     </div>
@@ -347,7 +347,7 @@
         <table class="tbl text-center"><thead><tr><th>근무</th><template x-for="(label,key) in weekdayLabels" :key="key"><th x-text="label"></th></template></tr></thead>
         <tbody><template x-for="shift in reqShiftCodes" :key="shift"><tr>
           <td class="font-semibold"><span :style="getShiftStyle(shift)" class="px-1.5 py-0.5 rounded text-xs font-bold" x-text="shift"></span></td>
-          <template x-for="(label,key) in weekdayLabels" :key="key"><td><input type="number" min="0" max="20" :value="(requirements[key]||{})[shift]||0" @change="if(!requirements[key])requirements[key]={};requirements[key][shift]=parseInt($event.target.value)||0" class="text-center" style="width:3.5em py-1"/></td></template>
+          <template x-for="(label,key) in weekdayLabels" :key="key"><td><input type="number" min="0" max="20" :value="(requirements[key]||{})[shift]||0" @change="if(!requirements[key])requirements[key]={};requirements[key][shift]=parseInt($event.target.value)||0" class="text-center py-1" style="width:3.5em"/></td></template>
         </tr></template></tbody></table>
       </div>
       <button @click="saveRequirements()" class="btn btn-success btn-sm w-full mt-3">인원 설정 저장</button>
@@ -1159,7 +1159,7 @@
   <div class="modal" style="max-width:28rem">
     <h3 class="font-bold mb-4 text-bright" x-text="nurseModal.isNew?'간호사 추가':'간호사 수정'"></h3>
     <div class="space-y-3">
-      <div class="flex gap-3"><div class="flex-1"><label class="text-xs text-dim">이름 *</label><input x-model="nurseModal.data.name" class="w-full mt-1" placeholder="홍길동"/></div><div class="flex-1"><label class="text-xs text-dim">그룹</label><input x-model="nurseModal.data.group" class="w-full mt-1" placeholder="A"/></div></div>
+      <div class="flex gap-3"><div class="flex-1"><label class="text-xs text-dim">이름 *</label><input type="text" x-model="nurseModal.data.name" class="w-full mt-1" placeholder="홍길동"/></div><div class="flex-1"><label class="text-xs text-dim">그룹</label><input type="text" x-model="nurseModal.data.group" class="w-full mt-1" placeholder="A"/></div></div>
       <div><label class="text-xs text-dim">성별</label><div class="flex gap-4 mt-1.5 text-sm"><label class="flex items-center gap-2"><input type="radio" x-model="nurseModal.data.gender" value="female"/>여</label><label class="flex items-center gap-2"><input type="radio" x-model="nurseModal.data.gender" value="male"/>남</label></div></div>
       <div><label class="text-xs text-dim">가능 근무</label><div class="flex flex-wrap gap-1.5 mt-1.5"><template x-for="s in allWorkShifts" :key="s"><label class="flex items-center gap-1 text-xs"><input type="checkbox" :checked="nurseModal.data.capable_shifts.includes(s)" @change="toggleShift(s)"/><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></label></template></div></div>
       <div><label class="text-xs text-dim">야간전담 월</label><div class="flex flex-wrap gap-1.5 mt-1.5"><template x-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :key="m"><label class="flex items-center gap-1 text-xs"><input type="checkbox" :checked="nurseModal.data.night_months?.[year+'-'+String(m).padStart(2,'0')]" @change="toggleNightMonthModal(m, $event.target.checked)"/><span x-text="m+'월'" class="text-dim"></span></label></template></div></div>
@@ -1402,7 +1402,7 @@
 
 <!-- ═══ 온보딩 슬라이드 ══════════════════════════════════ -->
 <div :style="showOnboarding?'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center':'display:none'">
-  <div style="width:520px;max-width:95vw;background:var(--card,#fff);border-radius:16px;padding:32px;box-shadow:0 8px 40px rgba(0,0,0,0.25);position:relative">
+  <div style="width:520px;max-width:95vw;background:var(--bg-card,#fff);border-radius:16px;padding:32px;box-shadow:0 8px 40px rgba(0,0,0,0.25);position:relative">
     <!-- 슬라이드 내용 -->
     <div style="text-align:center;min-height:220px;display:flex;flex-direction:column;justify-content:center">
       <template x-if="onboardingStep===0">

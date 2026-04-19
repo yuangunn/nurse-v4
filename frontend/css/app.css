@@ -303,7 +303,7 @@ html.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); 
 .btn-xs { padding: 4px 10px; font-size: 0.7rem; border-radius: 7px; }
 
 /* ── Inputs ──────────────────────────────────────────────── */
-input[type="text"], input[type="number"], select, textarea {
+input[type="text"], input[type="number"], input[type="password"], input[type="date"], input[type="email"], input:not([type]), select, textarea {
   font-family: inherit;
   background: var(--bg-input); color: var(--text);
   border: 1px solid var(--border);
@@ -519,7 +519,7 @@ html.dark .cy-4 { background: #151109; color: #fbbf24; }
 }
 @media (min-width:640px) { .modal { width: auto; min-width: 380px; } }
 
-.modal input[type="text"], .modal input[type="number"], .modal select, .modal textarea {
+.modal input[type="text"], .modal input[type="number"], .modal input[type="password"], .modal input[type="date"], .modal input[type="email"], .modal input:not([type]), .modal select, .modal textarea {
   background: var(--bg); border: 1px solid var(--border);
   padding: 9px 14px; font-size: 0.84rem;
 }
@@ -561,7 +561,7 @@ html.dark .cy-4 { background: #151109; color: #fbbf24; }
 }
 .profile-card {
   width: 420px; max-width: 95vw;
-  background: var(--card); border: 1px solid var(--border);
+  background: var(--bg-card); border: 1px solid var(--border);
   border-radius: 16px; padding: 32px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.12);
 }
@@ -586,7 +586,7 @@ kbd {
 .toast-history-btn {
   position: fixed; bottom: 18px; right: 18px; z-index: 199;
   padding: 6px 10px; border-radius: 20px; border: 1px solid var(--border);
-  background: var(--card); color: var(--text-sub);
+  background: var(--bg-card); color: var(--text-sub);
   font-size: 0.7rem; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   display: flex; align-items: center; gap: 4px;
 }

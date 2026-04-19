@@ -162,8 +162,9 @@ function app() {
         document.addEventListener('keydown',(e)=>{
           if(this.profileScreen)return;
           if(e.key==='?'&&!e.ctrlKey&&!e.metaKey&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){this.showShortcutHelp=!this.showShortcutHelp;e.preventDefault();return}
-          if(this.activeTab==='preinput'&&this._focusedCell&&!this.shiftEdit.open&&!this.noteEdit.open&&!this.juhuOptionModal.open){this.onGridKeyDown(e)}
-          else if((e.ctrlKey||e.metaKey)&&e.key==='z'&&this.activeTab==='preinput'){e.shiftKey?this.redo():this.undo();e.preventDefault()}
+          const _isTyping=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||document.activeElement?.isContentEditable;
+          if(this.activeTab==='preinput'&&this._focusedCell&&!this.shiftEdit.open&&!this.noteEdit.open&&!this.juhuOptionModal.open&&!_isTyping){this.onGridKeyDown(e)}
+          else if((e.ctrlKey||e.metaKey)&&e.key==='z'&&this.activeTab==='preinput'&&!_isTyping){e.shiftKey?this.redo():this.undo();e.preventDefault()}
         });
       }
       window.addEventListener('beforeunload',()=>{this._saveFullState();this._closeCurrentProfile()});
