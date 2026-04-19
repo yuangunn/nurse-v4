@@ -16,9 +16,9 @@ echo  NurseScheduler v4 Electron 빌드 시작
 echo ════════════════════════════════════════════════
 echo.
 
-REM 1. 이전 빌드 정리
+REM 1. 이전 빌드 정리 (build\NurseScheduler는 PyInstaller work dir, icon.ico 등 소스는 보존)
 echo [1/6] 이전 빌드 정리 중...
-if exist build rmdir /s /q build
+if exist build\NurseScheduler rmdir /s /q build\NurseScheduler
 if exist dist\NurseScheduler rmdir /s /q dist\NurseScheduler
 if exist dist\electron rmdir /s /q dist\electron
 if exist dist\installer rmdir /s /q dist\installer
