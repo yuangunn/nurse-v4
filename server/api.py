@@ -77,7 +77,7 @@ app = FastAPI(title="NurseScheduler v3")
 
 # 정적 파일 서빙 (frontend/ 하위 css, js, lib)
 _frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
-for _subdir in ("css", "js", "lib", "fonts"):
+for _subdir in ("css", "js", "lib", "fonts", "assets"):
     _sub_path = _frontend_dir / _subdir
     if _sub_path.exists():
         app.mount(f"/{_subdir}", StaticFiles(directory=str(_sub_path)), name=_subdir)
