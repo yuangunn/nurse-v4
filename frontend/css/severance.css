@@ -193,6 +193,178 @@ html.severance .app-shell {
   padding: 0;
 }
 
+/* ═════════════════════════════════════════════════════════
+   Phase 4 — 스케줄 탭
+   ═════════════════════════════════════════════════════════ */
+
+/* ─── 년월 컨트롤 + 헤더 ─── */
+html.severance .ym {
+  background: var(--sev-glass-bg);
+  backdrop-filter: blur(var(--sev-glass-blur));
+  -webkit-backdrop-filter: blur(var(--sev-glass-blur));
+  border: 1px solid var(--sev-glass-border);
+  border-radius: 12px;
+  padding: 6px 10px;
+  box-shadow: var(--sev-glass-highlight);
+}
+
+html.severance .ym input {
+  background: transparent;
+  color: var(--sev-text);
+  border: none;
+}
+
+html.severance .ym-lbl { color: var(--sev-text-sub); }
+html.severance .ym-nav { color: var(--sev-text-sub); }
+html.severance .ym-nav:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--sev-text);
+}
+html.severance .ym-big,
+html.severance .ym-big-input { color: var(--sev-text); }
+html.severance .ym-big-accent { color: var(--sev-accent); }
+html.severance .ym-arrow {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--sev-text-sub);
+  border: 1px solid var(--sev-glass-border);
+}
+html.severance .ym-arrow:hover {
+  background: rgba(96, 165, 250, 0.2);
+  color: var(--sev-accent);
+  border-color: var(--sev-accent);
+}
+
+/* ─── 버튼 ─── */
+html.severance .btn-primary {
+  background: linear-gradient(135deg, #60a5fa, #3b82f6);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(96, 165, 250, 0.3);
+}
+html.severance .btn-primary:hover {
+  background: linear-gradient(135deg, #93c5fd, #60a5fa);
+  transform: translateY(-1px);
+}
+
+html.severance .btn-ghost {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--sev-text);
+}
+html.severance .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--sev-text);
+}
+
+html.severance .btn-success {
+  background: linear-gradient(135deg, #4ade80, #16a34a);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+html.severance .btn-danger {
+  background: linear-gradient(135deg, #f87171, #dc2626);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+/* ─── 근무표 그리드 래퍼 ─── */
+html.severance .tbl {
+  background: var(--sev-grid-bg);
+  backdrop-filter: blur(var(--sev-grid-blur));
+  -webkit-backdrop-filter: blur(var(--sev-grid-blur));
+  border-radius: 12px;
+  border: 1px solid var(--sev-grid-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  color: var(--sev-grid-text);
+  overflow: hidden;
+}
+
+html.severance .tbl th {
+  color: var(--sev-grid-sub);
+}
+
+/* 다크 그리드 모드 */
+html.severance.dark .tbl {
+  color: var(--sev-grid-text);
+}
+
+html.severance.dark .tbl th {
+  color: var(--sev-grid-sub);
+}
+
+/* 다크 모드 셀 배경 조정 */
+html.severance.dark .g-cell {
+  color: var(--sev-grid-text);
+}
+
+html.severance.dark .g-cell-work {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+html.severance.dark .g-cell-rest {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+html.severance.dark .g-cell-pre {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+/* ─── 카드 & content 섹션 ─── */
+html.severance .card,
+html.severance .card-sm {
+  background: var(--sev-glass-bg);
+  backdrop-filter: blur(var(--sev-glass-blur));
+  -webkit-backdrop-filter: blur(var(--sev-glass-blur));
+  border: 1px solid var(--sev-glass-border);
+  border-radius: 14px;
+  color: var(--sev-text);
+  box-shadow: var(--sev-glass-highlight);
+}
+
+html.severance .card:hover {
+  background: var(--sev-glass-bg-strong);
+}
+
+html.severance .section-title,
+html.severance h1, html.severance h2, html.severance h3, html.severance h4 {
+  color: var(--sev-text);
+}
+
+html.severance .text-sub { color: var(--sev-text-sub); }
+html.severance .text-dim { color: var(--sev-text-dim); }
+html.severance .text-bright { color: #fff; }
+
+/* ─── 인쇄: 네이비 배경 제거, flat white ─── */
+@media print {
+  html.severance body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  html.severance body::before { display: none !important; }
+  html.severance .sidebar,
+  html.severance .sev-hospital-logo,
+  html.severance .sidebar-theme-picker { display: none !important; }
+  html.severance .tbl {
+    background: #fff !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid #000 !important;
+    color: #000 !important;
+    box-shadow: none !important;
+  }
+  html.severance .card,
+  html.severance .card-sm {
+    background: #fff !important;
+    backdrop-filter: none !important;
+    color: #000 !important;
+    box-shadow: none !important;
+  }
+}
+
 /* ─── backdrop-filter 미지원 브라우저 폴백 ─── */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   html.severance .sev-glass,
