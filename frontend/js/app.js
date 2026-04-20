@@ -37,6 +37,7 @@ function app() {
     mipGapPercent:null, scheduleStopped:false, estimatedSeconds:0,
     statusMessage:'', statusOk:true, savedSchedules:[],
     darkMode: localStorage.getItem('darkMode')==='true',
+    theme: localStorage.getItem('theme') || 'classic',  // v5: 'classic' | 'severance'
     weekdayLabels:{mon:'월',tue:'화',wed:'수',thu:'목',fri:'금',sat:'토',sun:'일'},
     // workShifts removed (use allWorkShifts computed instead)
     shifts:[], shiftMgmtOpen:false, scoringRuleOpen:false,
@@ -150,6 +151,7 @@ function app() {
     // ── init ──────────────────────────────────────────────────
     async init(){
       if(this.darkMode)document.documentElement.classList.add('dark');
+      if(this.theme === 'severance')document.documentElement.classList.add('severance');
       document.documentElement.style.fontSize=this.fontSize+'px';
 
       // 프로필 목록 로드 → 프로필 선택 화면 표시
@@ -773,6 +775,7 @@ function app() {
 
     // ── 다크모드 ──────────────────────────────────────────────
     toggleDark(){this.darkMode=!this.darkMode;document.documentElement.classList.toggle('dark',this.darkMode);localStorage.setItem('darkMode',this.darkMode)},
+    toggleTheme(t){this.theme=t;document.documentElement.classList.toggle('severance',t==='severance');localStorage.setItem('theme',t)},
     getDayDutyCount(day,shifts){if(!this.schedule||Object.keys(this.schedule).length===0)return 0;const k=this.dayKey(day);return Object.values(this.schedule).filter(ns=>shifts.includes(ns[k])).length},
 
     // ── 년월 이동 ─────────────────────────────────────────────
