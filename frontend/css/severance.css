@@ -97,6 +97,102 @@ html.severance .sev-glass-strong {
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
+/* ─── Sidebar ─── */
+html.severance .sidebar {
+  background: var(--sev-glass-bg);
+  backdrop-filter: blur(var(--sev-glass-blur));
+  -webkit-backdrop-filter: blur(var(--sev-glass-blur));
+  border: 1px solid var(--sev-glass-border);
+  border-right: 1px solid var(--sev-glass-border);
+  border-radius: 16px;
+  margin: 12px 0 12px 12px;
+  box-shadow: var(--sev-glass-highlight);
+  height: calc(100vh - 24px);
+}
+
+html.severance .sidebar-logo {
+  color: var(--sev-text);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+html.severance .sidebar-logo svg {
+  color: var(--sev-accent);
+  opacity: 0.9;
+}
+
+html.severance .sidebar-item {
+  color: var(--sev-text-sub);
+  border-radius: 9px;
+  margin: 2px 4px;
+}
+
+html.severance .sidebar-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--sev-text);
+}
+
+html.severance .sidebar-item.active {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--sev-text);
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+html.severance .sidebar-item .nav-label,
+html.severance .sidebar-item .nav-icon {
+  color: inherit;
+}
+
+/* Theme/Mode 토글 버튼 영역 */
+html.severance .sidebar-theme-picker {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 8px 0;
+}
+
+/* ─── 병원 로고 카드 ─── */
+html.severance .sev-hospital-logo {
+  margin: 8px 10px 6px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+html.severance .sev-hospital-logo img {
+  max-width: 100%;
+  height: 40px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+
+/* Classic 테마에서는 숨김 (x-show 이중 방어) */
+html:not(.severance) .sev-hospital-logo {
+  display: none !important;
+}
+
+/* ─── 프로필 badge ─── */
+html.severance .profile-badge {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  margin: 0 10px 10px;
+  color: var(--sev-text);
+}
+
+html.severance .profile-badge:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ─── App shell (사이드바 margin 보정) ─── */
+html.severance .app-shell {
+  padding: 0;
+}
+
 /* ─── backdrop-filter 미지원 브라우저 폴백 ─── */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   html.severance .sev-glass,
