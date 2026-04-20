@@ -150,6 +150,11 @@ function app() {
 
     // ── init ──────────────────────────────────────────────────
     async init(){
+      // v5 마이그레이션: theme 키 없으면 severance 디폴트
+      if(!localStorage.getItem('theme')){
+        localStorage.setItem('theme','severance');
+        this.theme='severance';
+      }
       if(this.darkMode)document.documentElement.classList.add('dark');
       if(this.theme === 'severance')document.documentElement.classList.add('severance');
       document.documentElement.style.fontSize=this.fontSize+'px';
