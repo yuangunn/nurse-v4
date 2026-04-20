@@ -164,4 +164,46 @@
 | v4.0.1 | 차등 보너스(preBonus) |
 | v4.0.2 | 중간번 포함 9개 금지 전환 |
 | v4.0.3 | UX 개선 (토스트 히스토리, Undo 카운터, 프린트 등) |
-| v4.0.4 | PyInstaller `--windowed` stdout=None 수정 + em 기반 입력 폭 + 다크모드 카드 수정 (진행 중) |
+| v4.0.4 | PyInstaller `--windowed` stdout=None 수정 + em 기반 입력 폭 |
+| v4.0.5 | 다크모드 카드 수정 + 셀 완화 제외 + 공휴일 OF 금지 |
+| v4.0.6 | 유령 간호사 클린업 + 저장 라운드트립 복구 + 재적외 default OF 버그 |
+| **v5.0.0** | **Severance Theme (Apple Liquid Glass + 용인세브란스 네이비 #013378)** |
+
+---
+
+## 5. Severance Theme 결정 (v5.0.0, 2026-04-19)
+
+### 5-1. 브랜드 색상 `#013378` 채택
+- **결정**: Severance 테마 기본색 `rgb(1, 51, 120)` = 용인세브란스병원 공식 네이비
+- **이유**: 사용자(용인세브란스 소속) 요청. 병원 아이덴티티 직결
+- **적용**: `html.severance` 클래스 내에서만. Classic 테마는 기존 `#2563eb` 그대로 유지
+
+### 5-2. CSS 파일 분리 (`severance.css`)
+- **결정**: 기존 `app.css`는 거의 건드리지 않고 별도 `severance.css`에 `html.severance*` 스코프 규칙만 추가
+- **이유**: 롤백 안전성. 문제 시 `<link>` 한 줄 주석으로 즉시 원복
+- **파일**: `frontend/css/severance.css` (~400줄)
+
+### 5-3. 4개 테마 조합 (2축 토글)
+- `Classic Light` / `Classic Dark` (기존)
+- `Severance Light` / `Severance Dark` (신규)
+- **핵심 설계**: Severance 내부 라이트/다크 전환 시 **그리드만** 변함. 네이비 배경·유리 사이드바 공통 유지
+- **구현**: `html.severance` + `html.severance.dark` 다축 CSS 레이어링
+
+### 5-4. 디폴트 테마 정책 (Severance-first)
+- v5 첫 실행 시 `localStorage.theme === null` → 자동으로 `'severance'` 저장
+- 기존 `darkMode` 값은 유지 (대부분 false → Light 기본)
+- 결과: v4 사용자도 업그레이드 시 Severance Light로 진입
+- **이유**: 리디자인 투자 효과 극대화. 사용자가 원하면 언제든 Classic 전환 가능
+
+### 5-5. Liquid Glass 강도 = Moderate (B)
+- **채택**: 사이드바·카드·모달·헤더 = `backdrop-filter: blur(20px)`, 그리드 래퍼 = `blur(16px)`, **그리드 셀은 flat 유지**
+- **이유**: 620셀(20명×31일) 전부 blur 시 GPU 부담. 래퍼에만 적용으로 성능·시각 균형
+- **기각**: Subtle(변화 약함), Heavy(장시간 눈 피로+성능 리스크)
+
+### 5-6. 병원 로고 위치
+- **결정**: `frontend/assets/yongin-severance-logo.png`를 흰 카드로 감싸서 사이드바 하단, 프로필 badge 바로 위
+- **이유**: 네이비 배경에서 원본 투명 PNG가 흐려 보이는 문제 → 흰 카드 래핑으로 또렷
+- **가시성**: `x-show="theme==='severance'"` + CSS `html:not(.severance) .sev-hospital-logo { display:none }` 이중 가드
+
+### 5-7. backdrop-filter 폴백
+- 구형 브라우저(IE/구 Safari)에서 `backdrop-filter` 미지원 시 `@supports not (...)` 규칙으로 `rgba(1,51,120,0.85)` 짙은 네이비 반투명 대체
