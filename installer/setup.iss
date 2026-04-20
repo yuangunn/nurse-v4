@@ -5,7 +5,7 @@
 ; ═══════════════════════════════════════════════════════════════
 
 #define AppName "NurseScheduler"
-#define AppVersion "4.0.6"
+#define AppVersion "4.0.7"
 #define AppPublisher "Hospital Nursing Team"
 #define AppExeName "NurseScheduler.exe"
 #define AppSourceDir "..\dist\electron\NurseScheduler-win32-x64"

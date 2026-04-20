@@ -814,3 +814,27 @@ input[type="number"]::-webkit-outer-spin-button {
   .section-title { font-size: 14pt !important; margin-bottom: 8px !important; }
   @page { size: A3 landscape; margin: 10mm; }
 }
+
+/* ── 용인세브란스병원 로고 (사이드바 하단) ───────────────────── */
+.hospital-logo {
+  margin: 8px 10px 6px;
+  padding: 8px;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+.hospital-logo img {
+  max-width: 100%;
+  height: 36px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+html.dark .hospital-logo {
+  background: rgba(255,255,255,0.95);
+}
+@media print {
+  .hospital-logo { display: none !important; }
+}

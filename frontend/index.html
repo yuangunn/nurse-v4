@@ -306,6 +306,12 @@
       </svg>
       <span class="nav-label" x-text="darkMode?'라이트 모드':'다크 모드'"></span>
     </button>
+    <!-- 용인세브란스병원 로고 -->
+    <div class="hospital-logo">
+      <img src="assets/yongin-severance-logo.png?v=1" alt="용인세브란스병원" loading="lazy"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='block'"/>
+      <div style="display:none;font-size:0.65rem;font-weight:700;color:var(--accent);padding:4px;letter-spacing:-0.02em">용인세브란스병원</div>
+    </div>
     <!-- #11 현재 프로필 표시 -->
     <template x-if="currentProfile">
       <div style="margin-top:6px;padding:4px 4px;border-top:1px solid var(--border);text-align:center">
@@ -1625,7 +1631,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.0.6 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.0.7 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">PuLP + HiGHS 수리최적화 솔버 기반</p>
         <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
