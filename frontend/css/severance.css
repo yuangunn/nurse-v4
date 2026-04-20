@@ -365,6 +365,159 @@ html.severance .text-bright { color: #fff; }
   }
 }
 
+/* ═════════════════════════════════════════════════════════
+   Phase 5 — 나머지 탭 / Input / Modal 공통
+   ═════════════════════════════════════════════════════════ */
+
+/* ─── Input / Select / Textarea ─── */
+html.severance input[type="text"],
+html.severance input[type="number"],
+html.severance input[type="password"],
+html.severance input[type="date"],
+html.severance input[type="email"],
+html.severance input:not([type]),
+html.severance select,
+html.severance textarea {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--sev-glass-border);
+  color: var(--sev-text);
+}
+
+html.severance input:focus,
+html.severance select:focus,
+html.severance textarea:focus {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--sev-accent);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+html.severance input::placeholder,
+html.severance textarea::placeholder {
+  color: var(--sev-text-dim);
+}
+
+html.severance select option {
+  background: var(--sev-bg);
+  color: var(--sev-text);
+}
+
+/* 그리드 내부 input은 flat 유지 (라이트) — 다크에서만 톤 조정 */
+html.severance .tbl input,
+html.severance .tbl select {
+  background: transparent;
+  color: var(--sev-grid-text);
+  border: none;
+}
+
+html.severance.dark .tbl input,
+html.severance.dark .tbl select {
+  color: var(--sev-grid-text);
+}
+
+/* ─── 체크박스/라디오 ─── */
+html.severance input[type="checkbox"],
+html.severance input[type="radio"] {
+  accent-color: var(--sev-accent);
+}
+
+/* ─── Modal ─── */
+html.severance .modal-bg {
+  background: rgba(1, 51, 120, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+html.severance .modal {
+  background: rgba(1, 51, 120, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--sev-glass-border);
+  color: var(--sev-text);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+html.severance .modal label {
+  color: var(--sev-text-sub);
+}
+
+html.severance .modal input[type="text"],
+html.severance .modal input[type="number"],
+html.severance .modal input[type="password"],
+html.severance .modal input[type="date"],
+html.severance .modal input:not([type]),
+html.severance .modal select,
+html.severance .modal textarea {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--sev-glass-border);
+  color: var(--sev-text);
+}
+
+/* ─── 프로필 선택 오버레이 ─── */
+html.severance .profile-overlay {
+  background: var(--sev-bg) !important;
+}
+
+/* ─── Log panel (솔버 로그) ─── */
+html.severance .log-box {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--sev-glass-border);
+  color: #4ade80;
+}
+
+/* ─── Pills & Status badges ─── */
+html.severance .pill {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--sev-text-sub);
+  border: 1px solid var(--sev-glass-border);
+}
+
+/* ─── kbd (키보드 표시) ─── */
+html.severance kbd {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--sev-glass-border);
+  color: var(--sev-text);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* ─── 스크롤바 (Severance 전용) ─── */
+html.severance ::-webkit-scrollbar { width: 10px; height: 10px; }
+html.severance ::-webkit-scrollbar-track { background: transparent; }
+html.severance ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+}
+html.severance ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ─── 토스트 ─── */
+html.severance .toast {
+  background: var(--sev-glass-bg-strong);
+  backdrop-filter: blur(var(--sev-glass-blur));
+  -webkit-backdrop-filter: blur(var(--sev-glass-blur));
+  border: 1px solid var(--sev-glass-border);
+  color: var(--sev-text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* ─── 주기 헤더 색상 (다크 그리드 대비 밝은 톤) ─── */
+html.severance.dark .cy-1 { background: rgba(59,130,246,0.12); color: #93c5fd; }
+html.severance.dark .cy-2 { background: rgba(34,197,94,0.12); color: #86efac; }
+html.severance.dark .cy-3 { background: rgba(167,139,250,0.12); color: #c4b5fd; }
+html.severance.dark .cy-4 { background: rgba(251,191,36,0.12); color: #fcd34d; }
+
+/* ─── 슬랙(여유) 색상 다크 모드 ─── */
+html.severance.dark .slack-good { background: rgba(74,222,128,0.15); color: #4ade80; }
+html.severance.dark .slack-ok { background: rgba(250,204,21,0.12); color: #facc15; }
+html.severance.dark .slack-tight { background: rgba(251,191,36,0.12); color: #fbbf24; }
+html.severance.dark .slack-warn { background: rgba(251,146,60,0.15); color: #fb923c; }
+html.severance.dark .slack-danger { background: rgba(248,113,113,0.2); color: #f87171; }
+
+/* ─── Empty state ─── */
+html.severance .empty-state {
+  color: var(--sev-text-dim);
+}
+
 /* ─── backdrop-filter 미지원 브라우저 폴백 ─── */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   html.severance .sev-glass,
