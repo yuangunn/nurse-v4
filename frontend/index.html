@@ -161,8 +161,8 @@
 </div>
 
 <!-- 개발자 설정 모달 -->
-<div :style="devSettingsOpen?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="devSettingsOpen=false">
-  <div style="max-width:480px;width:95vw;max-height:85vh;overflow-y:auto;background:var(--bg-card,#fff);color:var(--text,#1f2937);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+<div :style="devSettingsOpen?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="devSettingsOpen=false">
+  <div style="max-width:720px;width:95vw;max-height:85vh;overflow-y:auto;background:var(--modal-bg,var(--bg,#fff));color:var(--text,#1f2937);border:1px solid var(--border,#e5e7eb);border-radius:14px;padding:24px;box-shadow:var(--shadow-lg,0 8px 32px rgba(0,0,0,0.2))">
     <h3 style="margin-bottom:16px;font-weight:700;color:var(--text,#1f2937)">개발자 설정</h3>
 
     <!-- 보안 -->
@@ -239,10 +239,17 @@
     <!-- UI -->
     <div style="padding:14px;margin-bottom:10px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--bg,#f9fafb)">
       <h4 style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text,#1f2937)">UI</h4>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:0.75rem;color:var(--text-sub)">글자 크기 범위:</span>
-        <input type="number" x-model.number="fontSize" min="8" max="30" style="width:4em;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);color:var(--text);font-size:0.8rem;text-align:center" @change="setFontSize(fontSize)">
-        <span style="font-size:0.7rem;color:var(--text-sub)">(개발자: 8~30px, 일반: 16~24px)</span>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:0.75rem;color:var(--text-sub)">글자 크기 범위:</span>
+          <input type="number" x-model.number="fontSize" min="8" max="30" style="width:4em;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);color:var(--text);font-size:0.8rem;text-align:center" @change="setFontSize(fontSize)">
+          <span style="font-size:0.7rem;color:var(--text-sub)">(개발자: 8~30px, 일반: 16~24px)</span>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.8rem;color:var(--text)">
+          <input type="checkbox" :checked="showHospitalLogo" @change="toggleHospitalLogo()"/>
+          사이드바에 병원 로고 표시
+          <span style="font-size:0.7rem;color:var(--text-sub)">(용인세브란스병원)</span>
+        </label>
       </div>
     </div>
 
@@ -306,8 +313,8 @@
       </svg>
       <span class="nav-label" x-text="darkMode?'라이트 모드':'다크 모드'"></span>
     </button>
-    <!-- 용인세브란스병원 로고 -->
-    <div class="hospital-logo">
+    <!-- 용인세브란스병원 로고 (개발자 설정에서 토글) -->
+    <div class="hospital-logo" x-show="showHospitalLogo" x-cloak>
       <img src="assets/yongin-severance-logo.png?v=1" alt="용인세브란스병원" loading="lazy"
            onerror="this.style.display='none';this.nextElementSibling.style.display='block'"/>
       <div style="display:none;font-size:0.65rem;font-weight:700;color:var(--accent);padding:4px;letter-spacing:-0.02em">용인세브란스병원</div>
@@ -427,7 +434,19 @@
     </div>
 
     <!-- 간호사 -->
-    <div class="card span-2">
+    <div class="card span-2" style="position:relative"
+         @dragover.prevent="if($event.dataTransfer.types.includes('Files'))csvDragOver=true"
+         @dragleave="if(!$event.relatedTarget||!$event.currentTarget.contains($event.relatedTarget))csvDragOver=false"
+         @drop.prevent="csvDragOver=false; if($event.dataTransfer.types.includes('Files'))onCsvDrop($event)">
+      <!-- CSV 드롭 오버레이 -->
+      <div x-show="csvDragOver" x-cloak
+           style="position:absolute;inset:0;background:rgba(59,130,246,0.12);border:2px dashed #3b82f6;border-radius:inherit;z-index:5;display:flex;align-items:center;justify-content:center;pointer-events:none">
+        <div class="text-center">
+          <div style="font-size:2.5rem">📤</div>
+          <div class="font-semibold text-blue">CSV 파일을 놓으세요</div>
+          <div class="text-xs text-dim mt-1">UTF-8 / CP949 자동 감지</div>
+        </div>
+      </div>
       <div class="flex items-center justify-between mb-2">
         <div class="section-title" style="margin:0">간호사 <span class="text-blue" x-text="`${nurses.length}명`"></span></div>
         <div class="flex gap-2">
@@ -437,24 +456,151 @@
           </template>
           <button @click="downloadNurseTemplate()" class="btn btn-xs btn-ghost" title="빈 CSV 템플릿 다운로드">📥 템플릿</button>
           <button @click="exportNursesToCSV()" class="btn btn-xs btn-ghost" title="현재 간호사 목록을 CSV로 내보내기">💾 내보내기</button>
-          <button @click="$refs.nurseCsvInput.click()" class="btn btn-xs btn-ghost" title="CSV 파일로 일괄 등록">📤 가져오기</button>
+          <button @click="$refs.nurseCsvInput.click()" class="btn btn-xs btn-ghost" title="CSV 파일로 일괄 등록 (또는 카드에 끌어다 놓기)">📤 가져오기</button>
           <input type="file" x-ref="nurseCsvInput" accept=".csv,.txt" style="display:none" @change="importNursesFromCSV($event)"/>
           <button @click="openNurseModal(null)" class="btn btn-sm btn-primary">+ 추가</button>
         </div>
       </div>
+      <!-- 일괄 작업 툴바 (선택된 간호사 ≥1명일 때) -->
+      <div x-show="selectedNurseCount>0" x-cloak class="card-sm mb-2"
+           style="padding:8px 10px;border-left:3px solid var(--accent);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="text-xs font-semibold text-blue">
+          <strong x-text="selectedNurseCount"></strong>명 선택됨
+        </span>
+        <span class="text-dim" style="opacity:0.5">|</span>
+        <span class="text-xs text-dim">그룹:</span>
+        <template x-for="g in nurseGroupChoices" :key="'bg'+g">
+          <button @click="bulkSetGroup(g)" class="btn btn-xs btn-ghost"
+                  :title="`선택한 간호사를 그룹 '${g}'(으)로 변경`"
+                  x-text="g"></button>
+        </template>
+        <input type="text" x-model="_bulkGroupInput"
+               maxlength="3"
+               placeholder="새 그룹"
+               style="width:4em;padding:2px 6px;font-size:0.75rem"
+               @keydown.enter.prevent="bulkSetGroup()"/>
+        <button @click="bulkSetGroup()" class="btn btn-xs btn-primary"
+                :disabled="!_bulkGroupInput.trim()" title="새 그룹으로 적용">+</button>
+        <span class="text-dim" style="opacity:0.5">|</span>
+        <span class="text-xs text-dim">성별:</span>
+        <button @click="bulkSetGender('female')" class="btn btn-xs btn-ghost">여</button>
+        <button @click="bulkSetGender('male')" class="btn btn-xs btn-ghost">남</button>
+        <span class="text-dim" style="opacity:0.5">|</span>
+        <span class="text-xs text-dim" x-text="month+'월 야간전담:'"></span>
+        <button @click="bulkSetNightThisMonth(true)" class="btn btn-xs btn-ghost text-amber">ON</button>
+        <button @click="bulkSetNightThisMonth(false)" class="btn btn-xs btn-ghost">OFF</button>
+        <span class="ml-auto flex gap-1.5">
+          <button @click="bulkDelete()"
+                  class="btn btn-xs"
+                  :class="_bulkDeleteConfirm?'btn-primary':'btn-ghost'"
+                  :style="_bulkDeleteConfirm?'background:var(--red);color:white':''"
+                  x-text="_bulkDeleteConfirm?'한 번 더 클릭하면 삭제':'🗑 삭제'"></button>
+          <button @click="clearNurseSelection()" class="btn btn-xs btn-ghost text-dim">선택 해제</button>
+        </span>
+      </div>
+
+      <datalist id="bulk-group-list">
+        <template x-for="g in nurseGroupChoices" :key="g">
+          <option :value="g"></option>
+        </template>
+      </datalist>
+
       <div class="overflow-x-auto">
-        <table class="tbl"><thead><tr><th>#</th><th>이름</th><th>그룹</th><th>성별</th><th>가능 근무</th><th>야간전담</th><th></th></tr></thead>
-        <tbody><template x-for="(nurse,idx) in nurses" :key="nurse.id"><tr draggable="true" @dragstart="onNurseDragStart(idx)" @dragover="onNurseDragOver(idx,$event)" @drop="onNurseDrop(idx)" class="cursor-grab">
-          <td class="text-dim" x-text="idx+1"></td><td class="font-medium text-bright" x-text="nurse.name"></td><td class="text-dim" x-text="nurse.group"></td><td class="text-dim" x-text="nurse.gender==='female'?'여':'남'"></td>
-          <td><span class="text-xs text-sub" x-text="nurse.capable_shifts.join(', ')"></span></td>
-          <td class="text-center">
-            <span x-show="isNightThisMonth(nurse)" class="text-amber font-bold text-xs" x-text="month+'월 야간전담'"></span>
-            <span x-show="nurse.is_trainee" class="text-pink font-bold text-xs">신규</span>
-            <span x-show="nurse.is_trainee&&nurse.preceptor_id" class="text-dim text-xs" x-text="'→'+nurses.find(n=>n.id===nurse.preceptor_id)?.name"></span>
-          </td>
-          <td class="flex gap-2 justify-end"><button @click="openNurseModal(nurse)" class="text-xs text-blue">수정</button><button @click="removeNurse(nurse.id)" class="text-xs text-red">삭제</button></td>
-        </tr></template>
-        <tr x-show="nurses.length===0"><td colspan="7"><div class="empty-state" style="padding:24px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="width:32px;height:32px"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><p style="font-size:0.8rem">간호사를 추가해주세요</p></div></td></tr></tbody></table>
+        <table class="tbl nurse-edit-tbl">
+          <thead><tr>
+            <th style="width:1.8em">
+              <input type="checkbox" :checked="allNursesSelected"
+                     @change="toggleAllNurseSelect()"
+                     :indeterminate="selectedNurseCount>0&&!allNursesSelected"
+                     title="전체 선택/해제"/>
+            </th>
+            <th style="width:2em">#</th>
+            <th>이름</th>
+            <th>그룹</th>
+            <th style="width:3em">성별</th>
+            <th>가능 근무 <span class="text-dim text-xs">(클릭 토글)</span></th>
+            <th style="width:5em" :title="month+'월 야간전담'"><span x-text="month+'월 야간'"></span></th>
+            <th>상세</th>
+            <th></th>
+          </tr></thead>
+          <tbody>
+            <template x-for="(nurse,idx) in nurses" :key="nurse.id">
+              <tr draggable="true"
+                  @dragstart="onNurseDragStart(idx)"
+                  @dragover="onNurseDragOver(idx,$event)"
+                  @drop="onNurseDrop(idx)"
+                  :class="isNurseSelected(nurse.id)?'row-selected':''"
+                  class="cursor-grab">
+                <td>
+                  <input type="checkbox" :checked="isNurseSelected(nurse.id)"
+                         @change="toggleNurseSelect(nurse.id)"/>
+                </td>
+                <td class="text-dim text-xs" x-text="idx+1"></td>
+                <td>
+                  <input type="text" :value="nurse.name"
+                         @blur="inlineRename(nurse, $event.target.value)"
+                         @keydown.enter.prevent="$event.target.blur()"
+                         class="cell-input font-medium"
+                         placeholder="이름"/>
+                </td>
+                <td>
+                  <input type="text" :value="nurse.group"
+                         list="bulk-group-list"
+                         maxlength="3"
+                         @blur="inlineSetGroup(nurse, $event.target.value)"
+                         @keydown.enter.prevent="$event.target.blur()"
+                         class="cell-input cell-input-group"
+                         placeholder="A"/>
+                </td>
+                <td class="text-center">
+                  <button @click="inlineToggleGender(nurse)"
+                          class="cell-toggle"
+                          :class="nurse.gender==='female'?'cell-toggle-fem':'cell-toggle-male'"
+                          x-text="nurse.gender==='female'?'여':'남'"
+                          title="클릭하여 토글"></button>
+                </td>
+                <td>
+                  <div class="flex flex-wrap gap-1">
+                    <template x-for="s in allWorkShifts" :key="s">
+                      <button type="button" @click="inlineToggleShift(nurse, s)"
+                              class="shift-chip"
+                              :class="nurse.capable_shifts.includes(s)?'shift-chip-on':'shift-chip-off'"
+                              :style="nurse.capable_shifts.includes(s)?getShiftStyle(s):''"
+                              x-text="s"></button>
+                    </template>
+                  </div>
+                </td>
+                <td class="text-center">
+                  <button @click="inlineToggleNightThisMonth(nurse)"
+                          class="cell-toggle"
+                          :class="isNightThisMonth(nurse)?'cell-night-on':'cell-night-off'"
+                          x-text="isNightThisMonth(nurse)?'전담':'—'"
+                          :title="month+'월 야간전담 토글'"></button>
+                </td>
+                <td class="text-xs">
+                  <span x-show="nurse.is_trainee" class="text-pink font-bold">신규</span>
+                  <span x-show="nurse.is_trainee&&nurse.preceptor_id" class="text-dim"
+                        x-text="'→'+nurses.find(n=>n.id===nurse.preceptor_id)?.name"></span>
+                  <span x-show="nurse.start_date||nurse.end_date" class="text-amber" title="로테이션">⟳</span>
+                </td>
+                <td class="flex gap-1 justify-end">
+                  <button @click="openNurseModal(nurse)" class="btn btn-xs btn-ghost text-blue" title="상세 편집">⋯</button>
+                  <button @click="removeNurse(nurse.id)"
+                          class="btn btn-xs btn-ghost"
+                          :class="_removeConfirmId===nurse.id?'text-white':'text-red'"
+                          :style="_removeConfirmId===nurse.id?'background:var(--red)':''"
+                          x-text="_removeConfirmId===nurse.id?'정말?':'×'"></button>
+                </td>
+              </tr>
+            </template>
+            <tr x-show="nurses.length===0">
+              <td colspan="9"><div class="empty-state" style="padding:24px">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="width:32px;height:32px"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                <p style="font-size:0.8rem">간호사를 추가하거나 CSV를 끌어다 놓으세요</p>
+              </div></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -473,6 +619,7 @@
       <button @click="nextMonth()" class="ym-nav">›</button>
     </div>
     <div class="ml-auto flex gap-2 flex-wrap">
+      <button @click="openPastePrev()" class="btn btn-xs btn-ghost text-green" title="엑셀에서 복사한 사전입력 표를 붙여넣기">📋 엑셀 붙여넣기</button>
       <button @click="loadPrevMonthSchedule()" class="btn btn-xs btn-ghost text-blue" title="이전달 스케줄 이월">📅 전달이월</button>
       <button @click="undo()" class="btn btn-xs btn-ghost" :title="`Ctrl+Z (${_undoStack.length}회 가능)`" :style="_undoStack.length?'':'opacity:0.3'">↩ 되돌리기 <span x-show="_undoStack.length>0" class="text-xs" style="margin-left:2px;font-size:0.6rem;opacity:0.6" x-text="'('+_undoStack.length+')'"></span></button>
       <button @click="redo()" class="btn btn-xs btn-ghost" :title="`Ctrl+Shift+Z (${_redoStack.length}회 가능)`" :style="_redoStack.length?'':'opacity:0.3'">↪ 다시 <span x-show="_redoStack.length>0" class="text-xs" style="margin-left:2px;font-size:0.6rem;opacity:0.6" x-text="'('+_redoStack.length+')'"></span></button>
@@ -1167,7 +1314,7 @@
     <div class="space-y-3">
       <div class="flex gap-3"><div class="flex-1"><label class="text-xs text-dim">이름 *</label><input type="text" x-model="nurseModal.data.name" class="w-full mt-1" placeholder="홍길동"/></div><div class="flex-1"><label class="text-xs text-dim">그룹</label><input type="text" x-model="nurseModal.data.group" class="w-full mt-1" placeholder="A"/></div></div>
       <div><label class="text-xs text-dim">성별</label><div class="flex gap-4 mt-1.5 text-sm"><label class="flex items-center gap-2"><input type="radio" x-model="nurseModal.data.gender" value="female"/>여</label><label class="flex items-center gap-2"><input type="radio" x-model="nurseModal.data.gender" value="male"/>남</label></div></div>
-      <div><label class="text-xs text-dim">가능 근무</label><div class="flex flex-wrap gap-1.5 mt-1.5"><template x-for="s in allWorkShifts" :key="s"><label class="flex items-center gap-1 text-xs"><input type="checkbox" :checked="nurseModal.data.capable_shifts.includes(s)" @change="toggleShift(s)"/><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></label></template></div></div>
+      <div><label class="text-xs text-dim">가능 근무</label><div class="flex flex-wrap gap-1.5 mt-1.5"><template x-for="s in allWorkShifts" :key="s"><label class="flex items-center gap-1 text-xs"><input type="checkbox" :checked="nurseModal.data.capable_shifts?.includes(s)" @change="toggleShift(s)"/><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></label></template></div></div>
       <div><label class="text-xs text-dim">야간전담 월</label><div class="flex flex-wrap gap-1.5 mt-1.5"><template x-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :key="m"><label class="flex items-center gap-1 text-xs"><input type="checkbox" :checked="nurseModal.data.night_months?.[year+'-'+String(m).padStart(2,'0')]" @change="toggleNightMonthModal(m, $event.target.checked)"/><span x-text="m+'월'" class="text-dim"></span></label></template></div></div>
       <!-- 시니어리티는 목록 순서(드래그)로 자동 결정 — 별도 입력 불필요 -->
       <!-- 신규간호사 (트레이니) -->
@@ -1370,24 +1517,291 @@
   </div>
 </div>
 
-<!-- CSV 가져오기 결과 모달 -->
-<div x-show="csvImportResult.open" x-cloak class="modal-bg" @click.self="csvImportResult.open=false">
-  <div class="modal" style="max-width:32rem;max-height:70vh;display:flex;flex-direction:column">
-    <div class="font-bold text-lg mb-2 text-bright">CSV 가져오기 결과</div>
-    <p class="text-xs text-sub mb-3">
-      <strong x-text="csvImportResult.filename"></strong>에서
-      <strong class="text-blue" x-text="csvImportResult.imported+'명'"></strong> 가져옴
-      <span x-show="csvImportResult.replaced"> (기존 데이터 교체)</span>
+<!-- 엑셀 사전입력 붙여넣기 모달 -->
+<div x-show="pastePrev.open" x-cloak class="modal-bg" @click.self="closePastePrev()">
+  <div class="modal" style="max-width:48rem;max-height:88vh;display:flex;flex-direction:column">
+    <div class="flex items-center justify-between mb-2">
+      <div class="font-bold text-lg text-bright">📋 엑셀 사전입력 붙여넣기</div>
+      <button @click="closePastePrev()" class="text-dim text-lg" title="닫기">×</button>
+    </div>
+    <p class="text-xs text-sub mb-2">
+      엑셀/구글시트에서 표 영역을 선택해 복사(Ctrl+C)한 뒤 아래 영역에 <kbd>Ctrl+V</kbd>로 붙여넣으세요.
+      이름과 날짜를 자동 감지해 매칭합니다.
     </p>
-    <div x-show="csvImportResult.errors?.length" class="card-sm mb-2" style="border-left:3px solid var(--amber);padding:10px">
-      <div class="text-xs font-semibold text-amber mb-2">⚠ 오류 <span x-text="csvImportResult.errors.length"></span>건 — 해당 행은 건너뜀</div>
-      <div style="flex:1;overflow-y:auto;max-height:40vh">
-        <template x-for="(err,i) in csvImportResult.errors" :key="i">
-          <div class="text-xs text-red font-mono" style="padding:4px 0;border-bottom:1px solid var(--border-light)" x-text="err"></div>
-        </template>
+    <textarea id="paste-prev-textarea"
+              x-model="pastePrev.rawText"
+              @paste="onPasteRawPaste($event)"
+              @input="onPasteTextChange()"
+              placeholder="여기에 붙여넣기 (Ctrl+V)..."
+              class="w-full mb-2"
+              style="height:5em;font-family:'Courier New',monospace;font-size:0.75rem;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:var(--bg-card)"></textarea>
+
+    <!-- 모드 선택 -->
+    <div class="flex flex-wrap items-center gap-3 mb-2 text-xs" x-show="pastePrev.grid.length">
+      <label class="flex items-center gap-1.5 cursor-pointer">
+        <input type="checkbox" :checked="pastePrev.hasNameCol"
+               @change="pastePrev.hasNameCol=$event.target.checked; pastePrev.mode='manual'; _matchPasteGrid()"/>
+        <span>첫 컬럼 = 이름</span>
+      </label>
+      <label class="flex items-center gap-1.5 cursor-pointer">
+        <input type="checkbox" :checked="pastePrev.hasDateRow"
+               @change="pastePrev.hasDateRow=$event.target.checked; pastePrev.mode='manual'; _matchPasteGrid()"/>
+        <span>첫 행 = 날짜</span>
+      </label>
+      <span class="text-dim">|</span>
+      <span class="text-dim" x-text="`${pastePrev.grid.length}행 × ${Math.max(...pastePrev.grid.map(r=>r.length))||0}열`"></span>
+      <span x-show="pastePrev.matches" class="text-dim">·</span>
+      <span x-show="pastePrev.matches" class="text-blue"
+            x-text="`이름 매칭 ${pastePrev.matches?.nameRow?.filter(x=>x.matched).length||0}/${pastePrev.matches?.nameRow?.length||0}, 날짜 매칭 ${pastePrev.matches?.dateCol?.filter(x=>x.matched).length||0}/${pastePrev.matches?.dateCol?.length||0}`"></span>
+    </div>
+
+    <!-- 결과 요약 배지 -->
+    <div class="flex flex-wrap gap-2 mb-2 text-xs" x-show="pastePrev.diff">
+      <span class="pill" style="background:rgba(34,197,94,0.15);color:#22c55e">
+        ✏ 변경 <strong x-text="pastePrev.diff?.will_set.length"></strong>건
+      </span>
+      <span x-show="pastePrev.diff?.will_clear.length" class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444">
+        🗑 비움 <strong x-text="pastePrev.diff?.will_clear.length"></strong>건
+      </span>
+      <span x-show="pastePrev.diff?.unrecognized.length" class="pill" style="background:rgba(245,158,11,0.15);color:#f59e0b">
+        ⚠ 미인식 코드 <strong x-text="pastePrev.diff?.unrecognized.length"></strong>종
+      </span>
+      <span x-show="pastePrev.diff?.unmatchedNames.length" class="pill" style="background:rgba(245,158,11,0.15);color:#f59e0b">
+        매칭 실패 이름 <strong x-text="pastePrev.diff?.unmatchedNames.length"></strong>
+      </span>
+    </div>
+
+    <!-- 상세 -->
+    <div x-show="pastePrev.diff" style="flex:1;overflow-y:auto;min-height:0;padding-right:4px">
+      <template x-if="pastePrev.diff?.will_set.length">
+        <div class="mb-2">
+          <div class="text-xs font-semibold mb-1" style="color:#22c55e">✏ 적용 예정</div>
+          <div style="max-height:36vh;overflow-y:auto">
+            <table class="text-xs" style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr class="text-dim" style="text-align:left">
+                  <th style="padding:2px 6px">이름</th>
+                  <th style="padding:2px 6px">날짜</th>
+                  <th style="padding:2px 6px">기존</th>
+                  <th style="padding:2px 6px">→ 새 값</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="(it,i) in pastePrev.diff.will_set" :key="'ps'+i">
+                  <tr style="background:rgba(34,197,94,0.05)">
+                    <td style="padding:2px 6px" class="font-medium" x-text="it.name"></td>
+                    <td style="padding:2px 6px" class="font-mono text-dim" x-text="it.dk"></td>
+                    <td style="padding:2px 6px" class="font-mono text-dim" x-text="it.oldShift||'(빈칸)'"></td>
+                    <td style="padding:2px 6px" class="font-mono font-bold text-blue" x-text="it.newShift"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="pastePrev.diff?.will_clear.length">
+        <div class="mb-2">
+          <div class="text-xs font-semibold mb-1" style="color:#ef4444">🗑 비움 예정</div>
+          <div style="max-height:20vh;overflow-y:auto">
+            <template x-for="(it,i) in pastePrev.diff.will_clear" :key="'pc'+i">
+              <div class="text-xs flex gap-3" style="padding:2px 6px;background:rgba(239,68,68,0.05)">
+                <span class="font-medium" x-text="it.name"></span>
+                <span class="font-mono text-dim" x-text="it.dk"></span>
+                <span class="font-mono text-dim line-through" x-text="it.oldShift"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="pastePrev.diff?.unrecognized.length">
+        <div class="mb-2 card-sm" style="border-left:3px solid var(--amber);padding:6px 10px">
+          <div class="text-xs font-semibold text-amber mb-1">⚠ 인식 못한 근무 코드 (해당 셀은 건너뜀)</div>
+          <div class="flex flex-wrap gap-1.5 text-xs font-mono">
+            <template x-for="(c,i) in pastePrev.diff.unrecognized" :key="'un'+i">
+              <span class="pill" style="background:rgba(245,158,11,0.1)" x-text="c"></span>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="pastePrev.diff?.unmatchedNames.length">
+        <div class="mb-2 card-sm" style="border-left:3px solid var(--amber);padding:6px 10px">
+          <div class="text-xs font-semibold text-amber mb-1">⚠ 매칭 실패 이름 (간호사 목록에 없음)</div>
+          <div class="flex flex-wrap gap-1.5 text-xs">
+            <template x-for="(n,i) in pastePrev.diff.unmatchedNames" :key="'unn'+i">
+              <span class="pill" style="background:rgba(245,158,11,0.1)" x-text="n"></span>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="pastePrev.diff && !pastePrev.diff.will_set.length && !pastePrev.diff.will_clear.length">
+        <div class="text-center text-dim py-6 text-sm">
+          변경 사항이 없습니다.
+        </div>
+      </template>
+    </div>
+
+    <!-- 액션 -->
+    <div class="flex gap-2 mt-3" style="flex-shrink:0">
+      <button @click="closePastePrev()" class="btn btn-sm btn-ghost flex-1">취소</button>
+      <button @click="applyPastePrev()"
+              :disabled="!pastePrev.diff || (!pastePrev.diff.will_set.length && !pastePrev.diff.will_clear.length)"
+              class="btn btn-sm btn-primary flex-1">
+        적용
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- CSV 가져오기 미리보기 모달 -->
+<div x-show="csvImportPreview.open" x-cloak class="modal-bg" @click.self="closeCsvImport()">
+  <div class="modal" style="max-width:42rem;max-height:80vh;display:flex;flex-direction:column">
+    <div class="flex items-center justify-between mb-2">
+      <div class="font-bold text-lg text-bright">CSV 가져오기 미리보기</div>
+      <button @click="closeCsvImport()" class="text-dim text-lg" title="닫기">×</button>
+    </div>
+    <p class="text-xs text-sub mb-2">
+      📄 <strong x-text="csvImportPreview.filename"></strong> —
+      <span x-text="csvImportPreview.parsed_count+'행 분석'"></span>
+    </p>
+
+    <!-- 모드 선택 -->
+    <div class="card-sm mb-2" style="padding:8px 10px">
+      <div class="flex items-center gap-3 text-sm">
+        <label class="flex items-center gap-1.5 cursor-pointer">
+          <input type="radio" :checked="!csvImportPreview.replaceAll"
+                 @change="csvImportPreview.replaceAll=false; _refreshImportPreview()"/>
+          <span>병합 (추가 + 수정만)</span>
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer">
+          <input type="radio" :checked="csvImportPreview.replaceAll"
+                 @change="csvImportPreview.replaceAll=true; _refreshImportPreview()"/>
+          <span class="text-amber">교체 (파일에 없는 기존 간호사는 삭제)</span>
+        </label>
       </div>
     </div>
-    <button @click="csvImportResult.open=false" class="btn btn-primary btn-sm w-full mt-2">확인</button>
+
+    <!-- 요약 배지 -->
+    <div class="flex flex-wrap gap-2 mb-2 text-xs" x-show="!csvImportPreview.loading">
+      <span class="pill" style="background:rgba(34,197,94,0.15);color:#22c55e">
+        + 신규 <strong x-text="csvImportPreview.will_add.length"></strong>명
+      </span>
+      <span class="pill" style="background:rgba(59,130,246,0.15);color:#3b82f6">
+        ✏ 수정 <strong x-text="csvImportPreview.will_update.length"></strong>명
+      </span>
+      <span class="pill" style="background:rgba(107,114,128,0.15);color:#6b7280">
+        = 변경 없음 <strong x-text="csvImportPreview.unchanged_count"></strong>명
+      </span>
+      <span x-show="csvImportPreview.replaceAll" class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444">
+        🗑 삭제 <strong x-text="csvImportPreview.will_delete.length"></strong>명
+      </span>
+      <span x-show="csvImportPreview.errors.length" class="pill" style="background:rgba(245,158,11,0.15);color:#f59e0b">
+        ⚠ 경고 <strong x-text="csvImportPreview.errors.length"></strong>건
+      </span>
+    </div>
+
+    <div x-show="csvImportPreview.loading" class="text-center text-dim py-8 text-sm">분석 중...</div>
+
+    <!-- 상세 리스트 (스크롤) -->
+    <div x-show="!csvImportPreview.loading" style="flex:1;overflow-y:auto;min-height:0">
+
+      <template x-if="csvImportPreview.will_add.length">
+        <div class="mb-2">
+          <div class="text-xs font-semibold mb-1" style="color:#22c55e">+ 신규 등록</div>
+          <div class="space-y-0.5">
+            <template x-for="(n,i) in csvImportPreview.will_add" :key="'add'+i">
+              <div class="text-xs flex gap-2" style="padding:3px 8px;background:rgba(34,197,94,0.06);border-radius:3px">
+                <span class="font-medium text-bright" x-text="n.name"></span>
+                <span class="text-dim" x-show="n.group" x-text="'('+n.group+')'"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="csvImportPreview.will_update.length">
+        <div class="mb-2">
+          <div class="text-xs font-semibold mb-1" style="color:#3b82f6">✏ 수정</div>
+          <div class="space-y-0.5">
+            <template x-for="(n,i) in csvImportPreview.will_update" :key="'upd'+i">
+              <div class="text-xs" style="padding:4px 8px;background:rgba(59,130,246,0.06);border-radius:3px">
+                <div class="flex gap-2 items-center">
+                  <span class="font-medium text-bright" x-text="n.name"></span>
+                  <span class="text-dim" x-show="n.group" x-text="'('+n.group+')'"></span>
+                  <span class="text-dim" x-text="'· '+n.fields.length+'개 항목'"></span>
+                </div>
+                <div class="text-xs text-dim mt-0.5 font-mono" style="padding-left:8px">
+                  <template x-for="(f,fi) in n.fields" :key="fi">
+                    <div x-text="f.field+': '+JSON.stringify(f.old)+' → '+JSON.stringify(f.new)"></div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="csvImportPreview.replaceAll && csvImportPreview.will_delete.length">
+        <div class="mb-2">
+          <div class="text-xs font-semibold mb-1" style="color:#ef4444">🗑 삭제 (파일에 없음)</div>
+          <div class="space-y-0.5">
+            <template x-for="(n,i) in csvImportPreview.will_delete" :key="'del'+i">
+              <div class="text-xs flex gap-2" style="padding:3px 8px;background:rgba(239,68,68,0.06);border-radius:3px">
+                <span class="text-bright line-through" x-text="n.name"></span>
+                <span class="text-dim" x-show="n.group" x-text="'('+n.group+')'"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="csvImportPreview.errors.length">
+        <div class="mb-2">
+          <div class="text-xs font-semibold mb-1 text-amber">⚠ 경고 — 자동 보정됨</div>
+          <table class="text-xs" style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr class="text-dim" style="text-align:left">
+                <th style="padding:2px 6px;width:3em">행</th>
+                <th style="padding:2px 6px;width:6em">컬럼</th>
+                <th style="padding:2px 6px">받은 값 → 기대</th>
+                <th style="padding:2px 6px">메시지</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(err,i) in csvImportPreview.errors" :key="'err'+i">
+                <tr style="background:rgba(245,158,11,0.04)">
+                  <td class="font-mono text-amber" style="padding:2px 6px" x-text="err.row"></td>
+                  <td class="font-mono" style="padding:2px 6px" x-text="err.col"></td>
+                  <td class="font-mono text-dim" style="padding:2px 6px" x-text="(err.got||'(빈칸)')+' → '+err.expected"></td>
+                  <td class="text-sub" style="padding:2px 6px" x-text="err.message"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+      <div x-show="csvImportPreview.parsed_count===0 && !csvImportPreview.loading"
+           class="text-center text-dim py-6 text-sm">
+        파일에서 가져올 수 있는 데이터가 없습니다.
+      </div>
+    </div>
+
+    <!-- 액션 버튼 -->
+    <div class="flex gap-2 mt-3" style="flex-shrink:0">
+      <button @click="closeCsvImport()" class="btn btn-sm btn-ghost flex-1">취소</button>
+      <button @click="applyCsvImport()"
+              :disabled="csvImportPreview.loading || csvImportPreview.parsed_count===0"
+              class="btn btn-sm btn-primary flex-1"
+              :class="csvImportPreview.replaceAll?'!bg-red':''">
+        <span x-show="!csvImportPreview.replaceAll">병합 적용</span>
+        <span x-show="csvImportPreview.replaceAll">교체 적용</span>
+      </button>
+    </div>
   </div>
 </div>
 

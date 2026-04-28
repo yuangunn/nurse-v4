@@ -83,6 +83,22 @@ for _subdir in ("css", "js", "lib", "fonts", "assets"):
         app.mount(f"/{_subdir}", StaticFiles(directory=str(_sub_path)), name=_subdir)
 
 
+# 개발 중 stylesheet/script 캐시로 인한 stale UI 방지 — 정적 파일에 no-cache
+@app.middleware("http")
+async def _no_cache_static(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith(("/css/", "/js/", "/lib/", "/fonts/", "/assets/")) or path == "/":
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        # ETag / Last-Modified 제거 — 브라우저 304 conditional 응답 차단
+        for h in ("etag", "last-modified"):
+            if h in response.headers:
+                del response.headers[h]
+    return response
+
+
 @app.on_event("startup")
 def startup():
     prof.init_default_profiles()
@@ -374,42 +390,80 @@ def nurse_export():
     )
 
 
-@app.post("/api/nurses/import")
-def nurse_import(body: dict):
-    """
-    CSV 본문(text)을 받아 파싱 후 일괄 등록/업데이트.
-    body: {"csv": "<파일내용>", "replace_all": false}
-    """
-    import io
-    import csv
-    import json as _json
+# ── CSV 파싱 헬퍼 (preview / import 양쪽에서 사용) ─────────────────────
+
+_CSV_ENCODINGS = ("utf-8-sig", "cp949", "euc-kr", "utf-8")
+
+
+def _decode_csv_input(body: dict) -> str:
+    """body에서 CSV 텍스트 추출. csv_b64(바이트)면 인코딩 자동 감지."""
+    import base64
+
+    csv_b64 = body.get("csv_b64")
+    if csv_b64:
+        try:
+            raw = base64.b64decode(csv_b64)
+        except Exception as e:
+            raise HTTPException(400, f"base64 디코딩 실패: {e}")
+        for enc in _CSV_ENCODINGS:
+            try:
+                return raw.decode(enc)
+            except UnicodeDecodeError:
+                continue
+        raise HTTPException(400, "지원되지 않는 인코딩 (UTF-8 / CP949 모두 실패)")
 
     csv_text = body.get("csv", "")
-    replace_all = bool(body.get("replace_all", False))
-
     if not csv_text:
         raise HTTPException(400, "CSV 내용이 비어 있습니다.")
+    if csv_text.startswith("\ufeff"):
+        csv_text = csv_text[1:]
+    return csv_text
 
-    # BOM 제거
+
+def _parse_nurses_csv(csv_text: str) -> dict:
+    """CSV 텍스트 → {nurses, errors[{row,col,got,expected,message}]}.
+    id 비어 있으면 자동 생성."""
+    import io
+    import csv as _csv
+    import re
+    import uuid
+
     if csv_text.startswith("\ufeff"):
         csv_text = csv_text[1:]
 
-    # 주석(#) 행 제거
     lines = [ln for ln in csv_text.splitlines() if not ln.lstrip().startswith("#")]
     cleaned = "\n".join(lines)
-    reader = csv.reader(io.StringIO(cleaned))
+    reader = _csv.reader(io.StringIO(cleaned))
     rows = [r for r in reader if any(c.strip() for c in r)]
 
     if len(rows) < 2:
-        raise HTTPException(400, "헤더 + 최소 1명의 데이터 행이 필요합니다.")
+        return {
+            "nurses": [],
+            "errors": [{
+                "row": 0, "col": "_file", "got": "",
+                "expected": "헤더 행 + 최소 1명",
+                "message": "헤더 행과 최소 1명의 데이터 행이 필요합니다.",
+            }],
+        }
 
     header = [c.strip() for c in rows[0]]
     data_rows = rows[1:]
 
-    # 헤더 검증
-    required = {"id", "이름"}
-    if not required.issubset(set(header)):
-        raise HTTPException(400, f"필수 열 누락: {required - set(header)}")
+    if "이름" not in header:
+        return {
+            "nurses": [],
+            "errors": [{
+                "row": 1, "col": "이름", "got": ",".join(header)[:120],
+                "expected": "헤더에 '이름' 포함",
+                "message": (
+                    "필수 컬럼 '이름'이 헤더에 없습니다. "
+                    "엑셀이 다른 인코딩으로 저장한 경우, 템플릿(📥)을 다시 받아 "
+                    "수정 후 업로드해 주세요."
+                ),
+            }],
+        }
+
+    juhu_map = {"일": 0, "월": 1, "화": 2, "수": 3, "목": 4, "금": 5, "토": 6}
 
     def col(row, name, default=""):
         if name in header:
@@ -419,69 +473,224 @@ def nurse_import(body: dict):
                 return default
         return default
 
-    nurses_to_save = []
+    def yn(val, default=False):
+        v = (val or "").strip().upper()
+        if v in ("Y", "YES", "TRUE", "1", "O"):
+            return True
+        if v in ("N", "NO", "FALSE", "0", "X"):
+            return False
+        return default
+
+    def err(row_idx, col_name, got, expected, msg):
+        return {"row": row_idx, "col": col_name, "got": got,
+                "expected": expected, "message": msg}
+
+    nurses = []
     errors = []
+
     for idx, row in enumerate(data_rows, start=2):
+        name = col(row, "이름")
+        if not name:
+            errors.append(err(idx, "이름", "", "비어있지 않음",
+                              f"{idx}행: 이름이 비어 있어 건너뜀"))
+            continue
+
+        nid = col(row, "id")
+        if not nid:
+            nid = f"n_{uuid.uuid4().hex[:10]}"
+
+        capable_str = col(row, "가능근무", "DC,D,EC,E,NC,N")
+        capable = [s.strip() for s in capable_str.split(",") if s.strip()]
+
+        juhu_ko = col(row, "주휴요일")
+        juhu_day = juhu_map.get(juhu_ko) if juhu_ko else None
+        if juhu_ko and juhu_day is None:
+            errors.append(err(idx, "주휴요일", juhu_ko,
+                              "일/월/화/수/목/금/토 또는 빈칸",
+                              f"{idx}행: 주휴요일 '{juhu_ko}' 인식 불가 → 임의로 처리"))
+
+        seniority_str = col(row, "시니어리티", "0")
         try:
-            nid = col(row, "id")
-            name = col(row, "이름")
-            if not nid or not name:
-                errors.append(f"{idx}행: id 또는 이름 비어 있음")
-                continue
+            seniority = int(seniority_str) if seniority_str else 0
+        except ValueError:
+            seniority = 0
+            errors.append(err(idx, "시니어리티", seniority_str, "정수",
+                              f"{idx}행: 시니어리티 정수 변환 실패 → 0 처리"))
 
-            capable_str = col(row, "가능근무", "DC,D,EC,E,NC,N")
-            capable = [s.strip() for s in capable_str.split(",") if s.strip()]
+        def chk_date(field):
+            v = col(row, field)
+            if not v:
+                return None
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+                errors.append(err(idx, field, v, "YYYY-MM-DD",
+                                  f"{idx}행: {field} 형식 오류 → 빈값 처리"))
+                return None
+            return v
 
-            juhu_day_ko = col(row, "주휴요일")
-            juhu_day_map = {"일": 0, "월": 1, "화": 2, "수": 3, "목": 4, "금": 5, "토": 6}
-            juhu_day = juhu_day_map.get(juhu_day_ko) if juhu_day_ko else None
+        gender_raw = col(row, "성별", "female").lower()
+        if gender_raw == "여":
+            gender_raw = "female"
+        elif gender_raw == "남":
+            gender_raw = "male"
+        elif gender_raw == "":
+            gender_raw = "female"
+        elif gender_raw not in ("female", "male"):
+            errors.append(err(idx, "성별", gender_raw, "female/male/여/남",
+                              f"{idx}행: 성별 '{gender_raw}' → female 처리"))
+            gender_raw = "female"
 
-            def yn(val, default=False):
-                v = (val or "").strip().upper()
-                if v in ("Y", "YES", "TRUE", "1", "O"):
-                    return True
-                if v in ("N", "NO", "FALSE", "0", "X"):
-                    return False
-                return default
+        nurses.append({
+            "id": nid,
+            "name": name,
+            "group": col(row, "그룹"),
+            "gender": gender_raw,
+            "capable_shifts": capable,
+            "is_night_shift": yn(col(row, "야간전담"), False),
+            "seniority": seniority,
+            "wishes": {},
+            "juhu_day": juhu_day,
+            "juhu_auto_rotate": yn(col(row, "주휴로테이션"), True),
+            "night_months": {},
+            "is_trainee": yn(col(row, "트레이닝"), False),
+            "training_end_date": chk_date("트레이닝종료일"),
+            "preceptor_id": col(row, "프리셉터ID") or None,
+            "start_date": chk_date("전입일"),
+            "end_date": chk_date("전출일"),
+        })
 
-            seniority_str = col(row, "시니어리티", "0")
-            try:
-                seniority = int(seniority_str)
-            except ValueError:
-                seniority = 0
+    return {"nurses": nurses, "errors": errors}
 
-            nurse = {
-                "id": nid,
-                "name": name,
-                "group": col(row, "그룹"),
-                "gender": col(row, "성별", "female").lower(),
-                "capable_shifts": capable,
-                "is_night_shift": yn(col(row, "야간전담"), False),
-                "seniority": seniority,
-                "wishes": {},
-                "juhu_day": juhu_day,
-                "juhu_auto_rotate": yn(col(row, "주휴로테이션"), True),
-                "night_months": {},
-                "is_trainee": yn(col(row, "트레이닝"), False),
-                "training_end_date": col(row, "트레이닝종료일") or None,
-                "preceptor_id": col(row, "프리셉터ID") or None,
-                "start_date": col(row, "전입일") or None,
-                "end_date": col(row, "전출일") or None,
-            }
-            nurses_to_save.append(nurse)
-        except Exception as e:
-            errors.append(f"{idx}행: {e}")
+
+_NURSE_DIFF_FIELDS = (
+    "name", "group", "gender", "capable_shifts", "is_night_shift",
+    "seniority", "juhu_day", "juhu_auto_rotate", "is_trainee",
+    "training_end_date", "preceptor_id", "start_date", "end_date",
+)
+
+
+def _resolve_nurse_ids(parsed_nurses: list, existing_nurses: list):
+    """파싱한 nurse의 id를 기존 DB와 매칭. id 우선, name+group fallback.
+    매칭된 기존 ID 집합 반환."""
+    by_id = {n["id"]: n for n in existing_nurses}
+    by_name_grp = {(n.get("name", "").strip(), n.get("group", "").strip()): n
+                   for n in existing_nurses}
+
+    matched_ids = set()
+    for p in parsed_nurses:
+        match = None
+        if p["id"] in by_id:
+            match = by_id[p["id"]]
+        else:
+            key = (p.get("name", "").strip(), p.get("group", "").strip())
+            if key[0] and key in by_name_grp:
+                match = by_name_grp[key]
+        if match:
+            p["id"] = match["id"]
+            matched_ids.add(match["id"])
+    return matched_ids
+
+
+def _build_diff(parsed_nurses: list, existing_nurses: list, matched_ids: set,
+                replace_all: bool) -> dict:
+    by_id = {n["id"]: n for n in existing_nurses}
+
+    will_add = []
+    will_update = []
+    unchanged = 0
+
+    for p in parsed_nurses:
+        old = by_id.get(p["id"])
+        if old is None:
+            will_add.append({
+                "id": p["id"], "name": p["name"], "group": p.get("group", ""),
+            })
+            continue
+
+        diff_fields = []
+        for key in _NURSE_DIFF_FIELDS:
+            old_v = old.get(key)
+            new_v = p.get(key)
+            if isinstance(old_v, list):
+                old_v = sorted(old_v or [])
+            if isinstance(new_v, list):
+                new_v = sorted(new_v or [])
+            if old_v != new_v:
+                diff_fields.append({
+                    "field": key, "old": old.get(key), "new": p.get(key),
+                })
+        if diff_fields:
+            will_update.append({
+                "id": p["id"], "name": p["name"],
+                "group": p.get("group", ""), "fields": diff_fields,
+            })
+        else:
+            unchanged += 1
+
+    will_delete = []
+    if replace_all:
+        for n in existing_nurses:
+            if n["id"] not in matched_ids:
+                will_delete.append({
+                    "id": n["id"], "name": n["name"],
+                    "group": n.get("group", ""),
+                })
+
+    return {
+        "will_add": will_add,
+        "will_update": will_update,
+        "will_delete": will_delete,
+        "unchanged_count": unchanged,
+    }
+
+
+@app.post("/api/nurses/import/preview")
+def nurse_import_preview(body: dict):
+    """업로드 전 미리보기: 어떤 행이 추가/수정/삭제될지 계산만 하고 DB는 건드리지 않음."""
+    csv_text = _decode_csv_input(body)
+    replace_all = bool(body.get("replace_all", False))
+
+    parsed = _parse_nurses_csv(csv_text)
+    existing = db.get_nurses()
+    matched_ids = _resolve_nurse_ids(parsed["nurses"], existing)
+    diff = _build_diff(parsed["nurses"], existing, matched_ids, replace_all)
+
+    return {
+        "ok": True,
+        "errors": parsed["errors"],
+        "parsed_count": len(parsed["nurses"]),
+        "replace_all": replace_all,
+        **diff,
+    }
+
+
+@app.post("/api/nurses/import")
+def nurse_import(body: dict):
+    """
+    CSV 파싱 + 매칭 + 저장.
+    body: {"csv": "<text>"} 또는 {"csv_b64": "<base64>"} + "replace_all"(bool)
+    """
+    csv_text = _decode_csv_input(body)
+    replace_all = bool(body.get("replace_all", False))
+
+    parsed = _parse_nurses_csv(csv_text)
+    nurses_to_save = parsed["nurses"]
+    errors = parsed["errors"]
 
     if not nurses_to_save:
-        raise HTTPException(400, f"유효한 행이 없습니다. 오류: {'; '.join(errors)}")
+        raise HTTPException(
+            400,
+            f"유효한 행이 없습니다. 오류 {len(errors)}건: "
+            + "; ".join(e["message"] for e in errors[:5]),
+        )
 
-    # 저장
+    existing = db.get_nurses()
+    matched_ids = _resolve_nurse_ids(nurses_to_save, existing)
+
     try:
         if replace_all:
-            # 기존 간호사 전체 삭제 후 삽입
-            existing = db.get_nurses()
             for n in existing:
-                db.delete_nurse(n["id"])
+                if n["id"] not in matched_ids:
+                    db.delete_nurse(n["id"])
         for nurse in nurses_to_save:
             db.upsert_nurse(nurse)
     except Exception as e:
@@ -494,8 +703,6 @@ def nurse_import(body: dict):
         "replaced": replace_all,
     }
 
-
-# ── 헬스체크 ─────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():

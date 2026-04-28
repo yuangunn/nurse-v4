@@ -408,6 +408,85 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .tbl tr:hover td { background: var(--bg-card-hover); }
 .tbl tbody tr:last-child td { border-bottom: none; }
 
+/* ── 인라인 편집 표 (간호사) ─────────────────────────────────── */
+.nurse-edit-tbl th { white-space: nowrap; }
+.nurse-edit-tbl td { padding: 6px 8px; vertical-align: middle; }
+.nurse-edit-tbl tbody tr.row-selected td,
+.tbl tbody tr.row-selected td {
+  background: rgba(59,130,246,0.10) !important;
+}
+html.dark .nurse-edit-tbl tbody tr.row-selected td,
+html.dark .tbl tbody tr.row-selected td {
+  background: rgba(59,130,246,0.18) !important;
+}
+
+.nurse-edit-tbl input.cell-input {
+  /* 적응형: 입력 텍스트 길이에 맞춰 자동 확장 (Chromium 123+) */
+  field-sizing: content;
+  min-width: 4ch; max-width: 100%;
+  padding: 4px 6px; font-size: 0.8rem;
+  background: transparent; border: 1px solid transparent;
+  border-radius: 4px; color: var(--text-bright);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+/* 그룹은 최대 3글자 — 좁게 고정 */
+.nurse-edit-tbl input.cell-input-group {
+  min-width: 1.5ch;
+  max-width: 4em;
+}
+.nurse-edit-tbl input.cell-input:hover {
+  background: var(--bg-card-hover); border-color: var(--border-light);
+}
+.nurse-edit-tbl input.cell-input:focus {
+  background: var(--bg-card); border-color: var(--accent);
+  outline: none; box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+
+.nurse-edit-tbl button.cell-toggle {
+  min-width: 1.8em; padding: 3px 8px;
+  font-size: 0.72rem; font-weight: 600;
+  border-radius: 4px; border: 1px solid var(--border-light);
+  background-color: transparent; cursor: pointer;
+  transition: all 0.15s ease;
+}
+.nurse-edit-tbl button.cell-toggle:hover { transform: translateY(-1px); }
+.nurse-edit-tbl button.cell-toggle.cell-toggle-fem {
+  color: #ec4899 !important;
+  background-color: rgba(236,72,153,0.10) !important;
+  border-color: rgba(236,72,153,0.30) !important;
+}
+.nurse-edit-tbl button.cell-toggle.cell-toggle-male {
+  color: #3b82f6 !important;
+  background-color: rgba(59,130,246,0.10) !important;
+  border-color: rgba(59,130,246,0.30) !important;
+}
+.nurse-edit-tbl button.cell-toggle.cell-night-on {
+  color: #f59e0b !important;
+  background-color: rgba(245,158,11,0.14) !important;
+  border-color: rgba(245,158,11,0.40) !important;
+  font-weight: 700;
+}
+.nurse-edit-tbl button.cell-toggle.cell-night-off { color: var(--text-dim); }
+
+.nurse-edit-tbl button.shift-chip {
+  display: inline-block;
+  padding: 2px 6px !important;
+  min-width: 1.7em;
+  font-size: 0.7rem; font-weight: 700; line-height: 1.4;
+  border-radius: 3px !important;
+  border: 1px solid transparent;
+  cursor: pointer; user-select: none;
+  transition: all 0.12s ease;
+}
+.nurse-edit-tbl button.shift-chip:hover { transform: translateY(-1px); }
+.nurse-edit-tbl button.shift-chip-off {
+  color: var(--text-dim) !important;
+  background-color: transparent !important;
+  border-color: var(--border-light);
+  opacity: 0.55;
+}
+.nurse-edit-tbl button.shift-chip-off:hover { opacity: 1; }
+
 /* ── Schedule Grid ───────────────────────────────────────── */
 .g-sun { background: #fef2f2; border-left: 1.5px solid #fca5a5 !important; }
 .g-sat-bg { background: #eff6ff; }
@@ -817,25 +896,21 @@ input[type="number"]::-webkit-outer-spin-button {
 
 /* ── 용인세브란스병원 로고 (사이드바 하단) ───────────────────── */
 .hospital-logo {
-  margin: 8px 10px 6px;
-  padding: 8px;
-  background: #fff;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
+  margin: 0 10px;
+  padding: 0;
+  background: transparent;
   text-align: center;
+  line-height: 0;
 }
 .hospital-logo img {
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   height: auto;
-  min-height: 60px;
-  max-height: 110px;
+  min-height: 80px;
+  max-height: 120px;
   object-fit: contain;
   display: block;
   margin: 0 auto;
-}
-html.dark .hospital-logo {
-  background: rgba(255,255,255,0.95);
 }
 @media print {
   .hospital-logo { display: none !important; }
