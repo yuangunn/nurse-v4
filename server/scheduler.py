@@ -1550,6 +1550,265 @@ class NurseScheduler:
 
         return scores, details
 
+    # ── Infeasible 진단 헬퍼: 사전입력 핀포인트 ──────────────────────────────
+    # 솔버가 Infeasible을 토할 때, 단순히 "어떤 제약 충돌"이 아니라
+    # "몇월 며칠의 어떤 사전입력 때문인지" 사용자에게 정확히 짚어주기 위한 스캐너들.
+
+    _DAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
+
+    def _fmt_nurse_label(self, nurse: dict) -> str:
+        nm = nurse.get("name", "?")
+        grp = nurse.get("group", "")
+        return f"{nm}({grp})" if grp else nm
+
+    def _fmt_date(self, dt: date) -> str:
+        return f"{dt.strftime('%m/%d')}({self._DAY_KR[dt.weekday()]})"
+
+    def _scan_pre_forbidden_transitions(self) -> list:
+        """사전입력만으로 발생한 9개 금지 전환을 모두 찾아 반환.
+        Returns: [{'nurse', 'd1','wk1','shift1','d2','wk2','shift2','rule'}, ...]
+        """
+        rules = [
+            ("E→D",   set(self.EVENING_SHIFTS), set(self.DAY_SHIFTS)),
+            ("E→D1",  set(self.EVENING_SHIFTS), set(self.DAY1_SHIFTS)),
+            ("E→중",  set(self.EVENING_SHIFTS), set(self.MIDDLE_SHIFTS)),
+            ("N→E",   set(self.NIGHT_SHIFTS),   set(self.EVENING_SHIFTS)),
+            ("N→D",   set(self.NIGHT_SHIFTS),   set(self.DAY_SHIFTS)),
+            ("N→D1",  set(self.NIGHT_SHIFTS),   set(self.DAY1_SHIFTS)),
+            ("N→중",  set(self.NIGHT_SHIFTS),   set(self.MIDDLE_SHIFTS)),
+            ("중→D",  set(self.MIDDLE_SHIFTS),  set(self.DAY_SHIFTS)),
+            ("중→D1", set(self.MIDDLE_SHIFTS),  set(self.DAY1_SHIFTS)),
+        ]
+        found = []
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            prev = self.prev.get(nid, {})
+            for d in range(self.T - 1):
+                dt1 = self.all_dates[d]
+                dt2 = self.all_dates[d + 1]
+                # 적어도 하나는 당월에 속해야 의미 있음
+                if dt1.month != self.month and dt2.month != self.month:
+                    continue
+                s1 = prev.get(dt1.strftime("%Y-%m-%d"))
+                s2 = prev.get(dt2.strftime("%Y-%m-%d"))
+                if not s1 or not s2:
+                    continue
+                for label, g1, g2 in rules:
+                    if s1 in g1 and s2 in g2:
+                        found.append({
+                            "nurse_label": self._fmt_nurse_label(nurse),
+                            "date1": self._fmt_date(dt1),
+                            "shift1": s1,
+                            "date2": self._fmt_date(dt2),
+                            "shift2": s2,
+                            "rule": label,
+                        })
+                        break  # 한 페어당 하나만 기록
+        return found
+
+    def _scan_pre_consecutive_runs(self) -> dict:
+        """사전입력만으로 이미 연속 근무/야간 한도를 초과한 런(run)을 찾는다.
+        Returns: {'work_runs': [...], 'night_runs': [...]}.
+        run = {'nurse_label', 'days': [(date_str, wk, shift), ...], 'len'}
+        """
+        work_set = set(self.WORK_SHIFTS)
+        night_set = set(self.NIGHT_SHIFTS)
+        max_w = self.rules.maxConsecutiveWorkDays
+        max_n = self.rules.maxConsecutiveNightDays
+        work_runs, night_runs = [], []
+
+        def _flush_w(label, run):
+            if run and len(run) > max_w and self.rules.maxConsecutiveWork:
+                work_runs.append({"nurse_label": label, "days": run, "len": len(run)})
+
+        def _flush_n(label, run):
+            if run and len(run) > max_n and self.rules.maxConsecutiveNight:
+                night_runs.append({"nurse_label": label, "days": run, "len": len(run)})
+
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            label = self._fmt_nurse_label(nurse)
+            prev = self.prev.get(nid, {})
+            run_w, run_n = [], []
+            for d in range(self.T):
+                dt = self.all_dates[d]
+                s = prev.get(dt.strftime("%Y-%m-%d"))
+                wk = self._DAY_KR[dt.weekday()]
+                if s in work_set:
+                    run_w.append((dt.strftime("%m/%d"), wk, s))
+                    if s in night_set:
+                        run_n.append((dt.strftime("%m/%d"), wk, s))
+                    else:
+                        _flush_n(label, run_n)
+                        run_n = []
+                else:
+                    _flush_w(label, run_w)
+                    run_w = []
+                    _flush_n(label, run_n)
+                    run_n = []
+            _flush_w(label, run_w)
+            _flush_n(label, run_n)
+        return {"work_runs": work_runs, "night_runs": night_runs}
+
+    def _scan_pre_code_excess(self, code: str, limit: int) -> list:
+        """당월 사전입력에서 특정 코드(예: 'V', '생')가 limit을 초과한 간호사 리스트.
+        Returns: [{'nurse_label', 'dates': [str], 'count', 'limit'}, ...]
+        """
+        out = []
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            dates = []
+            for dt in self.all_dates:
+                if dt.month != self.month:
+                    continue
+                if self.prev.get(nid, {}).get(dt.strftime("%Y-%m-%d")) == code:
+                    dates.append(self._fmt_date(dt))
+            if len(dates) > limit:
+                out.append({
+                    "nurse_label": self._fmt_nurse_label(nurse),
+                    "dates": dates,
+                    "count": len(dates),
+                    "limit": limit,
+                })
+        return out
+
+    def _scan_pre_night_excess(self, limit: int) -> list:
+        """사전입력에 야간(N/NC) 코드가 당월 limit을 초과한 정규 간호사 리스트.
+        야간전담은 별도 규칙이므로 제외."""
+        night_set = set(self.NIGHT_SHIFTS)
+        out = []
+        for nurse in self.nurses:
+            if nurse.get("is_night_shift"):
+                continue
+            nid = nurse["id"]
+            entries = []
+            for dt in self.all_dates:
+                if dt.month != self.month:
+                    continue
+                s = self.prev.get(nid, {}).get(dt.strftime("%Y-%m-%d"))
+                if s in night_set:
+                    entries.append(f"{self._fmt_date(dt)} {s}")
+            if len(entries) > limit:
+                out.append({
+                    "nurse_label": self._fmt_nurse_label(nurse),
+                    "entries": entries,
+                    "count": len(entries),
+                    "limit": limit,
+                })
+        return out
+
+    def _scan_pre_two_month_night_excess(self, limit: int) -> list:
+        """전월 야간 + 당월 사전입력 야간이 limit을 초과한 정규 간호사."""
+        night_set = set(self.NIGHT_SHIFTS)
+        out = []
+        for nurse in self.nurses:
+            if nurse.get("is_night_shift"):
+                continue
+            nid = nurse["id"]
+            prev_n = int(self.prev_month_nights.get(nid, 0) or 0)
+            cur_dates = []
+            for dt in self.all_dates:
+                if dt.month != self.month:
+                    continue
+                s = self.prev.get(nid, {}).get(dt.strftime("%Y-%m-%d"))
+                if s in night_set:
+                    cur_dates.append(f"{self._fmt_date(dt)} {s}")
+            total = prev_n + len(cur_dates)
+            if total > limit:
+                out.append({
+                    "nurse_label": self._fmt_nurse_label(nurse),
+                    "prev_month": prev_n,
+                    "cur_dates": cur_dates,
+                    "total": total,
+                    "limit": limit,
+                })
+        return out
+
+    def _scan_pre_menstrual_issues(self) -> list:
+        """생리휴가(생) 사전입력에서 명백히 충돌하는 항목.
+        - 남성에게 생휴 입력
+        - 공휴일에 생휴 입력 (야간전담 아닌 경우)
+        - 같은 달에 2회 이상 (월 1회 한도)
+        """
+        out = []
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            is_male = nurse.get("gender") != "female"
+            is_night = bool(nurse.get("is_night_shift"))
+            entries = []
+            sd_dates = []
+            for dt in self.all_dates:
+                if dt.month != self.month:
+                    continue
+                dt_str = dt.strftime("%Y-%m-%d")
+                if self.prev.get(nid, {}).get(dt_str) != "생":
+                    continue
+                fmt = self._fmt_date(dt)
+                if is_male:
+                    entries.append(f"{fmt}: 남성 간호사에 '생' 입력")
+                elif (dt_str in self.holidays) and not is_night:
+                    entries.append(f"{fmt}: 공휴일에 '생' 입력 (일반 간호사 차단)")
+                else:
+                    sd_dates.append(fmt)
+            if len(sd_dates) > 1:
+                entries.append(
+                    f"월 2회 이상: {', '.join(sd_dates)} (생리휴가는 월 1회 한도)"
+                )
+            if entries:
+                out.append({
+                    "nurse_label": self._fmt_nurse_label(nurse),
+                    "entries": entries,
+                })
+        return out
+
+    def _scan_pre_charge_seniority_conflicts(self) -> list:
+        """더 선임이 같은 듀티에서 일반 근무로 사전입력되어 있는데
+        후임이 같은 날 같은 듀티의 Charge로 사전입력된 경우 검출.
+        nurses 리스트 순서 = seniority (작을수록 선임).
+        """
+        # 듀티 → (charge_code, regular_codes)
+        duty_pairs = []
+        if self.DAY_SHIFTS:
+            charge_d = next((c for c in self.DAY_SHIFTS if c == "DC"), None)
+            if charge_d:
+                duty_pairs.append(("D", charge_d, [c for c in self.DAY_SHIFTS if c != charge_d]))
+        if self.EVENING_SHIFTS:
+            charge_e = next((c for c in self.EVENING_SHIFTS if c == "EC"), None)
+            if charge_e:
+                duty_pairs.append(("E", charge_e, [c for c in self.EVENING_SHIFTS if c != charge_e]))
+        if self.NIGHT_SHIFTS:
+            charge_n = next((c for c in self.NIGHT_SHIFTS if c == "NC"), None)
+            if charge_n:
+                duty_pairs.append(("N", charge_n, [c for c in self.NIGHT_SHIFTS if c != charge_n]))
+
+        out = []
+        for d in range(self.T):
+            dt = self.all_dates[d]
+            if dt.month != self.month:
+                continue
+            dt_str = dt.strftime("%Y-%m-%d")
+            for duty_label, ccode, regular in duty_pairs:
+                charges = []
+                regulars = []
+                for idx, nurse in enumerate(self.nurses):
+                    s = self.prev.get(nurse["id"], {}).get(dt_str)
+                    if s == ccode:
+                        charges.append((idx, nurse))
+                    elif s in regular:
+                        regulars.append((idx, nurse))
+                # 후임 charge + 더 선임 regular → 충돌
+                for cidx, charge_nurse in charges:
+                    seniors_on_duty = [n for ridx, n in regulars if ridx < cidx]
+                    if seniors_on_duty:
+                        out.append({
+                            "date": self._fmt_date(dt),
+                            "duty": duty_label,
+                            "charge_label": self._fmt_nurse_label(charge_nurse),
+                            "charge_code": ccode,
+                            "senior_labels": [self._fmt_nurse_label(n) for n in seniors_on_duty],
+                        })
+        return out
+
     # ── Infeasible 진단 ──────────────────────────────────────────────────────
 
     def _diagnose_infeasibility(self) -> str:
@@ -1728,8 +1987,23 @@ class NurseScheduler:
         self._c_forbidden_transitions(p, x)
         p += 0
         if not _try(p):
-            lines.append("  [원인] prev_schedule에 E→D, N→E 또는 N→D 역순 전환이 포함되어 있습니다.")
-            lines.append("    해결: 사전 고정된 근무 중 역순 패턴을 수정하세요.")
+            transitions = self._scan_pre_forbidden_transitions()
+            if transitions:
+                lines.append("  [원인] 사전입력에 물리적으로 불가능한 근무 전환이 포함되어 있습니다.")
+                lines.append("  (간격 < 8시간 — 9개 금지 전환: E→D/D1/중, N→E/D/D1/중, 중→D/D1)")
+                lines.append("  문제가 된 사전입력 항목:")
+                for t in transitions[:10]:
+                    lines.append(
+                        f"    · {t['nurse_label']}  "
+                        f"{t['date1']} {t['shift1']} → {t['date2']} {t['shift2']}  "
+                        f"[{t['rule']} 금지]"
+                    )
+                if len(transitions) > 10:
+                    lines.append(f"    ... 외 {len(transitions)-10}건")
+                lines.append("  → 해결: 위 행/열의 사전입력을 D→E→N 순방향(8시간 이상 간격)으로 수정하세요.")
+            else:
+                lines.append("  [원인] 역순 전환 충돌 — 사전입력에서 직접 위반은 없으나 다른 제약과 결합 시 발생합니다.")
+                lines.append("    해결: 사전입력을 일부 제거하거나 완화 모드로 재시도해 보세요.")
             return "\n".join(lines)
 
         # ── Phase 5: 주휴/OF ─────────────────────────────────────────────────
@@ -1858,12 +2132,39 @@ class NurseScheduler:
             self._c_max_consecutive_night(p, x, self.rules.maxConsecutiveNightDays)
         p += 0
         if not _try(p):
+            runs = self._scan_pre_consecutive_runs()
+            wruns = runs["work_runs"]
+            nruns = runs["night_runs"]
             lines.append(
-                f"  [원인] 연속 근무 제한이 너무 엄격합니다.\n"
-                f"    현재 설정: 연속 근무 최대 {self.rules.maxConsecutiveWorkDays}일, "
-                f"연속 야간 최대 {self.rules.maxConsecutiveNightDays}일\n"
-                "    해결: 규칙 설정에서 연속 근무 일수를 늘리세요."
+                f"  [원인] 연속 근무/야간 제한 충돌  "
+                f"(현재 설정: 연속 근무 ≤{self.rules.maxConsecutiveWorkDays}일, "
+                f"연속 야간 ≤{self.rules.maxConsecutiveNightDays}일)"
             )
+            if wruns:
+                lines.append("  사전입력만으로 이미 연속 근무 한도를 초과한 구간:")
+                for r in wruns[:5]:
+                    seq = " → ".join(f"{md}({wk}) {sh}" for md, wk, sh in r["days"])
+                    lines.append(
+                        f"    · {r['nurse_label']}  {r['len']}일 연속: {seq}"
+                    )
+                if len(wruns) > 5:
+                    lines.append(f"    ... 외 {len(wruns)-5}건")
+            if nruns:
+                lines.append("  사전입력만으로 이미 연속 야간 한도를 초과한 구간:")
+                for r in nruns[:5]:
+                    seq = " → ".join(f"{md}({wk}) {sh}" for md, wk, sh in r["days"])
+                    lines.append(
+                        f"    · {r['nurse_label']}  {r['len']}일 연속 야간: {seq}"
+                    )
+                if len(nruns) > 5:
+                    lines.append(f"    ... 외 {len(nruns)-5}건")
+            if not wruns and not nruns:
+                lines.append(
+                    "  사전입력에서 직접 한도 초과는 없으나, 솔버가 채울 가용 일수가 부족합니다."
+                )
+            lines.append("  → 해결:")
+            lines.append("     1) 위 사전입력의 일부를 OF/주/V 등으로 끊어 주세요.")
+            lines.append("     2) 또는 규칙 설정에서 연속 근무/야간 일수 한도를 늘리세요.")
             return "\n".join(lines)
 
         # ── Phase 7: V 월 최대 횟수 ─────────────────────────────────────────
@@ -1883,20 +2184,20 @@ class NurseScheduler:
         self._c_max_v_per_month(p, x)
         p += 0
         if not _try(p):
-            over_v = [
-                nurse["id"]
-                for nurse in self.nurses
-                if sum(
-                    1 for dt in self.all_dates
-                    if dt.month == self.month
-                    and self.prev.get(nurse["id"], {}).get(dt.strftime("%Y-%m-%d")) == "V"
-                ) > self.rules.maxVPerMonth
-            ]
+            over = self._scan_pre_code_excess("V", self.rules.maxVPerMonth)
             lines.append(
-                f"  [원인] V(연차) 초과 - 월 최대 {self.rules.maxVPerMonth}회 설정 초과.\n"
-                + (f"    초과 간호사: {', '.join(over_v)}\n" if over_v else "")
-                + "    해결: V 월 최대 횟수를 늘리거나 V 요청을 줄이세요."
+                f"  [원인] V(연차) 사전입력이 월 최대 {self.rules.maxVPerMonth}회 한도를 초과했습니다."
             )
+            if over:
+                lines.append("  사전입력에서 V 횟수가 한도 초과인 간호사:")
+                for o in over[:8]:
+                    lines.append(
+                        f"    · {o['nurse_label']}  V {o['count']}회 (한도 {o['limit']}회): "
+                        f"{', '.join(o['dates'])}"
+                    )
+                if len(over) > 8:
+                    lines.append(f"    ... 외 {len(over)-8}명")
+            lines.append("  → 해결: 위 V 사전입력 일부를 제거하거나, 규칙에서 V 월 최대 횟수를 늘리세요.")
             return "\n".join(lines)
 
         # ── Phase 8: 야간전담 전용 제약 ─────────────────────────────────────
@@ -2104,9 +2405,24 @@ class NurseScheduler:
         self._c_charge_seniority(p, x)
         p += 0
         if not _try(p):
+            seniors = self._scan_pre_charge_seniority_conflicts()
             lines.append("  [원인] Charge 시니어리티 제약 충돌")
-            lines.append("    야간전담 간호사의 seniority 순서와 NC 배정이 충돌합니다.")
-            lines.append("    해결: 간호사 설정에서 seniority 값을 확인하거나 야간전담 간호사 설정을 검토하세요.")
+            lines.append("  (Charge는 같은 듀티에서 가장 선임에게만 — 더 선임이 일반 근무로 사전입력되어 있으면 후임은 Charge 불가)")
+            if seniors:
+                lines.append("  사전입력에서 직접 충돌하는 항목:")
+                for c in seniors[:8]:
+                    seniors_str = ", ".join(c["senior_labels"])
+                    lines.append(
+                        f"    · {c['date']} {c['duty']}듀티 — "
+                        f"{c['charge_label']}이(가) {c['charge_code']}로 입력됨, "
+                        f"그러나 더 선임이 같은 듀티에서 일반 근무: {seniors_str}"
+                    )
+                if len(seniors) > 8:
+                    lines.append(f"    ... 외 {len(seniors)-8}건")
+                lines.append("  → 해결: 위 날짜의 Charge 사전입력을 더 선임 간호사로 옮기거나, 선임의 일반 근무 입력을 제거하세요.")
+            else:
+                lines.append("    사전입력에서 직접 충돌은 발견되지 않음 — 야간전담 NC 배정과의 조합 충돌일 수 있습니다.")
+                lines.append("    해결: 간호사 목록 순서(시니어리티) 또는 야간전담 설정을 확인해 주세요.")
             return "\n".join(lines)
 
         # ── Phase 10: N→OF→D 금지 ────────────────────────────────────────────
@@ -2155,8 +2471,20 @@ class NurseScheduler:
         self._c_menstrual_leave(p, x)
         p += 0
         if not _try(p):
-            lines.append("  [원인] 생리휴가 제약 충돌")
-            lines.append("  해결: 사전입력에서 생리휴가(생) 입력을 확인하거나 규칙을 검토하세요.")
+            issues = self._scan_pre_menstrual_issues()
+            lines.append("  [원인] 생리휴가(생) 제약 충돌")
+            if issues:
+                lines.append("  사전입력에서 직접 충돌하는 항목:")
+                for it in issues[:8]:
+                    lines.append(f"    · {it['nurse_label']}")
+                    for ent in it["entries"][:5]:
+                        lines.append(f"        - {ent}")
+                if len(issues) > 8:
+                    lines.append(f"    ... 외 {len(issues)-8}명")
+                lines.append("  → 해결: 위 날짜의 '생' 사전입력을 다른 코드로 바꾸거나 제거하세요.")
+            else:
+                lines.append("    사전입력에서 직접 충돌은 발견되지 않음.")
+                lines.append("    여성 간호사 + 31일 달일 때 야간전담 1회 의무로 발생할 수 있음 — 해당 간호사 야간전담 설정을 확인하세요.")
             return "\n".join(lines)
 
         # ── Phase 12: 월 최대 야간 ─────────────────────────────────────────────
@@ -2170,9 +2498,21 @@ class NurseScheduler:
             p += 0
             if not _try(p):
                 max_n = self.rules.maxNightPerMonthCount
+                over = self._scan_pre_night_excess(max_n)
                 lines.append(f"  [원인] 월 최대 야간 {max_n}회 제약 충돌")
-                lines.append(f"  총 야간 슬롯 대비 간호사×{max_n}회가 부족합니다.")
-                lines.append(f"  해결: 월 최대 야간 횟수를 늘리거나, 야간 필요인원을 줄이세요.")
+                if over:
+                    lines.append("  사전입력에서 N(야간) 횟수가 한도 초과인 정규 간호사:")
+                    for o in over[:8]:
+                        lines.append(
+                            f"    · {o['nurse_label']}  N {o['count']}회 (한도 {o['limit']}회): "
+                            f"{', '.join(o['entries'])}"
+                        )
+                    if len(over) > 8:
+                        lines.append(f"    ... 외 {len(over)-8}명")
+                    lines.append("  → 해결: 위 N 사전입력 일부를 제거하거나, 규칙에서 월 최대 야간을 늘리세요.")
+                else:
+                    lines.append(f"    사전입력에서 직접 한도 초과는 없음. 총 야간 슬롯 대비 간호사×{max_n}회가 부족합니다.")
+                    lines.append("    해결: 월 최대 야간 횟수를 늘리거나, 야간 필요인원을 줄이세요.")
                 return "\n".join(lines)
 
         # ── Phase 13: 홀짝월 합산 야간 ──────────────────────────────────────────
@@ -2187,9 +2527,25 @@ class NurseScheduler:
             self._c_max_night_two_month(p, x)
             p += 0
             if not _try(p):
-                lines.append(f"  [원인] 홀짝월 합산 야간 {self.rules.maxNightTwoMonthCount}회 제약 충돌")
-                lines.append("  이전달 야간 횟수가 너무 많아 당월 배정이 불가능합니다.")
-                lines.append("  해결: 사전입력의 '전월N' 값을 확인하거나 합산 상한을 늘리세요.")
+                lim = self.rules.maxNightTwoMonthCount
+                over = self._scan_pre_two_month_night_excess(lim)
+                lines.append(f"  [원인] 홀짝월 합산 야간 {lim}회 제약 충돌")
+                if over:
+                    lines.append("  전월 야간 + 당월 사전입력 야간이 합산 한도를 초과한 간호사:")
+                    for o in over[:8]:
+                        cur = ", ".join(o["cur_dates"]) if o["cur_dates"] else "(당월 사전 N 없음)"
+                        lines.append(
+                            f"    · {o['nurse_label']}  "
+                            f"전월 N {o['prev_month']}회 + 당월 사전 N {len(o['cur_dates'])}회 = {o['total']}회 "
+                            f"(한도 {o['limit']}회)"
+                        )
+                        lines.append(f"        당월 N: {cur}")
+                    if len(over) > 8:
+                        lines.append(f"    ... 외 {len(over)-8}명")
+                    lines.append("  → 해결: 당월 사전입력 N을 일부 제거하거나, 전월N 입력값을 검토하거나, 합산 상한을 늘리세요.")
+                else:
+                    lines.append("    사전입력에서 직접 합산 초과는 없음 — 전월N 입력값과 야간 의무 분배 충돌일 수 있습니다.")
+                    lines.append("    해결: 분석 탭에서 '전월N'(prev_month_nights) 값을 확인하거나 합산 상한을 늘리세요.")
                 return "\n".join(lines)
 
         # ── 원인 불명 ────────────────────────────────────────────────────────
