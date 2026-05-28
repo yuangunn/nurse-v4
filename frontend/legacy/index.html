@@ -3,15 +3,14 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>NurseScheduler v4</title>
-  <!-- 디자인 선택 기억: localStorage.design === 'legacy' 면 /legacy로 리디렉트 -->
-  <script>try{if(localStorage.getItem('design')==='legacy'&&location.pathname==='/')location.replace('/legacy');}catch(e){}</script>
+  <title>NurseScheduler v4 — Premium UI</title>
+  <!-- Premium UI(레거시) 디자인 — /legacy 경로에서 서빙. 상대 URL 기준점 고정. -->
+  <base href="/legacy/"/>
+  <!-- 디자인 선택 기억: localStorage.design === 'clinical' 면 / 로 리디렉트 -->
+  <script>try{if(localStorage.getItem('design')==='clinical')location.replace('/');}catch(e){}</script>
   <link rel="stylesheet" href="css/app.css"/>
-  <script src="lib/tailwindcss.js"></script>
-  <script defer src="lib/alpine.min.js"></script>
-  <!-- 모듈 스크립트 (app.js 진입점에서 spread로 사용됨) -->
-  <script src="js/modules/undo-redo.js"></script>
-  <script src="js/modules/drag-select.js"></script>
+  <script src="/lib/tailwindcss.js"></script>
+  <script defer src="/lib/alpine.min.js"></script>
   <script src="js/app.js"></script>
 </head>
 <body>
@@ -264,91 +263,7 @@
 
 <div class="app-shell">
 
-<!-- ═══ APPBAR + 5-STEP STEPPER (Clinical Paper) ═══════════ -->
-<header class="appbar" x-cloak>
-  <div class="appbar-top">
-    <div class="brand-lockup">
-      <span class="brand-mark"></span>
-      <div class="brand-lockup-text">
-        <span class="brand-name">NurseScheduler</span>
-        <span class="brand-hospital">용인세브란스병원 · Yongin Severance Hospital</span>
-      </div>
-      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.1.0</span>
-    </div>
-    <div></div>
-    <div class="appbar-meta">
-      <template x-if="currentProfile">
-        <div class="appbar-meta-cell">
-          <span class="appbar-meta-label">Ward</span>
-          <span class="appbar-meta-value" x-text="profiles.find(p=>p.id===currentProfile)?.name||currentProfile"></span>
-        </div>
-      </template>
-      <div class="appbar-meta-cell">
-        <span class="appbar-meta-label">Nurses</span>
-        <span class="appbar-meta-value" x-text="nurses.length"></span>
-      </div>
-      <div class="appbar-meta-cell">
-        <span class="appbar-meta-label">Year/Mo</span>
-        <span class="appbar-meta-value" x-text="year + '.' + month"></span>
-      </div>
-      <div class="appbar-actions">
-        <button @click="switchDesign('legacy')" class="btn btn-xs btn-ghost" title="Premium UI(v4.0.x) 디자인으로 전환" style="font-family:var(--font-mono,monospace);font-size:0.62rem;letter-spacing:0.04em">UI ▸ Premium</button>
-        <button @click="toggleDark()" class="btn btn-xs btn-ghost" :title="darkMode?'라이트 모드':'다크 모드'" x-text="darkMode?'☀':'☾'"></button>
-        <button @click="showHelpModal=true" class="btn btn-xs btn-ghost" title="도움말">?</button>
-        <template x-if="currentProfile">
-          <button @click="switchProfile()" class="btn btn-xs btn-ghost" title="프로필 전환">전환</button>
-        </template>
-        <template x-if="_devModeUnlocked">
-          <button @click="devSettingsOpen=true;loadDevDbInfo()" class="btn btn-xs btn-ghost" style="color:var(--warn)">DEV</button>
-        </template>
-      </div>
-    </div>
-  </div>
-  <nav class="stepper">
-    <div class="step" :class="{active: activeTab==='settings', done: stepperDone.settings}"
-         @click="activeTab='settings'">
-      <span class="step-num">01</span>
-      <div class="step-body">
-        <span class="step-name">설정</span>
-        <span class="step-desc" x-text="stepperSummary.settings"></span>
-      </div>
-    </div>
-    <div class="step" :class="{active: activeTab==='preinput', done: stepperDone.preinput}"
-         @click="activeTab='preinput'">
-      <span class="step-num">02</span>
-      <div class="step-body">
-        <span class="step-name">사전입력</span>
-        <span class="step-desc" x-text="stepperSummary.preinput"></span>
-      </div>
-    </div>
-    <div class="step" :class="{active: activeTab==='analysis', done: stepperDone.analysis}"
-         @click="activeTab='analysis'">
-      <span class="step-num">03</span>
-      <div class="step-body">
-        <span class="step-name">분석</span>
-        <span class="step-desc" x-text="stepperSummary.analysis"></span>
-      </div>
-    </div>
-    <div class="step" :class="{active: activeTab==='schedule', done: stepperDone.schedule}"
-         @click="activeTab='schedule'">
-      <span class="step-num">04</span>
-      <div class="step-body">
-        <span class="step-name">생성</span>
-        <span class="step-desc" x-text="stepperSummary.schedule"></span>
-      </div>
-    </div>
-    <div class="step" :class="{active: activeTab==='saved', done: stepperDone.saved}"
-         @click="activeTab='saved'">
-      <span class="step-num">05</span>
-      <div class="step-body">
-        <span class="step-name">저장</span>
-        <span class="step-desc" x-text="stepperSummary.saved"></span>
-      </div>
-    </div>
-  </nav>
-</header>
-
-<!-- ═══ SIDEBAR (legacy — Phase 3에서 데스크톱은 hide, 모바일은 Phase 6에서 재구성) ═══ -->
+<!-- ═══ SIDEBAR ═══════════════════════════════════════════ -->
 <aside class="sidebar">
   <div class="sidebar-logo">
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
@@ -401,6 +316,11 @@
         <template x-if="!darkMode"><g><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></g></template>
       </svg>
       <span class="nav-label" x-text="darkMode?'라이트 모드':'다크 모드'"></span>
+    </button>
+    <!-- 디자인 전환 → Clinical Paper -->
+    <button @click="switchDesign('clinical')" class="sidebar-item w-full" title="Clinical Paper(v4.1) 디자인으로 전환">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="14" x2="15" y2="14"/><line x1="9" y1="18" x2="12" y2="18"/></svg>
+      <span class="nav-label">디자인: 신버전</span>
     </button>
     <!-- 용인세브란스병원 로고 (개발자 설정에서 토글) -->
     <div class="hospital-logo" x-show="showHospitalLogo" x-cloak>
@@ -695,109 +615,18 @@
   </div>
 </div>
 
-<!-- ═══ TAB 0: 오늘 (모바일 home — Phase 6 신규) ════════════ -->
-<div x-show="activeTab==='today'" x-cloak class="content-flex" style="padding:0;overflow-y:auto">
-  <div class="today-hero">
-    <div class="today-eyebrow" x-text="(()=>{const d=new Date();return d.getFullYear()+'.'+(d.getMonth()+1).toString().padStart(2,'0')+'.'+d.getDate().toString().padStart(2,'0')})()"></div>
-    <div class="today-date">
-      <span x-text="(()=>{const d=new Date();return (d.getMonth()+1)+'.'+d.getDate()})()"></span>
-      <span class="day-name" x-text="(()=>{const d=new Date();return ['일','월','화','수','목','금','토'][d.getDay()]+'요일'})()"></span>
-    </div>
-    <div class="today-meta" x-text="currentProfile ? (profiles.find(p=>p.id===currentProfile)?.name+' · 간호사 '+nurses.length+'명') : '간호사 '+nurses.length+'명'"></div>
-  </div>
-
-  <div class="today-section">
-    <div class="today-section-title">
-      <h3>오늘 근무자</h3>
-      <span class="count" x-text="(()=>{
-        if(!schedule||!Object.keys(schedule).length) return '스케줄 없음';
-        const todayKey = (()=>{const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0')})();
-        const c = Object.values(schedule).reduce((n,days)=>n+(days[todayKey]&&['D','DC','D1','E','EC','중','N','NC'].includes(days[todayKey])?1:0),0);
-        return c+'명';
-      })()"></span>
-    </div>
-    <template x-if="!schedule || !Object.keys(schedule).length">
-      <div class="today-empty">아직 생성된 근무표가 없습니다. <button @click="activeTab='preinput'" class="text-blue" style="text-decoration:underline">사전입력</button> 후 생성하세요.</div>
-    </template>
-    <template x-if="schedule && Object.keys(schedule).length">
-      <div>
-        <template x-for="duty in ['D','E','N']" :key="'duty'+duty">
-          <div class="today-duty-group">
-            <div class="today-duty-label">
-              <span class="dot" :class="duty"></span>
-              <span x-text="duty==='D'?'데이':duty==='E'?'이브닝':'나이트'"></span>
-            </div>
-            <div class="today-nurse-list">
-              <template x-for="nid in (()=>{
-                const todayKey = (()=>{const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0')})();
-                const accept = duty==='D'?['D','DC','D1']:duty==='E'?['E','EC','중']:['N','NC'];
-                return Object.entries(schedule).filter(([nid,days])=>accept.includes(days[todayKey])).map(([nid])=>nid);
-              })()" :key="'tdn'+duty+nid">
-                <span class="today-nurse-chip" x-text="nurses.find(n=>n.id===nid)?.name || nid"></span>
-              </template>
-              <span x-show="(()=>{
-                const todayKey = (()=>{const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0')})();
-                const accept = duty==='D'?['D','DC','D1']:duty==='E'?['E','EC','중']:['N','NC'];
-                return !Object.entries(schedule).some(([nid,days])=>accept.includes(days[todayKey]));
-              })()" class="today-empty" style="padding:0">없음</span>
-            </div>
-          </div>
-        </template>
-      </div>
-    </template>
-  </div>
-
-  <div class="today-section">
-    <div class="today-section-title">
-      <h3>이번 달 진행</h3>
-      <span class="count" x-text="year+'.'+month"></span>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-      <div class="kpi" style="padding:14px 16px">
-        <span class="kpi-label">간호사</span>
-        <div class="kpi-value" style="font-size:1.8rem" x-text="nurses.length"><span class="unit">명</span></div>
-      </div>
-      <div class="kpi" style="padding:14px 16px">
-        <span class="kpi-label">사전입력</span>
-        <div class="kpi-value" style="font-size:1.8rem" x-text="countPrevEntries()"><span class="unit">건</span></div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- ═══ TAB 2: 사전입력 ═══════════════════════════════════ -->
-<div x-show="activeTab==='preinput'" x-cloak class="content-flex" style="padding:0;display:flex;flex-direction:column">
-  <!-- Phase 5: compact month banner (1행, 그리드가 hero) -->
-  <div class="month-banner">
-    <div class="month-banner-left">
-      <div class="month-banner-num">
-        <span x-text="year"></span><span class="month-dot">.</span><span x-text="month"></span>
-      </div>
-      <span class="month-banner-meta" x-text="`${['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][month-1]} · ${new Date(year, month, 0).getDate()}일 · 공휴일 ${(holidays||[]).length}`"></span>
-    </div>
-    <div class="ym" style="margin:0">
+<div x-show="activeTab==='preinput'" x-cloak class="content-flex">
+  <div class="flex flex-wrap items-center gap-3 mb-3" style="flex-shrink:0">
+    <div class="section-title" style="margin:0">사전입력</div>
+    <div class="ym">
       <button @click="prevMonth()" class="ym-nav">‹</button>
-      <input type="number" x-model.number="year" min="2020" max="2099" style="width:4em"/>
+      <input type="number" x-model.number="year" min="2020" max="2099" style="width:4.5em"/>
       <span class="ym-lbl">년</span>
-      <input type="number" x-model.number="month" min="1" max="12" style="width:2.5em"/>
+      <input type="number" x-model.number="month" min="1" max="12" style="width:3em"/>
       <span class="ym-lbl">월</span>
       <button @click="nextMonth()" class="ym-nav">›</button>
     </div>
-    <div class="month-banner-right">
-      <div class="month-banner-progress">
-        <span class="month-banner-progress-val" x-text="countPrevEntries()"></span>
-        <span class="month-banner-progress-meta">
-          / <span x-text="(nurses.filter(n=>!n.is_trainee).length * (scheduleDays?.filter(d=>!isOverflow(d))?.length||0))"></span> 셀
-          · <span x-text="prevInputProgress + '%'"></span>
-        </span>
-      </div>
-      <div class="month-banner-bar">
-        <div class="month-banner-bar-fill" :style="`width:${Math.min(100, prevInputProgress||0)}%`"></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="flex flex-wrap items-center gap-2 mb-1" style="flex-shrink:0;padding:6px 28px 0">
     <div class="ml-auto flex gap-2 flex-wrap">
       <button @click="openPastePrev()" class="btn btn-xs btn-ghost text-green" title="엑셀에서 복사한 사전입력 표를 붙여넣기">📋 엑셀 붙여넣기</button>
       <button @click="loadPrevMonthSchedule()" class="btn btn-xs btn-ghost text-blue" title="이전달 스케줄 이월">📅 전달이월</button>
@@ -1456,30 +1285,14 @@
 </main>
 </div><!-- /main-content -->
 
-<!-- ═══ BOTTOM NAV (Phase 6: Clinical Paper 모바일 5탭) ═════ -->
-<!-- 데스크톱: 설정·사전입력·분석·생성·저장 (5단계 워크플로우)
-     모바일: 오늘·사전입력·스케줄·분석·더보기 (조회 우선) -->
+<!-- ═══ BOTTOM NAV (mobile) ══════════════════════════════ -->
 <nav class="bottom-nav">
-  <div @click="activeTab='today'" :class="activeTab==='today'?'active':''" class="bottom-nav-item">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-    <span>오늘</span>
-  </div>
-  <div @click="activeTab='preinput'" :class="activeTab==='preinput'?'active':''" class="bottom-nav-item">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-    <span>사전입력</span>
-  </div>
-  <div @click="activeTab='schedule'" :class="activeTab==='schedule'?'active':''" class="bottom-nav-item">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-    <span>스케줄</span>
-  </div>
-  <div @click="activeTab='analysis'" :class="activeTab==='analysis'?'active':''" class="bottom-nav-item">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-    <span>분석</span>
-  </div>
-  <div @click="showMobileMore=!showMobileMore" :class="showMobileMore?'active':''" class="bottom-nav-item">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-    <span>더보기</span>
-  </div>
+  <div @click="activeTab='settings'" :class="activeTab==='settings'?'active':''" class="bottom-nav-item"><svg width="17" height="17" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span>설정</span></div>
+  <div @click="activeTab='preinput'" :class="activeTab==='preinput'?'active':''" class="bottom-nav-item"><svg width="17" height="17" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><span>사전입력</span></div>
+  <div @click="activeTab='analysis'" :class="activeTab==='analysis'?'active':''" class="bottom-nav-item"><svg width="17" height="17" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>분석</span></div>
+  <div @click="activeTab='schedule'" :class="activeTab==='schedule'?'active':''" class="bottom-nav-item"><svg width="17" height="17" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>스케줄</span></div>
+  <div @click="activeTab='saved'" :class="activeTab==='saved'?'active':''" class="bottom-nav-item"><svg width="17" height="17" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><span>저장</span></div>
+  <div @click="showMobileMore=!showMobileMore" :class="showMobileMore?'active':''" class="bottom-nav-item"><svg width="17" height="17" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg><span>더보기</span></div>
 </nav>
 
 <!-- 모바일 더보기 메뉴 -->
@@ -2241,7 +2054,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.1.0 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.1.0 (legacy UI) · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">PuLP + HiGHS 수리최적화 솔버 기반</p>
         <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">

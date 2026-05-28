@@ -4,6 +4,66 @@ NurseScheduler v4의 주요 변경 이력. 최신 버전이 위쪽.
 
 ---
 
+## v4.1.0 — 2026-05-28
+
+대규모 UI 리디자인 + 솔버 진단 강화 + 테스트 회귀망 + 코드 모듈화.
+
+### 🎨 디자인 선택 시스템 (신규)
+
+기존 **Premium UI**(v4.0.x — Outfit + Noto Sans KR, modern blue)와
+새 **Clinical Paper UI**(v4.1 — Pretendard + Newsreader + JetBrains Mono,
+세브란스 navy + paper beige)를 **둘 다** 포함.
+
+- 기본 진입: 새 Clinical Paper UI (`/`)
+- 레거시 진입: `/legacy` 경로 또는 사이드바 "디자인: 신버전" / appbar "UI ▸ Premium" 버튼
+- 선택은 `localStorage.design` 에 기억 — 다음 방문에 자동 복원
+- 두 디자인 모두 동일 백엔드 API 사용, 데이터/프로필 호환
+
+### 🩺 Clinical Paper 리디자인 (Phase 6 — 완료)
+
+- **타이포그래피**: Newsreader serif headings + JetBrains Mono 셀/수치 + Pretendard Variable 본문
+- **컬러**: 세브란스 navy #023671 + 따뜻한 paper beige (#f3eee3) + 잉크 그라데이션
+- **레이아웃**: 상단 마스트헤드 + 5-step stepper (사이드바 제거, 데스크톱)
+- **헤더 컴팩션**: appbar/stepper/month-banner padding 축소로 테이블 영역 +50px 확보
+
+### 🐛 헤더 sticky 투명도 수정
+
+- `.cy-1~4` 주기 헤더, `.g-sat-bg` 토요일 헤더가 `rgba 0.06` 단일 레이어라
+  스크롤 시 본문이 비쳐보이던 문제 해소
+- 솔리드 `var(--card-warm)` 베이스 + 색조 오버레이로 분리
+- `.g-fix`의 `background: ... !important` shorthand가 tint를 덮어쓰던 충돌 해결
+
+### 🔍 솔버 진단 메시지 강화
+
+[`scheduler.py` `_diagnose_infeasibility()` Phase 5] 주휴/OF 부족 출력에
+구체적 액션 제안 추가 — 일반 조언 대신 수치 기반 3택:
+
+1. **간호사 +N명 추가** (가장 부족한 주의 gap÷5 올림)
+2. **요일별 D/E/N 합계 일평균 -K명** (현재 X.X → 목표 Y.Y)
+3. 사전입력 휴가/OF 일부 제거
+
+### 🧪 pytest 회귀 테스트 (10건, 0.5초)
+
+- `tests/conftest.py`: `LimitedScheduler` 픽스처 + 빌더
+- `tests/test_constraints.py`: smoke / 9개 금지 전환 / 일별 인원 정확 일치 /
+  charge 시니어리티 / V 월 한도 / 1일1근무 / 사전 고정 유지
+- `tests/test_diagnostics.py`: Phase 5 액션 제안 메시지 / infeasible 응답 형태
+- `pytest.ini` + `tests/__init__.py` 추가
+
+### 📦 JS 모듈화 (패턴 확립)
+
+- `frontend/js/modules/undo-redo.js` — `_pushUndo / undo / redo` 추출
+- `frontend/js/modules/drag-select.js` — 드래그 멀티셀렉트 5개 메서드 추출
+- `app.js` 진입점에서 `...UndoRedoModule(), ...DragSelectModule()` 스프레드
+- 빌드 도구 없이 `<script>` 순차 로드 + window namespace 패턴 — 점진적 분리 가능
+
+### 🐞 알려진 사소한 시맨틱
+
+- `Rules.maxVPerMonth=0`은 `_c_max_v_per_month`에서 "제약 미적용" 의미
+  (UI는 별도 `unlimited_v` 플래그 사용). 회귀 테스트 주석으로 명시.
+
+---
+
 ## v4.0.8 — 2026-04-28
 
 간호사 일괄 관리와 사전입력 엑셀 붙여넣기 중심의 큰 UX 개선.
