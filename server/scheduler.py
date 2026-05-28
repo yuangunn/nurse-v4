@@ -2059,6 +2059,9 @@ class NurseScheduler:
 
             # ── 원인 2: 휴가 + OF + 주휴 → 주 내 off가 너무 많아 슬랙 부족 ──
             lines.append("  [주차별 분석]")
+            worst_week_gap = 0
+            worst_week_label = ""
+            worst_week_daily_avg = 0  # 가장 부족한 주의 일평균 필요 슬롯
             for wi, (ws, we) in enumerate(self.weeks):
                 week_slots_needed = 0
                 day_details = []
@@ -2095,7 +2098,8 @@ class NurseScheduler:
 
                 # 휴가 고정으로 실제 슬랙이 줄어드는 효과 반영
                 effective_avail = max(0, week_avail - total_extra_leave)
-                tight = " ★빡빡" if week_slots_needed > effective_avail else ""
+                gap = week_slots_needed - effective_avail
+                tight = " ★빡빡" if gap > 0 else ""
 
                 start_dt = self.all_dates[ws]
                 end_dt = self.all_dates[min(we, len(self.all_dates)-1)]
@@ -2104,6 +2108,10 @@ class NurseScheduler:
                     f"    {wi+1}주차 ({start_dt.strftime('%m/%d')}~{end_dt.strftime('%m/%d')}): "
                     f"필요 {week_slots_needed}슬롯 / 가용 {effective_avail}슬롯{leave_note}{tight}"
                 )
+                if gap > worst_week_gap:
+                    worst_week_gap = gap
+                    worst_week_label = f"{wi+1}주차 ({start_dt.strftime('%m/%d')}~{end_dt.strftime('%m/%d')})"
+                    worst_week_daily_avg = week_slots_needed / month_days_in_week
                 # 해당 주에서 가장 빡빡한 날 상위 3개
                 day_details_sorted = sorted(day_details, key=lambda x: x[1] - (N - x[2]), reverse=True)
                 for dt, needed, fixed_off in day_details_sorted[:3]:
@@ -2113,7 +2121,25 @@ class NurseScheduler:
                         f"      {dt.strftime('%m/%d')}({DAY_KR[dt.weekday()]}): "
                         f"필요 {needed}명 / 가용 {avail_day}명{flag}"
                     )
-            lines.append("  → 해결: 간호사를 늘리거나 요일별 필요 인원을 줄이세요.")
+            # ── 액션 제안: 부족분을 구체 수치로 환산 ────────────────────────
+            if worst_week_gap > 0:
+                # 간호사 1명을 1주에 ~5슬롯(주휴+OF 빼고) 기여 가능 → 추가 N≈ceil(gap/5)
+                add_nurses = -(-worst_week_gap // 5)
+                # 일평균 demand 기준 줄여야 할 정도: gap/7 (반올림)
+                demand_cut_per_day = -(-worst_week_gap // 7)
+                lines.append("  ★ 해결 (택1):")
+                lines.append(
+                    f"     1) 간호사 +{add_nurses}명 추가 — "
+                    f"가장 부족한 {worst_week_label}이 {worst_week_gap}슬롯 부족."
+                )
+                lines.append(
+                    f"     2) 요일별 D/E/N 합계를 일평균 -{demand_cut_per_day}명 줄이기 "
+                    f"(현재 일평균 {worst_week_daily_avg:.1f}명 → 목표 "
+                    f"{max(0, worst_week_daily_avg - demand_cut_per_day):.1f}명)."
+                )
+                lines.append("     3) 사전입력 휴가/OF가 과도하면 일부 제거.")
+            else:
+                lines.append("  → 해결: 간호사를 늘리거나 요일별 필요 인원을 줄이세요.")
             return "\n".join(lines)
 
         # ── Phase 6: 연속 근무/야간 제한 ────────────────────────────────────

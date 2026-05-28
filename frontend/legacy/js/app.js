@@ -70,38 +70,6 @@ function app() {
     profiles:[],
     currentProfile:null,
     hasMasterPassword:false,
-    appVersion:'v4.1.0',
-
-    // ── Stepper (Phase 3 — Clinical Paper appbar) ──
-    get stepperDone(){
-      const sched = this.schedule && Object.keys(this.schedule).length>0;
-      return {
-        settings: (this.nurses||[]).length > 0,
-        preinput: this.countPrevEntries() > 0,
-        analysis: !!this.analysisResult,
-        schedule: sched,
-        saved: false,
-      };
-    },
-    get stepperSummary(){
-      const nurseN = (this.nurses||[]).length;
-      const prevN = this.countPrevEntries();
-      const totalCells = (this.nurses||[]).filter(n=>!n.is_trainee).length *
-                         (this.scheduleDays?.filter(d=>!this.isOverflow(d))?.length || 0);
-      const warns = (this.scheduleWarnings||[]).length;
-      const sched = this.schedule && Object.keys(this.schedule).length>0;
-      const savedN = (this.savedList||[]).length;
-      return {
-        settings: nurseN ? `${nurseN}명 · 규칙` : '명부 · 규칙',
-        preinput: totalCells ? `${prevN} / ${totalCells} 셀` : '주휴 · 연차 입력',
-        analysis: this.analysisResult ? (warns ? `경고 ${warns}건` : '인원 분석 완료') : '인원 과부족',
-        schedule: this.generating ? 'solving…' :
-                  (sched ? (this.mipGapPercent!=null ? `gap ${this.mipGapPercent.toFixed(1)}%` : '생성 완료')
-                         : 'MIP 솔버'),
-        saved: savedN ? `${savedN}건 저장됨` : 'CSV · 인쇄',
-      };
-    },
-
     profileCreateModal:{open:false,id:'',name:'',password:'',passwordConfirm:''},
     profilePasswordInput:'',
     profileMasterInput:'',
@@ -780,53 +748,17 @@ function app() {
 
     // ── 근무 관리 ─────────────────────────────────────────────
     async loadShifts(){this.shifts=await this.api('GET','/api/shifts')},
-    // ── Clinical Paper cell color map (Phase 4) ──
-    // shift code → [bg-var, ink-var, font-weight]
-    // 페이퍼 톤 + 잉크 — DB-defined color는 fallback으로만 사용
-    _CLINICAL_CELL_MAP: {
-      'D':  ['--d-bg', '--d-ink', '600'],
-      'DC': ['--d-bg', '--d-ink', '700'],
-      'D1': ['--d-bg', '--d-ink', '600'],
-      'E':  ['--e-bg', '--e-ink', '600'],
-      'EC': ['--e-bg', '--e-ink', '700'],
-      '중':  ['--e-bg', '--e-ink', '600'],
-      'N':  ['--n-bg', '--n-ink', '600'],
-      'NC': ['--n-bg', '--n-ink', '700'],
-      'OF': ['transparent', '--off-ink', '400'],
-      '주':  ['--paper-2', '--ink-4', '600'],
-      'V':  ['--v-bg', '--v-ink', '600'],
-      '생':  ['--v-bg', '--v-ink', '600'],
-      '특':  ['--v-bg', '--v-ink', '600'],
-      '공':  ['--v-bg', '--v-ink', '600'],
-      '법':  ['--v-bg', '--v-ink', '600'],
-      '병':  ['--v-bg', '--v-ink', '600'],
-    },
     getShiftStyle(code){
       // 트레이니 /D → D로 매핑
       const baseCode=code?.startsWith('/')?code.slice(1):code;
-      const entry=this._CLINICAL_CELL_MAP[baseCode];
-      if(entry){
-        const [bg, ink, weight]=entry;
-        const style={
-          background: bg==='transparent'?'transparent':`var(${bg})`,
-          color: `var(${ink})`,
-          fontWeight: weight,
-        };
-        // 주(주휴)는 italic
-        if(baseCode==='주') style.fontStyle='italic';
-        if(code?.startsWith('/')){
-          // 트레이니: opacity 낮추고 italic
-          style.opacity='0.55';
-          style.fontStyle='italic';
-        }
-        return style;
-      }
-      // fallback: DB-defined shift (사용자가 새 코드 추가한 경우)
       const s=this.shiftMap.get(baseCode);if(!s)return {};
       if(code?.startsWith('/')){
-        return{background:s.color_bg+'80',color:s.color_text+'99',fontStyle:'italic',opacity:'0.55'};
+        // 트레이니: 반투명 스타일
+        if(!this.darkMode)return{background:s.color_bg+'80',color:s.color_text+'99',fontStyle:'italic'};
+        return{background:this._shiftGlassBg(s.color_bg),color:this._shiftGlassText(s.color_text),opacity:'0.6',fontStyle:'italic'};
       }
-      return{background:s.color_bg,color:s.color_text};
+      if(!this.darkMode)return{background:s.color_bg,color:s.color_text};
+      return{background:this._shiftGlassBg(s.color_bg),color:this._shiftGlassText(s.color_text)};
     },
     // 스케줄 탭용 셀 스타일
     hideCharge:true, colorByShift:true, showCompareMenu:false, showMobileMore:false,
@@ -999,13 +931,10 @@ function app() {
 
     // ── 다크모드 ──────────────────────────────────────────────
     toggleDark(){this.darkMode=!this.darkMode;document.documentElement.classList.toggle('dark',this.darkMode);localStorage.setItem('darkMode',this.darkMode)},
-
-    // ── 디자인 전환 (Premium UI ↔ Clinical Paper) ─────────────
+    // 디자인 전환 (Premium UI ↔ Clinical Paper)
     switchDesign(target){
-      // target: 'legacy' (Premium UI) | 'clinical' (Clinical Paper, 기본)
       try{localStorage.setItem('design',target)}catch(e){}
-      if(target==='legacy')window.location.href='/legacy';
-      else window.location.href='/';
+      window.location.href=(target==='legacy')?'/legacy':'/';
     },
     getDayDutyCount(day,shifts){if(!this.schedule||Object.keys(this.schedule).length===0)return 0;const k=this.dayKey(day);return Object.values(this.schedule).filter(ns=>shifts.includes(ns[k])).length},
 
@@ -1430,7 +1359,27 @@ function app() {
     },
 
     // ── Undo/Redo ────────────────────────────────────────────
-    // _pushUndo / undo / redo 는 modules/undo-redo.js 로 이동.
+    _pushUndo(){
+      this._undoStack.push(JSON.stringify({ps:this.prevSchedule,dr:this.prevDayReqs,hd:this.holidays,lk:this.lockedCells,nt:this.cellNotes}));
+      if(this._undoStack.length>this._maxUndo)this._undoStack.shift();
+      this._redoStack=[];
+    },
+    undo(){
+      if(!this._undoStack.length)return;
+      this._redoStack.push(JSON.stringify({ps:this.prevSchedule,dr:this.prevDayReqs,hd:this.holidays,lk:this.lockedCells,nt:this.cellNotes}));
+      const state=JSON.parse(this._undoStack.pop());
+      this.prevSchedule=state.ps;this.prevDayReqs=state.dr;this.holidays=state.hd;
+      this.lockedCells=state.lk||{};this.cellNotes=state.nt||{};
+      this._checkViolations();
+    },
+    redo(){
+      if(!this._redoStack.length)return;
+      this._undoStack.push(JSON.stringify({ps:this.prevSchedule,dr:this.prevDayReqs,hd:this.holidays,lk:this.lockedCells,nt:this.cellNotes}));
+      const state=JSON.parse(this._redoStack.pop());
+      this.prevSchedule=state.ps;this.prevDayReqs=state.dr;this.holidays=state.hd;
+      this.lockedCells=state.lk||{};this.cellNotes=state.nt||{};
+      this._checkViolations();
+    },
 
     // ── Auto-save ──────────────────────────────────────────
     _startAutoSave(){
@@ -1503,8 +1452,54 @@ function app() {
     },
 
     // ── 드래그 다중 선택 ───────────────────────────────────
-    // onCellMouseDown/Over/Up, isDragSelected, applyMultiShiftEdit 는
-    // modules/drag-select.js 로 이동.
+    onCellMouseDown(nurse,day,event){
+      if(event.button!==0)return;
+      this._isDragging=true;
+      this._dragStart={nid:nurse.id,day};
+      this._dragCells=[{nid:nurse.id,day,dk:this.dayKey(day)}];
+    },
+    onCellMouseOver(nurse,day){
+      if(!this._isDragging)return;
+      const dk=this.dayKey(day);
+      if(!this._dragCells.some(c=>c.nid===nurse.id&&c.dk===dk)){
+        this._dragCells.push({nid:nurse.id,day,dk});
+      }
+    },
+    onCellMouseUp(){
+      if(!this._isDragging)return;
+      this._isDragging=false;
+      if(this._dragCells.length>1){
+        // 다중 선택 → 근무 선택 모달
+        this.shiftEdit={open:true,nurse:this._dragCells[0],day:this._dragCells[0].day,dateLabel:`${this._dragCells.length}셀 선택`,mode:'prev_multi'};
+      }else if(this._dragCells.length===1){
+        const c=this._dragCells[0];
+        const nurse=this.nurses.find(n=>n.id===c.nid);
+        if(nurse)this.openPrevEdit(nurse,c.day);
+      }
+      this._dragStart=null;
+    },
+    isDragSelected(nurseId,day){
+      if(!this._isDragging)return false;
+      const dk=this.dayKey(day);
+      return this._dragCells.some(c=>c.nid===nurseId&&c.dk===dk);
+    },
+    applyMultiShiftEdit(shift){
+      if(shift==='__CLEAR__'){
+        this._pushUndo();
+        for(const c of this._dragCells){
+          if(this.prevSchedule[c.nid])delete this.prevSchedule[c.nid][c.dk];
+        }
+      }else{
+        this._pushUndo();
+        for(const c of this._dragCells){
+          if(!this.prevSchedule[c.nid])this.prevSchedule[c.nid]={};
+          this.prevSchedule[c.nid][c.dk]=shift;
+        }
+      }
+      this._dragCells=[];
+      this.shiftEdit.open=false;
+      this._checkViolations();
+    },
 
     // ── 키보드 네비게이션 ──────────────────────────────────
     onGridKeyDown(event){
@@ -2638,11 +2633,5 @@ function app() {
       const avgWeekends=stats.reduce((s,n)=>s+n.weekends,0)/stats.length;
       return{stats,avgNights:avgNights.toFixed(1),avgWeekends:avgWeekends.toFixed(1)};
     },
-
-    // ── 외부 모듈 합성 (modules/*.js — index.html에서 app.js 앞에 로드) ──
-    // 동일 키가 위에 있으면 이쪽으로 덮어쓰여지므로, 모듈로 옮긴 메서드는
-    // 반드시 위쪽 정의에서 제거되어야 함 (drag-select, undo-redo 모듈 참고).
-    ...(window.UndoRedoModule ? window.UndoRedoModule() : {}),
-    ...(window.DragSelectModule ? window.DragSelectModule() : {}),
   };
 }

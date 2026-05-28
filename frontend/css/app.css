@@ -1,99 +1,307 @@
 /* ═══════════════════════════════════════════════════════════
-   NurseScheduler v4 — Premium UI
-   Outfit (EN) + Noto Sans KR (한글)
+   NurseScheduler v4.1 — Clinical Paper Redesign
+   세브란스 네이비 #023671 · 페이퍼 베이지 · 잉크
+   Pretendard Variable (한글 본문) + Newsreader (serif headings)
+   + JetBrains Mono (셀/시각/로그)
    ═══════════════════════════════════════════════════════════ */
 
-/* ── Fonts ────────────────────────────────────────────────── */
-@font-face { font-family:'Outfit'; font-weight:400; font-display:swap; src:url('/fonts/Outfit-400.ttf') format('truetype'); }
-@font-face { font-family:'Outfit'; font-weight:500; font-display:swap; src:url('/fonts/Outfit-500.ttf') format('truetype'); }
-@font-face { font-family:'Outfit'; font-weight:600; font-display:swap; src:url('/fonts/Outfit-600.ttf') format('truetype'); }
-@font-face { font-family:'Outfit'; font-weight:700; font-display:swap; src:url('/fonts/Outfit-700.ttf') format('truetype'); }
-@font-face { font-family:'Noto Sans KR'; font-weight:300; font-display:swap; src:url('/fonts/NotoSansKR-300.ttf') format('truetype'); }
-@font-face { font-family:'Noto Sans KR'; font-weight:400; font-display:swap; src:url('/fonts/NotoSansKR-400.ttf') format('truetype'); }
-@font-face { font-family:'Noto Sans KR'; font-weight:500; font-display:swap; src:url('/fonts/NotoSansKR-500.ttf') format('truetype'); }
-@font-face { font-family:'Noto Sans KR'; font-weight:600; font-display:swap; src:url('/fonts/NotoSansKR-600.ttf') format('truetype'); }
-@font-face { font-family:'Noto Sans KR'; font-weight:700; font-display:swap; src:url('/fonts/NotoSansKR-700.ttf') format('truetype'); }
+/* ── Fonts (오프라인 번들, Electron) ──────────────────────── */
+@font-face {
+  font-family: 'Pretendard Variable';
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
+}
+@font-face { font-family:'Newsreader'; font-style:normal; font-weight:300; font-display:swap; src:url('/fonts/Newsreader-300.woff2') format('woff2'); }
+@font-face { font-family:'Newsreader'; font-style:normal; font-weight:400; font-display:swap; src:url('/fonts/Newsreader-400.woff2') format('woff2'); }
+@font-face { font-family:'Newsreader'; font-style:normal; font-weight:500; font-display:swap; src:url('/fonts/Newsreader-500.woff2') format('woff2'); }
+@font-face { font-family:'Newsreader'; font-style:normal; font-weight:600; font-display:swap; src:url('/fonts/Newsreader-600.woff2') format('woff2'); }
+@font-face { font-family:'Newsreader'; font-style:italic; font-weight:300; font-display:swap; src:url('/fonts/Newsreader-300i.woff2') format('woff2'); }
+@font-face { font-family:'Newsreader'; font-style:italic; font-weight:400; font-display:swap; src:url('/fonts/Newsreader-400i.woff2') format('woff2'); }
+@font-face { font-family:'JetBrains Mono'; font-weight:400; font-display:swap; src:url('/fonts/JetBrainsMono-400.woff2') format('woff2'); }
+@font-face { font-family:'JetBrains Mono'; font-weight:500; font-display:swap; src:url('/fonts/JetBrainsMono-500.woff2') format('woff2'); }
+@font-face { font-family:'JetBrains Mono'; font-weight:600; font-display:swap; src:url('/fonts/JetBrainsMono-600.woff2') format('woff2'); }
+@font-face { font-family:'JetBrains Mono'; font-weight:700; font-display:swap; src:url('/fonts/JetBrainsMono-700.woff2') format('woff2'); }
 
-/* ── CSS Variables (Light) ───────────────────────────────── */
+/* ── Clinical Paper Design Tokens (Light) ────────────────── */
 :root {
-  --bg: #f3f4f8;
-  --bg-sidebar: #ffffff;
-  --bg-card: #ffffff;
-  --bg-card-hover: #f8f9fb;
-  --bg-input: #f0f1f5;
-  --border: #e2e5ec;
-  --border-light: #eceef3;
-  --text: #1e293b;
-  --text-sub: #475569;
-  --text-dim: #94a3b8;
-  --text-bright: #0f172a;
-  --accent: #2563eb;
-  --accent-hover: #3b82f6;
-  --accent-bg: rgba(37,99,235,0.06);
-  --accent-glow: rgba(37,99,235,0.12);
-  --green: #16a34a;
-  --red: #dc2626;
-  --amber: #d97706;
-  --pink: #db2777;
-  --t-green: #16a34a;
-  --t-red: #dc2626;
-  --t-amber: #d97706;
-  --t-pink: #db2777;
-  --t-blue: #2563eb;
-  --g-fix: #f8f9fb;
-  --log-bg: #0f172a;
-  --log-text: #4ade80;
-  --modal-bg: #ffffff;
-  --modal-overlay: rgba(15,23,42,0.3);
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
-  --shadow-lg: 0 12px 40px rgba(0,0,0,0.08);
-  --sidebar-active-bg: linear-gradient(135deg, rgba(37,99,235,0.08), rgba(37,99,235,0.03));
+  /* Paper (warm beige) */
+  --paper:       #f3eee3;
+  --paper-2:     #ebe4d2;
+  --paper-3:     #e2dac2;
+  --card:        #fbf8f0;
+  --card-warm:   #f8f3e6;
+
+  /* Ink (warm near-black → mid greys) */
+  --ink:         #1a1815;
+  --ink-2:       #3a342c;
+  --ink-3:       #6e6759;
+  --ink-4:       #9c9483;
+  --ink-5:       #c4bca9;
+
+  /* Rules (hairline separators) */
+  --rule:        #d4cbb4;
+  --rule-2:      #c3b994;
+  --rule-soft:   #e6dfca;
+
+  /* Severance Navy — single accent */
+  --accent:      #023671;
+  --accent-2:    #1a4f87;
+  --accent-3:    #0b2d56;
+  --accent-soft: #dde4ec;
+  --accent-mist: #eef2f7;
+
+  /* Signal colors (status only) */
+  --ok:          #4a6b32;   --ok-bg:   #e3e8c8;
+  --warn:        #8a5a1c;   --warn-bg: #f3e6c4;
+  --err:         #8b2e1f;   --err-bg:  #f0d7cc;
+  --info:        #023671;   --info-bg: #dde4ec;
+
+  /* Shift palette (subtle paper tones, NOT fluorescent) */
+  --d-ink: #023671;  --d-bg: #d6dfeb;   /* Day — navy */
+  --e-ink: #8a3a1a;  --e-bg: #f3dcc9;   /* Evening — terracotta */
+  --n-ink: #3d2a5e;  --n-bg: #ddd2eb;   /* Night — mauve */
+  --v-ink: #4a6b32;  --v-bg: #dde3c4;   /* Vacation — moss */
+  --off-ink: #6e6759; --off-bg: #ebe4d2; /* Off — paper */
+
+  /* ── Legacy variable aliases (Phase 1 호환) ─────────────
+     Phase 2~3에서 컴포넌트 룰을 새 토큰으로 직접 갈아끼우기 전까지
+     기존 변수 이름을 새 토큰에 매핑해서 룰이 깨지지 않게 함. */
+  --bg:            var(--paper);
+  --bg-sidebar:    var(--card);
+  --bg-card:       var(--card);
+  --bg-card-hover: var(--card-warm);
+  --bg-input:      var(--paper-2);
+  --border:        var(--rule);
+  --border-light:  var(--rule-soft);
+  --text:          var(--ink-2);
+  --text-sub:      var(--ink-3);
+  --text-dim:      var(--ink-4);
+  --text-bright:   var(--ink);
+  --accent-hover:  var(--accent-2);
+  --accent-bg:     var(--accent-soft);
+  --accent-glow:   var(--accent-mist);
+  --green:         var(--ok);
+  --red:           var(--err);
+  --amber:         var(--warn);
+  --pink:          var(--err);
+  --t-green:       var(--ok);
+  --t-red:         var(--err);
+  --t-amber:       var(--warn);
+  --t-pink:        var(--err);
+  --t-blue:        var(--accent);
+  --g-fix:         var(--card-warm);
+  --log-bg:        var(--ink);
+  --log-text:      var(--ok);
+  --modal-bg:      var(--card);
+  --modal-overlay: rgba(26,24,21,0.32);
+  --shadow-sm:     0 1px 0 var(--rule-soft);
+  --shadow-md:     0 1px 0 var(--rule);
+  --shadow-lg:     0 2px 0 var(--rule);
+  --sidebar-active-bg: var(--accent-soft);
 }
 
-/* ── CSS Variables (Dark) ────────────────────────────────── */
+/* ── Dark mode (paper inverted to deep ink) ──────────────── */
 html.dark {
-  --bg: #0c0f17;
-  --bg-sidebar: #0a0d14;
-  --bg-card: rgba(255,255,255,0.025);
-  --bg-card-hover: rgba(255,255,255,0.04);
-  --bg-input: rgba(255,255,255,0.03);
-  --border: rgba(255,255,255,0.06);
-  --border-light: rgba(255,255,255,0.035);
-  --text: #cbd5e1;
-  --text-sub: rgba(255,255,255,0.5);
-  --text-dim: rgba(255,255,255,0.25);
-  --text-bright: rgba(255,255,255,0.9);
-  --accent: #60a5fa;
-  --accent-hover: #93c5fd;
-  --accent-bg: rgba(96,165,250,0.08);
-  --accent-glow: rgba(96,165,250,0.15);
-  --green: #4ade80;
-  --red: #f87171;
-  --amber: #fbbf24;
-  --pink: #f472b6;
-  --t-green: #4ade80;
-  --t-red: #f87171;
-  --t-amber: #fbbf24;
-  --t-pink: #f472b6;
-  --t-blue: #60a5fa;
-  --g-fix: #0c0f17;
-  --log-bg: #050810;
-  --log-text: #4ade80;
-  --modal-bg: #111827;
-  --modal-overlay: rgba(0,0,0,0.6);
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
-  --shadow-lg: 0 12px 40px rgba(0,0,0,0.4);
-  --sidebar-active-bg: linear-gradient(135deg, rgba(96,165,250,0.1), rgba(96,165,250,0.03));
+  --paper:       #0e0d0c;
+  --paper-2:     #16140f;
+  --paper-3:     #1d1a14;
+  --card:        #14120e;
+  --card-warm:   #1a1813;
+
+  --ink:         #f0ebde;
+  --ink-2:       #c4bca9;
+  --ink-3:       #9c9483;
+  --ink-4:       #6e6759;
+  --ink-5:       #3a342c;
+
+  --rule:        #2a2620;
+  --rule-2:      #3a342c;
+  --rule-soft:   #1d1a14;
+
+  --accent:      #6b9bd1;
+  --accent-2:    #8eb5db;
+  --accent-3:    #4a7bb0;
+  --accent-soft: rgba(107,155,209,0.12);
+  --accent-mist: rgba(107,155,209,0.06);
+
+  --ok:          #a8c478;  --ok-bg:   rgba(168,196,120,0.12);
+  --warn:        #d4a96a;  --warn-bg: rgba(212,169,106,0.12);
+  --err:         #d68b78;  --err-bg:  rgba(214,139,120,0.12);
+  --info:        #6b9bd1;  --info-bg: rgba(107,155,209,0.12);
+
+  --d-ink: #8eb5db;  --d-bg: rgba(107,155,209,0.12);
+  --e-ink: #d4a08a;  --e-bg: rgba(212,160,138,0.12);
+  --n-ink: #b89dd4;  --n-bg: rgba(184,157,212,0.12);
+  --v-ink: #b8c879;  --v-bg: rgba(184,200,121,0.12);
+  --off-ink: #6e6759; --off-bg: rgba(110,103,89,0.10);
+
+  --modal-overlay: rgba(0,0,0,0.55);
+  --shadow-sm:     0 1px 0 var(--rule);
+  --shadow-md:     0 1px 0 var(--rule);
+  --shadow-lg:     0 2px 0 var(--rule);
+}
+
+/* ── Typography utilities (Phase 1 / Phase 5) ────────────── */
+.serif {
+  font-family: 'Newsreader', 'Times New Roman', serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.mono {
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.tnum { font-variant-numeric: tabular-nums; }
+.eyebrow {
+  display: inline-block;
+  font-size: 0.62rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+.h-display {
+  font-family: 'Newsreader', 'Times New Roman', serif;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1.06;
+  color: var(--ink);
+}
+.h-display .accent { color: var(--accent); }
+.h-display .italic-dim { font-style: italic; color: var(--ink-3); font-weight: 300; }
+
+/* ── Section title (Phase 5: serif option) ──────────────── */
+.section-title.serif-h {
+  font-family: 'Newsreader', serif;
+  font-weight: 400;
+  font-size: 1.8rem;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  text-transform: none;
+}
+
+/* ── Month banner (사전입력/스케줄 hero — compact: 1행 inline) ─ */
+.month-banner {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 5px 28px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--card);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.month-banner-left {
+  display: flex; align-items: baseline; gap: 10px;
+  flex-shrink: 0;
+}
+.month-banner-num {
+  font-family: 'Newsreader', serif;
+  font-size: 1.7rem; font-weight: 400;
+  line-height: 1; letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.month-banner-num .month-dot { color: var(--ink-3); font-style: italic; }
+.month-banner-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.66rem; color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+.month-banner-right {
+  display: flex; align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.month-banner-progress { display: inline-flex; align-items: baseline; gap: 4px; }
+.month-banner-progress-val {
+  font-family: 'Newsreader', serif;
+  font-size: 1.05rem; font-weight: 500;
+  color: var(--ink); line-height: 1;
+}
+.month-banner-progress-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.66rem; color: var(--ink-3);
+}
+.month-banner-bar {
+  width: 110px; height: 2px;
+  background: var(--rule-soft);
+  position: relative; overflow: hidden;
+}
+.month-banner-bar-fill {
+  position: absolute; top: 0; left: 0; bottom: 0;
+  background: var(--ink); transition: width 0.2s ease;
+}
+
+/* ── KPI cards (분석 화면) ───────────────────────────────── */
+.kpi {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 18px 22px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+}
+.kpi-label {
+  font-size: 0.62rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+.kpi-value {
+  font-family: 'Newsreader', serif;
+  font-size: 2.6rem; font-weight: 300;
+  line-height: 1; letter-spacing: -0.03em;
+  color: var(--ink);
+}
+.kpi-value .unit {
+  font-family: 'Pretendard Variable', system-ui, sans-serif;
+  font-size: 0.88rem; font-weight: 400;
+  color: var(--ink-3); margin-left: 4px;
+}
+.kpi-delta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+}
+.kpi-delta.pos { color: var(--ok); }
+.kpi-delta.neg { color: var(--err); }
+
+/* ── Generation panel (스케줄 하단 고정 솔버) ──────────── */
+.gen-panel {
+  background: var(--card-warm);
+  border-top: 1px solid var(--rule);
+  padding: 16px 28px;
+  flex-shrink: 0;
+}
+.gen-panel-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem; color: var(--ink-3);
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.gen-panel-bar {
+  width: 100%; height: 3px;
+  background: var(--rule-soft);
+  position: relative; overflow: hidden;
+}
+.gen-panel-bar-fill {
+  position: absolute; top: 0; left: 0; bottom: 0;
+  background: var(--ink);
+}
+.gen-panel-log {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.66rem;
+  background: var(--paper-2);
+  color: var(--ink-2);
+  padding: 6px 10px;
+  border: 1px solid var(--rule-soft);
+  max-height: 56px; overflow-y: auto;
+  line-height: 1.5;
 }
 
 /* ── Base ─────────────────────────────────────────────────── */
 *,*::before,*::after { box-sizing: border-box; }
 body {
   margin: 0;
-  font-family: 'Outfit', 'Noto Sans KR', system-ui, -apple-system, sans-serif;
+  font-family: 'Pretendard Variable', 'Pretendard', system-ui, -apple-system, sans-serif;
   font-size: 1rem; font-weight: 400;
+  font-feature-settings: "tnum", "ss01";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: var(--bg);
@@ -102,8 +310,153 @@ body {
 }
 [x-cloak] { display: none !important; }
 
-/* ── Layout ──────────────────────────────────────────────── */
-.app-shell { display: flex; height: 100vh; overflow: hidden; }
+/* ── Layout (Phase 3: Clinical Paper viewport) ────────────── */
+.app-shell {
+  display: flex; flex-direction: column;
+  height: 100vh; overflow: hidden;
+  background: var(--paper);
+  position: relative;
+}
+/* 상단 3px Severance navy ribbon */
+.app-shell::before {
+  content: ''; position: fixed; top: 0; left: 0; right: 0;
+  height: 3px; background: var(--accent);
+  z-index: 60;
+}
+
+/* ── Appbar (마스트헤드: brand + meta + 5-step stepper) ─── */
+.appbar {
+  flex-shrink: 0;
+  background: var(--card);
+  border-bottom: 1px solid var(--rule);
+  padding-top: 3px; /* ribbon 자리 */
+}
+.appbar-top {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  padding: 8px 28px;
+  gap: 18px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.brand-lockup {
+  display: flex; align-items: center; gap: 12px;
+}
+.brand-mark {
+  width: 28px; height: 28px;
+  background: var(--accent);
+  position: relative;
+  flex-shrink: 0;
+}
+.brand-mark::before, .brand-mark::after {
+  content: ''; position: absolute; background: var(--paper);
+}
+.brand-mark::before {
+  /* 가로 십자 */
+  left: 6px; right: 6px; top: 13px; height: 2px;
+}
+.brand-mark::after {
+  /* 세로 십자 */
+  top: 6px; bottom: 6px; left: 13px; width: 2px;
+}
+.brand-lockup-text {
+  display: flex; flex-direction: column; gap: 1px;
+  line-height: 1.1;
+}
+.brand-name {
+  font-family: 'Newsreader', 'Times New Roman', serif;
+  font-size: 1.05rem; font-weight: 500;
+  color: var(--ink); letter-spacing: -0.01em;
+}
+.brand-hospital {
+  font-size: 0.62rem; color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+.brand-ver {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem; color: var(--ink-4);
+  padding: 2px 6px;
+  border: 1px solid var(--rule);
+  margin-left: 4px;
+  cursor: pointer; user-select: none;
+}
+.appbar-meta {
+  display: flex; gap: 18px; align-items: center;
+  font-size: 0.7rem;
+}
+.appbar-meta-cell {
+  display: flex; flex-direction: column; gap: 1px;
+  line-height: 1.2;
+}
+.appbar-meta-label {
+  font-size: 0.58rem; color: var(--ink-4);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.appbar-meta-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem; color: var(--ink-2);
+  font-weight: 500;
+}
+.appbar-actions { display: flex; gap: 6px; align-items: center; }
+
+/* ── Stepper (5-step 워크플로우) ──────────────────────────── */
+.stepper {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+}
+.step {
+  display: grid; grid-template-columns: auto 1fr;
+  gap: 10px; align-items: center;
+  padding: 7px 16px;
+  border-right: 1px solid var(--rule-soft);
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink-3);
+  transition: background-color 0.12s, color 0.12s;
+  user-select: none;
+}
+.step:last-child { border-right: none; }
+.step:hover { background: var(--card-warm); color: var(--ink); }
+.step.active {
+  background: var(--ink); color: var(--paper);
+}
+.step.active .step-num,
+.step.active .step-desc { color: var(--paper); opacity: 0.7; }
+.step-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; font-weight: 600;
+  color: var(--ink-4); letter-spacing: 0.04em;
+  position: relative;
+}
+.step.done .step-num::after {
+  content: '✓'; margin-left: 4px; color: var(--ok); font-weight: 700;
+}
+.step.active.done .step-num::after { color: var(--paper); }
+.step-body { display: flex; flex-direction: column; gap: 1px; line-height: 1.2; }
+.step-name {
+  font-size: 0.84rem; font-weight: 600;
+  color: var(--ink); letter-spacing: -0.005em;
+}
+.step.active .step-name { color: var(--paper); }
+.step-desc {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.64rem; color: var(--ink-3);
+  letter-spacing: 0.01em;
+}
+
+/* ── Layout breakpoints (Phase 3+6: Clinical Paper) ───────
+   사이드바는 모든 viewport에서 hide (legacy 마크업 유지).
+   데스크톱: 상단 마스트헤드 + 스텝퍼
+   모바일(<768px): 마스트헤드 hide + 모바일 bottom-nav */
+.sidebar { display: none !important; }
+@media (min-width: 768px) {
+  .bottom-nav { display: none !important; }
+}
+@media (max-width: 767px) {
+  .appbar { display: none !important; }
+  /* 모바일에서 bottom-nav가 fixed로 56px 차지하므로 콘텐츠에 여백 */
+  .main-content { padding-bottom: 56px; }
+}
 
 /* ── Sidebar ─────────────────────────────────────────────── */
 .sidebar {
@@ -157,48 +510,118 @@ body {
 .sidebar-item:hover .nav-icon { opacity: 0.6; }
 .sidebar-item.active .nav-icon { opacity: 0.9; }
 
+/* legacy sidebar tablet rules — Phase 3 이후 사이드바 자체가 hide되므로 effective 영향 없음 */
 @media (min-width:768px) and (max-width:1023px) {
-  .sidebar { width: 56px; overflow: hidden; }
-  .sidebar-logo { justify-content: center; padding: 16px 0; }
-  .sidebar-logo>span, .logo-ver { display: none; }
-  .sidebar-item { justify-content: center; padding: 12px 0; }
-  .sidebar-item.active { box-shadow: inset 3px 0 0 var(--accent); }
-  .nav-label { display: none; }
-  .sidebar-bottom-extra { display: none; }
   .sidebar-fontsize-h { display: none !important; }
   .sidebar-fontsize-v { display: flex !important; }
 }
-@media (max-width:767px) { .sidebar { display: none; } }
 
-/* ── Bottom Nav (mobile) ─────────────────────────────────── */
+/* ── Mobile Bottom Nav (Phase 6: Clinical Paper) ─────────── */
 .bottom-nav {
   display: none; position: fixed; bottom: 0; left: 0; right: 0;
-  background: var(--bg-sidebar);
-  border-top: 1px solid var(--border);
-  box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
+  background: var(--card);
+  border-top: 1px solid var(--rule);
   z-index: 50;
-  backdrop-filter: blur(12px);
 }
-@media (max-width:767px) { .bottom-nav { display: flex; } }
+@media (max-width: 767px) { .bottom-nav { display: flex; } }
 .bottom-nav-item {
   flex: 1; display: flex; flex-direction: column; align-items: center;
   justify-content: center; padding: 8px 4px;
-  font-size: 0.58rem; font-weight: 500;
-  color: var(--text-dim); cursor: pointer; gap: 3px;
-  transition: color 0.2s; user-select: none; position: relative;
+  font-size: 0.6rem; font-weight: 500;
+  color: var(--ink-3); cursor: pointer; gap: 3px;
+  transition: background-color 0.12s, color 0.12s;
+  user-select: none; position: relative;
+  border-right: 1px solid var(--rule-soft);
 }
-.bottom-nav-item.active { color: var(--accent); }
-.bottom-nav-item.active::after {
-  content: ''; position: absolute; top: 0;
-  width: 24px; height: 2.5px; background: var(--accent); border-radius: 0 0 3px 3px;
+.bottom-nav-item:last-child { border-right: none; }
+.bottom-nav-item.active {
+  color: var(--paper); background: var(--ink);
 }
-.bottom-nav-item svg { width: 18px; height: 18px; }
+.bottom-nav-item svg { width: 18px; height: 18px; stroke-width: 1.5; }
+
+/* ── Mobile-only "오늘" tab content (Phase 6) ───────────── */
+.today-hero {
+  padding: 28px 22px 18px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--card);
+}
+.today-eyebrow {
+  font-size: 0.62rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--ink-3); margin-bottom: 6px;
+}
+.today-date {
+  font-family: 'Newsreader', serif;
+  font-size: 2.6rem; font-weight: 300;
+  line-height: 0.95; letter-spacing: -0.025em;
+  color: var(--ink);
+}
+.today-date .day-name {
+  font-family: 'Pretendard Variable', system-ui, sans-serif;
+  font-size: 0.95rem; color: var(--ink-3);
+  font-weight: 500; margin-left: 12px; vertical-align: middle;
+}
+.today-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; color: var(--ink-3);
+  margin-top: 10px;
+}
+
+.today-section {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.today-section-title {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 12px;
+}
+.today-section-title h3 {
+  font-family: 'Newsreader', serif;
+  font-size: 1.15rem; font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.today-section-title .count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; color: var(--ink-3);
+}
+.today-duty-group { margin-bottom: 14px; }
+.today-duty-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin-bottom: 4px;
+  display: flex; align-items: center; gap: 6px;
+}
+.today-duty-label .dot {
+  width: 8px; height: 8px; display: inline-block;
+}
+.today-duty-label .dot.D { background: var(--d-ink); }
+.today-duty-label .dot.E { background: var(--e-ink); }
+.today-duty-label .dot.N { background: var(--n-ink); }
+.today-nurse-list {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding-left: 14px;
+}
+.today-nurse-chip {
+  font-size: 0.8rem; font-weight: 500;
+  color: var(--ink-2);
+}
+.today-nurse-chip:not(:last-child)::after {
+  content: '·'; margin-left: 6px; color: var(--ink-4);
+}
+.today-empty {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; color: var(--ink-4);
+  padding: 8px 14px;
+}
 
 /* ── Main Content ────────────────────────────────────────── */
 .main-content {
-  flex: 1; min-width: 0; height: 100vh;
+  flex: 1; min-width: 0; min-height: 0;
   display: flex; flex-direction: column; overflow: hidden;
-  background: var(--bg);
+  background: var(--paper);
 }
 @media (max-width:767px) { .main-content { padding-bottom: 56px; } }
 
@@ -217,22 +640,22 @@ body {
 html.dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); }
 html.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); }
 
-/* ── Card ─────────────────────────────────────────────────── */
+/* ── Card (Clinical Paper: hairline 룰만, radius 0, 그림자 없음) ─ */
 .card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 0;
   padding: 20px;
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s ease;
+  box-shadow: none;
+  transition: background-color 0.12s ease;
 }
-.card:hover { box-shadow: var(--shadow-md); }
+.card:hover { box-shadow: none; }
 .card-sm {
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
+  background: var(--card);
+  border: 1px solid var(--rule-soft);
+  border-radius: 0;
   padding: 14px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 /* ── Typography ──────────────────────────────────────────── */
@@ -252,55 +675,61 @@ html.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); 
 .text-amber { color: var(--t-amber) !important; }
 .text-pink { color: var(--t-pink) !important; }
 
-/* ── Buttons ─────────────────────────────────────────────── */
+/* ── Buttons (radius 0, 그림자 없음, hover시 fill 반전) ───── */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 8px 16px; border-radius: 9px;
+  padding: 8px 16px;
+  border-radius: 0;
   font-family: inherit; font-size: 0.78rem; font-weight: 600;
+  letter-spacing: -0.005em;
   cursor: pointer;
-  transition: all 0.2s ease;
-  border: none; outline: none; color: #fff;
-  position: relative;
-  overflow: hidden;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  border: 1px solid var(--ink);
+  outline: none;
+  background: transparent;
+  color: var(--ink);
 }
-.btn:active { transform: scale(0.96); }
-.btn:focus-visible { box-shadow: 0 0 0 3px var(--accent-glow); }
+.btn:hover { background: var(--ink); color: var(--paper); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .btn-primary {
-  background: var(--accent);
-  color: #fff;
-  box-shadow: 0 1px 3px rgba(37,99,235,0.2);
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
 }
 .btn-primary:hover {
-  background: var(--accent-hover);
-  box-shadow: 0 2px 8px rgba(37,99,235,0.25);
-  transform: translateY(-1px);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper);
 }
-.btn-primary:active { transform: translateY(0) scale(0.98); }
 
 .btn-ghost {
-  background: var(--bg-input);
-  color: var(--text-sub);
-  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink-2);
+  border: 1px solid var(--rule);
 }
 .btn-ghost:hover {
-  background: var(--bg-card-hover);
-  color: var(--text-bright);
-  border-color: var(--border);
+  background: var(--card-warm);
+  color: var(--ink);
+  border-color: var(--ink-3);
 }
 
 .btn-success {
-  background: var(--green);
-  color: #fff;
-  box-shadow: 0 1px 3px rgba(22,163,74,0.2);
+  background: var(--ok);
+  color: var(--paper);
+  border-color: var(--ok);
 }
-.btn-success:hover { box-shadow: 0 2px 8px rgba(22,163,74,0.25); transform: translateY(-1px); }
+.btn-success:hover { background: var(--ink); border-color: var(--ink); }
 
-.btn-danger { background: var(--red); color: #fff; }
-.btn-danger:hover { opacity: 0.9; }
+.btn-danger {
+  background: var(--err);
+  color: var(--paper);
+  border-color: var(--err);
+}
+.btn-danger:hover { background: var(--ink); border-color: var(--ink); }
 
-.btn-sm { padding: 6px 13px; font-size: 0.75rem; border-radius: 8px; }
-.btn-xs { padding: 4px 10px; font-size: 0.7rem; border-radius: 7px; }
+.btn-sm { padding: 6px 13px; font-size: 0.75rem; border-radius: 0; }
+.btn-xs { padding: 4px 10px; font-size: 0.7rem; border-radius: 0; }
 
 /* ── Inputs ──────────────────────────────────────────────── */
 input[type="text"], input[type="number"], input[type="password"], input[type="date"], input[type="email"], input:not([type]), select, textarea {
@@ -394,18 +823,19 @@ input[type="range"]::-webkit-slider-thumb:hover {
 /* ── Tables ──────────────────────────────────────────────── */
 .tbl { width: 100%; font-size: 0.8rem; border-collapse: collapse; }
 .tbl th {
-  font-weight: 600; color: var(--text-dim);
-  padding: 10px 12px; text-align: left;
-  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em;
-  border-bottom: 2px solid var(--border);
+  font-family: 'Pretendard Variable', system-ui, sans-serif;
+  font-weight: 600; color: var(--ink-3);
+  padding: 9px 12px; text-align: left;
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em;
+  border-bottom: 1px solid var(--rule-2);
 }
 .tbl td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-light);
-  color: var(--text-sub);
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--rule-soft);
+  color: var(--ink-2);
 }
-.tbl tr { transition: background 0.15s ease; }
-.tbl tr:hover td { background: var(--bg-card-hover); }
+.tbl tr { transition: background-color 0.12s ease; }
+.tbl tr:hover td { background: var(--card-warm); }
 .tbl tbody tr:last-child td { border-bottom: none; }
 
 /* ── 인라인 편집 표 (간호사) ─────────────────────────────────── */
@@ -487,11 +917,18 @@ html.dark .tbl tbody tr.row-selected td {
 }
 .nurse-edit-tbl button.shift-chip-off:hover { opacity: 1; }
 
-/* ── Schedule Grid ───────────────────────────────────────── */
-.g-sun { background: #fef2f2; border-left: 1.5px solid #fca5a5 !important; }
-.g-sat-bg { background: #eff6ff; }
-html.dark .g-sun { background: #1a1012; border-left: 1.5px solid #7f1d1d !important; }
-html.dark .g-sat-bg { background: #101520; }
+/* ── Schedule Grid (Phase 4: Clinical Paper) ─────────────── */
+/* 일요일: terracotta 4%, 토요일: navy 4% */
+.g-sun {
+  background: rgba(139, 46, 31, 0.04);
+  border-left: 1px solid var(--err) !important;
+}
+.g-sat-bg { background-color: var(--card-warm); background-image: linear-gradient(rgba(2, 54, 113, 0.08), rgba(2, 54, 113, 0.08)) !important; }
+html.dark .g-sun { background: rgba(214, 139, 120, 0.06); border-left: 1px solid var(--err) !important; }
+html.dark .g-sat-bg { background-color: var(--card-warm); background-image: linear-gradient(rgba(107, 155, 209, 0.10), rgba(107, 155, 209, 0.10)) !important; }
+/* 공휴일 컬럼 */
+.holiday { background-color: rgba(139, 46, 31, 0.06); }
+html.dark .holiday { background-color: rgba(214, 139, 120, 0.08); }
 
 /* #2 인원 부족 표시 */
 .staff-short { color: var(--red) !important; font-weight: 700 !important; }
@@ -516,10 +953,10 @@ html.dark .g-sat-bg { background: #101520; }
   .mobile-hidden { display: none !important; }
 }
 
-.g-cell { border: 1px solid var(--border-light); }
-.g-sat { border-right: 2.5px solid var(--border) !important; }
-.g-cycle { border-left: 2.5px solid var(--accent-bg) !important; }
-.g-fix { background: var(--g-fix) !important; }
+.g-cell { border: 1px solid var(--rule-soft); }
+.g-sat { border-right: 2px solid var(--rule-2) !important; }
+.g-cycle { border-left: 2px solid var(--rule-2) !important; }
+.g-fix { background-color: var(--card-warm) !important; }
 .g-cell input[type="number"]::-webkit-inner-spin-button,
 .g-cell input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .g-cell input[type="number"] { -moz-appearance: textfield; }
@@ -529,72 +966,77 @@ html.dark .g-sat-bg { background: #101520; }
 .g-overflow-header { opacity: 0.3; }
 /* 사전입력 완화(relaxed) 셀 */
 .g-relaxed { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* 스케줄 셀 색상: 근무=파란, 휴무=회색, 사전입력=노란 */
-.g-cell-work { background: #eff6ff; color: #1d4ed8; }
-.g-cell-rest { background: #f8fafc; color: #64748b; }
-.g-cell-pre { background: #fef2f2; color: #b91c1c; }
-html.dark .g-cell-work { background: rgba(37,99,235,0.12); color: #93c5fd; }
-html.dark .g-cell-rest { background: rgba(255,255,255,0.03); color: #94a3b8; }
-html.dark .g-cell-pre { background: rgba(220,38,38,0.12); color: #fca5a5; }
+/* 스케줄 셀 색상 (legacy fallback — Phase 4에서는 inline style이 우선) */
+.g-cell-work { background: var(--accent-soft); color: var(--accent); }
+.g-cell-rest { background: var(--paper-2); color: var(--ink-3); }
+.g-cell-pre  { background: var(--warn-bg); color: var(--warn); }
 
-/* 간호사 이름 열 */
+/* 간호사 이름 열 (Phase 4: Pretendard + hairline border) */
 .name-cell {
-  min-width: 85px; white-space: nowrap;
-  padding: 4px 10px; font-size: 0.76rem;
+  min-width: 130px; white-space: nowrap;
+  padding: 5px 10px; font-size: 0.78rem;
   position: sticky !important; left: 0 !important; z-index: 10 !important;
-  background: var(--g-fix);
+  background: var(--card) !important;
+  border-right: 1px solid var(--rule) !important;
 }
-.name-cell .nurse-name { font-weight: 600; color: var(--text-bright); }
+.name-cell .nurse-name {
+  font-weight: 600; color: var(--ink); letter-spacing: -0.01em;
+}
 .name-cell .nurse-group {
-  font-weight: 400; color: var(--text-dim); font-size: 0.62rem;
-  margin-left: 2px;
-  padding: 1px 4px; border-radius: 3px;
-  background: var(--accent-bg);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500; color: var(--ink-4); font-size: 0.62rem;
+  margin-left: 4px;
+  padding: 0;
+  background: transparent;
+  letter-spacing: 0.04em;
 }
 
-/* 근무 셀 — Outfit으로 깔끔하게 */
+/* 근무 셀 (Phase 4: JetBrains Mono + sharp + tabular figures) */
 .schedule-cell, .schedule-cell-text {
+  display: block;
   min-width: 1.5rem; text-align: center;
-  font-size: 0.66rem; font-weight: 600;
-  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: 0.72rem; font-weight: 600;
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   padding: 4px 0; cursor: pointer; user-select: none;
   transition: opacity 0.1s;
 }
-.schedule-cell { border-radius: 4px; }
+.schedule-cell { border-radius: 0; }
 .schedule-cell:hover, .schedule-cell-text:hover { opacity: 0.7; }
 
-/* ── Cycle Colors ────────────────────────────────────────── */
-.cy-1 { background: #dbeafe; color: #1d4ed8; }
-.cy-2 { background: #dcfce7; color: #15803d; }
-.cy-3 { background: #f3e8ff; color: #7c3aed; }
-.cy-4 { background: #fef3c7; color: #b45309; }
-html.dark .cy-1 { background: #0f1926; color: #60a5fa; }
-html.dark .cy-2 { background: #0f1612; color: #4ade80; }
-html.dark .cy-3 { background: #131019; color: #a78bfa; }
-html.dark .cy-4 { background: #151109; color: #fbbf24; }
+/* ── Cycle Colors (Phase 4: 페이퍼 톤 4단계) ─────────────── */
+/* sticky 헤더에서 비쳐보이지 않도록 솔리드 base(var(--card-warm)) 위에 색조 레이어 */
+.cy-1 { background-color: var(--card-warm); background-image: linear-gradient(rgba(2, 54, 113, 0.10), rgba(2, 54, 113, 0.10));   color: var(--accent); }   /* navy */
+.cy-2 { background-color: var(--card-warm); background-image: linear-gradient(rgba(74, 107, 50, 0.10), rgba(74, 107, 50, 0.10));  color: var(--ok); }       /* moss */
+.cy-3 { background-color: var(--card-warm); background-image: linear-gradient(rgba(61, 42, 94, 0.10), rgba(61, 42, 94, 0.10));   color: var(--n-ink); }    /* mauve */
+.cy-4 { background-color: var(--card-warm); background-image: linear-gradient(rgba(138, 90, 28, 0.10), rgba(138, 90, 28, 0.10));  color: var(--warn); }     /* ochre */
+html.dark .cy-1 { background-color: var(--card-warm); background-image: linear-gradient(rgba(107, 155, 209, 0.18), rgba(107, 155, 209, 0.18)); color: var(--d-ink); }
+html.dark .cy-2 { background-color: var(--card-warm); background-image: linear-gradient(rgba(168, 196, 120, 0.16), rgba(168, 196, 120, 0.16)); color: var(--ok); }
+html.dark .cy-3 { background-color: var(--card-warm); background-image: linear-gradient(rgba(184, 157, 212, 0.16), rgba(184, 157, 212, 0.16)); color: var(--n-ink); }
+html.dark .cy-4 { background-color: var(--card-warm); background-image: linear-gradient(rgba(212, 169, 106, 0.16), rgba(212, 169, 106, 0.16)); color: var(--warn); }
 
-/* ── Modal ───────────────────────────────────────────────── */
+/* ── Modal (Clinical Paper: sharp corners, paper-aboard-paper stacking) ─ */
 .modal-bg {
   position: fixed; inset: 0; z-index: 100;
   display: flex; align-items: center; justify-content: center;
   background: var(--modal-overlay);
-  backdrop-filter: blur(4px);
-  animation: fadeIn 0.15s ease;
+  backdrop-filter: blur(2px);
+  animation: fadeIn 0.12s ease;
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes slideUp { from { opacity: 0; transform: translateY(12px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes slideUp { from { opacity: 0; } to { opacity: 1; } }
 
 .modal {
   font-family: inherit;
-  background: var(--modal-bg);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: var(--shadow-lg);
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  /* 단 viewport 스택 외부 셀로의 종이-아래-종이 그림자만 허용 */
+  box-shadow: 4px 6px 0 var(--paper-3);
   padding: 28px; max-height: 85vh; overflow-y: auto;
-  color: var(--text); width: 90vw;
-  animation: slideUp 0.2s ease;
+  color: var(--ink); width: 90vw;
+  animation: fadeIn 0.12s ease;
 }
 @media (min-width:640px) { .modal { width: auto; min-width: 380px; } }
 
@@ -604,15 +1046,15 @@ html.dark .cy-4 { background: #151109; color: #fbbf24; }
 }
 .modal label { font-size: 0.78rem; color: var(--text-sub); font-weight: 500; }
 
-/* ── Log Panel ───────────────────────────────────────────── */
+/* ── Log Panel (ink terminal strip) ──────────────────────── */
 .log-box {
   background: var(--log-bg);
   color: var(--log-text);
-  font-family: 'Cascadia Code', 'Cascadia Mono', 'Consolas', 'Courier New', monospace;
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', 'Courier New', monospace;
   font-size: 0.72rem; line-height: 1.55;
-  border-radius: 10px;
+  border-radius: 0;
   padding: 14px; overflow-y: auto; max-height: 460px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--rule-2);
   letter-spacing: 0;
 }
 
@@ -620,11 +1062,41 @@ html.dark .cy-4 { background: #151109; color: #fbbf24; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
 
+/* ── Tag / Pill (사각 잉크 태그 + dotmark) ──────────────────── */
 .pill {
-  display: inline-flex; align-items: center;
-  padding: 3px 10px; border-radius: 6px;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px;
+  border-radius: 0;
+  border: 1px solid var(--rule);
+  background: var(--card-warm);
+  color: var(--ink-2);
   font-size: 0.68rem; font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+.tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px;
+  border-radius: 0;
+  border: 1px solid var(--ink-3);
+  background: transparent;
+  color: var(--ink-2);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.68rem; font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tag.accent { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.tag.ok    { border-color: var(--ok);    color: var(--ok);    background: var(--ok-bg); }
+.tag.warn  { border-color: var(--warn);  color: var(--warn);  background: var(--warn-bg); }
+.tag.err   { border-color: var(--err);   color: var(--err);   background: var(--err-bg); }
+.tag.ink   { border-color: var(--ink);   color: var(--paper); background: var(--ink); }
+.dotmark {
+  display: inline-block;
+  width: 5px; height: 5px;
+  background: currentColor;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 /* ── Settings Grid ───────────────────────────────────────── */
@@ -632,33 +1104,38 @@ html.dark .cy-4 { background: #151109; color: #fbbf24; }
 @media (min-width:768px) { .settings-2col { grid-template-columns: 1fr 1fr; } }
 .settings-2col .span-2 { grid-column: 1 / -1; }
 
-/* ── Profile Screen ─────────────────────────────────────── */
+/* ── Profile Screen (Clinical Paper) ────────────────────── */
 .profile-overlay {
   position: fixed; inset: 0; z-index: 500;
-  background: var(--bg);
+  background: var(--paper);
   display: flex; align-items: center; justify-content: center;
 }
 .profile-card {
   width: 420px; max-width: 95vw;
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 16px; padding: 32px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  background: var(--card); border: 1px solid var(--rule);
+  border-radius: 0; padding: 32px;
+  box-shadow: 4px 6px 0 var(--paper-3);
 }
 .profile-item {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px; border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--bg); transition: all 0.15s;
+  padding: 10px 14px;
+  border-radius: 0;
+  border: 1px solid var(--rule);
+  background: var(--card-warm);
+  transition: border-color 0.12s, background-color 0.12s;
 }
-.profile-item:hover { border-color: var(--accent); }
-.profile-guest { border-style: dashed; opacity: 0.8; }
+.profile-item:hover { border-color: var(--ink-3); background: var(--paper-2); }
+.profile-guest { border-style: dashed; opacity: 0.85; }
 
 kbd {
   display: inline-block; padding: 1px 5px; margin: 0 1px;
-  font-size: 0.7em; font-family: 'Cascadia Code','Consolas',monospace;
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: 3px; color: var(--text-sub);
-  box-shadow: 0 1px 0 var(--border);
+  font-size: 0.7em;
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+  background: var(--card-warm);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  color: var(--ink-2);
+  box-shadow: none;
 }
 
 /* 토스트 히스토리 버튼 */
