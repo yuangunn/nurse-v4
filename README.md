@@ -9,19 +9,30 @@
 
 ## 주요 기능
 
-- **근무표 자동 생성** — MIP 솔버가 하드/소프트 제약을 만족하는 최적 배정 계산
+### 🎨 UI / UX (v4.1.0)
+- **디자인 선택** — Clinical Paper(v4.1, 세브란스 navy + paper beige) ↔ Premium UI(v4.0.x, modern blue) 토글, `localStorage` 기억
+- **다크 모드, 키보드 단축키, 모바일 대응** — `← ↑ ↓ →` 이동 / `D E N V O W` 직접 입력
+- **셀 단위 잠금 + 메모** — 사전입력 셀 우클릭 → 메모 + "완화 시 고정" 토글 (보수교육·원내교육 등)
+- **드래그 다중 선택 + Undo/Redo** — 40단계, Ctrl+Z / Ctrl+Shift+Z
+
+### 🧮 스케줄러
+- **MIP 기반 근무표 자동 생성** — PuLP + HiGHS, 하드/소프트 제약 만족 최적 배정
 - **사전입력 시스템** — 주휴, 연차, 희망근무를 미리 입력하면 나머지를 솔버가 자동 채움
+- **사전입력 완화 모드** — 생성 실패 시 종류별 차등 보너스로 유연하게 해결, 공휴일 OF는 하드 금지
+- **infeasible 진단 + 액션 제안** (v4.1.0 강화) — Phase 1~13 단계별 분석, 부족분을 *간호사 +N명 추가* / *일평균 -K명 감축* 등 수치 기반 3택으로 제시
+- **인원 분석 + 주휴 추천** — 일자별 과부족 히트맵 + 최적 주휴 배분 자동 계산
+
+### 📥 데이터 관리
 - **사전입력 엑셀 붙여넣기** — Teams 공용 엑셀에서 표 영역을 그대로 복붙 (이름/날짜 자동 매칭, 한글 별칭 변환)
 - **간호사 인라인 편집 + 일괄 작업** — 셀 클릭으로 즉시 수정, 다중 선택 후 그룹/성별/야간/삭제 한 번에
 - **CSV 일괄 등록** — UTF-8/CP949 자동 감지, id 자동 생성, 미리보기 모달로 변경 사항 확인 후 적용
-- **셀 단위 잠금** — 사전입력 셀 우클릭 → 메모 + "완화 시 고정" 토글 (보수교육·원내교육 등)
-- **인원 분석 + 주휴 추천** — 일자별 과부족 히트맵 + 최적 주휴 배분 자동 계산
-- **infeasible 진단** — 솔버 실패 시 strict 기준 일별/주간 분석, 완화가능 인원, 재적(전입/전출) 반영 수치 제공
-- **프로필 시스템** — 병동별 DB 분리 + Fernet 암호화 (비밀번호 보호)
+- **프로필 시스템** — 병동별 DB 분리 + Fernet 암호화 (PBKDF2 100k 비밀번호 보호)
 - **간호사 관리** — 야간전담(월별 지정), 트레이닝(프리셉터 연동), 전입/전출 로테이션
-- **사전입력 완화** — 생성 실패 시 종류별 차등 보너스로 유연하게 해결. 공휴일 OF는 하드 금지
-- **Electron 데스크톱 앱** — 브라우저 없이 독립 창으로 실행
-- **다크 모드, 키보드 단축키, 모바일 대응**
+
+### 🛠 인프라
+- **Electron 데스크톱 앱** — 브라우저 없이 독립 창으로 실행, 완전 오프라인
+- **pytest 회귀 테스트** (v4.1.0) — 9개 금지 전환·charge 시니어리티·일별 인원 등 하드 제약 자동 검증
+- **JS 모듈화** (v4.1.0) — `frontend/js/modules/*` window namespace 합성 패턴, 빌드 도구 불필요
 
 ---
 
@@ -102,9 +113,16 @@ nurse-v4/
 │   ├── models.py            # Pydantic 데이터 모델
 │   └── profiles.py          # 프로필 관리 + Fernet 암호화
 ├── frontend/
-│   ├── index.html           # SPA (5탭: 설정/사전입력/분석/스케줄/저장)
-│   ├── css/app.css          # 스타일
-│   └── js/app.js            # Alpine.js 앱 로직
+│   ├── index.html           # SPA — Clinical Paper UI (5탭)
+│   ├── css/app.css          # Clinical Paper 스타일
+│   ├── js/
+│   │   ├── app.js           # Alpine.js 앱 진입점
+│   │   └── modules/         # 분리된 모듈 (undo-redo, drag-select, ...)
+│   ├── legacy/              # Premium UI(v4.0.x) — /legacy 경로에서 서빙
+│   ├── lib/                 # tailwindcss, alpine, lucide (오프라인 번들)
+│   └── fonts/               # Pretendard / Newsreader / JetBrainsMono / Outfit / NotoSansKR
+├── tests/                   # pytest 회귀 테스트 (제약·진단)
+├── pytest.ini
 ├── electron/
 │   ├── main.js              # Electron main process
 │   ├── preload.js           # context isolation
