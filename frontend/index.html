@@ -273,7 +273,7 @@
         <span class="brand-name">NurseScheduler</span>
         <span class="brand-hospital">용인세브란스병원 · Yongin Severance Hospital</span>
       </div>
-      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.1.0</span>
+      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.1.1</span>
     </div>
     <div></div>
     <div class="appbar-meta">
@@ -1062,11 +1062,21 @@
       <template x-if="!solveProgress.is_running&&!solveProgress.has_solution&&solveProgress.nodes===0"><span>모델 구축 중…</span></template>
     </div>
   </div>
-  <!-- 메시지 -->
-  <div x-show="statusMessage" x-cloak class="card-sm text-sm whitespace-pre-wrap mb-2" :style="statusOk?'border-color:var(--green);color:var(--t-green)':'border-color:var(--red);color:var(--t-red)'">
-    <div class="flex items-center justify-between gap-4">
-      <span x-text="statusMessage"></span>
+  <!-- 메시지 (라인별 분리 — ★ 라인은 강조) -->
+  <div x-show="statusMessage" x-cloak class="card-sm text-sm mb-2" :style="statusOk?'border-color:var(--green);color:var(--t-green)':'border-color:var(--red);color:var(--t-red)'">
+    <div class="flex items-start justify-between gap-4">
+      <div class="flex-1 min-w-0">
+        <template x-for="(line, i) in (statusMessage||'').split('\n')" :key="i">
+          <div :class="line.includes('★')?'diag-highlight':''" :style="line.includes('★')?'background:rgba(255,193,7,0.10);border-left:3px solid var(--warn,#d97706);padding:4px 8px;margin:2px -4px;font-weight:500;white-space:pre-wrap':'white-space:pre-wrap'" x-text="line||' '"></div>
+        </template>
+      </div>
       <span x-show="statusOk&&generateFinalElapsed>0" x-cloak class="shrink-0 font-mono text-xs opacity-60" x-text="(()=>{const m=Math.floor(generateFinalElapsed/60);const s=generateFinalElapsed%60;return(m>0?m+'분 ':'')+s+'초'})()"></span>
+    </div>
+    <!-- 진단 액션 버튼 (infeasible 시) -->
+    <div x-show="!statusOk&&statusMessage" x-cloak class="flex flex-wrap gap-2 mt-3 pt-2" style="border-top:1px solid var(--rule-soft,rgba(0,0,0,0.08))">
+      <button @click="navigator.clipboard.writeText(statusMessage).then(()=>toast('진단 메시지 복사됨','success'))" class="btn btn-xs btn-ghost" style="color:var(--ink-2)">📋 진단 복사</button>
+      <button x-show="/\d{2}\/\d{2}/.test(statusMessage)" @click="activeTab='preinput'" class="btn btn-xs btn-ghost" style="color:var(--ink-2)">📅 사전입력 탭으로</button>
+      <button x-show="statusMessage.includes('주차별')||statusMessage.includes('주간')" @click="activeTab='analysis'" class="btn btn-xs btn-ghost" style="color:var(--ink-2)">📊 분석 탭으로</button>
     </div>
   </div>
   <!-- 로그 -->
@@ -2241,7 +2251,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.1.0 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.1.1 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">PuLP + HiGHS 수리최적화 솔버 기반</p>
         <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
