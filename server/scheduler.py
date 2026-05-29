@@ -1596,10 +1596,13 @@ class NurseScheduler:
                 for label, g1, g2 in rules:
                     if s1 in g1 and s2 in g2:
                         found.append({
+                            "nurse_id": nid,
                             "nurse_label": self._fmt_nurse_label(nurse),
                             "date1": self._fmt_date(dt1),
+                            "date1_iso": dt1.strftime("%Y-%m-%d"),
                             "shift1": s1,
                             "date2": self._fmt_date(dt2),
+                            "date2_iso": dt2.strftime("%Y-%m-%d"),
                             "shift2": s2,
                             "rule": label,
                         })
@@ -1809,6 +1812,36 @@ class NurseScheduler:
                         })
         return out
 
+    def _rank_cells_by_violation_count(self, participations: list) -> list:
+        """
+        사전입력 셀의 위반 기여도 ranking.
+
+        Args:
+            participations: [(nurse_id, date_iso, shift, date_label), ...]
+                각 튜플은 한 위반 사건에서 해당 셀이 참여했다는 기록.
+                같은 (nurse_id, date_iso) 셀이 여러 위반에 참여할 수 있음.
+
+        Returns: [(human_label, count), ...] count 내림차순.
+            human_label 예: "*김지현 05/12 (E)"
+        """
+        from collections import Counter
+        # (nurse_id, date_iso) → 등장 횟수
+        freq = Counter((nid, di) for nid, di, _sh, _dl in participations)
+        # 표시용 라벨 만들기: shift는 첫 등장 사용
+        label_map: dict = {}
+        for nid, di, sh, dl in participations:
+            key = (nid, di)
+            if key not in label_map:
+                nurse = next((n for n in self.nurses if n["id"] == nid), None)
+                name = self._fmt_nurse_label(nurse) if nurse else nid
+                label_map[key] = f"{name} {dl} ({sh})"
+        ranked = sorted(
+            ((label_map[key], cnt) for key, cnt in freq.items()),
+            key=lambda x: -x[1],
+        )
+        # count >= 1 인 셀은 모두 반환 — 호출자가 자르도록
+        return ranked
+
     # ── Infeasible 진단 ──────────────────────────────────────────────────────
 
     def _diagnose_infeasibility(self) -> str:
@@ -1989,7 +2022,7 @@ class NurseScheduler:
         if not _try(p):
             transitions = self._scan_pre_forbidden_transitions()
             if transitions:
-                lines.append("  [원인] 사전입력에 물리적으로 불가능한 근무 전환이 포함되어 있습니다.")
+                lines.append(f"  [원인] 사전입력에 물리적으로 불가능한 근무 전환 — 총 {len(transitions)}건")
                 lines.append("  (간격 < 8시간 — 9개 금지 전환: E→D/D1/중, N→E/D/D1/중, 중→D/D1)")
                 lines.append("  문제가 된 사전입력 항목:")
                 for t in transitions[:10]:
@@ -2000,7 +2033,17 @@ class NurseScheduler:
                     )
                 if len(transitions) > 10:
                     lines.append(f"    ... 외 {len(transitions)-10}건")
-                lines.append("  → 해결: 위 행/열의 사전입력을 D→E→N 순방향(8시간 이상 간격)으로 수정하세요.")
+                # 셀 기여도 ranking — 어느 셀을 비우면 가장 많은 충돌을 동시에 해소하나
+                cell_participations = (
+                    [(t["nurse_id"], t["date1_iso"], t["shift1"], t["date1"]) for t in transitions]
+                    + [(t["nurse_id"], t["date2_iso"], t["shift2"], t["date2"]) for t in transitions]
+                )
+                top_cells = self._rank_cells_by_violation_count(cell_participations)
+                if top_cells:
+                    lines.append("  ★ 셀 기여도 — 이 셀(들)을 비우면 가장 많은 충돌 해소:")
+                    for label, count in top_cells[:3]:
+                        lines.append(f"    · {label} → {count}건 동시 해소")
+                lines.append("  → 해결: 위 셀을 빈 칸으로 두거나 D→E→N 순방향(8시간 이상 간격)으로 수정하세요.")
             else:
                 lines.append("  [원인] 역순 전환 충돌 — 사전입력에서 직접 위반은 없으나 다른 제약과 결합 시 발생합니다.")
                 lines.append("    해결: 사전입력을 일부 제거하거나 완화 모드로 재시도해 보세요.")
@@ -2402,10 +2445,35 @@ class NurseScheduler:
                     lines.append("    [주간 총량 부족 (주휴+OF 의무 + 전입/전출 반영)]")
                     lines.extend(week_warnings)
 
-                lines.append("    해결 방법:")
-                lines.append("      1. 야간전담이 아닌 간호사를 추가하세요.")
-                lines.append("      2. 부족한 날짜의 D/E 필요 인원을 줄이세요 (사전입력 탭 D/E 행 활용).")
-                lines.append(f"      3. 현재 {month_days}일 달 — 야간전담 근무 범위(12~16일)를 확인하세요.")
+                # ── 액션 제안: D/E 총 부족분 → 수치 환산 ────────────────────
+                total_de_shortage = sum(r[9] for r in day_rows if r[9] > 0)
+                worst_day_shortage = max((r[9] for r in day_rows), default=0)
+                if total_de_shortage > 0:
+                    # 정규 간호사 1명 = 주 ~5 D/E 슬롯 기여 가능 (주휴+OF 빼고)
+                    # 월 환산: 1명이 한 달에 ~21~22 D/E 슬롯 커버 가능
+                    add_regular = -(-total_de_shortage // 21)
+                    # 야간전담 1명을 정규로 전환 = 월 14 N 슬롯 손실 + ~22 D/E 슬롯 획득
+                    convert_night = -(-total_de_shortage // 22)
+                    lines.append("    ★ 해결 (택1, 수치 기준):")
+                    lines.append(
+                        f"      1) 정규 간호사 +{add_regular}명 추가 — "
+                        f"D/E 월간 총 {total_de_shortage}슬롯 부족"
+                    )
+                    if night_nurses and convert_night <= len(night_nurses):
+                        lines.append(
+                            f"      2) 야간전담 {len(night_nurses)}명 중 {convert_night}명을 정규로 전환 "
+                            f"(N 슬롯 {convert_night*14}개 감소 ↔ D/E 슬롯 +{convert_night*22}개)"
+                        )
+                    lines.append(
+                        f"      3) 부족 일자의 D/E 인원을 평균 -{(-(-worst_day_shortage//1))}명씩 줄이기 "
+                        f"(사전입력 탭의 일별 D/E 필요행 직접 편집)"
+                    )
+                    lines.append(f"      4) 야간전담 근무 범위 (현재 월 14일, {month_days}일 달 기준) 확인")
+                else:
+                    lines.append("    해결 방법:")
+                    lines.append("      1. 야간전담이 아닌 간호사를 추가하세요.")
+                    lines.append("      2. 부족한 날짜의 D/E 필요 인원을 줄이세요.")
+                    lines.append(f"      3. 현재 {month_days}일 달 — 야간전담 근무 범위(12~16일)를 확인하세요.")
                 return "\n".join(lines)
 
         # ── Phase 9: Charge 시니어리티 ──────────────────────────────────────
@@ -2435,7 +2503,10 @@ class NurseScheduler:
             lines.append("  [원인] Charge 시니어리티 제약 충돌")
             lines.append("  (Charge는 같은 듀티에서 가장 선임에게만 — 더 선임이 일반 근무로 사전입력되어 있으면 후임은 Charge 불가)")
             if seniors:
-                lines.append("  사전입력에서 직접 충돌하는 항목:")
+                lines.append(f"  사전입력에서 직접 충돌 — 총 {len(seniors)}건:")
+                # 후임이 일반 근무인 같은 charger가 여러 날 반복되는 경우 묶기
+                from collections import Counter
+                charge_freq = Counter(c["charge_label"] for c in seniors)
                 for c in seniors[:8]:
                     seniors_str = ", ".join(c["senior_labels"])
                     lines.append(
@@ -2445,7 +2516,24 @@ class NurseScheduler:
                     )
                 if len(seniors) > 8:
                     lines.append(f"    ... 외 {len(seniors)-8}건")
-                lines.append("  → 해결: 위 날짜의 Charge 사전입력을 더 선임 간호사로 옮기거나, 선임의 일반 근무 입력을 제거하세요.")
+                # 액션 제안: 가장 빈번히 등장한 후임 charger 우선 처리
+                if len(charge_freq) > 0:
+                    top_offender, count = charge_freq.most_common(1)[0]
+                    lines.append(
+                        f"  ★ 해결 우선순위:"
+                    )
+                    if count >= 2:
+                        lines.append(
+                            f"    1) {top_offender}의 Charge 사전입력 {count}건을 한꺼번에 처리 "
+                            f"(가장 빈번한 충돌 유발 간호사)"
+                        )
+                    lines.append(
+                        f"    2) 위 날짜의 Charge 사전입력을 더 선임 간호사로 옮기거나, "
+                        f"선임의 일반 근무 입력을 제거"
+                    )
+                    lines.append(
+                        f"    3) 간호사 목록 순서(설정 탭 → 드래그)로 시니어리티 재조정 가능"
+                    )
             else:
                 lines.append("    사전입력에서 직접 충돌은 발견되지 않음 — 야간전담 NC 배정과의 조합 충돌일 수 있습니다.")
                 lines.append("    해결: 간호사 목록 순서(시니어리티) 또는 야간전담 설정을 확인해 주세요.")

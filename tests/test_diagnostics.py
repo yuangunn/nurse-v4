@@ -43,6 +43,31 @@ def test_phase5_action_suggestions(build_request, solve_small, small_nurses):
     assert "일평균" in msg and "목표" in msg, f"demand 감축 수치 누락:\n{msg}"
 
 
+# ── Phase 4: 역순 전환 — 셀 기여도 ranking ──────────────────────────────────
+
+
+def test_phase4_cell_ranking(build_request, solve_small, small_nurses):
+    """
+    사전입력에 E→D 역순 전환 포함 → Phase 4 트리거.
+    셀 기여도 ranking 라인이 출력되어야 함.
+    """
+    nurses = small_nurses(6)
+    nid = nurses[0].id
+    # day 2 = E, day 3 = D → E→D 금지
+    prev = {nid: {"2026-03-02": "E", "2026-03-03": "D"}}
+    result = _solve(
+        build_request, solve_small,
+        nurses=nurses, prev_schedule=prev, add_juhu=False,
+    )
+    assert not result["success"], "사전입력 위반은 infeasible 이어야 함"
+    msg = result["message"]
+    assert "역순" in msg or "금지" in msg or "셀 기여도" in msg, (
+        f"Phase 4 진단 미발동:\n{msg}"
+    )
+    if "셀 기여도" in msg:
+        assert "동시 해소" in msg, f"기여도 라인 형식 깨짐:\n{msg}"
+
+
 # ── 진단 결과는 반드시 구조화된 메시지 ──────────────────────────────────────
 
 
