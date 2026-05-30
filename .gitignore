@@ -20,7 +20,7 @@ package-lock.json
 
 # Claude Code 로컬 설정 / 디자인 핸드오프 (커밋 제외)
 .claude/
-.design-handoff/
+.design-handoff*/
 
 # pytest 캐시
 .pytest_cache/
