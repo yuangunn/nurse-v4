@@ -109,14 +109,15 @@ def test_daily_requirements_exact_match(build_request, solve_small, small_nurses
 # ── hard: charge 시니어리티 ──────────────────────────────────────────────────
 
 
-def test_charge_goes_to_senior(build_request, solve_small, small_nurses):
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_charge_goes_to_senior(build_request, solve_small, small_nurses, solver):
     """
     같은 듀티에 두 명 이상 배정될 때 charge(DC/EC/NC)는 seniority 가장 낮은
     (선임) 간호사에게만 부여된다.
     """
     nurses = small_nurses(6)  # seniority 0~5
     sen_map = {n.id: n.seniority for n in nurses}
-    result = solve_small(build_request(nurses=nurses))
+    result = solve_small(build_request(nurses=nurses), solver=solver)
     _ok(result)
 
     schedule = result["schedule"]

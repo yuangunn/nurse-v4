@@ -51,6 +51,11 @@ class CpSatScheduler(_SchedulerBase):
         if getattr(self.rules, 'restAfterNight', False):
             self._cs_rest_after_night(model, x)
 
+        # ── Hard Constraints (비자명) — 4c ───────────────────────────────────
+        self._cs_charge_seniority(model, x)
+        self._cs_menstrual_leave(model, x)
+        self._cs_night_shift_nurses(model, x)
+
         # ── Solve ─────────────────────────────────────────────────────────────
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = float(self.time_limit)
@@ -363,3 +368,94 @@ class CpSatScheduler(_SchedulerBase):
                         lhs = lhs - night_next_fixed
                     lhs = lhs + sum(work_vars)
                     model.Add(lhs <= min_consec)
+
+    # ── 비자명 하드 제약 (HiGHS _c_* 와 1:1) — 4c ────────────────────────────
+    def _cs_charge_seniority(self, model, x):
+        """Charge는 같은 듀티 최선임에게만 (후임 charge + 선임 일반 동시 금지)."""
+        period_peers = {"day": ("day",), "evening": ("evening",), "night": ("night",)}
+        charge_regular_map = {}
+        for s in self._shifts:
+            if not s["is_charge"]:
+                continue
+            peers = period_peers.get(s["period"], (s["period"],))
+            charge_regular_map[s["code"]] = [
+                r["code"] for r in self._shifts if r["period"] in peers and not r["is_charge"]
+            ]
+        eligible_pairs = []
+        for i_nurse in self.nurses:
+            for j_nurse in self.nurses:
+                if i_nurse["id"] == j_nurse["id"]:
+                    continue
+                if i_nurse.get("seniority", 0) <= j_nurse.get("seniority", 0):
+                    continue
+                j_capable = set(j_nurse.get("capable_shifts", []))
+                for charge_s, regulars in charge_regular_map.items():
+                    if charge_s not in j_capable:
+                        continue
+                    eligible_pairs.append((i_nurse["id"], j_nurse["id"], charge_s, regulars))
+        for d, dt in enumerate(self.all_dates):
+            if dt.month != self.month:
+                continue
+            dt_str = dt.strftime("%Y-%m-%d")
+            for nid_i, nid_j, charge_s, regulars in eligible_pairs:
+                j_fixed = self.prev.get(nid_j, {}).get(dt_str)
+                if j_fixed and j_fixed != charge_s:
+                    continue
+                v_charge = x[nid_i][d][charge_s]
+                if isinstance(v_charge, int):
+                    continue
+                for regular_s in regulars:
+                    v_reg = x[nid_j][d][regular_s]
+                    if isinstance(v_reg, int):
+                        continue
+                    model.Add(v_charge + v_reg <= 1)
+
+    def _cs_menstrual_leave(self, model, x):
+        """생리휴가: 여성 당월 최대 1회 + overflow 처리."""
+        if "생" not in self.ALL_SHIFTS:
+            return
+        first_of_month = date(self.year, self.month, 1)
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            if nurse.get("gender") != "female":
+                continue
+            month_vars = [x[nid][d]["생"] for d, dt in enumerate(self.all_dates)
+                          if dt.month == self.month and dt.year == self.year]
+            if month_vars:
+                model.Add(sum(month_vars) <= 1)
+            for d, dt in enumerate(self.all_dates):
+                if dt < first_of_month:
+                    v = x[nid][d]["생"]
+                    if not isinstance(v, int):
+                        model.Add(v == 0)
+            next_m = [x[nid][d]["생"] for d, dt in enumerate(self.all_dates)
+                      if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month]
+            if next_m:
+                model.Add(sum(next_m) <= 1)
+
+    def _cs_night_shift_nurses(self, model, x):
+        """야간전담: N/NC만, 5일 윈도우<=3, 당월 정확 14일, 여성·31일달 생 1회."""
+        night_nurses = [n for n in self.nurses if n.get("is_night_shift")]
+        if not night_nurses:
+            return
+        import calendar
+        month_days = calendar.monthrange(self.year, self.month)[1]
+        month_idxs = [d for d, dt in enumerate(self.all_dates)
+                      if dt.month == self.month and dt.year == self.year]
+        if not month_idxs:
+            return
+        non_night_work = [s["code"] for s in self._shifts
+                          if s["period"] not in ("night", "rest", "leave")]
+        for nurse in night_nurses:
+            nid = nurse["id"]
+            for d in month_idxs:
+                for s in non_night_work:
+                    v = x[nid][d].get(s)
+                    if v is not None and not isinstance(v, int):
+                        model.Add(v == 0)
+            for start in range(month_idxs[0], month_idxs[-1] - 3):
+                model.Add(sum(x[nid][d][s] for d in range(start, start + 5) if d < self.T
+                              for s in self.NIGHT_SHIFTS) <= 3)
+            model.Add(sum(x[nid][d][s] for d in month_idxs for s in self.NIGHT_SHIFTS) == 14)
+            if month_days == 31 and nurse.get("gender") == "female" and "생" in self.ALL_SHIFTS:
+                model.Add(sum(x[nid][d]["생"] for d in month_idxs) == 1)
