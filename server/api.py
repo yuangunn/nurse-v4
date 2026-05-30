@@ -1006,7 +1006,11 @@ def generate(request: GenerateRequest):
         rest_shifts  = [s.code for s in request.shifts if s.period == "rest"]
 
         warning = _validate_staffing(request, leave_shifts, rest_shifts)
-        scheduler = NurseScheduler(request)
+        if request.solver == "cpsat":
+            from .scheduler_cpsat import CpSatScheduler
+            scheduler = CpSatScheduler(request)
+        else:
+            scheduler = NurseScheduler(request)
         result = scheduler.solve()
 
         # MIP gap 및 중지 여부 추가

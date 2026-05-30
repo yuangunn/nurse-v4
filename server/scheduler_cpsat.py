@@ -19,6 +19,44 @@ from .models import GenerateRequest
 from .scheduler_base import _SchedulerBase, WEEKDAY_KEYS
 
 
+class _CpSatProgress:
+    """solver_progress 어댑터 — CP-SAT 진행/취소 상태."""
+    def __init__(self):
+        self.cancelled = False
+        self.gap_percent = None
+        self.nodes = 0
+        self.has_solution = False
+
+    def cancel(self):
+        self.cancelled = True
+
+    def progress(self) -> dict:
+        return {"gap_percent": self.gap_percent, "nodes": self.nodes,
+                "has_solution": self.has_solution, "is_running": True}
+
+
+class _CpSatCb(cp_model.CpSolverSolutionCallback):
+    """incumbent마다 진행 갱신·로그 push·취소 확인 (HiGHS 콜백 패리티).
+    주의: 콜백은 개선 incumbent에서만 호출 → 취소 지연은 max_time_in_seconds가 백스톱."""
+    def __init__(self, prog: _CpSatProgress, log_sink):
+        super().__init__()
+        self._p = prog
+        self._log = log_sink
+
+    def on_solution_callback(self):
+        ov = self.ObjectiveValue()
+        bound = self.BestObjectiveBound()
+        self._p.has_solution = True
+        denom = max(1.0, abs(ov))
+        self._p.gap_percent = round(abs(bound - ov) / denom * 100, 2)
+        self._p.nodes = int(self.NumBranches())
+        if self._log:
+            self._log({"type": "log",
+                       "msg": f"[CP-SAT] incumbent {ov:.0f} · bound {bound:.0f} · branches {self._p.nodes}"})
+        if self._p.cancelled:
+            self.StopSearch()
+
+
 class CpSatScheduler(_SchedulerBase):
     def solve(self) -> Dict:
         if not self.nurses:
@@ -61,11 +99,34 @@ class CpSatScheduler(_SchedulerBase):
         if obj_terms:
             model.Maximize(sum(obj_terms))
 
-        # ── Solve ─────────────────────────────────────────────────────────────
+        # ── Solve (진행/중지/로그 콜백 — HiGHS 패리티) ──────────────────────
+        from . import solver_progress
+        prog = _CpSatProgress()
+
+        def _log_sink(item):
+            try:
+                from . import api  # 런타임 lazy (순환 import 회피)
+                api._log_queue.put(item)
+            except Exception:
+                pass
+        # 이전 로그 드레인
+        try:
+            from . import api as _api
+            while not _api._log_queue.empty():
+                _api._log_queue.get_nowait()
+        except Exception:
+            pass
+
         solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = float(self.time_limit)
+        solver.parameters.max_time_in_seconds = float(self.time_limit)  # 취소 하드 백스톱
         solver.parameters.relative_gap_limit = float(self.mip_gap)
-        status = solver.Solve(model)
+        solver.parameters.log_search_progress = False
+        cb = _CpSatCb(prog, _log_sink)
+        solver_progress.register(prog)
+        try:
+            status = solver.Solve(model, cb)
+        finally:
+            solver_progress.unregister()
 
         if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             schedule, extended = self._extract_solution(x, lambda v: solver.Value(v))
@@ -77,6 +138,7 @@ class CpSatScheduler(_SchedulerBase):
                 "extended_schedule": extended,
                 "nurse_scores": nurse_scores,
                 "nurse_score_details": nurse_score_details,
+                "mip_gap_percent": prog.gap_percent if prog.gap_percent is not None else 0.0,
                 "message": f"근무표가 생성되었습니다. (CP-SAT 상태: {label})",
                 "estimated_seconds": self.estimate_seconds(),
             }
