@@ -244,6 +244,28 @@ def set_master_password(body: dict):
 
 # ── 개발자 API ────────────────────────────────────────────────────────────────
 
+@app.get("/api/dev/cpsat-selftest")
+def dev_cpsat_selftest():
+    """CP-SAT(ortools)가 번들 환경에서 임포트·풀이되는지 셀프테스트.
+    Phase 0 오프라인 번들 게이트 검증용 — 번들된 exe에서 호출해 ortools 네이티브
+    libs가 올바로 실렸는지 확인한다. (ortools는 런타임 네트워크를 쓰지 않음.)"""
+    try:
+        from ortools.sat.python import cp_model
+        m = cp_model.CpModel()
+        xs = [m.NewBoolVar(f"x{i}") for i in range(5)]
+        m.Add(sum(xs) == 2)
+        s = cp_model.CpSolver()
+        st = s.Solve(m)
+        ok = st in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+        return {
+            "ok": ok,
+            "sum": sum(int(s.Value(x)) for x in xs) if ok else None,
+            "ortools_status": int(st),
+        }
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
 @app.get("/api/dev/info")
 def dev_info():
     """현재 DB 경로, 크기, 간호사 수"""
