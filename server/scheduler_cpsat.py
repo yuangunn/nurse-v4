@@ -1,0 +1,254 @@
+"""
+간호사 스케줄러 — CP-SAT(OR-Tools) 엔진.
+
+NurseScheduler(HiGHS)와 평행한 두 번째 생성 엔진. 공유 _SchedulerBase에서 데이터/
+날짜/추출/점수 로직을 상속하고, 여기서는 cp_model 변수·제약·solve만 구현한다.
+제약은 HiGHS의 _c_* 메서드와 1:1 대응 (의미 동일, 네이티브 표현).
+
+Phase 4a: 변수 도메인 + 선형 하드 제약 + 피저빌리티 solve.
+(목적함수=4d, 네이티브 조합제약=4b, 비자명 제약=4c, 콜백=6a)
+"""
+from __future__ import annotations
+
+from datetime import date
+from typing import Dict
+
+from ortools.sat.python import cp_model
+
+from .models import GenerateRequest
+from .scheduler_base import _SchedulerBase, WEEKDAY_KEYS
+
+
+class CpSatScheduler(_SchedulerBase):
+    def solve(self) -> Dict:
+        if not self.nurses:
+            return {"success": False, "message": "간호사가 등록되지 않았습니다.", "schedule": {}}
+
+        model = cp_model.CpModel()
+        x = self._build_vars(model)
+
+        # ── Hard Constraints (선형) ──────────────────────────────────────────
+        self._cs_one_shift_per_day(model, x)
+        self._cs_shift_eligibility(model, x)
+        self._cs_daily_requirements(model, x)
+        self._cs_charge_requirements(model, x)
+        if self.rules.weeklyOff:
+            self._cs_weekly_off(model, x)
+        self._cs_max_v_per_month(model, x)
+        if self.rules.maxNightPerMonth:
+            self._cs_max_night_per_month(model, x)
+        if self.rules.maxNightTwoMonth:
+            self._cs_max_night_two_month(model, x)
+
+        # ── Solve ─────────────────────────────────────────────────────────────
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = float(self.time_limit)
+        solver.parameters.relative_gap_limit = float(self.mip_gap)
+        status = solver.Solve(model)
+
+        if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            schedule, extended = self._extract_solution(x, lambda v: solver.Value(v))
+            nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
+            label = "Optimal" if status == cp_model.OPTIMAL else "Feasible"
+            return {
+                "success": True,
+                "schedule": schedule,
+                "extended_schedule": extended,
+                "nurse_scores": nurse_scores,
+                "nurse_score_details": nurse_score_details,
+                "message": f"근무표가 생성되었습니다. (CP-SAT 상태: {label})",
+                "estimated_seconds": self.estimate_seconds(),
+            }
+        if status == cp_model.INFEASIBLE:
+            return {
+                "success": False, "schedule": {}, "extended_schedule": {},
+                "message": "CP-SAT: 제약을 모두 만족하는 근무표가 없습니다 (infeasible).",
+            }
+        return {
+            "success": False, "schedule": {}, "extended_schedule": {},
+            "message": f"CP-SAT: 제한 시간 내에 해를 찾지 못했습니다 (상태: {solver.StatusName(status)}).",
+        }
+
+    # ── 변수 도메인 (HiGHS solve()의 변수 생성 블록과 동일 규칙) ──────────────
+    def _build_vars(self, model) -> Dict[str, Dict[int, Dict[str, object]]]:
+        """x[nid][d][shift] = BoolVar(자유) 또는 int 0(고정). HiGHS와 동일 도메인 규칙."""
+        x: Dict[str, Dict[int, Dict[str, object]]] = {}
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            x[nid] = {}
+            is_night = nurse.get("is_night_shift")
+            is_male = nurse.get("gender") != "female"
+            for d in range(self.T):
+                dt = self.all_dates[d]
+                dt_str = dt.strftime("%Y-%m-%d")
+                x[nid][d] = {}
+                pre = self.prev.get(nid, {}).get(dt_str)
+                is_holiday = dt_str in self.holidays
+                if pre == "OF" and is_holiday:
+                    pre = None
+                pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
+                if not self._nurse_active_on(nurse, dt):
+                    for s in self.ALL_SHIFTS:
+                        x[nid][d][s] = 0
+                    continue
+                for s in self.ALL_SHIFTS:
+                    if s == "OF" and is_holiday:
+                        x[nid][d][s] = 0
+                        continue
+                    if pre:
+                        if s in pre_flex:
+                            x[nid][d][s] = model.NewBoolVar(f"x_{nid}_{d}_{s}")
+                        else:
+                            x[nid][d][s] = 0
+                    elif s == "법" and is_night:
+                        x[nid][d][s] = 0
+                    elif s == "법" and not is_holiday:
+                        x[nid][d][s] = 0
+                    elif s == "법" and is_holiday:
+                        x[nid][d][s] = model.NewBoolVar(f"x_{nid}_{d}_{s}")
+                    elif s in ("생", "V") and is_holiday and not is_night:
+                        x[nid][d][s] = 0
+                    elif s not in self.SOLVER_SHIFTS:
+                        x[nid][d][s] = 0
+                    elif s == "생" and is_male:
+                        x[nid][d][s] = 0
+                    else:
+                        x[nid][d][s] = model.NewBoolVar(f"x_{nid}_{d}_{s}")
+        return x
+
+    # ── 선형 하드 제약 (각각 HiGHS _c_* 와 1:1) ──────────────────────────────
+    def _cs_one_shift_per_day(self, model, x):
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            for d in range(self.T):
+                if not self._nurse_active_idx(nurse, d):
+                    continue
+                model.Add(sum(x[nid][d][s] for s in self.ALL_SHIFTS) == 1)
+
+    def _cs_shift_eligibility(self, model, x):
+        eligible_check = [
+            s["code"] for s in self._shifts
+            if s["period"] in ("day", "evening", "night")
+        ]
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            capable = set(nurse.get("capable_shifts", self.WORK_SHIFTS))
+            impossible = [s for s in eligible_check if s not in capable]
+            for d in range(self.T):
+                for s in impossible:
+                    v = x[nid][d][s]
+                    if not isinstance(v, int):
+                        model.Add(v == 0)
+
+    def _cs_daily_requirements(self, model, x):
+        req_dict = self.req.model_dump()
+        period_map = {"D": self.DAY_SHIFTS, "E": self.EVENING_SHIFTS, "N": self.NIGHT_SHIFTS}
+        grouped_codes = set()
+        for shifts in period_map.values():
+            grouped_codes.update(shifts)
+        for s in self._shifts:
+            code = s["code"]
+            if s.get("auto_assign", True) and code in self.SOLVER_SHIFTS and code not in grouped_codes:
+                period_map[code] = [code]
+
+        first_of_month = date(self.year, self.month, 1)
+        for d, dt in enumerate(self.all_dates):
+            if dt < first_of_month:
+                continue
+            date_key = dt.strftime('%Y-%m-%d')
+            weekday_key = WEEKDAY_KEYS[dt.weekday()]
+            base_req = req_dict.get(weekday_key, {})
+            is_cur = (dt.month == self.month and dt.year == self.year)
+            override = self.per_day_req.get(date_key, {}) if is_cur else {}
+            day_req = {**base_req, **override} if override else base_req
+            for period, shifts in period_map.items():
+                required = day_req.get(period, 0)
+                if required <= 0:
+                    continue
+                model.Add(sum(x[n["id"]][d][s] for n in self.nurses for s in shifts) == required)
+
+    def _cs_charge_requirements(self, model, x):
+        req_dict = self.req.model_dump()
+        period_to_req = {"day": "D", "evening": "E", "night": "N"}
+        charge_shifts = [s for s in self._shifts if s["is_charge"]]
+        first_of_month = date(self.year, self.month, 1)
+        for d, dt in enumerate(self.all_dates):
+            if dt < first_of_month:
+                continue
+            date_key = dt.strftime('%Y-%m-%d')
+            weekday_key = WEEKDAY_KEYS[dt.weekday()]
+            base_req = req_dict.get(weekday_key, {})
+            is_cur = (dt.month == self.month and dt.year == self.year)
+            override = self.per_day_req.get(date_key, {}) if is_cur else {}
+            day_req = {**base_req, **override} if override else base_req
+            for s in charge_shifts:
+                req_key = period_to_req.get(s["period"])
+                if req_key and day_req.get(req_key, 0) > 0:
+                    model.Add(sum(x[n["id"]][d][s["code"]] for n in self.nurses) == 1)
+
+    def _cs_weekly_off(self, model, x):
+        of_code = "OF"
+        if of_code not in self.SOLVER_SHIFTS:
+            return
+        first_of_month = date(self.year, self.month, 1)
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            if nurse.get("is_night_shift", False):
+                continue
+            for ws, we in self.weeks:
+                week_days = [d for d in range(ws, we + 1)
+                             if self.all_dates[d] >= first_of_month
+                             and self._nurse_active_idx(nurse, d)]
+                if not week_days:
+                    continue
+                of_sum = sum(x[nid][d][of_code] for d in week_days)
+                if len(week_days) >= 7:
+                    model.Add(of_sum == 1)
+                else:
+                    model.Add(of_sum <= 1)
+
+    def _cs_max_v_per_month(self, model, x):
+        max_v = self.rules.maxVPerMonth
+        first_of_month = date(self.year, self.month, 1)
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            if max_v > 0 and not self.unlimited_v:
+                v_vars = [x[nid][d]["V"] for d, dt in enumerate(self.all_dates)
+                          if dt.month == self.month and dt.year == self.year]
+                if v_vars:
+                    model.Add(sum(v_vars) <= max_v)
+            for d, dt in enumerate(self.all_dates):
+                if dt < first_of_month and "V" in self.ALL_SHIFTS:
+                    v = x[nid][d]["V"]
+                    if not isinstance(v, int):
+                        model.Add(v == 0)
+            next_v_vars = [x[nid][d]["V"] for d, dt in enumerate(self.all_dates)
+                           if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month]
+            if next_v_vars:
+                model.Add(sum(next_v_vars) <= 1)
+
+    def _cs_max_night_per_month(self, model, x):
+        max_n = self.rules.maxNightPerMonthCount
+        for nurse in self.nurses:
+            if nurse.get("is_night_shift"):
+                continue
+            nid = nurse["id"]
+            night_vars = [x[nid][d][s] for d, dt in enumerate(self.all_dates)
+                          if dt.month == self.month and dt.year == self.year
+                          for s in self.NIGHT_SHIFTS]
+            if night_vars:
+                model.Add(sum(night_vars) <= max_n)
+
+    def _cs_max_night_two_month(self, model, x):
+        max_n = self.rules.maxNightTwoMonthCount
+        prev_nights = getattr(self, 'prev_month_nights', None) or {}
+        for nurse in self.nurses:
+            if nurse.get("is_night_shift"):
+                continue
+            nid = nurse["id"]
+            prev_count = prev_nights.get(nid, 0)
+            night_vars = [x[nid][d][s] for d, dt in enumerate(self.all_dates)
+                          if dt.month == self.month and dt.year == self.year
+                          for s in self.NIGHT_SHIFTS]
+            if night_vars:
+                model.Add(sum(night_vars) <= max_n - prev_count)
