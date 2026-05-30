@@ -22,6 +22,7 @@
 - **MIP 기반 근무표 자동 생성** — PuLP + HiGHS, 하드/소프트 제약 만족 최적 배정
 - **사전입력 시스템** — 주휴, 연차, 희망근무를 미리 입력하면 나머지를 솔버가 자동 채움
 - **사전입력 완화 모드** — 생성 실패 시 종류별 차등 보너스로 유연하게 해결, 공휴일 OF는 하드 금지
+- **듀얼 솔버 (v4.3.0)** — HiGHS(MILP)와 **CP-SAT** 중 선택 생성. infeasible 시 CP-SAT assumptions로 *어느 제약이 동시 충족 불가인지* 1회에 정밀 진단 (생성/저장 화면 "정밀 충돌 분석" 버튼)
 - **infeasible 진단 + 액션 제안** (v4.2.1 강화) — Phase 1~13 단계별 분석. 부족분을 *간호사 +N명 추가* / *일평균 -K명 감축* / *야간전담 K명을 정규로 전환* 등 수치 기반으로 제시. **셀 기여도 ranking** — 어느 사전입력 셀을 비우면 가장 많은 충돌이 동시 해소되는지 표시. **진단 액션 버튼** — UI에서 사전입력/분석 탭으로 한 번에 점프
 - **인원 분석 + 주휴 추천** — 일자별 과부족 히트맵 + 최적 주휴 배분 자동 계산
 
@@ -41,12 +42,12 @@
 
 ## 다운로드
 
-> **최신 버전: v4.2.1** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
+> **최신 버전: v4.3.0** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
 
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_Setup_v4.2.1.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.2.1/NurseScheduler_Setup_v4.2.1.exe) | 설치 마법사 (권장) | ~143 MB |
-| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.2.1/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~204 MB |
+| [**NurseScheduler_Setup_v4.3.0.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.0/NurseScheduler_Setup_v4.3.0.exe) | 설치 마법사 (권장) | ~190 MB |
+| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.0/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~250 MB |
 
 ### 시스템 요구사항
 - Windows 10/11 (64bit)
@@ -76,7 +77,7 @@
 | 구분 | 기술 |
 |------|------|
 | 백엔드 | Python 3.11 + FastAPI + uvicorn |
-| 스케줄링 엔진 | PuLP 2.9 + HiGHS (Python 바인딩: highspy) |
+| 스케줄링 엔진 | PuLP 2.9 + HiGHS (highspy) · **OR-Tools CP-SAT** 듀얼 엔진 |
 | 데이터 저장 | SQLite + Fernet 암호화 (cryptography) |
 | 프론트엔드 | HTML + Tailwind CSS + Alpine.js |
 | 데스크톱 래퍼 | Electron |
@@ -98,7 +99,7 @@ build.bat
 결과물:
 - `dist/electron/NurseScheduler-win32-x64/` — Electron 번들
 - `dist/NurseScheduler_v4_portable.zip` — 포터블 ZIP
-- `dist/installer/NurseScheduler_Setup_v4.2.1.exe` — 설치 마법사
+- `dist/installer/NurseScheduler_Setup_v4.3.0.exe` — 설치 마법사
 
 자세한 빌드 가이드는 [BUILD.md](BUILD.md)를 참고하세요.
 
