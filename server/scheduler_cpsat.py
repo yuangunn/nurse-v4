@@ -56,6 +56,11 @@ class CpSatScheduler(_SchedulerBase):
         self._cs_menstrual_leave(model, x)
         self._cs_night_shift_nurses(model, x)
 
+        # ── Objective (Soft Constraints) — 4d ────────────────────────────────
+        obj_terms = self._build_objective_cpsat(model, x)
+        if obj_terms:
+            model.Maximize(sum(obj_terms))
+
         # ── Solve ─────────────────────────────────────────────────────────────
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = float(self.time_limit)
@@ -459,3 +464,199 @@ class CpSatScheduler(_SchedulerBase):
             model.Add(sum(x[nid][d][s] for d in month_idxs for s in self.NIGHT_SHIFTS) == 14)
             if month_days == 31 and nurse.get("gender") == "female" and "생" in self.ALL_SHIFTS:
                 model.Add(sum(x[nid][d]["생"] for d in month_idxs) == 1)
+
+    # ── 목적함수 (Soft Constraints, 정수 가중합) — 4d ─────────────────────────
+    def _build_objective_cpsat(self, model, x) -> list:
+        """HiGHS _build_objective와 1:1. 모든 가중치가 정수라 스케일 불필요.
+        리피케이션(AND-of-k)·night_fairness range는 동일 선형 패턴, 보조변수는 cp_model."""
+        terms = []
+        month_days = [d for d, dt in enumerate(self.all_dates)
+                      if dt.month == self.month and dt.year == self.year]
+        month_day_pairs = [(month_days[i], month_days[i + 1])
+                           for i in range(len(month_days) - 1)
+                           if month_days[i + 1] == month_days[i] + 1]
+        ub_nights = max(1, len(month_days))
+
+        def lin(expr_list):
+            return sum(expr_list) if expr_list else 0
+
+        for rule in self.scoring_rules:
+            rt, p = rule.rule_type, rule.params
+            sc = int(round(rule.score))
+            rid = rule.id if rule.id is not None else rule.sort_order
+
+            if rt == "specific_shift":
+                code = p.get("shift_code", "")
+                cond = p.get("condition", "all")
+                if code not in self.ALL_SHIFTS:
+                    continue
+                for nurse in self.nurses:
+                    nid = nurse["id"]
+                    if cond == "female_only" and nurse.get("gender") != "female":
+                        continue
+                    for d in month_days:
+                        terms.append(sc * x[nid][d][code])
+
+            elif rt == "transition":
+                from_shifts = self._resolve_group(p.get("from", ""))
+                to_shifts = self._resolve_group(p.get("to", ""))
+                if not from_shifts or not to_shifts:
+                    continue
+                for nurse in self.nurses:
+                    nid = nurse["id"]
+                    for d, d1 in month_day_pairs:
+                        f_sum = lin([x[nid][d][s] for s in from_shifts if s in self.ALL_SHIFTS])
+                        t_sum = lin([x[nid][d1][s] for s in to_shifts if s in self.ALL_SHIFTS])
+                        v = model.NewBoolVar(f"tr{rid}_{nid}_{d}")
+                        model.Add(v <= f_sum)
+                        model.Add(v <= t_sum)
+                        model.Add(v >= f_sum + t_sum - 1)
+                        terms.append(sc * v)
+
+            elif rt == "consecutive_same":
+                period_shifts = self._resolve_group(p.get("period", ""))
+                if not period_shifts:
+                    continue
+                for nurse in self.nurses:
+                    nid = nurse["id"]
+                    for d, d1 in month_day_pairs:
+                        g1 = lin([x[nid][d][s] for s in period_shifts if s in self.ALL_SHIFTS])
+                        g2 = lin([x[nid][d1][s] for s in period_shifts if s in self.ALL_SHIFTS])
+                        v = model.NewBoolVar(f"cs{rid}_{nid}_{d}")
+                        model.Add(v <= g1)
+                        model.Add(v <= g2)
+                        model.Add(v >= g1 + g2 - 1)
+                        terms.append(sc * v)
+
+            elif rt == "pattern":
+                pattern = p.get("pattern", [])
+                n_steps = len(pattern)
+                if n_steps < 2:
+                    continue
+                groups = [self._resolve_group(g) for g in pattern]
+                if any(not g for g in groups):
+                    continue
+                for nurse in self.nurses:
+                    nid = nurse["id"]
+                    for start_d in month_days:
+                        window = [start_d + k for k in range(n_steps)]
+                        if any(w >= len(self.all_dates) for w in window):
+                            continue
+                        if any(w not in month_days for w in window):
+                            continue
+                        if window[-1] != window[0] + n_steps - 1:
+                            continue
+                        sums = [lin([x[nid][window[k]][s] for s in groups[k] if s in self.ALL_SHIFTS])
+                                for k in range(n_steps)]
+                        v = model.NewBoolVar(f"pat{rid}_{nid}_{start_d}")
+                        for s_expr in sums:
+                            model.Add(v <= s_expr)
+                        model.Add(v >= lin(sums) - (n_steps - 1))
+                        terms.append(sc * v)
+
+            elif rt == "wish":
+                for nurse in self.nurses:
+                    nid = nurse["id"]
+                    for day_str, wish_shift in nurse.get("wishes", {}).items():
+                        try:
+                            wish_date = date(self.year, self.month, int(day_str))
+                            if wish_date not in self.date_to_idx:
+                                continue
+                            d = self.date_to_idx[wish_date]
+                            if wish_shift == "OFF":
+                                terms.append(sc * lin([x[nid][d][s] for s in self.REST_SHIFTS + self.LEAVE_SHIFTS]))
+                            elif wish_shift in self.ALL_SHIFTS:
+                                terms.append(sc * x[nid][d][wish_shift])
+                        except (ValueError, KeyError):
+                            pass
+
+            elif rt == "night_fairness":
+                if len(self.nurses) >= 2:
+                    night_counts = {
+                        nurse["id"]: lin([x[nurse["id"]][d][s] for d in month_days for s in self.NIGHT_SHIFTS])
+                        for nurse in self.nurses
+                    }
+                    max_n = model.NewIntVar(0, ub_nights, f"max_nights_{rid}")
+                    min_n = model.NewIntVar(0, ub_nights, f"min_nights_{rid}")
+                    for nurse in self.nurses:
+                        nid = nurse["id"]
+                        model.Add(max_n >= night_counts[nid])
+                        model.Add(min_n <= night_counts[nid])
+                    range_var = model.NewIntVar(0, ub_nights, f"night_range_{rid}")
+                    model.Add(range_var >= max_n - min_n)
+                    terms.append(sc * range_var)
+
+            elif rt == "holiday_work":
+                for nurse in self.nurses:
+                    nid = nurse["id"]
+                    for d in month_days:
+                        if self.all_dates[d].strftime("%Y-%m-%d") in self.holidays:
+                            for s in self.WORK_SHIFTS:
+                                terms.append(sc * x[nid][d][s])
+
+            elif rt == "weekend_work":
+                slots = p.get("slots", [])
+                for nurse in self.nurses:
+                    nid = nurse["id"]
+                    for d in month_days:
+                        wd = self.all_dates[d].weekday()
+                        for slot in slots:
+                            if wd == slot.get("weekday"):
+                                target = []
+                                for period in slot.get("periods", []):
+                                    target.extend(self._resolve_group(period))
+                                for s in target:
+                                    if s in self.ALL_SHIFTS:
+                                        terms.append(sc * x[nid][d][s])
+
+            elif rt == "holiday_off":
+                if "OF" in self.ALL_SHIFTS:
+                    for nurse in self.nurses:
+                        nid = nurse["id"]
+                        if nurse.get("is_night_shift"):
+                            continue
+                        for d in month_days:
+                            if self.all_dates[d].strftime("%Y-%m-%d") in self.holidays:
+                                terms.append(sc * x[nid][d]["OF"])
+
+        # 이후달 overflow V 페널티 (항상)
+        first_of_month = date(self.year, self.month, 1)
+        overflow_days = [d for d, dt in enumerate(self.all_dates)
+                         if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month]
+        if overflow_days and "V" in self.ALL_SHIFTS:
+            for nurse in self.nurses:
+                nid = nurse["id"]
+                for d in overflow_days:
+                    terms.append(-500 * x[nid][d]["V"])
+
+        # V 무제한 모드 점진 페널티
+        if self.unlimited_v and "V" in self.ALL_SHIFTS:
+            for nurse in self.nurses:
+                nid = nurse["id"]
+                v_month = [x[nid][d]["V"] for d, dt in enumerate(self.all_dates)
+                           if dt.month == self.month and dt.year == self.year]
+                if not v_month:
+                    continue
+                v_total = lin(v_month)
+                v2 = model.NewIntVar(0, ub_nights, f"v2_{nid}")
+                model.Add(v2 >= v_total - 1)
+                v3 = model.NewIntVar(0, ub_nights, f"v3_{nid}")
+                model.Add(v3 >= v_total - 2)
+                terms.append(-500 * v2)
+                terms.append(-4000 * v3)
+
+        # 생리휴가 2회+ 방지 페널티 (안전장치)
+        if "생" in self.ALL_SHIFTS:
+            for nurse in self.nurses:
+                if nurse.get("gender") != "female":
+                    continue
+                nid = nurse["id"]
+                m_vars = [x[nid][d]["생"] for d, dt in enumerate(self.all_dates)
+                          if dt.month == self.month and dt.year == self.year]
+                if not m_vars:
+                    continue
+                m2 = model.NewIntVar(0, ub_nights, f"m2_{nid}")
+                model.Add(m2 >= lin(m_vars) - 1)
+                terms.append(-20100 * m2)
+
+        return terms
