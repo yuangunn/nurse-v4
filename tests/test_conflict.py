@@ -21,3 +21,14 @@ def test_feasible_returns_no_conflict(build_request, small_nurses):
     req = build_request(nurses=nurses, add_juhu=False)
     res = analyze_conflicts(req)
     assert res["conflicts"] == [], f"충돌이 없어야 함:\n{res['message']}"
+
+
+def test_detects_preinput_forbidden_transition(build_request, small_nurses):
+    """사전입력 E(2일)→D(3일) 고정 → 금지 전환 충돌을 짚는다 (새로 넓힌 게이팅)."""
+    nurses = small_nurses(6)  # 인원은 충분 → 유일한 충돌이 금지전환이 되도록
+    prev = {nurses[0].id: {"2026-03-02": "E", "2026-03-03": "D"}}
+    req = build_request(nurses=nurses, prev_schedule=prev, add_juhu=False)
+    res = analyze_conflicts(req)
+    assert res["conflicts"], f"충돌이 검출되어야 함:\n{res['message']}"
+    joined = "\n".join(res["conflicts"])
+    assert "금지" in joined, f"금지 전환이 짚여야 함:\n{joined}"
