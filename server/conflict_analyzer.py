@@ -36,11 +36,17 @@ class _ConflictAnalyzer(CpSatScheduler):
         model = cp_model.CpModel()
         x = self._build_vars(model)
         self._labels: Dict[int, str] = {}   # lit.Index() → 한국어 라벨
+        self._anchor_by_label: Dict[str, dict] = {}  # 라벨 → {nurse_id, date} 셀 점프
         lits: List = []
 
-        def gate(label: str):
+        def gate(label: str, nid=None, dt=None):
             lit = model.NewBoolVar(f"assume_{len(lits)}")
             self._labels[lit.Index()] = label
+            if nid is not None or dt is not None:
+                self._anchor_by_label[label] = {
+                    "nurse_id": nid,
+                    "date": dt.strftime("%Y-%m-%d") if dt is not None else None,
+                }
             lits.append(lit)
             return lit
 
@@ -148,7 +154,9 @@ class _ConflictAnalyzer(CpSatScheduler):
                 parts.append(f"[충돌 {gi}] 이 제약들이 동시 충족 불가:")
                 parts.extend(f"  · {c}" for c in m)
             msg = "\n".join(parts)
-        return {"conflicts": flat, "muses": muses, "message": msg}
+        anchored = [{"label": c, **(self._anchor_by_label.get(c) or {"nurse_id": None, "date": None})}
+                    for c in flat]
+        return {"conflicts": flat, "anchored": anchored, "muses": muses, "message": msg}
 
     # ── 게이팅 제약 (라벨 = 한국어 핀포인트) ──────────────────────────────────
     def _cur_day_req(self, dt):
@@ -170,7 +178,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                 req = day_req.get(period, 0)
                 if req <= 0:
                     continue
-                lit = gate(f"{self._fmt_date(dt)} {period} 필요 인원 {req}명")
+                lit = gate(f"{self._fmt_date(dt)} {period} 필요 인원 {req}명", dt=dt)
                 model.Add(sum(x[n["id"]][d][s] for n in self.nurses for s in shifts) == req).OnlyEnforceIf(lit)
 
     def _g_charge_requirements(self, model, x, gate):
@@ -184,7 +192,7 @@ class _ConflictAnalyzer(CpSatScheduler):
             for s in charge_shifts:
                 rk = period_to_req.get(s["period"])
                 if rk and day_req.get(rk, 0) > 0:
-                    lit = gate(f"{self._fmt_date(dt)} {s['code']} 차지 1명 필요")
+                    lit = gate(f"{self._fmt_date(dt)} {s['code']} 차지 1명 필요", dt=dt)
                     model.Add(sum(x[n["id"]][d][s["code"]] for n in self.nurses) == 1).OnlyEnforceIf(lit)
 
     def _g_weekly_off(self, model, x, gate):
@@ -199,7 +207,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                 week_days = [d for d in range(ws, we + 1)
                              if self.all_dates[d] >= first and self._nurse_active_idx(nurse, d)]
                 if len(week_days) >= 7:
-                    lit = gate(f"{self._fmt_nurse_label(nurse)} {wi+1}주차 OF 1회 의무")
+                    lit = gate(f"{self._fmt_nurse_label(nurse)} {wi+1}주차 OF 1회 의무", nid=nid)
                     model.Add(sum(x[nid][d]["OF"] for d in week_days) == 1).OnlyEnforceIf(lit)
 
     def _g_max_v(self, model, x, gate):
@@ -211,7 +219,7 @@ class _ConflictAnalyzer(CpSatScheduler):
             v_vars = [x[nid][d]["V"] for d, dt in enumerate(self.all_dates)
                       if dt.month == self.month and dt.year == self.year]
             if v_vars:
-                lit = gate(f"{self._fmt_nurse_label(nurse)} V(연차) 월 {max_v}회 이하")
+                lit = gate(f"{self._fmt_nurse_label(nurse)} V(연차) 월 {max_v}회 이하", nid=nid)
                 model.Add(sum(v_vars) <= max_v).OnlyEnforceIf(lit)
 
     def _g_night_dedicated(self, model, x, gate):
@@ -224,7 +232,7 @@ class _ConflictAnalyzer(CpSatScheduler):
             if not nurse.get("is_night_shift"):
                 continue
             nid = nurse["id"]
-            lit = gate(f"{self._fmt_nurse_label(nurse)} 야간전담 당월 정확히 14일")
+            lit = gate(f"{self._fmt_nurse_label(nurse)} 야간전담 당월 정확히 14일", nid=nid)
             model.Add(sum(x[nid][d][s] for d in month_idxs for s in self.NIGHT_SHIFTS) == 14).OnlyEnforceIf(lit)
 
     def _g_menstrual(self, model, x, gate):
@@ -237,7 +245,7 @@ class _ConflictAnalyzer(CpSatScheduler):
         for nurse in self.nurses:
             if nurse.get("is_night_shift") and month_days == 31 and nurse.get("gender") == "female":
                 nid = nurse["id"]
-                lit = gate(f"{self._fmt_nurse_label(nurse)} 야간전담 생리휴가 1회(31일달)")
+                lit = gate(f"{self._fmt_nurse_label(nurse)} 야간전담 생리휴가 1회(31일달)", nid=nid)
                 model.Add(sum(x[nid][d]["생"] for d in month_idxs) == 1).OnlyEnforceIf(lit)
 
     def _g_forbidden(self, model, x, gate):
@@ -266,7 +274,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                             if isinstance(v2, int):
                                 continue
                             lit = gate(f"{self._fmt_nurse_label(nurse)} "
-                                       f"{self._fmt_date(self.all_dates[d])}→{self._fmt_date(self.all_dates[d+1])} {tag} 금지")
+                                       f"{self._fmt_date(self.all_dates[d])}→{self._fmt_date(self.all_dates[d+1])} {tag} 금지", nid=nid, dt=self.all_dates[d])
                             model.Add(v1 + v2 <= 1).OnlyEnforceIf(lit)
 
     def _g_charge_seniority(self, model, x, gate):
@@ -308,7 +316,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                     if isinstance(vr, int):
                         continue
                     if day_lit is None:
-                        day_lit = gate(f"{self._fmt_date(dt)} charge 시니어리티(선임이 차지)")
+                        day_lit = gate(f"{self._fmt_date(dt)} charge 시니어리티(선임이 차지)", dt=dt)
                     model.Add(vc + vr <= 1).OnlyEnforceIf(day_lit)
 
     def _g_nod(self, model, x, gate):
@@ -330,7 +338,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                             if isinstance(vd, int):
                                 continue
                             if lit is None:
-                                lit = gate(f"{self._fmt_nurse_label(nurse)} N→휴무→D 금지")
+                                lit = gate(f"{self._fmt_nurse_label(nurse)} N→휴무→D 금지", nid=nid)
                             model.Add(vn + vr + vd <= 2).OnlyEnforceIf(lit)
 
     def _g_consecutive_work(self, model, x, gate):
@@ -340,7 +348,7 @@ class _ConflictAnalyzer(CpSatScheduler):
             nid = nurse["id"]
             if self.T <= max_days:
                 continue
-            lit = gate(f"{self._fmt_nurse_label(nurse)} 연속근무 ≤{max_days}일")
+            lit = gate(f"{self._fmt_nurse_label(nurse)} 연속근무 ≤{max_days}일", nid=nid)
             for start in range(self.T - max_days):
                 window = range(start, start + max_days + 1)
                 model.Add(sum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= max_days).OnlyEnforceIf(lit)
@@ -352,7 +360,7 @@ class _ConflictAnalyzer(CpSatScheduler):
             nid = nurse["id"]
             if self.T <= max_n:
                 continue
-            lit = gate(f"{self._fmt_nurse_label(nurse)} 연속야간 ≤{max_n}일")
+            lit = gate(f"{self._fmt_nurse_label(nurse)} 연속야간 ≤{max_n}일", nid=nid)
             for start in range(self.T - max_n):
                 window = range(start, start + max_n + 1)
                 model.Add(sum(x[nid][d][s] for d in window for s in self.NIGHT_SHIFTS) <= max_n).OnlyEnforceIf(lit)
@@ -389,7 +397,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                     if not work_vars:
                         continue
                     if lit is None:
-                        lit = gate(f"{self._fmt_nurse_label(nurse)} 연속야간 후 휴무 보장")
+                        lit = gate(f"{self._fmt_nurse_label(nurse)} 연속야간 후 휴무 보장", nid=nid)
                     lhs = sum(night_terms) + night_fixed
                     lhs = lhs - (sum(night_next) if night_next else night_next_fixed)
                     lhs = lhs + sum(work_vars)
@@ -406,7 +414,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                           if dt.month == self.month and dt.year == self.year
                           for s in self.NIGHT_SHIFTS]
             if night_vars:
-                lit = gate(f"{self._fmt_nurse_label(nurse)} 월 야간 ≤{max_n}회")
+                lit = gate(f"{self._fmt_nurse_label(nurse)} 월 야간 ≤{max_n}회", nid=nid)
                 model.Add(sum(night_vars) <= max_n).OnlyEnforceIf(lit)
 
     def _g_max_night_two_month(self, model, x, gate):
@@ -422,7 +430,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                           if dt.month == self.month and dt.year == self.year
                           for s in self.NIGHT_SHIFTS]
             if night_vars:
-                lit = gate(f"{self._fmt_nurse_label(nurse)} 홀짝월 합산 야간 ≤{max_n}회(전월 {prev_count})")
+                lit = gate(f"{self._fmt_nurse_label(nurse)} 홀짝월 합산 야간 ≤{max_n}회(전월 {prev_count})", nid=nid)
                 model.Add(sum(night_vars) <= max_n - prev_count).OnlyEnforceIf(lit)
 
 
@@ -552,7 +560,8 @@ class _ConflictAnalyzer(CpSatScheduler):
                     "message": "최소 수정 처방을 계산하지 못했습니다 "
                                "(행동 제약 자체의 충돌일 수 있음 — 정밀 충돌 분석 참고)."}
 
-        removed = [(self._fmt_nurse_label(n), self._fmt_date(self.all_dates[d]), pre)
+        removed = [(n["id"], self._fmt_nurse_label(n),
+                    self.all_dates[d].strftime("%Y-%m-%d"), self._fmt_date(self.all_dates[d]), pre)
                    for keep, n, d, pre in pre_keeps if solver.Value(keep) == 0]
         short_list = []
         for kind, dt, code, var, req in shortfalls:
@@ -563,7 +572,7 @@ class _ConflictAnalyzer(CpSatScheduler):
         lines = []
         if removed:
             lines.append(f"■ 사전입력 {len(removed)}건 제거하면 충원 가능:")
-            for label, ds, pre in removed[:15]:
+            for nid, label, iso, ds, pre in removed[:15]:
                 lines.append(f"  · {label} {ds} '{pre}' 제거")
             if len(removed) > 15:
                 lines.append(f"  · … 외 {len(removed)-15}건")
@@ -581,7 +590,8 @@ class _ConflictAnalyzer(CpSatScheduler):
                     "message": "수정 없이 생성 가능합니다 (현재 하드 제약상 충돌 없음)."}
         return {
             "fixable": True,
-            "removals": [{"nurse": l, "date": ds, "pre": p} for l, ds, p in removed],
+            "removals": [{"nurse_id": nid, "nurse": l, "date_iso": iso, "date": ds, "pre": p}
+                          for nid, l, iso, ds, p in removed],
             "shortfalls": [{"kind": k, "date": dt.strftime("%Y-%m-%d"), "code": c, "amount": v}
                            for k, dt, c, v in short_list],
             "message": "이렇게 수정하면 생성 가능합니다:\n" + "\n".join(lines),

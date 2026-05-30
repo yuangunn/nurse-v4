@@ -34,7 +34,7 @@ function app() {
     generateTimer:null, sseSource:null, solverLogs:[], showLogPanel:false,
     solveProgress:{gap_percent:null,nodes:0,has_solution:false,is_running:false},
     stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, unlimitedV:false, relaxedCells:{},
-    solver:'highs', diagnosing:false,
+    solver:'highs', diagnosing:false, fixing:false, diagResult:null, fixResult:null,
     mipGapPercent:null, scheduleStopped:false, estimatedSeconds:0,
     statusMessage:'', statusOk:true, savedSchedules:[],
     darkMode: localStorage.getItem('darkMode')==='true',
@@ -998,18 +998,64 @@ function app() {
     },
 
     // ── 정밀 충돌 분석 (CP-SAT assumptions) ───────────────────
+    _diagPayload(){return{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null}},
     async diagnoseConflicts(){
       if(this.diagnosing)return;
-      this.diagnosing=true;
+      this.diagnosing=true; this.diagResult=null;
       try{
-        const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null};
-        const res=await this.api('POST','/api/diagnose',payload);
+        const res=await this.api('POST','/api/diagnose',this._diagPayload());
         if(res&&res.message){
+          this.diagResult=res;
           this.statusMessage=this.statusMessage+'\n\n━━ 정밀 충돌 분석 (CP-SAT) ━━\n'+res.message;
           this.toast(res.conflicts&&res.conflicts.length?`충돌 ${res.conflicts.length}건 발견`:'하드 제약 충돌 없음','info',3500);
         }
       }catch(e){this.toast('충돌 분석 실패','error');}
       finally{this.diagnosing=false;}
+    },
+    async suggestFix(){
+      if(this.fixing)return;
+      this.fixing=true; this.fixResult=null;
+      try{
+        const res=await this.api('POST','/api/suggest-fix',this._diagPayload());
+        if(res){
+          this.fixResult=res;
+          this.toast(res.fixable?'자동 수정 처방을 계산했습니다':'처방 계산 실패 — 정밀 분석 참고',res.fixable?'success':'error',3800);
+        }
+      }catch(e){this.toast('자동 수정 처방 실패','error');}
+      finally{this.fixing=false;}
+    },
+    jumpToPreCell(nid,iso){
+      if(iso){const p=String(iso).split('-').map(Number);if(p[0]&&p[1]){this.year=p[0];this.month=p[1];}}
+      this.activeTab='preinput';
+      this.$nextTick(()=>setTimeout(()=>{
+        let el=(nid&&iso)?document.querySelector(`[data-cell="${nid}|${iso}"]`):null;
+        if(!el&&iso)el=document.querySelector(`[data-cell$="|${iso}"]`);
+        if(el){el.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});el.classList.add('g-jump-flash');setTimeout(()=>el.classList.remove('g-jump-flash'),2400);}
+        else this.toast('해당 셀이 현재 주기 화면에 없습니다','info',3000);
+      },140));
+    },
+    applyFix(){
+      const r=this.fixResult; if(!r)return;
+      const rms=r.removals||[]; const sfs=(r.shortfalls||[]).filter(s=>s.kind==='staff');
+      if(!rms.length&&!sfs.length){this.toast('적용할 수정이 없습니다','info');return;}
+      this._pushUndo();
+      let rn=0;
+      for(const rm of rms){
+        if(rm.nurse_id&&rm.date_iso&&this.prevSchedule[rm.nurse_id]&&this.prevSchedule[rm.nurse_id][rm.date_iso]!==undefined){
+          delete this.prevSchedule[rm.nurse_id][rm.date_iso]; rn++;
+          if(!Object.keys(this.prevSchedule[rm.nurse_id]).length)delete this.prevSchedule[rm.nurse_id];
+        }
+      }
+      let sn=0;
+      for(const s of sfs){
+        const d=new Date(s.date+'T00:00:00'); if(isNaN(d))continue;
+        const cur=this.getPrevDayReq(d,s.code); const base=this.getDefaultDayReq(d,s.code);
+        const curVal=(cur!==null&&cur!==undefined)?cur:base;
+        this.setPrevDayReq(d,s.code,Math.max(0,curVal-(s.amount||0))); sn++;
+      }
+      if(this._checkViolations)this._checkViolations();
+      this.toast(`처방 적용 — 사전입력 ${rn}건 제거, 수요 ${sn}건 감축 (Ctrl+Z 취소)`,'success',4500);
+      this.fixResult=null; this.activeTab='preinput';
     },
 
     // ── 표시 헬퍼 ─────────────────────────────────────────────
