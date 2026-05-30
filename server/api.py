@@ -82,18 +82,6 @@ for _subdir in ("css", "js", "lib", "fonts", "assets"):
     if _sub_path.exists():
         app.mount(f"/{_subdir}", StaticFiles(directory=str(_sub_path)), name=_subdir)
 
-# 레거시 디자인 (Premium UI) — frontend/legacy/ 트리를 /legacy/* 로 노출
-_legacy_dir = _frontend_dir / "legacy"
-if _legacy_dir.exists():
-    for _subdir in ("css", "js"):
-        _sub_path = _legacy_dir / _subdir
-        if _sub_path.exists():
-            app.mount(
-                f"/legacy/{_subdir}",
-                StaticFiles(directory=str(_sub_path)),
-                name=f"legacy_{_subdir}",
-            )
-
 
 # 개발 중 stylesheet/script 캐시로 인한 stale UI 방지 — 정적 파일에 no-cache
 @app.middleware("http")
@@ -729,16 +717,6 @@ def index():
     if html_path.exists():
         return FileResponse(str(html_path))
     raise HTTPException(status_code=404, detail="index.html not found")
-
-
-@app.get("/legacy")
-@app.get("/legacy/")
-def index_legacy():
-    """레거시 Premium UI 디자인 (v4.0.x). 사용자가 디자인 선택 시 접근."""
-    html_path = Path(__file__).parent.parent / "frontend" / "legacy" / "index.html"
-    if html_path.exists():
-        return FileResponse(str(html_path))
-    raise HTTPException(status_code=404, detail="legacy index.html not found")
 
 
 # ── 간호사 API ────────────────────────────────────────────────────────────────

@@ -173,24 +173,25 @@ def init_db():
 def _seed_shifts(conn: sqlite3.Connection):
     """기본 근무 16종 삽입"""
     # auto_assign: 1=솔버 자동배정 가능, 0=사전입력 전용
+    # YGinvest 팔레트: D=블루, E=레드, N=바이올렛, V=그린, 휴무=그레이
     shifts = [
         # code   name            period    is_charge  hours              color_bg   color_text  sort  auto_assign
-        ("DC", "Day Charge",    "day",     1, "06:00~14:00", "#bfdbfe", "#1d4ed8", 0,  1),
-        ("D",  "Day",           "day",     0, "06:00~14:00", "#dbeafe", "#1d4ed8", 1,  1),
-        ("D1", "Day1",          "day1",    0, "08:30~17:30", "#e0f2fe", "#0284c7", 2,  0),
-        ("EC", "Evening Charge","evening", 1, "14:00~22:00", "#bbf7d0", "#15803d", 3,  1),
-        ("E",  "Evening",       "evening", 0, "14:00~22:00", "#dcfce7", "#15803d", 4,  1),
-        ("중", "중간번",         "middle",  0, "11:00~19:00", "#ccfbf1", "#0f766e", 5,  0),
-        ("NC", "Night Charge",  "night",   1, "22:00~06:00", "#fde68a", "#92400e", 6,  1),
-        ("N",  "Night",         "night",   0, "22:00~06:00", "#fef9c3", "#92400e", 7,  1),
-        ("OF", "Off",           "rest",    0, "-",           "#f3f4f6", "#6b7280", 8,  1),
-        ("주", "주휴",           "rest",    0, "-",           "#e0e7ff", "#4338ca", 9,  0),
-        ("V",  "연차",           "leave",   0, "-",           "#fce7f3", "#be185d", 10, 1),
-        ("생", "생리휴가",        "leave",   0, "-",           "#fdf2f8", "#be185d", 11, 1),
-        ("특", "특별휴가",        "leave",   0, "-",           "#fdf4ff", "#7e22ce", 12, 0),
-        ("공", "공적업무",        "leave",   0, "-",           "#ecfdf5", "#064e3b", 13, 0),
-        ("법", "법정공휴일",      "leave",   0, "-",           "#fff7ed", "#c2410c", 14, 0),
-        ("병", "병가",           "leave",   0, "-",           "#fef2f2", "#dc2626", 15, 0),
+        ("DC", "Day Charge",    "day",     1, "06:00~14:00", "#E2ECFD", "#1B4FC3", 0,  1),
+        ("D",  "Day",           "day",     0, "06:00~14:00", "#EEF3FE", "#1B4FC3", 1,  1),
+        ("D1", "Day1",          "day1",    0, "08:30~17:30", "#F0F6FF", "#2563EB", 2,  0),
+        ("EC", "Evening Charge","evening", 1, "14:00~22:00", "#FCE3E5", "#C7384A", 3,  1),
+        ("E",  "Evening",       "evening", 0, "14:00~22:00", "#FEEFEF", "#C7384A", 4,  1),
+        ("중", "중간번",         "middle",  0, "11:00~19:00", "#FBF3E2", "#B7791F", 5,  0),
+        ("NC", "Night Charge",  "night",   1, "22:00~06:00", "#E7E0F8", "#5B3FB0", 6,  1),
+        ("N",  "Night",         "night",   0, "22:00~06:00", "#EFEBFB", "#5B3FB0", 7,  1),
+        ("OF", "Off",           "rest",    0, "-",           "#F2F3F5", "#8A93A1", 8,  1),
+        ("주", "주휴",           "rest",    0, "-",           "#EDEFF3", "#4A5160", 9,  0),
+        ("V",  "연차",           "leave",   0, "-",           "#ECF7F0", "#1F8A5B", 10, 1),
+        ("생", "생리휴가",        "leave",   0, "-",           "#FCEAF1", "#B83280", 11, 1),
+        ("특", "특별휴가",        "leave",   0, "-",           "#F1ECFB", "#6D4AC0", 12, 0),
+        ("공", "공적업무",        "leave",   0, "-",           "#E8F5EE", "#1F8A5B", 13, 0),
+        ("법", "법정공휴일",      "leave",   0, "-",           "#FDEEE5", "#C2410C", 14, 0),
+        ("병", "병가",           "leave",   0, "-",           "#FEEAEA", "#C7384A", 15, 0),
     ]
     conn.executemany(
         "INSERT OR IGNORE INTO shifts "

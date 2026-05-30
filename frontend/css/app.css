@@ -1,11 +1,13 @@
 /* ═══════════════════════════════════════════════════════════
-   NurseScheduler v4.1 — Clinical Paper Redesign
-   세브란스 네이비 #023671 · 페이퍼 베이지 · 잉크
-   Pretendard Variable (한글 본문) + Newsreader (serif headings)
-   + JetBrains Mono (셀/시각/로그)
+   NurseScheduler v4.2 — YGinvest Redesign (Korean fintech)
+   딥 잉크 #0F1115 · 쿨그레이 페이퍼 · 흰 카드 · 둥근 모서리
+   Pretendard 단일 타입 시스템 · KR 시그널 red↑ / blue↓
    ═══════════════════════════════════════════════════════════ */
 
-/* ── Fonts (오프라인 번들, Electron) ──────────────────────── */
+/* ── Fonts (오프라인 번들, Electron) ──────────────────────────
+   YGinvest는 Pretendard 단일. 과거 'Newsreader'/'JetBrains Mono'
+   참조(컴포넌트·인라인)가 남아 있어도 전부 Pretendard로 렌더되도록
+   동일 패밀리명을 Pretendard 가변폰트에 재매핑한다 (오프라인 보장). */
 @font-face {
   font-family: 'Pretendard Variable';
   font-weight: 45 920;
@@ -13,66 +15,74 @@
   font-display: swap;
   src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
 }
-@font-face { font-family:'Newsreader'; font-style:normal; font-weight:300; font-display:swap; src:url('/fonts/Newsreader-300.woff2') format('woff2'); }
-@font-face { font-family:'Newsreader'; font-style:normal; font-weight:400; font-display:swap; src:url('/fonts/Newsreader-400.woff2') format('woff2'); }
-@font-face { font-family:'Newsreader'; font-style:normal; font-weight:500; font-display:swap; src:url('/fonts/Newsreader-500.woff2') format('woff2'); }
-@font-face { font-family:'Newsreader'; font-style:normal; font-weight:600; font-display:swap; src:url('/fonts/Newsreader-600.woff2') format('woff2'); }
-@font-face { font-family:'Newsreader'; font-style:italic; font-weight:300; font-display:swap; src:url('/fonts/Newsreader-300i.woff2') format('woff2'); }
-@font-face { font-family:'Newsreader'; font-style:italic; font-weight:400; font-display:swap; src:url('/fonts/Newsreader-400i.woff2') format('woff2'); }
-@font-face { font-family:'JetBrains Mono'; font-weight:400; font-display:swap; src:url('/fonts/JetBrainsMono-400.woff2') format('woff2'); }
-@font-face { font-family:'JetBrains Mono'; font-weight:500; font-display:swap; src:url('/fonts/JetBrainsMono-500.woff2') format('woff2'); }
-@font-face { font-family:'JetBrains Mono'; font-weight:600; font-display:swap; src:url('/fonts/JetBrainsMono-600.woff2') format('woff2'); }
-@font-face { font-family:'JetBrains Mono'; font-weight:700; font-display:swap; src:url('/fonts/JetBrainsMono-700.woff2') format('woff2'); }
+@font-face { font-family:'Newsreader'; font-weight:45 920; font-style:normal; font-display:swap; src:url('/fonts/PretendardVariable.woff2') format('woff2-variations'); }
+@font-face { font-family:'JetBrains Mono'; font-weight:45 920; font-style:normal; font-display:swap; src:url('/fonts/PretendardVariable.woff2') format('woff2-variations'); }
 
-/* ── Clinical Paper Design Tokens (Light) ────────────────── */
+/* ── YGinvest Design Tokens (Light) ──────────────────────── */
 :root {
-  /* Paper (warm beige) */
-  --paper:       #f3eee3;
-  --paper-2:     #ebe4d2;
-  --paper-3:     #e2dac2;
-  --card:        #fbf8f0;
-  --card-warm:   #f8f3e6;
+  /* Surfaces — cool gray app bg + white cards */
+  --paper:       #F4F5F7;
+  --paper-2:     #EDEFF3;
+  --paper-3:     #E4E7EC;
+  --card:        #FFFFFF;
+  --card-warm:   #F8F9FB;
 
-  /* Ink (warm near-black → mid greys) */
-  --ink:         #1a1815;
-  --ink-2:       #3a342c;
-  --ink-3:       #6e6759;
-  --ink-4:       #9c9483;
-  --ink-5:       #c4bca9;
+  /* Ink ramp */
+  --ink:         #0F1115;
+  --ink-2:       #4A5160;
+  --ink-3:       #8A93A1;
+  --ink-4:       #B8BFC9;
+  --ink-5:       #D4D9E0;
 
-  /* Rules (hairline separators) */
-  --rule:        #d4cbb4;
-  --rule-2:      #c3b994;
-  --rule-soft:   #e6dfca;
+  /* Lines (mostly invisible — spacing separates) */
+  --rule:        #EBEDF0;
+  --rule-2:      #DCE0E6;
+  --rule-soft:   #F2F3F5;
 
-  /* Severance Navy — single accent */
-  --accent:      #023671;
-  --accent-2:    #1a4f87;
-  --accent-3:    #0b2d56;
-  --accent-soft: #dde4ec;
-  --accent-mist: #eef2f7;
+  /* Brand = deep ink (NOT blue/navy) */
+  --accent:      #0F1115;
+  --accent-2:    #2A2E36;
+  --accent-3:    #000000;
+  --accent-soft: #F2F3F5;
+  --accent-mist: #F8F9FB;
 
-  /* Signal colors (status only) */
-  --ok:          #4a6b32;   --ok-bg:   #e3e8c8;
-  --warn:        #8a5a1c;   --warn-bg: #f3e6c4;
-  --err:         #8b2e1f;   --err-bg:  #f0d7cc;
-  --info:        #023671;   --info-bg: #dde4ec;
+  /* KR convention red↑ (shortage/up) / blue↓ (surplus/down) */
+  --up:          #E84B5A;  --up-deep:   #C7384A;
+  --down:        #2563EB;  --down-deep: #1B4FC3;
 
-  /* Shift palette (subtle paper tones, NOT fluorescent) */
-  --d-ink: #023671;  --d-bg: #d6dfeb;   /* Day — navy */
-  --e-ink: #8a3a1a;  --e-bg: #f3dcc9;   /* Evening — terracotta */
-  --n-ink: #3d2a5e;  --n-bg: #ddd2eb;   /* Night — mauve */
-  --v-ink: #4a6b32;  --v-bg: #dde3c4;   /* Vacation — moss */
-  --off-ink: #6e6759; --off-bg: #ebe4d2; /* Off — paper */
+  /* Signal colors (status) */
+  --ok:          #1F8A5B;   --ok-bg:   #ECF7F0;
+  --warn:        #B7791F;   --warn-bg: #FBF3E2;
+  --err:         #C7384A;   --err-bg:  #FEEFEF;
+  --info:        #0F1115;   --info-bg: #F2F3F5;
 
-  /* ── Legacy variable aliases (Phase 1 호환) ─────────────
-     Phase 2~3에서 컴포넌트 룰을 새 토큰으로 직접 갈아끼우기 전까지
-     기존 변수 이름을 새 토큰에 매핑해서 룰이 깨지지 않게 함. */
+  /* Shift palette — soft tint bg + deep ink text */
+  --d-ink: #1B4FC3;  --d-bg: #EEF3FE;   /* Day — blue */
+  --e-ink: #C7384A;  --e-bg: #FEEFEF;   /* Evening — red */
+  --n-ink: #5B3FB0;  --n-bg: #EFEBFB;   /* Night — violet */
+  --v-ink: #1F8A5B;  --v-bg: #ECF7F0;   /* Vacation — green */
+  --off-ink: #8A93A1; --off-bg: #F2F3F5; /* Off — gray */
+
+  /* Radii + shadow (YG: big rounded cards, soft elevation) */
+  --r-card:      20px;
+  --r-card-sm:   16px;
+  --r-btn:       12px;
+  --r-chip:      9999px;
+  --r-input:     12px;
+  --shadow-card: 0 1px 2px rgba(15,17,21,0.04), 0 0 0 1px rgba(15,17,21,0.03);
+  --shadow-pop:  0 10px 30px rgba(15,17,21,0.10), 0 0 0 1px rgba(15,17,21,0.04);
+  --grad-dark:   linear-gradient(150deg, #1E2530 0%, #0F1115 70%);
+
+  /* Single type family (Pretendard) */
+  --font-sans:  'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  --font-mono:  var(--font-sans);
+
+  /* ── Legacy variable aliases — 기존 컴포넌트 룰 호환 매핑 ── */
   --bg:            var(--paper);
   --bg-sidebar:    var(--card);
   --bg-card:       var(--card);
   --bg-card-hover: var(--card-warm);
-  --bg-input:      var(--paper-2);
+  --bg-input:      var(--card-warm);
   --border:        var(--rule);
   --border-light:  var(--rule-soft);
   --text:          var(--ink-2);
@@ -85,74 +95,84 @@
   --green:         var(--ok);
   --red:           var(--err);
   --amber:         var(--warn);
-  --pink:          var(--err);
+  --pink:          var(--up);
   --t-green:       var(--ok);
   --t-red:         var(--err);
   --t-amber:       var(--warn);
-  --t-pink:        var(--err);
-  --t-blue:        var(--accent);
+  --t-pink:        var(--up);
+  --t-blue:        var(--down);
   --g-fix:         var(--card-warm);
-  --log-bg:        var(--ink);
-  --log-text:      var(--ok);
+  --log-bg:        #0F1115;
+  --log-text:      #9FE0B8;
   --modal-bg:      var(--card);
-  --modal-overlay: rgba(26,24,21,0.32);
-  --shadow-sm:     0 1px 0 var(--rule-soft);
-  --shadow-md:     0 1px 0 var(--rule);
-  --shadow-lg:     0 2px 0 var(--rule);
+  --modal-overlay: rgba(15,17,21,0.42);
+  --shadow-sm:     var(--shadow-card);
+  --shadow-md:     var(--shadow-card);
+  --shadow-lg:     var(--shadow-pop);
   --sidebar-active-bg: var(--accent-soft);
 }
 
-/* ── Dark mode (paper inverted to deep ink) ──────────────── */
+/* ── Dark mode (YGinvest deep navy-black) ────────────────── */
 html.dark {
-  --paper:       #0e0d0c;
-  --paper-2:     #16140f;
-  --paper-3:     #1d1a14;
-  --card:        #14120e;
-  --card-warm:   #1a1813;
+  --paper:       #0A0C10;
+  --paper-2:     #14181F;
+  --paper-3:     #1B1F28;
+  --card:        #14181F;
+  --card-warm:   #1B1F28;
 
-  --ink:         #f0ebde;
-  --ink-2:       #c4bca9;
-  --ink-3:       #9c9483;
-  --ink-4:       #6e6759;
-  --ink-5:       #3a342c;
+  --ink:         #F1F4F8;
+  --ink-2:       #B4BCC9;
+  --ink-3:       #7C8593;
+  --ink-4:       #4E5663;
+  --ink-5:       #3a414d;
 
-  --rule:        #2a2620;
-  --rule-2:      #3a342c;
-  --rule-soft:   #1d1a14;
+  --rule:        #242A35;
+  --rule-2:      #303744;
+  --rule-soft:   #1B1F28;
 
-  --accent:      #6b9bd1;
-  --accent-2:    #8eb5db;
-  --accent-3:    #4a7bb0;
-  --accent-soft: rgba(107,155,209,0.12);
-  --accent-mist: rgba(107,155,209,0.06);
+  --accent:      #F1F4F8;
+  --accent-2:    #D2D8E0;
+  --accent-3:    #FFFFFF;
+  --accent-soft: #1F2430;
+  --accent-mist: #1B1F28;
 
-  --ok:          #a8c478;  --ok-bg:   rgba(168,196,120,0.12);
-  --warn:        #d4a96a;  --warn-bg: rgba(212,169,106,0.12);
-  --err:         #d68b78;  --err-bg:  rgba(214,139,120,0.12);
-  --info:        #6b9bd1;  --info-bg: rgba(107,155,209,0.12);
+  --up:          #FF6470;  --up-deep:   #FF8A92;
+  --down:        #5A8AFF;  --down-deep: #8AA8FF;
 
-  --d-ink: #8eb5db;  --d-bg: rgba(107,155,209,0.12);
-  --e-ink: #d4a08a;  --e-bg: rgba(212,160,138,0.12);
-  --n-ink: #b89dd4;  --n-bg: rgba(184,157,212,0.12);
-  --v-ink: #b8c879;  --v-bg: rgba(184,200,121,0.12);
-  --off-ink: #6e6759; --off-bg: rgba(110,103,89,0.10);
+  --ok:          #4FD08A;  --ok-bg:   #10261C;
+  --warn:        #E0A93B;  --warn-bg: #2C2310;
+  --err:         #FF8A92;  --err-bg:  #2C141A;
+  --info:        #F1F4F8;  --info-bg: #1F2430;
 
-  --modal-overlay: rgba(0,0,0,0.55);
-  --shadow-sm:     0 1px 0 var(--rule);
-  --shadow-md:     0 1px 0 var(--rule);
-  --shadow-lg:     0 2px 0 var(--rule);
+  --d-ink: #8AA8FF;  --d-bg: #16203A;
+  --e-ink: #FF8A92;  --e-bg: #2C141A;
+  --n-ink: #B79CFF;  --n-bg: #1E1838;
+  --v-ink: #4FD08A;  --v-bg: #10261C;
+  --off-ink: #7C8593; --off-bg: #1F2430;
+
+  --log-bg:        #0A0C10;
+  --log-text:      #4FD08A;
+  --modal-overlay: rgba(0,0,0,0.6);
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04);
+  --shadow-pop:  0 12px 30px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  --grad-dark:   linear-gradient(150deg, #232A36 0%, #14181F 70%);
 }
 
-/* ── Typography utilities (Phase 1 / Phase 5) ────────────── */
+/* ── Typography utilities (YGinvest: Pretendard 단일) ─────── */
 .serif {
-  font-family: 'Newsreader', 'Times New Roman', serif;
-  font-weight: 400;
-  letter-spacing: -0.01em;
+  font-family: var(--font-sans);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-style: normal;
 }
+.serif em { font-style: normal; font-weight: 600; color: var(--ink-3); }
 .mono {
-  font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: 0;
 }
+.italic { font-style: normal; }
 .tnum { font-variant-numeric: tabular-nums; }
 .eyebrow {
   display: inline-block;
@@ -1392,3 +1412,254 @@ input[type="number"]::-webkit-outer-spin-button {
 @media print {
   .hospital-logo { display: none !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   YGinvest SKIN OVERRIDES (v4.2)
+   동일 셀렉터를 소스 순서로 후행 정의 → Clinical Paper 룰을 덮어쓴다.
+   둥근 모서리 · 부드러운 그림자 · 핀테크 pill · Pretendard 단일.
+   ═══════════════════════════════════════════════════════════ */
+
+/* 상단 네이비 ribbon 제거 (YG는 ribbon 없음) */
+.app-shell::before { display: none !important; }
+
+/* ── Cards ───────────────────────────────────────────────── */
+.card {
+  border: none;
+  border-radius: var(--r-card-sm);
+  box-shadow: var(--shadow-card);
+}
+.card:hover { box-shadow: var(--shadow-card); }
+.card-sm {
+  border: none;
+  border-radius: var(--r-card-sm);
+  box-shadow: var(--shadow-card);
+}
+
+/* ── Buttons (YG pill) ───────────────────────────────────── */
+.btn {
+  border: none;
+  border-radius: var(--r-btn);
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: 700;
+  transition: transform .12s ease, background-color .12s ease, color .12s ease;
+}
+.btn:hover { background: var(--rule-2); color: var(--ink); }
+.btn:active { transform: scale(.98); }
+.btn-primary { background: var(--accent); color: #fff; border: none; }
+html.dark .btn-primary { color: var(--paper); }
+.btn-primary:hover { background: var(--accent-2); border: none; color: #fff; }
+html.dark .btn-primary:hover { color: var(--paper); }
+.btn-ghost { background: transparent; color: var(--ink-2); border: none; box-shadow: inset 0 0 0 1px var(--rule-2); }
+.btn-ghost:hover { background: var(--accent-soft); color: var(--ink); box-shadow: inset 0 0 0 1px var(--rule-2); }
+.btn-success { background: var(--ok); color: #fff; border: none; }
+.btn-success:hover { background: var(--ok); border: none; color: #fff; filter: brightness(0.94); }
+.btn-danger { background: var(--err-bg); color: var(--err); border: none; }
+.btn-danger:hover { background: var(--err); border: none; color: #fff; }
+.btn-sm { border-radius: 10px; }
+.btn-xs { border-radius: 9px; background: var(--accent-soft); }
+.btn-link { border-radius: 8px; }
+
+/* ── Inputs (soft inset ring, rounded) ───────────────────── */
+input[type="text"], input[type="number"], input[type="password"], input[type="date"], input[type="email"], input:not([type]), select, textarea {
+  background: var(--card-warm);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--rule);
+  border-radius: var(--r-input);
+}
+input:focus, select:focus, textarea:focus {
+  border: none;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  background: var(--card);
+}
+.modal input[type="text"], .modal input[type="number"], .modal input[type="password"], .modal input[type="date"], .modal input[type="email"], .modal input:not([type]), .modal select, .modal textarea {
+  background: var(--card-warm); border: none; box-shadow: inset 0 0 0 1px var(--rule);
+}
+.ym { border: none; box-shadow: inset 0 0 0 1px var(--rule); border-radius: var(--r-input); background: var(--card-warm); }
+input[type="range"]::-webkit-slider-thumb { box-shadow: 0 1px 4px rgba(15,17,21,0.2); }
+
+/* ── Tags / pills (YG rounded chip) ──────────────────────── */
+.tag {
+  border: none;
+  border-radius: 9999px;
+  background: var(--accent-soft);
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+.tag.accent { background: var(--d-bg); color: var(--d-ink); border: none; }
+.tag.ok    { background: var(--ok-bg);   color: var(--ok);   border: none; }
+.tag.warn  { background: var(--warn-bg); color: var(--warn); border: none; }
+.tag.err   { background: var(--err-bg);  color: var(--err);  border: none; }
+.tag.ink   { background: var(--accent);  color: #fff;        border: none; }
+html.dark .tag.ink { color: var(--paper); }
+.pill {
+  border: none;
+  border-radius: 9999px;
+  background: var(--accent-soft);
+  color: var(--ink-2);
+  font-weight: 700;
+}
+.status-badge { border-radius: 9999px; }
+.juhu-badge { border-radius: 9999px; }
+
+/* ── Modal / profile (rounded + soft pop shadow) ─────────── */
+.modal {
+  border: none;
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-pop);
+}
+.profile-overlay { background: var(--paper); }
+.profile-card {
+  border: none;
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-pop);
+}
+.profile-item {
+  border: none;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+}
+.profile-item:hover { background: var(--card-warm); box-shadow: var(--shadow-pop); }
+.profile-guest { box-shadow: inset 0 0 0 1px var(--rule-2); background: transparent; }
+kbd {
+  border: none;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--ink-2);
+}
+.log-box {
+  border-radius: var(--r-input);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+}
+
+/* ── Stepper (YG rounded step cards) ─────────────────────── */
+.stepper { gap: 6px; padding: 0 0 12px; }
+.step {
+  border-right: none;
+  border-radius: 12px;
+  background: var(--card-warm);
+  padding: 9px 14px;
+  transition: background-color .15s ease;
+}
+.step:last-child { border-right: none; }
+.step:hover { background: var(--accent-soft); color: var(--ink); }
+.step.active { background: var(--accent); color: #fff; }
+html.dark .step.active { color: var(--paper); }
+.step.active .step-name { color: #fff; }
+html.dark .step.active .step-name { color: var(--paper); }
+.step.active .step-num, .step.active .step-desc { color: var(--ink-4); opacity: 1; }
+.appbar-top { padding-top: 14px; }
+
+/* ── Brand mark (rounded square) ─────────────────────────── */
+.brand-mark { border-radius: 9px; }
+.brand-mark::before { left: 50%; right: auto; top: 6px; bottom: 6px; width: 2.5px; height: auto; transform: translateX(-50%); border-radius: 2px; background: var(--card); }
+.brand-mark::after { top: 50%; bottom: auto; left: 6px; right: 6px; height: 2.5px; width: auto; transform: translateY(-50%); border-radius: 2px; background: var(--card); }
+.brand-ver { border: none; border-radius: 9999px; background: var(--accent-soft); }
+
+/* ── KPI (big Pretendard 800 number) ─────────────────────── */
+.kpi {
+  border: none;
+  border-radius: var(--r-card-sm);
+  box-shadow: var(--shadow-card);
+}
+.kpi-value { font-family: var(--font-sans); font-weight: 800; letter-spacing: -0.04em; }
+.kpi-delta.pos { color: var(--up); }
+.kpi-delta.neg { color: var(--down); }
+
+/* ── Generation panel ────────────────────────────────────── */
+.gen-panel-bar { border-radius: 9999px; }
+.gen-panel-bar-fill { background: var(--accent); border-radius: 9999px; }
+.gen-panel-log { border-radius: 10px; border: none; box-shadow: inset 0 0 0 1px var(--rule); }
+
+/* ── Month banner ────────────────────────────────────────── */
+.month-banner-bar { border-radius: 9999px; }
+.month-banner-bar-fill { background: var(--accent); }
+
+/* ── Schedule cells ──────────────────────────────────────── */
+.schedule-cell { border-radius: 0; }
+.g-fix { background-color: var(--card-warm) !important; }
+
+/* ── Today (mobile home) — YG cards ──────────────────────── */
+.today-hero { background: var(--card); }
+.today-date { font-family: var(--font-sans); font-weight: 800; letter-spacing: -0.04em; }
+.today-section-title h3 { font-family: var(--font-sans); font-weight: 800; letter-spacing: -0.02em; }
+.today-duty-label .dot { border-radius: 3px; }
+.today-next-card {
+  background: var(--accent); color: #fff;
+  border-radius: var(--r-card-sm);
+  padding: 16px 18px; margin: 0 22px 4px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+html.dark .today-next-card { color: var(--paper); }
+.today-next-card .lbl { font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.7; }
+.today-next-card .big { font-family: var(--font-sans); font-size: 2.6rem; font-weight: 800; line-height: 1; letter-spacing: -0.04em; }
+.today-next-card .meta { font-size: 0.72rem; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.shift-stack {
+  display: flex; gap: 4px; height: 38px;
+  border-radius: var(--r-btn); overflow: hidden;
+  background: var(--card-warm); padding: 3px; margin: 6px 0 14px;
+}
+.shift-stack .seg {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-sans); font-size: 0.78rem; font-weight: 800;
+  color: var(--ink); border-radius: 9px; font-variant-numeric: tabular-nums;
+}
+.shift-stack .seg.lbl { flex: 0 0 28px; font-size: 0.62rem; color: var(--ink-3); font-weight: 700; background: transparent; }
+.shift-stack .seg.shift-D { background: var(--d-bg); color: var(--d-ink); }
+.shift-stack .seg.shift-E { background: var(--e-bg); color: var(--e-ink); }
+.shift-stack .seg.shift-N { background: var(--n-bg); color: var(--n-ink); }
+.cov-row {
+  display: grid; grid-template-columns: 34px 1fr auto;
+  align-items: center; gap: 11px;
+  padding: 10px 0; border-bottom: 1px solid var(--rule-soft);
+}
+.cov-row:last-child { border-bottom: 0; }
+.cov-row .cov-shift {
+  width: 34px; height: 34px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-sans); font-weight: 800; font-size: 0.72rem;
+}
+.cov-row .cov-shift.shift-D { background: var(--d-bg); color: var(--d-ink); }
+.cov-row .cov-shift.shift-E { background: var(--e-bg); color: var(--e-ink); }
+.cov-row .cov-shift.shift-N { background: var(--n-bg); color: var(--n-ink); }
+.cov-row .cov-shift.charge { box-shadow: inset 0 0 0 1.5px currentColor; }
+.cov-row .cov-nm { font-size: 0.84rem; font-weight: 700; color: var(--ink); }
+.cov-row .cov-meta { font-size: 0.66rem; color: var(--ink-3); font-weight: 600; }
+
+/* ── Mobile bottom-nav (YG 5-tab: 상단 accent bar) ───────── */
+.bottom-nav { background: var(--card); }
+.bottom-nav-item { border-right: none; color: var(--ink-3); }
+.bottom-nav-item.active { color: var(--ink); background: transparent; }
+.bottom-nav-item.active::after {
+  content: ''; position: absolute; top: 0; left: 34%; right: 34%;
+  height: 3px; border-radius: 9999px; background: var(--accent);
+}
+.bottom-nav-item.active svg { opacity: 1; }
+
+/* ── Cycle band colors (YG: shift-palette 톤으로 정렬) ────── */
+.cy-1 { background-color: var(--card-warm); background-image: linear-gradient(var(--d-bg), var(--d-bg)); color: var(--d-ink); }
+.cy-2 { background-color: var(--card-warm); background-image: linear-gradient(var(--v-bg), var(--v-bg)); color: var(--v-ink); }
+.cy-3 { background-color: var(--card-warm); background-image: linear-gradient(var(--n-bg), var(--n-bg)); color: var(--n-ink); }
+.cy-4 { background-color: var(--card-warm); background-image: linear-gradient(var(--warn-bg), var(--warn-bg)); color: var(--warn); }
+html.dark .cy-1 { background-color: var(--card-warm); background-image: linear-gradient(var(--d-bg), var(--d-bg)); color: var(--d-ink); }
+html.dark .cy-2 { background-color: var(--card-warm); background-image: linear-gradient(var(--v-bg), var(--v-bg)); color: var(--v-ink); }
+html.dark .cy-3 { background-color: var(--card-warm); background-image: linear-gradient(var(--n-bg), var(--n-bg)); color: var(--n-ink); }
+html.dark .cy-4 { background-color: var(--card-warm); background-image: linear-gradient(var(--warn-bg), var(--warn-bg)); color: var(--warn); }
+/* 주말 컬럼 틴트 (YG red↑/blue↓) */
+.g-sat-bg { background-color: var(--card-warm); background-image: linear-gradient(var(--d-bg), var(--d-bg)) !important; }
+html.dark .g-sat-bg { background-color: var(--card-warm); background-image: linear-gradient(var(--d-bg), var(--d-bg)) !important; }
+.g-sun { background: var(--e-bg); border-left: 1px solid var(--up) !important; }
+html.dark .g-sun { background: var(--e-bg); border-left: 1px solid var(--up) !important; }
+
+/* ── Misc rounding ───────────────────────────────────────── */
+.progress-track { border-radius: 9999px; }
+.progress-fill { background: var(--accent); }
+.progress-fill::after { display: none; }
+.toast { border-radius: 14px; box-shadow: var(--shadow-pop); border: none; }
+.toast-history-btn { border-radius: 9999px; border: none; box-shadow: var(--shadow-card); }
+.divider { background: var(--rule); }

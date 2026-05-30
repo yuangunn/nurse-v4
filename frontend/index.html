@@ -4,8 +4,6 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>NurseScheduler v4</title>
-  <!-- 디자인 선택 기억: localStorage.design === 'legacy' 면 /legacy로 리디렉트 -->
-  <script>try{if(localStorage.getItem('design')==='legacy'&&location.pathname==='/')location.replace('/legacy');}catch(e){}</script>
   <link rel="stylesheet" href="css/app.css"/>
   <script src="lib/tailwindcss.js"></script>
   <script defer src="lib/alpine.min.js"></script>
@@ -273,7 +271,7 @@
         <span class="brand-name">NurseScheduler</span>
         <span class="brand-hospital">용인세브란스병원 · Yongin Severance Hospital</span>
       </div>
-      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.1.1</span>
+      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.2.0</span>
     </div>
     <div></div>
     <div class="appbar-meta">
@@ -292,7 +290,6 @@
         <span class="appbar-meta-value" x-text="year + '.' + month"></span>
       </div>
       <div class="appbar-actions">
-        <button @click="switchDesign('legacy')" class="btn btn-xs btn-ghost" title="Premium UI(v4.0.x) 디자인으로 전환" style="font-family:var(--font-mono,monospace);font-size:0.62rem;letter-spacing:0.04em">UI ▸ Premium</button>
         <button @click="toggleDark()" class="btn btn-xs btn-ghost" :title="darkMode?'라이트 모드':'다크 모드'" x-text="darkMode?'☀':'☾'"></button>
         <button @click="showHelpModal=true" class="btn btn-xs btn-ghost" title="도움말">?</button>
         <template x-if="currentProfile">
@@ -721,26 +718,32 @@
     </template>
     <template x-if="schedule && Object.keys(schedule).length">
       <div>
+        <!-- 커버리지 stack: D/E/N 배정 / 요구 -->
+        <div class="shift-stack">
+          <div class="seg lbl">D</div>
+          <div class="seg shift-D" x-text="todayShiftCount('D')+' / '+todayShiftReq('D')"></div>
+          <div class="seg lbl">E</div>
+          <div class="seg shift-E" x-text="todayShiftCount('E')+' / '+todayShiftReq('E')"></div>
+          <div class="seg lbl">N</div>
+          <div class="seg shift-N" x-text="todayShiftCount('N')+' / '+todayShiftReq('N')"></div>
+        </div>
+        <!-- 듀티별 근무자 cov-row -->
         <template x-for="duty in ['D','E','N']" :key="'duty'+duty">
           <div class="today-duty-group">
             <div class="today-duty-label">
               <span class="dot" :class="duty"></span>
-              <span x-text="duty==='D'?'데이':duty==='E'?'이브닝':'나이트'"></span>
+              <span x-text="duty==='D'?'데이 (06–14)':duty==='E'?'이브닝 (14–22)':'나이트 (22–06)'"></span>
             </div>
-            <div class="today-nurse-list">
-              <template x-for="nid in (()=>{
-                const todayKey = (()=>{const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0')})();
-                const accept = duty==='D'?['D','DC','D1']:duty==='E'?['E','EC','중']:['N','NC'];
-                return Object.entries(schedule).filter(([nid,days])=>accept.includes(days[todayKey])).map(([nid])=>nid);
-              })()" :key="'tdn'+duty+nid">
-                <span class="today-nurse-chip" x-text="nurses.find(n=>n.id===nid)?.name || nid"></span>
-              </template>
-              <span x-show="(()=>{
-                const todayKey = (()=>{const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0')})();
-                const accept = duty==='D'?['D','DC','D1']:duty==='E'?['E','EC','중']:['N','NC'];
-                return !Object.entries(schedule).some(([nid,days])=>accept.includes(days[todayKey]));
-              })()" class="today-empty" style="padding:0">없음</span>
-            </div>
+            <template x-for="row in todayNursesByDuty(duty)" :key="'tdn'+duty+row.nid">
+              <div class="cov-row">
+                <div class="cov-shift" :class="'shift-'+duty+(['DC','EC','NC'].includes(row.code)?' charge':'')" x-text="row.code"></div>
+                <div>
+                  <div class="cov-nm" x-text="row.nurse.name"></div>
+                  <div class="cov-meta" x-text="(row.nurse.group||'')+(['DC','EC','NC'].includes(row.code)?' · 차지':'')+(row.nurse.is_night_shift?' · 야간전담':'')"></div>
+                </div>
+              </div>
+            </template>
+            <div x-show="todayNursesByDuty(duty).length===0" class="today-empty" style="padding:4px 0">없음</div>
           </div>
         </template>
       </div>
@@ -2251,7 +2254,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.1.1 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.2.0 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">PuLP + HiGHS 수리최적화 솔버 기반</p>
         <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
