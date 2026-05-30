@@ -214,7 +214,24 @@ function app() {
       }
       window.addEventListener('beforeunload',()=>{this._saveFullState();this._closeCurrentProfile()});
       document.addEventListener('mouseup',()=>{if(this._isDragging)this.onCellMouseUp()});
+      this._setupHeaderCondense();
       this.$nextTick(()=>{if(window.lucide)lucide.createIcons()});
+    },
+
+    // ── 적응형 헤더 축소 (활성 탭 스크롤 시 앱바 압축) ──────────
+    _setupHeaderCondense(){
+      if(window._nsCondenseBound)return;
+      window._nsCondenseBound=true;
+      const appbar=document.querySelector('.appbar');
+      if(!appbar)return;
+      // 스크롤은 버블링되지 않으므로 캡처 단계로 main-content 내부 스크롤을 모두 감지
+      document.addEventListener('scroll',(e)=>{
+        const t=e.target;
+        if(!t||!t.closest||!t.closest('.main-content'))return;
+        appbar.classList.toggle('condensed',(t.scrollTop||0)>12);
+      },true);
+      // 탭 전환 시 새 탭은 스크롤 top=0이므로 압축 해제
+      this.$watch('activeTab',()=>appbar.classList.remove('condensed'));
     },
 
 

@@ -1656,6 +1656,25 @@ html.dark .g-sat-bg { background-color: var(--card-warm); background-image: line
 .g-sun { background: var(--e-bg); border-left: 1px solid var(--up) !important; }
 html.dark .g-sun { background: var(--e-bg); border-left: 1px solid var(--up) !important; }
 
+/* ── Adaptive condensing masthead (v4.2.1) ───────────────────
+   활성 탭 콘텐츠를 스크롤하면 상단 앱바가 부드럽게 축소된다 →
+   병원 부제·버전칩·스텝 설명 숨김 + 브랜드마크/이름/스텝 패딩 축소.
+   (모바일은 .appbar 자체가 hide되므로 영향 없음) */
+.appbar { transition: box-shadow .22s ease; }
+.appbar-top { transition: padding .22s cubic-bezier(.2,.7,.2,1); }
+.appbar .brand-mark { transition: width .22s, height .22s; }
+.appbar .brand-name { transition: font-size .22s; }
+.appbar .stepper { transition: padding .22s; }
+.appbar .step { transition: padding .22s, background-color .12s, color .12s; }
+.appbar.condensed { box-shadow: 0 6px 16px -12px rgba(15,17,21,0.28); }
+.appbar.condensed .appbar-top { padding-top: 5px; padding-bottom: 4px; }
+.appbar.condensed .brand-hospital,
+.appbar.condensed .brand-ver { display: none; }
+.appbar.condensed .brand-mark { width: 22px; height: 22px; }
+.appbar.condensed .brand-name { font-size: 0.92rem; }
+.appbar.condensed .stepper .step { padding-top: 4px; padding-bottom: 4px; }
+.appbar.condensed .step-desc { display: none; }
+
 /* ── Misc rounding ───────────────────────────────────────── */
 .progress-track { border-radius: 9999px; }
 .progress-fill { background: var(--accent); }
