@@ -34,6 +34,7 @@ function app() {
     generateTimer:null, sseSource:null, solverLogs:[], showLogPanel:false,
     solveProgress:{gap_percent:null,nodes:0,has_solution:false,is_running:false},
     stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, unlimitedV:false, relaxedCells:{},
+    solver:'highs', diagnosing:false,
     mipGapPercent:null, scheduleStopped:false, estimatedSeconds:0,
     statusMessage:'', statusOk:true, savedSchedules:[],
     darkMode: localStorage.getItem('darkMode')==='true',
@@ -964,7 +965,7 @@ function app() {
         else if(data.type==='progress')this.solveProgress=data;
         else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
       };
-      const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60,allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,unlimited_v:this.unlimitedV};
+      const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60,allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,unlimited_v:this.unlimitedV,solver:this.solver};
       this.api('POST','/api/estimate',payload).then(est=>{if(est&&est.estimated_seconds)this.estimatedSeconds=est.estimated_seconds}).catch(()=>{});
       try{
         const result=await this.api('POST','/api/generate',payload);
@@ -994,6 +995,21 @@ function app() {
       if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}
       if(this.sseSource){this.sseSource.close();this.sseSource=null}
       try{await fetch('/api/generate/stop',{method:'POST'})}catch(e){}
+    },
+
+    // ── 정밀 충돌 분석 (CP-SAT assumptions) ───────────────────
+    async diagnoseConflicts(){
+      if(this.diagnosing)return;
+      this.diagnosing=true;
+      try{
+        const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null};
+        const res=await this.api('POST','/api/diagnose',payload);
+        if(res&&res.message){
+          this.statusMessage=this.statusMessage+'\n\n━━ 정밀 충돌 분석 (CP-SAT) ━━\n'+res.message;
+          this.toast(res.conflicts&&res.conflicts.length?`충돌 ${res.conflicts.length}건 발견`:'하드 제약 충돌 없음','info',3500);
+        }
+      }catch(e){this.toast('충돌 분석 실패','error');}
+      finally{this.diagnosing=false;}
     },
 
     // ── 표시 헬퍼 ─────────────────────────────────────────────
@@ -2185,7 +2201,7 @@ function app() {
     async generateMultiple(count=2){
       this.multiSolveResults=[];
       for(let i=0;i<count;i++){
-        const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:Math.max(0.02,this.mipGap+i*0.02),time_limit:Math.min(this.generateTimeout*60,120),allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,unlimited_v:this.unlimitedV};
+        const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:Math.max(0.02,this.mipGap+i*0.02),time_limit:Math.min(this.generateTimeout*60,120),allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,unlimited_v:this.unlimitedV,solver:this.solver};
         try{
           const result=await this.api('POST','/api/generate',payload);
           if(result.success)this.multiSolveResults.push({idx:i+1,schedule:result.schedule,scores:result.nurse_scores||{},gap:result.mip_gap_percent,msg:result.message});

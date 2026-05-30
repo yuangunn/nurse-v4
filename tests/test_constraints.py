@@ -40,9 +40,10 @@ def _ok(result: dict) -> None:
 # ── smoke ────────────────────────────────────────────────────────────────────
 
 
-def test_smoke_solve_succeeds(build_request, solve_small):
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_smoke_solve_succeeds(build_request, solve_small, solver):
     """기본 6명 × 7일 구성으로 해를 찾는다."""
-    result = solve_small(build_request())
+    result = solve_small(build_request(), solver=solver)
     _ok(result)
     schedule = result["schedule"]
     # 모든 간호사가 매 날짜에 정확히 한 셀
@@ -56,9 +57,10 @@ def test_smoke_solve_succeeds(build_request, solve_small):
 # ── hard: 9개 금지 전환 ──────────────────────────────────────────────────────
 
 
-def test_no_forbidden_transitions(build_request, solve_small):
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_no_forbidden_transitions(build_request, solve_small, solver):
     """E→D, N→E 등 9개 역순 전환이 결과에 절대 나타나지 않는다."""
-    result = solve_small(build_request())
+    result = solve_small(build_request(), solver=solver)
     _ok(result)
     violations: list[str] = []
     for nid, days in result["schedule"].items():
@@ -76,13 +78,14 @@ def test_no_forbidden_transitions(build_request, solve_small):
 # ── hard: 일별 인원 정확 충족 (D/E/N 등호 제약) ──────────────────────────────
 
 
-def test_daily_requirements_exact_match(build_request, solve_small, small_nurses):
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_daily_requirements_exact_match(build_request, solve_small, small_nurses, solver):
     """일별 D/E/N 합계가 요구치와 정확히 같다 (초과/부족 모두 불가)."""
     nurses = small_nurses(6)
     req = Requirements()
     for day in ("mon", "tue", "wed", "thu", "fri", "sat", "sun"):
         setattr(req, day, DayRequirement(D=1, E=1, N=1))
-    result = solve_small(build_request(nurses=nurses, requirements=req))
+    result = solve_small(build_request(nurses=nurses, requirements=req), solver=solver)
     _ok(result)
 
     schedule = result["schedule"]
@@ -106,14 +109,15 @@ def test_daily_requirements_exact_match(build_request, solve_small, small_nurses
 # ── hard: charge 시니어리티 ──────────────────────────────────────────────────
 
 
-def test_charge_goes_to_senior(build_request, solve_small, small_nurses):
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_charge_goes_to_senior(build_request, solve_small, small_nurses, solver):
     """
     같은 듀티에 두 명 이상 배정될 때 charge(DC/EC/NC)는 seniority 가장 낮은
     (선임) 간호사에게만 부여된다.
     """
     nurses = small_nurses(6)  # seniority 0~5
     sen_map = {n.id: n.seniority for n in nurses}
-    result = solve_small(build_request(nurses=nurses))
+    result = solve_small(build_request(nurses=nurses), solver=solver)
     _ok(result)
 
     schedule = result["schedule"]
@@ -147,14 +151,15 @@ def test_charge_goes_to_senior(build_request, solve_small, small_nurses):
 
 
 @pytest.mark.parametrize("max_v", [1, 2])
-def test_v_per_month_limit(build_request, solve_small, max_v):
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_v_per_month_limit(build_request, solve_small, max_v, solver):
     """maxVPerMonth 설정 이하로만 V가 배정된다.
 
     주의: scheduler._c_max_v_per_month는 `max_v > 0` 조건이므로 0은 '제약 미적용'
     의미 (= 무제한). UI는 unlimited_v 플래그를 별도로 사용함.
     """
     rules = Rules(maxConsecutiveWorkDays=6, maxVPerMonth=max_v)
-    result = solve_small(build_request(rules=rules))
+    result = solve_small(build_request(rules=rules), solver=solver)
     _ok(result)
     for nid, days in result["schedule"].items():
         v_count = sum(1 for v in days.values() if v == "V")
@@ -164,9 +169,10 @@ def test_v_per_month_limit(build_request, solve_small, max_v):
 # ── hard: 1일 1근무 ──────────────────────────────────────────────────────────
 
 
-def test_one_shift_per_day(build_request, solve_small):
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_one_shift_per_day(build_request, solve_small, solver):
     """매 간호사가 매 날짜에 정확히 1개 코드를 받는다 (중복/누락 없음)."""
-    result = solve_small(build_request())
+    result = solve_small(build_request(), solver=solver)
     _ok(result)
     schedule = result["schedule"]
     # 7일 모두 날짜 키 존재
@@ -183,11 +189,12 @@ def test_one_shift_per_day(build_request, solve_small):
 # ── hard: 사전 고정 주휴 유지 ───────────────────────────────────────────────
 
 
-def test_prev_schedule_juhu_preserved(build_request, solve_small):
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_prev_schedule_juhu_preserved(build_request, solve_small, solver):
     """prev_schedule에 '주'로 사전 고정한 셀은 결과에서 그대로 '주' 이다."""
     request = build_request()
     pre = request.prev_schedule or {}
-    result = solve_small(request)
+    result = solve_small(request, solver=solver)
     _ok(result)
     schedule = result["schedule"]
     for nid, days in pre.items():

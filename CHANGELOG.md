@@ -4,6 +4,34 @@ NurseScheduler v4의 주요 변경 이력. 최신 버전이 위쪽.
 
 ---
 
+## v4.3.0 — 2026-05-31
+
+**CP-SAT 듀얼 솔버.** 기존 PuLP+HiGHS(MILP)에 Google OR-Tools **CP-SAT**를 두 번째
+생성 엔진으로 추가. 생성 패널에서 선택(기본 HiGHS). 브레인스토밍→스펙→계획→TDD 구현.
+
+### 🧮 듀얼 엔진 아키텍처
+- 공유 `_SchedulerBase`(엔진 무관 데이터/날짜/추출/점수) + 엔진별 서브클래스:
+  `NurseScheduler`(HiGHS, 무손상) / `CpSatScheduler`(CP-SAT, cp_model).
+- CpSatScheduler: 전 하드 제약(1일1근무·일별인원·charge·시니어리티·금지전환·연속·
+  주휴/OF·V·야간전담·생휴) + 목적함수(scoring_rules 정수 가중합) 1:1 포팅.
+- 진행/중지/로그를 솔버 무관 레지스트리(`solver_progress.py`)로 분리 → CP-SAT도
+  `CpSolverSolutionCallback`로 동일 UX(중지·실시간 gap·로그).
+
+### 🔍 정밀 충돌 분석 (핵심)
+- `conflict_analyzer.py`: 하드 제약을 enforce 리터럴로 게이팅 +
+  `SufficientAssumptionsForInfeasibility()` → infeasible 시 **어느 제약이 동시 충족
+  불가인지 1회 호출로 한국어 핀포인트** ("03/12(목) D 필요 인원 5명" 등).
+- `POST /api/diagnose` + 생성 결과 "🔍 정밀 충돌 분석 (CP-SAT)" 버튼 — 어느 엔진이든
+  infeasible에 호출. CP-SAT 생성 실패 시 자동 첨부.
+
+### 🎛 UI / 배포
+- 생성 패널 솔버 토글(HiGHS/CP-SAT). CP-SAT 선택 시 완화 토글 비활성(완화는 HiGHS 전용).
+- ortools 오프라인 PyInstaller 번들(`collect_all`+`collect_dynamic_libs`+protobuf).
+  인트라넷 무인터넷 동작 검증 완료. 설치파일 ~190MB.
+- 테스트 양엔진 파라미터화 + 동등성 테스트. 회귀 25/25.
+
+---
+
 ## v4.2.1 — 2026-05-30
 
 ### 🎯 적응형 헤더 축소

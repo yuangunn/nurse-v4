@@ -9,6 +9,8 @@ import logging
 import traceback
 import threading
 
+from . import solver_progress  # solver-agnostic progress/cancel registry
+
 logger = logging.getLogger(__name__)
 
 from . import database as db
@@ -24,10 +26,7 @@ _current_profile_password: Optional[str] = None
 # PuLP의 HiGHS 솔버가 내부적으로 생성하는 highspy.Highs 인스턴스를 가로채
 # cancelSolve() 호출과 mip_gap 캡처를 가능하게 함.
 _solve_lock = threading.Lock()
-_current_highs_instance = None
 _last_mip_gap: Optional[float] = None
-_solve_cancelled: bool = False
-_solve_progress: dict = {"gap_percent": None, "nodes": 0, "has_solution": False, "is_running": False}
 _log_queue: queue.Queue = queue.Queue()
 _last_generate_result: Optional[dict] = None  # 마지막 생성 결과 보관 (새로고침 복구용)
 
@@ -35,10 +34,35 @@ try:
     import highspy as _highspy_mod
     _OrigHighs = _highspy_mod.Highs
 
+    class _HighsAdapter:
+        """solver_progress 어댑터 — HiGHS 라이브 인스턴스 래핑 (cancel/progress)."""
+        def __init__(self, highs):
+            self._h = highs
+
+        def cancel(self):
+            try:
+                self._h.cancelSolve()
+            except Exception:
+                pass
+
+        def progress(self) -> dict:
+            import math
+            out = {"gap_percent": None, "nodes": 0, "has_solution": False, "is_running": True}
+            try:
+                status, gap = self._h.getInfoValue("mip_gap")
+                if status.value == 0 and math.isfinite(float(gap)):
+                    out["gap_percent"] = round(float(gap) * 100, 2)
+                    out["has_solution"] = True
+                status2, nodes = self._h.getInfoValue("mip_node_count")
+                if status2.value == 0:
+                    out["nodes"] = int(nodes)
+            except Exception:
+                pass
+            return out
+
     class _TrackableHighs(_OrigHighs):
         def run(self):
-            global _current_highs_instance, _last_mip_gap, _log_queue
-            _current_highs_instance = self
+            global _last_mip_gap, _log_queue
             # 큐 초기화 (이전 실행 잔여 로그 제거)
             while not _log_queue.empty():
                 try: _log_queue.get_nowait()
@@ -57,6 +81,7 @@ try:
             # HandleUserInterrupt=True 필수: 이 플래그가 있어야 cancelSolve()가
             # MIP 인터럽트 콜백을 활성화하여 솔버를 실제로 중단할 수 있음
             self.HandleUserInterrupt = True
+            solver_progress.register(_HighsAdapter(self))
             try:
                 result = super().run()
                 return result
@@ -67,7 +92,7 @@ try:
                         _last_mip_gap = float(gap)
                 except Exception:
                     pass
-                _current_highs_instance = None
+                solver_progress.unregister()
 
     _highspy_mod.Highs = _TrackableHighs
 except ImportError:
@@ -243,6 +268,28 @@ def set_master_password(body: dict):
 
 
 # ── 개발자 API ────────────────────────────────────────────────────────────────
+
+@app.get("/api/dev/cpsat-selftest")
+def dev_cpsat_selftest():
+    """CP-SAT(ortools)가 번들 환경에서 임포트·풀이되는지 셀프테스트.
+    Phase 0 오프라인 번들 게이트 검증용 — 번들된 exe에서 호출해 ortools 네이티브
+    libs가 올바로 실렸는지 확인한다. (ortools는 런타임 네트워크를 쓰지 않음.)"""
+    try:
+        from ortools.sat.python import cp_model
+        m = cp_model.CpModel()
+        xs = [m.NewBoolVar(f"x{i}") for i in range(5)]
+        m.Add(sum(xs) == 2)
+        s = cp_model.CpSolver()
+        st = s.Solve(m)
+        ok = st in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+        return {
+            "ok": ok,
+            "sum": sum(int(s.Value(x)) for x in xs) if ok else None,
+            "ortools_status": int(st),
+        }
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
 
 @app.get("/api/dev/info")
 def dev_info():
@@ -882,11 +929,8 @@ def estimate(request: GenerateRequest):
 @app.post("/api/generate/stop")
 def stop_generate():
     """진행 중인 스케줄 생성을 중지하고 지금까지 찾은 최선의 해를 반환하도록 신호."""
-    global _solve_cancelled
-    h = _current_highs_instance
-    if h is not None:
-        _solve_cancelled = True
-        h.cancelSolve()
+    if solver_progress.is_active():
+        solver_progress.request_cancel()
         return {"ok": True, "message": "중지 신호를 전송했습니다."}
     return {"ok": False, "message": "진행 중인 생성이 없습니다."}
 
@@ -898,8 +942,8 @@ def generate_stream():
         import time
         # 솔버가 아직 시작되지 않았을 수 있으므로 최대 30초 대기
         waited = 0
-        while _current_highs_instance is None and _log_queue.empty() and waited < 30:
-            if _solve_progress.get("is_running"):
+        while not solver_progress.is_active() and _log_queue.empty() and waited < 30:
+            if solver_progress.is_running():
                 # generate()가 호출됨 → 솔버 시작 대기
                 time.sleep(0.2)
                 waited += 0.2
@@ -908,7 +952,6 @@ def generate_stream():
                 time.sleep(0.5)
                 waited += 0.5
         while True:
-            h = _current_highs_instance
             # 로그 메시지 우선 드레인
             try:
                 item = _log_queue.get(timeout=0.05)
@@ -917,11 +960,11 @@ def generate_stream():
             except queue.Empty:
                 pass
             # 솔버 종료 + 큐 비어있으면 done
-            if h is None and _log_queue.empty() and not _solve_progress.get("is_running"):
+            if not solver_progress.is_active() and _log_queue.empty() and not solver_progress.is_running():
                 yield "data: {\"type\":\"done\"}\n\n"
                 break
             # 1초 heartbeat — 현재 progress 전송
-            prog = dict(_solve_progress)
+            prog = solver_progress.get_progress()
             prog["type"] = "progress"
             yield f"data: {json.dumps(prog)}\n\n"
             time.sleep(1)
@@ -935,34 +978,17 @@ def generate_stream():
 @app.get("/api/generate/progress")
 def get_generate_progress():
     """생성 중 실시간 진행 상황 반환 (2초 간격 폴링용)"""
-    global _solve_progress
-    h = _current_highs_instance
-    _solve_progress["is_running"] = h is not None
-    if h is not None:
-        try:
-            import math
-            status, gap = h.getInfoValue("mip_gap")
-            if status.value == 0 and math.isfinite(float(gap)):
-                _solve_progress["gap_percent"] = round(float(gap) * 100, 2)
-                _solve_progress["has_solution"] = True
-            status2, nodes = h.getInfoValue("mip_node_count")
-            if status2.value == 0:
-                _solve_progress["nodes"] = int(nodes)
-
-        except Exception:
-            pass
-    return _solve_progress
+    return solver_progress.get_progress()
 
 
 @app.post("/api/generate")
 def generate(request: GenerateRequest):
-    global _last_mip_gap, _solve_cancelled, _solve_progress, _last_generate_result
+    global _last_mip_gap, _last_generate_result
     # 이전 솔버가 아직 돌고 있으면 거부
-    if _current_highs_instance is not None or _solve_progress.get("is_running"):
+    if solver_progress.is_running():
         raise HTTPException(status_code=409, detail="이미 생성이 진행 중입니다. 중지 후 다시 시도하세요.")
     _last_mip_gap = None
-    _solve_cancelled = False
-    _solve_progress = {"gap_percent": None, "nodes": 0, "has_solution": False, "is_running": True}
+    solver_progress.begin()
     _last_generate_result = None  # 새 생성 시작 시 이전 결과 초기화
     try:
         # shifts가 비어있으면 DB에서 로드
@@ -980,7 +1006,11 @@ def generate(request: GenerateRequest):
         rest_shifts  = [s.code for s in request.shifts if s.period == "rest"]
 
         warning = _validate_staffing(request, leave_shifts, rest_shifts)
-        scheduler = NurseScheduler(request)
+        if request.solver == "cpsat":
+            from .scheduler_cpsat import CpSatScheduler
+            scheduler = CpSatScheduler(request)
+        else:
+            scheduler = NurseScheduler(request)
         result = scheduler.solve()
 
         # MIP gap 및 중지 여부 추가
@@ -988,7 +1018,7 @@ def generate(request: GenerateRequest):
             import math
             if math.isfinite(_last_mip_gap):
                 result["mip_gap_percent"] = round(_last_mip_gap * 100, 2)
-        if _solve_cancelled and result.get("success"):
+        if solver_progress.is_cancelled() and result.get("success"):
             result["stopped"] = True
 
         if warning and not result.get("success"):
@@ -997,10 +1027,10 @@ def generate(request: GenerateRequest):
             result["warning"] = warning
 
         _last_generate_result = result  # 결과 보관
-        _solve_progress["is_running"] = False
+        solver_progress.end()
         return result
     except Exception as e:
-        _solve_progress["is_running"] = False
+        solver_progress.end()
         _last_generate_result = {"success": False, "message": str(e), "schedule": {}}
         logger.error("Server error: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail="서버 오류가 발생했습니다. 다시 시도해주세요.")
@@ -1009,11 +1039,28 @@ def generate(request: GenerateRequest):
 @app.get("/api/generate/result")
 def get_generate_result():
     """마지막 생성 결과 조회 (새로고침 복구용)"""
-    if _solve_progress.get("is_running"):
+    if solver_progress.is_running():
         return {"status": "running"}
     if _last_generate_result is not None:
         return {"status": "done", "result": _last_generate_result}
     return {"status": "idle"}
+
+
+@app.post("/api/diagnose")
+def diagnose(request: GenerateRequest):
+    """CP-SAT assumptions 기반 정밀 충돌 분석.
+    어느 엔진으로 생성하다 infeasible이 나든 '어느 제약이 동시 충족 불가인지' 짚는다."""
+    from .conflict_analyzer import analyze_conflicts
+    if not request.shifts:
+        from .models import ShiftDef
+        request.shifts = [ShiftDef(**s) for s in db.list_shifts()]
+    if not request.scoring_rules:
+        request.scoring_rules = [ScoringRule(**r) for r in db.list_scoring_rules()]
+    try:
+        return analyze_conflicts(request)
+    except Exception as e:
+        logger.error("diagnose error: %s\n%s", e, traceback.format_exc())
+        return {"conflicts": [], "message": f"충돌 분석 중 오류: {e}"}
 
 
 # ── 스케줄 저장/관리 API ──────────────────────────────────────────────────────
