@@ -4,6 +4,17 @@ NurseScheduler v4의 주요 변경 이력. 최신 버전이 위쪽.
 
 ---
 
+## v4.2.1 — 2026-05-30
+
+### 🎯 적응형 헤더 축소
+Claude Design 핸드오프(YGinvest 데스크톱)의 신규 기능 이식. 활성 탭 콘텐츠를 스크롤하면 상단 앱바가 부드럽게 축소된다 — 병원 부제·버전칩·스텝 설명 숨김 + 브랜드마크/이름/스텝 패딩 축소 + 미묘한 그림자. 근무표에 더 많은 세로 공간 확보.
+
+- 프로토타입의 `.vp-body`(660px) 내부 스크롤 패턴 대신, 우리의 영구 flex 앱바 구조에 맞춰 **캡처-단계 scroll 리스너**로 `main-content` 내부 스크롤을 감지해 `.appbar.condensed` 토글
+- 탭 전환 시 `$watch('activeTab')`로 압축 해제 (새 탭 top=0)
+- 모바일은 앱바가 hide되므로 영향 없음
+
+---
+
 ## v4.2.0 — 2026-05-30
 
 **YGinvest 핀테크 전면 리디자인.** Claude Design 핸드오프(`NurseScheduler - YGinvest`)를 실제 코드에 적용.
