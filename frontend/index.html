@@ -271,7 +271,7 @@
         <span class="brand-name">NurseScheduler</span>
         <span class="brand-hospital">용인세브란스병원 · Yongin Severance Hospital</span>
       </div>
-      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.3.0</span>
+      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.3.1</span>
     </div>
     <div></div>
     <div class="appbar-meta">
@@ -875,7 +875,7 @@
           <span x-show="copySource&&copySource!==nurse.id" @click="pasteRow(nurse.id)" class="text-xs text-green ml-1 cursor-pointer" title="붙여넣기">📥</span>
         </td>
         <template x-for="(day,dIdx) in scheduleDays" :key="day">
-          <td class="g-cell p-0" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',hasViolation(nurse.id,day)?'g-violation':'',isDragSelected(nurse.id,day)?'g-drag-sel':'',isFocused(nIdx,dIdx)?'g-focused':'',isLocked(nurse.id,day)?'g-locked':'',isNurseInactive(nurse,day)?'g-inactive':'']" :style="getPrevShift(nurse.id,day)?getShiftStyle(getPrevShift(nurse.id,day)):{}" :title="isNurseInactive(nurse,day)==='before'?'전입 전':(isNurseInactive(nurse,day)==='after'?'전출 후':'')"
+          <td class="g-cell p-0" :data-cell="nurse.id+'|'+dayKey(day)" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',hasViolation(nurse.id,day)?'g-violation':'',isDragSelected(nurse.id,day)?'g-drag-sel':'',isFocused(nIdx,dIdx)?'g-focused':'',isLocked(nurse.id,day)?'g-locked':'',isNurseInactive(nurse,day)?'g-inactive':'']" :style="getPrevShift(nurse.id,day)?getShiftStyle(getPrevShift(nurse.id,day)):{}" :title="isNurseInactive(nurse,day)==='before'?'전입 전':(isNurseInactive(nurse,day)==='after'?'전출 후':'')"
             @mousedown="onCellMouseDown(nurse,day,$event)" @mouseover="onCellMouseOver(nurse,day)" @click="focusCell(nIdx,dIdx)" @dblclick="openPrevEdit(nurse,day)" @contextmenu.prevent="openNote(nurse.id,day)">
             <template x-if="getPrevShift(nurse.id,day)"><span class="schedule-cell-text block" x-text="getPrevShift(nurse.id,day)"></span></template>
             <template x-if="!getPrevShift(nurse.id,day)"><span class="schedule-cell block" :style="hasWish(nurse.id,day)?'color:var(--accent);opacity:0.3':'color:rgba(255,255,255,0.05)'" x-text="hasWish(nurse.id,day)?'★':'·'"></span></template>
@@ -975,17 +975,19 @@
     <span class="text-xs font-mono w-8" x-text="generateTimeout+'분'"></span>
     <div class="flex gap-1"><template x-for="v in [5,10,20,60]" :key="v"><button @click="generateTimeout=v" :class="generateTimeout===v?'btn-primary':'btn-ghost'" class="btn btn-xs" x-text="v+'분'"></button></template></div>
   </div>
-  <!-- 솔버 선택 (기본 HiGHS / CP-SAT) -->
+  <!-- 솔버 선택 (HiGHS / CP-SAT / 레이스) -->
   <div class="flex items-center gap-3 text-xs mb-2 flex-wrap">
     <span class="text-dim" style="font-weight:600">솔버</span>
     <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="solver" value="highs" x-model="solver"/><span class="text-dim">HiGHS (MILP)</span></label>
     <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="solver" value="cpsat" x-model="solver"/><span class="text-dim">CP-SAT</span></label>
+    <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="solver" value="race" x-model="solver"/><span class="text-dim">⚡ 레이스</span></label>
     <span x-show="solver==='cpsat'" class="text-xs text-dim">(infeasible 시 충돌 지점 정밀 진단 · 완화 미지원)</span>
+    <span x-show="solver==='race'" class="text-xs text-dim">(HiGHS·CP-SAT 동시 실행 → 먼저 성공한 쪽 채택 · 완화 미지원)</span>
   </div>
   <div class="flex items-center gap-3 text-xs mb-3 flex-wrap">
-    <label class="flex items-center gap-1.5" :class="solver==='cpsat'?'opacity-40':'cursor-pointer'"><input type="checkbox" x-model="allowPreRelax" :disabled="solver==='cpsat'"/><span class="text-dim">사전입력 완화</span></label>
-    <button x-show="allowPreRelax&&solver!=='cpsat'" @click="showPreBonusSettings=!showPreBonusSettings" class="btn btn-xs btn-ghost" style="padding:1px 6px;font-size:0.65rem" x-text="showPreBonusSettings?'▾ 완화 설정':'▸ 완화 설정'"></button>
-    <label class="flex items-center gap-1.5" :class="solver==='cpsat'?'opacity-40':'cursor-pointer'"><input type="checkbox" x-model="allowJuhuRelax" :disabled="solver==='cpsat'"/><span class="text-dim">주휴 무시</span></label>
+    <label class="flex items-center gap-1.5" :class="solver!=='highs'?'opacity-40':'cursor-pointer'"><input type="checkbox" x-model="allowPreRelax" :disabled="solver!=='highs'"/><span class="text-dim">사전입력 완화</span></label>
+    <button x-show="allowPreRelax&&solver==='highs'" @click="showPreBonusSettings=!showPreBonusSettings" class="btn btn-xs btn-ghost" style="padding:1px 6px;font-size:0.65rem" x-text="showPreBonusSettings?'▾ 완화 설정':'▸ 완화 설정'"></button>
+    <label class="flex items-center gap-1.5" :class="solver!=='highs'?'opacity-40':'cursor-pointer'"><input type="checkbox" x-model="allowJuhuRelax" :disabled="solver!=='highs'"/><span class="text-dim">주휴 무시</span></label>
     <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="unlimitedV"/><span class="text-dim">V 무제한</span></label>
     <span x-show="unlimitedV" class="text-xs text-dim">(번표 생성이 안 될 때 사용 — V 사용 시 큰 감점 적용)</span>
   </div>
@@ -1085,10 +1087,36 @@
     <!-- 진단 액션 버튼 (infeasible 시) -->
     <div x-show="!statusOk&&statusMessage" x-cloak class="flex flex-wrap gap-2 mt-3 pt-2" style="border-top:1px solid var(--rule-soft,rgba(0,0,0,0.08))">
       <button @click="diagnoseConflicts()" :disabled="diagnosing" class="btn btn-xs btn-primary" x-text="diagnosing?'분석 중…':'🔍 정밀 충돌 분석 (CP-SAT)'"></button>
+      <button @click="suggestFix()" :disabled="fixing" class="btn btn-xs btn-primary" x-text="fixing?'처방 중…':'🔧 자동 수정 처방'"></button>
       <button @click="navigator.clipboard.writeText(statusMessage).then(()=>toast('진단 메시지 복사됨','success'))" class="btn btn-xs btn-ghost" style="color:var(--ink-2)">📋 진단 복사</button>
       <button x-show="/\d{2}\/\d{2}/.test(statusMessage)" @click="activeTab='preinput'" class="btn btn-xs btn-ghost" style="color:var(--ink-2)">📅 사전입력 탭으로</button>
       <button x-show="statusMessage.includes('주차별')||statusMessage.includes('주간')" @click="activeTab='analysis'" class="btn btn-xs btn-ghost" style="color:var(--ink-2)">📊 분석 탭으로</button>
     </div>
+    <!-- 충돌 셀 점프 (정밀 분석 결과 anchored) -->
+    <template x-if="diagResult&&diagResult.anchored&&diagResult.anchored.some(a=>a.nurse_id||a.date)">
+      <div class="mt-2 pt-2" style="border-top:1px dashed var(--rule-soft,rgba(0,0,0,0.08))">
+        <div class="text-xs font-bold mb-1" style="color:var(--ink-2)">📍 충돌 위치로 이동 (클릭):</div>
+        <div class="flex flex-wrap gap-1">
+          <template x-for="(a,ai) in diagResult.anchored" :key="'anc'+ai">
+            <button x-show="a.nurse_id||a.date" @click="jumpToPreCell(a.nurse_id,a.date)" class="btn btn-xs btn-ghost" style="color:var(--t-red);border:1px solid rgba(239,83,80,0.2)" x-text="'➤ '+a.label"></button>
+          </template>
+        </div>
+      </div>
+    </template>
+    <!-- 최소 수정 처방 (MCS) -->
+    <template x-if="fixResult">
+      <div class="mt-2 pt-2" style="border-top:1px dashed var(--rule-soft,rgba(0,0,0,0.08))">
+        <div class="text-xs whitespace-pre-wrap mb-1.5" x-text="fixResult.message"></div>
+        <div class="flex flex-wrap gap-1.5">
+          <button x-show="(fixResult.removals&&fixResult.removals.length)||(fixResult.shortfalls&&fixResult.shortfalls.some(s=>s.kind==='staff'))" @click="applyFix()" class="btn btn-xs btn-primary">✅ 처방 모두 적용</button>
+        </div>
+        <div x-show="fixResult.removals&&fixResult.removals.length" class="flex flex-wrap gap-1 mt-1.5">
+          <template x-for="(rm,ri) in fixResult.removals" :key="'rm'+ri">
+            <button @click="jumpToPreCell(rm.nurse_id,rm.date_iso)" class="btn btn-xs btn-ghost" style="border:1px solid var(--rule-soft,rgba(0,0,0,0.12))" x-text="'➤ '+rm.nurse+' '+rm.date+' '+rm.pre"></button>
+          </template>
+        </div>
+      </div>
+    </template>
   </div>
   <!-- 로그 -->
   <div x-show="solverLogs.length>0" x-cloak class="mb-3">
@@ -2262,7 +2290,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.3.0 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.3.1 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">PuLP + HiGHS 수리최적화 솔버 기반</p>
         <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">

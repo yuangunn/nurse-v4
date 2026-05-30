@@ -1329,6 +1329,18 @@ html.dark .juhu-new {
   outline-offset: -2px;
 }
 
+/* 충돌/처방 셀로 점프 시 일시 강조 */
+.g-jump-flash {
+  outline: 3px solid var(--accent) !important;
+  outline-offset: -3px;
+  animation: jumpFlash 0.5s ease 4;
+  z-index: 5;
+}
+@keyframes jumpFlash {
+  0%,100% { background: var(--accent-bg); }
+  50% { background: rgba(255,193,7,0.45); }
+}
+
 .g-locked { position: relative; }
 .lock-indicator {
   position: absolute; top: 0; right: 0;

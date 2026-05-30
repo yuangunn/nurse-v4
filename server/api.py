@@ -81,7 +81,8 @@ try:
             # HandleUserInterrupt=True 필수: 이 플래그가 있어야 cancelSolve()가
             # MIP 인터럽트 콜백을 활성화하여 솔버를 실제로 중단할 수 있음
             self.HandleUserInterrupt = True
-            solver_progress.register(_HighsAdapter(self))
+            _hadapter = _HighsAdapter(self)
+            solver_progress.register(_hadapter)
             try:
                 result = super().run()
                 return result
@@ -92,7 +93,7 @@ try:
                         _last_mip_gap = float(gap)
                 except Exception:
                     pass
-                solver_progress.unregister()
+                solver_progress.unregister(_hadapter)
 
     _highspy_mod.Highs = _TrackableHighs
 except ImportError:
@@ -981,6 +982,68 @@ def get_generate_progress():
     return solver_progress.get_progress()
 
 
+def _run_race(request: GenerateRequest) -> dict:
+    """두 엔진 레이스 — HiGHS와 CP-SAT를 동시 실행, 먼저 성공한 쪽을 채택하고
+    패자는 즉시 중지(cancel_all_adapters, 사용자 취소 플래그는 건드리지 않음).
+
+    안전성: 승자 확정 후 양 스레드를 bounded join으로 정리한다. 드물게 패자(특히
+    incumbent 없는 CP-SAT)가 콜백 게이트 때문에 즉시 멈추지 못하면 데몬 스레드로
+    남지만, generate()의 solver_progress.end()가 레지스트리를 비우므로 다음 생성이
+    409로 막히거나 상태가 오염되지 않는다(패자 결과는 폐기)."""
+    from .scheduler_cpsat import CpSatScheduler
+    results: dict = {}
+    first_success = threading.Event()
+    decide_lock = threading.Lock()
+    winner = {"name": None}
+
+    def _run(name, factory):
+        try:
+            res = factory(request).solve()
+        except Exception as e:  # 한 엔진이 터져도 다른 엔진 결과로 진행
+            res = {"success": False, "message": f"[{name}] 오류: {e}", "schedule": {}}
+        results[name] = res
+        if res.get("success"):
+            with decide_lock:
+                if winner["name"] is None:
+                    winner["name"] = name
+                    first_success.set()
+                    solver_progress.cancel_all_adapters()  # 패자 중지
+
+    threads = []
+    for name, factory in (("HiGHS", NurseScheduler), ("CP-SAT", CpSatScheduler)):
+        t = threading.Thread(target=_run, args=(name, factory), daemon=True, name=f"race-{name}")
+        t.start()
+        threads.append(t)
+
+    # 첫 성공 OR 둘 다 종료까지 대기 — 솔버 자체 time_limit가 전체 백스톱.
+    # (둘 다 빠르게 실패하면 first_success가 안 떠도 all-dead로 즉시 빠져나가야 함)
+    import time as _time
+    overall = float(getattr(request, "time_limit", 1200) or 1200) + 60
+    deadline = _time.monotonic() + overall
+    while not first_success.is_set() and any(t.is_alive() for t in threads):
+        if _time.monotonic() > deadline:
+            break
+        first_success.wait(timeout=0.1)
+    solver_progress.cancel_all_adapters()  # 안전망: 승자 유무와 무관하게 남은 어댑터 취소
+    for t in threads:  # 패자 정리(HiGHS는 즉시, CP-SAT는 다음 incumbent까지) — 최대 30s 바운드
+        t.join(timeout=30)
+
+    win = winner["name"]
+    if win and results.get(win, {}).get("success"):
+        res = dict(results[win])
+        res["race_winner"] = win
+        base = res.get("message", "")
+        res["message"] = f"[{win} 우승] {base}" if base else f"{win} 엔진이 먼저 해를 찾았습니다."
+        return res
+    # 성공한 엔진이 없음 → 더 유용한 메시지(둘 다 infeasible/timeout)를 HiGHS 우선 반환
+    for name in ("HiGHS", "CP-SAT"):
+        if name in results:
+            res = dict(results[name])
+            res["race_winner"] = None
+            return res
+    return {"success": False, "message": "레이스 실패 (두 엔진 모두 결과 없음).", "schedule": {}}
+
+
 @app.post("/api/generate")
 def generate(request: GenerateRequest):
     global _last_mip_gap, _last_generate_result
@@ -1006,15 +1069,17 @@ def generate(request: GenerateRequest):
         rest_shifts  = [s.code for s in request.shifts if s.period == "rest"]
 
         warning = _validate_staffing(request, leave_shifts, rest_shifts)
-        if request.solver == "cpsat":
+        if request.solver == "race":
+            result = _run_race(request)
+        elif request.solver == "cpsat":
             from .scheduler_cpsat import CpSatScheduler
-            scheduler = CpSatScheduler(request)
+            result = CpSatScheduler(request).solve()
         else:
-            scheduler = NurseScheduler(request)
-        result = scheduler.solve()
+            result = NurseScheduler(request).solve()
 
-        # MIP gap 및 중지 여부 추가
-        if _last_mip_gap is not None:
+        # MIP gap 및 중지 여부 추가 (race는 _run_race가 승자 gap을 이미 결과에 담음 →
+        # HiGHS 패자의 stale _last_mip_gap로 CP-SAT 승자 gap을 덮어쓰지 않도록 제외)
+        if _last_mip_gap is not None and request.solver != "race":
             import math
             if math.isfinite(_last_mip_gap):
                 result["mip_gap_percent"] = round(_last_mip_gap * 100, 2)
@@ -1061,6 +1126,22 @@ def diagnose(request: GenerateRequest):
     except Exception as e:
         logger.error("diagnose error: %s\n%s", e, traceback.format_exc())
         return {"conflicts": [], "message": f"충돌 분석 중 오류: {e}"}
+
+
+@app.post("/api/suggest-fix")
+def suggest_fix(request: GenerateRequest):
+    """최소 수정 처방(MCS): 어떤 사전입력을 빼거나 인원을 얼마나 늘리면 생성 가능한지."""
+    from .conflict_analyzer import suggest_correction
+    if not request.shifts:
+        from .models import ShiftDef
+        request.shifts = [ShiftDef(**s) for s in db.list_shifts()]
+    if not request.scoring_rules:
+        request.scoring_rules = [ScoringRule(**r) for r in db.list_scoring_rules()]
+    try:
+        return suggest_correction(request)
+    except Exception as e:
+        logger.error("suggest-fix error: %s\n%s", e, traceback.format_exc())
+        return {"fixable": False, "message": f"수정 처방 계산 중 오류: {e}"}
 
 
 # ── 스케줄 저장/관리 API ──────────────────────────────────────────────────────

@@ -5,11 +5,15 @@ REM  사용법: build.bat
 REM  결과:
 REM    dist\electron\NurseScheduler-win32-x64\       (Electron 번들)
 REM    dist\NurseScheduler_v4_portable.zip           (포터블 ZIP)
-REM    dist\installer\NurseScheduler_Setup_v4.0.exe  (설치 마법사)
+REM    dist\installer\NurseScheduler_Setup_v<버전>.exe (설치 마법사)
 REM ═══════════════════════════════════════════════════════════════
 
 setlocal
 chcp 65001 > nul
+
+REM setup.iss의 #define AppVersion 에서 실제 빌드 버전 추출 (echo가 항상 정확하도록)
+set "APPVER=?"
+for /f "tokens=3" %%v in ('findstr /b /c:"#define AppVersion" installer\setup.iss') do set APPVER=%%~v
 echo.
 echo ════════════════════════════════════════════════
 echo  NurseScheduler v4 Electron 빌드 시작
@@ -72,7 +76,7 @@ if not exist "%ISCC%" set "ISCC=C:\Program Files\Inno Setup 6\ISCC.exe"
 if not exist "%ISCC%" set "ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
 if exist "%ISCC%" (
     "%ISCC%" installer\setup.iss
-    echo       완료: dist\installer\NurseScheduler_Setup_v4.0.exe
+    echo       완료: dist\installer\NurseScheduler_Setup_v%APPVER%.exe
 ) else (
     echo       건너뜀 ^(Inno Setup 미설치 - https://jrsoftware.org/isdl.php^)
 )
@@ -85,6 +89,6 @@ echo.
 echo  결과물:
 echo   • dist\electron\NurseScheduler-win32-x64\NurseScheduler.exe  ^(직접 실행^)
 echo   • dist\NurseScheduler_v4_portable.zip                         ^(포터블 배포^)
-if exist "%ISCC%" echo   • dist\installer\NurseScheduler_Setup_v4.0.exe               ^(설치 마법사^)
+if exist "%ISCC%" echo   • dist\installer\NurseScheduler_Setup_v%APPVER%.exe          ^(설치 마법사^)
 echo.
 endlocal
