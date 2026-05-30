@@ -134,7 +134,7 @@ class CpSatScheduler(_SchedulerBase):
         try:
             status = solver.Solve(model, cb)
         finally:
-            solver_progress.unregister()
+            solver_progress.unregister(prog)
 
         if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             schedule, extended = self._extract_solution(x, lambda v: solver.Value(v))

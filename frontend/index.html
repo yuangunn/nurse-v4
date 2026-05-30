@@ -975,17 +975,19 @@
     <span class="text-xs font-mono w-8" x-text="generateTimeout+'분'"></span>
     <div class="flex gap-1"><template x-for="v in [5,10,20,60]" :key="v"><button @click="generateTimeout=v" :class="generateTimeout===v?'btn-primary':'btn-ghost'" class="btn btn-xs" x-text="v+'분'"></button></template></div>
   </div>
-  <!-- 솔버 선택 (기본 HiGHS / CP-SAT) -->
+  <!-- 솔버 선택 (HiGHS / CP-SAT / 레이스) -->
   <div class="flex items-center gap-3 text-xs mb-2 flex-wrap">
     <span class="text-dim" style="font-weight:600">솔버</span>
     <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="solver" value="highs" x-model="solver"/><span class="text-dim">HiGHS (MILP)</span></label>
     <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="solver" value="cpsat" x-model="solver"/><span class="text-dim">CP-SAT</span></label>
+    <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="solver" value="race" x-model="solver"/><span class="text-dim">⚡ 레이스</span></label>
     <span x-show="solver==='cpsat'" class="text-xs text-dim">(infeasible 시 충돌 지점 정밀 진단 · 완화 미지원)</span>
+    <span x-show="solver==='race'" class="text-xs text-dim">(HiGHS·CP-SAT 동시 실행 → 먼저 성공한 쪽 채택 · 완화 미지원)</span>
   </div>
   <div class="flex items-center gap-3 text-xs mb-3 flex-wrap">
-    <label class="flex items-center gap-1.5" :class="solver==='cpsat'?'opacity-40':'cursor-pointer'"><input type="checkbox" x-model="allowPreRelax" :disabled="solver==='cpsat'"/><span class="text-dim">사전입력 완화</span></label>
-    <button x-show="allowPreRelax&&solver!=='cpsat'" @click="showPreBonusSettings=!showPreBonusSettings" class="btn btn-xs btn-ghost" style="padding:1px 6px;font-size:0.65rem" x-text="showPreBonusSettings?'▾ 완화 설정':'▸ 완화 설정'"></button>
-    <label class="flex items-center gap-1.5" :class="solver==='cpsat'?'opacity-40':'cursor-pointer'"><input type="checkbox" x-model="allowJuhuRelax" :disabled="solver==='cpsat'"/><span class="text-dim">주휴 무시</span></label>
+    <label class="flex items-center gap-1.5" :class="solver!=='highs'?'opacity-40':'cursor-pointer'"><input type="checkbox" x-model="allowPreRelax" :disabled="solver!=='highs'"/><span class="text-dim">사전입력 완화</span></label>
+    <button x-show="allowPreRelax&&solver==='highs'" @click="showPreBonusSettings=!showPreBonusSettings" class="btn btn-xs btn-ghost" style="padding:1px 6px;font-size:0.65rem" x-text="showPreBonusSettings?'▾ 완화 설정':'▸ 완화 설정'"></button>
+    <label class="flex items-center gap-1.5" :class="solver!=='highs'?'opacity-40':'cursor-pointer'"><input type="checkbox" x-model="allowJuhuRelax" :disabled="solver!=='highs'"/><span class="text-dim">주휴 무시</span></label>
     <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="unlimitedV"/><span class="text-dim">V 무제한</span></label>
     <span x-show="unlimitedV" class="text-xs text-dim">(번표 생성이 안 될 때 사용 — V 사용 시 큰 감점 적용)</span>
   </div>
