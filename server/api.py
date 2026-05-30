@@ -1063,6 +1063,22 @@ def diagnose(request: GenerateRequest):
         return {"conflicts": [], "message": f"충돌 분석 중 오류: {e}"}
 
 
+@app.post("/api/suggest-fix")
+def suggest_fix(request: GenerateRequest):
+    """최소 수정 처방(MCS): 어떤 사전입력을 빼거나 인원을 얼마나 늘리면 생성 가능한지."""
+    from .conflict_analyzer import suggest_correction
+    if not request.shifts:
+        from .models import ShiftDef
+        request.shifts = [ShiftDef(**s) for s in db.list_shifts()]
+    if not request.scoring_rules:
+        request.scoring_rules = [ScoringRule(**r) for r in db.list_scoring_rules()]
+    try:
+        return suggest_correction(request)
+    except Exception as e:
+        logger.error("suggest-fix error: %s\n%s", e, traceback.format_exc())
+        return {"fixable": False, "message": f"수정 처방 계산 중 오류: {e}"}
+
+
 # ── 스케줄 저장/관리 API ──────────────────────────────────────────────────────
 
 @app.get("/api/schedules")
