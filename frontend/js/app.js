@@ -999,20 +999,36 @@ function app() {
 
     // ── 다크모드 ──────────────────────────────────────────────
     toggleDark(){this.darkMode=!this.darkMode;document.documentElement.classList.toggle('dark',this.darkMode);localStorage.setItem('darkMode',this.darkMode)},
-
-    // ── 디자인 전환 (Premium UI ↔ Clinical Paper) ─────────────
-    switchDesign(target){
-      // target: 'legacy' (Premium UI) | 'clinical' (Clinical Paper, 기본)
-      try{localStorage.setItem('design',target)}catch(e){}
-      if(target==='legacy')window.location.href='/legacy';
-      else window.location.href='/';
-    },
     getDayDutyCount(day,shifts){if(!this.schedule||Object.keys(this.schedule).length===0)return 0;const k=this.dayKey(day);return Object.values(this.schedule).filter(ns=>shifts.includes(ns[k])).length},
 
     // ── 년월 이동 ─────────────────────────────────────────────
     prevMonth(){if(this.month===1){this.month=12;this.year--}else this.month--},
     nextMonth(){if(this.month===12){this.month=1;this.year++}else this.month++},
     dayKey(day){return`${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`},
+
+    // ── 오늘(Today) 홈 헬퍼 ───────────────────────────────────
+    todayKey(){return this.dayKey(new Date())},
+    _dutyAccept(duty){return duty==='D'?['D','DC','D1']:duty==='E'?['E','EC','중']:['N','NC']},
+    todayShiftCount(duty){
+      if(!this.schedule)return 0;
+      const k=this.todayKey(), acc=this._dutyAccept(duty);
+      return Object.values(this.schedule).filter(days=>acc.includes(days[k])).length;
+    },
+    todayShiftReq(duty){
+      const wk=['sun','mon','tue','wed','thu','fri','sat'][new Date().getDay()];
+      const r=this.requirements?.[wk]||{};
+      if(duty==='D')return (r.DC||0)+(r.D||0);
+      if(duty==='E')return (r.EC||0)+(r.E||0);
+      return (r.NC||0)+(r.N||0);
+    },
+    todayNursesByDuty(duty){
+      if(!this.schedule)return [];
+      const k=this.todayKey(), acc=this._dutyAccept(duty);
+      return Object.entries(this.schedule)
+        .filter(([nid,days])=>acc.includes(days[k]))
+        .map(([nid,days])=>({nid,code:days[k],nurse:this.nurses.find(n=>n.id===nid)}))
+        .filter(x=>x.nurse);
+    },
 
     // ── 셀 편집 ──────────────────────────────────────────────
     openShiftEdit(nurse,day){this.shiftEdit={open:true,nurse,day,dateLabel:`${day.getMonth()+1}/${day.getDate()}`,mode:'schedule'}},

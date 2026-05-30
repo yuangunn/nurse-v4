@@ -4,6 +4,30 @@ NurseScheduler v4의 주요 변경 이력. 최신 버전이 위쪽.
 
 ---
 
+## v4.2.0 — 2026-05-30
+
+**YGinvest 핀테크 전면 리디자인.** Claude Design 핸드오프(`NurseScheduler - YGinvest`)를 실제 코드에 적용.
+
+### 🎨 디자인 시스템 교체 (Clinical Paper → YGinvest)
+- **토큰**: 따뜻한 페이퍼 베이지 + 세브란스 네이비 → **쿨그레이 바탕 `#F4F5F7` + 흰 카드 + 딥 잉크 브랜드 `#0F1115`**
+- **타입**: Newsreader serif + JetBrains Mono 제거 → **Pretendard 단일** (오프라인 번들, `.serif`/`.mono` 리매핑)
+- **셰이프**: 직각 0~2px + hairline → **큰 둥근 모서리(12~20px) + 부드러운 그림자**, pill 버튼·칩
+- **KR 시그널**: 부족·경고 red↑(`#E84B5A`), 여유·정상 blue↓(`#2563EB`)
+- **근무 팔레트**: D=블루 · E=레드 · N=바이올렛 · V=그린 (시드 `database.py` 갱신)
+- 라이트/다크 모드 모두 재정의
+
+### 📱 모바일 '오늘' 홈 보강
+- 오늘 근무 현황 **shift-stack** (D/E/N 배정/요구) + 듀티별 **cov-row**(차지 배지 링·근무 시간)
+- 헬퍼: `todayKey / todayShiftCount / todayShiftReq / todayNursesByDuty`
+- 5-탭 하단 네비(오늘·사전입력·스케줄·분석·더보기) YG 스타일(상단 accent 바)
+
+### 🗑 단일 디자인으로 통합
+- `/legacy` (Premium UI v4.0.x) 라우트·정적 마운트·`frontend/legacy/` 트리 제거
+- 디자인 토글 버튼 + `switchDesign()` + localStorage 리디렉트 제거
+- YGinvest 단일 디자인으로 확정
+
+---
+
 ## v4.1.1 — 2026-05-29
 
 솔버 진단 로그 전반 강화 + UI 시각화.
