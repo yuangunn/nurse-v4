@@ -40,6 +40,17 @@ class CpSatScheduler(_SchedulerBase):
         if self.rules.maxNightTwoMonth:
             self._cs_max_night_two_month(model, x)
 
+        # ── Hard Constraints (조합/네이티브) — 4b ────────────────────────────
+        self._cs_forbidden_transitions(model, x)
+        if self.rules.noNOD:
+            self._cs_nod_pattern(model, x)
+        if self.rules.maxConsecutiveWork:
+            self._cs_max_consecutive_work(model, x, self.rules.maxConsecutiveWorkDays)
+        if self.rules.maxConsecutiveNight:
+            self._cs_max_consecutive_night(model, x, self.rules.maxConsecutiveNightDays)
+        if getattr(self.rules, 'restAfterNight', False):
+            self._cs_rest_after_night(model, x)
+
         # ── Solve ─────────────────────────────────────────────────────────────
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = float(self.time_limit)
@@ -252,3 +263,103 @@ class CpSatScheduler(_SchedulerBase):
                           for s in self.NIGHT_SHIFTS]
             if night_vars:
                 model.Add(sum(night_vars) <= max_n - prev_count)
+
+    # ── 조합/네이티브 하드 제약 (HiGHS _c_* 와 1:1) — 4b ─────────────────────
+    def _cs_forbidden_transitions(self, model, x):
+        """9개 물리 불가 전환 금지 (인접일 v1+v2<=1)."""
+        forbidden = [
+            (self.EVENING_SHIFTS, self.DAY_SHIFTS),
+            (self.EVENING_SHIFTS, self.DAY1_SHIFTS),
+            (self.EVENING_SHIFTS, self.MIDDLE_SHIFTS),
+            (self.NIGHT_SHIFTS,   self.EVENING_SHIFTS),
+            (self.NIGHT_SHIFTS,   self.DAY_SHIFTS),
+            (self.NIGHT_SHIFTS,   self.DAY1_SHIFTS),
+            (self.NIGHT_SHIFTS,   self.MIDDLE_SHIFTS),
+            (self.MIDDLE_SHIFTS,  self.DAY_SHIFTS),
+            (self.MIDDLE_SHIFTS,  self.DAY1_SHIFTS),
+        ]
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            for d in range(self.T - 1):
+                for first_group, second_group in forbidden:
+                    for s1 in first_group:
+                        v1 = x[nid][d][s1]
+                        if isinstance(v1, int):
+                            continue
+                        for s2 in second_group:
+                            v2 = x[nid][d + 1][s2]
+                            if isinstance(v2, int):
+                                continue
+                            model.Add(v1 + v2 <= 1)
+
+    def _cs_nod_pattern(self, model, x):
+        """N→휴무→D 금지 (vn+vr+vd<=2)."""
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            for d in range(self.T - 2):
+                for ns in self.NIGHT_SHIFTS:
+                    vn = x[nid][d][ns]
+                    if isinstance(vn, int):
+                        continue
+                    for rs in self.REST_SHIFTS:
+                        vr = x[nid][d + 1][rs]
+                        if isinstance(vr, int):
+                            continue
+                        for ds in self.DAY_SHIFTS:
+                            vd = x[nid][d + 2][ds]
+                            if isinstance(vd, int):
+                                continue
+                            model.Add(vn + vr + vd <= 2)
+
+    def _cs_max_consecutive_work(self, model, x, max_days: int):
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            for start in range(self.T - max_days):
+                window = range(start, start + max_days + 1)
+                model.Add(sum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= max_days)
+
+    def _cs_max_consecutive_night(self, model, x, max_nights: int):
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            for start in range(self.T - max_nights):
+                window = range(start, start + max_nights + 1)
+                model.Add(sum(x[nid][d][s] for d in window for s in self.NIGHT_SHIFTS) <= max_nights)
+
+    def _cs_rest_after_night(self, model, x):
+        """연속 야간(min_consec) 후 rest_days 일간 근무 불가.
+        lhs = ΣN(d..d+mc-1) - ΣN(next) + ΣW(rest_d) <= min_consec (HiGHS _c_rest_after_night 대응)."""
+        min_consec = getattr(self.rules, 'restAfterNightMinConsec', 2)
+        rest_days = getattr(self.rules, 'restAfterNightDays', 2)
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            if nurse.get("is_night_shift"):
+                continue
+            for d in range(self.T - min_consec):
+                night_terms = [x[nid][d + i][s] for i in range(min_consec)
+                               for s in self.NIGHT_SHIFTS if not isinstance(x[nid][d + i][s], int)]
+                night_fixed = sum(x[nid][d + i][s] for i in range(min_consec)
+                                  for s in self.NIGHT_SHIFTS if isinstance(x[nid][d + i][s], int))
+                if not night_terms and night_fixed < min_consec:
+                    continue
+                next_d = d + min_consec
+                if next_d >= self.T:
+                    continue
+                night_next = [x[nid][next_d][s] for s in self.NIGHT_SHIFTS
+                              if not isinstance(x[nid][next_d][s], int)]
+                night_next_fixed = sum(x[nid][next_d][s] for s in self.NIGHT_SHIFTS
+                                       if isinstance(x[nid][next_d][s], int))
+                for k in range(rest_days):
+                    rest_d = next_d + k
+                    if rest_d >= self.T:
+                        break
+                    work_vars = [x[nid][rest_d][s] for s in self.WORK_SHIFTS
+                                 if s not in self.NIGHT_SHIFTS and not isinstance(x[nid][rest_d][s], int)]
+                    if not work_vars:
+                        continue
+                    lhs = sum(night_terms) + night_fixed
+                    if night_next:
+                        lhs = lhs - sum(night_next)
+                    else:
+                        lhs = lhs - night_next_fixed
+                    lhs = lhs + sum(work_vars)
+                    model.Add(lhs <= min_consec)

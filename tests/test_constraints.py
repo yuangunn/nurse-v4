@@ -57,9 +57,10 @@ def test_smoke_solve_succeeds(build_request, solve_small, solver):
 # ── hard: 9개 금지 전환 ──────────────────────────────────────────────────────
 
 
-def test_no_forbidden_transitions(build_request, solve_small):
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_no_forbidden_transitions(build_request, solve_small, solver):
     """E→D, N→E 등 9개 역순 전환이 결과에 절대 나타나지 않는다."""
-    result = solve_small(build_request())
+    result = solve_small(build_request(), solver=solver)
     _ok(result)
     violations: list[str] = []
     for nid, days in result["schedule"].items():
