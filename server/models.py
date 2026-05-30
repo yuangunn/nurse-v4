@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 
 class ScoringRule(BaseModel):
@@ -106,6 +106,7 @@ class GenerateRequest(BaseModel):
     allow_pre_relax: bool = False  # infeasible 시 사전입력 완화 허용
     allow_juhu_relax: bool = False  # 주휴 재배치 허용
     unlimited_v: bool = False  # V 무제한 모드 (해를 못 찾을 때 사용)
+    solver: Literal["highs", "cpsat"] = "highs"  # 생성 엔진 선택 (기본 HiGHS)
 
 
 class ScheduleSave(BaseModel):

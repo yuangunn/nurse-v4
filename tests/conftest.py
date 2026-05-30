@@ -21,12 +21,10 @@ from server.models import (
 from server.scheduler import NurseScheduler
 
 
-class LimitedScheduler(NurseScheduler):
-    """월 전체 대신 max_days 일만 커버하는 테스트용 스케줄러."""
-
-    def __init__(self, request: GenerateRequest, max_days: int = 7):
-        self._max_days = max_days
-        super().__init__(request)
+class _LimitedMixin:
+    """월 전체 대신 max_days 일만 커버하도록 _build_date_range를 윈도잉.
+    엔진 무관 — HiGHS/CP-SAT 스케줄러 어느 쪽에든 믹스인.
+    (_max_days는 __init__에서 super().__init__ 호출 전에 세팅되어야 함)"""
 
     def _build_date_range(self):
         super()._build_date_range()
@@ -36,6 +34,34 @@ class LimitedScheduler(NurseScheduler):
         self.T = len(self.all_dates)
         self.date_to_idx = {d: i for i, d in enumerate(self.all_dates)}
         self.weeks = [(ws, we) for ws, we in self.weeks if we < self.T]
+
+
+class LimitedScheduler(_LimitedMixin, NurseScheduler):
+    """HiGHS 윈도잉 스케줄러 (하위호환 이름)."""
+
+    def __init__(self, request: GenerateRequest, max_days: int = 7):
+        self._max_days = max_days
+        super().__init__(request)
+
+
+def make_limited(request: GenerateRequest, days: int = 7, solver: str = "highs"):
+    """solver별 윈도잉 스케줄러 생성. cpsat는 CpSatScheduler 구현 전까지 skip."""
+    if solver == "highs":
+        return LimitedScheduler(request, max_days=days)
+    if solver == "cpsat":
+        try:
+            from server.scheduler_cpsat import CpSatScheduler
+        except ImportError:
+            import pytest
+            pytest.skip("CpSatScheduler 미구현 (Phase 4)")
+
+        class LimitedCpSat(_LimitedMixin, CpSatScheduler):
+            def __init__(self, req: GenerateRequest, max_days: int = 7):
+                self._max_days = max_days
+                super().__init__(req)
+
+        return LimitedCpSat(request, max_days=days)
+    raise ValueError(f"unknown solver: {solver}")
 
 
 def _mini_nurses(n: int = 6) -> list[Nurse]:
@@ -120,10 +146,10 @@ def build_request():
 
 @pytest.fixture
 def solve_small():
-    """빌더 → LimitedScheduler.solve() 결과 반환."""
+    """빌더 → 윈도잉 스케줄러.solve() 결과 반환. solver 인자로 엔진 선택."""
 
-    def _solve(request: GenerateRequest, days: int = 7) -> dict:
-        return LimitedScheduler(request, max_days=days).solve()
+    def _solve(request: GenerateRequest, days: int = 7, solver: str = "highs") -> dict:
+        return make_limited(request, days=days, solver=solver).solve()
 
     return _solve
 
