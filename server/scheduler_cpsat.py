@@ -81,10 +81,15 @@ class CpSatScheduler(_SchedulerBase):
                 "estimated_seconds": self.estimate_seconds(),
             }
         if status == cp_model.INFEASIBLE:
-            return {
-                "success": False, "schedule": {}, "extended_schedule": {},
-                "message": "CP-SAT: 제약을 모두 만족하는 근무표가 없습니다 (infeasible).",
-            }
+            msg = "CP-SAT: 제약을 모두 만족하는 근무표가 없습니다 (infeasible)."
+            try:
+                from .conflict_analyzer import analyze_conflicts
+                diag = analyze_conflicts(self._request)
+                if diag.get("conflicts"):
+                    msg += "\n\n[정밀 충돌 분석]\n" + diag["message"]
+            except Exception:
+                pass
+            return {"success": False, "schedule": {}, "extended_schedule": {}, "message": msg}
         return {
             "success": False, "schedule": {}, "extended_schedule": {},
             "message": f"CP-SAT: 제한 시간 내에 해를 찾지 못했습니다 (상태: {solver.StatusName(status)}).",

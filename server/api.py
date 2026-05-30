@@ -1042,6 +1042,23 @@ def get_generate_result():
     return {"status": "idle"}
 
 
+@app.post("/api/diagnose")
+def diagnose(request: GenerateRequest):
+    """CP-SAT assumptions 기반 정밀 충돌 분석.
+    어느 엔진으로 생성하다 infeasible이 나든 '어느 제약이 동시 충족 불가인지' 짚는다."""
+    from .conflict_analyzer import analyze_conflicts
+    if not request.shifts:
+        from .models import ShiftDef
+        request.shifts = [ShiftDef(**s) for s in db.list_shifts()]
+    if not request.scoring_rules:
+        request.scoring_rules = [ScoringRule(**r) for r in db.list_scoring_rules()]
+    try:
+        return analyze_conflicts(request)
+    except Exception as e:
+        logger.error("diagnose error: %s\n%s", e, traceback.format_exc())
+        return {"conflicts": [], "message": f"충돌 분석 중 오류: {e}"}
+
+
 # ── 스케줄 저장/관리 API ──────────────────────────────────────────────────────
 
 @app.get("/api/schedules")

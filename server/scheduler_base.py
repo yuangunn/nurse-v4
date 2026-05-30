@@ -58,6 +58,7 @@ class _SchedulerBase:
     _DAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
 
     def __init__(self, request: GenerateRequest):
+        self._request = request  # 원본 (CP-SAT infeasible 시 conflict 분석 재사용)
         self.year  = request.year
         self.month = request.month
         all_nurses: List[Dict] = [n.model_dump() for n in request.nurses]
