@@ -10,6 +10,7 @@ Phase 4a: 변수 도메인 + 선형 하드 제약 + 피저빌리티 solve.
 """
 from __future__ import annotations
 
+import os
 from datetime import date
 from typing import Dict
 
@@ -121,6 +122,13 @@ class CpSatScheduler(_SchedulerBase):
         solver.parameters.max_time_in_seconds = float(self.time_limit)  # 취소 하드 백스톱
         solver.parameters.relative_gap_limit = float(self.mip_gap)
         solver.parameters.log_search_progress = False
+        # ── 성능 튜닝 ───────────────────────────────────────────────────────
+        # CP-SAT는 포트폴리오 병렬 탐색(여러 워커가 서로 다른 전략)으로 큰 이득.
+        # 데스크톱 UI/Electron과 공존하므로 코어 전부를 점유하지 않고 8로 캡.
+        _cores = os.cpu_count() or 4
+        solver.parameters.num_workers = max(1, min(8, _cores))
+        solver.parameters.random_seed = 1          # 재현성(병렬이어도 시드 고정)
+        solver.parameters.use_lns_only = False     # 기본 포트폴리오 유지(LNS+완전탐색 혼합)
         cb = _CpSatCb(prog, _log_sink)
         solver_progress.register(prog)
         try:
