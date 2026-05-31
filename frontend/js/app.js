@@ -35,6 +35,7 @@ function app() {
     solveProgress:{gap_percent:null,nodes:0,has_solution:false,is_running:false},
     stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, unlimitedV:false, relaxedCells:{},
     solver:'highs', diagnosing:false, fixing:false, diagResult:null, fixResult:null,
+    tableFullscreen:false,
     mipGapPercent:null, scheduleStopped:false, estimatedSeconds:0,
     statusMessage:'', statusOk:true, savedSchedules:[],
     darkMode: localStorage.getItem('darkMode')==='true',

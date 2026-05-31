@@ -1471,6 +1471,34 @@ html.dark .btn-primary:hover { color: var(--paper); }
 .btn-sm { border-radius: 10px; }
 .btn-xs { border-radius: 9px; background: var(--accent-soft); }
 .btn-link { border-radius: 8px; }
+/* .btn-xs가 background를 accent-soft(연한 색)로 덮어써서, 컬러 변형(primary/success/
+   danger)과 함께 쓰이면 '연한 배경 + 흰 글자'가 되어 가독성이 깨진다(선택된 프리셋 버튼
+   2%/20분 등). 더 높은 명시도로 본래 색을 복원한다. */
+.btn-xs.btn-primary { background: var(--accent); color: #fff; }
+.btn-xs.btn-primary:hover { background: var(--accent-2); color: #fff; }
+html.dark .btn-xs.btn-primary,
+html.dark .btn-xs.btn-primary:hover { color: var(--paper); }
+.btn-xs.btn-success { background: var(--ok); color: #fff; }
+.btn-xs.btn-success:hover { background: var(--ok); color: #fff; filter: brightness(0.94); }
+.btn-xs.btn-danger { background: var(--err); color: #fff; }
+.btn-xs.btn-danger:hover { background: var(--err); color: #fff; }
+
+/* ── 테이블 전체화면 (사전입력·근무표 탭) ──────────────────────
+   appbar/bottom-nav/탭 툴바를 숨기고 슬림 배너 + 표만 남겨 화면을 꽉 채운다.
+   사이드바는 이미 항상 숨김(legacy). main-content는 flex:1이라 appbar가 사라지면
+   자동으로 전체 높이를 차지한다. */
+.app-shell.table-fullscreen .appbar,
+.app-shell.table-fullscreen .bottom-nav { display: none !important; }
+.app-shell.table-fullscreen .fs-hide { display: none !important; }
+.app-shell.table-fullscreen .main-content { padding-bottom: 0 !important; }
+.app-shell.table-fullscreen .content,
+.app-shell.table-fullscreen .content-flex { padding-top: 8px; }
+/* 전체화면 토글 버튼 (배너 안 아이콘 버튼) */
+.fs-toggle { display: inline-flex; align-items: center; justify-content: center;
+  gap: 5px; padding: 5px 10px; line-height: 1; white-space: nowrap; }
+.fs-toggle svg { width: 15px; height: 15px; }
+/* 전체화면 전용 요소는 평소 숨김 (x-show로도 제어하지만 FOUC 방지) */
+.fs-only { }
 
 /* ── Inputs (soft inset ring, rounded) ───────────────────── */
 input[type="text"], input[type="number"], input[type="password"], input[type="date"], input[type="email"], input:not([type]), select, textarea {

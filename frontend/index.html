@@ -260,7 +260,7 @@
   </div>
 </div>
 
-<div class="app-shell">
+<div class="app-shell" :class="tableFullscreen&&(activeTab==='preinput'||activeTab==='schedule')?'table-fullscreen':''" @keydown.escape.window="if(tableFullscreen)tableFullscreen=false">
 
 <!-- ═══ APPBAR + 5-STEP STEPPER (Clinical Paper) ═══════════ -->
 <header class="appbar" x-cloak>
@@ -271,7 +271,7 @@
         <span class="brand-name">NurseScheduler</span>
         <span class="brand-hospital">용인세브란스병원 · Yongin Severance Hospital</span>
       </div>
-      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.3.1</span>
+      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.3.2</span>
     </div>
     <div></div>
     <div class="appbar-meta">
@@ -798,9 +798,14 @@
         <div class="month-banner-bar-fill" :style="`width:${Math.min(100, prevInputProgress||0)}%`"></div>
       </div>
     </div>
+    <button @click="tableFullscreen=!tableFullscreen" class="btn btn-xs btn-ghost fs-toggle" :title="tableFullscreen?'전체화면 종료 (Esc)':'테이블 전체화면'">
+      <svg x-show="!tableFullscreen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3"/></svg>
+      <svg x-show="tableFullscreen" x-cloak viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+      <span x-text="tableFullscreen?'종료':'전체화면'"></span>
+    </button>
   </div>
 
-  <div class="flex flex-wrap items-center gap-2 mb-1" style="flex-shrink:0;padding:6px 28px 0">
+  <div class="flex flex-wrap items-center gap-2 mb-1 fs-hide" style="flex-shrink:0;padding:6px 28px 0">
     <div class="ml-auto flex gap-2 flex-wrap">
       <button @click="openPastePrev()" class="btn btn-xs btn-ghost text-green" title="엑셀에서 복사한 사전입력 표를 붙여넣기">📋 엑셀 붙여넣기</button>
       <button @click="loadPrevMonthSchedule()" class="btn btn-xs btn-ghost text-blue" title="이전달 스케줄 이월">📅 전달이월</button>
@@ -813,7 +818,7 @@
       <button @click="prevSavePanel=!prevSavePanel" :class="prevSavePanel?'btn-primary':'btn-ghost'" class="btn btn-xs">저장/불러오기</button>
     </div>
   </div>
-  <div x-show="prevSavePanel" x-cloak class="card-sm mb-3" style="flex-shrink:0">
+  <div x-show="prevSavePanel" x-cloak class="card-sm mb-3 fs-hide" style="flex-shrink:0">
     <div class="flex gap-2 mb-2"><input type="text" x-model="prevSaveName" :placeholder="`${year}년 ${month}월`" class="flex-1" @keydown.enter="savePrevToServer()"/><button @click="savePrevToServer()" class="btn btn-xs btn-primary">저장</button></div>
     <div x-show="prevSaves.length===0" class="text-xs text-center py-2 text-dim">저장된 사전입력 없음</div>
     <div x-show="prevSaves.length>0" class="space-y-1 max-h-36 overflow-y-auto"><template x-for="ps in prevSaves" :key="ps.id">
@@ -836,7 +841,7 @@
       <div x-show="prevViolations.length>10" class="text-dim" x-text="`... 외 ${prevViolations.length-10}건`"></div>
     </div>
   </div>
-  <div class="flex flex-wrap gap-1 text-xs mb-2 items-center" style="flex-shrink:0">
+  <div class="flex flex-wrap gap-1 text-xs mb-2 items-center fs-hide" style="flex-shrink:0">
     <template x-for="s in prevShifts" :key="s"><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></template>
     <span class="text-dim ml-1">빈칸=자동</span>
     <span class="text-dim ml-2">| ← ↑ ↓ → <kbd>D</kbd><kbd>E</kbd><kbd>N</kbd><kbd>V</kbd><kbd>O</kbd>=OF <kbd>W</kbd>=주 입력 · <kbd>Del</kbd> 삭제 · <kbd>Ctrl+Z</kbd> 되돌리기 · <kbd>?</kbd> 전체 단축키</span>
@@ -920,8 +925,30 @@
 
 <!-- ═══ TAB 3: 스케줄 ═════════════════════════════════════ -->
 <div x-show="activeTab==='schedule'" x-cloak class="content">
+  <!-- 전체화면 슬림 배너 (전체화면 모드에서만 — 첨부 1번 사진 스타일) -->
+  <div class="fs-only" x-show="tableFullscreen" x-cloak style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--rule)">
+    <div class="month-banner-left">
+      <div class="month-banner-num"><span x-text="year"></span><span class="month-dot">.</span><span x-text="month"></span></div>
+      <span class="month-banner-meta" x-text="`${['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][month-1]} · ${new Date(year, month, 0).getDate()}일 · 공휴일 ${(holidays||[]).length}`"></span>
+    </div>
+    <div class="ym" style="margin:0">
+      <button @click="prevMonth()" class="ym-nav">‹</button>
+      <input type="number" x-model.number="year" min="2020" max="2099" style="width:4em"/>
+      <span class="ym-lbl">년</span>
+      <input type="number" x-model.number="month" min="1" max="12" style="width:2.5em"/>
+      <span class="ym-lbl">월</span>
+      <button @click="nextMonth()" class="ym-nav">›</button>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+      <span x-show="mipGapPercent!==null" x-cloak class="status-badge" :class="mipGapPercent<=0.1?'status-optimal':mipGapPercent<=2?'status-gap':'status-stopped'"><span x-text="mipGapPercent<=0.1?'최적해':`Gap ${mipGapPercent}%`"></span></span>
+      <button @click="tableFullscreen=false" class="btn btn-xs btn-ghost fs-toggle" title="전체화면 종료 (Esc)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+        <span>종료</span>
+      </button>
+    </div>
+  </div>
   <!-- 컨트롤 -->
-  <div class="flex flex-wrap items-center gap-3 mb-3">
+  <div class="flex flex-wrap items-center gap-3 mb-3 fs-hide">
     <div class="section-title" style="margin:0">근무표</div>
     <span x-show="mipGapPercent!==null" x-cloak class="status-badge" :class="mipGapPercent<=0.1?'status-optimal':mipGapPercent<=2?'status-gap':'status-stopped'">
       <svg x-show="mipGapPercent<=0.1" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
@@ -936,6 +963,10 @@
       <span class="ym-lbl">월</span>
       <button @click="nextMonth()" class="ym-nav">›</button>
     </div>
+    <button @click="tableFullscreen=true" class="btn btn-xs btn-ghost fs-toggle" title="테이블 전체화면 (Esc로 종료)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3"/></svg>
+      <span>전체화면</span>
+    </button>
     <button @click="generate()" :disabled="generating" class="btn btn-primary" style="padding:6px 20px;font-size:0.9rem;font-weight:700" :style="generating?'opacity:0.5':''">
       <svg x-show="generating" class="w-4 h-4 spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
       <span x-text="generating?'생성 중...':'생성'"></span>
@@ -962,7 +993,7 @@
   </div>
   <!-- 슬라이더 (#5 모바일 접기) -->
   <button @click="scheduleGenOptions=!scheduleGenOptions" class="btn btn-xs btn-ghost mb-1 md-hide" x-text="scheduleGenOptions?'▾ 옵션 접기':'▸ 옵션 펼치기'" style="display:none"></button>
-  <div :class="scheduleGenOptions?'':'mobile-hidden'" class="gen-options">
+  <div :class="scheduleGenOptions?'':'mobile-hidden'" class="gen-options fs-hide">
   <div class="flex items-center gap-3 mb-1.5">
     <span class="text-xs text-dim w-8">오차</span>
     <input type="range" min="0" max="0.1" step="0.01" x-model.number="mipGap" class="flex-1" style="max-width:110px;accent-color:#1976d2"/>
@@ -1161,7 +1192,7 @@
     </div>
   </div>
   <!-- 표시 옵션 -->
-  <div x-show="schedule&&Object.keys(schedule).length>0" class="flex items-center gap-4 text-xs mb-2">
+  <div x-show="schedule&&Object.keys(schedule).length>0" class="flex items-center gap-4 text-xs mb-2 fs-hide">
     <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="hideCharge"/><span class="text-dim">Charge 숨기기</span></label>
     <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="colorByShift"/><span class="text-dim">근무별 색상</span></label>
     <select x-model="groupFilter" class="text-xs" style="padding:2px 6px">
@@ -2290,7 +2321,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.3.1 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.3.2 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">PuLP + HiGHS 수리최적화 솔버 기반</p>
         <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">

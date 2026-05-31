@@ -12,6 +12,7 @@
 ### 🎨 UI / UX (v4.2 — YGinvest 리디자인)
 - **YGinvest 핀테크 디자인** — 쿨그레이 바탕 + 흰 카드 + 딥 잉크 브랜드, 큰 둥근 모서리·부드러운 그림자, **Pretendard 단일** 타입 시스템
 - **적응형 헤더** (v4.2.1) — 탭 콘텐츠를 스크롤하면 상단 앱바가 부드럽게 축소되어 근무표에 더 많은 공간 확보
+- **테이블 전체화면 보기** (v4.3.2) — 사전입력·근무표 탭에서 ⛶ 토글로 헤더·툴바·옵션 패널을 모두 숨기고 슬림 배너 + 표만 화면 가득. `Esc`로 종료
 - **KR 시그널 컬러** — 부족·경고 red↑, 여유·정상 blue↓ / 근무 칩: D=블루 · E=레드 · N=바이올렛 · V=그린
 - **모바일 '오늘' 홈** — 오늘 근무 현황(D/E/N 배정/요구 stack) + 듀티별 근무자(차지 배지·시간) + 5-탭 하단 네비
 - **다크 모드, 키보드 단축키, 모바일 대응** — `← ↑ ↓ →` 이동 / `D E N V O W` 직접 입력
@@ -43,12 +44,12 @@
 
 ## 다운로드
 
-> **최신 버전: v4.3.1** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
+> **최신 버전: v4.3.2** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
 
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_Setup_v4.3.1.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.1/NurseScheduler_Setup_v4.3.1.exe) | 설치 마법사 (권장) | ~190 MB |
-| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.1/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~250 MB |
+| [**NurseScheduler_Setup_v4.3.2.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.2/NurseScheduler_Setup_v4.3.2.exe) | 설치 마법사 (권장) | ~190 MB |
+| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.2/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~250 MB |
 
 ### 시스템 요구사항
 - Windows 10/11 (64bit)
@@ -100,7 +101,7 @@ build.bat
 결과물:
 - `dist/electron/NurseScheduler-win32-x64/` — Electron 번들
 - `dist/NurseScheduler_v4_portable.zip` — 포터블 ZIP
-- `dist/installer/NurseScheduler_Setup_v4.3.1.exe` — 설치 마법사
+- `dist/installer/NurseScheduler_Setup_v4.3.2.exe` — 설치 마법사
 
 자세한 빌드 가이드는 [BUILD.md](BUILD.md)를 참고하세요.
 
