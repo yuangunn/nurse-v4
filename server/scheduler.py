@@ -383,24 +383,35 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             schedule, extended = self._extract_solution(x, lambda v: pulp.value(v))
             nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
 
-            # 사전입력과 다르게 배정된 셀 찾기
-            relaxed_cells: Dict[str, Dict[str, Dict[str, str]]] = {}
+            # 사전입력과 다르게 배정된 셀 찾기 (PRE_FLEX 내 변환은 제외)
+            relaxed_cells: Dict[str, Dict[str, Dict[str, object]]] = {}
+            leave_changed = 0
             for nid, days in self.prev.items():
                 for dt_str, pre_shift in days.items():
                     assigned = schedule.get(nid, {}).get(dt_str)
                     if assigned and assigned != pre_shift:
-                        # D→DC 등 PRE_FLEX 내 변환은 relaxed로 안 봄
                         pre_flex = self._PRE_FLEX.get(pre_shift, {pre_shift})
                         if assigned not in pre_flex:
-                            if nid not in relaxed_cells:
-                                relaxed_cells[nid] = {}
-                            relaxed_cells[nid][dt_str] = {
+                            is_leave = pre_shift in LEAVE_CODES
+                            if is_leave:
+                                leave_changed += 1
+                            relaxed_cells.setdefault(nid, {})[dt_str] = {
                                 "original": pre_shift,
                                 "assigned": assigned,
+                                "is_leave": is_leave,
                             }
 
             label = "중지" if status_str not in ("Optimal", "Feasible") else status_str
             relax_count = sum(len(v) for v in relaxed_cells.values())
+            other_changed = relax_count - leave_changed
+            # 투명성: 무엇을 얼마나 바꿨는지 + 휴가 변경은 별도 경고
+            if relax_count == 0:
+                relax_msg = "사전입력을 그대로 유지했습니다."
+            else:
+                relax_msg = f"⚠ 최소 침습 완화: 휴식/근무 {other_changed}건 조정"
+                if leave_changed:
+                    relax_msg += f" · ⚠ 휴가 {leave_changed}건 변경(불가피 — 인원 추가/수요 감축 검토 권장)"
+                relax_msg += "."
             return {
                 "success": True,
                 "schedule": schedule,
@@ -408,10 +419,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 "nurse_scores": nurse_scores,
                 "nurse_score_details": nurse_score_details,
                 "relaxed_cells": relaxed_cells,
-                "message": (
-                    f"근무표가 생성되었습니다. (상태: {label})\n"
-                    f"⚠ 사전입력 완화: {relax_count}건의 사전입력이 변경되었습니다."
-                ),
+                "leave_relaxed_count": leave_changed,
+                "message": f"근무표가 생성되었습니다. (상태: {label})\n{relax_msg}",
                 "estimated_seconds": self.estimate_seconds(),
             }
         return None
