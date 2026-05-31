@@ -374,115 +374,6 @@ function app() {
       const res=await fetch(url,opts);if(!res.ok)throw new Error(await res.text());return res.json();
     },
 
-    // ── 스케줄 생성 ──────────────────────────────────────────
-    async generate(){
-      if(this.nurses.length===0){this.toast('간호사를 먼저 등록해주세요','error');return}
-      if(this._recoverPoll){clearInterval(this._recoverPoll);this._recoverPoll=null}
-      this.generating=true;this.stopRequested=false;this.mipGapPercent=null;this.scheduleStopped=false;
-      this.statusMessage='';this.estimatedSeconds=0;this.generateStartTime=Date.now();this.generateElapsed=0;
-      this.generateTimer=setInterval(()=>{this.generateElapsed=Math.floor((Date.now()-this.generateStartTime)/1000)},1000);
-      this.solveProgress={gap_percent:null,nodes:0,has_solution:false,is_running:false};
-      this.solverLogs=[];this._logSeq=0;
-      this.sseSource=new EventSource('/api/generate/stream');
-      this.sseSource.onmessage=(e)=>{
-        const data=JSON.parse(e.data);
-        if(data.type==='log'){this.solverLogs.push({id:++this._logSeq,msg:data.msg});if(this.solverLogs.length>300)this.solverLogs=this.solverLogs.slice(-200);this.$nextTick(()=>{const el=document.getElementById('logPanel');if(el)el.scrollTop=el.scrollHeight})}
-        else if(data.type==='progress')this.solveProgress=data;
-        else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
-      };
-      const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60,allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,unlimited_v:this.unlimitedV,solver:this.solver};
-      this.api('POST','/api/estimate',payload).then(est=>{if(est&&est.estimated_seconds)this.estimatedSeconds=est.estimated_seconds}).catch(()=>{});
-      try{
-        const result=await this.api('POST','/api/generate',payload);
-        this.statusOk=result.success;this.statusMessage=result.message;
-        if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.activeTab='schedule';
-          if(result.stopped)this.statusMessage+='\n⏹ 중지 요청으로 탐색 종료 — 현재까지 찾은 최선의 해를 표시합니다.';
-          // 완화된 셀 상세 메시지
-          if(Object.keys(this.relaxedCells).length>0){
-            const details=[];
-            for(const[nid,cells]of Object.entries(this.relaxedCells)){
-              const nurse=this.nurses.find(n=>n.id===nid);
-              const name=nurse?nurse.name:nid;
-              for(const[dk,info]of Object.entries(cells)){
-                const dateStr=dk.slice(5).replace('-','/');
-                details.push(`  ${name} ${dateStr}: ${info.original} → ${info.assigned}`);
-              }
-            }
-            this.statusMessage+='\n\n📋 변경 상세:\n'+details.join('\n');
-          }
-          this.trackEdits();
-          if(result.warning){this.statusMessage=result.warning+'\n\n'+this.statusMessage;this.statusOk=false}}
-      }catch(e){this.statusOk=false;this.statusMessage='서버 오류: '+e.message}
-      finally{this.generating=false;this.stopRequested=false;if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generateFinalElapsed=this.generateElapsed}
-    },
-    async stopGenerate(){
-      if(this.stopRequested)return;this.stopRequested=true;
-      if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}
-      if(this.sseSource){this.sseSource.close();this.sseSource=null}
-      try{await fetch('/api/generate/stop',{method:'POST'})}catch(e){}
-    },
-
-    // ── 정밀 충돌 분석 (CP-SAT assumptions) ───────────────────
-    _diagPayload(){return{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null}},
-    async diagnoseConflicts(){
-      if(this.diagnosing)return;
-      this.diagnosing=true; this.diagResult=null;
-      try{
-        const res=await this.api('POST','/api/diagnose',this._diagPayload());
-        if(res&&res.message){
-          this.diagResult=res;
-          this.statusMessage=this.statusMessage+'\n\n━━ 정밀 충돌 분석 (CP-SAT) ━━\n'+res.message;
-          this.toast(res.conflicts&&res.conflicts.length?`충돌 ${res.conflicts.length}건 발견`:'하드 제약 충돌 없음','info',3500);
-        }
-      }catch(e){this.toast('충돌 분석 실패','error');}
-      finally{this.diagnosing=false;}
-    },
-    async suggestFix(){
-      if(this.fixing)return;
-      this.fixing=true; this.fixResult=null;
-      try{
-        const res=await this.api('POST','/api/suggest-fix',this._diagPayload());
-        if(res){
-          this.fixResult=res;
-          this.toast(res.fixable?'자동 수정 처방을 계산했습니다':'처방 계산 실패 — 정밀 분석 참고',res.fixable?'success':'error',3800);
-        }
-      }catch(e){this.toast('자동 수정 처방 실패','error');}
-      finally{this.fixing=false;}
-    },
-    jumpToPreCell(nid,iso){
-      if(iso){const p=String(iso).split('-').map(Number);if(p[0]&&p[1]){this.year=p[0];this.month=p[1];}}
-      this.activeTab='preinput';
-      this.$nextTick(()=>setTimeout(()=>{
-        let el=(nid&&iso)?document.querySelector(`[data-cell="${nid}|${iso}"]`):null;
-        if(!el&&iso)el=document.querySelector(`[data-cell$="|${iso}"]`);
-        if(el){el.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});el.classList.add('g-jump-flash');setTimeout(()=>el.classList.remove('g-jump-flash'),2400);}
-        else this.toast('해당 셀이 현재 주기 화면에 없습니다','info',3000);
-      },140));
-    },
-    applyFix(){
-      const r=this.fixResult; if(!r)return;
-      const rms=r.removals||[]; const sfs=(r.shortfalls||[]).filter(s=>s.kind==='staff');
-      if(!rms.length&&!sfs.length){this.toast('적용할 수정이 없습니다','info');return;}
-      this._pushUndo();
-      let rn=0;
-      for(const rm of rms){
-        if(rm.nurse_id&&rm.date_iso&&this.prevSchedule[rm.nurse_id]&&this.prevSchedule[rm.nurse_id][rm.date_iso]!==undefined){
-          delete this.prevSchedule[rm.nurse_id][rm.date_iso]; rn++;
-          if(!Object.keys(this.prevSchedule[rm.nurse_id]).length)delete this.prevSchedule[rm.nurse_id];
-        }
-      }
-      let sn=0;
-      for(const s of sfs){
-        const d=new Date(s.date+'T00:00:00'); if(isNaN(d))continue;
-        const cur=this.getPrevDayReq(d,s.code); const base=this.getDefaultDayReq(d,s.code);
-        const curVal=(cur!==null&&cur!==undefined)?cur:base;
-        this.setPrevDayReq(d,s.code,Math.max(0,curVal-(s.amount||0))); sn++;
-      }
-      if(this._checkViolations)this._checkViolations();
-      this.toast(`처방 적용 — 사전입력 ${rn}건 제거, 수요 ${sn}건 감축 (Ctrl+Z 취소)`,'success',4500);
-      this.fixResult=null; this.activeTab='preinput';
-    },
-
     // ── 표시 헬퍼 ─────────────────────────────────────────────
     getShift(nurseId,day){const key=`${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`;return(this.schedule[nurseId]&&this.schedule[nurseId][key])||'-'},
     getDayClass(day){const dow=day.getDay();if(dow===0)return'text-red-500';if(dow===6)return'text-blue-500';return''},
@@ -1591,6 +1482,7 @@ function app() {
     },
 
     // ── 외부 모듈 합성 (modules/*.js — index.html에서 app.js 앞에 로드) ──
+    ...(window.SolverModule ? window.SolverModule() : {}),
     ...(window.SettingsDefsModule ? window.SettingsDefsModule() : {}),
     ...(window.NurseManageModule ? window.NurseManageModule() : {}),
     ...(window.DevToolsModule ? window.DevToolsModule() : {}),
