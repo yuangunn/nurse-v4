@@ -353,8 +353,18 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         self._c_night_shift_nurses(prob, x)
 
         # 목적함수: 기본 배점 + 사전입력 유지 보너스
+        # 최소 침습(minimally invasive): 유지 보너스가 배점(scoring)을 '사전순(lexicographic)'으로
+        # 지배하도록 스케일한다. 가장 작은 보너스(보통 휴식)조차 배점 총합을 넘게 만들어, 솔버가
+        # '점수를 더 따려고' 사전입력을 바꾸는 일을 원천 차단한다. → 사전입력 변경은 오직
+        # 실현가능성에 꼭 필요할 때만, 그리고 그때도 휴식<근무<휴가 순으로 최소한만 일어난다.
         obj = self._build_objective(prob, x)
-        prob += obj + pulp.lpSum(pre_bonus_terms)
+        if pre_bonus_terms:
+            scoring_bound = sum(abs(c) for c in obj.values())
+            raw_min = min(PRE_BONUS_LEAVE, PRE_BONUS_WORK, PRE_BONUS_REST)
+            dom = int(scoring_bound // max(1, raw_min)) + 2   # dom*raw_min > scoring_bound 보장
+            prob += obj + dom * pulp.lpSum(pre_bonus_terms)
+        else:
+            prob += obj
 
         solver = pulp.HiGHS(timeLimit=self.time_limit, mip_rel_gap=self.mip_gap, msg=False)
         try:
