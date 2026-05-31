@@ -23,7 +23,7 @@ from ortools.sat.python import cp_model
 
 from .models import GenerateRequest
 from .scheduler_cpsat import CpSatScheduler
-from .scheduler_base import WEEKDAY_KEYS
+from .scheduler_base import WEEKDAY_KEYS, timeoff_class, is_protected_timeoff
 
 
 class _ConflictAnalyzer(CpSatScheduler):
@@ -518,20 +518,13 @@ class _ConflictAnalyzer(CpSatScheduler):
 
         cost_terms = []
         SHORT_COST = 10
-        # 최소 침습(minimally invasive): 사전입력 제거 비용을 종류별로 차등한다.
-        # 휴가는 간호사 개인의 인생(휴식·여행·성취·결혼 등) → 제거는 최후의 수단.
-        # 휴식(1) ≪ 근무(4) ≪ 인원부족 보고(SHORT_COST=10) ≪ 휴가(50).
-        # → 같은 효과면 휴식부터 빼고, 휴가를 뺄 바엔 '인원 추가/수요 감축'을 먼저 제시한다.
-        _LEAVE_CODES = {"V", "생", "특", "공", "법", "병"}
-        _REST_CODES = {"OF", "주"}
-        def _removal_cost(code: str) -> int:
-            if code in _LEAVE_CODES:
-                return 50
-            if code in _REST_CODES:
-                return 1
-            return 4
+        # 최소 침습(minimally invasive): 사전입력 제거 비용을 보호 등급별로 차등한다.
+        # 사전입력의 '휴무'(OFF·연차·생리·특·공·법·병)는 간호사 개인의 인생 시간 → 강하게 보호.
+        # 근무(1) < 인원부족 보고(10) < 휴무 OFF(30) < 연차류(60) < 주휴(100).
+        # → 근무만 싸게 완화하고, 휴무를 뺄 바엔 '인원 추가/수요 감축'을 먼저 제시한다.
+        _RM_COST = {"work": 1, "off": 30, "leave": 60, "juhu": 100}
         for keep, nurse, d, pre in pre_keeps:
-            cost_terms.append(_removal_cost(pre) * (1 - keep))
+            cost_terms.append(_RM_COST[timeoff_class(pre)] * (1 - keep))
         # 일별 D/E/N 미충원 (soft) + charge 미배치 (soft)
         period_map = {"D": self.DAY_SHIFTS, "E": self.EVENING_SHIFTS, "N": self.NIGHT_SHIFTS}
         period_to_req = {"day": "D", "evening": "E", "night": "N"}
@@ -580,16 +573,16 @@ class _ConflictAnalyzer(CpSatScheduler):
             if v > 0:
                 short_list.append((kind, dt, code, v))
 
-        # 최소 침습 프레이밍: 휴식/근무 조정 → 인원 부족(휴가 무손실 대안) → 휴가 제거(최후)
-        soft_rm = [r for r in removed if r[4] not in _LEAVE_CODES]
-        leave_rm = [r for r in removed if r[4] in _LEAVE_CODES]
+        # 최소 침습 프레이밍: 근무 조정 → 인원 부족(휴무 무손실 대안) → ⚠휴무 제거(최후)
+        work_rm = [r for r in removed if timeoff_class(r[4]) == "work"]
+        timeoff_rm = [r for r in removed if timeoff_class(r[4]) != "work"]
         lines = []
-        if soft_rm:
-            lines.append(f"■ 휴식/근무 사전입력 {len(soft_rm)}건 조정으로 충원:")
-            for nid, label, iso, ds, pre in soft_rm[:15]:
+        if work_rm:
+            lines.append(f"■ 근무 사전입력 {len(work_rm)}건 조정으로 충원:")
+            for nid, label, iso, ds, pre in work_rm[:15]:
                 lines.append(f"  · {label} {ds} '{pre}' 제거")
-            if len(soft_rm) > 15:
-                lines.append(f"  · … 외 {len(soft_rm)-15}건")
+            if len(work_rm) > 15:
+                lines.append(f"  · … 외 {len(work_rm)-15}건")
         if short_list:
             lines.append(f"■ 인원이 부족합니다 — 인원 추가 또는 수요 감축 권장 ({len(short_list)}건):")
             for kind, dt, code, v in short_list[:15]:
@@ -599,19 +592,19 @@ class _ConflictAnalyzer(CpSatScheduler):
                     lines.append(f"  · {self._fmt_date(dt)} {code} {v}명 부족")
             if len(short_list) > 15:
                 lines.append(f"  · … 외 {len(short_list)-15}건")
-        if leave_rm:
-            lines.append(f"⚠ 휴가 {len(leave_rm)}건 제거가 불가피합니다 — 가능하면 위의 인원 추가/수요 감축을 먼저 검토하세요:")
-            for nid, label, iso, ds, pre in leave_rm[:15]:
-                lines.append(f"  · {label} {ds} '{pre}' (휴가)")
-            if len(leave_rm) > 15:
-                lines.append(f"  · … 외 {len(leave_rm)-15}건")
+        if timeoff_rm:
+            lines.append(f"⚠ 휴무 {len(timeoff_rm)}건 제거가 불가피합니다 — 가능하면 위의 인원 추가/수요 감축을 먼저 검토하세요:")
+            for nid, label, iso, ds, pre in timeoff_rm[:15]:
+                lines.append(f"  · {label} {ds} '{pre}' (휴무)")
+            if len(timeoff_rm) > 15:
+                lines.append(f"  · … 외 {len(timeoff_rm)-15}건")
         if not removed and not short_list:
             return {"fixable": True, "removals": [], "shortfalls": [],
                     "message": "수정 없이 생성 가능합니다 (현재 하드 제약상 충돌 없음)."}
         return {
             "fixable": True,
             "removals": [{"nurse_id": nid, "nurse": l, "date_iso": iso, "date": ds, "pre": p,
-                          "is_leave": p in _LEAVE_CODES}
+                          "is_timeoff": timeoff_class(p) != "work"}
                           for nid, l, iso, ds, p in removed],
             "shortfalls": [{"kind": k, "date": dt.strftime("%Y-%m-%d"), "code": c, "amount": v}
                            for k, dt, c, v in short_list],

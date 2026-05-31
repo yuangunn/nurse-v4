@@ -94,12 +94,12 @@ window.SolverModule = function() {
       const r=this.fixResult; if(!r)return;
       const rms=r.removals||[]; const sfs=(r.shortfalls||[]).filter(s=>s.kind==='staff');
       if(!rms.length&&!sfs.length){this.toast('적용할 수정이 없습니다','info');return;}
-      // 휴가(=간호사 개인의 인생 일정) 제거가 포함되면 명시적 확인을 받는다 — 무심코 적용 금지
-      const leaveRms=rms.filter(rm=>rm.is_leave);
-      if(leaveRms.length){
-        const detail=leaveRms.slice(0,8).map(rm=>`• ${rm.nurse} ${rm.date} '${rm.pre}'`).join('\n');
-        const more=leaveRms.length>8?`\n… 외 ${leaveRms.length-8}건`:'';
-        if(!confirm(`⚠ 이 처방은 간호사의 휴가 ${leaveRms.length}건을 제거합니다.\n휴가는 간호사 개인의 인생 일정(휴식·여행·성취·결혼 등)입니다 — 가능하면 인원 추가나 수요 감축을 먼저 검토하세요.\n\n${detail}${more}\n\n그래도 휴가를 제거하고 적용하시겠습니까?`)) return;
+      // 휴무(OFF·연차류 = 간호사 개인의 시간) 제거가 포함되면 명시적 확인 — 무심코 적용 금지
+      const timeoffRms=rms.filter(rm=>rm.is_timeoff);
+      if(timeoffRms.length){
+        const detail=timeoffRms.slice(0,8).map(rm=>`• ${rm.nurse} ${rm.date} '${rm.pre}'`).join('\n');
+        const more=timeoffRms.length>8?`\n… 외 ${timeoffRms.length-8}건`:'';
+        if(!confirm(`⚠ 이 처방은 간호사의 휴무 ${timeoffRms.length}건을 제거합니다.\n휴무(OFF·연차 등)는 간호사 개인의 시간(휴식·여행·성취·결혼 등)입니다 — 가능하면 인원 추가나 수요 감축을 먼저 검토하세요.\n\n${detail}${more}\n\n그래도 휴무를 제거하고 적용하시겠습니까?`)) return;
       }
       this._pushUndo();
       let rn=0;
@@ -117,7 +117,7 @@ window.SolverModule = function() {
         this.setPrevDayReq(d,s.code,Math.max(0,curVal-(s.amount||0))); sn++;
       }
       if(this._checkViolations)this._checkViolations();
-      const _lv=leaveRms.length?`⚠ 휴가 ${leaveRms.length}건 포함 · `:'';
+      const _lv=timeoffRms.length?`⚠ 휴무 ${timeoffRms.length}건 포함 · `:'';
       this.toast(`처방 적용 — ${_lv}사전입력 ${rn}건 제거, 수요 ${sn}건 감축 (Ctrl+Z 취소)`,'success',4500);
       this.fixResult=null; this.activeTab='preinput';
     },

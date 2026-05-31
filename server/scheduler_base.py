@@ -18,6 +18,30 @@ from .models import GenerateRequest, ScoringRule
 
 WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
+# ── 사전입력 보호 등급 (최소 침습) ──────────────────────────────────────────
+# 사전입력은 간호사 개인의 인생 일정. 완화/처방으로 '빼는' 것도 수술처럼 최소 침습이어야
+# 한다. 등급(낮을수록 먼저 완화): 근무 < (인원부족 보고) < 휴무(OFF·연차류) < 주휴.
+#   · 주휴(주)  : 법정 주휴 — 고정. 사실상 완화하지 않음(allow_juhu_relax 시에만 별도).
+#   · 휴무      : OFF + 연차/생리/특/공/법/병 — 쉼·여행·성취·결혼 등 개인의 시간 → 강하게 보호.
+#   · 근무      : 배정 의도 — 상대적으로 유연 → 필요 시 먼저 완화.
+_LEAVE_CODES = frozenset({"V", "생", "특", "공", "법", "병"})  # 연차류 휴가
+_OFF_CODE = "OF"                                              # 휴식(비번)
+_JUHU_CODE = "주"                                            # 주휴(고정)
+
+def timeoff_class(code: str) -> str:
+    """사전입력 코드의 보호 등급: 'leave' | 'off' | 'juhu' | 'work'."""
+    if code in _LEAVE_CODES:
+        return "leave"
+    if code == _OFF_CODE:
+        return "off"
+    if code == _JUHU_CODE:
+        return "juhu"
+    return "work"
+
+def is_protected_timeoff(code: str) -> bool:
+    """주휴를 제외한 모든 휴무(OFF·연차류) = 보호 대상 여부."""
+    return code in _LEAVE_CODES or code == _OFF_CODE
+
 # 기본 근무 16종 (DB 없이 fallback 시 사용)
 _DEFAULT_SHIFTS = [
     {"code": "DC", "period": "day",     "is_charge": True},

@@ -46,41 +46,38 @@ def test_mcs_reports_capacity_shortfall(build_request, small_nurses):
     assert "부족" in res["message"]
 
 
-def test_mcs_suggests_preinput_removal(build_request, small_nurses):
-    """6명인데 같은 날 5명 OF(휴식) 고정 → 충원 불가 → 휴식(OF) 제거 처방(휴식은 싸게 조정)."""
+def test_mcs_relaxes_work_not_timeoff(build_request, small_nurses):
+    """근무 사전입력 충돌(E→D 금지전환)은 근무만 조정해 해소하고, 다른 간호사의
+    휴무(V/OF)는 건드리지 않는다 — 근무는 싸게, 휴무는 보호."""
     nurses = small_nurses(6)
-    prev = {n.id: {"2026-03-02": "OF"} for n in nurses[:5]}
-    req = build_request(nurses=nurses, prev_schedule=prev, add_juhu=False)
-    res = suggest_correction(req)
-    assert res["fixable"] is True, res["message"]
-    assert res["removals"], f"사전입력 제거 처방이 나와야 함:\n{res['message']}"
-    assert "제거" in res["message"]
-    assert all(not r["is_leave"] for r in res["removals"]), "휴식만 제거되어야(휴가 아님)"
-
-
-def test_mcs_protects_leave_over_rest(build_request, small_nurses):
-    """같은 날 3명 V(휴가)+3명 OF(휴식)로 막힘 → 최소 침습: 휴식만 빼고 휴가는 지킨다."""
-    nurses = small_nurses(6)
-    day = "2026-03-10"
-    prev = {n.id: {day: ("V" if i < 3 else "OF")} for i, n in enumerate(nurses)}
+    prev = {
+        nurses[0].id: {"2026-03-05": "E", "2026-03-06": "D"},  # 근무 금지전환
+        nurses[1].id: {"2026-03-04": "V"},                     # 휴무(연차)
+        nurses[2].id: {"2026-03-04": "OF"},                    # 휴무(휴식)
+    }
     req = build_request(nurses=nurses, prev_schedule=prev, add_juhu=False)
     res = suggest_correction(req)
     assert res["fixable"], res["message"]
-    codes = [r["pre"] for r in res.get("removals", [])]
-    assert codes, f"제거 처방이 있어야 함:\n{res['message']}"
-    assert "V" not in codes, f"휴가(V)는 보호되어야 함 — 제거된 코드: {codes}\n{res['message']}"
+    assert res["removals"], f"근무 조정 처방이 나와야 함:\n{res['message']}"
+    assert all(not r["is_timeoff"] for r in res["removals"]), \
+        f"근무만 조정되어야(휴무 보호) — 제거: {[(r['pre'], r['is_timeoff']) for r in res['removals']]}"
 
 
-def test_mcs_prefers_shortfall_over_leave(build_request, small_nurses):
-    """막는 사전입력이 전부 휴가(V)뿐이면 — 휴가 제거 대신 '인원 부족(추가/감축)'을 먼저 제시."""
+def test_mcs_protects_timeoff_prefers_shortfall(build_request, small_nurses):
+    """같은 날 휴무(OF·V)로 충원이 막히면 — 휴무를 빼는 대신 '인원 부족(추가/감축)'을 먼저 제시.
+    OFF도 V와 똑같이 보호된다(모든 휴무 = 간호사 개인의 시간)."""
     nurses = small_nurses(6)
-    prev = {n.id: {"2026-03-02": "V"} for n in nurses[:5]}
+    day = "2026-03-03"
+    # 3 OFF + 2 V = 5명 고정, 1명 자유 → 3명 필요 → 부족 (근무 사전입력 없음)
+    prev = {nurses[0].id: {day: "OF"}, nurses[1].id: {day: "OF"}, nurses[2].id: {day: "OF"},
+            nurses[3].id: {day: "V"}, nurses[4].id: {day: "V"}}
     req = build_request(nurses=nurses, prev_schedule=prev, add_juhu=False)
     res = suggest_correction(req)
     assert res["fixable"], res["message"]
     assert res.get("shortfalls"), f"인원 부족이 보고되어야 함:\n{res['message']}"
-    leave_removed = [r for r in res.get("removals", []) if r["is_leave"]]
-    assert not leave_removed, f"휴가 제거 대신 인원부족 보고가 우선되어야 — 제거된 휴가: {leave_removed}\n{res['message']}"
+    timeoff_removed = [r for r in res.get("removals", []) if r["is_timeoff"]]
+    assert not timeoff_removed, \
+        f"휴무(OFF 포함) 제거 대신 인원부족 보고가 우선되어야 — 제거된 휴무: {timeoff_removed}\n{res['message']}"
 
 
 # ── #1 최소 MUS + #2 다중 충돌 열거 ──────────────────────────────────────────
