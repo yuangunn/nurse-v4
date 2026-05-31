@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Tuple
 import pulp
 
 from .models import GenerateRequest, Nurse, Requirements, Rules, ScoringRule
-from .scheduler_base import _SchedulerBase
+from .scheduler_base import _SchedulerBase, timeoff_class
 from .scheduler_highs_constraints import _HighsConstraintsMixin
 from .scheduler_highs_diagnosis import _HighsDiagnosisMixin
 
@@ -212,17 +212,20 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         """
         prob = pulp.LpProblem("nurse_schedule_relaxed", pulp.LpMaximize)
         pre_bonus_terms = []
-        # 차등 보너스: 휴가(V/생/...)는 높게, 근무는 중간, 쉬는 날은 낮게
-        PRE_BONUS_LEAVE = getattr(self.rules, 'preBonusLeave', 5000)
-        PRE_BONUS_WORK = getattr(self.rules, 'preBonusWork', 500)
-        PRE_BONUS_REST = getattr(self.rules, 'preBonusRest', 300)
-        LEAVE_CODES = {"V", "생", "특", "공", "법", "병"}
-        REST_CODES = {"OF", "주"}
+        # 최소 침습 차등 보너스(높을수록 보호 → 늦게 완화). 휴무는 간호사 개인의 시간이라
+        # 강하게 보호: 근무 < OFF < 연차류. 주휴(주)는 기본 하드 고정(allow_juhu_relax 시에만).
+        PRE_BONUS_LEAVE = getattr(self.rules, 'preBonusLeave', 5000)   # 연차/생리/특/공/법/병
+        PRE_BONUS_OFF   = getattr(self.rules, 'preBonusOff', 3000)     # OFF 휴식 (보호)
+        PRE_BONUS_WORK  = getattr(self.rules, 'preBonusWork', 500)     # 근무 (먼저 완화)
+        PRE_BONUS_REST  = getattr(self.rules, 'preBonusRest', 300)     # 주휴 — allow_juhu_relax 시
 
         def _pre_bonus_for(code: str) -> int:
-            if code in LEAVE_CODES:
+            cls = timeoff_class(code)
+            if cls == "leave":
                 return PRE_BONUS_LEAVE
-            if code in REST_CODES:
+            if cls == "off":
+                return PRE_BONUS_OFF
+            if cls == "juhu":
                 return PRE_BONUS_REST
             return PRE_BONUS_WORK
 
@@ -360,7 +363,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         obj = self._build_objective(prob, x)
         if pre_bonus_terms:
             scoring_bound = sum(abs(c) for c in obj.values())
-            raw_min = min(PRE_BONUS_LEAVE, PRE_BONUS_WORK, PRE_BONUS_REST)
+            raw_min = min(PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK, PRE_BONUS_REST)
             dom = int(scoring_bound // max(1, raw_min)) + 2   # dom*raw_min > scoring_bound 보장
             prob += obj + dom * pulp.lpSum(pre_bonus_terms)
         else:
@@ -385,32 +388,32 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
 
             # 사전입력과 다르게 배정된 셀 찾기 (PRE_FLEX 내 변환은 제외)
             relaxed_cells: Dict[str, Dict[str, Dict[str, object]]] = {}
-            leave_changed = 0
+            timeoff_changed = 0
             for nid, days in self.prev.items():
                 for dt_str, pre_shift in days.items():
                     assigned = schedule.get(nid, {}).get(dt_str)
                     if assigned and assigned != pre_shift:
                         pre_flex = self._PRE_FLEX.get(pre_shift, {pre_shift})
                         if assigned not in pre_flex:
-                            is_leave = pre_shift in LEAVE_CODES
-                            if is_leave:
-                                leave_changed += 1
+                            is_timeoff = timeoff_class(pre_shift) != "work"
+                            if is_timeoff:
+                                timeoff_changed += 1
                             relaxed_cells.setdefault(nid, {})[dt_str] = {
                                 "original": pre_shift,
                                 "assigned": assigned,
-                                "is_leave": is_leave,
+                                "is_timeoff": is_timeoff,
                             }
 
             label = "중지" if status_str not in ("Optimal", "Feasible") else status_str
             relax_count = sum(len(v) for v in relaxed_cells.values())
-            other_changed = relax_count - leave_changed
-            # 투명성: 무엇을 얼마나 바꿨는지 + 휴가 변경은 별도 경고
+            work_changed = relax_count - timeoff_changed
+            # 투명성: 무엇을 얼마나 바꿨는지 + 휴무(OFF·연차류) 변경은 별도 경고
             if relax_count == 0:
                 relax_msg = "사전입력을 그대로 유지했습니다."
             else:
-                relax_msg = f"⚠ 최소 침습 완화: 휴식/근무 {other_changed}건 조정"
-                if leave_changed:
-                    relax_msg += f" · ⚠ 휴가 {leave_changed}건 변경(불가피 — 인원 추가/수요 감축 검토 권장)"
+                relax_msg = f"⚠ 최소 침습 완화: 근무 {work_changed}건 조정"
+                if timeoff_changed:
+                    relax_msg += f" · ⚠ 휴무 {timeoff_changed}건 변경(불가피 — 인원 추가/수요 감축 검토 권장)"
                 relax_msg += "."
             return {
                 "success": True,
@@ -419,7 +422,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 "nurse_scores": nurse_scores,
                 "nurse_score_details": nurse_score_details,
                 "relaxed_cells": relaxed_cells,
-                "leave_relaxed_count": leave_changed,
+                "timeoff_relaxed_count": timeoff_changed,
                 "message": f"근무표가 생성되었습니다. (상태: {label})\n{relax_msg}",
                 "estimated_seconds": self.estimate_seconds(),
             }
