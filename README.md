@@ -44,12 +44,12 @@
 
 ## 다운로드
 
-> **최신 버전: v4.3.2** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
+> **최신 버전: v4.3.3** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
 
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_Setup_v4.3.2.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.2/NurseScheduler_Setup_v4.3.2.exe) | 설치 마법사 (권장) | ~190 MB |
-| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.2/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~250 MB |
+| [**NurseScheduler_Setup_v4.3.3.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.3/NurseScheduler_Setup_v4.3.3.exe) | 설치 마법사 (권장) | ~190 MB |
+| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.3/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~250 MB |
 
 ### 시스템 요구사항
 - Windows 10/11 (64bit)
@@ -101,7 +101,7 @@ build.bat
 결과물:
 - `dist/electron/NurseScheduler-win32-x64/` — Electron 번들
 - `dist/NurseScheduler_v4_portable.zip` — 포터블 ZIP
-- `dist/installer/NurseScheduler_Setup_v4.3.2.exe` — 설치 마법사
+- `dist/installer/NurseScheduler_Setup_v4.3.3.exe` — 설치 마법사
 
 자세한 빌드 가이드는 [BUILD.md](BUILD.md)를 참고하세요.
 

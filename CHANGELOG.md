@@ -4,6 +4,25 @@ NurseScheduler v4의 주요 변경 이력. 최신 버전이 위쪽.
 
 ---
 
+## v4.3.3 — 2026-06-01
+
+**내부 구조 개선 (모듈화).** 사용자 기능 변경은 없습니다 — 거대 단일 파일들을 도메인별로
+분리해 유지보수성을 높였습니다. 동작은 v4.3.2와 동일.
+
+### 🧩 코드 모듈화 (순수 리팩터링)
+- **프론트 JS**: `app.js` **2744 → 529줄**. 도메인 로직을 `frontend/js/modules/` **14개 모듈**로
+  분리(analysis·paste-import·profiles·dev-tools·nurse-manage·settings-defs·solver·view-helpers·
+  preinput-io·grid-interactions·schedule-features·misc-features + 기존 undo-redo·drag-select).
+  window-namespace 합성(`...XxxModule()`) 패턴, 빌드 도구 불필요.
+- **백엔드**: `scheduler.py` **2258 → 409줄**. HiGHS 엔진을 믹스인 2개로 분리 —
+  `scheduler_highs_constraints.py`(하드 제약 + 목적함수), `scheduler_highs_diagnosis.py`(13-phase
+  infeasible 진단).
+- **CSS**: `app.css` **1724줄 → 4파일**(tokens·base·components·yginvest-skin), cascade 순서 보존.
+- 검증: pytest 37/37 + 브라우저 E2E(컴포넌트 422키·콘솔 0)로 동등성 확인. 게터는 본체 유지(스프레드
+  compose 함정 회피).
+
+---
+
 ## v4.3.2 — 2026-05-31
 
 **테이블 전체화면 보기 + 버튼 가독성.** 근무표를 한눈에 검토할 수 있는 전체화면 모드와
