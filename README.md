@@ -2,7 +2,7 @@
 
 **간호사 3교대 근무표 자동 생성 데스크톱 앱**
 
-수리최적화(PuLP + HiGHS) 솔버 기반으로 최적의 근무표를 자동 생성합니다.
+수리최적화 솔버(HiGHS · CP-SAT 듀얼 엔진) 기반으로 최적의 근무표를 자동 생성합니다.
 인터넷 연결 없이 완전한 오프라인 환경에서 동작합니다.
 
 ---
@@ -37,7 +37,7 @@
 
 ### 🛠 인프라
 - **Electron 데스크톱 앱** — 브라우저 없이 독립 창으로 실행, 완전 오프라인
-- **pytest 회귀 테스트** (v4.2.1) — 9개 금지 전환·charge 시니어리티·일별 인원 등 하드 제약 자동 검증
+- **pytest 회귀 테스트** — 37건: 9개 금지 전환·charge 시니어리티·일별 인원 등 하드 제약 + CP-SAT 동등성·정밀 충돌 분석·야간전담·두 엔진 레이스 자동 검증
 - **JS 모듈화** (v4.2.1) — `frontend/js/modules/*` window namespace 합성 패턴, 빌드 도구 불필요
 
 ---
@@ -111,37 +111,38 @@ build.bat
 
 ```
 nurse-v4/
-├── main.py                  # Python 서버 진입점 (stdout PORT 출력)
+├── main.py                  # 진입점: 포트 탐색 → stdout "PORT:N" → uvicorn
 ├── server/
-│   ├── api.py               # FastAPI 라우터 + 프로필/개발자 API
-│   ├── scheduler.py         # HiGHS MIP 스케줄링 엔진
-│   ├── database.py          # SQLite CRUD
-│   ├── models.py            # Pydantic 데이터 모델
-│   └── profiles.py          # 프로필 관리 + Fernet 암호화
+│   ├── api.py               # FastAPI 라우터 (프로필/간호사/규칙/스케줄/진단/개발자)
+│   ├── scheduler_base.py    # 엔진 공유 베이스 _SchedulerBase (데이터·날짜·추출·점수)
+│   ├── scheduler.py         # HiGHS(MILP) 엔진 — NurseScheduler
+│   ├── scheduler_cpsat.py   # CP-SAT(OR-Tools) 엔진 — CpSatScheduler
+│   ├── conflict_analyzer.py # 정밀 충돌 분석 (assumptions·MUS/MCS) — /api/diagnose·suggest-fix
+│   ├── solver_progress.py   # 솔버 무관 진행/취소 레지스트리 (레이스 안전 다중 어댑터)
+│   ├── database.py          # SQLite CRUD + 마이그레이션 + 유령 정리
+│   ├── models.py            # Pydantic 데이터 모델 (GenerateRequest 등)
+│   └── profiles.py          # 프로필 관리 + Fernet 암호화 (PBKDF2 100k)
 ├── frontend/
-│   ├── index.html           # SPA — Clinical Paper UI (5탭)
-│   ├── css/app.css          # Clinical Paper 스타일
+│   ├── index.html           # SPA — YGinvest (설정·사전입력·분석·스케줄·저장 + 모바일 '오늘' 홈)
+│   ├── css/app.css          # YGinvest 스타일 + 다크모드 + 테이블 전체화면
 │   ├── js/
 │   │   ├── app.js           # Alpine.js 앱 진입점
-│   │   └── modules/         # 분리된 모듈 (undo-redo, drag-select, ...)
-│   ├── legacy/              # Premium UI(v4.0.x) — /legacy 경로에서 서빙
+│   │   └── modules/         # 분리 모듈 (undo-redo, drag-select)
 │   ├── lib/                 # tailwindcss, alpine, lucide (오프라인 번들)
-│   └── fonts/               # Pretendard / Newsreader / JetBrainsMono / Outfit / NotoSansKR
-├── tests/                   # pytest 회귀 테스트 (제약·진단)
+│   ├── fonts/               # Pretendard(주) + 번들 폰트
+│   └── assets/              # 아이콘·이미지
+├── tests/                   # pytest 회귀 37건 (제약·진단·CP-SAT 동등성·충돌·야간전담·레이스)
 ├── pytest.ini
-├── electron/
-│   ├── main.js              # Electron main process
-│   ├── preload.js           # context isolation
-│   └── package.json         # Electron 의존성
-├── build/
-│   ├── icon.ico             # 앱 아이콘
-│   └── make_icon.py         # 아이콘 생성 스크립트
+├── electron/                # Electron main.js / preload.js / package.json
+├── build/                   # icon.ico, make_icon.py
 ├── installer/
-│   └── setup.iss            # Inno Setup 스크립트
-├── NurseScheduler.spec      # PyInstaller 스펙
-├── build.bat                # 원클릭 빌드 스크립트
+│   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
+├── docs/                    # decisions.md · session_notes/ · superpowers/
+├── NurseScheduler.spec      # PyInstaller 스펙 (ortools 오프라인 번들)
+├── build.bat                # 원클릭 빌드 (PyInstaller → Electron → ZIP → 설치파일)
 ├── BUILD.md                 # 빌드 가이드
 ├── MANUAL.md                # 사용 매뉴얼
+├── CHANGELOG.md             # 변경 이력
 └── CLAUDE.md                # 프로젝트 사양서
 ```
 
