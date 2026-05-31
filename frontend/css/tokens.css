@@ -1,0 +1,161 @@
+/* tokens.css — app.css 분할 (cascade 순서: tokens → base → components → yginvest-skin) */
+/* ═══════════════════════════════════════════════════════════
+   NurseScheduler v4.2 — YGinvest Redesign (Korean fintech)
+   딥 잉크 #0F1115 · 쿨그레이 페이퍼 · 흰 카드 · 둥근 모서리
+   Pretendard 단일 타입 시스템 · KR 시그널 red↑ / blue↓
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Fonts (오프라인 번들, Electron) ──────────────────────────
+   YGinvest는 Pretendard 단일. 과거 'Newsreader'/'JetBrains Mono'
+   참조(컴포넌트·인라인)가 남아 있어도 전부 Pretendard로 렌더되도록
+   동일 패밀리명을 Pretendard 가변폰트에 재매핑한다 (오프라인 보장). */
+@font-face {
+  font-family: 'Pretendard Variable';
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
+}
+@font-face { font-family:'Newsreader'; font-weight:45 920; font-style:normal; font-display:swap; src:url('/fonts/PretendardVariable.woff2') format('woff2-variations'); }
+@font-face { font-family:'JetBrains Mono'; font-weight:45 920; font-style:normal; font-display:swap; src:url('/fonts/PretendardVariable.woff2') format('woff2-variations'); }
+
+/* ── YGinvest Design Tokens (Light) ──────────────────────── */
+:root {
+  /* Surfaces — cool gray app bg + white cards */
+  --paper:       #F4F5F7;
+  --paper-2:     #EDEFF3;
+  --paper-3:     #E4E7EC;
+  --card:        #FFFFFF;
+  --card-warm:   #F8F9FB;
+
+  /* Ink ramp */
+  --ink:         #0F1115;
+  --ink-2:       #4A5160;
+  --ink-3:       #8A93A1;
+  --ink-4:       #B8BFC9;
+  --ink-5:       #D4D9E0;
+
+  /* Lines (mostly invisible — spacing separates) */
+  --rule:        #EBEDF0;
+  --rule-2:      #DCE0E6;
+  --rule-soft:   #F2F3F5;
+
+  /* Brand = deep ink (NOT blue/navy) */
+  --accent:      #0F1115;
+  --accent-2:    #2A2E36;
+  --accent-3:    #000000;
+  --accent-soft: #F2F3F5;
+  --accent-mist: #F8F9FB;
+
+  /* KR convention red↑ (shortage/up) / blue↓ (surplus/down) */
+  --up:          #E84B5A;  --up-deep:   #C7384A;
+  --down:        #2563EB;  --down-deep: #1B4FC3;
+
+  /* Signal colors (status) */
+  --ok:          #1F8A5B;   --ok-bg:   #ECF7F0;
+  --warn:        #B7791F;   --warn-bg: #FBF3E2;
+  --err:         #C7384A;   --err-bg:  #FEEFEF;
+  --info:        #0F1115;   --info-bg: #F2F3F5;
+
+  /* Shift palette — soft tint bg + deep ink text */
+  --d-ink: #1B4FC3;  --d-bg: #EEF3FE;   /* Day — blue */
+  --e-ink: #C7384A;  --e-bg: #FEEFEF;   /* Evening — red */
+  --n-ink: #5B3FB0;  --n-bg: #EFEBFB;   /* Night — violet */
+  --v-ink: #1F8A5B;  --v-bg: #ECF7F0;   /* Vacation — green */
+  --off-ink: #8A93A1; --off-bg: #F2F3F5; /* Off — gray */
+
+  /* Radii + shadow (YG: big rounded cards, soft elevation) */
+  --r-card:      20px;
+  --r-card-sm:   16px;
+  --r-btn:       12px;
+  --r-chip:      9999px;
+  --r-input:     12px;
+  --shadow-card: 0 1px 2px rgba(15,17,21,0.04), 0 0 0 1px rgba(15,17,21,0.03);
+  --shadow-pop:  0 10px 30px rgba(15,17,21,0.10), 0 0 0 1px rgba(15,17,21,0.04);
+  --grad-dark:   linear-gradient(150deg, #1E2530 0%, #0F1115 70%);
+
+  /* Single type family (Pretendard) */
+  --font-sans:  'Pretendard Variable','Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  --font-mono:  var(--font-sans);
+
+  /* ── Legacy variable aliases — 기존 컴포넌트 룰 호환 매핑 ── */
+  --bg:            var(--paper);
+  --bg-sidebar:    var(--card);
+  --bg-card:       var(--card);
+  --bg-card-hover: var(--card-warm);
+  --bg-input:      var(--card-warm);
+  --border:        var(--rule);
+  --border-light:  var(--rule-soft);
+  --text:          var(--ink-2);
+  --text-sub:      var(--ink-3);
+  --text-dim:      var(--ink-4);
+  --text-bright:   var(--ink);
+  --accent-hover:  var(--accent-2);
+  --accent-bg:     var(--accent-soft);
+  --accent-glow:   var(--accent-mist);
+  --green:         var(--ok);
+  --red:           var(--err);
+  --amber:         var(--warn);
+  --pink:          var(--up);
+  --t-green:       var(--ok);
+  --t-red:         var(--err);
+  --t-amber:       var(--warn);
+  --t-pink:        var(--up);
+  --t-blue:        var(--down);
+  --g-fix:         var(--card-warm);
+  --log-bg:        #0F1115;
+  --log-text:      #9FE0B8;
+  --modal-bg:      var(--card);
+  --modal-overlay: rgba(15,17,21,0.42);
+  --shadow-sm:     var(--shadow-card);
+  --shadow-md:     var(--shadow-card);
+  --shadow-lg:     var(--shadow-pop);
+  --sidebar-active-bg: var(--accent-soft);
+}
+
+/* ── Dark mode (YGinvest deep navy-black) ────────────────── */
+html.dark {
+  --paper:       #0A0C10;
+  --paper-2:     #14181F;
+  --paper-3:     #1B1F28;
+  --card:        #14181F;
+  --card-warm:   #1B1F28;
+
+  --ink:         #F1F4F8;
+  --ink-2:       #B4BCC9;
+  --ink-3:       #7C8593;
+  --ink-4:       #4E5663;
+  --ink-5:       #3a414d;
+
+  --rule:        #242A35;
+  --rule-2:      #303744;
+  --rule-soft:   #1B1F28;
+
+  --accent:      #F1F4F8;
+  --accent-2:    #D2D8E0;
+  --accent-3:    #FFFFFF;
+  --accent-soft: #1F2430;
+  --accent-mist: #1B1F28;
+
+  --up:          #FF6470;  --up-deep:   #FF8A92;
+  --down:        #5A8AFF;  --down-deep: #8AA8FF;
+
+  --ok:          #4FD08A;  --ok-bg:   #10261C;
+  --warn:        #E0A93B;  --warn-bg: #2C2310;
+  --err:         #FF8A92;  --err-bg:  #2C141A;
+  --info:        #F1F4F8;  --info-bg: #1F2430;
+
+  --d-ink: #8AA8FF;  --d-bg: #16203A;
+  --e-ink: #FF8A92;  --e-bg: #2C141A;
+  --n-ink: #B79CFF;  --n-bg: #1E1838;
+  --v-ink: #4FD08A;  --v-bg: #10261C;
+  --off-ink: #7C8593; --off-bg: #1F2430;
+
+  --log-bg:        #0A0C10;
+  --log-text:      #4FD08A;
+  --modal-overlay: rgba(0,0,0,0.6);
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04);
+  --shadow-pop:  0 12px 30px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  --grad-dark:   linear-gradient(150deg, #232A36 0%, #14181F 70%);
+}
+
