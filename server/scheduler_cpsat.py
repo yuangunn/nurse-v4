@@ -17,7 +17,7 @@ from typing import Dict
 from ortools.sat.python import cp_model
 
 from .models import GenerateRequest
-from .scheduler_base import _SchedulerBase, WEEKDAY_KEYS
+from .scheduler_base import _SchedulerBase, WEEKDAY_KEYS, timeoff_class
 
 
 class _CpSatProgress:
@@ -65,35 +65,7 @@ class CpSatScheduler(_SchedulerBase):
 
         model = cp_model.CpModel()
         x = self._build_vars(model)
-
-        # ── Hard Constraints (선형) ──────────────────────────────────────────
-        self._cs_one_shift_per_day(model, x)
-        self._cs_shift_eligibility(model, x)
-        self._cs_daily_requirements(model, x)
-        self._cs_charge_requirements(model, x)
-        if self.rules.weeklyOff:
-            self._cs_weekly_off(model, x)
-        self._cs_max_v_per_month(model, x)
-        if self.rules.maxNightPerMonth:
-            self._cs_max_night_per_month(model, x)
-        if self.rules.maxNightTwoMonth:
-            self._cs_max_night_two_month(model, x)
-
-        # ── Hard Constraints (조합/네이티브) — 4b ────────────────────────────
-        self._cs_forbidden_transitions(model, x)
-        if self.rules.noNOD:
-            self._cs_nod_pattern(model, x)
-        if self.rules.maxConsecutiveWork:
-            self._cs_max_consecutive_work(model, x, self.rules.maxConsecutiveWorkDays)
-        if self.rules.maxConsecutiveNight:
-            self._cs_max_consecutive_night(model, x, self.rules.maxConsecutiveNightDays)
-        if getattr(self.rules, 'restAfterNight', False):
-            self._cs_rest_after_night(model, x)
-
-        # ── Hard Constraints (비자명) — 4c ───────────────────────────────────
-        self._cs_charge_seniority(model, x)
-        self._cs_menstrual_leave(model, x)
-        self._cs_night_shift_nurses(model, x)
+        self._apply_hard_constraints(model, x)
 
         # ── Objective (Soft Constraints) — 4d ────────────────────────────────
         obj_terms = self._build_objective_cpsat(model, x)
@@ -151,6 +123,11 @@ class CpSatScheduler(_SchedulerBase):
                 "estimated_seconds": self.estimate_seconds(),
             }
         if status == cp_model.INFEASIBLE:
+            # 사전입력 완화 재시도 (HiGHS 패리티 — 최소 침습)
+            if self.allow_pre_relax and self.prev:
+                relaxed = self._solve_relaxed()
+                if relaxed:
+                    return relaxed
             msg = "CP-SAT: 제약을 모두 만족하는 근무표가 없습니다 (infeasible)."
             try:
                 from .conflict_analyzer import analyze_conflicts
@@ -163,6 +140,162 @@ class CpSatScheduler(_SchedulerBase):
         return {
             "success": False, "schedule": {}, "extended_schedule": {},
             "message": f"CP-SAT: 제한 시간 내에 해를 찾지 못했습니다 (상태: {solver.StatusName(status)}).",
+        }
+
+    def _apply_hard_constraints(self, model, x):
+        """solve()/완화 공통 하드 제약 — 두 경로의 제약 동등성 보장."""
+        self._cs_one_shift_per_day(model, x)
+        self._cs_shift_eligibility(model, x)
+        self._cs_daily_requirements(model, x)
+        self._cs_charge_requirements(model, x)
+        if self.rules.weeklyOff:
+            self._cs_weekly_off(model, x)
+        self._cs_max_v_per_month(model, x)
+        if self.rules.maxNightPerMonth:
+            self._cs_max_night_per_month(model, x)
+        if self.rules.maxNightTwoMonth:
+            self._cs_max_night_two_month(model, x)
+        self._cs_forbidden_transitions(model, x)
+        if self.rules.noNOD:
+            self._cs_nod_pattern(model, x)
+        if self.rules.maxConsecutiveWork:
+            self._cs_max_consecutive_work(model, x, self.rules.maxConsecutiveWorkDays)
+        if self.rules.maxConsecutiveNight:
+            self._cs_max_consecutive_night(model, x, self.rules.maxConsecutiveNightDays)
+        if getattr(self.rules, "restAfterNight", False):
+            self._cs_rest_after_night(model, x)
+        self._cs_charge_seniority(model, x)
+        self._cs_menstrual_leave(model, x)
+        self._cs_night_shift_nurses(model, x)
+
+    # ── 사전입력 완화 (최소 침습 — HiGHS _solve_with_relaxed_pre 패리티) ──────
+    def _build_vars_relaxed(self, model):
+        """사전입력 셀을 자유화한 변수 + pre_keeps[(nid,d,pre,[flex_vars])].
+        잠긴 셀/전입전출/공휴일OF/주휴(고정)는 solve()와 동일 규칙으로 보존."""
+        x = {}
+        pre_keeps = []
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            x[nid] = {}
+            is_night = nurse.get("is_night_shift")
+            is_male = nurse.get("gender") != "female"
+            for d in range(self.T):
+                dt = self.all_dates[d]
+                dt_str = dt.strftime("%Y-%m-%d")
+                x[nid][d] = {}
+                is_holiday = dt_str in self.holidays
+                pre = self.prev.get(nid, {}).get(dt_str)
+                if pre == "OF" and is_holiday:
+                    pre = None
+                active = self._nurse_active_on(nurse, dt)
+                locked = bool(self.locked_cells.get(nid, {}).get(dt_str))
+                fixed_to = None
+                if active and pre and locked:
+                    fixed_to = pre
+                elif active and pre == "주" and not self.allow_juhu_relax:
+                    fixed_to = "주"
+                if fixed_to is not None:
+                    for s in self.ALL_SHIFTS:
+                        x[nid][d][s] = 1 if s == fixed_to else 0
+                    continue
+                if not active:
+                    for s in self.ALL_SHIFTS:
+                        x[nid][d][s] = 0
+                    continue
+                for s in self.ALL_SHIFTS:
+                    if s == "OF" and is_holiday:
+                        x[nid][d][s] = 0
+                    elif s == "법" and is_night:
+                        x[nid][d][s] = 0
+                    elif s == "법" and not is_holiday:
+                        x[nid][d][s] = 0
+                    elif s == "법" and is_holiday:
+                        x[nid][d][s] = model.NewBoolVar(f"rx_{nid}_{d}_{s}")
+                    elif s in ("생", "V") and is_holiday and not is_night:
+                        x[nid][d][s] = 0
+                    elif s == "생" and is_male:
+                        x[nid][d][s] = 0
+                    elif s in self.SOLVER_SHIFTS:
+                        x[nid][d][s] = model.NewBoolVar(f"rx_{nid}_{d}_{s}")
+                    elif pre and s == pre:
+                        x[nid][d][s] = model.NewBoolVar(f"rx_{nid}_{d}_{s}")
+                    else:
+                        x[nid][d][s] = 0
+                if pre:
+                    flex = self._PRE_FLEX.get(pre, {pre})
+                    flex_vars = [x[nid][d][s] for s in flex if not isinstance(x[nid][d][s], int)]
+                    if flex_vars:
+                        pre_keeps.append((nid, d, pre, flex_vars))
+        return x, pre_keeps
+
+    def _solve_relaxed(self):
+        """INFEASIBLE 시 사전입력을 소프트로 풀어 최소 침습 완화 재시도. 성공 시 결과, 실패 시 None."""
+        model = cp_model.CpModel()
+        x, pre_keeps = self._build_vars_relaxed(model)
+        self._apply_hard_constraints(model, x)
+        obj_terms = self._build_objective_cpsat(model, x)
+        # 사전순 지배 유지보너스 — 근무 < OFF < 연차류 (주휴 고정). 배점을 압도하도록 dom 스케일.
+        _BONUS = {"work": 500, "off": 3000, "leave": 5000, "juhu": 300}
+        keep_terms = []
+        for nid, d, pre, flex_vars in pre_keeps:
+            b = _BONUS[timeoff_class(pre)]
+            for v in flex_vars:
+                keep_terms.append(b * v)
+        max_score = max((abs(int(round(getattr(r, "score", 0)))) for r in self.scoring_rules), default=100)
+        coarse = max_score * max(1, len(self.nurses)) * max(1, self.T) * max(1, len(self.scoring_rules)) + 1
+        dom = coarse // 500 + 2
+        model.Maximize(sum(obj_terms) + dom * sum(keep_terms))
+        from . import solver_progress
+        prog = _CpSatProgress()
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = float(self.time_limit)
+        solver.parameters.relative_gap_limit = float(self.mip_gap)
+        solver.parameters.num_workers = max(1, min(8, os.cpu_count() or 4))
+        solver.parameters.random_seed = 1
+        cb = _CpSatCb(prog, None)
+        solver_progress.register(prog)
+        try:
+            status = solver.Solve(model, cb)
+        finally:
+            solver_progress.unregister(prog)
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            return None
+        schedule, extended = self._extract_solution(x, lambda v: solver.Value(v))
+        nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
+        relaxed_cells = {}
+        timeoff_changed = 0
+        for nid, days in self.prev.items():
+            for dt_str, pre_shift in days.items():
+                assigned = schedule.get(nid, {}).get(dt_str)
+                if assigned and assigned != pre_shift:
+                    flex = self._PRE_FLEX.get(pre_shift, {pre_shift})
+                    if assigned not in flex:
+                        is_timeoff = timeoff_class(pre_shift) != "work"
+                        if is_timeoff:
+                            timeoff_changed += 1
+                        relaxed_cells.setdefault(nid, {})[dt_str] = {
+                            "original": pre_shift, "assigned": assigned, "is_timeoff": is_timeoff,
+                        }
+        relax_count = sum(len(v) for v in relaxed_cells.values())
+        work_changed = relax_count - timeoff_changed
+        if relax_count == 0:
+            relax_msg = "사전입력을 그대로 유지했습니다."
+        else:
+            relax_msg = f"⚠ 최소 침습 완화: 근무 {work_changed}건 조정"
+            if timeoff_changed:
+                relax_msg += f" · ⚠ 휴무 {timeoff_changed}건 변경(불가피 — 인원 추가/수요 감축 검토 권장)"
+            relax_msg += "."
+        return {
+            "success": True,
+            "schedule": schedule,
+            "extended_schedule": extended,
+            "nurse_scores": nurse_scores,
+            "nurse_score_details": nurse_score_details,
+            "relaxed_cells": relaxed_cells,
+            "timeoff_relaxed_count": timeoff_changed,
+            "mip_gap_percent": prog.gap_percent if prog.gap_percent is not None else 0.0,
+            "message": f"근무표가 생성되었습니다. (CP-SAT 완화)\n{relax_msg}",
+            "estimated_seconds": self.estimate_seconds(),
         }
 
     # ── 변수 도메인 (HiGHS solve()의 변수 생성 블록과 동일 규칙) ──────────────
