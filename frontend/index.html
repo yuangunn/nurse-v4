@@ -1158,7 +1158,7 @@
         </div>
         <div x-show="fixResult.removals&&fixResult.removals.length" class="flex flex-wrap gap-1 mt-1.5">
           <template x-for="(rm,ri) in fixResult.removals" :key="'rm'+ri">
-            <button @click="jumpToPreCell(rm.nurse_id,rm.date_iso)" class="btn btn-xs btn-ghost" style="border:1px solid var(--rule-soft,rgba(0,0,0,0.12))" x-text="'➤ '+rm.nurse+' '+rm.date+' '+rm.pre"></button>
+            <button @click="jumpToPreCell(rm.nurse_id,rm.date_iso)" class="btn btn-xs btn-ghost" :style="rm.is_leave?'border:1px solid var(--red);color:var(--t-red)':'border:1px solid var(--rule-soft,rgba(0,0,0,0.12))'" :title="rm.is_leave?'⚠ 휴가 제거 — 신중히 검토':''" x-text="(rm.is_leave?'⚠ ':'➤ ')+rm.nurse+' '+rm.date+' '+rm.pre"></button>
           </template>
         </div>
       </div>
