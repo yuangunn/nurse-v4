@@ -135,6 +135,137 @@ function app() {
     resetConfirmStep:0,             // #14 초기화 2단계
 
     // ── computed ──────────────────────────────────────────────
+    get traineeShifts(){
+      // /D, /E, /N, /주, /OF, /D1 + 여성이면 /생
+      const base=['/D','/E','/N','/주','/OF','/D1'];
+      if(this.shiftEdit.nurse?.gender==='female')base.push('/생');
+      return base;
+    },
+    get presets(){
+      return [
+        {name:'주말 OFF',desc:'토/일을 OF로 설정',apply:(nid)=>{
+          this._pushUndo();
+          for(const d of this.scheduleDays){if(d.getDay()===0||d.getDay()===6){if(!this.prevSchedule[nid])this.prevSchedule[nid]={};this.prevSchedule[nid][this.dayKey(d)]='OF'}}
+          this._checkViolations();
+        }},
+        {name:'주휴 자동',desc:'주휴 4주 순환 배분',apply:(nid)=>{
+          const nurse=this.nurses.find(n=>n.id===nid);
+          if(nurse){
+            const firstSat=this.scheduleDays.find(d=>d.getDay()===6);
+            if(firstSat)this.autoFillJuhu(nurse,firstSat);
+          }
+        }},
+        {name:'야간전담',desc:'모든 근무일을 N으로',apply:(nid)=>{
+          this._pushUndo();
+          for(const d of this.scheduleDays){
+            const dk=this.dayKey(d);
+            const existing=(this.prevSchedule[nid]||{})[dk];
+            if(!existing||existing===''){if(!this.prevSchedule[nid])this.prevSchedule[nid]={};this.prevSchedule[nid][dk]='N'}
+          }
+          this._checkViolations();
+        }},
+        {name:'전체 초기화',desc:'이 간호사의 사전입력 삭제',apply:(nid)=>{
+          this._pushUndo();
+          const keys=this._cycleDateKeys();
+          if(this.prevSchedule[nid]){for(const k of keys)delete this.prevSchedule[nid][k]}
+          this._checkViolations();
+        }},
+      ];
+    },
+    get nurseSummaryData(){
+      if(!this.schedule||!Object.keys(this.schedule).length)return[];
+      const dayCodes=this.shifts.filter(s=>s.period==='day').map(s=>s.code);
+      const eveCodes=this.shifts.filter(s=>s.period==='evening').map(s=>s.code);
+      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
+      const restCodes=this.shifts.filter(s=>s.period==='rest').map(s=>s.code);
+      const leaveCodes=this.shifts.filter(s=>s.period==='leave').map(s=>s.code);
+      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
+      return this.nurses.map(nurse=>{
+        const nid=nurse.id;
+        const sc=this.schedule[nid]||{};
+        let d=0,e=0,n=0,rest=0,leave=0,weekendWork=0;
+        for(const day of days){
+          const dk=this.dayKey(day);
+          const val=sc[dk];if(!val)continue;
+          if(dayCodes.includes(val))d++;
+          else if(eveCodes.includes(val))e++;
+          else if(nightCodes.includes(val))n++;
+          else if(restCodes.includes(val))rest++;
+          else if(leaveCodes.includes(val))leave++;
+          if((day.getDay()===0||day.getDay()===6)&&[...dayCodes,...eveCodes,...nightCodes].includes(val))weekendWork++;
+        }
+        return{name:nurse.name,group:nurse.group,d,e,n,rest,leave,weekendWork,total:d+e+n,score:this.nurseScores[nid]??0};
+      });
+    },
+    get filteredNurses(){
+      if(this.groupFilter==='all')return this.nurses;
+      return this.nurses.filter(n=>n.group===this.groupFilter);
+    },
+    get nurseGroups(){
+      const groups=[...new Set(this.nurses.map(n=>n.group).filter(Boolean))];
+      return groups.sort();
+    },
+    get nurseGroupChoices(){
+      let history=[];
+      try{const raw=localStorage.getItem('nurseGroupHistory');if(raw)history=JSON.parse(raw)||[]}catch(e){}
+      const merged=[...new Set([...this.nurseGroups,...history,'A','B','C'])].filter(Boolean);
+      return merged.sort();
+    },
+    get scheduleWarnings(){
+      if(!this.schedule||!Object.keys(this.schedule).length)return[];
+      const warns=[];
+      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
+      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
+      const workCodes=this.shifts.filter(s=>['day','day1','evening','middle','night'].includes(s.period)).map(s=>s.code);
+      const dayNames=['일','월','화','수','목','금','토'];
+
+      for(const nurse of this.nurses){
+        const nid=nurse.id;
+        // 연속 근무 체크
+        let consec=0,maxConsec=0;
+        for(const day of days){
+          const val=this.schedule[nid]?.[this.dayKey(day)];
+          if(val&&workCodes.includes(val)){consec++;maxConsec=Math.max(maxConsec,consec)}
+          else consec=0;
+        }
+        if(maxConsec>=6)warns.push({type:'warn',nurse:nurse.name,msg:`연속 ${maxConsec}일 근무`});
+
+        // 야간 편중
+        const nCount=Object.values(this.schedule[nid]||{}).filter(v=>nightCodes.includes(v)).length;
+        if(nCount>=8)warns.push({type:'warn',nurse:nurse.name,msg:`야간 ${nCount}회 (편중)`});
+
+        // 주말 근무 편중
+        let weekendWork=0;
+        for(const day of days){
+          if(day.getDay()!==0&&day.getDay()!==6)continue;
+          const val=this.schedule[nid]?.[this.dayKey(day)];
+          if(val&&workCodes.includes(val))weekendWork++;
+        }
+        if(weekendWork>=6)warns.push({type:'info',nurse:nurse.name,msg:`주말 근무 ${weekendWork}회`});
+      }
+      return warns;
+    },
+    get fairnessData(){
+      if(!this.schedule||!Object.keys(this.schedule).length)return null;
+      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
+      const workCodes=this.shifts.filter(s=>['day','day1','evening','middle','night'].includes(s.period)).map(s=>s.code);
+      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
+      const stats=this.nurses.map(nurse=>{
+        const nid=nurse.id;
+        let nights=0,weekends=0,holidays=0;
+        for(const day of days){
+          const dk=this.dayKey(day);
+          const val=this.schedule[nid]?.[dk];if(!val)continue;
+          if(nightCodes.includes(val))nights++;
+          if((day.getDay()===0||day.getDay()===6)&&workCodes.includes(val))weekends++;
+          if(this.holidays.includes(dk)&&workCodes.includes(val))holidays++;
+        }
+        return{name:nurse.name,group:nurse.group,nights,weekends,holidays,score:this.nurseScores[nid]??0};
+      });
+      const avgNights=stats.reduce((s,n)=>s+n.nights,0)/stats.length;
+      const avgWeekends=stats.reduce((s,n)=>s+n.weekends,0)/stats.length;
+      return{stats,avgNights:avgNights.toFixed(1),avgWeekends:avgWeekends.toFixed(1)};
+    },
     selectedNurseMap:{},
     get selectedNurseIds(){return Object.keys(this.selectedNurseMap)},
     get selectedNurseCount(){return this.selectedNurseIds.length},
@@ -571,12 +702,6 @@ function app() {
       const end=new Date(nurse.training_end_date);
       return day<=end;
     },
-    get traineeShifts(){
-      // /D, /E, /N, /주, /OF, /D1 + 여성이면 /생
-      const base=['/D','/E','/N','/주','/OF','/D1'];
-      if(this.shiftEdit.nurse?.gender==='female')base.push('/생');
-      return base;
-    },
     getEditShifts(){
       const nurse=this.shiftEdit.nurse;
       const day=this.shiftEdit.day;
@@ -771,37 +896,6 @@ function app() {
     },
 
     // ── 프리셋 패턴 ────────────────────────────────────────
-    get presets(){
-      return [
-        {name:'주말 OFF',desc:'토/일을 OF로 설정',apply:(nid)=>{
-          this._pushUndo();
-          for(const d of this.scheduleDays){if(d.getDay()===0||d.getDay()===6){if(!this.prevSchedule[nid])this.prevSchedule[nid]={};this.prevSchedule[nid][this.dayKey(d)]='OF'}}
-          this._checkViolations();
-        }},
-        {name:'주휴 자동',desc:'주휴 4주 순환 배분',apply:(nid)=>{
-          const nurse=this.nurses.find(n=>n.id===nid);
-          if(nurse){
-            const firstSat=this.scheduleDays.find(d=>d.getDay()===6);
-            if(firstSat)this.autoFillJuhu(nurse,firstSat);
-          }
-        }},
-        {name:'야간전담',desc:'모든 근무일을 N으로',apply:(nid)=>{
-          this._pushUndo();
-          for(const d of this.scheduleDays){
-            const dk=this.dayKey(d);
-            const existing=(this.prevSchedule[nid]||{})[dk];
-            if(!existing||existing===''){if(!this.prevSchedule[nid])this.prevSchedule[nid]={};this.prevSchedule[nid][dk]='N'}
-          }
-          this._checkViolations();
-        }},
-        {name:'전체 초기화',desc:'이 간호사의 사전입력 삭제',apply:(nid)=>{
-          this._pushUndo();
-          const keys=this._cycleDateKeys();
-          if(this.prevSchedule[nid]){for(const k of keys)delete this.prevSchedule[nid][k]}
-          this._checkViolations();
-        }},
-      ];
-    },
     applyPreset(presetIdx,nurseId){this.presets[presetIdx].apply(nurseId);this.presetPanel=false},
 
     // ── 야간 카운터 ────────────────────────────────────────
@@ -920,31 +1014,6 @@ function app() {
 
     // ═══ 5. 간호사별 월간 요약 ═══════════════════════════
     showNurseSummary:false,
-    get nurseSummaryData(){
-      if(!this.schedule||!Object.keys(this.schedule).length)return[];
-      const dayCodes=this.shifts.filter(s=>s.period==='day').map(s=>s.code);
-      const eveCodes=this.shifts.filter(s=>s.period==='evening').map(s=>s.code);
-      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
-      const restCodes=this.shifts.filter(s=>s.period==='rest').map(s=>s.code);
-      const leaveCodes=this.shifts.filter(s=>s.period==='leave').map(s=>s.code);
-      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
-      return this.nurses.map(nurse=>{
-        const nid=nurse.id;
-        const sc=this.schedule[nid]||{};
-        let d=0,e=0,n=0,rest=0,leave=0,weekendWork=0;
-        for(const day of days){
-          const dk=this.dayKey(day);
-          const val=sc[dk];if(!val)continue;
-          if(dayCodes.includes(val))d++;
-          else if(eveCodes.includes(val))e++;
-          else if(nightCodes.includes(val))n++;
-          else if(restCodes.includes(val))rest++;
-          else if(leaveCodes.includes(val))leave++;
-          if((day.getDay()===0||day.getDay()===6)&&[...dayCodes,...eveCodes,...nightCodes].includes(val))weekendWork++;
-        }
-        return{name:nurse.name,group:nurse.group,d,e,n,rest,leave,weekendWork,total:d+e+n,score:this.nurseScores[nid]??0};
-      });
-    },
 
     // ═══ 6. 이전달 스케줄 자동 연동 ══════════════════════
     async loadPrevMonthSchedule(){
@@ -1182,21 +1251,7 @@ function app() {
 
     // ═══ 12. 간호사 그룹별 필터 ══════════════════════════
     groupFilter:'all',
-    get filteredNurses(){
-      if(this.groupFilter==='all')return this.nurses;
-      return this.nurses.filter(n=>n.group===this.groupFilter);
-    },
-    get nurseGroups(){
-      const groups=[...new Set(this.nurses.map(n=>n.group).filter(Boolean))];
-      return groups.sort();
-    },
     // 단체 수정/직접 입력에서 항상 보여줄 그룹 후보 — 현재 사용 중 + 누적 history + 표준 [A,B,C]
-    get nurseGroupChoices(){
-      let history=[];
-      try{const raw=localStorage.getItem('nurseGroupHistory');if(raw)history=JSON.parse(raw)||[]}catch(e){}
-      const merged=[...new Set([...this.nurseGroups,...history,'A','B','C'])].filter(Boolean);
-      return merged.sort();
-    },
     _rememberGroup(g){
       g=(g||'').trim();
       if(!g)return;
@@ -1209,40 +1264,6 @@ function app() {
     },
 
     // ═══ 13. 생성 결과 경고 요약 ═════════════════════════
-    get scheduleWarnings(){
-      if(!this.schedule||!Object.keys(this.schedule).length)return[];
-      const warns=[];
-      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
-      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
-      const workCodes=this.shifts.filter(s=>['day','day1','evening','middle','night'].includes(s.period)).map(s=>s.code);
-      const dayNames=['일','월','화','수','목','금','토'];
-
-      for(const nurse of this.nurses){
-        const nid=nurse.id;
-        // 연속 근무 체크
-        let consec=0,maxConsec=0;
-        for(const day of days){
-          const val=this.schedule[nid]?.[this.dayKey(day)];
-          if(val&&workCodes.includes(val)){consec++;maxConsec=Math.max(maxConsec,consec)}
-          else consec=0;
-        }
-        if(maxConsec>=6)warns.push({type:'warn',nurse:nurse.name,msg:`연속 ${maxConsec}일 근무`});
-
-        // 야간 편중
-        const nCount=Object.values(this.schedule[nid]||{}).filter(v=>nightCodes.includes(v)).length;
-        if(nCount>=8)warns.push({type:'warn',nurse:nurse.name,msg:`야간 ${nCount}회 (편중)`});
-
-        // 주말 근무 편중
-        let weekendWork=0;
-        for(const day of days){
-          if(day.getDay()!==0&&day.getDay()!==6)continue;
-          const val=this.schedule[nid]?.[this.dayKey(day)];
-          if(val&&workCodes.includes(val))weekendWork++;
-        }
-        if(weekendWork>=6)warns.push({type:'info',nurse:nurse.name,msg:`주말 근무 ${weekendWork}회`});
-      }
-      return warns;
-    },
 
     // ═══ 14. 다크모드 자동 전환 ══════════════════════════
     autoDarkMode:false,
@@ -1459,27 +1480,6 @@ function app() {
     },
 
     // ═══ 8. 공정성 대시보드 (간이 버전) ══════════════════
-    get fairnessData(){
-      if(!this.schedule||!Object.keys(this.schedule).length)return null;
-      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
-      const workCodes=this.shifts.filter(s=>['day','day1','evening','middle','night'].includes(s.period)).map(s=>s.code);
-      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
-      const stats=this.nurses.map(nurse=>{
-        const nid=nurse.id;
-        let nights=0,weekends=0,holidays=0;
-        for(const day of days){
-          const dk=this.dayKey(day);
-          const val=this.schedule[nid]?.[dk];if(!val)continue;
-          if(nightCodes.includes(val))nights++;
-          if((day.getDay()===0||day.getDay()===6)&&workCodes.includes(val))weekends++;
-          if(this.holidays.includes(dk)&&workCodes.includes(val))holidays++;
-        }
-        return{name:nurse.name,group:nurse.group,nights,weekends,holidays,score:this.nurseScores[nid]??0};
-      });
-      const avgNights=stats.reduce((s,n)=>s+n.nights,0)/stats.length;
-      const avgWeekends=stats.reduce((s,n)=>s+n.weekends,0)/stats.length;
-      return{stats,avgNights:avgNights.toFixed(1),avgWeekends:avgWeekends.toFixed(1)};
-    },
 
     // ── 외부 모듈 합성 (modules/*.js — index.html에서 app.js 앞에 로드) ──
     ...(window.SolverModule ? window.SolverModule() : {}),
