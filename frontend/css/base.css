@@ -1,0 +1,503 @@
+/* base.css — app.css 분할 (cascade 순서: tokens → base → components → yginvest-skin) */
+/* ── Typography utilities (YGinvest: Pretendard 단일) ─────── */
+.serif {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-style: normal;
+}
+.serif em { font-style: normal; font-weight: 600; color: var(--ink-3); }
+.mono {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: 0;
+}
+.italic { font-style: normal; }
+.tnum { font-variant-numeric: tabular-nums; }
+.eyebrow {
+  display: inline-block;
+  font-size: 0.62rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+.h-display {
+  font-family: 'Newsreader', 'Times New Roman', serif;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1.06;
+  color: var(--ink);
+}
+.h-display .accent { color: var(--accent); }
+.h-display .italic-dim { font-style: italic; color: var(--ink-3); font-weight: 300; }
+
+/* ── Section title (Phase 5: serif option) ──────────────── */
+.section-title.serif-h {
+  font-family: 'Newsreader', serif;
+  font-weight: 400;
+  font-size: 1.8rem;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  text-transform: none;
+}
+
+/* ── Month banner (사전입력/스케줄 hero — compact: 1행 inline) ─ */
+.month-banner {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 5px 28px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--card);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.month-banner-left {
+  display: flex; align-items: baseline; gap: 10px;
+  flex-shrink: 0;
+}
+.month-banner-num {
+  font-family: 'Newsreader', serif;
+  font-size: 1.7rem; font-weight: 400;
+  line-height: 1; letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.month-banner-num .month-dot { color: var(--ink-3); font-style: italic; }
+.month-banner-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.66rem; color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+.month-banner-right {
+  display: flex; align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.month-banner-progress { display: inline-flex; align-items: baseline; gap: 4px; }
+.month-banner-progress-val {
+  font-family: 'Newsreader', serif;
+  font-size: 1.05rem; font-weight: 500;
+  color: var(--ink); line-height: 1;
+}
+.month-banner-progress-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.66rem; color: var(--ink-3);
+}
+.month-banner-bar {
+  width: 110px; height: 2px;
+  background: var(--rule-soft);
+  position: relative; overflow: hidden;
+}
+.month-banner-bar-fill {
+  position: absolute; top: 0; left: 0; bottom: 0;
+  background: var(--ink); transition: width 0.2s ease;
+}
+
+/* ── KPI cards (분석 화면) ───────────────────────────────── */
+.kpi {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 18px 22px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+}
+.kpi-label {
+  font-size: 0.62rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+.kpi-value {
+  font-family: 'Newsreader', serif;
+  font-size: 2.6rem; font-weight: 300;
+  line-height: 1; letter-spacing: -0.03em;
+  color: var(--ink);
+}
+.kpi-value .unit {
+  font-family: 'Pretendard Variable', system-ui, sans-serif;
+  font-size: 0.88rem; font-weight: 400;
+  color: var(--ink-3); margin-left: 4px;
+}
+.kpi-delta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+}
+.kpi-delta.pos { color: var(--ok); }
+.kpi-delta.neg { color: var(--err); }
+
+/* ── Generation panel (스케줄 하단 고정 솔버) ──────────── */
+.gen-panel {
+  background: var(--card-warm);
+  border-top: 1px solid var(--rule);
+  padding: 16px 28px;
+  flex-shrink: 0;
+}
+.gen-panel-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem; color: var(--ink-3);
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.gen-panel-bar {
+  width: 100%; height: 3px;
+  background: var(--rule-soft);
+  position: relative; overflow: hidden;
+}
+.gen-panel-bar-fill {
+  position: absolute; top: 0; left: 0; bottom: 0;
+  background: var(--ink);
+}
+.gen-panel-log {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.66rem;
+  background: var(--paper-2);
+  color: var(--ink-2);
+  padding: 6px 10px;
+  border: 1px solid var(--rule-soft);
+  max-height: 56px; overflow-y: auto;
+  line-height: 1.5;
+}
+
+/* ── Base ─────────────────────────────────────────────────── */
+*,*::before,*::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Pretendard Variable', 'Pretendard', system-ui, -apple-system, sans-serif;
+  font-size: 1rem; font-weight: 400;
+  font-feature-settings: "tnum", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+[x-cloak] { display: none !important; }
+
+/* ── Layout (Phase 3: Clinical Paper viewport) ────────────── */
+.app-shell {
+  display: flex; flex-direction: column;
+  height: 100vh; overflow: hidden;
+  background: var(--paper);
+  position: relative;
+}
+/* 상단 3px Severance navy ribbon */
+.app-shell::before {
+  content: ''; position: fixed; top: 0; left: 0; right: 0;
+  height: 3px; background: var(--accent);
+  z-index: 60;
+}
+
+/* ── Appbar (마스트헤드: brand + meta + 5-step stepper) ─── */
+.appbar {
+  flex-shrink: 0;
+  background: var(--card);
+  border-bottom: 1px solid var(--rule);
+  padding-top: 3px; /* ribbon 자리 */
+}
+.appbar-top {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  padding: 8px 28px;
+  gap: 18px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.brand-lockup {
+  display: flex; align-items: center; gap: 12px;
+}
+.brand-mark {
+  width: 28px; height: 28px;
+  background: var(--accent);
+  position: relative;
+  flex-shrink: 0;
+}
+.brand-mark::before, .brand-mark::after {
+  content: ''; position: absolute; background: var(--paper);
+}
+.brand-mark::before {
+  /* 가로 십자 */
+  left: 6px; right: 6px; top: 13px; height: 2px;
+}
+.brand-mark::after {
+  /* 세로 십자 */
+  top: 6px; bottom: 6px; left: 13px; width: 2px;
+}
+.brand-lockup-text {
+  display: flex; flex-direction: column; gap: 1px;
+  line-height: 1.1;
+}
+.brand-name {
+  font-family: 'Newsreader', 'Times New Roman', serif;
+  font-size: 1.05rem; font-weight: 500;
+  color: var(--ink); letter-spacing: -0.01em;
+}
+.brand-hospital {
+  font-size: 0.62rem; color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+.brand-ver {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem; color: var(--ink-4);
+  padding: 2px 6px;
+  border: 1px solid var(--rule);
+  margin-left: 4px;
+  cursor: pointer; user-select: none;
+}
+.appbar-meta {
+  display: flex; gap: 18px; align-items: center;
+  font-size: 0.7rem;
+}
+.appbar-meta-cell {
+  display: flex; flex-direction: column; gap: 1px;
+  line-height: 1.2;
+}
+.appbar-meta-label {
+  font-size: 0.58rem; color: var(--ink-4);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.appbar-meta-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem; color: var(--ink-2);
+  font-weight: 500;
+}
+.appbar-actions { display: flex; gap: 6px; align-items: center; }
+
+/* ── Stepper (5-step 워크플로우) ──────────────────────────── */
+.stepper {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+}
+.step {
+  display: grid; grid-template-columns: auto 1fr;
+  gap: 10px; align-items: center;
+  padding: 7px 16px;
+  border-right: 1px solid var(--rule-soft);
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink-3);
+  transition: background-color 0.12s, color 0.12s;
+  user-select: none;
+}
+.step:last-child { border-right: none; }
+.step:hover { background: var(--card-warm); color: var(--ink); }
+.step.active {
+  background: var(--ink); color: var(--paper);
+}
+.step.active .step-num,
+.step.active .step-desc { color: var(--paper); opacity: 0.7; }
+.step-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; font-weight: 600;
+  color: var(--ink-4); letter-spacing: 0.04em;
+  position: relative;
+}
+.step.done .step-num::after {
+  content: '✓'; margin-left: 4px; color: var(--ok); font-weight: 700;
+}
+.step.active.done .step-num::after { color: var(--paper); }
+.step-body { display: flex; flex-direction: column; gap: 1px; line-height: 1.2; }
+.step-name {
+  font-size: 0.84rem; font-weight: 600;
+  color: var(--ink); letter-spacing: -0.005em;
+}
+.step.active .step-name { color: var(--paper); }
+.step-desc {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.64rem; color: var(--ink-3);
+  letter-spacing: 0.01em;
+}
+
+/* ── Layout breakpoints (Phase 3+6: Clinical Paper) ───────
+   사이드바는 모든 viewport에서 hide (legacy 마크업 유지).
+   데스크톱: 상단 마스트헤드 + 스텝퍼
+   모바일(<768px): 마스트헤드 hide + 모바일 bottom-nav */
+.sidebar { display: none !important; }
+@media (min-width: 768px) {
+  .bottom-nav { display: none !important; }
+}
+@media (max-width: 767px) {
+  .appbar { display: none !important; }
+  /* 모바일에서 bottom-nav가 fixed로 56px 차지하므로 콘텐츠에 여백 */
+  .main-content { padding-bottom: 56px; }
+}
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+.sidebar {
+  width: 210px; flex-shrink: 0;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  height: 100vh; overflow-y: auto;
+  box-shadow: 1px 0 4px rgba(0,0,0,0.03);
+}
+.sidebar-logo {
+  display: flex; align-items: center; gap: 8px;
+  padding: 20px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap; overflow: hidden;
+  font-size: 18px !important;
+  font-weight: 700; font-size: 0.88rem;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.sidebar-logo svg { opacity: 0.5; flex-shrink: 0; }
+.logo-ver {
+  margin-left: auto; font-size: 0.55rem; font-weight: 700;
+  color: var(--accent); background: var(--accent-bg);
+  padding: 2px 7px; border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+.sidebar-nav { flex: 1; padding: 10px 8px; }
+.sidebar-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 14px; margin-bottom: 3px;
+  cursor: pointer; font-size: 0.82rem; font-weight: 500;
+  color: var(--text-dim);
+  border-radius: 10px;
+  transition: all 0.2s ease;
+  user-select: none;
+  position: relative;
+}
+.sidebar-item:hover {
+  background: var(--accent-bg);
+  color: var(--text-sub);
+  transform: translateX(2px);
+}
+.sidebar-item.active {
+  color: var(--accent);
+  background: var(--sidebar-active-bg);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.nav-icon { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.4; transition: opacity 0.2s; }
+.sidebar-item:hover .nav-icon { opacity: 0.6; }
+.sidebar-item.active .nav-icon { opacity: 0.9; }
+
+/* legacy sidebar tablet rules — Phase 3 이후 사이드바 자체가 hide되므로 effective 영향 없음 */
+@media (min-width:768px) and (max-width:1023px) {
+  .sidebar-fontsize-h { display: none !important; }
+  .sidebar-fontsize-v { display: flex !important; }
+}
+
+/* ── Mobile Bottom Nav (Phase 6: Clinical Paper) ─────────── */
+.bottom-nav {
+  display: none; position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--card);
+  border-top: 1px solid var(--rule);
+  z-index: 50;
+}
+@media (max-width: 767px) { .bottom-nav { display: flex; } }
+.bottom-nav-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 8px 4px;
+  font-size: 0.6rem; font-weight: 500;
+  color: var(--ink-3); cursor: pointer; gap: 3px;
+  transition: background-color 0.12s, color 0.12s;
+  user-select: none; position: relative;
+  border-right: 1px solid var(--rule-soft);
+}
+.bottom-nav-item:last-child { border-right: none; }
+.bottom-nav-item.active {
+  color: var(--paper); background: var(--ink);
+}
+.bottom-nav-item svg { width: 18px; height: 18px; stroke-width: 1.5; }
+
+/* ── Mobile-only "오늘" tab content (Phase 6) ───────────── */
+.today-hero {
+  padding: 28px 22px 18px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--card);
+}
+.today-eyebrow {
+  font-size: 0.62rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--ink-3); margin-bottom: 6px;
+}
+.today-date {
+  font-family: 'Newsreader', serif;
+  font-size: 2.6rem; font-weight: 300;
+  line-height: 0.95; letter-spacing: -0.025em;
+  color: var(--ink);
+}
+.today-date .day-name {
+  font-family: 'Pretendard Variable', system-ui, sans-serif;
+  font-size: 0.95rem; color: var(--ink-3);
+  font-weight: 500; margin-left: 12px; vertical-align: middle;
+}
+.today-meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; color: var(--ink-3);
+  margin-top: 10px;
+}
+
+.today-section {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.today-section-title {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 12px;
+}
+.today-section-title h3 {
+  font-family: 'Newsreader', serif;
+  font-size: 1.15rem; font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.today-section-title .count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; color: var(--ink-3);
+}
+.today-duty-group { margin-bottom: 14px; }
+.today-duty-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin-bottom: 4px;
+  display: flex; align-items: center; gap: 6px;
+}
+.today-duty-label .dot {
+  width: 8px; height: 8px; display: inline-block;
+}
+.today-duty-label .dot.D { background: var(--d-ink); }
+.today-duty-label .dot.E { background: var(--e-ink); }
+.today-duty-label .dot.N { background: var(--n-ink); }
+.today-nurse-list {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding-left: 14px;
+}
+.today-nurse-chip {
+  font-size: 0.8rem; font-weight: 500;
+  color: var(--ink-2);
+}
+.today-nurse-chip:not(:last-child)::after {
+  content: '·'; margin-left: 6px; color: var(--ink-4);
+}
+.today-empty {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; color: var(--ink-4);
+  padding: 8px 14px;
+}
+
+/* ── Main Content ────────────────────────────────────────── */
+.main-content {
+  flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--paper);
+}
+@media (max-width:767px) { .main-content { padding-bottom: 56px; } }
+
+.content { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 28px 32px; }
+.content-flex { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 24px 28px; }
+@media (max-width: 767px) {
+  .content { padding: 12px 10px 80px; }
+  .content-flex { padding: 12px 10px 70px; }
+}
+
+/* ── Scrollbar ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.15); }
+html.dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); }
+html.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); }
+

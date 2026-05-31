@@ -126,7 +126,7 @@ nurse-v4/
 │   └── profiles.py          # 프로필 관리 + Fernet 암호화 (PBKDF2 100k)
 ├── frontend/
 │   ├── index.html           # SPA — YGinvest (설정·사전입력·분석·스케줄·저장 + 모바일 '오늘' 홈)
-│   ├── css/app.css          # YGinvest 스타일 + 다크모드 + 테이블 전체화면
+│   ├── css/                 # tokens·base·components·yginvest-skin (cascade 순서로 link)
 │   ├── js/
 │   │   ├── app.js           # Alpine.js 코어 (~530줄: 상태·computed·init·API·모듈 합성)
 │   │   └── modules/         # 14개 도메인 모듈 (analysis·solver·profiles·nurse-manage·
