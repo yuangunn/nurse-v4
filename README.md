@@ -115,7 +115,9 @@ nurse-v4/
 ├── server/
 │   ├── api.py               # FastAPI 라우터 (프로필/간호사/규칙/스케줄/진단/개발자)
 │   ├── scheduler_base.py    # 엔진 공유 베이스 _SchedulerBase (데이터·날짜·추출·점수)
-│   ├── scheduler.py         # HiGHS(MILP) 엔진 — NurseScheduler
+│   ├── scheduler.py         # HiGHS(MILP) 엔진 — NurseScheduler (solve/완화, ~410줄 코어)
+│   ├── scheduler_highs_constraints.py # HiGHS 하드 제약 + 목적함수 믹스인
+│   ├── scheduler_highs_diagnosis.py   # HiGHS Infeasible 13-phase 진단 믹스인
 │   ├── scheduler_cpsat.py   # CP-SAT(OR-Tools) 엔진 — CpSatScheduler
 │   ├── conflict_analyzer.py # 정밀 충돌 분석 (assumptions·MUS/MCS) — /api/diagnose·suggest-fix
 │   ├── solver_progress.py   # 솔버 무관 진행/취소 레지스트리 (레이스 안전 다중 어댑터)
