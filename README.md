@@ -38,7 +38,7 @@
 ### 🛠 인프라
 - **Electron 데스크톱 앱** — 브라우저 없이 독립 창으로 실행, 완전 오프라인
 - **pytest 회귀 테스트** — 37건: 9개 금지 전환·charge 시니어리티·일별 인원 등 하드 제약 + CP-SAT 동등성·정밀 충돌 분석·야간전담·두 엔진 레이스 자동 검증
-- **JS 모듈화** (v4.2.1) — `frontend/js/modules/*` window namespace 합성 패턴, 빌드 도구 불필요
+- **JS 모듈화** — `app.js`(2744→~530줄 코어)에서 도메인 로직을 `frontend/js/modules/*` **14개 모듈**로 분리. window-namespace 합성(`...XxxModule()`) 패턴, 빌드 도구 불필요
 
 ---
 
@@ -126,8 +126,10 @@ nurse-v4/
 │   ├── index.html           # SPA — YGinvest (설정·사전입력·분석·스케줄·저장 + 모바일 '오늘' 홈)
 │   ├── css/app.css          # YGinvest 스타일 + 다크모드 + 테이블 전체화면
 │   ├── js/
-│   │   ├── app.js           # Alpine.js 앱 진입점
-│   │   └── modules/         # 분리 모듈 (undo-redo, drag-select)
+│   │   ├── app.js           # Alpine.js 코어 (~530줄: 상태·computed·init·API·모듈 합성)
+│   │   └── modules/         # 14개 도메인 모듈 (analysis·solver·profiles·nurse-manage·
+│   │                        #   preinput-io·grid-interactions·schedule-features·misc-features·
+│   │                        #   settings-defs·view-helpers·paste-import·dev-tools·undo-redo·drag-select)
 │   ├── lib/                 # tailwindcss, alpine, lucide (오프라인 번들)
 │   ├── fonts/               # Pretendard(주) + 번들 폰트
 │   └── assets/              # 아이콘·이미지
