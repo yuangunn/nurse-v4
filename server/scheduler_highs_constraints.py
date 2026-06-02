@@ -287,6 +287,31 @@ class _HighsConstraintsMixin:
                         f"weekly_of_{nid}_{ws}"
                     )
 
+    def _c_pregnancy_p1_weekly(self, prob, x):
+        """임산부(모성보호): P1 구간에 완전히 포함된 주마다 P1 정확히 1회 (부분 주 ≤1).
+        weeklyOff와 동일 패턴. 야간 제외·생 면제는 변수 게이팅(_preg_forbids)으로 처리된다."""
+        if "P1" not in self.ALL_SHIFTS:
+            return
+        for nurse in self.nurses:
+            if not nurse.get("is_pregnant"):
+                continue
+            nid = nurse["id"]
+            for ws, we in self.weeks:
+                win_days = [d for d in range(ws, we + 1)
+                            if self._nurse_active_idx(nurse, d)
+                            and self._preg_window_on(nid, self.all_dates[d])]
+                if not win_days:
+                    continue
+                p1_vars = [x[nid][d]["P1"] for d in win_days
+                           if isinstance(x[nid][d].get("P1"), pulp.LpVariable)]
+                if not p1_vars:
+                    continue
+                full_week = (we - ws + 1) == len(win_days)
+                if full_week and len(win_days) >= 7:
+                    prob += pulp.lpSum(p1_vars) == 1, f"preg_p1_{nid}_{ws}"
+                else:
+                    prob += pulp.lpSum(p1_vars) <= 1, f"preg_p1_{nid}_{ws}"
+
     def _c_max_consecutive_work(self, prob, x, max_days: int):
         """최대 연속 근무일 제한"""
         for nurse in self.nurses:

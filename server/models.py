@@ -41,6 +41,11 @@ class Nurse(BaseModel):
     preceptor_id: Optional[str] = None       # 프리셉터 간호사 ID
     start_date: Optional[str] = None         # 전입일 'YYYY-MM-DD' (None=상시 근무)
     end_date: Optional[str] = None           # 전출일 'YYYY-MM-DD' (None=상시 근무)
+    is_pregnant: bool = False                # 임산부(모성보호) 여부
+    # 임신 구간: {"early":{"start","end"}, "late":{"start","end"}} (YYYY-MM-DD)
+    #  · 초기/말기 각 구간 완전 포함 주마다 P1 1회 자동
+    #  · [early.start, late.end] 전체 동안 야간(N/NC) 제외 + 그 달 생리휴가 면제
+    pregnancy: Dict[str, Any] = {}
 
 
 class DayRequirement(BaseModel):

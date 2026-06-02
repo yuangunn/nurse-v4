@@ -616,6 +616,7 @@
                   <span x-show="nurse.is_trainee&&nurse.preceptor_id" class="text-dim"
                         x-text="'→'+nurses.find(n=>n.id===nurse.preceptor_id)?.name"></span>
                   <span x-show="nurse.start_date||nurse.end_date" class="text-amber" title="로테이션">⟳</span>
+                  <span x-show="nurse.is_pregnant" title="임산부 (모성보호)">🤰</span>
                 </td>
                 <td class="flex gap-1 justify-end">
                   <button @click="openNurseModal(nurse)" class="btn btn-xs btn-ghost text-blue" title="상세 편집">⋯</button>
@@ -1578,6 +1579,28 @@
           </div>
         </div>
         <p class="text-xs text-dim mt-2">전입일 이전 / 전출일 이후는 스케줄에 배정되지 않고 회색으로 표시됩니다. 빈칸 = 상시 근무.</p>
+      </div>
+
+      <!-- 임산부 (모성보호) -->
+      <div class="card-sm" style="border-left:3px solid #2C7A7B">
+        <label class="flex items-center gap-2 text-sm mb-2"><input type="checkbox" x-model="nurseModal.data.is_pregnant"/><span class="font-semibold">🤰 임산부 (모성보호)</span></label>
+        <div x-show="nurseModal.data.is_pregnant" class="space-y-2 mt-2">
+          <div>
+            <label class="text-xs text-dim">임신초기 휴무 구간</label>
+            <div class="grid grid-cols-2 gap-2 mt-1">
+              <input type="date" x-model="nurseModal.data.pregnancy.early.start" class="w-full" title="임신초기 시작일"/>
+              <input type="date" x-model="nurseModal.data.pregnancy.early.end" class="w-full" title="임신초기 종료일"/>
+            </div>
+          </div>
+          <div>
+            <label class="text-xs text-dim">출산전 휴무 구간</label>
+            <div class="grid grid-cols-2 gap-2 mt-1">
+              <input type="date" x-model="nurseModal.data.pregnancy.late.start" class="w-full" title="출산전 시작일"/>
+              <input type="date" x-model="nurseModal.data.pregnancy.late.end" class="w-full" title="출산전 종료일"/>
+            </div>
+          </div>
+          <p class="text-xs text-dim">각 구간 <b>매주 P1(임부휴무) 1회</b> 자동 배치 · 임신초기 시작~출산전 종료 전 기간 <b>야간(N/NC) 제외</b> · 그 달 <b>생리휴가 면제</b>. 사전입력에서 P1을 직접 지정할 수도 있습니다.</p>
+        </div>
       </div>
     </div>
     <div class="flex gap-2 mt-5"><button @click="nurseModal.open=false" class="btn btn-ghost flex-1">취소</button><button @click="saveNurse()" class="btn btn-primary flex-1">저장</button></div>

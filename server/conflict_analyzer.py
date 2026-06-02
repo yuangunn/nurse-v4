@@ -60,6 +60,7 @@ class _ConflictAnalyzer(CpSatScheduler):
         self._g_charge_seniority(model, x, gate)
         if self.rules.weeklyOff:
             self._g_weekly_off(model, x, gate)
+        self._g_pregnancy_p1(model, x, gate)
         self._g_max_v(model, x, gate)
         self._g_night_dedicated(model, x, gate)
         self._g_menstrual(model, x, gate)
@@ -209,6 +210,29 @@ class _ConflictAnalyzer(CpSatScheduler):
                 if len(week_days) >= 7:
                     lit = gate(f"{self._fmt_nurse_label(nurse)} {wi+1}주차 OF 1회 의무", nid=nid)
                     model.Add(sum(x[nid][d]["OF"] for d in week_days) == 1).OnlyEnforceIf(lit)
+
+    def _g_pregnancy_p1(self, model, x, gate):
+        """임산부 P1 주1회 — 게이팅 (충돌 시 라벨 핀포인트). 야간 제외·생 면제는 변수 도메인 처리."""
+        if "P1" not in self.ALL_SHIFTS:
+            return
+        for nurse in self.nurses:
+            if not nurse.get("is_pregnant"):
+                continue
+            nid = nurse["id"]
+            for wi, (ws, we) in enumerate(self.weeks):
+                win_days = [d for d in range(ws, we + 1)
+                            if self._nurse_active_idx(nurse, d)
+                            and self._preg_window_on(nid, self.all_dates[d])]
+                if not win_days:
+                    continue
+                p1_vars = [x[nid][d]["P1"] for d in win_days
+                           if not isinstance(x[nid][d].get("P1"), int)]
+                if not p1_vars:
+                    continue
+                full_week = (we - ws + 1) == len(win_days)
+                if full_week and len(win_days) >= 7:
+                    lit = gate(f"{self._fmt_nurse_label(nurse)} {wi+1}주차 P1(임부휴무) 1회 의무", nid=nid)
+                    model.Add(sum(p1_vars) == 1).OnlyEnforceIf(lit)
 
     def _g_max_v(self, model, x, gate):
         max_v = self.rules.maxVPerMonth
@@ -452,6 +476,8 @@ class _ConflictAnalyzer(CpSatScheduler):
                 pre = self.prev.get(nid, {}).get(dt_str)
                 if pre == "OF" and is_holiday:
                     pre = None
+                # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
+                pre = self._preg_effective_pre(nurse, dt, pre)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 active = self._nurse_active_on(nurse, dt)
                 free_ok = {}
@@ -460,6 +486,8 @@ class _ConflictAnalyzer(CpSatScheduler):
                         free_ok[s] = False
                     elif s == "OF" and is_holiday:
                         free_ok[s] = False
+                    elif self._preg_forbids(nurse, dt, s, pre):
+                        free_ok[s] = False   # 임산부 모성보호 (P1 구간 외/야간 제외/생 면제)
                     elif s == "법":
                         free_ok[s] = (is_holiday and not is_night)
                     elif s in ("생", "V") and is_holiday and not is_night:
@@ -509,6 +537,7 @@ class _ConflictAnalyzer(CpSatScheduler):
             self._cs_max_consecutive_night(model, x, self.rules.maxConsecutiveNightDays)
         if self.rules.weeklyOff:
             self._cs_weekly_off(model, x)
+        self._cs_pregnancy_p1_weekly(model, x)         # 임산부 P1 주1회 (모성보호)
         self._cs_max_v_per_month(model, x)
         if self.rules.maxNightPerMonth:
             self._cs_max_night_per_month(model, x)

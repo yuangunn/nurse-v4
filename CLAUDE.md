@@ -100,7 +100,7 @@ npm start
 
 ---
 
-## 근무 유형 정의 (기본 16종)
+## 근무 유형 정의 (기본 17종)
 
 | 코드 | 이름 | 시간 | auto_assign | 비고 |
 |------|------|------|:--:|------|
@@ -114,6 +114,7 @@ npm start
 | N | Night | 22:00~익일 06:00 | ✓ | |
 | OF | Off | — | ✓ | 주 1회 의무. 공휴일 배정 하드 금지 |
 | 주 | 주휴 | — | ✗ | 주 1회 의무 (법정 주휴일) |
+| P1 | 임부휴무 | — | ✓ | **임산부(모성보호) 전용**. 임신 구간 주 1회 자동. 비임산부엔 미배정 |
 | V | 연차 | — | ✓ | 월 최대 1회 (기본) |
 | 생 | 생리휴가 | — | ✓ | 여성 간호사만, 공휴일 금지 |
 | 특 | 특별휴가 | — | ✗ | 사전입력 전용 |
@@ -132,7 +133,7 @@ npm start
 - **MIDDLE_SHIFTS**: 중
 - **NIGHT_SHIFTS**: NC, N
 - **CHARGE_SHIFTS**: DC, EC, NC
-- **REST_SHIFTS**: OF, 주 (휴무)
+- **REST_SHIFTS**: OF, 주, P1 (휴무) — P1은 임부휴무(모성보호), `is_protected_timeoff`에서 OFF급 보호
 - **LEAVE_SHIFTS**: V, 생, 특, 공, 법, 병 (휴가)
 - **SOLVER_SHIFTS**: auto_assign=True인 집합 (솔버 자유 배정 가능)
 
@@ -164,6 +165,7 @@ npm start
 | 월 최대 야간 | 기본 월 6회 (수면OFF 임계) |
 | 홀짝월 합산 야간 | 전월+당월 ≤ 11회 (선택적) |
 | **야간전담 규칙** | N/NC만 배정, 5일 윈도우 내 ≤3 야간, 당월 정확히 14일 근무, 여성+31일 달엔 생 1회 |
+| **임산부 모성보호** | `is_pregnant`+`pregnancy`{early,late} 설정 시: ①P1 구간 완전 포함 주마다 P1 정확히 1회(부분 주 ≤1) ②임신 전 구간 `[early.start~late.end]` N/NC 금지 ③임신-중-달 생(生) 면제(배정 금지) ④임산부 달엔 야간전담 자동 해제. P1은 임산부+구간 또는 사전입력 P1에서만 허용(그 외 변수 0). HiGHS·CP-SAT·conflict_analyzer 패리티. 헬퍼: `_preg_window_on`/`_preg_span_on`/`_preg_active_in_month`/`_preg_forbids`/`_preg_effective_pre` (scheduler_base) |
 | 전입/전출 재적 | start_date ≤ d ≤ end_date 범위에서만 배정 |
 | **셀 잠금** | `locked_cells[nurse][date]=true`인 셀은 완화 모드에서도 사전입력 고정 |
 
@@ -247,8 +249,14 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   "preceptor_id": None,        # 프리셉터 연결
   "start_date": None,          # 전입일 YYYY-MM-DD (None=상시)
   "end_date": None,            # 전출일 YYYY-MM-DD (None=상시)
+  "is_pregnant": False,        # 임산부(모성보호)
+  "pregnancy": {},             # {"early":{"start","end"},"late":{"start","end"}} 임신초기/출산전 구간
 }
 ```
+
+**임산부(모성보호)**: `is_pregnant`+`pregnancy` 두 구간 설정 시 솔버가 각 구간 주마다 P1(임부휴무)
+1회 자동 배치 + 임신 전 기간 야간(N/NC) 제외 + 그 달 생리휴가 면제 + 야간전담 자동 해제.
+사전입력으로 P1을 직접 지정할 수도 있음. 상세 규칙은 [스케줄링 제약 규칙](#hard-constraints-반드시-지켜야-함) 참조.
 
 **월별 야간전담**: `night_months` dict에 값이 하나라도 있으면 해당 월 키 존재 여부로 결정.
 값이 비었으면 `is_night_shift` 폴백.
@@ -368,7 +376,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 ### 테이블
 | 테이블 | 내용 |
 |---|---|
-| `nurses` | id(PK), name, grp, gender, capable_shifts, is_night_shift, seniority, wishes, juhu_day, juhu_auto_rotate, night_months, is_trainee, training_end_date, preceptor_id, start_date, end_date |
+| `nurses` | id(PK), name, grp, gender, capable_shifts, is_night_shift, seniority, wishes, juhu_day, juhu_auto_rotate, night_months, is_trainee, training_end_date, preceptor_id, start_date, end_date, **is_pregnant, pregnancy** |
 | `rules` | key-value |
 | `requirements` | id=1 고정, data JSON |
 | `shifts` | code(PK), name, period, is_charge, hours, color_bg/text, sort_order, auto_assign |
@@ -390,7 +398,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 
 ### 기본 시드
 - 간호사 18명: A/B/C 그룹, 각 여4+남2
-- 근무 16종: DC, D, D1, EC, E, 중, NC, N, OF, 주, V, 생, 특, 공, 법, 병
+- 근무 17종: DC, D, D1, EC, E, 중, NC, N, OF, 주, P1, V, 생, 특, 공, 법, 병
 - 배점 규칙: 14종 (법정공휴일/주말 마이그레이션 포함)
 
 ---

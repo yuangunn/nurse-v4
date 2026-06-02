@@ -113,6 +113,15 @@ def init_db():
                 conn.execute(f"ALTER TABLE nurses ADD COLUMN {col} TEXT DEFAULT NULL")
             except Exception:
                 pass
+        # 기존 DB 호환: 임산부(모성보호) 컬럼 마이그레이션
+        try:
+            conn.execute("ALTER TABLE nurses ADD COLUMN is_pregnant INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE nurses ADD COLUMN pregnancy TEXT DEFAULT '{}'")
+        except Exception:
+            pass
         # 기존 DB 호환: shifts.auto_assign 컬럼 마이그레이션
         try:
             conn.execute("ALTER TABLE shifts ADD COLUMN auto_assign INTEGER DEFAULT 1")
@@ -167,6 +176,14 @@ def init_db():
         # 법정공휴일 + 주말 배점 규칙 마이그레이션
         _migrate_holiday_weekend_rules(conn)
 
+        # 임부휴무(P1) 근무 코드 마이그레이션 (기존 DB에 없을 경우 추가)
+        conn.execute(
+            "INSERT OR IGNORE INTO shifts "
+            "(code, name, period, is_charge, hours, color_bg, color_text, sort_order, auto_assign) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            ("P1", "임부휴무", "rest", 0, "-", "#E3F4F4", "#2C7A7B", 16, 1),
+        )
+
 
 # ── 근무 시드 데이터 ─────────────────────────────────────────────────────────
 
@@ -186,6 +203,7 @@ def _seed_shifts(conn: sqlite3.Connection):
         ("N",  "Night",         "night",   0, "22:00~06:00", "#EFEBFB", "#5B3FB0", 7,  1),
         ("OF", "Off",           "rest",    0, "-",           "#F2F3F5", "#8A93A1", 8,  1),
         ("주", "주휴",           "rest",    0, "-",           "#EDEFF3", "#4A5160", 9,  0),
+        ("P1", "임부휴무",        "rest",    0, "-",           "#E3F4F4", "#2C7A7B", 16, 1),
         ("V",  "연차",           "leave",   0, "-",           "#ECF7F0", "#1F8A5B", 10, 1),
         ("생", "생리휴가",        "leave",   0, "-",           "#FCEAF1", "#B83280", 11, 1),
         ("특", "특별휴가",        "leave",   0, "-",           "#F1ECFB", "#6D4AC0", 12, 0),
@@ -253,12 +271,12 @@ def upsert_nurse(nurse: Dict) -> None:
                 (id, name, grp, gender, capable_shifts, is_night_shift, seniority, wishes,
                  juhu_day, juhu_auto_rotate, night_months,
                  is_trainee, training_end_date, preceptor_id,
-                 start_date, end_date)
+                 start_date, end_date, is_pregnant, pregnancy)
             VALUES
                 (:id, :name, :grp, :gender, :capable_shifts, :is_night_shift, :seniority, :wishes,
                  :juhu_day, :juhu_auto_rotate, :night_months,
                  :is_trainee, :training_end_date, :preceptor_id,
-                 :start_date, :end_date)
+                 :start_date, :end_date, :is_pregnant, :pregnancy)
             ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name, grp=excluded.grp, gender=excluded.gender,
                 capable_shifts=excluded.capable_shifts, is_night_shift=excluded.is_night_shift,
@@ -267,7 +285,8 @@ def upsert_nurse(nurse: Dict) -> None:
                 night_months=excluded.night_months,
                 is_trainee=excluded.is_trainee, training_end_date=excluded.training_end_date,
                 preceptor_id=excluded.preceptor_id,
-                start_date=excluded.start_date, end_date=excluded.end_date
+                start_date=excluded.start_date, end_date=excluded.end_date,
+                is_pregnant=excluded.is_pregnant, pregnancy=excluded.pregnancy
         """, {
             "id": nurse["id"],
             "name": nurse["name"],
@@ -285,6 +304,8 @@ def upsert_nurse(nurse: Dict) -> None:
             "preceptor_id": nurse.get("preceptor_id"),
             "start_date": nurse.get("start_date"),
             "end_date": nurse.get("end_date"),
+            "is_pregnant": 1 if nurse.get("is_pregnant") else 0,
+            "pregnancy": json.dumps(nurse.get("pregnancy", {})),
         })
 
 
@@ -633,4 +654,6 @@ def _nurse_row_to_dict(row: sqlite3.Row) -> Dict:
         "preceptor_id": d.get("preceptor_id"),
         "start_date": d.get("start_date"),
         "end_date": d.get("end_date"),
+        "is_pregnant": d.get("is_pregnant") in (1, "1", True),
+        "pregnancy": json.loads(d.get("pregnancy", "{}") or "{}"),
     }

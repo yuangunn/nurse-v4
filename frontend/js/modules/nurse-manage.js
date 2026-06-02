@@ -12,7 +12,13 @@ window.NurseManageModule = function() {
     toggleNightMonthModal(m,checked){const mk=`${this.year}-${String(m).padStart(2,'0')}`;if(!this.nurseModal.data.night_months)this.nurseModal.data.night_months={};if(checked)this.nurseModal.data.night_months[mk]=true;else delete this.nurseModal.data.night_months[mk]},
     openNurseModal(nurse){
       this.nurseModal.isNew=!nurse;
-      this.nurseModal.data=nurse?JSON.parse(JSON.stringify(nurse)):{id:crypto.randomUUID(),name:'',group:'',gender:'female',capable_shifts:['DC','D','EC','E','NC','N'],is_night_shift:false,night_months:{},seniority:this.nurses.length,wishes:{},juhu_day:null,juhu_auto_rotate:true,is_trainee:false,training_end_date:null,preceptor_id:null,start_date:null,end_date:null};
+      this.nurseModal.data=nurse?JSON.parse(JSON.stringify(nurse)):{id:crypto.randomUUID(),name:'',group:'',gender:'female',capable_shifts:['DC','D','EC','E','NC','N'],is_night_shift:false,night_months:{},seniority:this.nurses.length,wishes:{},juhu_day:null,juhu_auto_rotate:true,is_trainee:false,training_end_date:null,preceptor_id:null,start_date:null,end_date:null,is_pregnant:false,pregnancy:{}};
+      // 임산부 구간 구조 정규화 (x-model 바인딩 안전 — 기존 간호사 호환)
+      const d=this.nurseModal.data;
+      if(d.is_pregnant===undefined)d.is_pregnant=false;
+      if(!d.pregnancy||typeof d.pregnancy!=='object')d.pregnancy={};
+      if(!d.pregnancy.early)d.pregnancy.early={start:null,end:null};
+      if(!d.pregnancy.late)d.pregnancy.late={start:null,end:null};
       this.nurseModal.open=true;
     },
     toggleShift(s){const arr=this.nurseModal.data.capable_shifts;const idx=arr.indexOf(s);if(idx>=0)arr.splice(idx,1);else arr.push(s)},

@@ -2,7 +2,7 @@
 
 > 컴팩팅/세션 재시작으로 잃기 쉬운 세부 맥락 보존용.
 > "이 방법은 시도했는데 실패함" 같은 네거티브 지식 포함.
-> 마지막 갱신: 2026-04-19
+> 마지막 갱신: 2026-06-02
 
 ---
 
@@ -60,6 +60,17 @@
 ### 1-12. CSS 변수는 `--bg-card`, NOT `--card` (2026-04-19 확정)
 - **결정**: 카드 배경은 항상 `var(--bg-card)` 사용.
 - **이유**: `--card`는 정의되지 않았음. 과거 코드가 `var(--card, #fff)` 쓰면 fallback으로 항상 흰색이 돼서 다크모드가 깨짐 (프로필창·온보딩 모달 안 보임 버그 원인).
+
+### 1-13. 임산부 모성보호 = 변수 게이팅 + P1 주1회 하드 (2026-06-02 확정)
+- **결정**: 임산부 기능을 "새 제약 메서드 최소화 + 변수 도메인 게이팅" 방식으로 구현.
+  - 새 근무 `P1`(임부휴무, period=rest, auto_assign=1). `_DEFAULT_SHIFTS`+DB seed+마이그레이션(INSERT OR IGNORE) 모두 추가.
+  - **야간 제외·생 면제·P1 구간 제한은 전부 변수 게이팅**(`_preg_forbids`로 해당 셀 변수=0) — 별도 제약식 불필요. 야간/생 사전입력은 `_preg_effective_pre`로 드롭(사전입력 N 강제→infeasible 회피).
+  - **유일한 양(positive) 제약 = P1 주1회**(`_c_pregnancy_p1_weekly`/`_cs_pregnancy_p1_weekly`): 구간 완전 포함 주 `==1`, 부분 주 `≤1` (weeklyOff 패턴).
+- **이유**: 게이팅은 HiGHS 2곳(solve+relaxed)·CP-SAT 2곳(build_vars+relaxed)·conflict_analyzer(build_vars_mcs)에 헬퍼 호출 1줄씩만 추가하면 끝 → 5엔진경로 패리티가 단순·견고. P1을 SOLVER_SHIFTS에 두되 게이팅으로 비임산부·구간밖은 0.
+- **야간 제외 구간 = `[early.start, late.end]` 전체**(중기 포함). 2구간 입력만으로 "임신~출산" 도출(별도 임신 전체구간 칸 없음).
+- **임산부 달엔 `is_night_shift` 자동 해제**(`__init__`): 야간전담 14일 의무와 야간 면제 충돌 방지.
+- **P1 보호등급 = OFF급**(`timeoff_class`→'off', `_OFF_CODES`={OF,P1}): 완화/MCS에서 근무보다 강하게 보호.
+- **파일**: `models.py`(is_pregnant,pregnancy)·`database.py`(2컬럼+P1 seed/마이그)·`scheduler_base.py`(헬퍼 5종+게이팅+분류)·`scheduler_highs_constraints.py`·`scheduler.py`(solve/relaxed 게이팅)·`scheduler_cpsat.py`·`conflict_analyzer.py`·`frontend`(모달 카드+🤰배지). 테스트 `tests/test_pregnancy.py`(양엔진 10건).
 
 ---
 

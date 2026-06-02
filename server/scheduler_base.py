@@ -25,22 +25,24 @@ WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 #   · 휴무      : OFF + 연차/생리/특/공/법/병 — 쉼·여행·성취·결혼 등 개인의 시간 → 강하게 보호.
 #   · 근무      : 배정 의도 — 상대적으로 유연 → 필요 시 먼저 완화.
 _LEAVE_CODES = frozenset({"V", "생", "특", "공", "법", "병"})  # 연차류 휴가
+_OFF_CODES = frozenset({"OF", "P1"})                          # 휴식(비번) + 임부휴무(모성보호)
 _OFF_CODE = "OF"                                              # 휴식(비번)
 _JUHU_CODE = "주"                                            # 주휴(고정)
 
 def timeoff_class(code: str) -> str:
-    """사전입력 코드의 보호 등급: 'leave' | 'off' | 'juhu' | 'work'."""
+    """사전입력 코드의 보호 등급: 'leave' | 'off' | 'juhu' | 'work'.
+    P1(임부휴무)은 모성보호 휴무라 OFF급으로 보호한다(연차류처럼 강하게)."""
     if code in _LEAVE_CODES:
         return "leave"
-    if code == _OFF_CODE:
+    if code in _OFF_CODES:
         return "off"
     if code == _JUHU_CODE:
         return "juhu"
     return "work"
 
 def is_protected_timeoff(code: str) -> bool:
-    """주휴를 제외한 모든 휴무(OFF·연차류) = 보호 대상 여부."""
-    return code in _LEAVE_CODES or code == _OFF_CODE
+    """주휴를 제외한 모든 휴무(OFF·P1·연차류) = 보호 대상 여부."""
+    return code in _LEAVE_CODES or code in _OFF_CODES
 
 # 기본 근무 16종 (DB 없이 fallback 시 사용)
 _DEFAULT_SHIFTS = [
@@ -54,6 +56,7 @@ _DEFAULT_SHIFTS = [
     {"code": "N",  "period": "night",   "is_charge": False},
     {"code": "OF", "period": "rest",    "is_charge": False},
     {"code": "주", "period": "rest",    "is_charge": False},
+    {"code": "P1", "period": "rest",    "is_charge": False},
     {"code": "V",  "period": "leave",   "is_charge": False},
     {"code": "생", "period": "leave",   "is_charge": False},
     {"code": "특", "period": "leave",   "is_charge": False},
@@ -113,6 +116,16 @@ class _SchedulerBase:
             if nm:  # night_months에 하나라도 있으면 해당 월 기준
                 nurse["is_night_shift"] = bool(nm.get(month_key, False))
             # nm이 비어있으면 기존 is_night_shift 유지
+            # 임산부(모성보호): 해당 월에 임신 중이면 야간전담 해제 — 야간 면제와 충돌 방지
+            if nurse.get("is_pregnant") and self._preg_active_in_month(nurse):
+                nurse["is_night_shift"] = False
+        # 임신 구간 파싱 캐시 {nid: {"early":(s,e)|None, "late":(s,e)|None}}
+        self._preg = {n["id"]: self._parse_pregnancy(n) for n in self.nurses}
+        # 대상 월에 임신 중인 간호사 id 집합 (생리휴가 면제·야간전담 해제 대상)
+        self._preg_in_month = set(
+            n["id"] for n in self.nurses
+            if n.get("is_pregnant") and self._preg_active_in_month(n)
+        )
         self.req   = request.requirements
         self.rules = request.rules
         self.prev  = request.prev_schedule or {}
@@ -247,6 +260,97 @@ class _SchedulerBase:
     def _nurse_active_idx(self, nurse: dict, d: int) -> bool:
         """인덱스로 재적 여부 확인"""
         return self._nurse_active_on(nurse, self.all_dates[d])
+
+    # ── 임산부(모성보호) 유틸리티 ─────────────────────────────────────────────
+    def _parse_pregnancy(self, nurse: dict) -> Dict[str, object]:
+        """임신 구간을 date 튜플로 파싱.
+        Returns {"early": (start,end)|None, "late": (start,end)|None}.
+        is_pregnant=False거나 값이 잘못되면 해당 구간 None."""
+        out = {"early": None, "late": None}
+        if not nurse.get("is_pregnant"):
+            return out
+        preg = nurse.get("pregnancy") or {}
+        for key in ("early", "late"):
+            w = preg.get(key) or {}
+            s, e = w.get("start"), w.get("end")
+            try:
+                sd = date.fromisoformat(s) if s else None
+                ed = date.fromisoformat(e) if e else None
+            except (ValueError, TypeError):
+                sd = ed = None
+            if sd and ed and sd <= ed:
+                out[key] = (sd, ed)
+        return out
+
+    def _preg_window_on(self, nid: str, dt: date) -> bool:
+        """dt가 P1 구간(초기/말기) 내 — P1 허용·주1회 대상."""
+        w = self._preg.get(nid)
+        if not w:
+            return False
+        for key in ("early", "late"):
+            rng = w.get(key)
+            if rng and rng[0] <= dt <= rng[1]:
+                return True
+        return False
+
+    def _preg_span_on(self, nid: str, dt: date) -> bool:
+        """dt가 임신 전체 구간 [early.start, late.end] 내 — 야간(N/NC) 제외 대상."""
+        w = self._preg.get(nid)
+        if not w:
+            return False
+        bounds = [w[k] for k in ("early", "late") if w.get(k)]
+        if not bounds:
+            return False
+        span_s = min(b[0] for b in bounds)
+        span_e = max(b[1] for b in bounds)
+        return span_s <= dt <= span_e
+
+    def _preg_active_in_month(self, nurse: dict) -> bool:
+        """임신 구간이 대상 월과 겹치는가 — 생리휴가 면제·야간전담 해제 대상.
+        (__init__ 단계에서도 호출되므로 self._preg 대신 직접 파싱한다.)"""
+        w = self._parse_pregnancy(nurse)
+        bounds = [w[k] for k in ("early", "late") if w.get(k)]
+        if not bounds:
+            return False
+        span_s = min(b[0] for b in bounds)
+        span_e = max(b[1] for b in bounds)
+        import calendar as _cal
+        mlast = _cal.monthrange(self.year, self.month)[1]
+        m_s = date(self.year, self.month, 1)
+        m_e = date(self.year, self.month, mlast)
+        return span_s <= m_e and span_e >= m_s  # 구간 겹침
+
+    def _preg_forbids(self, nurse: dict, dt: date, s: str, pre: str = None) -> bool:
+        """임산부 모성보호로 (날짜 dt, shift s)를 0으로 고정해야 하면 True.
+          · P1: 임산부의 P1 구간(또는 사전입력 P1)에서만 허용 → 그 외 전원 금지
+          · 야간(N/NC): 임신 전체 구간 동안 금지
+          · 생(生): 임신-중-달엔 금지 (임신 중 생리 없음)
+        """
+        nid = nurse["id"]
+        # P1은 임산부 P1 구간 또는 사전입력 P1에서만 — 비임산부 포함 전원 게이팅
+        if s == "P1":
+            if pre == "P1":
+                return False
+            return not (nurse.get("is_pregnant") and self._preg_window_on(nid, dt))
+        if not nurse.get("is_pregnant"):
+            return False
+        if s in self.NIGHT_SHIFTS and self._preg_span_on(nid, dt):
+            return True
+        if s == "생" and nid in self._preg_in_month:
+            return True
+        return False
+
+    def _preg_effective_pre(self, nurse: dict, dt: date, pre: str):
+        """임산부 모성보호로 무시해야 할 사전입력(야간/생)은 None으로 — 솔버가 유효 근무 선택.
+        (사전입력 N을 임산부에게 강제하면 야간 면제와 충돌해 infeasible이 되므로 드롭.)"""
+        if not pre or not nurse.get("is_pregnant"):
+            return pre
+        nid = nurse["id"]
+        if pre in self.NIGHT_SHIFTS and self._preg_span_on(nid, dt):
+            return None
+        if pre == "생" and nid in self._preg_in_month:
+            return None
+        return pre
 
     # ── 예상 소요시간 추정 ────────────────────────────────────────────────────
 

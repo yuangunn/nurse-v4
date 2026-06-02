@@ -150,6 +150,7 @@ class CpSatScheduler(_SchedulerBase):
         self._cs_charge_requirements(model, x)
         if self.rules.weeklyOff:
             self._cs_weekly_off(model, x)
+        self._cs_pregnancy_p1_weekly(model, x)         # 임산부 P1 주1회 (모성보호)
         self._cs_max_v_per_month(model, x)
         if self.rules.maxNightPerMonth:
             self._cs_max_night_per_month(model, x)
@@ -187,6 +188,8 @@ class CpSatScheduler(_SchedulerBase):
                 pre = self.prev.get(nid, {}).get(dt_str)
                 if pre == "OF" and is_holiday:
                     pre = None
+                # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
+                pre = self._preg_effective_pre(nurse, dt, pre)
                 active = self._nurse_active_on(nurse, dt)
                 locked = bool(self.locked_cells.get(nid, {}).get(dt_str))
                 fixed_to = None
@@ -205,6 +208,8 @@ class CpSatScheduler(_SchedulerBase):
                 for s in self.ALL_SHIFTS:
                     if s == "OF" and is_holiday:
                         x[nid][d][s] = 0
+                    elif self._preg_forbids(nurse, dt, s, pre):
+                        x[nid][d][s] = 0   # 임산부 모성보호 (P1 구간 외/야간 제외/생 면제)
                     elif s == "법" and is_night:
                         x[nid][d][s] = 0
                     elif s == "법" and not is_holiday:
@@ -315,6 +320,8 @@ class CpSatScheduler(_SchedulerBase):
                 is_holiday = dt_str in self.holidays
                 if pre == "OF" and is_holiday:
                     pre = None
+                # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
+                pre = self._preg_effective_pre(nurse, dt, pre)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 if not self._nurse_active_on(nurse, dt):
                     for s in self.ALL_SHIFTS:
@@ -322,6 +329,10 @@ class CpSatScheduler(_SchedulerBase):
                     continue
                 for s in self.ALL_SHIFTS:
                     if s == "OF" and is_holiday:
+                        x[nid][d][s] = 0
+                        continue
+                    # 임산부 모성보호 게이팅 (P1 구간 외/야간 제외/생 면제 → 0 고정)
+                    if self._preg_forbids(nurse, dt, s, pre):
                         x[nid][d][s] = 0
                         continue
                     if pre:
@@ -435,6 +446,31 @@ class CpSatScheduler(_SchedulerBase):
                     model.Add(of_sum == 1)
                 else:
                     model.Add(of_sum <= 1)
+
+    def _cs_pregnancy_p1_weekly(self, model, x):
+        """임산부: P1 구간 완전 포함 주마다 P1 정확히 1회 (부분 주 ≤1).
+        HiGHS _c_pregnancy_p1_weekly 대응. 야간 제외·생 면제는 변수 게이팅으로 처리."""
+        if "P1" not in self.ALL_SHIFTS:
+            return
+        for nurse in self.nurses:
+            if not nurse.get("is_pregnant"):
+                continue
+            nid = nurse["id"]
+            for ws, we in self.weeks:
+                win_days = [d for d in range(ws, we + 1)
+                            if self._nurse_active_idx(nurse, d)
+                            and self._preg_window_on(nid, self.all_dates[d])]
+                if not win_days:
+                    continue
+                p1_vars = [x[nid][d]["P1"] for d in win_days
+                           if not isinstance(x[nid][d].get("P1"), int)]
+                if not p1_vars:
+                    continue
+                full_week = (we - ws + 1) == len(win_days)
+                if full_week and len(win_days) >= 7:
+                    model.Add(sum(p1_vars) == 1)
+                else:
+                    model.Add(sum(p1_vars) <= 1)
 
     def _cs_max_v_per_month(self, model, x):
         max_v = self.rules.maxVPerMonth

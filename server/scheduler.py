@@ -68,6 +68,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 # 공휴일에 OF 사전입력은 무시 — 솔버가 유효한 근무(법/근무 등) 선택
                 if pre == "OF" and is_holiday:
                     pre = None
+                # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
+                pre = self._preg_effective_pre(nurse, dt, pre)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 # 전입/전출일 범위 밖: 모든 shift 0으로 고정
                 if not self._nurse_active_on(nurse, dt):
@@ -77,6 +79,10 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 for s in self.ALL_SHIFTS:
                     # OF는 공휴일에 배정 불가 (하드 제약)
                     if s == "OF" and is_holiday:
+                        x[nid][d][s] = 0
+                        continue
+                    # 임산부 모성보호 게이팅 (P1 구간 외/야간 제외/생 면제 → 0 고정)
+                    if self._preg_forbids(nurse, dt, s, pre):
                         x[nid][d][s] = 0
                         continue
                     if pre:
@@ -117,6 +123,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             self._c_nod_pattern(prob, x)               # N→OF→D 금지
         if self.rules.weeklyOff:
             self._c_weekly_off(prob, x)
+        self._c_pregnancy_p1_weekly(prob, x)           # 임산부 P1 주1회 (모성보호)
         if self.rules.maxConsecutiveWork:
             self._c_max_consecutive_work(prob, x, self.rules.maxConsecutiveWorkDays)
         if self.rules.maxConsecutiveNight:
@@ -245,6 +252,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 # 공휴일에 OF 사전입력은 무시 — 완화 모드에서도 OF 재배치 대상
                 if pre == "OF" and is_holiday:
                     pre = None
+                # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
+                pre = self._preg_effective_pre(nurse, dt, pre)
                 # 전입/전출일 범위 밖: 모든 shift 0으로 고정
                 if not self._nurse_active_on(nurse, dt):
                     for s in self.ALL_SHIFTS:
@@ -259,6 +268,10 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 for s in self.ALL_SHIFTS:
                     # OF는 공휴일에 배정 불가 (하드 제약, 완화 모드 포함)
                     if s == "OF" and is_holiday:
+                        x[nid][d][s] = 0
+                        continue
+                    # 임산부 모성보호 게이팅 (P1 구간 외/야간 제외/생 면제 → 0 고정)
+                    if self._preg_forbids(nurse, dt, s, pre):
                         x[nid][d][s] = 0
                         continue
                     # 주휴 처리
@@ -324,6 +337,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             self._c_nod_pattern(prob, x)
         if self.rules.weeklyOff:
             self._c_weekly_off(prob, x)
+        self._c_pregnancy_p1_weekly(prob, x)           # 임산부 P1 주1회 (모성보호)
         # 주휴 재배치: 주당 주휴 정확히 1개 하드 제약
         if self.allow_juhu_relax and "주" in self.ALL_SHIFTS:
             first_of_month = date(self.year, self.month, 1)
