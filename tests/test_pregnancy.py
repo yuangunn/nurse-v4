@@ -105,3 +105,23 @@ def test_pregnancy_overrides_night_dedicated(build_request, small_nurses, solve_
     p1 = sum(1 for s in sch.values() if s == "P1")
     assert nights == 0, f"[{solver}] 임산부(야간전담 해제) 야간 {nights}회: {sch}"
     assert p1 == 1, f"[{solver}] P1 {p1}회 (1회 기대): {sch}"
+
+
+@pytest.mark.parametrize("solver", SOLVERS)
+def test_pregnancy_no_menstrual_in_mid_span(build_request, small_nurses, solve_small, solver):
+    """두 구간 '사이'(중기)에도 생리휴가 면제 — 면제는 임신 전체 기간 적용.
+    초기=3월·출산전=5월 임산부의 4월(중기) 생성: 4월은 어느 P1 구간에도 안 들지만
+    임신 중이므로 ①생(生) 면제(사전입력 생도 드롭) ②야간 제외 ③P1은 없음(구간 한정)."""
+    nurses = small_nurses(6)
+    _preg(nurses[1], early=("2026-03-01", "2026-03-14"), late=("2026-05-15", "2026-05-31"))
+    prev = {nurses[1].id: {"2026-04-03": "생"}}   # 중기에 생 사전입력 → 면제로 드롭돼야
+    req = build_request(nurses=nurses, prev_schedule=prev, add_juhu=False,
+                        year=2026, month=4,
+                        rules=Rules(maxConsecutiveWorkDays=6, maxVPerMonth=1))
+    req.solver = solver
+    res = solve_small(req, days=7, solver=solver)
+    assert res["success"], f"[{solver}] {res['message']}"
+    sch = res["schedule"][nurses[1].id]
+    assert all(s != "생" for s in sch.values()), f"[{solver}] 중기에 생 배정(면제 누락): {sch}"
+    assert all(s not in ("N", "NC") for s in sch.values()), f"[{solver}] 중기 야간 배정: {sch}"
+    assert all(s != "P1" for s in sch.values()), f"[{solver}] 중기에 P1 배정(구간 외): {sch}"
