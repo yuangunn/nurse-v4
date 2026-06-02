@@ -5,7 +5,7 @@
 ; ═══════════════════════════════════════════════════════════════
 
 #define AppName "NurseScheduler"
-#define AppVersion "4.3.5"
+#define AppVersion "4.3.6"
 #define AppPublisher "Hospital Nursing Team"
 #define AppExeName "NurseScheduler.exe"
 #define AppSourceDir "..\dist\electron\NurseScheduler-win32-x64"
@@ -26,6 +26,9 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64compatible
+; 업데이트 시 실행 중인 앱을 Restart Manager로 정상 종료 (파일 잠김/재부팅 요구 방지)
+CloseApplications=yes
+RestartApplications=no
 UninstallDisplayName={#AppName} v{#AppVersion}
 UninstallDisplayIcon={app}\{#AppExeName}
 SetupIconFile=..\build\icon.ico
@@ -54,6 +57,43 @@ Filename: "{app}\{#AppExeName}"; Description: "{#AppName} 실행"; Flags: nowait
 Type: filesandordirs; Name: "{app}"
 
 [Code]
+{ 기존 설치(같은 AppId)의 제거 명령 경로를 레지스트리에서 읽는다. }
+function GetUninstallString(): String;
+var
+  sKey: String;
+  sUnInstall: String;
+begin
+  sKey := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{F3C2A1B4-7D8E-4F6A-B3C2-A1D8E4F6A3B2}_is1';
+  sUnInstall := '';
+  if not RegQueryStringValue(HKLM, sKey, 'UninstallString', sUnInstall) then
+    RegQueryStringValue(HKCU, sKey, 'UninstallString', sUnInstall);
+  Result := sUnInstall;
+end;
+
+{ 설치 직전: 실행 중인 앱을 강제 종료하고, 이전 버전을 조용히 제거(orphan 정리)한다.
+  - Electron 앱과 Python 자식 프로세스 모두 이미지명이 NurseScheduler.exe → /T로 트리까지 종료.
+  - 사용자 데이터(%AppData%\NurseScheduler\: 프로필·DB)는 제거 대상이 아님(보존). }
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  sUnInst: String;
+  iResult: Integer;
+begin
+  if CurStep = ssInstall then
+  begin
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#AppExeName} /T', '',
+         SW_HIDE, ewWaitUntilTerminated, iResult);
+    Sleep(800);
+    sUnInst := GetUninstallString();
+    if sUnInst <> '' then
+    begin
+      sUnInst := RemoveQuotes(sUnInst);
+      Exec(sUnInst, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '',
+           SW_HIDE, ewWaitUntilTerminated, iResult);
+      Sleep(500);
+    end;
+  end;
+end;
+
 procedure InitializeWizard;
 begin
   WizardForm.Caption := '{#AppName} v{#AppVersion} 설치';
