@@ -77,11 +77,19 @@ def main():
     except Exception:
         pass
 
-    # Electron에서 실행 중이 아니면 (독립 실행) 브라우저 자동 오픈
-    is_electron = os.environ.get("ELECTRON_RUN_AS_NODE") or os.path.exists(
-        os.path.join(os.path.dirname(sys.executable), "resources", "app.asar")
+    # 브라우저 자동 오픈 억제 여부.
+    #  · Electron 래퍼는 spawn 시 NURSE_NO_BROWSER=1 을 전달 → 자동 오픈 안 함
+    #    (Electron 자체 창으로 UI를 띄우므로 크롬 중복 오픈 방지).
+    #  · ELECTRON_RUN_AS_NODE / app.asar 경로는 폴백 휴리스틱.
+    #  · 독립 실행(py main.py)에선 환경변수가 없어 브라우저가 정상 오픈됨.
+    suppress_browser = bool(
+        os.environ.get("NURSE_NO_BROWSER")
+        or os.environ.get("ELECTRON_RUN_AS_NODE")
+        or os.path.exists(
+            os.path.join(os.path.dirname(sys.executable), "resources", "app.asar")
+        )
     )
-    if not is_electron:
+    if not suppress_browser:
         threading.Thread(
             target=_wait_and_open_browser,
             args=(url,),

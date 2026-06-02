@@ -33,6 +33,8 @@ function startPythonServer() {
     pythonProcess = spawn(exePath, [], {
       cwd: path.dirname(exePath),
       windowsHide: true,
+      // Electron이 자체 창으로 UI를 띄우므로 Python이 브라우저(크롬)를 중복 오픈하지 않도록 억제
+      env: { ...process.env, NURSE_NO_BROWSER: '1' },
     });
 
     let stdoutBuffer = '';
