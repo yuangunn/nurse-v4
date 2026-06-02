@@ -565,6 +565,15 @@ kbd {
   animation: shimmer 1.5s infinite;
 }
 @keyframes shimmer { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+/* 예상 시간 초과 시: 멈춘 듯한 100% 대신 '진행 중'을 보여주는 불확정(indeterminate) 막대 */
+.progress-track.progress-indeterminate { position: relative; }
+.progress-track.progress-indeterminate::before {
+  content: ''; position: absolute; top: 0; left: 0; height: 100%; width: 35%;
+  border-radius: 10px;
+  background: linear-gradient(90deg, transparent, var(--accent), #60a5fa, transparent);
+  animation: indet 1.3s ease-in-out infinite;
+}
+@keyframes indet { 0% { left: -35%; } 100% { left: 100%; } }
 
 /* ── Status Badge ────────────────────────────────────────── */
 .status-badge {
