@@ -196,7 +196,7 @@ body {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  padding: 8px 28px;
+  padding: 5px 28px;
   gap: 18px;
   border-bottom: 1px solid var(--rule-soft);
 }
@@ -268,7 +268,7 @@ body {
 .step {
   display: grid; grid-template-columns: auto 1fr;
   gap: 10px; align-items: center;
-  padding: 7px 16px;
+  padding: 5px 16px;
   border-right: 1px solid var(--rule-soft);
   cursor: pointer;
   background: transparent;

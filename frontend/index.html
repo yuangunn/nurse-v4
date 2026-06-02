@@ -305,8 +305,8 @@
         <span class="appbar-meta-value" x-text="year + '.' + month"></span>
       </div>
       <div class="appbar-actions">
-        <button @click="toggleDark()" class="btn btn-xs btn-ghost" :title="darkMode?'라이트 모드':'다크 모드'" x-text="darkMode?'☀':'☾'"></button>
-        <button @click="showHelpModal=true" class="btn btn-xs btn-ghost" title="도움말">?</button>
+        <button @click="toggleDark()" class="btn btn-xs btn-ghost" :title="darkMode?'라이트 모드':'다크 모드'" aria-label="다크/라이트 모드 전환" x-text="darkMode?'☀':'☾'"></button>
+        <button @click="showHelpModal=true" class="btn btn-xs btn-ghost" title="도움말" aria-label="도움말 열기">?</button>
         <template x-if="currentProfile">
           <button @click="switchProfile()" class="btn btn-xs btn-ghost" title="프로필 전환">전환</button>
         </template>
@@ -360,84 +360,17 @@
   </nav>
 </header>
 
-<!-- ═══ SIDEBAR (legacy — Phase 3에서 데스크톱은 hide, 모바일은 Phase 6에서 재구성) ═══ -->
-<aside class="sidebar">
-  <div class="sidebar-logo">
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-    <span>NurseScheduler</span>
-    <span class="logo-ver" @click="trackVersionClick()" style="cursor:pointer;user-select:none">v4</span>
-  </div>
-  <nav class="sidebar-nav">
-    <div @click="activeTab='settings'" :class="activeTab==='settings'?'active':''" class="sidebar-item">
-      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      <span class="nav-label">설정</span>
-    </div>
-    <div @click="activeTab='preinput'" :class="activeTab==='preinput'?'active':''" class="sidebar-item">
-      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-      <span class="nav-label">사전입력</span>
-    </div>
-    <div @click="activeTab='analysis'" :class="activeTab==='analysis'?'active':''" class="sidebar-item">
-      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-      <span class="nav-label">분석</span>
-    </div>
-    <div @click="activeTab='schedule'" :class="activeTab==='schedule'?'active':''" class="sidebar-item">
-      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      <span class="nav-label">스케줄</span>
-    </div>
-    <div @click="activeTab='saved'" :class="activeTab==='saved'?'active':''" class="sidebar-item">
-      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-      <span class="nav-label">저장</span>
-    </div>
-  </nav>
-  <div style="padding:8px;border-top:1px solid var(--border)">
-    <!-- 글자크기: 펼침=가로, 접힘=세로 -->
-    <div class="sidebar-fontsize-h flex items-center gap-1 px-3 py-2" style="justify-content:center">
-      <button @click="setFontSize(Math.max(_devModeUnlocked?8:16,fontSize-1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.65rem">A-</button>
-      <span class="text-xs text-sub" style="min-width:28px;text-align:center" x-text="fontSize+'px'"></span>
-      <button @click="setFontSize(Math.min(_devModeUnlocked?30:24,fontSize+1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.75rem;font-weight:700">A+</button>
-    </div>
-    <div class="sidebar-fontsize-v" style="display:none;flex-direction:column;align-items:center;gap:2px;padding:6px 0">
-      <button @click="setFontSize(Math.min(_devModeUnlocked?30:24,fontSize+1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.7rem;font-weight:700;width:36px">A+</button>
-      <span class="text-xs text-sub" style="font-size:0.6rem" x-text="fontSize+'px'"></span>
-      <button @click="setFontSize(Math.max(_devModeUnlocked?8:16,fontSize-1))" class="btn btn-xs btn-ghost" style="padding:2px 6px;font-size:0.6rem;width:36px">A-</button>
-    </div>
-    <!-- 도움말 -->
-    <button @click="showHelpModal=true" class="sidebar-item w-full">
-      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      <span class="nav-label">도움말</span>
-    </button>
-    <!-- 다크모드 -->
-    <button @click="toggleDark()" class="sidebar-item w-full">
-      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <template x-if="darkMode"><g><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></g></template>
-        <template x-if="!darkMode"><g><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></g></template>
-      </svg>
-      <span class="nav-label" x-text="darkMode?'라이트 모드':'다크 모드'"></span>
-    </button>
-    <!-- 용인세브란스병원 로고 (개발자 설정에서 토글) -->
-    <div class="hospital-logo" x-show="showHospitalLogo" x-cloak>
-      <img src="assets/yongin-severance-logo.png?v=1" alt="용인세브란스병원" loading="lazy"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='block'"/>
-      <div style="display:none;font-size:0.65rem;font-weight:700;color:var(--accent);padding:4px;letter-spacing:-0.02em">용인세브란스병원</div>
-    </div>
-    <!-- #11 현재 프로필 표시 -->
-    <template x-if="currentProfile">
-      <div style="margin-top:6px;padding:4px 4px;border-top:1px solid var(--border);text-align:center">
-        <div class="nav-label text-xs text-sub" style="font-weight:600" x-text="profiles.find(p=>p.id===currentProfile)?.name||currentProfile"></div>
-        <div style="display:flex;flex-direction:column;gap:2px;align-items:center;margin-top:2px">
-          <button @click="switchProfile()" class="btn btn-xs btn-ghost" style="font-size:0.55rem;opacity:0.7;padding:2px 4px">전환</button>
-          <button x-show="_devModeUnlocked" @click="devSettingsOpen=true;loadDevDbInfo()" class="btn btn-xs btn-ghost" style="font-size:0.55rem;opacity:0.7;color:var(--amber);padding:2px 4px">개발자</button>
-        </div>
-      </div>
-    </template>
-  </div>
-</aside>
+<!-- 사이드바(legacy) 제거됨 — 데스크톱=상단 스텝퍼, 모바일=하단 네비. 폰트크기는 개발자 설정. -->
 
 <div class="main-content">
 <main style="flex:1;min-height:0;display:flex;flex-direction:column">
 
 <!-- ═══ TAB 1: 설정 ═══════════════════════════════════════ -->
 <div x-show="activeTab==='settings'" x-cloak class="content">
+  <div x-data="{show: localStorage.getItem('ns_settings_guide_hid')!=='1'}" x-show="show" x-cloak class="card-sm mb-3" style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-left:3px solid var(--accent)">
+    <span class="text-xs">💡 <strong>처음이라면</strong> ① 간호사 등록 → ② 요일별 필요 인원 → ③ 규칙 확인 순서면 충분합니다. <span class="text-dim">근무 정의·배점 규칙은 기본값으로 두어도 됩니다.</span></span>
+    <button @click="show=false;localStorage.setItem('ns_settings_guide_hid','1')" class="btn btn-xs btn-ghost ml-auto" title="다시 보지 않기" aria-label="안내 닫기">✕</button>
+  </div>
   <div class="settings-2col">
     <!-- 년월 -->
     <div class="card" style="display:flex;flex-direction:column;justify-content:center">
@@ -1127,7 +1060,7 @@
     </div>
   </div>
   <!-- 메시지 (라인별 분리 — ★ 라인은 강조) -->
-  <div x-show="statusMessage" x-cloak class="card-sm text-sm mb-2" :style="statusOk?'border-color:var(--green);color:var(--t-green)':'border-color:var(--red);color:var(--t-red)'">
+  <div x-show="statusMessage" aria-live="polite" x-cloak class="card-sm text-sm mb-2" :style="statusOk?'border-color:var(--green);color:var(--t-green)':'border-color:var(--red);color:var(--t-red)'">
     <div class="flex items-start justify-between gap-4">
       <div class="flex-1 min-w-0">
         <template x-for="(line, i) in (statusMessage||'').split('\n')" :key="i">
@@ -1594,7 +1527,7 @@
       <button @click="setFontSize(Math.min(_devModeUnlocked?30:24,fontSize+1))" class="btn btn-xs btn-ghost" style="padding:4px 8px;font-weight:700">A+</button>
     </div>
     <!-- 다크모드 -->
-    <button @click="toggleDark()" class="btn btn-sm btn-ghost" style="font-size:0.75rem" x-text="darkMode?'☀ 라이트':'🌙 다크'"></button>
+    <button @click="toggleDark()" class="btn btn-sm btn-ghost" style="font-size:0.75rem" aria-label="다크/라이트 모드 전환" x-text="darkMode?'☀ 라이트':'🌙 다크'"></button>
     <!-- 도움말 -->
     <button @click="showHelpModal=true;showMobileMore=false" class="btn btn-sm btn-ghost" style="font-size:0.75rem">❓ 도움말</button>
     <!-- 프로필 전환 -->
@@ -1605,7 +1538,7 @@
 </div><!-- /app-shell -->
 
 <!-- ═══ 모달: 간호사 ═════════════════════════════════════ -->
-<div x-show="nurseModal.open" x-cloak class="modal-bg" @click.self="nurseModal.open=false">
+<div x-show="nurseModal.open" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="nurseModal.open=false">
   <div class="modal" style="max-width:28rem">
     <h3 class="font-bold mb-4 text-bright" x-text="nurseModal.isNew?'간호사 추가':'간호사 수정'"></h3>
     <div class="space-y-3">
@@ -1652,7 +1585,7 @@
 </div>
 
 <!-- ═══ 모달: 근무 ═══════════════════════════════════════ -->
-<div x-show="shiftModal.open" x-cloak class="modal-bg" @click.self="shiftModal.open=false">
+<div x-show="shiftModal.open" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="shiftModal.open=false">
   <div class="modal" style="max-width:24rem">
     <h3 class="font-bold text-lg mb-5 text-bright" x-text="shiftModal.isNew?'새 근무 추가':'근무 수정'"></h3>
     <div class="space-y-4">
@@ -1679,7 +1612,7 @@
 </div>
 
 <!-- ═══ 모달: 배점 규칙 ══════════════════════════════════ -->
-<div x-show="scoringModal.open" x-cloak class="modal-bg" @click.self="scoringModal.open=false">
+<div x-show="scoringModal.open" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="scoringModal.open=false">
   <div class="modal" style="max-width:28rem">
     <h3 class="font-bold mb-4 text-bright" x-text="scoringModal.isNew?'새 배점 규칙':'배점 규칙 수정'"></h3>
     <div class="space-y-3">
@@ -1699,7 +1632,7 @@
 </div>
 
 <!-- ═══ 모달: 셀 편집 ════════════════════════════════════ -->
-<div x-show="shiftEdit.open" x-cloak class="modal-bg" @click.self="shiftEdit.open=false">
+<div x-show="shiftEdit.open" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="shiftEdit.open=false">
   <div class="modal" style="max-width:20rem;min-width:auto">
     <div class="font-bold text-sm mb-2">
       <span class="text-bright" x-text="shiftEdit.nurse?.name||''"></span>
@@ -1722,7 +1655,7 @@
 </div>
 
 <!-- ═══ 모달: 주휴 옵션 ═══════════════════════════════════ -->
-<div x-show="juhuOptionModal.open" x-cloak class="modal-bg" @click.self="juhuOptionModal.open=false">
+<div x-show="juhuOptionModal.open" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="juhuOptionModal.open=false">
   <div class="modal" style="max-width:20rem;min-width:auto">
     <div class="font-bold text-sm mb-3 text-bright">
       <span x-text="juhuOptionModal.nurse?.name||''"></span>
@@ -1748,7 +1681,7 @@
 </div>
 
 <!-- ═══ 모달: 메모 ══════════════════════════════════════ -->
-<div x-show="noteEdit.open" x-cloak class="modal-bg" @click.self="noteEdit.open=false">
+<div x-show="noteEdit.open" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="noteEdit.open=false">
   <div class="modal" style="max-width:20rem;min-width:auto">
     <div class="font-bold text-sm mb-3 text-bright">메모</div>
     <textarea x-model="noteEdit.text" class="w-full" rows="3" placeholder="메모를 입력하세요"></textarea>
@@ -1764,7 +1697,7 @@
 </div>
 
 <!-- ═══ 모달: 배점 상세 ══════════════════════════════════ -->
-<div x-show="scoreDetailModal.open" x-cloak class="modal-bg" @click.self="scoreDetailModal.open=false">
+<div x-show="scoreDetailModal.open" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="scoreDetailModal.open=false">
   <div class="modal" style="max-width:24rem">
     <div class="flex items-center justify-between mb-3"><div class="font-bold text-bright"><span x-text="scoreDetailModal.nurseName"></span> <span class="font-normal text-sm text-dim">배점</span></div><span class="text-lg font-bold" :class="(scoreDetailModal.total||0)>=0?'text-green':'text-red'" x-text="((scoreDetailModal.total||0)>=0?'+':'')+(scoreDetailModal.total||0)"></span></div>
     <template x-if="scoreDetailModal.rows&&scoreDetailModal.rows.length>0"><table class="tbl mb-3"><thead><tr><th>규칙</th><th class="text-center">N</th><th class="text-right">단가</th><th class="text-right">합</th></tr></thead><tbody><template x-for="row in scoreDetailModal.rows" :key="row.name"><tr><td class="text-xs" x-text="row.name"></td><td class="text-center text-xs font-mono" x-text="row.count"></td><td class="text-right font-mono text-xs" :class="row.score_per>=0?'text-green':'text-red'" x-text="(row.score_per>=0?'+':'')+row.score_per"></td><td class="text-right font-mono font-bold text-xs" :class="row.total>=0?'text-green':'text-red'" x-text="(row.total>=0?'+':'')+row.total"></td></tr></template></tbody><tfoot><tr style="border-top:1px solid rgba(255,255,255,0.06)"><td class="font-bold" colspan="3">합계</td><td class="text-right font-bold" :class="(scoreDetailModal.total||0)>=0?'text-green':'text-red'" x-text="((scoreDetailModal.total||0)>=0?'+':'')+(scoreDetailModal.total||0)"></td></tr></tfoot></table></template>
@@ -1774,7 +1707,7 @@
 </div>
 
 <!-- ═══ 토스트 컨테이너 ════════════════════════════════ -->
-<div class="toast-container">
+<div class="toast-container" role="status" aria-live="polite">
   <template x-for="t in _toasts" :key="t.id">
     <div class="toast" :class="'toast-'+t.type" x-transition>
       <svg x-show="t.type==='loading'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="spin" style="margin-right:6px;vertical-align:middle"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
@@ -1786,7 +1719,7 @@
 </div>
 
 <!-- #8 스케줄 비교 결과 모달 -->
-<div x-show="compareResult" x-cloak class="modal-bg" @click.self="compareResult=null">
+<div x-show="compareResult" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="compareResult=null">
   <div class="modal" style="max-width:36rem;max-height:70vh;display:flex;flex-direction:column">
     <div class="flex items-center justify-between mb-3">
       <div class="font-bold text-lg text-bright">스케줄 비교</div>
@@ -1815,7 +1748,7 @@
 </div>
 
 <!-- 엑셀 사전입력 붙여넣기 모달 -->
-<div x-show="pastePrev.open" x-cloak class="modal-bg" @click.self="closePastePrev()">
+<div x-show="pastePrev.open" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="closePastePrev()">
   <div class="modal" style="max-width:48rem;max-height:88vh;display:flex;flex-direction:column">
     <div class="flex items-center justify-between mb-2">
       <div class="font-bold text-lg text-bright">📋 엑셀 사전입력 붙여넣기</div>
@@ -1968,7 +1901,7 @@
 </div>
 
 <!-- CSV 가져오기 미리보기 모달 -->
-<div x-show="csvImportPreview.open" x-cloak class="modal-bg" @click.self="closeCsvImport()">
+<div x-show="csvImportPreview.open" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="closeCsvImport()">
   <div class="modal" style="max-width:42rem;max-height:80vh;display:flex;flex-direction:column">
     <div class="flex items-center justify-between mb-2">
       <div class="font-bold text-lg text-bright">CSV 가져오기 미리보기</div>
@@ -2116,7 +2049,7 @@
 </div>
 
 <!-- 토스트 히스토리 패널 -->
-<div x-show="showToastHistory" x-cloak class="modal-bg" @click.self="showToastHistory=false">
+<div x-show="showToastHistory" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="showToastHistory=false">
   <div class="modal" style="max-width:28rem;max-height:70vh;display:flex;flex-direction:column">
     <div class="flex items-center justify-between mb-3">
       <div class="font-bold text-lg text-bright">이전 알림</div>
@@ -2383,7 +2316,7 @@
 </div>
 
 <!-- ═══ 모달: 단축키 도움말 ══════════════════════════════ -->
-<div x-show="showShortcutHelp" x-cloak class="modal-bg" @click.self="showShortcutHelp=false">
+<div x-show="showShortcutHelp" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="showShortcutHelp=false">
   <div class="modal" style="max-width:24rem">
     <div class="font-bold text-lg mb-4 text-bright">키보드 단축키</div>
     <table class="tbl">
