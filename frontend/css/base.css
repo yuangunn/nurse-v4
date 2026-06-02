@@ -313,10 +313,19 @@ body {
 @media (min-width: 768px) {
   .bottom-nav { display: none !important; }
 }
+/* 모바일 전용 안내(데스크톱 권장) — 작은 화면에서만 표시 */
+.mobile-note { display: none; }
 @media (max-width: 767px) {
   .appbar { display: none !important; }
   /* 모바일에서 bottom-nav가 fixed로 56px 차지하므로 콘텐츠에 여백 */
   .main-content { padding-bottom: 56px; }
+  .mobile-note {
+    display: flex; align-items: center; gap: 8px;
+    margin: 0 0 8px; padding: 7px 12px; flex-shrink: 0;
+    border-radius: 10px; font-size: 0.72rem; line-height: 1.4;
+    background: var(--accent-soft); color: var(--ink-2);
+    border: 1px solid var(--rule-soft, rgba(0,0,0,0.08));
+  }
 }
 
 /* ── Sidebar ─────────────────────────────────────────────── */

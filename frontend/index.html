@@ -856,10 +856,12 @@
       <div x-show="prevViolations.length>10" class="text-dim" x-text="`... 외 ${prevViolations.length-10}건`"></div>
     </div>
   </div>
+  <div class="mobile-note fs-hide">📱 작은 화면에서는 <strong>보기 전용</strong>을 권장합니다. 셀 편집·근무표 생성은 가로 화면 또는 PC에서 하세요. (표는 좌우로 스크롤됩니다)</div>
   <div class="flex flex-wrap gap-1 text-xs mb-2 items-center fs-hide" style="flex-shrink:0">
     <template x-for="s in prevShifts" :key="s"><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></template>
     <span class="text-dim ml-1">빈칸=자동</span>
     <span class="text-dim ml-2">| ← ↑ ↓ → <kbd>D</kbd><kbd>E</kbd><kbd>N</kbd><kbd>V</kbd><kbd>O</kbd>=OF <kbd>W</kbd>=주 입력 · <kbd>Del</kbd> 삭제 · <kbd>Ctrl+Z</kbd> 되돌리기 · <kbd>?</kbd> 전체 단축키</span>
+    <span class="text-dim ml-2">🖱 더블클릭=편집 · 우클릭=메모 · 드래그=여러 셀 일괄</span>
   </div>
   <!-- #3 이전달 이월 힌트 -->
   <div x-show="showPrevHint" class="card-sm mb-2" style="flex-shrink:0;padding:8px 14px;display:flex;align-items:center;gap:10px;border-left:3px solid var(--accent)">
@@ -895,7 +897,7 @@
           <span x-show="copySource&&copySource!==nurse.id" @click="pasteRow(nurse.id)" class="text-xs text-green ml-1 cursor-pointer" title="붙여넣기">📥</span>
         </td>
         <template x-for="(day,dIdx) in scheduleDays" :key="day">
-          <td class="g-cell p-0" :data-cell="nurse.id+'|'+dayKey(day)" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',hasViolation(nurse.id,day)?'g-violation':'',isDragSelected(nurse.id,day)?'g-drag-sel':'',isFocused(nIdx,dIdx)?'g-focused':'',isLocked(nurse.id,day)?'g-locked':'',isNurseInactive(nurse,day)?'g-inactive':'']" :style="getPrevShift(nurse.id,day)?getShiftStyle(getPrevShift(nurse.id,day)):{}" :title="isNurseInactive(nurse,day)==='before'?'전입 전':(isNurseInactive(nurse,day)==='after'?'전출 후':'')"
+          <td class="g-cell p-0" :data-cell="nurse.id+'|'+dayKey(day)" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',hasViolation(nurse.id,day)?'g-violation':'',isDragSelected(nurse.id,day)?'g-drag-sel':'',isFocused(nIdx,dIdx)?'g-focused':'',isLocked(nurse.id,day)?'g-locked':'',isNurseInactive(nurse,day)?'g-inactive':'']" :style="getPrevShift(nurse.id,day)?getShiftStyle(getPrevShift(nurse.id,day)):{}" :title="isNurseInactive(nurse,day)==='before'?'전입 전':(isNurseInactive(nurse,day)==='after'?'전출 후':'더블클릭=편집 · 우클릭=메모 · 드래그=다중선택 · D/E/N/V/O 키로 직접 입력')"
             @mousedown="onCellMouseDown(nurse,day,$event)" @mouseover="onCellMouseOver(nurse,day)" @click="focusCell(nIdx,dIdx)" @dblclick="openPrevEdit(nurse,day)" @contextmenu.prevent="openNote(nurse.id,day)">
             <template x-if="getPrevShift(nurse.id,day)"><span class="schedule-cell-text block" x-text="getPrevShift(nurse.id,day)"></span></template>
             <template x-if="!getPrevShift(nurse.id,day)"><span class="schedule-cell block" :style="hasWish(nurse.id,day)?'color:var(--accent);opacity:0.3':'color:rgba(255,255,255,0.05)'" x-text="hasWish(nurse.id,day)?'★':'·'"></span></template>
@@ -940,6 +942,7 @@
 
 <!-- ═══ TAB 3: 스케줄 ═════════════════════════════════════ -->
 <div x-show="activeTab==='schedule'" x-cloak class="content">
+  <div class="mobile-note fs-hide">📱 작은 화면에서는 <strong>보기 전용</strong>을 권장합니다. 생성·수정은 PC에서 하세요. (표는 좌우로 스크롤됩니다)</div>
   <!-- 전체화면 슬림 배너 (전체화면 모드에서만 — 첨부 1번 사진 스타일) -->
   <div class="fs-only" x-show="tableFullscreen" x-cloak style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--rule)">
     <div class="month-banner-left">
@@ -1112,7 +1115,10 @@
         <button @click="stopGenerate()" :disabled="stopRequested" class="btn btn-xs" :style="stopRequested?'background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.3)':'background:#e65100;color:#fff'" x-text="stopRequested?'중지 중':'중지'"></button>
       </div>
     </div>
-    <div class="progress-track mb-2"><div class="progress-fill" :style="`width:${estimatedSeconds?Math.min(100,Math.round(generateElapsed/estimatedSeconds*100)):Math.min(100,Math.round(generateElapsed/(generateTimeout*60)*100))}%`"></div></div>
+    <div class="progress-track mb-2" :class="estimatedSeconds&&generateElapsed>estimatedSeconds?'progress-indeterminate':''">
+      <div class="progress-fill" x-show="!(estimatedSeconds&&generateElapsed>estimatedSeconds)" :style="`width:${estimatedSeconds?Math.min(100,Math.round(generateElapsed/estimatedSeconds*100)):Math.min(100,Math.round(generateElapsed/(generateTimeout*60)*100))}%`"></div>
+    </div>
+    <div x-show="estimatedSeconds&&generateElapsed>estimatedSeconds" x-cloak class="text-xs text-amber mb-1">⏳ 예상 시간을 넘었지만 <strong>멈춘 게 아닙니다</strong> — 솔버가 더 나은 해를 탐색 중입니다 (최대 <span x-text="generateTimeout"></span>분). 충분하면 '중지'로 현재 최선해를 쓸 수 있어요.</div>
     <div class="text-xs min-h-[1em] text-dim">
       <template x-if="solveProgress.has_solution"><span class="text-blue">최적 대비 <strong x-text="solveProgress.gap_percent+'%'"></strong> | 노드 <strong x-text="solveProgress.nodes.toLocaleString('ko-KR')"></strong></span></template>
       <template x-if="!solveProgress.has_solution&&solveProgress.nodes>0"><span>탐색 중… 노드 <strong x-text="solveProgress.nodes.toLocaleString('ko-KR')"></strong></span></template>
@@ -1817,15 +1823,28 @@
     </div>
     <p class="text-xs text-sub mb-2">
       엑셀/구글시트에서 표 영역을 선택해 복사(Ctrl+C)한 뒤 아래 영역에 <kbd>Ctrl+V</kbd>로 붙여넣으세요.
-      이름과 날짜를 자동 감지해 매칭합니다.
+      이름과 날짜를 자동 감지해 매칭하고, <strong>적용 전 미리보기</strong>를 보여줍니다.
     </p>
+    <!-- 형식 예시 + 인식 코드 범례 -->
+    <div class="card-sm mb-2" style="padding:6px 10px;background:var(--card-warm,rgba(0,0,0,0.02))">
+      <div class="text-xs text-dim mb-1">권장 형식 — <strong>첫 행 = 날짜, 첫 열 = 이름</strong> (예시):</div>
+      <pre class="text-xs" style="margin:0;font-family:'Courier New',monospace;overflow-x:auto;color:var(--ink-2)">이름   1   2   3   4
+김지현  D   D   OF  N
+박서연  E   N   N   주</pre>
+      <div class="text-xs text-dim mt-1.5">
+        인식 코드:
+        <span class="font-mono">DC D EC E NC N OF 주 V 생 특 공 법 병</span>
+        · 한글 별칭도 인식: <span class="font-mono">데이·이브·나이트·오프·주휴·연차·생리</span>
+        <br>매칭 안 된 이름·미인식 코드는 아래에 ⚠로 표시되고 그 칸만 건너뜁니다.
+      </div>
+    </div>
     <textarea id="paste-prev-textarea"
               x-model="pastePrev.rawText"
               @paste="onPasteRawPaste($event)"
               @input="onPasteTextChange()"
               placeholder="여기에 붙여넣기 (Ctrl+V)..."
               class="w-full mb-2"
-              style="height:5em;font-family:'Courier New',monospace;font-size:0.75rem;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:var(--bg-card)"></textarea>
+              style="height:8em;font-family:'Courier New',monospace;font-size:0.75rem;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:var(--bg-card)"></textarea>
 
     <!-- 모드 선택 -->
     <div class="flex flex-wrap items-center gap-3 mb-2 text-xs" x-show="pastePrev.grid.length">
@@ -2190,8 +2209,8 @@
 </div>
 
 <!-- ═══ 도움말 모달 ═════════════════════════════════════════ -->
-<div x-show="showHelpModal" x-cloak class="modal-bg" @click.self="showHelpModal=false">
-  <div class="modal" style="max-width:640px;max-height:85vh;display:flex;flex-direction:column">
+<div x-show="showHelpModal" x-cloak class="modal-bg" @click.self="showHelpModal=false" role="dialog" aria-modal="true" aria-label="도움말">
+  <div class="modal" style="max-width:840px;max-height:88vh;display:flex;flex-direction:column">
     <div class="flex items-center justify-between mb-4">
       <div class="font-bold text-lg text-bright">도움말</div>
       <button @click="showHelpModal=false" style="background:none;border:none;font-size:1.3rem;color:var(--text-sub);cursor:pointer">&times;</button>
@@ -2291,8 +2310,12 @@
           <p class="text-xs mt-1">1. <strong>사전입력 완화</strong> 체크 → 재시도<br/>2. 실패 시 <strong>주휴 무시</strong> 추가<br/>3. 실패 시 <strong>V 무제한</strong> 추가<br/>4. 그래도 실패 시 에러 메시지의 원인 확인 → 해당 규칙 완화 (설정 탭)</p>
         </div>
         <div>
-          <h4 class="font-semibold text-bright">❓ 사전입력 완화란?</h4>
-          <p class="text-xs mt-1">사전입력한 근무를 솔버가 변경할 수 있게 허용합니다. 휴가(V/생)는 높은 보너스로 거의 유지되고, 일반 근무(D/E/N)는 유연하게 교체됩니다. "완화 설정"에서 보너스를 조절할 수 있습니다.</p>
+          <h4 class="font-semibold text-bright">❓ 사전입력 완화란? (최소 침습)</h4>
+          <p class="text-xs mt-1">생성이 안 될 때, 사전입력을 솔버가 바꿀 수 있게 허용합니다. <strong>꼭 필요한 만큼만</strong> 바꾸며 순서는 <strong>근무 → (인원 부족 보고) → 휴무</strong>입니다. 즉 근무 배정을 먼저 조정하고, <strong>휴무(OFF·V·생·특·공·법·병)는 간호사 개인의 시간이라 최후에만</strong> 건드립니다(주휴는 고정). 휴무가 바뀌면 ⚠로 알려주고, 처방 적용 시 확인을 받습니다. HiGHS·CP-SAT 두 엔진 모두 동일하게 동작합니다. "완화 설정"에서 보너스를 조절할 수 있습니다.</p>
+        </div>
+        <div>
+          <h4 class="font-semibold text-bright">❓ 엑셀/구글시트에서 근무표를 붙여넣으려면?</h4>
+          <p class="text-xs mt-1"><strong>사전입력 탭 → "📋 엑셀 붙여넣기"</strong> 클릭. 엑셀에서 표 영역(이름 열 + 날짜 행 + 근무 칸)을 선택해 복사(Ctrl+C)하고, 모달에 <kbd>Ctrl+V</kbd>로 붙여넣으면 이름·날짜를 자동 매칭하고 <strong>적용 전 미리보기</strong>를 보여줍니다. 인식 코드: D·E·N·OF·V·주·생 등(한글 별칭 "데이/이브/나이트/오프/연차"도 인식). 매칭 안 된 이름·미인식 코드는 경고로 표시되고 그 칸만 건너뜁니다.</p>
         </div>
         <div>
           <h4 class="font-semibold text-bright">❓ 생성 시간이 너무 오래 걸립니다</h4>
@@ -2327,7 +2350,14 @@
             <tr><td class="font-mono text-xs"><kbd>Ctrl+Z</kbd></td><td>되돌리기</td></tr>
             <tr><td class="font-mono text-xs"><kbd>Ctrl+Shift+Z</kbd></td><td>다시 실행</td></tr>
             <tr><td class="font-mono text-xs"><kbd>F5</kbd></td><td>새로고침</td></tr>
-            <tr><td class="font-mono text-xs"><kbd>F11</kbd></td><td>전체화면</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>F11</kbd></td><td>브라우저 전체화면</td></tr>
+            <tr><td colspan="2" class="text-xs text-dim" style="padding-top:8px;font-weight:600">마우스 (사전입력 그리드)</td></tr>
+            <tr><td class="text-xs">더블클릭</td><td>셀 편집 팝업 열기</td></tr>
+            <tr><td class="text-xs">우클릭 (셀)</td><td>메모 + 완화 시 고정 토글</td></tr>
+            <tr><td class="text-xs">우클릭 (날짜 헤더)</td><td>법정공휴일 지정/해제</td></tr>
+            <tr><td class="text-xs">드래그</td><td>여러 셀 선택 → 근무 일괄 지정</td></tr>
+            <tr><td class="text-xs">이름 우클릭</td><td>해당 행 복사(다른 간호사에 붙여넣기)</td></tr>
+            <tr><td class="text-xs">⛶ 버튼</td><td>표 전체화면 보기 (사전입력·근무표 탭)</td></tr>
           </tbody>
         </table>
       </div>
