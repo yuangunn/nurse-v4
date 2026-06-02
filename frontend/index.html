@@ -28,6 +28,25 @@
   <script src="js/app.js"></script>
 </head>
 <body>
+<!-- ═══ 커스텀 제목표시줄 (Electron 프레임리스 — 비-Electron에선 숨김) ═══ -->
+<div class="titlebar" id="titlebar">
+  <div class="titlebar-brand">
+    <svg class="titlebar-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+    <span class="titlebar-name">NurseScheduler</span>
+  </div>
+  <div class="titlebar-controls">
+    <button class="win-btn" id="winMin" title="최소화" aria-label="최소화" type="button">
+      <svg width="10" height="10" viewBox="0 0 10 10"><rect x="0" y="4.5" width="10" height="1" fill="currentColor"/></svg>
+    </button>
+    <button class="win-btn" id="winMax" title="최대화 / 이전 크기로" aria-label="최대화" type="button">
+      <svg class="ico-max" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="9" height="9" rx="0.5"/></svg>
+      <svg class="ico-restore" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="2.5" width="7" height="7" rx="0.5"/><path d="M2.5 2.5 V0.5 H9.5 V7.5 H7.5"/></svg>
+    </button>
+    <button class="win-btn win-btn-close" id="winClose" title="닫기" aria-label="닫기" type="button">
+      <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.2"><path d="M0.5 0.5 L9.5 9.5 M9.5 0.5 L0.5 9.5"/></svg>
+    </button>
+  </div>
+</div>
 <!-- ═══ 프로필 선택 화면 (app-shell 외부) ═══════════════════ -->
 <div :style="profileScreen?'position:fixed;inset:0;z-index:9999;background:var(--bg,#fff);display:flex;align-items:center;justify-content:center':'display:none'" class="profile-overlay">
   <div style="width:420px;max-width:95vw;background:var(--bg-card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:16px;padding:32px;box-shadow:0 8px 32px rgba(0,0,0,0.12)">
@@ -2361,6 +2380,30 @@
     <button @click="showShortcutHelp=false" class="btn btn-ghost w-full btn-sm mt-4">닫기</button>
   </div>
 </div>
+
+<!-- 커스텀 제목표시줄 배선 (Electron에서만 활성) -->
+<script>
+(function(){
+  if(!window.electronWin) return;  // 비-Electron(브라우저)에선 제목표시줄 숨김 유지
+  document.documentElement.classList.add('is-electron');
+  var tb=document.getElementById('titlebar'),
+      min=document.getElementById('winMin'),
+      max=document.getElementById('winMax'),
+      cls=document.getElementById('winClose');
+  if(min) min.addEventListener('click', function(){ window.electronWin.minimize(); });
+  if(max) max.addEventListener('click', function(){ window.electronWin.maximizeToggle(); });
+  if(cls) cls.addEventListener('click', function(){ window.electronWin.close(); });
+  // 드래그 영역 더블클릭 → 최대화/복원 (제어 버튼 영역 제외)
+  if(tb) tb.addEventListener('dblclick', function(e){
+    if(e.target.closest('.titlebar-controls')) return;
+    window.electronWin.maximizeToggle();
+  });
+  // 최대화 상태에 따라 최대화↔복원 아이콘 토글
+  function applyMax(isMax){ if(tb) tb.classList.toggle('win-maximized', !!isMax); }
+  window.electronWin.isMaximized().then(applyMax).catch(function(){});
+  window.electronWin.onMaximized(applyMax);
+})();
+</script>
 
 </body>
 </html>

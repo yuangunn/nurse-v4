@@ -1,7 +1,7 @@
 // NurseScheduler v4 - Electron main process
 // Python FastAPI 서버를 자식 프로세스로 실행하고 BrowserWindow로 UI 표시
 
-const { app, BrowserWindow, Menu, shell, dialog } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
@@ -119,6 +119,7 @@ function createWindow(port) {
     title: 'NurseScheduler v4',
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     autoHideMenuBar: true,
+    frame: false,            // 프레임리스 — 앱 자체 커스텀 제목표시줄 사용 (frontend .titlebar)
     backgroundColor: '#f8f9fb',
     webPreferences: {
       contextIsolation: true,
@@ -131,6 +132,10 @@ function createWindow(port) {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
+
+  // 커스텀 제목표시줄 ↔ 창 최대화 상태 동기화 (최대화/복원 아이콘 토글)
+  mainWindow.on('maximize',   () => mainWindow.webContents.send('win:maximized', true));
+  mainWindow.on('unmaximize', () => mainWindow.webContents.send('win:maximized', false));
 
   // 외부 링크는 기본 브라우저로
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -177,6 +182,16 @@ function createWindow(port) {
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
+
+// ── 커스텀 제목표시줄 창 제어 IPC (preload의 electronWin → 여기) ──────────────
+ipcMain.on('win:minimize', () => { if (mainWindow) mainWindow.minimize(); });
+ipcMain.on('win:maximize-toggle', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMaximized()) mainWindow.unmaximize();
+  else mainWindow.maximize();
+});
+ipcMain.on('win:close', () => { if (mainWindow) mainWindow.close(); });
+ipcMain.handle('win:is-maximized', () => !!(mainWindow && mainWindow.isMaximized()));
 
 function showErrorAndQuit(err) {
   console.error('[NurseScheduler] 시작 실패:', err);

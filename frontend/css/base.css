@@ -171,16 +171,44 @@ body {
 }
 [x-cloak] { display: none !important; }
 
+/* ── 커스텀 제목표시줄 (Electron 프레임리스; 비-Electron에선 숨김) ───────── */
+html { --titlebar-h: 0px; }
+html.is-electron { --titlebar-h: 36px; }
+.titlebar { display: none; }
+html.is-electron .titlebar {
+  display: flex; align-items: center; justify-content: space-between;
+  position: fixed; top: 0; left: 0; right: 0; height: var(--titlebar-h);
+  z-index: 100000;                          /* 모든 오버레이/모달 위 → 창 제어 항상 가능 */
+  background: var(--card); border-bottom: 1px solid var(--rule);
+  -webkit-app-region: drag; user-select: none;
+}
+.titlebar-brand { display: flex; align-items: center; gap: 7px; padding-left: 12px; opacity: 0.72; }
+.titlebar-icon { color: var(--accent); flex-shrink: 0; }
+.titlebar-name { font-size: 0.74rem; font-weight: 600; letter-spacing: 0.01em; color: var(--text); }
+.titlebar-controls { display: flex; height: 100%; -webkit-app-region: no-drag; }
+.win-btn {
+  width: 44px; height: 100%; padding: 0; border: 0; background: transparent;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text); opacity: 0.65; cursor: pointer;
+  transition: background 0.12s ease, opacity 0.12s ease;
+}
+.win-btn:hover { background: rgba(127,127,127,0.16); opacity: 1; }
+.win-btn-close:hover { background: #e81123; color: #fff; opacity: 1; }
+.win-btn .ico-restore { display: none; }   /* 기본: 최대화 아이콘 */
+.titlebar.win-maximized .win-btn .ico-max { display: none; }
+.titlebar.win-maximized .win-btn .ico-restore { display: inline; }
+
 /* ── Layout (Phase 3: Clinical Paper viewport) ────────────── */
 .app-shell {
   display: flex; flex-direction: column;
-  height: 100vh; overflow: hidden;
+  height: calc(100vh - var(--titlebar-h, 0px)); overflow: hidden;
+  margin-top: var(--titlebar-h, 0px);   /* 커스텀 제목표시줄 자리 (Electron) */
   background: var(--paper);
   position: relative;
 }
-/* 상단 3px Severance navy ribbon */
+/* 상단 3px Severance navy ribbon (제목표시줄 바로 아래) */
 .app-shell::before {
-  content: ''; position: fixed; top: 0; left: 0; right: 0;
+  content: ''; position: fixed; top: var(--titlebar-h, 0px); left: 0; right: 0;
   height: 3px; background: var(--accent);
   z-index: 60;
 }
