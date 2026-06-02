@@ -18,11 +18,12 @@
 - **다크 모드, 키보드 단축키, 모바일 대응** — `← ↑ ↓ →` 이동 / `D E N V O W` 직접 입력
 - **셀 단위 잠금 + 메모** — 사전입력 셀 우클릭 → 메모 + "완화 시 고정" 토글 (보수교육·원내교육 등)
 - **드래그 다중 선택 + Undo/Redo** — 40단계, Ctrl+Z / Ctrl+Shift+Z
+- **사용성·접근성 강화 (v4.3.4)** — 도움말 모달 확대(840px)·FAQ·마우스 제스처 안내, **엑셀 붙여넣기 형식 예시+인식 코드 범례**, 셀 hover 편집 툴팁, 장시간 생성 시 진행 애니메이션, 모달 `role=dialog`·상태 `aria-live`·아이콘 버튼 `aria-label` 등 스크린리더 대응
 
 ### 🧮 스케줄러
 - **MIP 기반 근무표 자동 생성** — PuLP + HiGHS, 하드/소프트 제약 만족 최적 배정
 - **사전입력 시스템** — 주휴, 연차, 희망근무를 미리 입력하면 나머지를 솔버가 자동 채움
-- **사전입력 완화 모드** — 생성 실패 시 종류별 차등 보너스로 유연하게 해결, 공휴일 OF는 하드 금지
+- **최소 침습 완화 (v4.3.4)** — 생성 실패 시 *꼭 필요한 만큼만* 사전입력을 조정. **근무를 먼저 풀고 휴무(OFF·V·생·특·공·법·병)는 최후에만** 건드림(주휴는 고정) — 사전입력은 간호사 개인의 시간이므로 '수술처럼 최소 침습'. HiGHS·CP-SAT 양 엔진이 동일하게 동작하며, 휴무 제거가 포함된 처방은 적용 전 확인. 공휴일 OF는 하드 금지
 - **트리플 솔버 (v4.3.1)** — HiGHS(MILP) · **CP-SAT** · **⚡ 레이스** 중 선택. 레이스는 두 엔진을 *동시 실행*해 먼저 해를 찾은 쪽을 채택(문제마다 빠른 엔진이 달라도 항상 빠른 쪽). infeasible 시 CP-SAT assumptions로 *어느 제약이 동시 충족 불가인지* 1회에 정밀 진단
 - **충돌 완전정복 (v4.3.1)** — 전 하드 제약 게이팅 + 최소 MUS·다중 충돌 분리 열거. **최소 수정 처방(MCS)** — *어떤 사전입력을 빼거나 수요를 얼마나 줄이면 풀리는지* 계산("🔧 자동 수정 처방"). 충돌을 클릭하면 사전입력 탭 **해당 셀로 점프·강조**, "✅ 처방 모두 적용"으로 제거+수요감축 원클릭(Ctrl+Z 취소)
 - **infeasible 진단 + 액션 제안** (v4.2.1 강화) — Phase 1~13 단계별 분석. 부족분을 *간호사 +N명 추가* / *일평균 -K명 감축* / *야간전담 K명을 정규로 전환* 등 수치 기반으로 제시. **셀 기여도 ranking** — 어느 사전입력 셀을 비우면 가장 많은 충돌이 동시 해소되는지 표시. **진단 액션 버튼** — UI에서 사전입력/분석 탭으로 한 번에 점프
@@ -37,19 +38,19 @@
 
 ### 🛠 인프라
 - **Electron 데스크톱 앱** — 브라우저 없이 독립 창으로 실행, 완전 오프라인
-- **pytest 회귀 테스트** — 37건: 9개 금지 전환·charge 시니어리티·일별 인원 등 하드 제약 + CP-SAT 동등성·정밀 충돌 분석·야간전담·두 엔진 레이스 자동 검증
+- **pytest 회귀 테스트** — 42건: 9개 금지 전환·charge 시니어리티·일별 인원 등 하드 제약 + CP-SAT 동등성·정밀 충돌 분석·야간전담·두 엔진 레이스 + **완화 최소 침습(휴무 보호)** 자동 검증
 - **JS 모듈화** — `app.js`(2744→~530줄 코어)에서 도메인 로직을 `frontend/js/modules/*` **14개 모듈**로 분리. window-namespace 합성(`...XxxModule()`) 패턴, 빌드 도구 불필요
 
 ---
 
 ## 다운로드
 
-> **최신 버전: v4.3.3** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
+> **최신 버전: v4.3.4** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
 
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_Setup_v4.3.3.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.3/NurseScheduler_Setup_v4.3.3.exe) | 설치 마법사 (권장) | ~190 MB |
-| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.3/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~250 MB |
+| [**NurseScheduler_Setup_v4.3.4.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.4/NurseScheduler_Setup_v4.3.4.exe) | 설치 마법사 (권장) | ~190 MB |
+| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.3.4/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~250 MB |
 
 ### 시스템 요구사항
 - Windows 10/11 (64bit)
@@ -101,7 +102,7 @@ build.bat
 결과물:
 - `dist/electron/NurseScheduler-win32-x64/` — Electron 번들
 - `dist/NurseScheduler_v4_portable.zip` — 포터블 ZIP
-- `dist/installer/NurseScheduler_Setup_v4.3.3.exe` — 설치 마법사
+- `dist/installer/NurseScheduler_Setup_v4.3.4.exe` — 설치 마법사
 
 자세한 빌드 가이드는 [BUILD.md](BUILD.md)를 참고하세요.
 
