@@ -149,9 +149,17 @@ def init_db():
             conn.execute("INSERT INTO requirements (id, data) VALUES (1, ?)", (json.dumps(default_req),))
 
         # 예시 간호사 삽입 (처음 실행 시 DB가 비어 있을 때만)
+        # 단, 저장된 근무표/사전입력이 있으면 '사용하던 DB에서 간호사만 전부
+        # 삭제된 상태'이므로 재시드하지 않는다 — 재시드하면 예시 ID(a0~c5)가
+        # valid 집합이 되어 cleanup_orphan_nurse_refs()가 저장본의 실데이터
+        # 키를 전부 유령으로 오인해 영구 삭제한다.
         existing_nurses = conn.execute("SELECT COUNT(*) FROM nurses").fetchone()[0]
         if existing_nurses == 0:
-            _seed_nurses(conn)
+            saved_rows = conn.execute(
+                "SELECT (SELECT COUNT(*) FROM schedules) + (SELECT COUNT(*) FROM prev_schedules)"
+            ).fetchone()[0]
+            if saved_rows == 0:
+                _seed_nurses(conn)
 
         # 기본 근무 시드 (shifts 테이블이 비어 있을 때만)
         existing_shifts = conn.execute("SELECT COUNT(*) FROM shifts").fetchone()[0]

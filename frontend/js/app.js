@@ -442,10 +442,12 @@ function app() {
       if(!this.schedule||!Object.keys(this.schedule).length)return;
       try{
         const name=`자동저장 ${this.year}-${String(this.month).padStart(2,'0')}`;
-        await this.api('POST','/api/schedules',{year:this.year,month:this.month,data:{schedule:this.schedule,extended:this.extendedSchedule,scores:this.nurseScores,scoreDetails:this.nurseScoreDetails,relaxed:this.relaxedCells},name});
+        // 수동 저장(saveSchedule)과 동일한 스키마 — 이전 payload는 ScheduleSave
+        // 필수 필드가 없어 항상 422로 무음 실패했다.
+        await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights});
         this.toast('스케줄 자동 저장됨','info');
         this.loadSavedList();
-      }catch(e){}
+      }catch(e){console.warn('자동저장 실패:',e)}
     },
 
     // #14 초기화 2단계 확인

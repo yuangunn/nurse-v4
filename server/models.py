@@ -122,3 +122,14 @@ class ScheduleSave(BaseModel):
     rules: Rules
     schedule: Dict[str, Dict[str, str]]
     name: Optional[str] = None
+    # 라운드트립 보존 필드 — typed 모델 도입 때 누락돼 잠금·메모·공휴일 등이
+    # 저장에서 조용히 유실되던 회귀(v4.0.6에서 고쳤던 버그) 복구
+    prev_schedule: Optional[Dict[str, Dict[str, str]]] = None
+    nurse_scores: Optional[Dict[str, Any]] = None
+    nurse_score_details: Optional[Dict[str, Any]] = None
+    locked_cells: Optional[Dict[str, Any]] = None
+    cell_notes: Optional[Dict[str, Any]] = None
+    holidays: Optional[List[str]] = None
+    prev_day_reqs: Optional[Dict[str, Any]] = None
+    prev_month_nights: Optional[Dict[str, Any]] = None
+    solver_log: Optional[str] = None
