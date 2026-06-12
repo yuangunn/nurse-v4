@@ -645,23 +645,31 @@ def delete_scoring_rule(rule_id: int) -> None:
 
 def _nurse_row_to_dict(row: sqlite3.Row) -> Dict:
     d = dict(row)
+
+    def _json(key, default):
+        # 손상된 JSON 컬럼 하나가 간호사 목록 전체(=앱 전체)를 죽이지 않도록 방어
+        try:
+            return json.loads(d.get(key) or default)
+        except (json.JSONDecodeError, TypeError):
+            return json.loads(default)
+
     return {
         "id": d["id"],
         "name": d["name"],
         "group": d["grp"],
         "gender": d["gender"],
-        "capable_shifts": json.loads(d["capable_shifts"]),
+        "capable_shifts": _json("capable_shifts", "[]"),
         "is_night_shift": bool(d["is_night_shift"]),
         "seniority": d["seniority"],
-        "wishes": json.loads(d["wishes"]),
+        "wishes": _json("wishes", "{}"),
         "juhu_day": d.get("juhu_day"),           # None or 0-6
         "juhu_auto_rotate": bool(d.get("juhu_auto_rotate", 1)),
-        "night_months": json.loads(d.get("night_months", "{}") or "{}"),
+        "night_months": _json("night_months", "{}"),
         "is_trainee": d.get("is_trainee") in (1, "1", True),
         "training_end_date": d.get("training_end_date"),
         "preceptor_id": d.get("preceptor_id"),
         "start_date": d.get("start_date"),
         "end_date": d.get("end_date"),
         "is_pregnant": d.get("is_pregnant") in (1, "1", True),
-        "pregnancy": json.loads(d.get("pregnancy", "{}") or "{}"),
+        "pregnancy": _json("pregnancy", "{}"),
     }

@@ -59,9 +59,10 @@ def _hash_password(password: str, salt: Optional[bytes] = None) -> tuple:
 
 
 def _verify_password(password: str, hash_hex: str, salt_hex: str) -> bool:
+    import hmac
     salt = bytes.fromhex(salt_hex)
     dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100_000)
-    return dk.hex() == hash_hex
+    return hmac.compare_digest(dk.hex(), hash_hex)  # 상수시간 비교
 
 
 def _derive_fernet_key(password: str, salt: bytes) -> bytes:
@@ -134,10 +135,26 @@ def remove_master_password() -> bool:
     return True
 
 
+_PROFILE_ID_RE = None
+
+
+def _valid_profile_id(profile_id: str) -> bool:
+    """profile_id는 파일 경로({id}.db)에 들어가므로 경로 조작 문자를 차단한다."""
+    global _PROFILE_ID_RE
+    if _PROFILE_ID_RE is None:
+        import re
+        _PROFILE_ID_RE = re.compile(r"^[A-Za-z0-9가-힣_-]{1,64}$")
+    return bool(profile_id) and bool(_PROFILE_ID_RE.match(profile_id))
+
+
 def create_profile(profile_id: str, name: str, password: str = "",
                    is_guest: bool = False) -> Dict:
     """새 프로필 생성"""
     from datetime import datetime
+
+    if not _valid_profile_id(profile_id):
+        return {"ok": False,
+                "error": "프로필 ID는 한글/영문/숫자/-/_ 만 사용할 수 있습니다 (64자 이내)."}
 
     data = _load_profiles()
 

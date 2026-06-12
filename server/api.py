@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 import json
@@ -604,9 +605,13 @@ def _parse_nurses_csv(csv_text: str) -> dict:
             v = col(row, field)
             if not v:
                 return None
-            if not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+            # 자릿수만 검사하면 2026-02-31 같은 존재하지 않는 날짜가 통과해
+            # 전입/전출·트레이닝 종료 제약이 조용히 무시된다 — 실제 달력 검증
+            try:
+                datetime.strptime(v, "%Y-%m-%d")
+            except ValueError:
                 errors.append(err(idx, field, v, "YYYY-MM-DD",
-                                  f"{idx}행: {field} 형식 오류 → 빈값 처리"))
+                                  f"{idx}행: {field} 형식/날짜 오류 → 빈값 처리"))
                 return None
             return v
 
@@ -770,12 +775,14 @@ def nurse_import(body: dict):
     matched_ids = _resolve_nurse_ids(nurses_to_save, existing)
 
     try:
+        # 업서트를 먼저, 삭제는 마지막에 — 중간 실패 시 '삭제만 반영되고 신규는
+        # 미반영'되는 최악의 경우(데이터 소실)를 피한다.
+        for nurse in nurses_to_save:
+            db.upsert_nurse(nurse)
         if replace_all:
             for n in existing:
                 if n["id"] not in matched_ids:
                     db.delete_nurse(n["id"])
-        for nurse in nurses_to_save:
-            db.upsert_nurse(nurse)
     except Exception as e:
         raise HTTPException(500, f"DB 저장 실패: {e}")
 
