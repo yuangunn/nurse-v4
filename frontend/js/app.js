@@ -322,7 +322,10 @@ function app() {
       const first=new Date(this.year,this.month-1,1);
       const last=new Date(this.year,this.month,0);
       const ref=this._CYCLE_REF;const ms=86400000;
-      const fo=Math.round((first-ref)/ms);const so=fo-((fo%7+7)%7);
+      const fo=Math.round((first-ref)/ms);let so=fo-((fo%7+7)%7);
+      // 1일이 주기 경계와 일치하면 전월 중첩 0일 — 서버와 동일하게 한 주 확장해
+      // 전월 말 기록(이월)이 월 경계 제약 검증에 쓰이게 한다
+      if(((fo%7+7)%7)===0)so-=7;
       const lo=Math.round((last-ref)/ms);const eo=lo+(6-((lo%7+7)%7));
       const start=new Date(ref.getTime()+so*ms);const end=new Date(ref.getTime()+eo*ms);
       const days=[];let c=new Date(start);while(c<=end){days.push(new Date(c));c.setDate(c.getDate()+1)}

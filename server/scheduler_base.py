@@ -215,6 +215,12 @@ class _SchedulerBase:
         # 주기 블록 시작으로 정렬 (7일 단위, _CYCLE_REF 기준)
         first_offset = self._cycle_day_offset(first)
         start_offset = first_offset - (first_offset % 7)
+        # 1일이 주기 경계와 정확히 일치하면 전월 중첩이 0일이 되어, 월 경계의
+        # 금지 전환·연속 야간·N→OF→D를 아무 제약도 검증하지 못한다(전월
+        # 사전입력이 범위 밖이라 전부 드롭됨). 한 주를 앞으로 확장해 전월 말
+        # 기록이 경계 제약에 연결되게 한다. (프론트 scheduleDays도 동일 산식)
+        if first_offset % 7 == 0:
+            start_offset -= 7
         self.schedule_start = self._CYCLE_REF + timedelta(days=start_offset)
 
         last_offset = self._cycle_day_offset(last)
@@ -499,8 +505,12 @@ class _SchedulerBase:
                     ns = schedule.get(nid, {})
                     for day_str, wish_shift in nurse.get("wishes", {}).items():
                         try:
-                            day_num = int(day_str)
-                            dk = date(self.year, self.month, day_num).strftime("%Y-%m-%d")
+                            ds = str(day_str)
+                            # 일(day) 숫자 키와 'YYYY-MM-DD' 키 모두 허용
+                            if "-" in ds:
+                                dk = date.fromisoformat(ds).strftime("%Y-%m-%d")
+                            else:
+                                dk = date(self.year, self.month, int(ds)).strftime("%Y-%m-%d")
                             if dk not in dt_keys:
                                 continue
                             s = ns.get(dk, "")

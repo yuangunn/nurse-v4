@@ -48,6 +48,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             return {"success": False, "message": "간호사가 등록되지 않았습니다.", "schedule": {}}
 
         nurse_ids = [n["id"] for n in self.nurses]
+        self._pre_soft = False  # strict 모드 — 사전입력은 변수 도메인으로 고정
         prob = pulp.LpProblem("nurse_schedule", pulp.LpMaximize)
 
         # 변수 생성: x[nurse_id][day_idx][shift] ∈ {0,1} 또는 상수 0
@@ -192,8 +193,12 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 "message": diagnosis,
             }
         else:
-            # Not Solved = 타임아웃 또는 해 없이 중단
-            if self.allow_pre_relax and self.prev:
+            # Not Solved = 타임아웃 또는 해 없이 중단.
+            # 사용자가 '중지'를 누른 경우엔 완화 재시도를 시작하지 않는다 —
+            # 중지 요청을 무시하고 새 솔브를 도는 셈이 된다.
+            from . import solver_progress
+            if (self.allow_pre_relax and self.prev
+                    and not solver_progress.is_cancelled()):
                 relax_result = self._solve_with_relaxed_pre()
                 if relax_result:
                     return relax_result
@@ -218,6 +223,9 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         성공 시 relaxed_cells 포함 결과 반환, 실패 시 None.
         """
         prob = pulp.LpProblem("nurse_schedule_relaxed", pulp.LpMaximize)
+        # 제약 함수(시니어리티 게이팅 등)에 '사전입력=소프트' 모드임을 알린다 —
+        # 완화 모드에서 원본 prev로 게이팅하면 하드 제약이 통째로 사라진다.
+        self._pre_soft = True
         pre_bonus_terms = []
         # 최소 침습 차등 보너스(높을수록 보호 → 늦게 완화). 휴무는 간호사 개인의 시간이라
         # 강하게 보호: 근무 < OFF < 연차류. 주휴(주)는 기본 하드 고정(allow_juhu_relax 시에만).
@@ -277,8 +285,19 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                     # 주휴 처리
                     if pre == "주":
                         if self.allow_juhu_relax:
-                            # 주휴 무시: 주 유지 or 근무 전환 허용, 단 주→OF 금지 (무의미)
+                            # 주휴 무시: 주 유지 or 근무 전환 허용, 단 주→OF 금지(무의미).
+                            # 일반 게이팅(법 공휴일 한정·생 성별·사전입력 전용 코드 차단)도
+                            # 동일 적용 — 없으면 남성 생리휴가·비공휴일 법·특/공/병 같은
+                            # 코드가 자유 배정될 수 있다.
                             if s == "OF":
+                                x[nid][d][s] = 0
+                            elif s == "법" and (is_night or not is_holiday):
+                                x[nid][d][s] = 0
+                            elif s in ("생", "V") and is_holiday and not is_night:
+                                x[nid][d][s] = 0
+                            elif s == "생" and is_male:
+                                x[nid][d][s] = 0
+                            elif s != "주" and s != "법" and s not in self.SOLVER_SHIFTS:
                                 x[nid][d][s] = 0
                             else:
                                 v = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
@@ -376,9 +395,21 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         # 실현가능성에 꼭 필요할 때만, 그리고 그때도 휴식<근무<휴가 순으로 최소한만 일어난다.
         obj = self._build_objective(prob, x)
         if pre_bonus_terms:
-            scoring_bound = sum(abs(c) for c in obj.values())
-            raw_min = min(PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK, PRE_BONUS_REST)
-            dom = int(scoring_bound // max(1, raw_min)) + 2   # dom*raw_min > scoring_bound 보장
+            # 배점 상한: 이진 변수는 |계수|, 정수 보조변수(night_range·v2/v3 등,
+            # 값 상한 ≤ 기간 일수 T)는 |계수|×T — Σ|계수|만 쓰면 정수 변수가
+            # 상한 가정을 깨 사전순 지배가 무너질 수 있다.
+            scoring_bound = 0
+            for var, coef in obj.items():
+                span = 1 if getattr(var, "cat", "Binary") == "Binary" else max(1, self.T)
+                scoring_bound += abs(coef) * span
+            # 보너스 '조합 차'의 최솟값은 개별 최솟값이 아니라 gcd —
+            # 예: 휴가 1건(5000) vs 주휴3+근무8(300×3+500×8=4900)의 차는 100.
+            import math
+            bonus_gcd = 0
+            for b in (PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK, PRE_BONUS_REST):
+                if b > 0:
+                    bonus_gcd = math.gcd(bonus_gcd, int(b))
+            dom = int(scoring_bound // max(1, bonus_gcd)) + 2
             prob += obj + dom * pulp.lpSum(pre_bonus_terms)
         else:
             prob += obj
