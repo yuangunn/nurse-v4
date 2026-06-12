@@ -40,6 +40,7 @@ def _req():
 
 def test_multi_adapter_register_cancel_all():
     solver_progress.clear()
+    solver_progress.begin()  # register는 begin~end 수명주기 내에서만 유효
     a, b = _FakeAdapter(), _FakeAdapter()
     solver_progress.register(a)
     solver_progress.register(b)
@@ -56,6 +57,7 @@ def test_multi_adapter_register_cancel_all():
 
 def test_get_progress_prefers_solution_holder():
     solver_progress.clear()
+    solver_progress.begin()  # register는 begin~end 수명주기 내에서만 유효
     a, b = _FakeAdapter(), _FakeAdapter()
     b._has = True                                   # b만 해 보유
     solver_progress.register(a)
@@ -68,6 +70,7 @@ def test_get_progress_prefers_solution_holder():
 
 def test_request_cancel_sets_flag_and_cancels():
     solver_progress.clear()
+    solver_progress.begin()  # register는 begin~end 수명주기 내에서만 유효
     a = _FakeAdapter()
     solver_progress.register(a)
     solver_progress.request_cancel()
@@ -121,6 +124,7 @@ class _Fail:
 def test_race_fast_wins_and_cancels_loser(monkeypatch):
     """빠른 엔진이 이기고, 느린 패자는 취소되어 빠르게 끝난다(행 없음)."""
     solver_progress.clear()
+    solver_progress.begin()  # 실제 generate() 경로와 동일하게 수명주기 시작
     monkeypatch.setattr(apimod, "NurseScheduler", _FastWin)
     import server.scheduler_cpsat as cps
     monkeypatch.setattr(cps, "CpSatScheduler", _SlowCancellable)

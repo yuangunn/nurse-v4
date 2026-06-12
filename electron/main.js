@@ -211,19 +211,46 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on('window-all-closed', () => {
+// 종료 전 프로필 close(재암호화)를 서버에 요청 — 렌더러 beforeunload의 fetch는
+// 창 파괴와 경쟁해 완료가 보장되지 않으므로 main 프로세스에서 동기적으로 대기한다.
+function requestProfileClose(timeoutMs = 2000) {
+  return new Promise((resolve) => {
+    if (!serverPort) { resolve(); return; }
+    const req = http.request({
+      hostname: '127.0.0.1', port: serverPort,
+      path: '/api/profiles/close', method: 'POST',
+      timeout: timeoutMs,
+    }, (res) => { res.resume(); res.on('end', resolve); });
+    req.on('error', resolve);
+    req.on('timeout', () => { req.destroy(); resolve(); });
+    req.end();
+  });
+}
+
+let shuttingDown = false;
+async function shutdownPython() {
+  if (!pythonProcess) return;
+  console.log('[NurseScheduler] 프로필 닫기 요청 후 Python 종료 중...');
+  await requestProfileClose();
   if (pythonProcess) {
-    console.log('[NurseScheduler] Python 프로세스 종료 중...');
     pythonProcess.kill();
     pythonProcess = null;
+  }
+}
+
+app.on('window-all-closed', async () => {
+  if (!shuttingDown) {
+    shuttingDown = true;
+    await shutdownPython();
   }
   app.quit();
 });
 
-app.on('before-quit', () => {
-  if (pythonProcess) {
-    pythonProcess.kill();
-    pythonProcess = null;
+app.on('before-quit', (event) => {
+  if (pythonProcess && !shuttingDown) {
+    shuttingDown = true;
+    event.preventDefault();
+    shutdownPython().then(() => app.quit());
   }
 });
 

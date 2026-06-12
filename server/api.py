@@ -130,6 +130,26 @@ def startup():
     prof.init_default_profiles()
     # 기본 DB 초기화 (프로필 전환 전 폴백)
     db.init_db()
+    # 직전 비정상 종료로 남은 게스트 임시 DB 정리
+    try:
+        guest_db = prof._db_path_for_profile("_guest_temp")
+        if guest_db.exists():
+            guest_db.unlink()
+    except Exception:
+        pass
+
+
+@app.on_event("shutdown")
+def shutdown():
+    """서버 종료 시 열린 프로필을 닫아 재암호화 보장 (graceful 종료 경로)."""
+    global _current_profile_id, _current_profile_password
+    if _current_profile_id:
+        try:
+            prof.close_profile(_current_profile_id, _current_profile_password or "")
+        except Exception:
+            pass
+        _current_profile_id = None
+        _current_profile_password = None
 
 
 # ── 프로필 API ────────────────────────────────────────────────────────────────
@@ -172,13 +192,21 @@ def open_profile(body: dict):
         if not prof.verify_master_password(master_pw):
             return {"ok": False, "error": "마스터 비밀번호가 틀렸습니다."}
 
-    # 현재 프로필 닫기
-    if _current_profile_id:
+    # 같은 프로필 재오픈이면 먼저 닫아 .db.enc를 최신화한 뒤 다시 연다.
+    if _current_profile_id and _current_profile_id == profile_id:
         prof.close_profile(_current_profile_id, _current_profile_password or "")
+        _current_profile_id = None
+        _current_profile_password = None
 
+    # 대상 프로필을 먼저 검증·복호화하고, 성공했을 때에만 현재 프로필을 닫는다.
+    # (실패 시 현재 프로필을 닫아버리면 평문이 사라진 상태로 전역이 옛 경로를
+    #  가리켜, 이후 요청이 빈 스텁 DB를 만들고 close가 그것을 재암호화한다.)
     result = prof.open_profile(profile_id, password)
     if not result.get("ok"):
         return result
+
+    if _current_profile_id:
+        prof.close_profile(_current_profile_id, _current_profile_password or "")
 
     # DB 경로 전환
     db_path = result["db_path"]
@@ -231,13 +259,18 @@ def change_profile_password(body: dict):
     force_reset = body.get("force_reset", False)
     if force_reset:
         # 개발자 모드: 비밀번호 강제 초기화 (제거)
+        # 마스터 비밀번호가 설정돼 있으면 검증 — 무인증 강제 초기화 방지
+        if prof.has_master_password():
+            if not prof.verify_master_password(body.get("master_password", "")):
+                raise HTTPException(403, "마스터 비밀번호가 필요합니다.")
         result = prof.force_reset_password(profile_id)
         if not result.get("ok"):
             raise HTTPException(400, result.get("error"))
         return result
     if not new_password:
         raise HTTPException(400, "새 비밀번호를 입력해주세요.")
-    result = prof.change_password(profile_id, old_password, new_password)
+    result = prof.change_password(profile_id, old_password, new_password,
+                                  is_open=(_current_profile_id == profile_id))
     if not result.get("ok"):
         raise HTTPException(400, result.get("error"))
     # 현재 열린 프로필이면 비밀번호 업데이트
@@ -311,10 +344,12 @@ def dev_info():
 @app.post("/api/dev/reset-seed")
 def dev_reset_seed():
     """예시 데이터(18명) 재생성"""
+    from .database import _seed_nurses
+    # 삭제와 시드를 같은 트랜잭션에서 — 분리하면 시드 INSERT가 커밋되지 않고
+    # GC 롤백되어 빈 테이블만 남는다.
     with db.get_conn() as conn:
         conn.execute("DELETE FROM nurses")
-    from .database import _seed_nurses
-    _seed_nurses(db.get_conn())
+        _seed_nurses(conn)
     return {"ok": True}
 
 
@@ -930,7 +965,10 @@ def estimate(request: GenerateRequest):
 @app.post("/api/generate/stop")
 def stop_generate():
     """진행 중인 스케줄 생성을 중지하고 지금까지 찾은 최선의 해를 반환하도록 신호."""
-    if solver_progress.is_active():
+    # is_active(어댑터 등록) 대신 is_running(수명주기 래치) 기준 — 모델 빌드
+    # 구간(어댑터 등록 전)에 눌린 중지도 플래그로 보존되어, register() 시점에
+    # 자동으로 cancel이 전달된다.
+    if solver_progress.is_running():
         solver_progress.request_cancel()
         return {"ok": True, "message": "중지 신호를 전송했습니다."}
     return {"ok": False, "message": "진행 중인 생성이 없습니다."}
@@ -1047,11 +1085,10 @@ def _run_race(request: GenerateRequest) -> dict:
 @app.post("/api/generate")
 def generate(request: GenerateRequest):
     global _last_mip_gap, _last_generate_result
-    # 이전 솔버가 아직 돌고 있으면 거부
-    if solver_progress.is_running():
+    # 이전 솔버가 아직 돌고 있으면 거부 (체크-시작을 원자적으로)
+    if not solver_progress.try_begin():
         raise HTTPException(status_code=409, detail="이미 생성이 진행 중입니다. 중지 후 다시 시도하세요.")
     _last_mip_gap = None
-    solver_progress.begin()
     _last_generate_result = None  # 새 생성 시작 시 이전 결과 초기화
     try:
         # shifts가 비어있으면 DB에서 로드

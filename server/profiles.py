@@ -271,6 +271,11 @@ def open_profile(profile_id: str, password: str = "") -> Dict:
     db_path = _db_path_for_profile(profile_id)
 
     if enc_path.exists() and profile.get("enc_salt"):
+        # 직전 세션이 재암호화 없이 끝났다면(크래시·강제종료) 평문 .db가
+        # .db.enc보다 최신이다. 비밀번호는 위에서 해시로 이미 검증됐으므로
+        # 낡은 암호화본으로 최신 평문을 덮어쓰지 않는다.
+        if db_path.exists() and db_path.stat().st_mtime > enc_path.stat().st_mtime:
+            return {"ok": True, "db_path": str(db_path), "is_guest": False}
         try:
             _decrypt_db(profile_id, password)
         except InvalidToken:
@@ -314,8 +319,12 @@ def close_profile(profile_id: str, password: str = ""):
 
 
 def change_password(profile_id: str, old_password: str,
-                    new_password: str) -> Dict:
-    """프로필 비밀번호 변경"""
+                    new_password: str, is_open: bool = False) -> Dict:
+    """프로필 비밀번호 변경.
+
+    is_open: 현재 세션에서 열려 있는 프로필이면 True — 변경 후 평문 DB를
+    복원해 세션이 계속 동작하게 한다.
+    """
     data = _load_profiles()
     profile = None
     for i, p in enumerate(data["profiles"]):
@@ -332,7 +341,22 @@ def change_password(profile_id: str, old_password: str,
                                 profile["password_salt"]):
             return {"ok": False, "error": "기존 비밀번호가 틀렸습니다."}
 
-    # 새 비밀번호 설정
+    enc_path = _enc_path_for_profile(profile_id)
+    db_path = _db_path_for_profile(profile_id)
+
+    # 닫힌(암호화된) 프로필: enc_salt를 갈기 전에 반드시 '옛 비밀번호+옛 salt'로
+    # 복호화부터 한다. 이 단계를 건너뛰고 salt를 덮어쓰면 .db.enc는 영구 복호화
+    # 불능이 된다.
+    was_closed = enc_path.exists() and not db_path.exists()
+    if was_closed:
+        if not profile.get("enc_salt"):
+            return {"ok": False, "error": "프로필 메타데이터 손상: 복호화 salt가 없습니다."}
+        try:
+            _decrypt_db(profile_id, old_password)
+        except InvalidToken:
+            return {"ok": False, "error": "기존 비밀번호로 DB를 복호화할 수 없습니다."}
+
+    # 새 비밀번호 설정 (복호화 성공 이후에만 salt 교체)
     h, s = _hash_password(new_password)
     profile["password_hash"] = h
     profile["password_salt"] = s
@@ -341,10 +365,13 @@ def change_password(profile_id: str, old_password: str,
     data["profiles"][data["profiles"].index(profile)] = profile
     _save_profiles(data)
 
-    # DB 재암호화
-    db_path = _db_path_for_profile(profile_id)
+    # DB 재암호화 (새 salt + 새 비밀번호)
     if db_path.exists():
         _encrypt_db(profile_id, new_password)
+        # 열려 있는 프로필이면 평문을 복원해 세션을 유지한다 — 복원하지 않으면
+        # 다음 DB 요청이 빈 스텁을 만들고, close 시 그 스텁이 .db.enc를 덮어쓴다.
+        if is_open and not was_closed:
+            _decrypt_db(profile_id, new_password)
 
     return {"ok": True}
 
@@ -402,9 +429,18 @@ def _encrypt_db(profile_id: str, password: str):
     with open(db_path, "rb") as fp:
         plaintext = fp.read()
 
+    # 빈/손상 스텁으로 정상 암호화본을 덮어쓰지 않도록 방어 —
+    # sqlite3.connect가 만든 0바이트 스텁(SQLite 헤더 100바이트 미만)이면
+    # 기존 .db.enc를 보존하고 스텁만 제거한다.
+    if len(plaintext) < 100 and enc_path.exists():
+        db_path.unlink()
+        return
+
     ciphertext = f.encrypt(plaintext)
-    with open(enc_path, "wb") as fp:
+    tmp_path = enc_path.with_name(enc_path.name + ".tmp")
+    with open(tmp_path, "wb") as fp:
         fp.write(ciphertext)
+    os.replace(tmp_path, enc_path)
 
     # 평문 DB 삭제
     db_path.unlink()
@@ -431,8 +467,10 @@ def _decrypt_db(profile_id: str, password: str):
         ciphertext = fp.read()
 
     plaintext = f.decrypt(ciphertext)  # InvalidToken if wrong password
-    with open(db_path, "wb") as fp:
+    tmp_path = db_path.with_name(db_path.name + ".tmp")
+    with open(tmp_path, "wb") as fp:
         fp.write(plaintext)
+    os.replace(tmp_path, db_path)
 
 
 def init_default_profiles():

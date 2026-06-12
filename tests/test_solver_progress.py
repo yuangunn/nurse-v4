@@ -9,6 +9,7 @@ def test_registry_default_idle():
 
 def test_register_and_progress():
     sp.clear()
+    sp.begin()  # register는 begin~end 수명주기 내에서만 유효
 
     class Fake:
         cancelled = False

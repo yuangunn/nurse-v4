@@ -49,6 +49,19 @@ def begin():
         _adapters.clear()
 
 
+def try_begin() -> bool:
+    """원자적 생성 시작 — 이미 진행 중이면 False (is_running 체크와 begin 사이의
+    TOCTOU 제거용). 성공 시 begin()과 동일한 상태가 된다."""
+    global _running, _cancelled
+    with _lock:
+        if _running or _adapters:
+            return False
+        _running = True
+        _cancelled = False
+        _adapters.clear()
+        return True
+
+
 def end():
     """생성 종료 — 전체 비활성화 (남은 레이스 패자 어댑터까지 정리)."""
     global _running
@@ -58,9 +71,23 @@ def end():
 
 
 def register(adapter):
-    """솔버 실행 시작 — 진행/취소 어댑터 등록."""
+    """솔버 실행 시작 — 진행/취소 어댑터 등록.
+
+    - 생성 수명주기 밖(end() 이후 레이스 패자의 완화 솔브, 테스트의 직접 호출)
+      에서는 등록하지 않는다 — running 고착(이후 생성 409 차단) 방지.
+    - 이미 사용자 취소 상태면 등록 직후 cancel()을 보낸다 — 모델 빌드 구간에
+      눌린 중지가 유실되지 않도록.
+    """
+    cancel_now = False
     with _lock:
-        _adapters[id(adapter)] = adapter
+        if _running:
+            _adapters[id(adapter)] = adapter
+            cancel_now = _cancelled
+    if cancel_now:
+        try:
+            adapter.cancel()
+        except Exception:
+            pass
 
 
 def unregister(adapter=None):
