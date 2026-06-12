@@ -13,6 +13,7 @@ window.UndoRedoModule = function() {
       hd: self.holidays,
       lk: self.lockedCells,
       nt: self.cellNotes,
+      pm: self.prevMonthNights,
     });
   }
   function restore(self, state) {
@@ -21,6 +22,7 @@ window.UndoRedoModule = function() {
     self.holidays     = state.hd;
     self.lockedCells  = state.lk || {};
     self.cellNotes    = state.nt || {};
+    if (state.pm !== undefined) self.prevMonthNights = state.pm;
   }
   return {
     _pushUndo() {

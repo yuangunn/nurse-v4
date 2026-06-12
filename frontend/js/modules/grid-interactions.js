@@ -95,12 +95,13 @@ window.GridInteractionsModule = function() {
         if(nurse&&this.prevSchedule[nurse.id]?.[dk]){this._pushUndo();delete this.prevSchedule[nurse.id][dk];this._checkViolations()}
         event.preventDefault();return;
       }
-      else if(event.key==='z'&&(event.ctrlKey||event.metaKey)){event.shiftKey?this.redo():this.undo();event.preventDefault();return}
+      else if(event.key.toLowerCase()==='z'&&(event.ctrlKey||event.metaKey)){event.shiftKey?this.redo():this.undo();event.preventDefault();return}
       else{
-        // 근무코드 직접 입력
+        // 근무코드 직접 입력 (ㅂ=병가, ㅃ(Shift+ㅂ)=법정공휴일 — 객체 리터럴 중복 키로
+        // '병' 입력이 불가능하고 ㅂ가 '법'을 입력하던 버그 수정)
         const key=event.key.toUpperCase();
         const shiftMap={'D':'D','E':'E','N':'N','V':'V','O':'OF','W':'주'};
-        const hangulMap={'ㅈ':'주','ㅂ':'병','ㅅ':'생','ㅌ':'특','ㄱ':'공','ㅂ':'법'};
+        const hangulMap={'ㅈ':'주','ㅂ':'병','ㅃ':'법','ㅅ':'생','ㅌ':'특','ㄱ':'공'};
         let code=shiftMap[key]||hangulMap[event.key];
         if(!code){
           const match=this.shifts.find(s=>s.code.toUpperCase()===key);

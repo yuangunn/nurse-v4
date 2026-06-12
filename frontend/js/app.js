@@ -351,7 +351,7 @@ function app() {
           if(e.key==='?'&&!e.ctrlKey&&!e.metaKey&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){this.showShortcutHelp=!this.showShortcutHelp;e.preventDefault();return}
           const _isTyping=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||document.activeElement?.isContentEditable;
           if(this.activeTab==='preinput'&&this._focusedCell&&!this.shiftEdit.open&&!this.noteEdit.open&&!this.juhuOptionModal.open&&!_isTyping){this.onGridKeyDown(e)}
-          else if((e.ctrlKey||e.metaKey)&&e.key==='z'&&this.activeTab==='preinput'&&!_isTyping){e.shiftKey?this.redo():this.undo();e.preventDefault()}
+          else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&this.activeTab==='preinput'&&!_isTyping){e.shiftKey?this.redo():this.undo();e.preventDefault()}
         });
       }
       window.addEventListener('beforeunload',()=>{this._saveFullState();this._closeCurrentProfile()});

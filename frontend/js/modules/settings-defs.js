@@ -17,7 +17,7 @@ window.SettingsDefsModule = function() {
     rulePresets:JSON.parse(localStorage.getItem('ns_rule_presets')||'[]'),
     showRulePresets:false,
     saveRulePreset(){
-      const name=prompt('프리셋 이름을 입력하세요 (예: 엄격/유연/야간 중심)');
+      const name=this._safePrompt('프리셋 이름을 입력하세요 (예: 엄격/유연/야간 중심)','새 프리셋');
       if(!name)return;
       this.rulePresets.push({name,rules:JSON.parse(JSON.stringify(this.rules)),created:new Date().toISOString().slice(0,16)});
       localStorage.setItem('ns_rule_presets',JSON.stringify(this.rulePresets));

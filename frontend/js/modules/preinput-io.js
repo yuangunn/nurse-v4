@@ -10,8 +10,17 @@ window.PreinputIoModule = function() {
     openPrevEdit(nurse,day){this.shiftEdit={open:true,nurse,day,dateLabel:`${day.getMonth()+1}/${day.getDate()}`,mode:'prev'}},
     getPrevShift(nurseId,day){return this.prevSchedule[nurseId]?.[this.dayKey(day)]||''},
     _cycleDateKeys(){const keys=new Set();for(const d of this.scheduleDays){keys.add(this.dayKey(d))}return keys},
-    clearPrevSchedule(){if(!this.confirmReset())return;const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(!keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>!keys.has(h))},
-    clearPrevOtherMonths(){if(!confirm(`${this.year}년 ${this.month}월 주기 이외의 데이터를 정리합니다. 계속하시겠습니까?`))return;const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(!keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>keys.has(h))},
+    _clearCellMeta(keys,inside){
+      // 잠금·메모도 함께 정리 — 남겨두면 다음 달/다른 데이터에 유령처럼 잔존
+      for(const store of [this.lockedCells,this.cellNotes]){
+        for(const nid of Object.keys(store)){
+          for(const k of Object.keys(store[nid])){if(keys.has(k)===inside)delete store[nid][k]}
+          if(!Object.keys(store[nid]).length)delete store[nid];
+        }
+      }
+    },
+    clearPrevSchedule(){if(!this.confirmReset())return;const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(!keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>!keys.has(h));this._clearCellMeta(keys,true)},
+    clearPrevOtherMonths(){if(!confirm(`${this.year}년 ${this.month}월 주기 이외의 데이터를 정리합니다. 계속하시겠습니까?`))return;const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(!keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>keys.has(h));this._clearCellMeta(keys,false)},
     countPrevEntries(){return Object.values(this.prevSchedule).reduce((s,v)=>s+Object.keys(v).length,0)},
     countNursePrev(nurseId){return Object.keys(this.prevSchedule[nurseId]||{}).length},
 
@@ -111,7 +120,7 @@ window.PreinputIoModule = function() {
 
     // ── 저장/불러오기 ────────────────────────────────────────
     async saveSchedule(){
-      const name=prompt('저장 이름을 입력하세요 (선택)',`${this.year}년 ${this.month}월`);if(name===null)return;
+      const name=this._safePrompt('저장 이름을 입력하세요 (선택)',`${this.year}년 ${this.month}월`);if(name===null)return;
       await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name:name||null,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights});
       await this.loadSavedList();this.toast('저장되었습니다','info');
     },

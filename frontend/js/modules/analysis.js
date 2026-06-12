@@ -294,6 +294,7 @@ window.AnalysisModule = function() {
     applyRecommendedJuhu(){
       if(!this.juhuRecommendation)return;
       const{assignments}=this.juhuRecommendation;
+      this._pushUndo(); // 대량 변경 — Ctrl+Z로 되돌릴 수 있어야 함
       let count=0;
       for(const[nid,list]of Object.entries(assignments)){
         for(const a of list){

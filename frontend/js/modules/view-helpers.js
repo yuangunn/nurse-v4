@@ -30,6 +30,16 @@ window.ViewHelpersModule = function() {
     // ── 년월 이동 ─────────────────────────────────────────────
     prevMonth(){if(this.month===1){this.month=12;this.year--}else this.month--},
     nextMonth(){if(this.month===12){this.month=1;this.year++}else this.month++},
+
+    // ── prompt 폴백 ───────────────────────────────────────────
+    // Electron 렌더러는 window.prompt를 지원하지 않는다 (decisions.md 2-12).
+    // 데스크톱 빌드에서는 confirm으로 기본값 사용 여부만 묻는다.
+    _safePrompt(message,def=''){
+      try{return window.prompt(message,def)}
+      catch(e){
+        return confirm(`${message}\n\n(이 환경에서는 직접 입력이 지원되지 않아 기본값 "${def}"을(를) 사용합니다. 계속할까요?)`)?def:null;
+      }
+    },
     dayKey(day){return`${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`},
 
     // ── 오늘(Today) 홈 헬퍼 ───────────────────────────────────
