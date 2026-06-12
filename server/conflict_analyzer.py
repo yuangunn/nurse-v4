@@ -104,6 +104,14 @@ class _ConflictAnalyzer(CpSatScheduler):
                                "충돌은 소프트/완화 조합 또는 솔버 타임아웃일 수 있습니다."}
         if first is False:
             return {"conflicts": [], "muses": [], "message": "충돌 분석 미완료 (타임아웃)."}
+        if first == []:
+            # 가정 리터럴 없이도 infeasible — 완화 대상이 아닌 구조 제약끼리 충돌
+            return {"conflicts": [], "muses": [],
+                    "message": "완화 가능한 제약과 무관하게 구조 제약(1일 1근무·근무 자격·"
+                               "알 수 없는 코드 등)만으로 충돌합니다. 사전입력 코드와 "
+                               "간호사 자격 설정을 확인하세요."}
+
+        _mus_uncertain = [False]
 
         def minimize_mus(suff):
             """#1 삭제 필터: 각 리터럴을 빼도 여전히 infeasible이면 불필요 → 최소 MUS."""
@@ -111,9 +119,13 @@ class _ConflictAnalyzer(CpSatScheduler):
             i = 0
             while i < len(mus):
                 trial = mus[:i] + mus[i + 1:]
-                if trial and infeasible_with(trial):
+                res = infeasible_with(trial) if trial else None
+                if trial and res:
                     mus = trial  # i번째는 불필요
                 else:
+                    if res is False:
+                        # 타임아웃 — 이 리터럴이 정말 필요한지 미확정인 채 유지됨
+                        _mus_uncertain[0] = True
                     i += 1
             return mus
 
@@ -155,6 +167,9 @@ class _ConflictAnalyzer(CpSatScheduler):
                 parts.append(f"[충돌 {gi}] 이 제약들이 동시 충족 불가:")
                 parts.extend(f"  · {c}" for c in m)
             msg = "\n".join(parts)
+        if _mus_uncertain[0]:
+            msg += ("\n⚠ 일부 항목은 시간 제한으로 최소성 검증을 마치지 못했습니다 — "
+                    "목록에 실제 원인이 아닌 제약이 포함돼 있을 수 있습니다.")
         anchored = [{"label": c, **(self._anchor_by_label.get(c) or {"nurse_id": None, "date": None})}
                     for c in flat]
         return {"conflicts": flat, "anchored": anchored, "muses": muses, "message": msg}
@@ -267,8 +282,15 @@ class _ConflictAnalyzer(CpSatScheduler):
         month_idxs = [d for d, dt in enumerate(self.all_dates)
                       if dt.month == self.month and dt.year == self.year]
         for nurse in self.nurses:
+            nid = nurse["id"]
+            # 모든 여성: 당월 생 ≤1 (솔버 하드 제약과 패리티 — 빠지면 생 2회
+            # 사전입력이 실제로는 infeasible인데 '충돌 없음'으로 오진)
+            if nurse.get("gender") == "female":
+                m_terms = [x[nid][d]["생"] for d in month_idxs]
+                if any(not isinstance(t, int) for t in m_terms):
+                    lit = gate(f"{self._fmt_nurse_label(nurse)} 생리휴가 월 1회 한도", nid=nid)
+                    model.Add(sum(m_terms) <= 1).OnlyEnforceIf(lit)
             if nurse.get("is_night_shift") and month_days == 31 and nurse.get("gender") == "female":
-                nid = nurse["id"]
                 lit = gate(f"{self._fmt_nurse_label(nurse)} 야간전담 생리휴가 1회(31일달)", nid=nid)
                 model.Add(sum(x[nid][d]["생"] for d in month_idxs) == 1).OnlyEnforceIf(lit)
 
@@ -480,6 +502,12 @@ class _ConflictAnalyzer(CpSatScheduler):
                 pre = self._preg_effective_pre(nurse, dt, pre)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 active = self._nurse_active_on(nurse, dt)
+                # 잠긴 셀: 완화·진단 경로와 동일하게 절대 고정 — keep 리터럴을 만들지
+                # 않아 '잠긴 셀 제거'가 처방으로 제시되는 일을 차단한다.
+                if active and pre and self.locked_cells.get(nid, {}).get(dt_str):
+                    for s in self.ALL_SHIFTS:
+                        x[nid][d][s] = 1 if s == pre else 0
+                    continue
                 free_ok = {}
                 for s in self.ALL_SHIFTS:
                     if not active:
@@ -541,6 +569,12 @@ class _ConflictAnalyzer(CpSatScheduler):
         self._cs_max_v_per_month(model, x)
         if self.rules.maxNightPerMonth:
             self._cs_max_night_per_month(model, x)
+        # 실제 솔버 경로(_apply_hard_constraints)와 동일 집합 보장 — 빠지면
+        # '수정 없이 생성 가능'이 거짓이 되거나 처방을 적용해도 여전히 실패한다.
+        if getattr(self.rules, "restAfterNight", False):
+            self._cs_rest_after_night(model, x)
+        if self.rules.maxNightTwoMonth:
+            self._cs_max_night_two_month(model, x)
         self._cs_menstrual_leave(model, x)
         self._cs_night_shift_nurses(model, x)
         self._cs_charge_seniority(model, x)
@@ -630,14 +664,20 @@ class _ConflictAnalyzer(CpSatScheduler):
         if not removed and not short_list:
             return {"fixable": True, "removals": [], "shortfalls": [],
                     "message": "수정 없이 생성 가능합니다 (현재 하드 제약상 충돌 없음)."}
+        # 시간 제한 내 OPTIMAL 미도달이면 '최소' 보장이 없음을 명시
+        approx_note = ""
+        if status != cp_model.OPTIMAL:
+            approx_note = ("\n⚠ 시간 제한으로 근사 처방입니다 — 최소 수정임이 보장되지 "
+                           "않으며, 더 적은 수정으로도 풀릴 수 있습니다.")
         return {
             "fixable": True,
+            "is_optimal": status == cp_model.OPTIMAL,
             "removals": [{"nurse_id": nid, "nurse": l, "date_iso": iso, "date": ds, "pre": p,
                           "is_timeoff": timeoff_class(p) != "work"}
                           for nid, l, iso, ds, p in removed],
             "shortfalls": [{"kind": k, "date": dt.strftime("%Y-%m-%d"), "code": c, "amount": v}
                            for k, dt, c, v in short_list],
-            "message": "이렇게 수정하면 생성 가능합니다:\n" + "\n".join(lines),
+            "message": "이렇게 수정하면 생성 가능합니다:\n" + "\n".join(lines) + approx_note,
         }
 
 

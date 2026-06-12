@@ -306,9 +306,24 @@ class _HighsDiagnosisMixin:
         N = len(self.nurses)
         req_dict = self.req.model_dump()
 
+        _unknown_phases = []
+
         def _try(prob) -> bool:
-            prob.solve(QUICK)
-            return pulp.LpStatus[prob.status] in ("Optimal", "Feasible")
+            """True = 이 단계를 원인으로 단정할 수 없음(feasible 또는 시간 초과 미결),
+            False = 증명된 Infeasible.
+            10초 내 판정 실패('Not Solved')를 실패로 취급하면 큰 문제에서 멀쩡한
+            단계가 원인으로 지목된다 — 증명된 Infeasible만 원인으로 본다."""
+            try:
+                prob.solve(QUICK)
+            except Exception:
+                return True  # 솔버 예외 — 단정 불가
+            status = pulp.LpStatus.get(prob.status, "Unknown") \
+                if isinstance(pulp.LpStatus, dict) else pulp.LpStatus[prob.status]
+            if status == "Infeasible":
+                return False
+            if status not in ("Optimal", "Feasible"):
+                _unknown_phases.append(getattr(prob, "name", "?"))
+            return True
 
         _phase_counter = [0]
         def _fresh_x():
@@ -322,17 +337,30 @@ class _HighsDiagnosisMixin:
                 is_night = nurse.get("is_night_shift")
                 is_male = nurse.get("gender") != "female"
                 for d in range(self.T):
-                    dt_str = self.all_dates[d].strftime("%Y-%m-%d")
+                    dt = self.all_dates[d]
+                    dt_str = dt.strftime("%Y-%m-%d")
                     pre = self.prev.get(nid, {}).get(dt_str)
                     is_holiday = dt_str in self.holidays
                     # 공휴일에 OF 사전입력은 무시 (진단도 동일 규칙)
                     if pre == "OF" and is_holiday:
                         pre = None
+                    # 임산부 모성보호: solve()와 동일하게 사전입력 보정
+                    pre = self._preg_effective_pre(nurse, dt, pre)
                     pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                     xx[nid][d] = {}
+                    # 전입/전출 범위 밖: 전부 0 — solve()와 동일. 누락 시 전출
+                    # 간호사가 진단 모델에서 공급으로 계산돼 광범위 오진이 난다.
+                    if not self._nurse_active_on(nurse, dt):
+                        for s in self.ALL_SHIFTS:
+                            xx[nid][d][s] = 0
+                        continue
                     for s in self.ALL_SHIFTS:
                         # OF는 공휴일에 배정 불가 (하드 제약)
                         if s == "OF" and is_holiday:
+                            xx[nid][d][s] = 0
+                            continue
+                        # 임산부 게이팅 (solve() 동일)
+                        if self._preg_forbids(nurse, dt, s, pre):
                             xx[nid][d][s] = 0
                             continue
                         if pre:
@@ -349,6 +377,10 @@ class _HighsDiagnosisMixin:
                         elif s == "법" and is_holiday:
                             xx[nid][d][s] = pulp.LpVariable(f"{pfx}_{nid}_{d}_{s}", cat="Binary")
                         elif s in ("생", "V") and is_holiday and not is_night:
+                            xx[nid][d][s] = 0
+                        elif s not in self.SOLVER_SHIFTS:
+                            # 사전입력 전용 코드(특/공/병/주/D1/중 등) — solve() 동일.
+                            # 자유 변수로 두면 진단 모델이 잉여 인원을 흡수해 오진.
                             xx[nid][d][s] = 0
                         else:
                             xx[nid][d][s] = pulp.LpVariable(f"{pfx}_{nid}_{d}_{s}", cat="Binary")
@@ -1117,6 +1149,10 @@ class _HighsDiagnosisMixin:
 
         # ── 원인 불명 ────────────────────────────────────────────────────────
         lines.append("  [원인 불명] 개별 제약은 통과하지만 전체 조합이 Infeasible입니다.")
+        if _unknown_phases:
+            lines.append(
+                f"    ⚠ {len(_unknown_phases)}개 단계는 10초 내 판정을 끝내지 못해 "
+                "통과로 간주했습니다 — 그중에 실제 원인이 있을 수 있습니다.")
         lines.append("    시간이 지나도 해를 찾지 못했을 수 있습니다 (타임아웃).")
         lines.append("    해결: 간호사를 추가하거나 일부 제약을 완화해보세요.")
         return "\n".join(lines)
