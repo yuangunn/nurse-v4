@@ -904,6 +904,28 @@ def delete_shift(code: str):
 # 일별 인원 사전 검증
 from datetime import date as _date, timedelta as _td
 
+def _validate_locked_conflicts(request: GenerateRequest) -> Optional[str]:
+    """잠긴 셀의 사전입력이 규칙에 의해 무효화(드롭)되는 충돌 검출.
+    '잠금은 완화에서도 고정'이 약속이지만, 공휴일 OF 금지 같은 규칙이 사전입력
+    자체를 드롭하면 잠금이 적용될 수 없다 — 조용히 무시하지 말고 경고한다."""
+    locked = request.locked_cells or {}
+    prev = request.prev_schedule or {}
+    holidays = set(request.holidays or [])
+    name_by_id = {n.id: n.name for n in request.nurses}
+    bad = []
+    for nid, cells in locked.items():
+        for dt_str, flag in (cells or {}).items():
+            if not flag:
+                continue
+            pre = (prev.get(nid) or {}).get(dt_str)
+            if pre == "OF" and dt_str in holidays:
+                bad.append(f"  · {name_by_id.get(nid, nid)} {dt_str}: 공휴일 OF 잠금")
+    if not bad:
+        return None
+    return ("⚠ 공휴일에는 OF를 배정할 수 없어 아래 잠금이 적용되지 않습니다 "
+            "(법정공휴일 '법' 코드 사용 권장):\n" + "\n".join(bad[:8]))
+
+
 def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts: list) -> Optional[str]:
     """
     prev_schedule의 고정 근무를 반영한 후, 각 날짜별 근무 가능 인원이
@@ -1113,6 +1135,9 @@ def generate(request: GenerateRequest):
         rest_shifts  = [s.code for s in request.shifts if s.period == "rest"]
 
         warning = _validate_staffing(request, leave_shifts, rest_shifts)
+        lock_warn = _validate_locked_conflicts(request)
+        if lock_warn:
+            warning = (warning + "\n\n" + lock_warn) if warning else lock_warn
         if request.solver == "race":
             result = _run_race(request)
         elif request.solver == "cpsat":

@@ -27,47 +27,59 @@ _lock = threading.Lock()
 _adapters: dict = {}       # id(adapter) -> adapter  (다중 = 레이스 안전)
 _running: bool = False     # 생성 수명주기 래치 (어댑터 등록 전에도 True)
 _cancelled: bool = False   # 사용자 취소 플래그 (레이스 패자 자동중지와 구분)
+_all_cancel: bool = False  # cancel_all 발생 래치 — 레이스 패자가 완화 재시도 등
+                           # 후속 솔브를 시작하지 않도록 신호 (사용자 취소와 구분)
 
 _IDLE = {"gap_percent": None, "nodes": 0, "has_solution": False, "is_running": False}
 
 
 def clear():
     """전체 리셋 (테스트/안전용)."""
-    global _running, _cancelled
+    global _running, _cancelled, _all_cancel
     with _lock:
         _adapters.clear()
         _running = False
         _cancelled = False
+        _all_cancel = False
 
 
 def begin():
     """생성 시작 — running 래치 ON, 취소 플래그 초기화 (어댑터는 아직 없음)."""
-    global _running, _cancelled
+    global _running, _cancelled, _all_cancel
     with _lock:
         _running = True
         _cancelled = False
+        _all_cancel = False
         _adapters.clear()
 
 
 def try_begin() -> bool:
     """원자적 생성 시작 — 이미 진행 중이면 False (is_running 체크와 begin 사이의
     TOCTOU 제거용). 성공 시 begin()과 동일한 상태가 된다."""
-    global _running, _cancelled
+    global _running, _cancelled, _all_cancel
     with _lock:
         if _running or _adapters:
             return False
         _running = True
         _cancelled = False
+        _all_cancel = False
         _adapters.clear()
         return True
 
 
 def end():
-    """생성 종료 — 전체 비활성화 (남은 레이스 패자 어댑터까지 정리)."""
+    """생성 종료 — 전체 비활성화. 남은 레이스 패자 어댑터는 clear 전에 cancel을
+    전파한다 (clear만 하면 잔존 솔브가 어떤 취소 경로에도 잡히지 않음)."""
     global _running
     with _lock:
+        leftovers = list(_adapters.values())
         _adapters.clear()
         _running = False
+    for a in leftovers:
+        try:
+            a.cancel()
+        except Exception:
+            pass
 
 
 def register(adapter):
@@ -124,8 +136,18 @@ def _cancel_snapshot():
 
 def cancel_all_adapters():
     """등록된 모든 어댑터 취소 — 사용자 취소 플래그는 건드리지 않음.
-    (레이스에서 승자 확정 후 패자를 멈출 때 사용 → 승자 결과가 stopped로 오인되지 않음)."""
+    (레이스에서 승자 확정 후 패자를 멈출 때 사용 → 승자 결과가 stopped로 오인되지 않음).
+    _all_cancel 래치를 켜서, cancel 시점에 미등록이던 패자의 후속 솔브(완화 재시도 등)도
+    was_cancel_all()로 스스로 중단을 판단할 수 있게 한다."""
+    global _all_cancel
+    with _lock:
+        _all_cancel = True
     _cancel_snapshot()
+
+
+def was_cancel_all() -> bool:
+    """이번 생성 수명주기에서 cancel_all이 발생했는가 (레이스 패자 판별용)."""
+    return _all_cancel
 
 
 def request_cancel():

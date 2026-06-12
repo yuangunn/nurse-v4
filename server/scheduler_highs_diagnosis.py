@@ -302,6 +302,9 @@ class _HighsDiagnosisMixin:
         제약을 단계적으로 추가하면서 어느 조건이 Infeasible을 만드는지 찾아 반환.
         빠른 진단을 위해 각 단계는 timeLimit=10초만 사용.
         """
+        # 완화 솔브가 남긴 _pre_soft 등 모드 플래그를 리셋 — 진단은 strict 모델과
+        # 동일한 게이팅으로 빌드되어야 한다 (소프트 게이팅 잔존 시 오진)
+        self._pre_soft = False
         QUICK = pulp.HiGHS(timeLimit=10, msg=False)
         N = len(self.nurses)
         req_dict = self.req.model_dump()
@@ -456,30 +459,59 @@ class _HighsDiagnosisMixin:
         self._c_daily_requirements(p, x)
         p += 0
         if not _try(p):
-            # 어느 날짜가 문제인지 찾기
+            # 어느 날짜가 문제인지 찾기 — 일별 오버라이드(per_day_req) 반영 +
+            # 부족뿐 아니라 '요구 0/초과 vs 사전입력 근무' 케이스도 검출
+            period_shift_map = {"D": self.DAY_SHIFTS, "E": self.EVENING_SHIFTS,
+                                "N": self.NIGHT_SHIFTS}
             short_days = []
+            excess_days = []
+            kor_wd = ['월', '화', '수', '목', '금', '토', '일']
             for d, dt in enumerate(self.all_dates):
                 if dt.month != self.month:
                     continue
+                dt_str = dt.strftime("%Y-%m-%d")
                 wk = WEEKDAY_KEYS[dt.weekday()]
-                day_req = req_dict.get(wk, {})
-                # prev_schedule로 사용 불가한 인원 계산
+                base_req = req_dict.get(wk, {})
+                ovr = self.per_day_req.get(dt_str, {})
+                day_req = {**base_req, **ovr} if ovr else base_req
+                # 부족: 사전입력 휴무/휴가로 빠진 인원 대비 총 요구
                 fixed_rest = sum(
                     1 for nurse in self.nurses
-                    if self.prev.get(nurse["id"], {}).get(dt.strftime("%Y-%m-%d"), "")
+                    if self.prev.get(nurse["id"], {}).get(dt_str, "")
                     in (self.LEAVE_SHIFTS + self.REST_SHIFTS)
                 )
                 avail = N - fixed_rest
-                needed = sum(day_req.get(p_, 0) for p_ in ["D", "E", "N"])
+                needed = sum(int(day_req.get(p_) or 0) for p_ in ["D", "E", "N"])
                 if avail < needed:
                     short_days.append(
-                        f"    {dt.strftime('%m/%d')}({['월','화','수','목','금','토','일'][dt.weekday()]}): "
-                        f"필요 {needed}명, 가용 {avail}명"
-                    )
-            lines.append("  [원인] 일별 인원 부족 - 다음 날짜에 근무 가능 인원이 부족합니다:")
-            lines.extend(short_days[:5])
-            if len(short_days) > 5:
-                lines.append(f"    ... 외 {len(short_days)-5}일")
+                        f"    {dt.strftime('%m/%d')}({kor_wd[dt.weekday()]}): "
+                        f"필요 {needed}명, 가용 {avail}명")
+                # 초과: 요구보다 많은 사전입력 근무 (특히 요구 0명인 날의 근무)
+                for p_, shifts_ in period_shift_map.items():
+                    if p_ not in day_req:
+                        continue
+                    req_n = max(0, int(day_req.get(p_) or 0))
+                    pre_n = sum(
+                        1 for nurse in self.nurses
+                        if self.prev.get(nurse["id"], {}).get(dt_str, "") in shifts_)
+                    if pre_n > req_n:
+                        excess_days.append(
+                            f"    {dt.strftime('%m/%d')}({kor_wd[dt.weekday()]}) {p_}: "
+                            f"요구 {req_n}명인데 사전입력 근무 {pre_n}명 (초과 불가)")
+            lines.append("  [원인] 일별 인원 제약 충돌:")
+            if short_days:
+                lines.append("  인원이 부족한 날짜:")
+                lines.extend(short_days[:5])
+                if len(short_days) > 5:
+                    lines.append(f"    ... 외 {len(short_days)-5}일")
+            if excess_days:
+                lines.append("  요구보다 사전입력 근무가 많은 날짜 (정확 일치 제약):")
+                lines.extend(excess_days[:5])
+                if len(excess_days) > 5:
+                    lines.append(f"    ... 외 {len(excess_days)-5}건")
+            if not short_days and not excess_days:
+                lines.append("    일자별 합계로는 특정 못 함 — 시간대별 자격(D/E/N 가능 인원)"
+                             " 편중이 원인일 수 있습니다. 정밀 충돌 분석을 실행해 보세요.")
             return "\n".join(lines)
 
         # ── Phase 3: Charge 요구사항 ─────────────────────────────────────────
@@ -1153,6 +1185,9 @@ class _HighsDiagnosisMixin:
             lines.append(
                 f"    ⚠ {len(_unknown_phases)}개 단계는 10초 내 판정을 끝내지 못해 "
                 "통과로 간주했습니다 — 그중에 실제 원인이 있을 수 있습니다.")
-        lines.append("    시간이 지나도 해를 찾지 못했을 수 있습니다 (타임아웃).")
+        lines.append("    참고: 연속야간 후 휴무(restAfterNight)·임산부 P1 주1회 등 일부")
+        lines.append("    제약은 이 단계별 진단에 포함되지 않습니다.")
+        lines.append("    → 아래 [🔍 정밀 충돌 분석]과 [🔧 자동 수정 처방] 버튼이 이런")
+        lines.append("      원인까지 포함해 충돌 지점을 짚어줍니다.")
         lines.append("    해결: 간호사를 추가하거나 일부 제약을 완화해보세요.")
         return "\n".join(lines)

@@ -116,6 +116,12 @@ class CpSatScheduler(_SchedulerBase):
         cb = _CpSatCb(prog, _log_sink)
         prog.solver = solver  # cancel() → stop_search() 즉시 중단 경로
         solver_progress.register(prog)
+        # 모델 빌드 중 눌린 중지는 register가 cancel()로 전달하지만, Solve 시작
+        # 전의 stop_search()는 no-op이므로 여기서 플래그를 직접 확인한다
+        if prog.cancelled:
+            solver_progress.unregister(prog)
+            return {"success": False, "schedule": {}, "extended_schedule": {},
+                    "message": "중지 요청으로 생성이 취소되었습니다."}
         try:
             status = solver.Solve(model, cb)
         finally:
@@ -136,24 +142,32 @@ class CpSatScheduler(_SchedulerBase):
                 "estimated_seconds": self.estimate_seconds(),
             }
         if status == cp_model.INFEASIBLE:
-            # 사전입력 완화 재시도 (HiGHS 패리티 — 최소 침습)
-            if self.allow_pre_relax and self.prev:
+            # 사전입력 완화 재시도 (HiGHS 패리티 — 최소 침습).
+            # 취소(사용자 중지·레이스 패자)면 후속 솔브를 시작하지 않는다.
+            cancelled_now = (prog.cancelled or solver_progress.is_cancelled()
+                             or solver_progress.was_cancel_all())
+            if self.allow_pre_relax and self.prev and not cancelled_now:
                 relaxed = self._solve_relaxed()
                 if relaxed:
                     return relaxed
             msg = "CP-SAT: 제약을 모두 만족하는 근무표가 없습니다 (infeasible)."
-            try:
-                from .conflict_analyzer import analyze_conflicts
-                diag = analyze_conflicts(self._request)
-                if diag.get("conflicts"):
-                    msg += "\n\n[정밀 충돌 분석]\n" + diag["message"]
-            except Exception:
-                pass
+            # 인라인 정밀분석은 단독 CP-SAT 모드에서만 — 레이스 패자의 분석은
+            # 결과가 폐기되는데 분~수십 분 CPU를 태울 수 있고 취소도 안 된다.
+            in_race = getattr(self._request, "solver", "") == "race"
+            if not in_race and not cancelled_now:
+                try:
+                    from .conflict_analyzer import analyze_conflicts
+                    diag = analyze_conflicts(self._request)
+                    if diag.get("conflicts"):
+                        msg += "\n\n[정밀 충돌 분석]\n" + diag["message"]
+                except Exception:
+                    pass
             return {"success": False, "schedule": {}, "extended_schedule": {}, "message": msg}
         # UNKNOWN(타임아웃·중단) — HiGHS의 'Not Solved' 완화 재시도와 패리티.
-        # 사용자가 중지를 누른 경우는 제외 (중지 무시하고 새 솔브를 도는 셈).
+        # 사용자 중지·레이스 패자 취소면 제외 (취소 무시하고 새 솔브를 도는 셈).
         if (self.allow_pre_relax and self.prev
-                and not solver_progress.is_cancelled() and not prog.cancelled):
+                and not solver_progress.is_cancelled() and not prog.cancelled
+                and not solver_progress.was_cancel_all()):
             relaxed = self._solve_relaxed()
             if relaxed:
                 return relaxed
@@ -211,7 +225,10 @@ class CpSatScheduler(_SchedulerBase):
                 # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
                 pre = self._preg_effective_pre(nurse, dt, pre)
                 active = self._nurse_active_on(nurse, dt)
-                locked = bool(self.locked_cells.get(nid, {}).get(dt_str))
+                # 잠긴 셀 + 전월(역사) 기록은 완화에서도 하드 고정 — 전월 기록을
+                # 변수로 두면 완화가 이미 일어난 과거를 '변조'한다 (HiGHS 패리티)
+                locked = bool(self.locked_cells.get(nid, {}).get(dt_str)) \
+                    or dt < date(self.year, self.month, 1)
                 fixed_to = None
                 if active and pre and locked:
                     fixed_to = pre
@@ -253,6 +270,10 @@ class CpSatScheduler(_SchedulerBase):
                         x[nid][d][s] = model.NewBoolVar(f"rx_{nid}_{d}_{s}")
                     elif s in ("생", "V") and is_holiday and not is_night:
                         x[nid][d][s] = 0
+                    elif s not in self.SOLVER_SHIFTS and s != "법" and pre and s == pre:
+                        # 사전입력 전용 코드 유지 변수 — 생(남성) 차단보다 먼저
+                        # 평가해 HiGHS 분기 순서와 동일하게 (최소 침습: 유지 우선)
+                        x[nid][d][s] = model.NewBoolVar(f"rx_{nid}_{d}_{s}")
                     elif s == "생" and is_male:
                         x[nid][d][s] = 0
                     elif s == "주" and self.allow_juhu_relax:
@@ -291,8 +312,11 @@ class CpSatScheduler(_SchedulerBase):
                     if not week_days:
                         continue
                     juhu_terms = [x[nid][d].get("주", 0) for d in week_days]
-                    if any(not isinstance(t, int) for t in juhu_terms):
-                        model.Add(sum(juhu_terms) <= 1)
+                    var_terms = [t for t in juhu_terms if not isinstance(t, int)]
+                    const_sum = sum(t for t in juhu_terms if isinstance(t, int))
+                    # 사용자 고정(잠금 주휴) 존중 — 자유 변수만 잔여 한도로 제한
+                    if var_terms:
+                        model.Add(sum(var_terms) <= max(0, 1 - const_sum))
         obj_terms = self._build_objective_cpsat(model, x)
         # 사전순 지배 유지보너스 — 근무 < OFF < 연차류. 사용자 설정(preBonus*)을
         # HiGHS와 동일 소스에서 읽는다 (하드코딩 시 엔진별 완화 결과가 달라짐).
@@ -309,6 +333,10 @@ class CpSatScheduler(_SchedulerBase):
                 keep_terms.append(b * v)
         max_score = max((abs(int(round(getattr(r, "score", 0)))) for r in self.scoring_rules), default=100)
         coarse = max_score * max(1, len(self.nurses)) * max(1, self.T) * max(1, len(self.scoring_rules)) + 1
+        # _build_objective_cpsat에는 scoring_rules와 무관한 상시 페널티항이 있다
+        # (이후달 V -500, unlimited_v v2/v3 -500/-4000, 생 2회 m2 -20100) — coarse가
+        # 이를 모르면 사전순 지배가 깨질 수 있어 보수적 상한을 가산한다.
+        coarse += 25100 * max(1, self.T) * max(1, len(self.nurses))
         # 지배 분모는 보너스 '조합 차'의 최솟값인 gcd — 500 하드코딩 시 최소
         # 보너스(주휴 300)의 사전순 지배가 보장되지 않는다.
         import math
@@ -322,22 +350,30 @@ class CpSatScheduler(_SchedulerBase):
         prog = _CpSatProgress()
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = float(self.time_limit)
-        solver.parameters.relative_gap_limit = float(self.mip_gap)
+        # 완화 솔브는 gap=0 — 상대 갭만큼 사전입력 보존이 희생되면 '최소 침습'
+        # 보장이 깨진다 (HiGHS 완화 경로와 동일 정책)
+        solver.parameters.relative_gap_limit = 0.0
         solver.parameters.num_workers = max(1, min(8, os.cpu_count() or 4))
         solver.parameters.random_seed = 1
         cb = _CpSatCb(prog, None)
         prog.solver = solver
         solver_progress.register(prog)
+        if prog.cancelled:
+            solver_progress.unregister(prog)
+            self._pre_soft = False
+            return None
         try:
             status = solver.Solve(model, cb)
         finally:
             solver_progress.unregister(prog)
+            self._pre_soft = False  # 플래그 누수 방지 (후속 분석 경로 보호)
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             return None
         schedule, extended = self._extract_solution(x, lambda v: solver.Value(v))
         nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
         relaxed_cells = {}
         timeoff_changed = 0
+        charge_promotions = 0
         for nid, days in self.prev.items():
             for dt_str, pre_shift in days.items():
                 assigned = schedule.get(nid, {}).get(dt_str)
@@ -350,6 +386,8 @@ class CpSatScheduler(_SchedulerBase):
                         relaxed_cells.setdefault(nid, {})[dt_str] = {
                             "original": pre_shift, "assigned": assigned, "is_timeoff": is_timeoff,
                         }
+                    else:
+                        charge_promotions += 1  # D→DC 등 차지 자동승격 (HiGHS 패리티)
         relax_count = sum(len(v) for v in relaxed_cells.values())
         work_changed = relax_count - timeoff_changed
         if relax_count == 0:
@@ -359,6 +397,8 @@ class CpSatScheduler(_SchedulerBase):
             if timeoff_changed:
                 relax_msg += f" · ⚠ 휴무 {timeoff_changed}건 변경(불가피 — 인원 추가/수요 감축 검토 권장)"
             relax_msg += "."
+        if charge_promotions:
+            relax_msg += f" (차지 자동승격 {charge_promotions}건: D→DC·E→EC 등)"
         return {
             "success": True,
             "schedule": schedule,
@@ -367,6 +407,7 @@ class CpSatScheduler(_SchedulerBase):
             "nurse_score_details": nurse_score_details,
             "relaxed_cells": relaxed_cells,
             "timeoff_relaxed_count": timeoff_changed,
+            "charge_promotions": charge_promotions,
             "mip_gap_percent": prog.gap_percent if prog.gap_percent is not None else 0.0,
             "message": f"근무표가 생성되었습니다. (CP-SAT 완화)\n{relax_msg}",
             "estimated_seconds": self.estimate_seconds(),
@@ -526,13 +567,16 @@ class CpSatScheduler(_SchedulerBase):
         HiGHS _c_pregnancy_p1_weekly 대응. 야간 제외·생 면제는 변수 게이팅으로 처리."""
         if "P1" not in self.ALL_SHIFTS:
             return
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             if not nurse.get("is_pregnant"):
                 continue
             nid = nurse["id"]
             for ws, we in self.weeks:
+                # 전월(역사) 날짜 제외 — 빈 과거 칸에 P1 '날조' 배치 방지
                 win_days = [d for d in range(ws, we + 1)
-                            if self._nurse_active_idx(nurse, d)
+                            if self.all_dates[d] >= first_of_month
+                            and self._nurse_active_idx(nurse, d)
                             and self._preg_window_on(nid, self.all_dates[d])]
                 if not win_days:
                     continue
@@ -610,9 +654,13 @@ class CpSatScheduler(_SchedulerBase):
             (self.MIDDLE_SHIFTS,  self.DAY_SHIFTS),
             (self.MIDDLE_SHIFTS,  self.DAY1_SHIFTS),
         ]
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             for d in range(self.T - 1):
+                # 전월(역사) 내부 완결 쌍 제외 — 과거 기록에 현재 규칙 소급 금지
+                if self.all_dates[d + 1] < first_of_month:
+                    continue
                 for first_group, second_group in forbidden:
                     for s1 in first_group:
                         v1 = x[nid][d][s1]
@@ -632,9 +680,13 @@ class CpSatScheduler(_SchedulerBase):
 
     def _cs_nod_pattern(self, model, x):
         """N→휴무→D 금지 (vn+vr+vd<=2)."""
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             for d in range(self.T - 2):
+                # 전월(역사) 내부 완결 윈도우 제외
+                if self.all_dates[d + 2] < first_of_month:
+                    continue
                 for ns in self.NIGHT_SHIFTS:
                     vn = x[nid][d][ns]
                     vn_const = isinstance(vn, int)
@@ -655,16 +707,22 @@ class CpSatScheduler(_SchedulerBase):
                             model.Add(vn + vr + vd <= 2)
 
     def _cs_max_consecutive_work(self, model, x, max_days: int):
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             for start in range(self.T - max_days):
+                if self.all_dates[start + max_days] < first_of_month:
+                    continue  # 전월 내부 완결 윈도우 제외 (역사 소급 금지)
                 window = range(start, start + max_days + 1)
                 model.Add(sum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= max_days)
 
     def _cs_max_consecutive_night(self, model, x, max_nights: int):
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             for start in range(self.T - max_nights):
+                if self.all_dates[start + max_nights] < first_of_month:
+                    continue  # 전월 내부 완결 윈도우 제외
                 window = range(start, start + max_nights + 1)
                 model.Add(sum(x[nid][d][s] for d in window for s in self.NIGHT_SHIFTS) <= max_nights)
 
@@ -673,6 +731,7 @@ class CpSatScheduler(_SchedulerBase):
         lhs = ΣN(d..d+mc-1) - ΣN(next) + ΣW(rest_d) <= min_consec (HiGHS _c_rest_after_night 대응)."""
         min_consec = getattr(self.rules, 'restAfterNightMinConsec', 2)
         rest_days = getattr(self.rules, 'restAfterNightDays', 2)
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             if nurse.get("is_night_shift"):
@@ -695,6 +754,8 @@ class CpSatScheduler(_SchedulerBase):
                     rest_d = next_d + k
                     if rest_d >= self.T:
                         break
+                    if self.all_dates[rest_d] < first_of_month:
+                        continue  # 전월(역사) 날짜에 휴식 강제 소급 금지
                     work_vars = [x[nid][rest_d][s] for s in self.WORK_SHIFTS
                                  if s not in self.NIGHT_SHIFTS and not isinstance(x[nid][rest_d][s], int)]
                     if not work_vars:
@@ -820,6 +881,17 @@ class CpSatScheduler(_SchedulerBase):
             # 야간 14일 — 월중 전입/전출이면 재적일수 비례 (HiGHS 패리티)
             night_target = 14 if active_days >= month_days else max(
                 0, round(14 * active_days / month_days))
+            # 일별 N 요구가 명시적 0인 날과의 산술 충돌 방지 (HiGHS 패리티)
+            req_dict_n = self.req.model_dump()
+            n_avail = 0
+            for d in month_idxs:
+                dt = self.all_dates[d]
+                base = req_dict_n.get(WEEKDAY_KEYS[dt.weekday()], {})
+                ovr = self.per_day_req.get(dt.strftime('%Y-%m-%d'), {})
+                dr = {**base, **ovr} if ovr else base
+                if "N" not in dr or int(dr.get("N") or 0) > 0:
+                    n_avail += 1
+            night_target = min(night_target, n_avail)
             model.Add(sum(x[nid][d][s] for d in month_idxs for s in self.NIGHT_SHIFTS) == night_target)
             if month_days == 31 and nurse.get("gender") == "female" and "생" in self.ALL_SHIFTS:
                 m_sum = sum(x[nid][d]["생"] for d in month_idxs)
@@ -941,9 +1013,16 @@ class CpSatScheduler(_SchedulerBase):
             elif rt == "night_fairness":
                 # 공정성 풀에서 야간전담(14 고정)·N 비자격·임산부 제외 — 포함 시
                 # range가 상수화되어 일반 간호사 간 편차를 벌점하지 못한다 (HiGHS 패리티)
+                # 홀짝월 클램프로 야간 0회 고정된 간호사도 제외 (HiGHS 패리티)
+                _two_mo_blocked = set()
+                if getattr(self.rules, "maxNightTwoMonth", False):
+                    _prev_n = getattr(self, "prev_month_nights", None) or {}
+                    _lim = self.rules.maxNightTwoMonthCount
+                    _two_mo_blocked = {k for k, c in _prev_n.items() if (c or 0) >= _lim}
                 fairness_pool = [
                     nurse for nurse in self.nurses
                     if not nurse.get("is_night_shift")
+                    and nurse["id"] not in _two_mo_blocked
                     and any(s in set(nurse.get("capable_shifts", self.WORK_SHIFTS))
                             for s in self.NIGHT_SHIFTS)
                     and not (nurse.get("is_pregnant") and self._preg_active_in_month(nurse))
