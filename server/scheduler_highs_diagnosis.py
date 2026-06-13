@@ -295,6 +295,46 @@ class _HighsDiagnosisMixin:
         # count >= 1 인 셀은 모두 반환 — 호출자가 자르도록
         return ranked
 
+    def _scan_pre_rest_after_night(self, min_consec: int, rest_days: int):
+        """사전입력만으로 '연속 야간 후 휴무' 위반인 셀 검출.
+        연속 야간(≥min_consec) 사전입력 뒤 rest_days 안에 비야간 근무가
+        사전입력돼 있으면 — 사이 빈 칸을 솔버가 어떻게 채워도 위반이다.
+        Returns: [{'nurse_id','nurse_label','night_seq','work_date','work_iso','work_shift'}]"""
+        out = []
+        night = set(self.NIGHT_SHIFTS)
+        work_non_night = set(self.WORK_SHIFTS) - night
+        for nurse in self.nurses:
+            if nurse.get("is_night_shift"):
+                continue  # 야간전담은 규칙 제외
+            nid = nurse["id"]
+            pres = [self.prev.get(nid, {}).get(dt.strftime("%Y-%m-%d"), "")
+                    for dt in self.all_dates]
+            run = 0
+            for d in range(self.T):
+                if pres[d] in night:
+                    run += 1
+                    continue
+                if run >= min_consec:
+                    for k in range(rest_days):
+                        rd = d + k
+                        if rd >= self.T:
+                            break
+                        if pres[rd] in work_non_night:
+                            seq = "→".join(
+                                self.all_dates[i].strftime("%m/%d")
+                                for i in range(d - run, d))
+                            out.append({
+                                "nurse_id": nid,
+                                "nurse_label": f"{nurse['name']}({nid})",
+                                "night_seq": f"야간 {run}연속({seq})",
+                                "work_date": self.all_dates[rd].strftime("%m/%d"),
+                                "work_iso": self.all_dates[rd].strftime("%Y-%m-%d"),
+                                "work_shift": pres[rd],
+                            })
+                            break
+                run = 0
+        return out
+
     # ── Infeasible 진단 ──────────────────────────────────────────────────────
 
     def _diagnose_infeasibility(self) -> str:
@@ -391,6 +431,17 @@ class _HighsDiagnosisMixin:
 
         lines = ["근무표 생성 실패 - 원인 진단 결과:"]
 
+        # 셀 점프용 앵커 — 정밀 충돌 분석(anchored)과 동일 스키마로 수집해
+        # 프론트의 '충돌 위치로 이동' 칩 UI를 그대로 재사용한다
+        self._diagnosis_anchors = []
+
+        def _anchor(label, nid=None, iso=None):
+            if len(self._diagnosis_anchors) >= 24:
+                return
+            item = {"label": label, "nurse_id": nid, "date": iso}
+            if item not in self._diagnosis_anchors:
+                self._diagnosis_anchors.append(item)
+
         # ── Phase 1: 기본 (1근무/일 + 자격) ─────────────────────────────────
         p = pulp.LpProblem("diag1", pulp.LpMinimize)
         x = _fresh_x()
@@ -413,6 +464,7 @@ class _HighsDiagnosisMixin:
                     if pre and pre not in known:
                         hint = " — 트레이니 표시용 코드, 사전입력에서 제거 필요" if pre.startswith("/") else " (현재 근무 목록에 없음)"
                         bad.append(f"    · {nname}({nid}) {dt_str}: \"{pre}\"{hint}")
+                        _anchor(f"{nname} {dt_str} '{pre}'", nid=nid, iso=dt_str)
             if bad:
                 lines.append("  문제가 된 항목:")
                 lines.extend(bad[:10])
@@ -441,6 +493,7 @@ class _HighsDiagnosisMixin:
                                 f"    · {nname}({nid}) {dt_str}: \"{pre}\" "
                                 f"(해당 간호사의 가능 근무 목록에 없음)"
                             )
+                            _anchor(f"{nname} {dt_str} '{pre}' 자격", nid=nid, iso=dt_str)
                 if cap_bad:
                     lines[-1] = "  [원인] 사전입력 근무가 간호사 자격과 충돌합니다."
                     lines.append("  문제가 된 항목:")
@@ -486,6 +539,7 @@ class _HighsDiagnosisMixin:
                     short_days.append(
                         f"    {dt.strftime('%m/%d')}({kor_wd[dt.weekday()]}): "
                         f"필요 {needed}명, 가용 {avail}명")
+                    _anchor(f"{dt.strftime('%m/%d')} 인원 부족", iso=dt_str)
                 # 초과: 요구보다 많은 사전입력 근무 (특히 요구 0명인 날의 근무)
                 for p_, shifts_ in period_shift_map.items():
                     if p_ not in day_req:
@@ -498,6 +552,7 @@ class _HighsDiagnosisMixin:
                         excess_days.append(
                             f"    {dt.strftime('%m/%d')}({kor_wd[dt.weekday()]}) {p_}: "
                             f"요구 {req_n}명인데 사전입력 근무 {pre_n}명 (초과 불가)")
+                        _anchor(f"{dt.strftime('%m/%d')} {p_} 초과 배정", iso=dt_str)
             lines.append("  [원인] 일별 인원 제약 충돌:")
             if short_days:
                 lines.append("  인원이 부족한 날짜:")
@@ -548,6 +603,8 @@ class _HighsDiagnosisMixin:
                         f"{t['date1']} {t['shift1']} → {t['date2']} {t['shift2']}  "
                         f"[{t['rule']} 금지]"
                     )
+                    _anchor(f"{t['nurse_label']} {t['date1']} {t['rule']}",
+                            nid=t["nurse_id"], iso=t["date1_iso"])
                 if len(transitions) > 10:
                     lines.append(f"    ... 외 {len(transitions)-10}건")
                 # 셀 기여도 ranking — 어느 셀을 비우면 가장 많은 충돌을 동시에 해소하나
@@ -606,11 +663,13 @@ class _HighsDiagnosisMixin:
                             f"    · {nname}({nid}) {wi+1}주차: OF가 {len(of_days)}회 "
                             f"({', '.join(of_days)})"
                         )
+                        _anchor(f"{nname} {wi+1}주차 OF 중복", nid=nid, iso=of_days[0])
                     if len(joo_days) >= 2:
                         dup_found.append(
                             f"    · {nname}({nid}) {wi+1}주차: 주휴가 {len(joo_days)}회 "
                             f"({', '.join(joo_days)})"
                         )
+                        _anchor(f"{nname} {wi+1}주차 주휴 중복", nid=nid, iso=joo_days[0])
             if dup_found:
                 lines.append("  [세부 원인] 같은 주에 OF 또는 주휴가 2회 이상 사전입력되었습니다.")
                 lines.extend(dup_found[:10])
@@ -702,6 +761,53 @@ class _HighsDiagnosisMixin:
                 lines.append("  → 해결: 간호사를 늘리거나 요일별 필요 인원을 줄이세요.")
             return "\n".join(lines)
 
+        # ── Phase 5.5: 임산부 P1 주1회 (모성보호) ───────────────────────────
+        pregnant = [n for n in self.nurses if n.get("is_pregnant")]
+        if pregnant and "P1" in self.ALL_SHIFTS:
+            p = pulp.LpProblem("diag5p", pulp.LpMinimize)
+            x = _fresh_x()
+            self._c_one_shift_per_day(p, x)
+            self._c_shift_eligibility(p, x)
+            self._c_daily_requirements(p, x)
+            self._c_charge_requirements(p, x)
+            self._c_forbidden_transitions(p, x)
+            if self.rules.weeklyOff:
+                self._c_weekly_off(p, x)
+            self._c_pregnancy_p1_weekly(p, x)
+            p += 0
+            if not _try(p):
+                lines.append("  [원인] 임산부 P1(임부휴무) 주 1회 의무가 다른 제약과 충돌합니다.")
+                first_of_month = date(self.year, self.month, 1)
+                direct = []
+                for nurse in pregnant:
+                    nid, nname = nurse["id"], nurse["name"]
+                    for wi, (ws, we) in enumerate(self.weeks):
+                        win = [d for d in range(ws, we + 1)
+                               if self.all_dates[d] >= first_of_month
+                               and self._nurse_active_idx(nurse, d)
+                               and self._preg_window_on(nid, self.all_dates[d])]
+                        if len(win) < 7 or (we - ws + 1) != len(win):
+                            continue  # 부분 주는 ≤1이라 의무 충돌 원인 아님
+                        pres = [self.prev.get(nid, {}).get(
+                            self.all_dates[d].strftime("%Y-%m-%d"), "") for d in win]
+                        if all(pres) and "P1" not in pres:
+                            iso = self.all_dates[win[0]].strftime("%Y-%m-%d")
+                            direct.append(
+                                f"    · {nname}({nid}) {wi+1}주차: 한 주가 전부 "
+                                f"사전입력됐는데 P1이 없습니다")
+                            _anchor(f"{nname} {wi+1}주차 P1 누락", nid=nid, iso=iso)
+                if direct:
+                    lines.append("  사전입력에서 직접 충돌 — P1을 놓을 자리가 없는 주:")
+                    lines.extend(direct[:8])
+                    lines.append("  → 해결: 해당 주 사전입력 중 하루를 비우거나 P1로 바꿔 주세요.")
+                else:
+                    lines.append(f"    임산부 {len(pregnant)}명: "
+                                 f"{', '.join(n['name'] for n in pregnant)}")
+                    lines.append("    임신 구간 주마다 P1 1회 + 주휴/OF로 쉬는 날이 주 3일이 되어")
+                    lines.append("    일별 인원 요구와 충돌할 수 있습니다.")
+                    lines.append("  → 해결: 해당 주의 필요 인원을 줄이거나 간호사를 추가하세요.")
+                return "\n".join(lines)
+
         # ── Phase 6: 연속 근무/야간 제한 ────────────────────────────────────
         p = pulp.LpProblem("diag6", pulp.LpMinimize)
         x = _fresh_x()
@@ -753,6 +859,48 @@ class _HighsDiagnosisMixin:
             lines.append("     2) 또는 규칙 설정에서 연속 근무/야간 일수 한도를 늘리세요.")
             return "\n".join(lines)
 
+        # ── Phase 6.5: 연속 야간 후 휴무 보장 ───────────────────────────────
+        if getattr(self.rules, "restAfterNight", False):
+            p = pulp.LpProblem("diag6r", pulp.LpMinimize)
+            x = _fresh_x()
+            self._c_one_shift_per_day(p, x)
+            self._c_shift_eligibility(p, x)
+            self._c_daily_requirements(p, x)
+            self._c_charge_requirements(p, x)
+            self._c_forbidden_transitions(p, x)
+            if self.rules.weeklyOff:
+                self._c_weekly_off(p, x)
+            self._c_pregnancy_p1_weekly(p, x)
+            if self.rules.maxConsecutiveWork:
+                self._c_max_consecutive_work(p, x, self.rules.maxConsecutiveWorkDays)
+            if self.rules.maxConsecutiveNight:
+                self._c_max_consecutive_night(p, x, self.rules.maxConsecutiveNightDays)
+            self._c_rest_after_night(p, x)
+            p += 0
+            if not _try(p):
+                min_consec = getattr(self.rules, "restAfterNightMinConsec", 2)
+                rest_days = getattr(self.rules, "restAfterNightDays", 2)
+                lines.append(
+                    f"  [원인] '연속 야간 후 휴무' 규칙 충돌 "
+                    f"(현재 설정: {min_consec}연속 야간 후 {rest_days}일 휴무)")
+                viol = self._scan_pre_rest_after_night(min_consec, rest_days)
+                if viol:
+                    lines.append("  사전입력에서 직접 충돌 — 연속 야간 직후 근무가 박혀 있는 셀:")
+                    for v in viol[:8]:
+                        lines.append(
+                            f"    · {v['nurse_label']}  {v['night_seq']} 직후 "
+                            f"{v['work_date']} '{v['work_shift']}'")
+                        _anchor(f"{v['nurse_label']} {v['work_date']} 야간후휴무",
+                                nid=v["nurse_id"], iso=v["work_iso"])
+                    if len(viol) > 8:
+                        lines.append(f"    ... 외 {len(viol)-8}건")
+                    lines.append("  → 해결: 해당 근무 셀을 비우거나 OF/주로 바꿔 주세요.")
+                else:
+                    lines.append("    사전입력 직접 위반은 없으나, 야간 인원 요구와 결합해")
+                    lines.append("    연속 야간 후 휴무를 보장할 수 없습니다.")
+                    lines.append("  → 해결: 야간 인원 요구를 줄이거나 규칙의 휴무 일수를 완화하세요.")
+                return "\n".join(lines)
+
         # ── Phase 7: V 월 최대 횟수 ─────────────────────────────────────────
         p = pulp.LpProblem("diag7", pulp.LpMinimize)
         x = _fresh_x()
@@ -763,10 +911,13 @@ class _HighsDiagnosisMixin:
         self._c_forbidden_transitions(p, x)
         if self.rules.weeklyOff:
             self._c_weekly_off(p, x)
+        self._c_pregnancy_p1_weekly(p, x)
         if self.rules.maxConsecutiveWork:
             self._c_max_consecutive_work(p, x, self.rules.maxConsecutiveWorkDays)
         if self.rules.maxConsecutiveNight:
             self._c_max_consecutive_night(p, x, self.rules.maxConsecutiveNightDays)
+        if getattr(self.rules, "restAfterNight", False):
+            self._c_rest_after_night(p, x)
         self._c_max_v_per_month(p, x)
         p += 0
         if not _try(p):
@@ -798,10 +949,13 @@ class _HighsDiagnosisMixin:
             self._c_forbidden_transitions(p, x)
             if self.rules.weeklyOff:
                 self._c_weekly_off(p, x)
+            self._c_pregnancy_p1_weekly(p, x)
             if self.rules.maxConsecutiveWork:
                 self._c_max_consecutive_work(p, x, self.rules.maxConsecutiveWorkDays)
             if self.rules.maxConsecutiveNight:
                 self._c_max_consecutive_night(p, x, self.rules.maxConsecutiveNightDays)
+            if getattr(self.rules, "restAfterNight", False):
+                self._c_rest_after_night(p, x)
             self._c_max_v_per_month(p, x)
             self._c_night_shift_nurses(p, x)
             p += 0
@@ -1004,10 +1158,13 @@ class _HighsDiagnosisMixin:
             self._c_forbidden_transitions(pp, xx)
             if self.rules.weeklyOff:
                 self._c_weekly_off(pp, xx)
+            self._c_pregnancy_p1_weekly(pp, xx)
             if self.rules.maxConsecutiveWork:
                 self._c_max_consecutive_work(pp, xx, self.rules.maxConsecutiveWorkDays)
             if self.rules.maxConsecutiveNight:
                 self._c_max_consecutive_night(pp, xx, self.rules.maxConsecutiveNightDays)
+            if getattr(self.rules, "restAfterNight", False):
+                self._c_rest_after_night(pp, xx)
             self._c_max_v_per_month(pp, xx)
             self._c_night_shift_nurses(pp, xx)
             return pp, xx
@@ -1185,9 +1342,7 @@ class _HighsDiagnosisMixin:
             lines.append(
                 f"    ⚠ {len(_unknown_phases)}개 단계는 10초 내 판정을 끝내지 못해 "
                 "통과로 간주했습니다 — 그중에 실제 원인이 있을 수 있습니다.")
-        lines.append("    참고: 연속야간 후 휴무(restAfterNight)·임산부 P1 주1회 등 일부")
-        lines.append("    제약은 이 단계별 진단에 포함되지 않습니다.")
-        lines.append("    → 아래 [🔍 정밀 충돌 분석]과 [🔧 자동 수정 처방] 버튼이 이런")
-        lines.append("      원인까지 포함해 충돌 지점을 짚어줍니다.")
+        lines.append("    → 아래 [🔍 정밀 충돌 분석]과 [🔧 자동 수정 처방] 버튼으로")
+        lines.append("      충돌 지점을 더 좁힐 수 있습니다.")
         lines.append("    해결: 간호사를 추가하거나 일부 제약을 완화해보세요.")
         return "\n".join(lines)

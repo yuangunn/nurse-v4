@@ -191,6 +191,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 "schedule": {},
                 "extended_schedule": {},
                 "message": diagnosis,
+                # 진단이 짚은 셀 좌표 — 프론트 '충돌 위치로 이동' 칩 재사용
+                "anchored": getattr(self, "_diagnosis_anchors", []),
             }
         else:
             # Not Solved = 타임아웃 또는 해 없이 중단.

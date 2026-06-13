@@ -142,3 +142,55 @@ def test_analyzer_detects_explicit_zero_requirement_conflict():
     removals = fix.get("removals") or []
     assert any(r["nurse_id"] == "a0" and r["date_iso"] == "2026-03-10"
                for r in removals), f"0명 요구일 사전입력 제거 처방 누락: {fix}"
+
+
+# ── 13단계 진단 신규 단계 (restAfterNight·P1) + anchored ──────────────────────
+
+def test_diagnosis_names_rest_after_night_cause(build_request):
+    """연속 야간 직후 근무 사전입력으로만 infeasible인 입력: '원인 불명'이 아니라
+    연속야간 휴무 규칙을 원인으로 짚고, 셀 점프 앵커를 제공해야 한다."""
+    nurses = _mini_nurses(6)
+    year, month, days = 2026, 3, 7
+    prev = _juhu_prev(nurses, year, month, days)
+    # a1: 3/1~3/2 N 연속 → 3/3 주휴(헬퍼) → 3/4 E — 금지 전환은 없지만
+    # '2연속 야간 후 2일 휴무' 위반 (휴무 2일째에 근무가 박힘)
+    prev.setdefault("a1", {})["2026-03-01"] = "N"
+    prev["a1"]["2026-03-02"] = "N"
+    prev["a1"]["2026-03-04"] = "E"
+
+    req = build_request(nurses=nurses, prev_schedule=prev, year=year,
+                        month=month, days=days,
+                        requirements=_mini_requirements(1, 2, 1))
+    result = make_limited(req, days=days, solver="highs").solve()
+    assert not result["success"]
+    assert "연속 야간 후" in result["message"], result["message"]
+    assert "원인 불명" not in result["message"]
+    anchors = result.get("anchored") or []
+    assert any(a.get("nurse_id") == "a1" and a.get("date") == "2026-03-04"
+               for a in anchors), anchors
+
+
+def test_diagnosis_names_pregnancy_p1_cause(build_request):
+    """임산부 주간이 P1 놓을 자리 없이 채워져 infeasible인 입력: P1 의무를
+    원인으로 짚어야 한다 (수정 전: 항상 '원인 불명')."""
+    nurses = _mini_nurses(6)
+    year, month, days = 2026, 3, 7
+    # a2 임산부 — 3월 초기 구간
+    a2 = next(n for n in nurses if n.id == "a2")
+    a2.is_pregnant = True
+    a2.pregnancy = {"early": {"start": "2026-03-01", "end": "2026-03-14"},
+                    "late": {"start": "2026-03-20", "end": "2026-03-31"}}
+    prev = _juhu_prev(nurses, year, month, days)
+    # a2의 주: 주휴(3/4, 헬퍼) 외 전부 사전입력 — 남은 3/6 하루를 OF(주1회 의무)와
+    # P1(주1회 의무)이 동시에 요구 → P1 단계에서만 잡히는 충돌
+    a2p = prev.setdefault("a2", {})
+    a2p.update({"2026-03-01": "D", "2026-03-02": "D", "2026-03-03": "E",
+                "2026-03-05": "E", "2026-03-07": "D"})
+
+    req = build_request(nurses=nurses, prev_schedule=prev, year=year,
+                        month=month, days=days,
+                        requirements=_mini_requirements(1, 2, 1))
+    result = make_limited(req, days=days, solver="highs").solve()
+    assert not result["success"]
+    assert "P1" in result["message"], result["message"]
+    assert "원인 불명" not in result["message"]
