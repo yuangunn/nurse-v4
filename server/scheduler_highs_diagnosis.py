@@ -384,11 +384,8 @@ class _HighsDiagnosisMixin:
                     dt_str = dt.strftime("%Y-%m-%d")
                     pre = self.prev.get(nid, {}).get(dt_str)
                     is_holiday = dt_str in self.holidays
-                    # 공휴일에 OF 사전입력은 무시 (진단도 동일 규칙)
-                    if pre == "OF" and is_holiday:
-                        pre = None
-                    # 임산부 모성보호: solve()와 동일하게 사전입력 보정
-                    pre = self._preg_effective_pre(nurse, dt, pre)
+                    # 유효 사전입력 — solve()와 동일 (공용 헬퍼)
+                    pre = self._effective_pre(nurse, dt, pre, is_holiday)
                     pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                     xx[nid][d] = {}
                     # 전입/전출 범위 밖: 전부 0 — solve()와 동일. 누락 시 전출

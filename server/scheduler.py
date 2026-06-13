@@ -66,11 +66,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
-                # 공휴일에 OF 사전입력은 무시 — 솔버가 유효한 근무(법/근무 등) 선택
-                if pre == "OF" and is_holiday:
-                    pre = None
-                # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
-                pre = self._preg_effective_pre(nurse, dt, pre)
+                # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
+                pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 # 전입/전출일 범위 밖: 모든 shift 0으로 고정
                 if not self._nurse_active_on(nurse, dt):
@@ -262,11 +259,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
-                # 공휴일에 OF 사전입력은 무시 — 완화 모드에서도 OF 재배치 대상
-                if pre == "OF" and is_holiday:
-                    pre = None
-                # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
-                pre = self._preg_effective_pre(nurse, dt, pre)
+                # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
+                pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 # 전입/전출일 범위 밖: 모든 shift 0으로 고정
                 if not self._nurse_active_on(nurse, dt):
                     for s in self.ALL_SHIFTS:

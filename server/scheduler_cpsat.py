@@ -220,10 +220,8 @@ class CpSatScheduler(_SchedulerBase):
                 x[nid][d] = {}
                 is_holiday = dt_str in self.holidays
                 pre = self.prev.get(nid, {}).get(dt_str)
-                if pre == "OF" and is_holiday:
-                    pre = None
-                # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
-                pre = self._preg_effective_pre(nurse, dt, pre)
+                # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
+                pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 active = self._nurse_active_on(nurse, dt)
                 # 잠긴 셀 + 전월(역사) 기록은 완화에서도 하드 고정 — 전월 기록을
                 # 변수로 두면 완화가 이미 일어난 과거를 '변조'한다 (HiGHS 패리티)
@@ -428,10 +426,8 @@ class CpSatScheduler(_SchedulerBase):
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
-                if pre == "OF" and is_holiday:
-                    pre = None
-                # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
-                pre = self._preg_effective_pre(nurse, dt, pre)
+                # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
+                pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 if not self._nurse_active_on(nurse, dt):
                     for s in self.ALL_SHIFTS:
@@ -637,8 +633,8 @@ class CpSatScheduler(_SchedulerBase):
                           if dt.month == self.month and dt.year == self.year
                           for s in self.NIGHT_SHIFTS]
             if night_vars:
-                # RHS 음수(전월 야간전담→일반 전환 등) 클램프 — HiGHS 패리티
-                model.Add(sum(night_vars) <= max(0, max_n - prev_count))
+                # RHS 음수 클램프 포함 (공용 헬퍼 — HiGHS 패리티)
+                model.Add(sum(night_vars) <= self._two_month_rhs(nid))
 
     # ── 조합/네이티브 하드 제약 (HiGHS _c_* 와 1:1) — 4b ─────────────────────
     def _cs_forbidden_transitions(self, model, x):
@@ -793,22 +789,14 @@ class CpSatScheduler(_SchedulerBase):
                         continue
                     eligible_pairs.append((i_nurse["id"], j_nurse["id"], charge_s, regulars))
         nurse_by_id = {n["id"]: n for n in self.nurses}
-        pre_soft = bool(getattr(self, "_pre_soft", False))
         for d, dt in enumerate(self.all_dates):
             if dt.month != self.month:
                 continue
             dt_str = dt.strftime("%Y-%m-%d")
             is_holiday = dt_str in self.holidays
             for nid_i, nid_j, charge_s, regulars in eligible_pairs:
-                # 선임 j의 '유효' 사전입력으로 게이팅 (공휴일 OF·임산부 드롭 반영,
-                # 완화 모드에선 잠긴 셀만 고정) — HiGHS 패리티
-                j_fixed = self.prev.get(nid_j, {}).get(dt_str)
-                if j_fixed == "OF" and is_holiday:
-                    j_fixed = None
-                if j_fixed:
-                    j_fixed = self._preg_effective_pre(nurse_by_id[nid_j], dt, j_fixed)
-                if pre_soft and not self.locked_cells.get(nid_j, {}).get(dt_str):
-                    j_fixed = None
+                # 선임 j의 '유효' 사전입력으로 게이팅 (공용 헬퍼 — HiGHS 패리티)
+                j_fixed = self._seniority_jfixed(nurse_by_id[nid_j], dt, dt_str, is_holiday)
                 if j_fixed and j_fixed != charge_s:
                     continue
                 v_charge = x[nid_i][d][charge_s]
@@ -864,7 +852,8 @@ class CpSatScheduler(_SchedulerBase):
                           if s["period"] not in ("night", "rest", "leave")]
         for nurse in night_nurses:
             nid = nurse["id"]
-            active_days = sum(1 for d in month_idxs if self._nurse_active_idx(nurse, d))
+            active_days, night_target = self._night_dedicated_quota(
+                nurse, month_idxs, month_days)
             if active_days <= 0:
                 continue  # 당월 재적 없음 — ==14를 걸면 무조건 infeasible
             for d in month_idxs:
@@ -878,20 +867,7 @@ class CpSatScheduler(_SchedulerBase):
             for start in range(w_lo, w_hi + 1):
                 model.Add(sum(x[nid][d][s] for d in range(start, start + 5)
                               for s in self.NIGHT_SHIFTS) <= 3)
-            # 야간 14일 — 월중 전입/전출이면 재적일수 비례 (HiGHS 패리티)
-            night_target = 14 if active_days >= month_days else max(
-                0, round(14 * active_days / month_days))
-            # 일별 N 요구가 명시적 0인 날과의 산술 충돌 방지 (HiGHS 패리티)
-            req_dict_n = self.req.model_dump()
-            n_avail = 0
-            for d in month_idxs:
-                dt = self.all_dates[d]
-                base = req_dict_n.get(WEEKDAY_KEYS[dt.weekday()], {})
-                ovr = self.per_day_req.get(dt.strftime('%Y-%m-%d'), {})
-                dr = {**base, **ovr} if ovr else base
-                if "N" not in dr or int(dr.get("N") or 0) > 0:
-                    n_avail += 1
-            night_target = min(night_target, n_avail)
+            # 야간 일수 — 재적 비례 + N 가용일 클램프 (공용 헬퍼, HiGHS 패리티)
             model.Add(sum(x[nid][d][s] for d in month_idxs for s in self.NIGHT_SHIFTS) == night_target)
             if month_days == 31 and nurse.get("gender") == "female" and "생" in self.ALL_SHIFTS:
                 m_sum = sum(x[nid][d]["생"] for d in month_idxs)
@@ -1013,20 +989,8 @@ class CpSatScheduler(_SchedulerBase):
             elif rt == "night_fairness":
                 # 공정성 풀에서 야간전담(14 고정)·N 비자격·임산부 제외 — 포함 시
                 # range가 상수화되어 일반 간호사 간 편차를 벌점하지 못한다 (HiGHS 패리티)
-                # 홀짝월 클램프로 야간 0회 고정된 간호사도 제외 (HiGHS 패리티)
-                _two_mo_blocked = set()
-                if getattr(self.rules, "maxNightTwoMonth", False):
-                    _prev_n = getattr(self, "prev_month_nights", None) or {}
-                    _lim = self.rules.maxNightTwoMonthCount
-                    _two_mo_blocked = {k for k, c in _prev_n.items() if (c or 0) >= _lim}
-                fairness_pool = [
-                    nurse for nurse in self.nurses
-                    if not nurse.get("is_night_shift")
-                    and nurse["id"] not in _two_mo_blocked
-                    and any(s in set(nurse.get("capable_shifts", self.WORK_SHIFTS))
-                            for s in self.NIGHT_SHIFTS)
-                    and not (nurse.get("is_pregnant") and self._preg_active_in_month(nurse))
-                ]
+                # 야간 횟수가 구조적으로 고정된 간호사 제외 (공용 헬퍼, HiGHS 패리티)
+                fairness_pool = self._night_fairness_pool()
                 if len(fairness_pool) >= 2:
                     night_counts = {
                         nurse["id"]: lin([x[nurse["id"]][d][s] for d in month_days for s in self.NIGHT_SHIFTS])

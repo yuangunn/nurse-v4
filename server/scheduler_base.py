@@ -358,6 +358,72 @@ class _SchedulerBase:
             return None
         return pre
 
+    # ── 공용 게이팅 헬퍼 ──────────────────────────────────────────────────────
+    # 같은 의미의 로직이 5개 경로(HiGHS strict/relax, CP-SAT strict/relax,
+    # 진단·분석기)에 사본으로 존재하면 한쪽만 수정되는 발산 버그가 생긴다 —
+    # 실제로 발산했던 로직들을 여기 단일 구현으로 모은다.
+
+    def _effective_pre(self, nurse: dict, dt: date, pre: str, is_holiday: bool):
+        """변수 도메인 기준의 '유효 사전입력' — 공휴일 OF 드롭 + 모성보호 드롭.
+        모든 변수 생성 경로와 게이팅이 이 함수를 써야 의미가 일치한다."""
+        if pre == "OF" and is_holiday:
+            pre = None
+        return self._preg_effective_pre(nurse, dt, pre)
+
+    def _seniority_jfixed(self, nurse_j: dict, dt: date, dt_str: str,
+                          is_holiday: bool):
+        """charge 시니어리티 게이팅용 선임 j의 유효 사전입력.
+        완화 모드(_pre_soft)에서는 잠긴 셀만 고정으로 취급한다."""
+        j_fixed = self.prev.get(nurse_j["id"], {}).get(dt_str)
+        if j_fixed:
+            j_fixed = self._effective_pre(nurse_j, dt, j_fixed, is_holiday)
+        if getattr(self, "_pre_soft", False) \
+                and not self.locked_cells.get(nurse_j["id"], {}).get(dt_str):
+            j_fixed = None
+        return j_fixed
+
+    def _two_month_rhs(self, nid: str) -> int:
+        """홀짝월 합산 야간의 당월 RHS — 전월 초과(야간전담→일반 전환)는 0 클램프."""
+        prev_nights = getattr(self, "prev_month_nights", None) or {}
+        return max(0, self.rules.maxNightTwoMonthCount - (prev_nights.get(nid) or 0))
+
+    def _night_dedicated_quota(self, nurse: dict, month_idxs, month_days: int):
+        """야간전담 (재적일수, 당월 야간 목표일수). 재적 0이면 (0, 0).
+        부분 재적은 14일 비례, 'N 요구가 명시적 0'인 날과의 산술 충돌 방지를 위해
+        달성 가능 일수로 클램프."""
+        active_days = sum(1 for d in month_idxs if self._nurse_active_idx(nurse, d))
+        if active_days <= 0:
+            return 0, 0
+        target = 14 if active_days >= month_days else max(
+            0, round(14 * active_days / month_days))
+        req_dict = self.req.model_dump()
+        n_avail = 0
+        for d in month_idxs:
+            dt = self.all_dates[d]
+            base = req_dict.get(WEEKDAY_KEYS[dt.weekday()], {})
+            ovr = self.per_day_req.get(dt.strftime('%Y-%m-%d'), {})
+            dr = {**base, **ovr} if ovr else base
+            if "N" not in dr or int(dr.get("N") or 0) > 0:
+                n_avail += 1
+        return active_days, min(target, n_avail)
+
+    def _night_fairness_pool(self):
+        """야간 공정 배분 대상 풀 — 야간 횟수가 구조적으로 고정된 간호사
+        (야간전담·N 비자격·임산부·홀짝월 0 클램프)는 제외해야 range가 유효하다."""
+        two_mo_blocked = set()
+        if getattr(self.rules, "maxNightTwoMonth", False):
+            prev_n = getattr(self, "prev_month_nights", None) or {}
+            lim = self.rules.maxNightTwoMonthCount
+            two_mo_blocked = {k for k, c in prev_n.items() if (c or 0) >= lim}
+        return [
+            nurse for nurse in self.nurses
+            if not nurse.get("is_night_shift")
+            and nurse["id"] not in two_mo_blocked
+            and any(s in set(nurse.get("capable_shifts", self.WORK_SHIFTS))
+                    for s in self.NIGHT_SHIFTS)
+            and not (nurse.get("is_pregnant") and self._preg_active_in_month(nurse))
+        ]
+
     # ── 예상 소요시간 추정 ────────────────────────────────────────────────────
 
     def estimate_seconds(self) -> int:

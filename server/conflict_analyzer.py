@@ -290,13 +290,11 @@ class _ConflictAnalyzer(CpSatScheduler):
             if not nurse.get("is_night_shift"):
                 continue
             nid = nurse["id"]
-            # 솔버와 동일하게 재적일수 기반 — 미반영 시 월중 전입/전출 야간전담에
-            # 대해 존재하지 않는 '정확히 14일' 충돌을 허위 보고한다
-            active_days = sum(1 for d in month_idxs if self._nurse_active_idx(nurse, d))
+            # 솔버와 동일하게 재적일수·N 가용일 기반 (공용 헬퍼) — 미반영 시
+            # 월중 전입/전출 야간전담에 허위 충돌을 보고한다
+            active_days, target = self._night_dedicated_quota(nurse, month_idxs, month_days)
             if active_days <= 0:
                 continue
-            target = 14 if active_days >= month_days else max(
-                0, round(14 * active_days / month_days))
             lit = gate(f"{self._fmt_nurse_label(nurse)} 야간전담 당월 {target}일", nid=nid)
             model.Add(sum(x[nid][d][s] for d in month_idxs for s in self.NIGHT_SHIFTS) == target).OnlyEnforceIf(lit)
 
@@ -387,12 +385,8 @@ class _ConflictAnalyzer(CpSatScheduler):
             is_holiday = dt_str in self.holidays
             day_lit = None
             for nid_i, nid_j, charge_s, regulars in eligible_pairs:
-                # 솔버와 동일한 '유효 사전입력' 게이팅 (공휴일 OF·임산부 드롭 반영)
-                jf = self.prev.get(nid_j, {}).get(dt_str)
-                if jf == "OF" and is_holiday:
-                    jf = None
-                if jf:
-                    jf = self._preg_effective_pre(nurse_by_id[nid_j], dt, jf)
+                # 솔버와 동일한 '유효 사전입력' 게이팅 (공용 헬퍼)
+                jf = self._seniority_jfixed(nurse_by_id[nid_j], dt, dt_str, is_holiday)
                 if jf and jf != charge_s:
                     continue
                 vc = x[nid_i][d][charge_s]
@@ -517,9 +511,9 @@ class _ConflictAnalyzer(CpSatScheduler):
                           if dt.month == self.month and dt.year == self.year
                           for s in self.NIGHT_SHIFTS]
             if night_vars:
-                # 솔버와 동일하게 RHS 음수 클램프 — 미클램프 시 자체 모순 리터럴이
-                # 항상 단독 MUS로 검출돼 실제 원인을 가린다 (허위 충돌 보고)
-                rhs = max(0, max_n - prev_count)
+                # 솔버와 동일한 클램프 (공용 헬퍼) — 미클램프 시 자체 모순 리터럴이
+                # 항상 단독 MUS로 검출돼 실제 원인을 가린다
+                rhs = self._two_month_rhs(nid)
                 label = (f"{self._fmt_nurse_label(nurse)} 홀짝월 합산 야간 ≤{max_n}회(전월 {prev_count})"
                          if rhs > 0 else
                          f"{self._fmt_nurse_label(nurse)} 전월 야간 {prev_count}회로 상한 초과 — 당월 야간 0회")
@@ -543,10 +537,8 @@ class _ConflictAnalyzer(CpSatScheduler):
                 x[nid][d] = {}
                 is_holiday = dt_str in self.holidays
                 pre = self.prev.get(nid, {}).get(dt_str)
-                if pre == "OF" and is_holiday:
-                    pre = None
-                # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
-                pre = self._preg_effective_pre(nurse, dt, pre)
+                # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
+                pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 active = self._nurse_active_on(nurse, dt)
                 # 잠긴 셀: 완화·진단 경로와 동일하게 절대 고정 — keep 리터럴을 만들지
