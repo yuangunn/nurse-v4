@@ -35,6 +35,7 @@ function app() {
     solveProgress:{gap_percent:null,nodes:0,has_solution:false,is_running:false},
     stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, unlimitedV:false, relaxedCells:{},
     generationReport:null, showGenReport:false, wishReport:null, showWishReport:false,
+    staffingAlerts:null, fairnessLedger3m:null,
     solver:'highs', diagnosing:false, fixing:false, diagResult:null, fixResult:null,
     tableFullscreen:false,
     mipGapPercent:null, scheduleStopped:false, estimatedSeconds:0,
@@ -181,21 +182,35 @@ function app() {
       const restCodes=this.shifts.filter(s=>s.period==='rest').map(s=>s.code);
       const leaveCodes=this.shifts.filter(s=>s.period==='leave').map(s=>s.code);
       const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
+      const offCodes=[...restCodes,...leaveCodes];
       return this.nurses.map(nurse=>{
         const nid=nurse.id;
         const sc=this.schedule[nid]||{};
         let d=0,e=0,n=0,rest=0,leave=0,weekendWork=0;
-        for(const day of days){
-          const dk=this.dayKey(day);
-          const val=sc[dk];if(!val)continue;
+        // 휴무의 질 — 고립 휴무(양옆이 근무인 하루짜리)와 최장 연속 휴무.
+        // OF 개수가 같아도 쪼개진 휴무와 이틀 연속은 체감이 다르다.
+        let isolatedOff=0,maxOffRun=0,offRun=0;
+        const seq=days.map(day=>sc[this.dayKey(day)]||'');
+        for(let i=0;i<days.length;i++){
+          const day=days[i];const val=seq[i];if(!val)continue;
           if(dayCodes.includes(val))d++;
           else if(eveCodes.includes(val))e++;
           else if(nightCodes.includes(val))n++;
           else if(restCodes.includes(val))rest++;
           else if(leaveCodes.includes(val))leave++;
           if((day.getDay()===0||day.getDay()===6)&&[...dayCodes,...eveCodes,...nightCodes].includes(val))weekendWork++;
+          if(offCodes.includes(val)){
+            offRun++;maxOffRun=Math.max(maxOffRun,offRun);
+            const prevOff=i>0&&offCodes.includes(seq[i-1]);
+            const nextOff=i<days.length-1&&offCodes.includes(seq[i+1]);
+            if(!prevOff&&!nextOff&&i>0&&i<days.length-1&&seq[i-1]&&seq[i+1])isolatedOff++;
+          }else offRun=0;
         }
-        return{name:nurse.name,group:nurse.group,d,e,n,rest,leave,weekendWork,total:d+e+n,score:this.nurseScores[nid]??0};
+        const cum=this.fairnessLedger3m?.[nid];
+        return{name:nurse.name,group:nurse.group,d,e,n,rest,leave,weekendWork,total:d+e+n,
+               isolatedOff,maxOffRun,
+               cumNights:cum?cum.nights:null,cumWeekends:cum?cum.weekends:null,
+               score:this.nurseScores[nid]??0};
       });
     },
     get filteredNurses(){
@@ -389,6 +404,7 @@ function app() {
       this._initScoringSliders();
       this._checkPrevMonthCarryover();
       this.checkFirstRun();
+      this.loadFairnessLedger();
       this.$nextTick(()=>{if(window.lucide)lucide.createIcons()});
     },
 

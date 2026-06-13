@@ -71,3 +71,50 @@ def test_build_wish_report_counts_and_unmet():
     a0 = next(r for r in wr["per_nurse"] if r["nurse_id"] == "a0")
     assert a0["boost"] == 1.5
     assert a0["unmet"] == [{"date": "2026-03-04", "wish": "D", "assigned": "E"}]
+
+
+# ── 공정성 원장 / 전월N 자동 ─────────────────────────────────────────────────
+
+def test_fairness_ledger_and_prev_month_nights(tmp_path, monkeypatch):
+    """저장본에서 누적 야간/주말/공휴일 근무와 전월N을 파생 계산한다."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from server import database as db
+    db.init_db()
+    db.save_schedule(
+        year=2026, month=5,
+        data={
+            "holidays": ["2026-05-05"],
+            "schedule": {"a1": {
+                "2026-05-01": "N",        # 금 — 야간
+                "2026-05-02": "N",        # 토 — 야간+주말
+                "2026-05-03": "OF",       # 일 — 휴무 (주말근무 아님)
+                "2026-05-05": "D",        # 공휴일 근무
+            }},
+        },
+        name="5월 확정",
+    )
+    ledger = db.compute_fairness_ledger(2026, 6)
+    assert ledger["a1"]["nights"] == 2
+    assert ledger["a1"]["weekends"] == 1
+    assert ledger["a1"]["holiday_work"] == 1
+    nights = db.compute_prev_month_nights(2026, 6)
+    assert nights == {"a1": 2}
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_fairness_offsets_shift_nights_to_low_cumulative(build_request, solver):
+    """공정성 원장 오프셋: 누적 야간이 많은 간호사는 당월 야간을 적게 받아야 한다."""
+    nurses = _mini_nurses(6)
+    req = build_request(nurses=nurses, year=2026, month=3, days=7,
+                        requirements=_mini_requirements(1, 1, 2))
+    req.scoring_rules = [ScoringRule(name="야간 공정", rule_type="night_fairness",
+                                     score=-100)]
+    # a0는 직전 달들 누적 야간 10회, 나머지는 0 — a0가 당월 최소를 받아야 함
+    req.fairness_offsets = {"a0": 10}
+    result = make_limited(req, days=7, solver=solver).solve()
+    assert result["success"], result.get("message")
+    night_codes = {"N", "NC"}
+    counts = {n.id: sum(1 for v in result["schedule"][n.id].values()
+                        if v in night_codes) for n in nurses}
+    assert counts["a0"] == min(counts.values()), counts
+    assert counts["a0"] < max(counts.values()), counts

@@ -371,6 +371,25 @@ def dev_reset_seed():
     return {"ok": True}
 
 
+@app.get("/api/fairness_ledger")
+def get_fairness_ledger(year: int, month: int, months_back: int = 3):
+    """공정성 원장 — 직전 N개월 저장본 누적 (야간/주말/공휴일 근무 + 위시)."""
+    try:
+        return {"ledger": db.compute_fairness_ledger(year, month, months_back),
+                "wish": db.compute_wish_ledger(year, month, months_back)}
+    except Exception:
+        return {"ledger": {}, "wish": {}}
+
+
+@app.get("/api/prev_month_nights")
+def get_prev_month_nights(year: int, month: int):
+    """직전 달 최신 저장 근무표 기준 간호사별 야간 수 — '전월N' 자동 채움용."""
+    try:
+        return db.compute_prev_month_nights(year, month)
+    except Exception:
+        return {}
+
+
 @app.get("/api/generation_runs")
 def get_generation_runs(limit: int = 20):
     """생성 이력 (현재 프로필 DB 기준, 최신순)."""
@@ -1239,6 +1258,18 @@ def generate(request: GenerateRequest):
         if lock_warn:
             warning = (warning + "\n\n" + lock_warn) if warning else lock_warn
         wish_ctx = _attach_wish_boosts(request)
+        # 공정성 원장 — night_fairness가 (직전 3개월 누적 + 당월) 편차를 줄이도록
+        # 누적 야간 오프셋을 자동 주입 (저장본 파생 — 별도 기록 불필요)
+        try:
+            if any(getattr(r, "rule_type", "") == "night_fairness"
+                   for r in request.scoring_rules):
+                fl = db.compute_fairness_ledger(request.year, request.month)
+                offsets = {nid: int(ent.get("nights") or 0)
+                           for nid, ent in fl.items() if ent.get("nights")}
+                if offsets:
+                    request.fairness_offsets = offsets
+        except Exception:
+            pass
         if request.solver == "race":
             result = _run_race(request)
         elif request.solver == "cpsat":

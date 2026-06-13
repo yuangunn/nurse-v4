@@ -399,6 +399,80 @@ def cleanup_orphan_nurse_refs() -> int:
 # 위시 판정용 표준 코드 집합 (저장본 기반 파생 계산 — 솔버 클래스와 독립)
 WISH_REST_LIKE = {"OF", "주", "P1"}
 WISH_LEAVE_LIKE = {"V", "생", "특", "공", "법", "병"}
+_WORK_CODES = {"DC", "D", "D1", "EC", "E", "중", "NC", "N"}
+_NIGHT_CODES = {"N", "NC"}
+
+
+def _latest_saved(conn, year: int, month: int):
+    """해당 월의 최신 저장 근무표 data(JSON dict) — 없으면 None."""
+    row = conn.execute(
+        "SELECT data FROM schedules WHERE year=? AND month=? "
+        "ORDER BY id DESC LIMIT 1", (year, month)).fetchone()
+    if not row:
+        return None
+    try:
+        return json.loads(row["data"])
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+def compute_prev_month_nights(year: int, month: int) -> Dict[str, int]:
+    """직전 달 최신 저장 근무표에서 간호사별 야간(N/NC) 횟수 — '전월N' 자동 인수인계.
+    수동으로 옮겨 적다 빼먹으면 월초 연속야간 검증이 빠지는 문제를 막는다."""
+    py, pm = (year - 1, 12) if month == 1 else (year, month - 1)
+    prefix = f"{py:04d}-{pm:02d}-"
+    out: Dict[str, int] = {}
+    with get_conn() as conn:
+        data = _latest_saved(conn, py, pm)
+    if not data:
+        return out
+    for nid, days in (data.get("schedule") or {}).items():
+        c = sum(1 for dk, s in (days or {}).items()
+                if dk.startswith(prefix) and s in _NIGHT_CODES)
+        if c:
+            out[nid] = c
+    return out
+
+
+def compute_fairness_ledger(year: int, month: int, months_back: int = 3) -> Dict:
+    """공정성 원장 — 직전 months_back개월 저장본에서 간호사별 누적 부담 집계.
+    Returns {nid: {"nights": n, "weekends": n, "holiday_work": n, "months": k}}"""
+    import datetime as _dt
+    targets = []
+    y, m = year, month
+    for _ in range(months_back):
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+        targets.append((y, m))
+    ledger: Dict = {}
+    with get_conn() as conn:
+        for ty, tm in targets:
+            data = _latest_saved(conn, ty, tm)
+            if not data:
+                continue
+            prefix = f"{ty:04d}-{tm:02d}-"
+            holidays = {h for h in (data.get("holidays") or []) if str(h).startswith(prefix)}
+            for nid, days in (data.get("schedule") or {}).items():
+                touched = False
+                ent = ledger.setdefault(
+                    nid, {"nights": 0, "weekends": 0, "holiday_work": 0, "months": 0})
+                for dk, s in (days or {}).items():
+                    if not dk.startswith(prefix) or s not in _WORK_CODES:
+                        continue
+                    touched = True
+                    if s in _NIGHT_CODES:
+                        ent["nights"] += 1
+                    try:
+                        if _dt.date.fromisoformat(dk).weekday() >= 5:
+                            ent["weekends"] += 1
+                    except ValueError:
+                        pass
+                    if dk in holidays:
+                        ent["holiday_work"] += 1
+                if touched:
+                    ent["months"] += 1
+    return ledger
 
 
 def compute_wish_ledger(year: int, month: int, months_back: int = 3) -> Dict:

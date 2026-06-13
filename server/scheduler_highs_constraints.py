@@ -741,8 +741,11 @@ class _HighsConstraintsMixin:
                     min_n = pulp.LpVariable(f"min_nights_{rid}", lowBound=0, cat="Integer")
                     for nurse in fairness_pool:
                         nid = nurse["id"]
-                        prob += max_n >= night_counts[nid], f"max_n_{rid}_{nid}"
-                        prob += min_n <= night_counts[nid], f"min_n_{rid}_{nid}"
+                        # 공정성 원장: (직전 달 누적 + 당월)의 편차를 최소화 —
+                        # 지난달 야간이 많았던 간호사는 이번 달 적게 받는다
+                        off = int(self.fairness_offsets.get(nid, 0))
+                        prob += max_n >= night_counts[nid] + off, f"max_n_{rid}_{nid}"
+                        prob += min_n <= night_counts[nid] + off, f"min_n_{rid}_{nid}"
                     range_var = pulp.LpVariable(f"night_range_{rid}", lowBound=0, cat="Integer")
                     prob += range_var >= max_n - min_n, f"night_range_def_{rid}"
                     terms.append(sc * range_var)

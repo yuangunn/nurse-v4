@@ -5,6 +5,44 @@
  * ─────────────────────────────────────────────────────────────────────────── */
 window.MiscFeaturesModule = function() {
   return {
+    // ═══ 한국 공휴일 자동 입력 ═══════════════════════════
+    // 관공서 공휴일 + 대체공휴일 + 선거일 (임시공휴일은 미포함 — 직접 추가)
+    _KR_HOLIDAYS:{
+      2025:['2025-01-01','2025-01-28','2025-01-29','2025-01-30','2025-03-01','2025-03-03','2025-05-05','2025-05-06','2025-06-06','2025-08-15','2025-10-03','2025-10-05','2025-10-06','2025-10-07','2025-10-08','2025-10-09','2025-12-25'],
+      2026:['2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02','2026-05-05','2026-05-24','2026-05-25','2026-06-03','2026-06-06','2026-08-15','2026-08-17','2026-09-24','2026-09-25','2026-09-26','2026-10-03','2026-10-05','2026-10-09','2026-12-25'],
+      2027:['2027-01-01','2027-02-05','2027-02-06','2027-02-07','2027-02-08','2027-03-01','2027-05-05','2027-05-13','2027-06-06','2027-08-15','2027-08-16','2027-09-14','2027-09-15','2027-09-16','2027-10-03','2027-10-04','2027-10-09','2027-10-11','2027-12-25','2027-12-27'],
+    },
+    autoFillHolidays(){
+      const table=this._KR_HOLIDAYS[this.year];
+      if(!table){this.toast(`${this.year}년 공휴일 내장 데이터가 없습니다 — 날짜 헤더 우클릭으로 직접 지정하세요`,'warn');return}
+      const prefix=`${this.year}-${String(this.month).padStart(2,'0')}-`;
+      const target=table.filter(h=>h.startsWith(prefix)&&!this.holidays.includes(h));
+      if(!target.length){this.toast('이 달에 추가할 공휴일이 없습니다 (이미 모두 입력됨)','info');return}
+      this._pushUndo();
+      this.holidays=[...this.holidays,...target];
+      this._checkViolations&&this._checkViolations();
+      this.toast(`🇰🇷 공휴일 ${target.length}일 입력: ${target.map(h=>+h.slice(8)+'일').join(', ')} — 임시공휴일·변경은 직접 확인하세요`,'info',5000);
+    },
+
+    // ═══ 전월N 자동 인수인계 ═════════════════════════════
+    async autoFillPrevMonthNights(){
+      try{
+        const r=await this.api('GET',`/api/prev_month_nights?year=${this.year}&month=${this.month}`);
+        const ids=Object.keys(r||{});
+        if(!ids.length){this.toast('직전 달 저장 근무표가 없습니다 — 저장 탭에서 전월 확정본을 먼저 저장해 두면 자동 계산됩니다','warn',5000);return}
+        this.prevMonthNights={...this.prevMonthNights,...r};
+        this.toast(`🌙 전월N ${ids.length}명 자동 입력 (직전 달 저장본의 N/NC 집계)`,'info',4000);
+      }catch(e){this.toast('전월N 자동 계산 실패','error')}
+    },
+
+    // ═══ 공정성 원장 (직전 3개월 누적) ════════════════════
+    async loadFairnessLedger(){
+      try{
+        const r=await this.api('GET',`/api/fairness_ledger?year=${this.year}&month=${this.month}`);
+        this.fairnessLedger3m=r.ledger||{};
+      }catch(e){this.fairnessLedger3m={}}
+    },
+
     // ═══ 11. 변경 이력 ════════════════════════════════════
     changeHistory:[],
     _maxHistory:100,

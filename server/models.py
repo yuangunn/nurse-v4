@@ -115,6 +115,9 @@ class GenerateRequest(BaseModel):
     # 위시 공정성 보정 — 서버가 직전 달 위시 거절 이력에서 자동 산출해 채움
     # {nurse_id: 가중배수}. 프론트가 보낼 필요 없음.
     wish_boosts: Optional[Dict[str, float]] = None
+    # 야간 공정성 원장 오프셋 — 직전 달들의 누적 야간 수 {nurse_id: n}.
+    # night_fairness가 (누적+당월)의 편차를 최소화해 누적 불공평을 당월에 보정.
+    fairness_offsets: Optional[Dict[str, int]] = None
 
 
 class ScheduleSave(BaseModel):

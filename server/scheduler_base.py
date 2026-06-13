@@ -142,6 +142,8 @@ class _SchedulerBase:
         self.unlimited_v = request.unlimited_v
         # 위시 공정성 보정 (서버가 거절 이력에서 산출) — {nid: 배수}
         self.wish_boosts = getattr(request, "wish_boosts", None) or {}
+        # 야간 공정성 원장 오프셋 (직전 달 누적 야간) — {nid: n}
+        self.fairness_offsets = getattr(request, "fairness_offsets", None) or {}
 
         # ── 근무 정의 → 카테고리 리스트 동적 구성 ─────────────────────────────
         shifts = [s.model_dump() for s in request.shifts] if request.shifts else []

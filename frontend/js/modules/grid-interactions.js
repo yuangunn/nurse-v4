@@ -70,6 +70,34 @@ window.GridInteractionsModule = function() {
       }
       this.prevViolations=v;
       this._violationSet=new Set(v.map(x=>`${x.nid}|${x.dk}`));
+      this._checkStaffingSlack();
+    },
+
+    _checkStaffingSlack(){
+      // 실시간 인원 슬랙 — 사전입력을 넣는 '그 자리에서' 부족/빡빡을 경고.
+      // (생성 20분 돌리고 실패로 알게 되는 일을 입력 시점에 차단)
+      const restLeave=this.shifts.filter(s=>s.period==='rest'||s.period==='leave').map(s=>s.code);
+      const wkKeys=['sun','mon','tue','wed','thu','fri','sat'];
+      const short=[],tight=[];
+      for(const day of this.scheduleDays){
+        if(this.isOverflow(day))continue;
+        const dk=this.dayKey(day);
+        const base=this.requirements?.[wkKeys[day.getDay()]]||{};
+        const ovr=this.prevDayReqs?.[dk]||{};
+        const req={...base,...ovr};
+        const needed=(+req.D||0)+(+req.E||0)+(+req.N||0);
+        if(!needed)continue;
+        let avail=0;
+        for(const n of this.nurses){
+          if((n.start_date&&dk<n.start_date)||(n.end_date&&dk>n.end_date))continue;
+          const pre=this.prevSchedule[n.id]?.[dk];
+          if(pre&&restLeave.includes(pre))continue;
+          avail++;
+        }
+        if(avail<needed)short.push({dk,needed,avail});
+        else if(avail===needed)tight.push({dk,needed,avail});
+      }
+      this.staffingAlerts={short,tight};
     },
     hasViolation(nurseId,day){
       return this._violationSet?.has(`${nurseId}|${this.dayKey(day)}`)||false;

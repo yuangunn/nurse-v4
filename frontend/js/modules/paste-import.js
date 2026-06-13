@@ -117,6 +117,15 @@ window.PasteImportModule = function() {
       const nurseByName={};
       for(const n of this.nurses)nurseByName[(n.name||'').trim()]=n;
 
+      // 요일 행 감지 — 날짜 행 아래 둘째 행에 월/화/수…가 오는 시트 형식 지원.
+      // 셀의 80% 이상이 요일 토큰이면 데이터 행이 아니라 헤더로 보고 무시한다.
+      const WEEKDAY_TOKENS=new Set(['월','화','수','목','금','토','일','요일']);
+      const isWeekdayRow=(row,startC)=>{
+        const cells=(row||[]).slice(startC).map(c=>(c||'').trim().replace(/[()]/g,'')).filter(Boolean);
+        if(cells.length<3)return false;
+        return cells.filter(c=>WEEKDAY_TOKENS.has(c)).length/cells.length>=0.8;
+      };
+
       const tryMatch=(useNameCol,useDateRow)=>{
         const startR=useDateRow?1:0;
         const startC=useNameCol?1:0;
@@ -126,6 +135,10 @@ window.PasteImportModule = function() {
 
         if(useNameCol){
           for(let r=startR;r<grid.length;r++){
+            if(isWeekdayRow(grid[r],startC)){
+              nameRow.push({r,name:'',nurseId:null,matched:false,weekdayHeader:true});
+              continue;
+            }
             const raw=(grid[r][0]||'').trim();
             const stripped=raw.replace(/^\*+/,'').trim();  // 게스트모드 데이터의 '*' 접두 제거
             const n=nurseByName[raw]||nurseByName[stripped];
@@ -226,7 +239,7 @@ window.PasteImportModule = function() {
         }
       }
 
-      const unmatchedNames=best.nameRow?best.nameRow.filter(x=>!x.matched&&x.name).map(x=>x.name):[];
+      const unmatchedNames=best.nameRow?best.nameRow.filter(x=>!x.matched&&x.name&&!x.weekdayHeader).map(x=>x.name):[];
       const unmatchedDates=best.dateCol?best.dateCol.filter(x=>!x.matched&&x.raw).map(x=>x.raw):[];
 
       this.pastePrev.diff={will_set:willSet,will_clear:willClear,matched_all:matchedAll,unrecognized:[...unrecognized],unmatchedNames,unmatchedDates};

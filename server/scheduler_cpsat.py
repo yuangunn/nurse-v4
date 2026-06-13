@@ -1041,13 +1041,18 @@ class CpSatScheduler(_SchedulerBase):
                         nurse["id"]: lin([x[nurse["id"]][d][s] for d in month_days for s in self.NIGHT_SHIFTS])
                         for nurse in fairness_pool
                     }
-                    max_n = model.NewIntVar(0, ub_nights, f"max_nights_{rid}")
-                    min_n = model.NewIntVar(0, ub_nights, f"min_nights_{rid}")
+                    max_off = max((int(self.fairness_offsets.get(n["id"], 0))
+                                   for n in fairness_pool), default=0)
+                    ub_fair = ub_nights + max_off
+                    max_n = model.NewIntVar(0, ub_fair, f"max_nights_{rid}")
+                    min_n = model.NewIntVar(0, ub_fair, f"min_nights_{rid}")
                     for nurse in fairness_pool:
                         nid = nurse["id"]
-                        model.Add(max_n >= night_counts[nid])
-                        model.Add(min_n <= night_counts[nid])
-                    range_var = model.NewIntVar(0, ub_nights, f"night_range_{rid}")
+                        # 공정성 원장: (직전 달 누적 + 당월) 편차 최소화 (HiGHS 패리티)
+                        off = int(self.fairness_offsets.get(nid, 0))
+                        model.Add(max_n >= night_counts[nid] + off)
+                        model.Add(min_n <= night_counts[nid] + off)
+                    range_var = model.NewIntVar(0, ub_fair, f"night_range_{rid}")
                     model.Add(range_var >= max_n - min_n)
                     terms.append(sc * range_var)
 
