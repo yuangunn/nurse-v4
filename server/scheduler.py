@@ -402,33 +402,56 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         # 실현가능성에 꼭 필요할 때만, 그리고 그때도 휴식<근무<휴가 순으로 최소한만 일어난다.
         obj = self._build_objective(prob, x)
         if pre_bonus_terms:
-            # 배점 상한: 이진 변수는 |계수|, 정수 보조변수(night_range·v2/v3 등,
-            # 값 상한 ≤ 기간 일수 T)는 |계수|×T — Σ|계수|만 쓰면 정수 변수가
-            # 상한 가정을 깨 사전순 지배가 무너질 수 있다.
-            scoring_bound = 0
-            for var, coef in obj.items():
-                # 이진성은 bounds로 판정 — pulp는 cat="Binary"를 'Integer'로
-                # 정규화해 저장하므로 cat 비교는 항상 거짓(사문)이다
-                is_bin = (getattr(var, "lowBound", None) == 0
-                          and getattr(var, "upBound", None) == 1)
-                span = 1 if is_bin else max(1, self.T)
-                scoring_bound += abs(coef) * span
-            # 보너스 '조합 차'의 최솟값은 개별 최솟값이 아니라 gcd —
-            # 예: 휴가 1건(5000) vs 주휴3+근무8(300×3+500×8=4900)의 차는 100.
-            import math
-            bonus_gcd = 0
-            for b in (PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK, PRE_BONUS_REST):
-                if b > 0:
-                    bonus_gcd = math.gcd(bonus_gcd, int(b))
-            dom = int(scoring_bound // max(1, bonus_gcd)) + 2
-            prob += obj + dom * pulp.lpSum(pre_bonus_terms)
+            # ── 2단계 사전순 솔브 ────────────────────────────────────────────
+            # 1단계: '사전입력 유지 보너스'만 최대화(gap 0) → 최소 침습 수준을
+            #         정확히 확정.
+            # 2단계: 그 수준을 하드 제약으로 고정하고 배점을 사용자 gap으로 최적화.
+            # → dom 가중 단일 솔브의 '거대 계수 + 상대 갭에 의한 보존 희생' 문제를
+            #   모두 제거. 1단계가 시간 내 증명 안 되면 가중 방식(gap 0)으로 폴백.
+            bonus_expr = pulp.lpSum(pre_bonus_terms)
+            prob.setObjective(bonus_expr)
+            stage1 = pulp.HiGHS(timeLimit=max(30, int(self.time_limit) // 3),
+                                mip_rel_gap=0.0, msg=False)
+            try:
+                prob.solve(stage1)
+            except Exception:
+                pass
+            s1_status = pulp.constants.LpStatus.get(prob.status, "Unknown")
+            if s1_status == "Infeasible":
+                self._pre_soft = False
+                return None
+            if s1_status == "Optimal":
+                best_keep = int(round(pulp.value(bonus_expr) or 0))
+                prob += bonus_expr >= best_keep, "keep_bonus_floor"
+                prob.setObjective(obj)
+                solver = pulp.HiGHS(timeLimit=self.time_limit,
+                                    mip_rel_gap=self.mip_gap, msg=False)
+            else:
+                # 폴백: dom 가중 단일 솔브 — 사전순 지배 스케일.
+                # 배점 상한: 이진 변수는 |계수|, 정수 보조변수(night_range·v2/v3
+                # 등, 값 상한 ≤ T)는 |계수|×T. 이진성은 bounds로 판정(pulp는
+                # cat="Binary"를 'Integer'로 정규화해 저장).
+                scoring_bound = 0
+                for var, coef in obj.items():
+                    is_bin = (getattr(var, "lowBound", None) == 0
+                              and getattr(var, "upBound", None) == 1)
+                    span = 1 if is_bin else max(1, self.T)
+                    scoring_bound += abs(coef) * span
+                # 보너스 '조합 차'의 최솟값은 gcd — 예: 휴가 1건(5000) vs
+                # 주휴3+근무8(4900)의 차는 100.
+                import math
+                bonus_gcd = 0
+                for b in (PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK, PRE_BONUS_REST):
+                    if b > 0:
+                        bonus_gcd = math.gcd(bonus_gcd, int(b))
+                dom = int(scoring_bound // max(1, bonus_gcd)) + 2
+                prob.setObjective(obj + dom * bonus_expr)
+                # 가중 방식에선 gap=0 필수 — 상대 갭만큼 보존이 희생될 수 있음
+                solver = pulp.HiGHS(timeLimit=self.time_limit,
+                                    mip_rel_gap=0.0, msg=False)
         else:
-            prob += obj
-
-        # 완화 솔브는 gap=0 — 상대 갭을 허용하면 dom 스케일된 보너스 합의 갭만큼
-        # 사전입력 보존이 임의로 희생될 수 있어 '최소 침습' 보장이 깨진다.
-        # (timeLimit 도달 시엔 그때까지의 최선해를 그대로 사용)
-        solver = pulp.HiGHS(timeLimit=self.time_limit, mip_rel_gap=0.0, msg=False)
+            prob.setObjective(obj)
+            solver = pulp.HiGHS(timeLimit=self.time_limit, mip_rel_gap=self.mip_gap, msg=False)
         try:
             prob.solve(solver)
         except Exception:

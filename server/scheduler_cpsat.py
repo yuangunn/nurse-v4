@@ -329,28 +329,49 @@ class CpSatScheduler(_SchedulerBase):
             b = _BONUS[timeoff_class(pre)]
             for v in flex_vars:
                 keep_terms.append(b * v)
-        max_score = max((abs(int(round(getattr(r, "score", 0)))) for r in self.scoring_rules), default=100)
-        coarse = max_score * max(1, len(self.nurses)) * max(1, self.T) * max(1, len(self.scoring_rules)) + 1
-        # _build_objective_cpsat에는 scoring_rules와 무관한 상시 페널티항이 있다
-        # (이후달 V -500, unlimited_v v2/v3 -500/-4000, 생 2회 m2 -20100) — coarse가
-        # 이를 모르면 사전순 지배가 깨질 수 있어 보수적 상한을 가산한다.
-        coarse += 25100 * max(1, self.T) * max(1, len(self.nurses))
-        # 지배 분모는 보너스 '조합 차'의 최솟값인 gcd — 500 하드코딩 시 최소
-        # 보너스(주휴 300)의 사전순 지배가 보장되지 않는다.
-        import math
-        bonus_gcd = 0
-        for b in _BONUS.values():
-            if b > 0:
-                bonus_gcd = math.gcd(bonus_gcd, b)
-        dom = coarse // max(1, bonus_gcd) + 2
-        model.Maximize(sum(obj_terms) + dom * sum(keep_terms))
+        # ── 2단계 사전순 솔브 (HiGHS 완화 경로와 동일 정책) ───────────────────
+        # 1단계: 유지 보너스만 최대화(gap 0) → 최소 침습 수준 확정.
+        # 2단계: 그 수준을 하드로 고정하고 배점을 사용자 gap으로 최적화.
+        # 1단계 미증명 시 dom 가중 단일 솔브(gap 0)로 폴백.
+        stage2_gap = 0.0
+        if keep_terms:
+            model.Maximize(sum(keep_terms))
+            s1 = cp_model.CpSolver()
+            s1.parameters.max_time_in_seconds = max(30.0, float(self.time_limit) / 3)
+            s1.parameters.relative_gap_limit = 0.0
+            s1.parameters.num_workers = max(1, min(8, os.cpu_count() or 4))
+            s1.parameters.random_seed = 1
+            st1 = s1.Solve(model)
+            if st1 == cp_model.INFEASIBLE:
+                self._pre_soft = False
+                return None
+            if st1 == cp_model.OPTIMAL:
+                best_keep = int(round(s1.ObjectiveValue()))
+                model.Add(sum(keep_terms) >= best_keep)
+                model.Maximize(sum(obj_terms) if obj_terms else 0)
+                stage2_gap = float(self.mip_gap)
+            else:
+                max_score = max((abs(int(round(getattr(r, "score", 0)))) for r in self.scoring_rules), default=100)
+                coarse = max_score * max(1, len(self.nurses)) * max(1, self.T) * max(1, len(self.scoring_rules)) + 1
+                # scoring_rules와 무관한 상시 페널티항(이후달 V -500, v2/v3,
+                # m2 -20100)까지 보수적 상한 가산 — 지배 붕괴 방지
+                coarse += 25100 * max(1, self.T) * max(1, len(self.nurses))
+                # 지배 분모는 보너스 조합 차의 최솟값인 gcd
+                import math
+                bonus_gcd = 0
+                for b in _BONUS.values():
+                    if b > 0:
+                        bonus_gcd = math.gcd(bonus_gcd, b)
+                dom = coarse // max(1, bonus_gcd) + 2
+                model.Maximize(sum(obj_terms) + dom * sum(keep_terms))
+        else:
+            model.Maximize(sum(obj_terms) if obj_terms else 0)
+            stage2_gap = float(self.mip_gap)
         from . import solver_progress
         prog = _CpSatProgress()
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = float(self.time_limit)
-        # 완화 솔브는 gap=0 — 상대 갭만큼 사전입력 보존이 희생되면 '최소 침습'
-        # 보장이 깨진다 (HiGHS 완화 경로와 동일 정책)
-        solver.parameters.relative_gap_limit = 0.0
+        solver.parameters.relative_gap_limit = stage2_gap
         solver.parameters.num_workers = max(1, min(8, os.cpu_count() or 4))
         solver.parameters.random_seed = 1
         cb = _CpSatCb(prog, None)
