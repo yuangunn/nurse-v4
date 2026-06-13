@@ -930,6 +930,80 @@ def delete_shift(code: str):
 # 일별 인원 사전 검증
 from datetime import date as _date, timedelta as _td
 
+def _attach_wish_boosts(request: GenerateRequest) -> Optional[dict]:
+    """직전 달들의 위시 거절 이력에서 간호사별 가중 배수를 산출해 request에 주입.
+    배수 = 1 + 0.5×누적 미반영 (최대 3배). '지난달 거절당한 사람 우선'의 자동화."""
+    try:
+        if not any((n.wishes or {}) for n in request.nurses):
+            return None
+        ledger = db.compute_wish_ledger(request.year, request.month)
+        boosts = {}
+        for n in request.nurses:
+            ent = ledger.get(n.id)
+            if ent:
+                rejected = max(0, ent["requested"] - ent["granted"])
+                if rejected:
+                    boosts[n.id] = round(min(3.0, 1.0 + 0.5 * rejected), 2)
+        if boosts:
+            request.wish_boosts = boosts
+        return {"ledger": ledger, "boosts": boosts}
+    except Exception:
+        return None
+
+
+def _build_wish_report(request: GenerateRequest, result: dict) -> Optional[dict]:
+    """생성 결과 대비 위시 반영 리포트 — 간호사별 신청/반영/미반영 목록."""
+    if not result.get("success"):
+        return None
+    sched = result.get("schedule") or {}
+    per_nurse = []
+    total_req = total_ok = 0
+    month_prefix = f"{request.year:04d}-{request.month:02d}-"
+    for n in request.nurses:
+        wishes = n.wishes or {}
+        if not wishes:
+            continue
+        ns = sched.get(n.id) or {}
+        requested = granted = 0
+        unmet = []
+        for day_str, wish in wishes.items():
+            ds = str(day_str)
+            if "-" in ds:
+                dk = ds
+                if not dk.startswith(month_prefix):
+                    continue
+            else:
+                try:
+                    dk = f"{month_prefix}{int(ds):02d}"
+                except (ValueError, TypeError):
+                    continue
+            assigned = ns.get(dk, "")
+            if not assigned:
+                continue
+            requested += 1
+            if wish == "OFF":
+                ok = assigned in db.WISH_REST_LIKE or assigned in db.WISH_LEAVE_LIKE
+            else:
+                ok = (assigned == wish)
+            if ok:
+                granted += 1
+            else:
+                unmet.append({"date": dk, "wish": wish, "assigned": assigned})
+        if requested:
+            total_req += requested
+            total_ok += granted
+            per_nurse.append({
+                "nurse_id": n.id, "name": n.name,
+                "requested": requested, "granted": granted, "unmet": unmet,
+                "boost": (request.wish_boosts or {}).get(n.id),
+            })
+    if not per_nurse:
+        return None
+    per_nurse.sort(key=lambda r: (r["granted"] / r["requested"], -len(r["unmet"])))
+    return {"total_requested": total_req, "total_granted": total_ok,
+            "per_nurse": per_nurse}
+
+
 def _validate_locked_conflicts(request: GenerateRequest) -> Optional[str]:
     """잠긴 셀의 사전입력이 규칙에 의해 무효화(드롭)되는 충돌 검출.
     '잠금은 완화에서도 고정'이 약속이지만, 공휴일 OF 금지 같은 규칙이 사전입력
@@ -1164,6 +1238,7 @@ def generate(request: GenerateRequest):
         lock_warn = _validate_locked_conflicts(request)
         if lock_warn:
             warning = (warning + "\n\n" + lock_warn) if warning else lock_warn
+        wish_ctx = _attach_wish_boosts(request)
         if request.solver == "race":
             result = _run_race(request)
         elif request.solver == "cpsat":
@@ -1186,6 +1261,15 @@ def generate(request: GenerateRequest):
         elif warning:
             result["warning"] = warning
 
+        # 위시 반영 리포트 — 거절의 투명성 (누가 몇 건 신청·반영됐는지 + 보정 배수)
+        try:
+            wr = _build_wish_report(request, result)
+            if wr:
+                if wish_ctx:
+                    wr["ledger"] = wish_ctx.get("ledger") or {}
+                result["wish_report"] = wr
+        except Exception:
+            pass
         # 생성 리포트 — run 레코더 집계 (end() 호출 전에 만들어야 함)
         try:
             report = solver_progress.build_report(result)

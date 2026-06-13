@@ -396,6 +396,67 @@ def cleanup_orphan_nurse_refs() -> int:
     return removed
 
 
+# 위시 판정용 표준 코드 집합 (저장본 기반 파생 계산 — 솔버 클래스와 독립)
+WISH_REST_LIKE = {"OF", "주", "P1"}
+WISH_LEAVE_LIKE = {"V", "생", "특", "공", "법", "병"}
+
+
+def compute_wish_ledger(year: int, month: int, months_back: int = 3) -> Dict:
+    """직전 months_back개월의 '최신 저장 근무표'에서 간호사별 위시 신청/반영 집계.
+    별도 기록 테이블 없이 저장본(저장 시점의 nurses[].wishes + schedule)만으로
+    계산하는 파생 뷰 — 같은 달을 여러 번 저장해도 최신본 1개만 본다.
+    Returns: {nurse_id: {"requested": n, "granted": m}}"""
+    targets = []
+    y, m = year, month
+    for _ in range(months_back):
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+        targets.append((y, m))
+    ledger: Dict = {}
+    with get_conn() as conn:
+        for ty, tm in targets:
+            row = conn.execute(
+                "SELECT data FROM schedules WHERE year=? AND month=? "
+                "ORDER BY id DESC LIMIT 1", (ty, tm)).fetchone()
+            if not row:
+                continue
+            try:
+                data = json.loads(row["data"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+            sched = data.get("schedule") or {}
+            for n in data.get("nurses") or []:
+                nid = n.get("id")
+                wishes = n.get("wishes") or {}
+                if not nid or not wishes:
+                    continue
+                ns = sched.get(nid) or {}
+                ent = ledger.setdefault(nid, {"requested": 0, "granted": 0})
+                for day_str, wish in wishes.items():
+                    ds = str(day_str)
+                    if "-" in ds:
+                        dk = ds
+                        if not dk.startswith(f"{ty:04d}-{tm:02d}-"):
+                            continue  # 다른 달 키는 그 달 집계에서 제외
+                    else:
+                        try:
+                            dk = f"{ty:04d}-{tm:02d}-{int(ds):02d}"
+                        except (ValueError, TypeError):
+                            continue
+                    s = ns.get(dk, "")
+                    if not s:
+                        continue
+                    ent["requested"] += 1
+                    if wish == "OFF":
+                        ok = s in WISH_REST_LIKE or s in WISH_LEAVE_LIKE
+                    else:
+                        ok = (s == wish)
+                    if ok:
+                        ent["granted"] += 1
+    return ledger
+
+
 def insert_generation_run(d: Dict):
     """생성 이력 1건 기록. (비교 노트, 최근 5건) 반환 — 노트는 유사 규모의 직전
     성공 이력 대비 3배 이상 느려졌을 때만 생성된다."""

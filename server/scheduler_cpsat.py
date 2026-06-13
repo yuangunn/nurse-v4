@@ -1011,6 +1011,8 @@ class CpSatScheduler(_SchedulerBase):
             elif rt == "wish":
                 for nurse in self.nurses:
                     nid = nurse["id"]
+                    # 위시 공정성 보정 (HiGHS 패리티)
+                    wsc = int(round(sc * float(self.wish_boosts.get(nid, 1.0))))
                     for day_str, wish_shift in nurse.get("wishes", {}).items():
                         try:
                             ds = str(day_str)
@@ -1023,9 +1025,9 @@ class CpSatScheduler(_SchedulerBase):
                                 continue
                             d = self.date_to_idx[wish_date]
                             if wish_shift == "OFF":
-                                terms.append(sc * lin([x[nid][d][s] for s in self.REST_SHIFTS + self.LEAVE_SHIFTS]))
+                                terms.append(wsc * lin([x[nid][d][s] for s in self.REST_SHIFTS + self.LEAVE_SHIFTS]))
                             elif wish_shift in self.ALL_SHIFTS:
-                                terms.append(sc * x[nid][d][wish_shift])
+                                terms.append(wsc * x[nid][d][wish_shift])
                         except (ValueError, KeyError):
                             pass
 

@@ -11,13 +11,14 @@ window.PasteImportModule = function() {
       rawText:'',
       grid:[],          // 2D array of pasted cells (string)
       mode:'auto',      // 'auto' | 'name-date' | 'cursor'
+      target:'prev',    // 'prev'=사전입력(확정) | 'wish'=희망근무(소프트 ★)
       hasNameCol:true,
       hasDateRow:true,
       matches:null,     // {nameRow:[{r,name,nurseId,matched}], dateCol:[{c,day,dk,matched}]}
-      diff:null,        // {will_set, will_clear, unrecognized, unmatchedNames, unmatchedDates}
+      diff:null,        // {will_set, will_clear, matched_all, unrecognized, unmatchedNames, unmatchedDates}
     },
-    openPastePrev(){
-      this.pastePrev={open:true,rawText:'',grid:[],mode:'auto',hasNameCol:true,hasDateRow:true,matches:null,diff:null};
+    openPastePrev(target){
+      this.pastePrev={open:true,rawText:'',grid:[],mode:'auto',target:target||'prev',hasNameCol:true,hasDateRow:true,matches:null,diff:null};
       this.$nextTick&&this.$nextTick(()=>{
         const ta=document.getElementById('paste-prev-textarea');
         if(ta)ta.focus();
@@ -165,6 +166,7 @@ window.PasteImportModule = function() {
       // 차이 계산
       const willSet=[];
       const willClear=[];
+      const matchedAll=[]; // 인식된 모든 (간호사,날짜,코드) — 위시 임포트용 (prev 비교 무관)
       const unrecognized=new Set();
       const startR=best.useDateRow?1:0;
       const startC=best.useNameCol?1:0;
@@ -193,8 +195,9 @@ window.PasteImportModule = function() {
               if(oldShift)willClear.push({nid,name:nameInfo.name,dk:ci.dk,oldShift});
             }else if(code===undefined){
               if(cell)unrecognized.add(cell);
-            }else if(code!==oldShift){
-              willSet.push({nid,name:nameInfo.name,dk:ci.dk,oldShift,newShift:code});
+            }else{
+              matchedAll.push({nid,name:nameInfo.name,dk:ci.dk,code});
+              if(code!==oldShift)willSet.push({nid,name:nameInfo.name,dk:ci.dk,oldShift,newShift:code});
             }
           }
         }
@@ -215,8 +218,9 @@ window.PasteImportModule = function() {
               if(oldShift)willClear.push({nid:nurse.id,name:nurse.name,dk,oldShift});
             }else if(code===undefined){
               if(cell)unrecognized.add(cell);
-            }else if(code!==oldShift){
-              willSet.push({nid:nurse.id,name:nurse.name,dk,oldShift,newShift:code});
+            }else{
+              matchedAll.push({nid:nurse.id,name:nurse.name,dk,code});
+              if(code!==oldShift)willSet.push({nid:nurse.id,name:nurse.name,dk,oldShift,newShift:code});
             }
           }
         }
@@ -225,7 +229,7 @@ window.PasteImportModule = function() {
       const unmatchedNames=best.nameRow?best.nameRow.filter(x=>!x.matched&&x.name).map(x=>x.name):[];
       const unmatchedDates=best.dateCol?best.dateCol.filter(x=>!x.matched&&x.raw).map(x=>x.raw):[];
 
-      this.pastePrev.diff={will_set:willSet,will_clear:willClear,unrecognized:[...unrecognized],unmatchedNames,unmatchedDates};
+      this.pastePrev.diff={will_set:willSet,will_clear:willClear,matched_all:matchedAll,unrecognized:[...unrecognized],unmatchedNames,unmatchedDates};
     },
 
     onPasteTextChange(){
@@ -242,6 +246,24 @@ window.PasteImportModule = function() {
     applyPastePrev(){
       const diff=this.pastePrev.diff;
       if(!diff)return;
+      if(this.pastePrev.target==='wish'){
+        // 위시 임포트: 사전입력과 비교하지 않고 인식된 전 셀을 희망으로 등록.
+        // 휴무/휴가 계열 코드는 'OFF 희망'으로 정규화 (배점 규칙의 OFF 위시 의미)
+        const cells=diff.matched_all||[];
+        if(!cells.length){this.toast('인식된 위시가 없습니다','warn');return}
+        const OFF_LIKE=['OF','주','P1','V','생','특','공','법','병'];
+        const updated=new Set();
+        for(const it of cells){
+          const nurse=this.nurses.find(n=>n.id===it.nid);if(!nurse)continue;
+          if(!nurse.wishes)nurse.wishes={};
+          nurse.wishes[it.dk]=OFF_LIKE.includes(it.code)?'OFF':it.code;
+          updated.add(it.nid);
+        }
+        Promise.all([...updated].map(nid=>this.api('POST','/api/nurses',this.nurses.find(n=>n.id===nid))))
+          .then(()=>this.toast(`★ 희망근무 ${cells.length}건 등록 (소프트 — 가능하면 반영, 서버 저장됨)`,'info',4500))
+          .catch(()=>this.toast('희망은 화면에 반영됐지만 일부 서버 저장에 실패했습니다','error'));
+        this.closePastePrev();return;
+      }
       const totalChanges=diff.will_set.length+diff.will_clear.length;
       if(!totalChanges){this.toast('적용할 변경 사항이 없습니다','warn');return}
       this._pushUndo();

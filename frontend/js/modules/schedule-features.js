@@ -122,6 +122,17 @@ window.ScheduleFeaturesModule = function() {
       if(!nurse||!nurse.wishes)return;
       delete nurse.wishes[this.dayKey(day)];
     },
+    getWish(nurseId,day){
+      if(!nurseId||!day)return'';
+      const n=this.nurses.find(x=>x.id===nurseId);
+      return n?.wishes?.[this.dayKey(day)]||'';
+    },
+    setWishAndSave(nurseId,day,shift){
+      // 셀 단위 위시 입력 + 간호사 레코드 영속화 (위시는 nurse.wishes에 저장됨)
+      this.setWish(nurseId,day,shift);
+      const n=this.nurses.find(x=>x.id===nurseId);
+      if(n)this.api('POST','/api/nurses',n).catch(()=>this.toast('희망 서버 저장 실패','error'));
+    },
 
     // ═══ 9. 다중 솔버 비교 ═══════════════════════════════
     multiSolveResults:[],

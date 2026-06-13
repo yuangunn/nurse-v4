@@ -700,6 +700,8 @@ class _HighsConstraintsMixin:
             elif rt == "wish":
                 for nurse in self.nurses:
                     nid = nurse["id"]
+                    # 위시 공정성 보정 — 직전 달 거절 누적이 큰 간호사의 위시 가중 상향
+                    wsc = int(round(sc * float(self.wish_boosts.get(nid, 1.0))))
                     for day_str, wish_shift in nurse.get("wishes", {}).items():
                         try:
                             ds = str(day_str)
@@ -713,10 +715,10 @@ class _HighsConstraintsMixin:
                                 continue
                             d = self.date_to_idx[wish_date]
                             if wish_shift == "OFF":
-                                terms.append(sc * pulp.lpSum(
+                                terms.append(wsc * pulp.lpSum(
                                     x[nid][d][s] for s in self.REST_SHIFTS + self.LEAVE_SHIFTS))
                             elif wish_shift in self.ALL_SHIFTS:
-                                terms.append(sc * x[nid][d][wish_shift])
+                                terms.append(wsc * x[nid][d][wish_shift])
                         except (ValueError, KeyError):
                             pass
 

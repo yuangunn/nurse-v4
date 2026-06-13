@@ -112,6 +112,9 @@ class GenerateRequest(BaseModel):
     allow_juhu_relax: bool = False  # 주휴 재배치 허용
     unlimited_v: bool = False  # V 무제한 모드 (해를 못 찾을 때 사용)
     solver: Literal["highs", "cpsat", "race"] = "highs"  # 생성 엔진 (race=두 엔진 경쟁, 먼저 성공한 쪽 채택)
+    # 위시 공정성 보정 — 서버가 직전 달 위시 거절 이력에서 자동 산출해 채움
+    # {nurse_id: 가중배수}. 프론트가 보낼 필요 없음.
+    wish_boosts: Optional[Dict[str, float]] = None
 
 
 class ScheduleSave(BaseModel):

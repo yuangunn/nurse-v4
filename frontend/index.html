@@ -1124,6 +1124,23 @@
       </div>
     </template>
   </div>
+  <!-- 위시 반영 리포트 -->
+  <div x-show="wishReport" x-cloak class="mb-3">
+    <button @click="showWishReport=!showWishReport" class="btn btn-xs btn-ghost">⭐ 위시 반영 <span class="text-sub" x-text="wishReport?wishReport.total_granted+'/'+wishReport.total_requested:''"></span> <span x-text="showWishReport?'▾':'▸'"></span></button>
+    <div x-show="showWishReport" x-cloak class="card-sm mt-1.5 text-xs">
+      <div class="text-sub mb-2">전체 반영률 <strong class="text-bright" x-text="Math.round(wishReport.total_granted/Math.max(1,wishReport.total_requested)*100)+'%'"></strong> — 미반영 위시는 <strong>다음 달 생성에서 자동 가중</strong>됩니다 (위시 공정성 보정 ×1.5/건, 최대 ×3).</div>
+      <template x-for="r in wishReport.per_nurse" :key="'wr'+r.nurse_id">
+        <div class="mb-1.5 flex flex-wrap items-center gap-1">
+          <span class="font-medium text-bright" x-text="r.name"></span>
+          <span :class="r.granted===r.requested?'text-green':'text-amber'" x-text="r.granted+'/'+r.requested+' 반영'"></span>
+          <span x-show="r.boost" class="text-amber" x-text="'(전월 미반영 보정 ×'+r.boost+')'"></span>
+          <template x-for="(u,ui) in r.unmet" :key="'wu'+r.nurse_id+ui">
+            <button @click="jumpToPreCell(r.nurse_id,u.date)" class="btn btn-xs btn-ghost" style="color:var(--t-amber,#e6a23c);border:1px solid rgba(230,162,60,0.25)" x-text="'➤ '+u.date.slice(5).replace('-','/')+' 희망 '+u.wish+' → '+u.assigned"></button>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
   <!-- 생성 리포트 -->
   <div x-show="generationReport" x-cloak class="mb-3">
     <button @click="showGenReport=!showGenReport" class="btn btn-xs btn-ghost">📈 생성 리포트 <span x-text="showGenReport?'▾':'▸'"></span></button>
@@ -1742,6 +1759,16 @@
       <button x-show="(shiftEdit.mode==='prev'||shiftEdit.mode==='prev_multi')&&(shiftEdit.mode==='prev_multi'||getPrevShift(shiftEdit.nurse?.id,shiftEdit.day))" @click="shiftEdit.mode==='prev_multi'?applyMultiShiftEdit('__CLEAR__'):applyShiftEditWithUndo('__CLEAR__')" class="flex-1 py-1 rounded text-xs text-red" style="border:1px solid rgba(239,83,80,0.15)">초기화</button>
       <button x-show="shiftEdit.mode==='prev'&&shiftEdit.nurse" @click="toggleLock(shiftEdit.nurse.id,shiftEdit.day);shiftEdit.open=false" class="flex-1 py-1 rounded text-xs" :class="isLocked(shiftEdit.nurse?.id,shiftEdit.day)?'text-amber':'text-dim'" style="border:1px solid rgba(255,255,255,0.08)" x-text="isLocked(shiftEdit.nurse?.id,shiftEdit.day)?'🔒 잠금 해제':'🔒 셀 잠금'"></button>
     </div>
+    <!-- ★ 희망(소프트) — 사전입력(확정)과 구분: 가능하면 반영, 미반영 시 다음 달 가중 -->
+    <div x-show="shiftEdit.mode==='prev'&&shiftEdit.nurse" x-cloak class="mt-2 pt-2" style="border-top:1px dashed rgba(127,127,127,0.2)">
+      <div class="text-xs text-sub mb-1">★ 희망 <span class="text-dim">(소프트 — 가능하면 반영)</span>: <strong class="text-amber" x-text="getWish(shiftEdit.nurse?.id,shiftEdit.day)||'없음'"></strong></div>
+      <div class="flex gap-1">
+        <template x-for="w in ['OFF','D','E','N']" :key="'wsh'+w">
+          <button @click="setWishAndSave(shiftEdit.nurse.id,shiftEdit.day,w)" class="flex-1 py-1 rounded text-xs" :class="getWish(shiftEdit.nurse?.id,shiftEdit.day)===w?'text-amber font-bold':'text-dim'" style="border:1px solid rgba(255,255,255,0.08)" x-text="'★'+w"></button>
+        </template>
+        <button x-show="getWish(shiftEdit.nurse?.id,shiftEdit.day)" @click="setWishAndSave(shiftEdit.nurse.id,shiftEdit.day,null)" class="flex-1 py-1 rounded text-xs text-dim" style="border:1px solid rgba(255,255,255,0.08)">해제</button>
+      </div>
+    </div>
     <button @click="shiftEdit.open=false" class="btn btn-ghost w-full btn-sm mt-2">취소</button>
   </div>
 </div>
@@ -1850,6 +1877,15 @@
       엑셀/구글시트에서 표 영역을 선택해 복사(Ctrl+C)한 뒤 아래 영역에 <kbd>Ctrl+V</kbd>로 붙여넣으세요.
       이름과 날짜를 자동 감지해 매칭하고, <strong>적용 전 미리보기</strong>를 보여줍니다.
     </p>
+    <div class="flex items-center gap-3 mb-2 text-xs">
+      <span class="text-sub font-semibold">적용 대상:</span>
+      <label class="flex items-center gap-1 cursor-pointer"><input type="radio" value="prev" x-model="pastePrev.target"/><span :class="pastePrev.target==='prev'?'text-bright font-bold':'text-dim'">사전입력 (확정)</span></label>
+      <label class="flex items-center gap-1 cursor-pointer"><input type="radio" value="wish" x-model="pastePrev.target"/><span :class="pastePrev.target==='wish'?'text-amber font-bold':'text-dim'">★ 희망근무 (소프트)</span></label>
+    </div>
+    <div x-show="pastePrev.target==='wish'" x-cloak class="text-xs text-amber mb-2">
+      위시 시트를 그대로 붙여넣으세요. 휴무 계열(OF·연차 등)은 '쉬고 싶음(OFF)' 희망으로 저장되어
+      <strong>가능하면 반영</strong>됩니다(확정 아님). 미반영자는 다음 달 생성에서 자동 가중됩니다.
+    </div>
     <!-- 형식 예시 + 인식 코드 범례 -->
     <div class="card-sm mb-2" style="padding:6px 10px;background:var(--card-warm,rgba(0,0,0,0.02))">
       <div class="text-xs text-dim mb-1">권장 형식 — <strong>첫 행 = 날짜, 첫 열 = 이름</strong> (예시):</div>

@@ -140,6 +140,8 @@ class _SchedulerBase:
         self.allow_pre_relax = request.allow_pre_relax
         self.allow_juhu_relax = request.allow_juhu_relax
         self.unlimited_v = request.unlimited_v
+        # 위시 공정성 보정 (서버가 거절 이력에서 산출) — {nid: 배수}
+        self.wish_boosts = getattr(request, "wish_boosts", None) or {}
 
         # ── 근무 정의 → 카테고리 리스트 동적 구성 ─────────────────────────────
         shifts = [s.model_dump() for s in request.shifts] if request.shifts else []
@@ -496,6 +498,7 @@ class _SchedulerBase:
 
         scores = {nurse["id"]: 0 for nurse in self.nurses}
         details: Dict[str, list] = {nurse["id"]: [] for nurse in self.nurses}
+        _wish_extra: Dict[str, int] = {}  # 위시 공정성 보정분 (별도 행 표기용)
 
         for rule in self.scoring_rules:
             rt = rule.rule_type
@@ -569,6 +572,7 @@ class _SchedulerBase:
                 for nurse in self.nurses:
                     nid = nurse["id"]
                     ns = schedule.get(nid, {})
+                    boost_extra = int(round(sc * (float(self.wish_boosts.get(nid, 1.0)) - 1.0)))
                     for day_str, wish_shift in nurse.get("wishes", {}).items():
                         try:
                             ds = str(day_str)
@@ -580,12 +584,15 @@ class _SchedulerBase:
                             if dk not in dt_keys:
                                 continue
                             s = ns.get(dk, "")
-                            if wish_shift == "OFF" and s in self.REST_SHIFTS + self.LEAVE_SHIFTS:
+                            granted = (
+                                (wish_shift == "OFF" and s in self.REST_SHIFTS + self.LEAVE_SHIFTS)
+                                or s == wish_shift)
+                            if granted:
                                 scores[nid] += sc
                                 counts[nid] += 1
-                            elif s == wish_shift:
-                                scores[nid] += sc
-                                counts[nid] += 1
+                                if boost_extra:
+                                    # 공정성 보정분은 별도 행으로 투명하게 표기
+                                    _wish_extra[nid] = _wish_extra.get(nid, 0) + boost_extra
                         except (ValueError, KeyError):
                             pass
             elif rt == "holiday_work":
@@ -642,6 +649,17 @@ class _SchedulerBase:
                         "score_per": sc,
                         "total": c * sc,
                     })
+
+        # 위시 공정성 보정(직전 달 거절 누적 가중) — 별도 행으로 투명하게 표기
+        for nid, extra in _wish_extra.items():
+            scores[nid] += extra
+            details[nid].append({
+                "name": "위시 공정성 보정",
+                "rule_type": "wish_boost",
+                "count": 1,
+                "score_per": extra,
+                "total": extra,
+            })
 
         return scores, details
 
