@@ -61,6 +61,17 @@ try:
                 pass
             return out
 
+    # 솔버 로그 패턴 → 사용자 행동 힌트 (run당 키별 1회만)
+    import re as _re
+    _LOG_HINTS = [
+        (_re.compile(r"Presolve\s*:?.*[Ii]nfeasible"), "presolve_infeasible",
+         "💡 전처리에서 모순 감지 — 사전입력끼리 충돌일 가능성이 높습니다. 실패 시 '정밀 충돌 분석'을 실행해 보세요."),
+        (_re.compile(r"kTimeLimit|[Tt]ime limit reached"), "time_limit",
+         "💡 시간 제한 도달 — 현재 해는 표시된 gap% 이내의 품질입니다."),
+        (_re.compile(r"kInterrupt"), "interrupted",
+         "💡 중지 신호로 탐색이 종료되었습니다."),
+    ]
+
     class _TrackableHighs(_OrigHighs):
         def run(self):
             global _last_mip_gap, _log_queue
@@ -70,10 +81,16 @@ try:
                 except Exception: break
             # 로그 콜백 등록 — 솔버 출력을 큐에 적재
             # highspy 1.8+: cbLogging.subscribe(fn) — event.message로 로그 수신
+            _hinted = set()
+
             def _on_log(event):
                 msg = getattr(event, "message", "")
                 if msg and msg.strip():
                     _log_queue.put({"type": "log", "msg": msg.rstrip()})
+                    for rx, key, hint in _LOG_HINTS:
+                        if key not in _hinted and rx.search(msg):
+                            _hinted.add(key)
+                            _log_queue.put({"type": "hint", "msg": hint})
             try:
                 self.cbLogging.subscribe(_on_log)
             except Exception:
@@ -352,6 +369,15 @@ def dev_reset_seed():
         conn.execute("DELETE FROM nurses")
         _seed_nurses(conn)
     return {"ok": True}
+
+
+@app.get("/api/generation_runs")
+def get_generation_runs(limit: int = 20):
+    """생성 이력 (현재 프로필 DB 기준, 최신순)."""
+    try:
+        return db.list_generation_runs(limit=limit)
+    except Exception:
+        return []
 
 
 @app.get("/api/dev/download-db")
@@ -1160,6 +1186,36 @@ def generate(request: GenerateRequest):
         elif warning:
             result["warning"] = warning
 
+        # 생성 리포트 — run 레코더 집계 (end() 호출 전에 만들어야 함)
+        try:
+            report = solver_progress.build_report(result)
+            if report:
+                if result.get("relaxed_cells"):
+                    report["relax_attempted"] = True
+                try:
+                    note, recent = db.insert_generation_run({
+                        "year": request.year, "month": request.month,
+                        "solver": request.solver,
+                        "success": 1 if result.get("success") else 0,
+                        "stopped": 1 if result.get("stopped") else 0,
+                        "relaxed": 1 if report.get("relax_attempted") else 0,
+                        "duration_s": report.get("duration_seconds"),
+                        "final_gap": report.get("final_gap_percent"),
+                        "num_vars": report.get("num_vars"),
+                        "num_constraints": report.get("num_constraints"),
+                        "nurse_count": len(request.nurses or []),
+                        "pre_filled": sum(len(v) for v in (request.prev_schedule or {}).values()),
+                        "time_limit": request.time_limit,
+                        "mip_gap": request.mip_gap,
+                    })
+                    if note:
+                        report["history_note"] = note
+                    report["recent_runs"] = recent
+                except Exception:
+                    pass
+                result["generation_report"] = report
+        except Exception:
+            pass
         _last_generate_result = result  # 결과 보관
         solver_progress.end()
         return result

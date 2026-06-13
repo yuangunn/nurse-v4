@@ -143,6 +143,12 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
 
         # ── Solve ─────────────────────────────────────────────────────────────
 
+        from . import solver_progress as _sp
+        try:
+            _sp.record_event("model", engine="HiGHS",
+                             vars=prob.numVariables(), cons=prob.numConstraints())
+        except Exception:
+            pass
         solver = pulp.HiGHS(
             timeLimit=self.time_limit,
             mip_rel_gap=self.mip_gap,
@@ -224,6 +230,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         성공 시 relaxed_cells 포함 결과 반환, 실패 시 None.
         """
         prob = pulp.LpProblem("nurse_schedule_relaxed", pulp.LpMaximize)
+        from . import solver_progress as _sp
+        _sp.record_event("relax_start", engine="HiGHS")
         # 제약 함수(시니어리티 게이팅 등)에 '사전입력=소프트' 모드임을 알린다 —
         # 완화 모드에서 원본 prev로 게이팅하면 하드 제약이 통째로 사라진다.
         self._pre_soft = True

@@ -22,6 +22,7 @@ v4.3.1: 단일 슬롯(`_current`) → 다중 어댑터(`_adapters`)로 확장. �
 from __future__ import annotations
 
 import threading
+import time
 
 _lock = threading.Lock()
 _adapters: dict = {}       # id(adapter) -> adapter  (다중 = 레이스 안전)
@@ -29,6 +30,37 @@ _running: bool = False     # 생성 수명주기 래치 (어댑터 등록 전에
 _cancelled: bool = False   # 사용자 취소 플래그 (레이스 패자 자동중지와 구분)
 _all_cancel: bool = False  # cancel_all 발생 래치 — 레이스 패자가 완화 재시도 등
                            # 후속 솔브를 시작하지 않도록 신호 (사용자 취소와 구분)
+
+# ── run 단위 이벤트 레코더 (생성 리포트·정체 감지의 정본) ─────────────────────
+# 공유 _log_queue는 race/완화 재시도에서 상호 드레인되고 타임스탬프가 없어
+# 분석 정본으로 쓸 수 없다. 샘플링은 별도 스레드 없이 get_progress() 호출
+# (SSE 1초 heartbeat·진행 폴링)을 표본으로 활용한다.
+_events: list = []
+_run_t0 = None            # time.monotonic() at begin
+_last_sample_t: float = 0.0
+_rec_last_gap = None
+_rec_has_sol: bool = False
+_rec_improve_t = None     # 마지막 개선 시각(경과초)
+_MAX_EVENTS = 5000
+
+
+def _reset_recorder_locked():
+    global _run_t0, _last_sample_t, _rec_last_gap, _rec_has_sol, _rec_improve_t
+    _events.clear()
+    _run_t0 = time.monotonic()
+    _last_sample_t = 0.0
+    _rec_last_gap = None
+    _rec_has_sol = False
+    _rec_improve_t = None
+
+
+def record_event(kind: str, **kw):
+    """run 수명주기 내 이벤트 기록 (밖이면 무시 — 레이스 패자 잔류 이벤트 차단)."""
+    with _lock:
+        if not _running or _run_t0 is None or len(_events) >= _MAX_EVENTS:
+            return
+        _events.append({"t": round(time.monotonic() - _run_t0, 1),
+                        "kind": kind, **kw})
 
 _IDLE = {"gap_percent": None, "nodes": 0, "has_solution": False, "is_running": False}
 
@@ -51,6 +83,7 @@ def begin():
         _cancelled = False
         _all_cancel = False
         _adapters.clear()
+        _reset_recorder_locked()
 
 
 def try_begin() -> bool:
@@ -64,6 +97,7 @@ def try_begin() -> bool:
         _cancelled = False
         _all_cancel = False
         _adapters.clear()
+        _reset_recorder_locked()
         return True
 
 
@@ -187,7 +221,95 @@ def get_progress() -> dict:
         if best is None:
             best = dict(_IDLE)
         best["is_running"] = True
-        return best
+        return _note_progress(best)
     p = dict(_IDLE)
     p["is_running"] = _running
+    return _note_progress(p)
+
+
+def _note_progress(p: dict) -> dict:
+    """진행 조회를 표본으로 기록 + 정체 시간(stalled_seconds) 계산.
+    SSE heartbeat/폴링이 1초 주기라 별도 스레드 없이 곡선이 만들어진다
+    (클라이언트가 없으면 곡선 공백 — 데스크톱 앱은 생성 중 항상 스트리밍)."""
+    global _last_sample_t, _rec_last_gap, _rec_has_sol, _rec_improve_t
+    with _lock:
+        if not _running or _run_t0 is None:
+            return p
+        now = time.monotonic()
+        el = now - _run_t0
+        improved = False
+        if p.get("has_solution") and not _rec_has_sol:
+            _rec_has_sol = True
+            improved = True
+        g = p.get("gap_percent")
+        if g is not None and (_rec_last_gap is None or g <= _rec_last_gap - 0.01):
+            _rec_last_gap = g
+            improved = True
+        if improved:
+            _rec_improve_t = el
+        if _rec_has_sol and _rec_improve_t is not None:
+            p["stalled_seconds"] = int(el - _rec_improve_t)
+        else:
+            p["stalled_seconds"] = 0
+        if now - _last_sample_t >= 1.0 and len(_events) < _MAX_EVENTS:
+            _last_sample_t = now
+            _events.append({"t": round(el, 1), "kind": "sample", "gap": g,
+                            "nodes": p.get("nodes") or 0,
+                            "has_solution": bool(p.get("has_solution"))})
     return p
+
+
+def build_report(result: dict) -> dict:
+    """생성 종료 시점의 run 리포트 — end() 호출 '전'에 만들어야 한다."""
+    with _lock:
+        events = list(_events)
+        t0 = _run_t0
+    if t0 is None:
+        return {}
+    duration = round(time.monotonic() - t0, 1)
+    samples = [e for e in events if e["kind"] == "sample"]
+    # 시간-gap 곡선: 변화점만 남기고 ≤120점 다운샘플
+    curve = []
+    last_gap = object()
+    for s in samples:
+        if s.get("gap") is None:
+            continue
+        if s["gap"] != last_gap:
+            curve.append([s["t"], s["gap"]])
+            last_gap = s["gap"]
+    if samples and samples[-1].get("gap") is not None and \
+            (not curve or curve[-1][0] != samples[-1]["t"]):
+        curve.append([samples[-1]["t"], samples[-1]["gap"]])
+    if len(curve) > 120:
+        step = len(curve) / 120.0
+        curve = [curve[int(i * step)] for i in range(120)]
+    # 정체 구간: 해 보유 중 gap 무개선 ≥180초
+    stalls = []
+    run_start = None
+    run_gap = None
+    prev_t = None
+    for s in samples:
+        if not s.get("has_solution") or s.get("gap") is None:
+            run_start = None
+            continue
+        if run_start is None or abs(s["gap"] - run_gap) >= 0.01:
+            if run_start is not None and prev_t - run_start >= 180:
+                stalls.append({"from": run_start, "to": prev_t, "gap": run_gap})
+            run_start = s["t"]
+            run_gap = s["gap"]
+        prev_t = s["t"]
+    if run_start is not None and prev_t is not None and prev_t - run_start >= 180:
+        stalls.append({"from": run_start, "to": prev_t, "gap": run_gap})
+    model_ev = next((e for e in events if e["kind"] == "model"), None)
+    return {
+        "duration_seconds": duration,
+        "final_gap_percent": result.get("mip_gap_percent"),
+        "curve": curve,
+        "stalls": stalls[:5],
+        "num_vars": (model_ev or {}).get("vars"),
+        "num_constraints": (model_ev or {}).get("cons"),
+        "engine": (model_ev or {}).get("engine"),
+        "relax_attempted": any(e["kind"] == "relax_start" for e in events),
+        "incumbents": sum(1 for e in events if e["kind"] == "incumbent"),
+        "stopped": bool(result.get("stopped")),
+    }

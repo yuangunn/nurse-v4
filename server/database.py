@@ -86,6 +86,25 @@ def init_db():
                 enabled    INTEGER DEFAULT 1,
                 sort_order INTEGER DEFAULT 0
             );
+
+            CREATE TABLE IF NOT EXISTS generation_runs (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                year            INTEGER,
+                month           INTEGER,
+                solver          TEXT,
+                success         INTEGER,
+                stopped         INTEGER,
+                relaxed         INTEGER,
+                duration_s      REAL,
+                final_gap       REAL,
+                num_vars        INTEGER,
+                num_constraints INTEGER,
+                nurse_count     INTEGER,
+                pre_filled      INTEGER,
+                time_limit      INTEGER,
+                mip_gap         REAL,
+                created_at      TEXT DEFAULT (datetime('now','localtime'))
+            );
         """)
         # 기존 DB 호환: juhu 컬럼 마이그레이션
         try:
@@ -375,6 +394,51 @@ def cleanup_orphan_nurse_refs() -> int:
                     conn.execute(f"UPDATE {table} SET data=? WHERE id=?",
                                  (json.dumps(data, ensure_ascii=False), row["id"]))
     return removed
+
+
+def insert_generation_run(d: Dict):
+    """생성 이력 1건 기록. (비교 노트, 최근 5건) 반환 — 노트는 유사 규모의 직전
+    성공 이력 대비 3배 이상 느려졌을 때만 생성된다."""
+    note = None
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT duration_s, pre_filled FROM generation_runs "
+            "WHERE success=1 AND nurse_count BETWEEN ? AND ? "
+            "ORDER BY id DESC LIMIT 5",
+            (int(d.get("nurse_count") or 0) - 2, int(d.get("nurse_count") or 0) + 2),
+        ).fetchall()
+        if d.get("success") and len(rows) >= 2 and d.get("duration_s"):
+            durs = sorted(float(r["duration_s"] or 0) for r in rows)
+            med = durs[len(durs) // 2]
+            if med > 0 and float(d["duration_s"]) > 3 * med:
+                note = (f"유사 규모의 직전 생성(중앙값 {med:.0f}초) 대비 "
+                        f"{float(d['duration_s'])/med:.1f}배 느렸습니다 — 사전입력 "
+                        f"{rows[0]['pre_filled']}건 → {d.get('pre_filled')}건 변화가 "
+                        f"원인일 수 있습니다.")
+        conn.execute(
+            "INSERT INTO generation_runs (year, month, solver, success, stopped, "
+            "relaxed, duration_s, final_gap, num_vars, num_constraints, "
+            "nurse_count, pre_filled, time_limit, mip_gap) "
+            "VALUES (:year,:month,:solver,:success,:stopped,:relaxed,:duration_s,"
+            ":final_gap,:num_vars,:num_constraints,:nurse_count,:pre_filled,"
+            ":time_limit,:mip_gap)",
+            {k: d.get(k) for k in (
+                "year", "month", "solver", "success", "stopped", "relaxed",
+                "duration_s", "final_gap", "num_vars", "num_constraints",
+                "nurse_count", "pre_filled", "time_limit", "mip_gap")},
+        )
+        recent = [dict(r) for r in conn.execute(
+            "SELECT created_at, solver, success, stopped, relaxed, duration_s, "
+            "final_gap, pre_filled FROM generation_runs "
+            "ORDER BY id DESC LIMIT 5").fetchall()]
+    return note, recent
+
+
+def list_generation_runs(limit: int = 20) -> List[Dict]:
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM generation_runs ORDER BY id DESC LIMIT ?",
+            (int(limit),)).fetchall()]
 
 
 def reorder_nurses(ordered_ids: List[str]) -> None:

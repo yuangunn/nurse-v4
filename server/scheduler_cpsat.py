@@ -62,6 +62,12 @@ class _CpSatCb(cp_model.CpSolverSolutionCallback):
         denom = max(1.0, abs(ov))
         self._p.gap_percent = round(abs(bound - ov) / denom * 100, 2)
         self._p.nodes = int(self.NumBranches())
+        try:
+            from . import solver_progress
+            solver_progress.record_event("incumbent", engine="CP-SAT",
+                                         obj=ov, gap=self._p.gap_percent)
+        except Exception:
+            pass
         if self._log:
             self._log({"type": "log",
                        "msg": f"[CP-SAT] incumbent {ov:.0f} · bound {bound:.0f} · branches {self._p.nodes}"})
@@ -113,6 +119,13 @@ class CpSatScheduler(_SchedulerBase):
         solver.parameters.num_workers = max(1, min(8, _cores))
         solver.parameters.random_seed = 1          # 재현성(병렬이어도 시드 고정)
         solver.parameters.use_lns_only = False     # 기본 포트폴리오 유지(LNS+완전탐색 혼합)
+        try:
+            proto = model.Proto()
+            solver_progress.record_event("model", engine="CP-SAT",
+                                         vars=len(proto.variables),
+                                         cons=len(proto.constraints))
+        except Exception:
+            pass
         cb = _CpSatCb(prog, _log_sink)
         prog.solver = solver  # cancel() → stop_search() 즉시 중단 경로
         solver_progress.register(prog)
@@ -293,6 +306,8 @@ class CpSatScheduler(_SchedulerBase):
     def _solve_relaxed(self):
         """INFEASIBLE 시 사전입력을 소프트로 풀어 최소 침습 완화 재시도. 성공 시 결과, 실패 시 None."""
         model = cp_model.CpModel()
+        from . import solver_progress as _sp0
+        _sp0.record_event("relax_start", engine="CP-SAT")
         # 제약 함수(시니어리티 게이팅 등)에 '사전입력=소프트' 모드임을 알림
         self._pre_soft = True
         x, pre_keeps = self._build_vars_relaxed(model)
@@ -374,7 +389,14 @@ class CpSatScheduler(_SchedulerBase):
         solver.parameters.relative_gap_limit = stage2_gap
         solver.parameters.num_workers = max(1, min(8, os.cpu_count() or 4))
         solver.parameters.random_seed = 1
-        cb = _CpSatCb(prog, None)
+        def _relax_log_sink(item):
+            # 완화 구간 incumbent도 SSE 로그로 — 기존엔 None이라 곡선 공백
+            try:
+                from . import api
+                api._log_queue.put(item)
+            except Exception:
+                pass
+        cb = _CpSatCb(prog, _relax_log_sink)
         prog.solver = solver
         solver_progress.register(prog)
         if prog.cancelled:

@@ -19,6 +19,7 @@ window.SolverModule = function() {
       this.sseSource.onmessage=(e)=>{
         const data=JSON.parse(e.data);
         if(data.type==='log'){this.solverLogs.push({id:++this._logSeq,msg:data.msg});if(this.solverLogs.length>300)this.solverLogs=this.solverLogs.slice(-200);this.$nextTick(()=>{const el=document.getElementById('logPanel');if(el)el.scrollTop=el.scrollHeight})}
+        else if(data.type==='hint'){this.solverLogs.push({id:++this._logSeq,msg:data.msg,hint:true})}
         else if(data.type==='progress')this.solveProgress=data;
         else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
       };
@@ -27,6 +28,7 @@ window.SolverModule = function() {
       try{
         const result=await this.api('POST','/api/generate',payload);
         this.statusOk=result.success;this.statusMessage=result.message;
+        this.generationReport=result.generation_report||null;
         // 13단계 진단이 짚은 셀 좌표 → 정밀분석과 동일한 '충돌 위치로 이동' 칩 표시
         if(!result.success&&Array.isArray(result.anchored)&&result.anchored.length){this.diagResult={anchored:result.anchored}}
         if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.activeTab='schedule';

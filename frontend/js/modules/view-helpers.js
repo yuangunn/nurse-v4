@@ -20,6 +20,17 @@ window.ViewHelpersModule = function() {
     getCycleClass(cycle){return['cy-1','cy-2','cy-3','cy-4'][cycle-1]},
     isCycleStart(day){return((this._daysSinceRef(day)%7)+7)%7===0},
     countShifts(nurseId,shifts){if(!this.schedule[nurseId])return 0;return Object.values(this.schedule[nurseId]).filter(v=>shifts.includes(v)).length},
+    // 배점 규칙별 득점 합산 (생성 리포트의 점수 분해 — 백엔드 nurse_score_details 재사용)
+    get ruleScoreSummary(){
+      const agg={};
+      for(const rows of Object.values(this.nurseScoreDetails||{})){
+        for(const r of (rows||[])){
+          if(!agg[r.name])agg[r.name]={name:r.name,count:0,total:0};
+          agg[r.name].count+=r.count||0;agg[r.name].total+=r.total||0;
+        }
+      }
+      return Object.values(agg).sort((a,b)=>Math.abs(b.total)-Math.abs(a.total));
+    },
     nurseScore(nurseId){return this.nurseScores[nurseId]??''},
     openScoreDetail(nurse){this.scoreDetailModal={open:true,nurseName:nurse.name,rows:this.nurseScoreDetails[nurse.id]||[],total:this.nurseScores[nurse.id]??0}},
 

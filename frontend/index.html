@@ -1074,6 +1074,7 @@
     <div x-show="estimatedSeconds&&generateElapsed>estimatedSeconds" x-cloak class="text-xs text-amber mb-1">⏳ 예상 시간을 넘었지만 <strong>멈춘 게 아닙니다</strong> — 솔버가 더 나은 해를 탐색 중입니다 (최대 <span x-text="generateTimeout"></span>분). 충분하면 '중지'로 현재 최선해를 쓸 수 있어요.</div>
     <div class="text-xs min-h-[1em] text-dim">
       <template x-if="solveProgress.has_solution"><span class="text-blue">최적 대비 <strong x-text="solveProgress.gap_percent+'%'"></strong> | 노드 <strong x-text="solveProgress.nodes.toLocaleString('ko-KR')"></strong></span></template>
+      <template x-if="solveProgress.has_solution&&(solveProgress.stalled_seconds||0)>=180"><span class="text-amber"> · ⏸ <strong x-text="Math.floor(solveProgress.stalled_seconds/60)"></strong>분째 개선 없음 — 지금 '중지'해도 품질 손해는 최대 <span x-text="(solveProgress.gap_percent??'?')+'%'"></span></span></template>
       <template x-if="!solveProgress.has_solution&&solveProgress.nodes>0"><span>탐색 중… 노드 <strong x-text="solveProgress.nodes.toLocaleString('ko-KR')"></strong></span></template>
       <template x-if="!solveProgress.has_solution&&solveProgress.nodes===0&&solveProgress.is_running"><span>모델 구축 → 최적화 중…</span></template>
       <template x-if="!solveProgress.is_running&&!solveProgress.has_solution&&solveProgress.nodes===0"><span>모델 구축 중…</span></template>
@@ -1123,11 +1124,60 @@
       </div>
     </template>
   </div>
+  <!-- 생성 리포트 -->
+  <div x-show="generationReport" x-cloak class="mb-3">
+    <button @click="showGenReport=!showGenReport" class="btn btn-xs btn-ghost">📈 생성 리포트 <span x-text="showGenReport?'▾':'▸'"></span></button>
+    <div x-show="showGenReport" x-cloak class="card-sm mt-1.5 text-xs">
+      <div class="flex flex-wrap gap-x-4 gap-y-1 mb-2">
+        <span class="text-sub">소요 <strong class="text-bright" x-text="Math.round(generationReport.duration_seconds||0)+'초'"></strong></span>
+        <span class="text-sub" x-show="generationReport.final_gap_percent!=null">최종 gap <strong class="text-bright" x-text="generationReport.final_gap_percent+'%'"></strong></span>
+        <span class="text-sub" x-show="generationReport.num_vars">변수 <strong class="text-bright" x-text="(generationReport.num_vars||0).toLocaleString('ko-KR')"></strong> · 제약 <strong class="text-bright" x-text="(generationReport.num_constraints||0).toLocaleString('ko-KR')"></strong></span>
+        <span x-show="generationReport.relax_attempted" class="text-amber">완화 발동</span>
+        <span x-show="generationReport.stopped" class="text-amber">중지됨</span>
+      </div>
+      <template x-if="generationReport.curve&&generationReport.curve.length>1">
+        <div class="mb-2">
+          <div class="text-sub mb-1">시간–gap 곡선 (낮을수록 최적에 가까움)</div>
+          <svg width="100%" height="56" viewBox="0 0 300 56" preserveAspectRatio="none" style="background:rgba(127,127,127,0.06);border-radius:4px">
+            <polyline fill="none" stroke="#42a5f5" stroke-width="1.5"
+              :points="(()=>{const c=generationReport.curve;const tMax=Math.max(...c.map(p=>p[0]),1);const gMax=Math.max(...c.map(p=>p[1]),0.1);return c.map(p=>`${(p[0]/tMax*296+2).toFixed(1)},${(52-p[1]/gMax*48+2).toFixed(1)}`).join(' ')})()"/>
+          </svg>
+        </div>
+      </template>
+      <template x-if="generationReport.stalls&&generationReport.stalls.length">
+        <div class="mb-2 text-amber">
+          <template x-for="(st,si) in generationReport.stalls" :key="'st'+si">
+            <div>⏸ <span x-text="Math.round(st.from)+'초'"></span>~<span x-text="Math.round(st.to)+'초'"></span> 구간 개선 없음 (gap <span x-text="st.gap+'%'"></span>) — 이때 중지해도 무방했습니다</div>
+          </template>
+        </div>
+      </template>
+      <div x-show="generationReport.history_note" class="mb-2 text-amber" x-text="generationReport.history_note"></div>
+      <template x-if="ruleScoreSummary.length">
+        <div class="mb-1">
+          <div class="text-sub mb-1">배점 규칙별 득점 (전체 간호사 합산 — 배점 튜닝 참고)</div>
+          <table class="tbl" style="font-size:0.68rem"><thead><tr><th>규칙</th><th class="text-center">발생</th><th class="text-right">합계</th></tr></thead>
+          <tbody><template x-for="rs in ruleScoreSummary.slice(0,12)" :key="'rs'+rs.name"><tr>
+            <td x-text="rs.name"></td>
+            <td class="text-center" x-text="rs.count"></td>
+            <td class="text-right font-mono" :class="rs.total>=0?'text-green':'text-red'" x-text="(rs.total>=0?'+':'')+rs.total"></td>
+          </tr></template></tbody></table>
+        </div>
+      </template>
+      <template x-if="generationReport.recent_runs&&generationReport.recent_runs.length>1">
+        <div>
+          <div class="text-sub mb-1">최근 생성 이력</div>
+          <template x-for="(r,ri) in generationReport.recent_runs" :key="'gr'+ri">
+            <div class="text-dim"><span x-text="(r.created_at||'').slice(5,16)"></span> · <span x-text="r.solver"></span> · <span :class="r.success?'text-green':'text-red'" x-text="r.success?'성공':'실패'"></span><span x-show="r.relaxed" class="text-amber"> 완화</span> · <span x-text="Math.round(r.duration_s||0)+'초'"></span><span x-show="r.final_gap!=null" x-text="' · gap '+r.final_gap+'%'"></span></div>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
   <!-- 로그 -->
   <div x-show="solverLogs.length>0" x-cloak class="mb-3">
     <button @click="showLogPanel=!showLogPanel" class="btn btn-xs btn-ghost">솔버 로그 <span x-text="showLogPanel?'▾':'▸'"></span> <span class="text-sub" x-text="solverLogs.length+'줄'"></span></button>
     <button x-show="showLogPanel" @click="navigator.clipboard.writeText(solverLogs.map(l=>l.msg).join('\n')).then(()=>$el.textContent='복사됨').catch(()=>{})" class="btn btn-xs btn-ghost ml-1">복사</button>
-    <div x-show="showLogPanel" x-cloak id="logPanel" class="log-box mt-1.5"><template x-for="line in solverLogs" :key="line.id"><div x-text="line.msg" class="leading-snug whitespace-pre"></div></template></div>
+    <div x-show="showLogPanel" x-cloak id="logPanel" class="log-box mt-1.5"><template x-for="line in solverLogs" :key="line.id"><div x-text="line.msg" class="leading-snug whitespace-pre" :style="line.hint?'color:var(--t-amber,#e6a23c);font-weight:600':''"></div></template></div>
     <div x-show="showLogPanel" x-cloak class="card-sm mt-1.5" style="padding:0;overflow:hidden">
       <div class="px-3 py-1.5 text-xs font-semibold" style="background:rgba(33,150,243,0.05);color:#64b5f6">Branch &amp; Bound 헤더 설명</div>
       <table class="w-full text-left" style="font-size:0.62rem">
