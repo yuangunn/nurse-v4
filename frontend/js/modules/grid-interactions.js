@@ -70,6 +70,34 @@ window.GridInteractionsModule = function() {
       }
       this.prevViolations=v;
       this._violationSet=new Set(v.map(x=>`${x.nid}|${x.dk}`));
+      this._checkStaffingSlack();
+    },
+
+    _checkStaffingSlack(){
+      // 실시간 인원 슬랙 — 사전입력을 넣는 '그 자리에서' 부족/빡빡을 경고.
+      // (생성 20분 돌리고 실패로 알게 되는 일을 입력 시점에 차단)
+      const restLeave=this.shifts.filter(s=>s.period==='rest'||s.period==='leave').map(s=>s.code);
+      const wkKeys=['sun','mon','tue','wed','thu','fri','sat'];
+      const short=[],tight=[];
+      for(const day of this.scheduleDays){
+        if(this.isOverflow(day))continue;
+        const dk=this.dayKey(day);
+        const base=this.requirements?.[wkKeys[day.getDay()]]||{};
+        const ovr=this.prevDayReqs?.[dk]||{};
+        const req={...base,...ovr};
+        const needed=(+req.D||0)+(+req.E||0)+(+req.N||0);
+        if(!needed)continue;
+        let avail=0;
+        for(const n of this.nurses){
+          if((n.start_date&&dk<n.start_date)||(n.end_date&&dk>n.end_date))continue;
+          const pre=this.prevSchedule[n.id]?.[dk];
+          if(pre&&restLeave.includes(pre))continue;
+          avail++;
+        }
+        if(avail<needed)short.push({dk,needed,avail});
+        else if(avail===needed)tight.push({dk,needed,avail});
+      }
+      this.staffingAlerts={short,tight};
     },
     hasViolation(nurseId,day){
       return this._violationSet?.has(`${nurseId}|${this.dayKey(day)}`)||false;
@@ -95,12 +123,13 @@ window.GridInteractionsModule = function() {
         if(nurse&&this.prevSchedule[nurse.id]?.[dk]){this._pushUndo();delete this.prevSchedule[nurse.id][dk];this._checkViolations()}
         event.preventDefault();return;
       }
-      else if(event.key==='z'&&(event.ctrlKey||event.metaKey)){event.shiftKey?this.redo():this.undo();event.preventDefault();return}
+      else if(event.key.toLowerCase()==='z'&&(event.ctrlKey||event.metaKey)){event.shiftKey?this.redo():this.undo();event.preventDefault();return}
       else{
-        // 근무코드 직접 입력
+        // 근무코드 직접 입력 (ㅂ=병가, ㅃ(Shift+ㅂ)=법정공휴일 — 객체 리터럴 중복 키로
+        // '병' 입력이 불가능하고 ㅂ가 '법'을 입력하던 버그 수정)
         const key=event.key.toUpperCase();
         const shiftMap={'D':'D','E':'E','N':'N','V':'V','O':'OF','W':'주'};
-        const hangulMap={'ㅈ':'주','ㅂ':'병','ㅅ':'생','ㅌ':'특','ㄱ':'공','ㅂ':'법'};
+        const hangulMap={'ㅈ':'주','ㅂ':'병','ㅃ':'법','ㅅ':'생','ㅌ':'특','ㄱ':'공'};
         let code=shiftMap[key]||hangulMap[event.key];
         if(!code){
           const match=this.shifts.find(s=>s.code.toUpperCase()===key);

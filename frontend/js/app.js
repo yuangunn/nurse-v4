@@ -34,6 +34,8 @@ function app() {
     generateTimer:null, sseSource:null, solverLogs:[], showLogPanel:false,
     solveProgress:{gap_percent:null,nodes:0,has_solution:false,is_running:false},
     stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, unlimitedV:false, relaxedCells:{},
+    generationReport:null, showGenReport:false, wishReport:null, showWishReport:false,
+    staffingAlerts:null, fairnessLedger3m:null,
     solver:'highs', diagnosing:false, fixing:false, diagResult:null, fixResult:null,
     tableFullscreen:false,
     mipGapPercent:null, scheduleStopped:false, estimatedSeconds:0,
@@ -180,21 +182,35 @@ function app() {
       const restCodes=this.shifts.filter(s=>s.period==='rest').map(s=>s.code);
       const leaveCodes=this.shifts.filter(s=>s.period==='leave').map(s=>s.code);
       const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
+      const offCodes=[...restCodes,...leaveCodes];
       return this.nurses.map(nurse=>{
         const nid=nurse.id;
         const sc=this.schedule[nid]||{};
         let d=0,e=0,n=0,rest=0,leave=0,weekendWork=0;
-        for(const day of days){
-          const dk=this.dayKey(day);
-          const val=sc[dk];if(!val)continue;
+        // 휴무의 질 — 고립 휴무(양옆이 근무인 하루짜리)와 최장 연속 휴무.
+        // OF 개수가 같아도 쪼개진 휴무와 이틀 연속은 체감이 다르다.
+        let isolatedOff=0,maxOffRun=0,offRun=0;
+        const seq=days.map(day=>sc[this.dayKey(day)]||'');
+        for(let i=0;i<days.length;i++){
+          const day=days[i];const val=seq[i];if(!val)continue;
           if(dayCodes.includes(val))d++;
           else if(eveCodes.includes(val))e++;
           else if(nightCodes.includes(val))n++;
           else if(restCodes.includes(val))rest++;
           else if(leaveCodes.includes(val))leave++;
           if((day.getDay()===0||day.getDay()===6)&&[...dayCodes,...eveCodes,...nightCodes].includes(val))weekendWork++;
+          if(offCodes.includes(val)){
+            offRun++;maxOffRun=Math.max(maxOffRun,offRun);
+            const prevOff=i>0&&offCodes.includes(seq[i-1]);
+            const nextOff=i<days.length-1&&offCodes.includes(seq[i+1]);
+            if(!prevOff&&!nextOff&&i>0&&i<days.length-1&&seq[i-1]&&seq[i+1])isolatedOff++;
+          }else offRun=0;
         }
-        return{name:nurse.name,group:nurse.group,d,e,n,rest,leave,weekendWork,total:d+e+n,score:this.nurseScores[nid]??0};
+        const cum=this.fairnessLedger3m?.[nid];
+        return{name:nurse.name,group:nurse.group,d,e,n,rest,leave,weekendWork,total:d+e+n,
+               isolatedOff,maxOffRun,
+               cumNights:cum?cum.nights:null,cumWeekends:cum?cum.weekends:null,
+               score:this.nurseScores[nid]??0};
       });
     },
     get filteredNurses(){
@@ -322,7 +338,10 @@ function app() {
       const first=new Date(this.year,this.month-1,1);
       const last=new Date(this.year,this.month,0);
       const ref=this._CYCLE_REF;const ms=86400000;
-      const fo=Math.round((first-ref)/ms);const so=fo-((fo%7+7)%7);
+      const fo=Math.round((first-ref)/ms);let so=fo-((fo%7+7)%7);
+      // 1일이 주기 경계와 일치하면 전월 중첩 0일 — 서버와 동일하게 한 주 확장해
+      // 전월 말 기록(이월)이 월 경계 제약 검증에 쓰이게 한다
+      if(((fo%7+7)%7)===0)so-=7;
       const lo=Math.round((last-ref)/ms);const eo=lo+(6-((lo%7+7)%7));
       const start=new Date(ref.getTime()+so*ms);const end=new Date(ref.getTime()+eo*ms);
       const days=[];let c=new Date(start);while(c<=end){days.push(new Date(c));c.setDate(c.getDate()+1)}
@@ -348,7 +367,7 @@ function app() {
           if(e.key==='?'&&!e.ctrlKey&&!e.metaKey&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){this.showShortcutHelp=!this.showShortcutHelp;e.preventDefault();return}
           const _isTyping=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||document.activeElement?.isContentEditable;
           if(this.activeTab==='preinput'&&this._focusedCell&&!this.shiftEdit.open&&!this.noteEdit.open&&!this.juhuOptionModal.open&&!_isTyping){this.onGridKeyDown(e)}
-          else if((e.ctrlKey||e.metaKey)&&e.key==='z'&&this.activeTab==='preinput'&&!_isTyping){e.shiftKey?this.redo():this.undo();e.preventDefault()}
+          else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&this.activeTab==='preinput'&&!_isTyping){e.shiftKey?this.redo():this.undo();e.preventDefault()}
         });
       }
       window.addEventListener('beforeunload',()=>{this._saveFullState();this._closeCurrentProfile()});
@@ -385,6 +404,7 @@ function app() {
       this._initScoringSliders();
       this._checkPrevMonthCarryover();
       this.checkFirstRun();
+      this.loadFairnessLedger();
       this.$nextTick(()=>{if(window.lucide)lucide.createIcons()});
     },
 
@@ -442,10 +462,12 @@ function app() {
       if(!this.schedule||!Object.keys(this.schedule).length)return;
       try{
         const name=`자동저장 ${this.year}-${String(this.month).padStart(2,'0')}`;
-        await this.api('POST','/api/schedules',{year:this.year,month:this.month,data:{schedule:this.schedule,extended:this.extendedSchedule,scores:this.nurseScores,scoreDetails:this.nurseScoreDetails,relaxed:this.relaxedCells},name});
+        // 수동 저장(saveSchedule)과 동일한 스키마 — 이전 payload는 ScheduleSave
+        // 필수 필드가 없어 항상 422로 무음 실패했다.
+        await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights});
         this.toast('스케줄 자동 저장됨','info');
         this.loadSavedList();
-      }catch(e){}
+      }catch(e){console.warn('자동저장 실패:',e)}
     },
 
     // #14 초기화 2단계 확인
@@ -488,11 +510,13 @@ function app() {
           this._recoverPoll=setInterval(async()=>{
             const pollRef=this._recoverPoll;
             try{const r=await this.api('GET','/api/generate/result');
-              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
+              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
             }catch(e){}
           },2000);
         }else if(res.status==='done'&&res.result){
           const result=res.result;this.statusOk=result.success;this.statusMessage=result.message+'\n(이전 생성 결과 복원됨)';
+          this.generationReport=result.generation_report||null;
+          this.wishReport=result.wish_report||null;
           if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.trackEdits();this.activeTab='schedule'}
         }
       }catch(e){}

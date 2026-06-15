@@ -140,6 +140,10 @@ class _SchedulerBase:
         self.allow_pre_relax = request.allow_pre_relax
         self.allow_juhu_relax = request.allow_juhu_relax
         self.unlimited_v = request.unlimited_v
+        # 위시 공정성 보정 (서버가 거절 이력에서 산출) — {nid: 배수}
+        self.wish_boosts = getattr(request, "wish_boosts", None) or {}
+        # 야간 공정성 원장 오프셋 (직전 달 누적 야간) — {nid: n}
+        self.fairness_offsets = getattr(request, "fairness_offsets", None) or {}
 
         # ── 근무 정의 → 카테고리 리스트 동적 구성 ─────────────────────────────
         shifts = [s.model_dump() for s in request.shifts] if request.shifts else []
@@ -215,6 +219,12 @@ class _SchedulerBase:
         # 주기 블록 시작으로 정렬 (7일 단위, _CYCLE_REF 기준)
         first_offset = self._cycle_day_offset(first)
         start_offset = first_offset - (first_offset % 7)
+        # 1일이 주기 경계와 정확히 일치하면 전월 중첩이 0일이 되어, 월 경계의
+        # 금지 전환·연속 야간·N→OF→D를 아무 제약도 검증하지 못한다(전월
+        # 사전입력이 범위 밖이라 전부 드롭됨). 한 주를 앞으로 확장해 전월 말
+        # 기록이 경계 제약에 연결되게 한다. (프론트 scheduleDays도 동일 산식)
+        if first_offset % 7 == 0:
+            start_offset -= 7
         self.schedule_start = self._CYCLE_REF + timedelta(days=start_offset)
 
         last_offset = self._cycle_day_offset(last)
@@ -352,6 +362,72 @@ class _SchedulerBase:
             return None
         return pre
 
+    # ── 공용 게이팅 헬퍼 ──────────────────────────────────────────────────────
+    # 같은 의미의 로직이 5개 경로(HiGHS strict/relax, CP-SAT strict/relax,
+    # 진단·분석기)에 사본으로 존재하면 한쪽만 수정되는 발산 버그가 생긴다 —
+    # 실제로 발산했던 로직들을 여기 단일 구현으로 모은다.
+
+    def _effective_pre(self, nurse: dict, dt: date, pre: str, is_holiday: bool):
+        """변수 도메인 기준의 '유효 사전입력' — 공휴일 OF 드롭 + 모성보호 드롭.
+        모든 변수 생성 경로와 게이팅이 이 함수를 써야 의미가 일치한다."""
+        if pre == "OF" and is_holiday:
+            pre = None
+        return self._preg_effective_pre(nurse, dt, pre)
+
+    def _seniority_jfixed(self, nurse_j: dict, dt: date, dt_str: str,
+                          is_holiday: bool):
+        """charge 시니어리티 게이팅용 선임 j의 유효 사전입력.
+        완화 모드(_pre_soft)에서는 잠긴 셀만 고정으로 취급한다."""
+        j_fixed = self.prev.get(nurse_j["id"], {}).get(dt_str)
+        if j_fixed:
+            j_fixed = self._effective_pre(nurse_j, dt, j_fixed, is_holiday)
+        if getattr(self, "_pre_soft", False) \
+                and not self.locked_cells.get(nurse_j["id"], {}).get(dt_str):
+            j_fixed = None
+        return j_fixed
+
+    def _two_month_rhs(self, nid: str) -> int:
+        """홀짝월 합산 야간의 당월 RHS — 전월 초과(야간전담→일반 전환)는 0 클램프."""
+        prev_nights = getattr(self, "prev_month_nights", None) or {}
+        return max(0, self.rules.maxNightTwoMonthCount - (prev_nights.get(nid) or 0))
+
+    def _night_dedicated_quota(self, nurse: dict, month_idxs, month_days: int):
+        """야간전담 (재적일수, 당월 야간 목표일수). 재적 0이면 (0, 0).
+        부분 재적은 14일 비례, 'N 요구가 명시적 0'인 날과의 산술 충돌 방지를 위해
+        달성 가능 일수로 클램프."""
+        active_days = sum(1 for d in month_idxs if self._nurse_active_idx(nurse, d))
+        if active_days <= 0:
+            return 0, 0
+        target = 14 if active_days >= month_days else max(
+            0, round(14 * active_days / month_days))
+        req_dict = self.req.model_dump()
+        n_avail = 0
+        for d in month_idxs:
+            dt = self.all_dates[d]
+            base = req_dict.get(WEEKDAY_KEYS[dt.weekday()], {})
+            ovr = self.per_day_req.get(dt.strftime('%Y-%m-%d'), {})
+            dr = {**base, **ovr} if ovr else base
+            if "N" not in dr or int(dr.get("N") or 0) > 0:
+                n_avail += 1
+        return active_days, min(target, n_avail)
+
+    def _night_fairness_pool(self):
+        """야간 공정 배분 대상 풀 — 야간 횟수가 구조적으로 고정된 간호사
+        (야간전담·N 비자격·임산부·홀짝월 0 클램프)는 제외해야 range가 유효하다."""
+        two_mo_blocked = set()
+        if getattr(self.rules, "maxNightTwoMonth", False):
+            prev_n = getattr(self, "prev_month_nights", None) or {}
+            lim = self.rules.maxNightTwoMonthCount
+            two_mo_blocked = {k for k, c in prev_n.items() if (c or 0) >= lim}
+        return [
+            nurse for nurse in self.nurses
+            if not nurse.get("is_night_shift")
+            and nurse["id"] not in two_mo_blocked
+            and any(s in set(nurse.get("capable_shifts", self.WORK_SHIFTS))
+                    for s in self.NIGHT_SHIFTS)
+            and not (nurse.get("is_pregnant") and self._preg_active_in_month(nurse))
+        ]
+
     # ── 예상 소요시간 추정 ────────────────────────────────────────────────────
 
     def estimate_seconds(self) -> int:
@@ -424,6 +500,7 @@ class _SchedulerBase:
 
         scores = {nurse["id"]: 0 for nurse in self.nurses}
         details: Dict[str, list] = {nurse["id"]: [] for nurse in self.nurses}
+        _wish_extra: Dict[str, int] = {}  # 위시 공정성 보정분 (별도 행 표기용)
 
         for rule in self.scoring_rules:
             rt = rule.rule_type
@@ -497,19 +574,27 @@ class _SchedulerBase:
                 for nurse in self.nurses:
                     nid = nurse["id"]
                     ns = schedule.get(nid, {})
+                    boost_extra = int(round(sc * (float(self.wish_boosts.get(nid, 1.0)) - 1.0)))
                     for day_str, wish_shift in nurse.get("wishes", {}).items():
                         try:
-                            day_num = int(day_str)
-                            dk = date(self.year, self.month, day_num).strftime("%Y-%m-%d")
+                            ds = str(day_str)
+                            # 일(day) 숫자 키와 'YYYY-MM-DD' 키 모두 허용
+                            if "-" in ds:
+                                dk = date.fromisoformat(ds).strftime("%Y-%m-%d")
+                            else:
+                                dk = date(self.year, self.month, int(ds)).strftime("%Y-%m-%d")
                             if dk not in dt_keys:
                                 continue
                             s = ns.get(dk, "")
-                            if wish_shift == "OFF" and s in self.REST_SHIFTS + self.LEAVE_SHIFTS:
+                            granted = (
+                                (wish_shift == "OFF" and s in self.REST_SHIFTS + self.LEAVE_SHIFTS)
+                                or s == wish_shift)
+                            if granted:
                                 scores[nid] += sc
                                 counts[nid] += 1
-                            elif s == wish_shift:
-                                scores[nid] += sc
-                                counts[nid] += 1
+                                if boost_extra:
+                                    # 공정성 보정분은 별도 행으로 투명하게 표기
+                                    _wish_extra[nid] = _wish_extra.get(nid, 0) + boost_extra
                         except (ValueError, KeyError):
                             pass
             elif rt == "holiday_work":
@@ -566,6 +651,17 @@ class _SchedulerBase:
                         "score_per": sc,
                         "total": c * sc,
                     })
+
+        # 위시 공정성 보정(직전 달 거절 누적 가중) — 별도 행으로 투명하게 표기
+        for nid, extra in _wish_extra.items():
+            scores[nid] += extra
+            details[nid].append({
+                "name": "위시 공정성 보정",
+                "rule_type": "wish_boost",
+                "count": 1,
+                "score_per": extra,
+                "total": extra,
+            })
 
         return scores, details
 

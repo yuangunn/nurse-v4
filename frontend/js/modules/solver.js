@@ -10,6 +10,7 @@ window.SolverModule = function() {
       if(this.nurses.length===0){this.toast('간호사를 먼저 등록해주세요','error');return}
       if(this._recoverPoll){clearInterval(this._recoverPoll);this._recoverPoll=null}
       this.generating=true;this.stopRequested=false;this.mipGapPercent=null;this.scheduleStopped=false;
+      this.diagResult=null;this.fixResult=null;
       this.statusMessage='';this.estimatedSeconds=0;this.generateStartTime=Date.now();this.generateElapsed=0;
       this.generateTimer=setInterval(()=>{this.generateElapsed=Math.floor((Date.now()-this.generateStartTime)/1000)},1000);
       this.solveProgress={gap_percent:null,nodes:0,has_solution:false,is_running:false};
@@ -18,6 +19,7 @@ window.SolverModule = function() {
       this.sseSource.onmessage=(e)=>{
         const data=JSON.parse(e.data);
         if(data.type==='log'){this.solverLogs.push({id:++this._logSeq,msg:data.msg});if(this.solverLogs.length>300)this.solverLogs=this.solverLogs.slice(-200);this.$nextTick(()=>{const el=document.getElementById('logPanel');if(el)el.scrollTop=el.scrollHeight})}
+        else if(data.type==='hint'){this.solverLogs.push({id:++this._logSeq,msg:data.msg,hint:true})}
         else if(data.type==='progress')this.solveProgress=data;
         else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
       };
@@ -26,6 +28,11 @@ window.SolverModule = function() {
       try{
         const result=await this.api('POST','/api/generate',payload);
         this.statusOk=result.success;this.statusMessage=result.message;
+        this.generationReport=result.generation_report||null;
+        this.wishReport=result.wish_report||null;
+        this.loadFairnessLedger&&this.loadFairnessLedger();
+        // 13단계 진단이 짚은 셀 좌표 → 정밀분석과 동일한 '충돌 위치로 이동' 칩 표시
+        if(!result.success&&Array.isArray(result.anchored)&&result.anchored.length){this.diagResult={anchored:result.anchored}}
         if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.activeTab='schedule';
           if(result.stopped)this.statusMessage+='\n⏹ 중지 요청으로 탐색 종료 — 현재까지 찾은 최선의 해를 표시합니다.';
           // 완화된 셀 상세 메시지
@@ -86,6 +93,8 @@ window.SolverModule = function() {
       this.$nextTick(()=>setTimeout(()=>{
         let el=(nid&&iso)?document.querySelector(`[data-cell="${nid}|${iso}"]`):null;
         if(!el&&iso)el=document.querySelector(`[data-cell$="|${iso}"]`);
+        // 날짜 없는 앵커(연속야간·V한도 등 간호사 단위)는 해당 행 첫 셀로 폴백
+        if(!el&&nid)el=document.querySelector(`[data-cell^="${nid}|"]`);
         if(el){el.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});el.classList.add('g-jump-flash');setTimeout(()=>el.classList.remove('g-jump-flash'),2400);}
         else this.toast('해당 셀이 현재 주기 화면에 없습니다','info',3000);
       },140));

@@ -83,8 +83,17 @@ class _ConflictAnalyzer(CpSatScheduler):
 
         lit_by_idx = {l.Index(): l for l in lits}
 
+        # 분석 전체 wall-clock 예산 — probe당 8초 캡만 있으면 MUS 최소화 반복으로
+        # 총 시간이 분~수십 분까지 늘어날 수 있고(generate 응답 지연), '중지'도
+        # 듣지 않는다. 예산 초과·취소 시 probe는 '미결'로 처리되어 부분 결과 반환.
+        import time as _time
+        _deadline = _time.monotonic() + 60.0
+        from . import solver_progress as _sp
+
         def infeasible_with(assumed_idx):
             """assumed_idx 리터럴만 가정하고 풀이 → INFEASIBLE이면 sufficient idx 집합."""
+            if _time.monotonic() > _deadline or _sp.is_cancelled():
+                return False  # 예산 초과/중지 — 미결 처리
             model.ClearAssumptions()
             model.AddAssumptions([lit_by_idx[i] for i in assumed_idx])
             s = cp_model.CpSolver()
@@ -104,6 +113,14 @@ class _ConflictAnalyzer(CpSatScheduler):
                                "충돌은 소프트/완화 조합 또는 솔버 타임아웃일 수 있습니다."}
         if first is False:
             return {"conflicts": [], "muses": [], "message": "충돌 분석 미완료 (타임아웃)."}
+        if first == []:
+            # 가정 리터럴 없이도 infeasible — 완화 대상이 아닌 구조 제약끼리 충돌
+            return {"conflicts": [], "muses": [],
+                    "message": "완화 가능한 제약과 무관하게 구조 제약(1일 1근무·근무 자격·"
+                               "알 수 없는 코드 등)만으로 충돌합니다. 사전입력 코드와 "
+                               "간호사 자격 설정을 확인하세요."}
+
+        _mus_uncertain = [False]
 
         def minimize_mus(suff):
             """#1 삭제 필터: 각 리터럴을 빼도 여전히 infeasible이면 불필요 → 최소 MUS."""
@@ -111,9 +128,13 @@ class _ConflictAnalyzer(CpSatScheduler):
             i = 0
             while i < len(mus):
                 trial = mus[:i] + mus[i + 1:]
-                if trial and infeasible_with(trial):
+                res = infeasible_with(trial) if trial else None
+                if trial and res:
                     mus = trial  # i번째는 불필요
                 else:
+                    if res is False:
+                        # 타임아웃 — 이 리터럴이 정말 필요한지 미확정인 채 유지됨
+                        _mus_uncertain[0] = True
                     i += 1
             return mus
 
@@ -155,6 +176,9 @@ class _ConflictAnalyzer(CpSatScheduler):
                 parts.append(f"[충돌 {gi}] 이 제약들이 동시 충족 불가:")
                 parts.extend(f"  · {c}" for c in m)
             msg = "\n".join(parts)
+        if _mus_uncertain[0]:
+            msg += ("\n⚠ 일부 항목은 시간 제한으로 최소성 검증을 마치지 못했습니다 — "
+                    "목록에 실제 원인이 아닌 제약이 포함돼 있을 수 있습니다.")
         anchored = [{"label": c, **(self._anchor_by_label.get(c) or {"nurse_id": None, "date": None})}
                     for c in flat]
         return {"conflicts": flat, "anchored": anchored, "muses": muses, "message": msg}
@@ -176,11 +200,18 @@ class _ConflictAnalyzer(CpSatScheduler):
                 continue
             day_req = self._cur_day_req(dt)
             for period, shifts in period_map.items():
-                req = day_req.get(period, 0)
-                if req <= 0:
+                if period not in day_req:
                     continue
-                lit = gate(f"{self._fmt_date(dt)} {period} 필요 인원 {req}명", dt=dt)
-                model.Add(sum(x[n["id"]][d][s] for n in self.nurses for s in shifts) == req).OnlyEnforceIf(lit)
+                req = max(0, int(day_req.get(period) or 0))
+                # 명시적 0도 게이팅 — 솔버는 ==0을 강제하므로 빠지면 '0명 요구일
+                # 사전입력 근무' 충돌을 '충돌 없음'으로 오진한다
+                exprs = [x[n["id"]][d][s] for n in self.nurses for s in shifts]
+                if not any(not isinstance(e, int) for e in exprs):
+                    continue
+                label = (f"{self._fmt_date(dt)} {period} 필요 인원 {req}명" if req > 0
+                         else f"{self._fmt_date(dt)} {period} 0명(배정 금지)")
+                lit = gate(label, dt=dt)
+                model.Add(sum(exprs) == req).OnlyEnforceIf(lit)
 
     def _g_charge_requirements(self, model, x, gate):
         period_to_req = {"day": "D", "evening": "E", "night": "N"}
@@ -215,13 +246,15 @@ class _ConflictAnalyzer(CpSatScheduler):
         """임산부 P1 주1회 — 게이팅 (충돌 시 라벨 핀포인트). 야간 제외·생 면제는 변수 도메인 처리."""
         if "P1" not in self.ALL_SHIFTS:
             return
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             if not nurse.get("is_pregnant"):
                 continue
             nid = nurse["id"]
             for wi, (ws, we) in enumerate(self.weeks):
                 win_days = [d for d in range(ws, we + 1)
-                            if self._nurse_active_idx(nurse, d)
+                            if self.all_dates[d] >= first_of_month
+                            and self._nurse_active_idx(nurse, d)
                             and self._preg_window_on(nid, self.all_dates[d])]
                 if not win_days:
                     continue
@@ -248,6 +281,7 @@ class _ConflictAnalyzer(CpSatScheduler):
 
     def _g_night_dedicated(self, model, x, gate):
         import calendar
+        month_days = calendar.monthrange(self.year, self.month)[1]
         month_idxs = [d for d, dt in enumerate(self.all_dates)
                       if dt.month == self.month and dt.year == self.year]
         if not month_idxs:
@@ -256,8 +290,13 @@ class _ConflictAnalyzer(CpSatScheduler):
             if not nurse.get("is_night_shift"):
                 continue
             nid = nurse["id"]
-            lit = gate(f"{self._fmt_nurse_label(nurse)} 야간전담 당월 정확히 14일", nid=nid)
-            model.Add(sum(x[nid][d][s] for d in month_idxs for s in self.NIGHT_SHIFTS) == 14).OnlyEnforceIf(lit)
+            # 솔버와 동일하게 재적일수·N 가용일 기반 (공용 헬퍼) — 미반영 시
+            # 월중 전입/전출 야간전담에 허위 충돌을 보고한다
+            active_days, target = self._night_dedicated_quota(nurse, month_idxs, month_days)
+            if active_days <= 0:
+                continue
+            lit = gate(f"{self._fmt_nurse_label(nurse)} 야간전담 당월 {target}일", nid=nid)
+            model.Add(sum(x[nid][d][s] for d in month_idxs for s in self.NIGHT_SHIFTS) == target).OnlyEnforceIf(lit)
 
     def _g_menstrual(self, model, x, gate):
         if "생" not in self.ALL_SHIFTS:
@@ -267,10 +306,25 @@ class _ConflictAnalyzer(CpSatScheduler):
         month_idxs = [d for d, dt in enumerate(self.all_dates)
                       if dt.month == self.month and dt.year == self.year]
         for nurse in self.nurses:
+            nid = nurse["id"]
+            # 모든 여성: 당월 생 ≤1 (솔버 하드 제약과 패리티 — 빠지면 생 2회
+            # 사전입력이 실제로는 infeasible인데 '충돌 없음'으로 오진)
+            if nurse.get("gender") == "female":
+                m_terms = [x[nid][d]["생"] for d in month_idxs]
+                if any(not isinstance(t, int) for t in m_terms):
+                    lit = gate(f"{self._fmt_nurse_label(nurse)} 생리휴가 월 1회 한도", nid=nid)
+                    model.Add(sum(m_terms) <= 1).OnlyEnforceIf(lit)
             if nurse.get("is_night_shift") and month_days == 31 and nurse.get("gender") == "female":
-                nid = nurse["id"]
+                # 솔버와 동일하게 부분 재적은 ≤1 (전 기간 재적만 ==1)
+                active_days = sum(1 for d in month_idxs if self._nurse_active_idx(nurse, d))
+                if active_days <= 0:
+                    continue
+                m_sum = sum(x[nid][d]["생"] for d in month_idxs)
                 lit = gate(f"{self._fmt_nurse_label(nurse)} 야간전담 생리휴가 1회(31일달)", nid=nid)
-                model.Add(sum(x[nid][d]["생"] for d in month_idxs) == 1).OnlyEnforceIf(lit)
+                if active_days >= month_days:
+                    model.Add(m_sum == 1).OnlyEnforceIf(lit)
+                else:
+                    model.Add(m_sum <= 1).OnlyEnforceIf(lit)
 
     def _g_forbidden(self, model, x, gate):
         """9개 금지 전환 전체 (가장 흔한 사전입력 충돌). per (nurse, date-pair)."""
@@ -323,13 +377,16 @@ class _ConflictAnalyzer(CpSatScheduler):
                 for charge_s, regulars in charge_regular_map.items():
                     if charge_s in j_capable:
                         eligible_pairs.append((i_nurse["id"], j_nurse["id"], charge_s, regulars))
+        nurse_by_id = {n["id"]: n for n in self.nurses}
         for d, dt in enumerate(self.all_dates):
             if dt.month != self.month:
                 continue
             dt_str = dt.strftime("%Y-%m-%d")
+            is_holiday = dt_str in self.holidays
             day_lit = None
             for nid_i, nid_j, charge_s, regulars in eligible_pairs:
-                jf = self.prev.get(nid_j, {}).get(dt_str)
+                # 솔버와 동일한 '유효 사전입력' 게이팅 (공용 헬퍼)
+                jf = self._seniority_jfixed(nurse_by_id[nid_j], dt, dt_str, is_holiday)
                 if jf and jf != charge_s:
                     continue
                 vc = x[nid_i][d][charge_s]
@@ -454,8 +511,14 @@ class _ConflictAnalyzer(CpSatScheduler):
                           if dt.month == self.month and dt.year == self.year
                           for s in self.NIGHT_SHIFTS]
             if night_vars:
-                lit = gate(f"{self._fmt_nurse_label(nurse)} 홀짝월 합산 야간 ≤{max_n}회(전월 {prev_count})", nid=nid)
-                model.Add(sum(night_vars) <= max_n - prev_count).OnlyEnforceIf(lit)
+                # 솔버와 동일한 클램프 (공용 헬퍼) — 미클램프 시 자체 모순 리터럴이
+                # 항상 단독 MUS로 검출돼 실제 원인을 가린다
+                rhs = self._two_month_rhs(nid)
+                label = (f"{self._fmt_nurse_label(nurse)} 홀짝월 합산 야간 ≤{max_n}회(전월 {prev_count})"
+                         if rhs > 0 else
+                         f"{self._fmt_nurse_label(nurse)} 전월 야간 {prev_count}회로 상한 초과 — 당월 야간 0회")
+                lit = gate(label, nid=nid)
+                model.Add(sum(night_vars) <= rhs).OnlyEnforceIf(lit)
 
 
     # ── #3 MCS (최소 수정집합) — "이것만 빼면/줄이면 풀린다" 처방 ──────────────
@@ -474,12 +537,16 @@ class _ConflictAnalyzer(CpSatScheduler):
                 x[nid][d] = {}
                 is_holiday = dt_str in self.holidays
                 pre = self.prev.get(nid, {}).get(dt_str)
-                if pre == "OF" and is_holiday:
-                    pre = None
-                # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
-                pre = self._preg_effective_pre(nurse, dt, pre)
+                # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
+                pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 active = self._nurse_active_on(nurse, dt)
+                # 잠긴 셀: 완화·진단 경로와 동일하게 절대 고정 — keep 리터럴을 만들지
+                # 않아 '잠긴 셀 제거'가 처방으로 제시되는 일을 차단한다.
+                if active and pre and self.locked_cells.get(nid, {}).get(dt_str):
+                    for s in self.ALL_SHIFTS:
+                        x[nid][d][s] = 1 if s == pre else 0
+                    continue
                 free_ok = {}
                 for s in self.ALL_SHIFTS:
                     if not active:
@@ -523,6 +590,10 @@ class _ConflictAnalyzer(CpSatScheduler):
         if not self.nurses:
             return {"fixable": False, "message": "간호사가 없습니다."}
         model = cp_model.CpModel()
+        # MCS 도메인은 사전입력이 keep 리터럴로 제거 가능한 '완화형' 모델 —
+        # 시니어리티 게이팅도 완화 경로와 동일하게(잠긴 셀만 고정) 동작해야
+        # '처방 적용 후 재생성이 다시 실패'하는 구멍이 없다
+        self._pre_soft = True
         x, pre_keeps = self._build_vars_mcs(model)
 
         # 하드 유지: 구조·행동 제약 (daily/charge만 soft 레버)
@@ -541,6 +612,12 @@ class _ConflictAnalyzer(CpSatScheduler):
         self._cs_max_v_per_month(model, x)
         if self.rules.maxNightPerMonth:
             self._cs_max_night_per_month(model, x)
+        # 실제 솔버 경로(_apply_hard_constraints)와 동일 집합 보장 — 빠지면
+        # '수정 없이 생성 가능'이 거짓이 되거나 처방을 적용해도 여전히 실패한다.
+        if getattr(self.rules, "restAfterNight", False):
+            self._cs_rest_after_night(model, x)
+        if self.rules.maxNightTwoMonth:
+            self._cs_max_night_two_month(model, x)
         self._cs_menstrual_leave(model, x)
         self._cs_night_shift_nurses(model, x)
         self._cs_charge_seniority(model, x)
@@ -565,15 +642,22 @@ class _ConflictAnalyzer(CpSatScheduler):
                 continue
             day_req = self._cur_day_req(dt)
             for period, shifts in period_map.items():
-                req = day_req.get(period, 0)
-                if req <= 0:
+                if period not in day_req:
                     continue
-                assigned = sum(x[n["id"]][d][s] for n in self.nurses for s in shifts)
+                req = max(0, int(day_req.get(period) or 0))
+                # 명시적 0도 모델링 (assigned <= 0) — 빠지면 '0명 요구일의
+                # 사전입력 근무' 충돌에 대해 '수정 없이 가능' 거짓 처방이 나간다.
+                # 0요구일 사전입력은 keep 리터럴로 제거 가능하므로 처방으로 잡힌다.
+                exprs = [x[n["id"]][d][s] for n in self.nurses for s in shifts]
+                if not any(not isinstance(e, int) for e in exprs):
+                    continue
+                assigned = sum(exprs)
                 model.Add(assigned <= req)
-                short = model.NewIntVar(0, req, f"short_{d}_{period}")
-                model.Add(short >= req - assigned)
-                cost_terms.append(SHORT_COST * short)
-                shortfalls.append(("staff", dt, period, short, req))
+                if req > 0:
+                    short = model.NewIntVar(0, req, f"short_{d}_{period}")
+                    model.Add(short >= req - assigned)
+                    cost_terms.append(SHORT_COST * short)
+                    shortfalls.append(("staff", dt, period, short, req))
             for s in charge_shifts:
                 rk = period_to_req.get(s["period"])
                 if rk and day_req.get(rk, 0) > 0:
@@ -630,14 +714,20 @@ class _ConflictAnalyzer(CpSatScheduler):
         if not removed and not short_list:
             return {"fixable": True, "removals": [], "shortfalls": [],
                     "message": "수정 없이 생성 가능합니다 (현재 하드 제약상 충돌 없음)."}
+        # 시간 제한 내 OPTIMAL 미도달이면 '최소' 보장이 없음을 명시
+        approx_note = ""
+        if status != cp_model.OPTIMAL:
+            approx_note = ("\n⚠ 시간 제한으로 근사 처방입니다 — 최소 수정임이 보장되지 "
+                           "않으며, 더 적은 수정으로도 풀릴 수 있습니다.")
         return {
             "fixable": True,
+            "is_optimal": status == cp_model.OPTIMAL,
             "removals": [{"nurse_id": nid, "nurse": l, "date_iso": iso, "date": ds, "pre": p,
                           "is_timeoff": timeoff_class(p) != "work"}
                           for nid, l, iso, ds, p in removed],
             "shortfalls": [{"kind": k, "date": dt.strftime("%Y-%m-%d"), "code": c, "amount": v}
                            for k, dt, c, v in short_list],
-            "message": "이렇게 수정하면 생성 가능합니다:\n" + "\n".join(lines),
+            "message": "이렇게 수정하면 생성 가능합니다:\n" + "\n".join(lines) + approx_note,
         }
 
 

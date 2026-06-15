@@ -112,6 +112,12 @@ class GenerateRequest(BaseModel):
     allow_juhu_relax: bool = False  # 주휴 재배치 허용
     unlimited_v: bool = False  # V 무제한 모드 (해를 못 찾을 때 사용)
     solver: Literal["highs", "cpsat", "race"] = "highs"  # 생성 엔진 (race=두 엔진 경쟁, 먼저 성공한 쪽 채택)
+    # 위시 공정성 보정 — 서버가 직전 달 위시 거절 이력에서 자동 산출해 채움
+    # {nurse_id: 가중배수}. 프론트가 보낼 필요 없음.
+    wish_boosts: Optional[Dict[str, float]] = None
+    # 야간 공정성 원장 오프셋 — 직전 달들의 누적 야간 수 {nurse_id: n}.
+    # night_fairness가 (누적+당월)의 편차를 최소화해 누적 불공평을 당월에 보정.
+    fairness_offsets: Optional[Dict[str, int]] = None
 
 
 class ScheduleSave(BaseModel):
@@ -122,3 +128,14 @@ class ScheduleSave(BaseModel):
     rules: Rules
     schedule: Dict[str, Dict[str, str]]
     name: Optional[str] = None
+    # 라운드트립 보존 필드 — typed 모델 도입 때 누락돼 잠금·메모·공휴일 등이
+    # 저장에서 조용히 유실되던 회귀(v4.0.6에서 고쳤던 버그) 복구
+    prev_schedule: Optional[Dict[str, Dict[str, str]]] = None
+    nurse_scores: Optional[Dict[str, Any]] = None
+    nurse_score_details: Optional[Dict[str, Any]] = None
+    locked_cells: Optional[Dict[str, Any]] = None
+    cell_notes: Optional[Dict[str, Any]] = None
+    holidays: Optional[List[str]] = None
+    prev_day_reqs: Optional[Dict[str, Any]] = None
+    prev_month_nights: Optional[Dict[str, Any]] = None
+    solver_log: Optional[str] = None

@@ -69,7 +69,13 @@ window.ProfilesModule = function() {
         this.profilePasswordInput='';
         this.profileMasterInput='';
         this.profileSwitchModal=false;
+        // 프로필별 상태 전부 초기화 — 잠금·메모·공휴일·전월N·undo 스택이 남으면
+        // 다른 병동 프로필로 새어 들어가 생성 payload·저장에 섞인다
         this.nurses=[];this.schedule={};this.prevSchedule={};
+        this.extendedSchedule={};this.nurseScores={};this.nurseScoreDetails={};
+        this.lockedCells={};this.cellNotes={};this.holidays=[];
+        this.prevDayReqs={};this.prevMonthNights={};this.relaxedCells={};
+        this.solverLogs=[];this._undoStack=[];this._redoStack=[];
         await this._initApp();
       }catch(e){this.profileError=e.message||'서버 오류'}
     },
@@ -94,7 +100,13 @@ window.ProfilesModule = function() {
       const profile=this.profiles.find(p=>p.id===profileId);
       if(!profile)return;
       const name=profile.name;
-      const input=prompt(`이 프로필과 모든 데이터가 영구 삭제됩니다.\n삭제하려면 "${name}"을(를) 입력하세요:`);
+      let input;
+      try{
+        input=window.prompt(`이 프로필과 모든 데이터가 영구 삭제됩니다.\n삭제하려면 "${name}"을(를) 입력하세요:`);
+      }catch(e){
+        // Electron 렌더러는 prompt 미지원 — confirm으로 대체 (이름 입력 생략)
+        input=confirm(`프로필 "${name}"과(와) 모든 데이터가 영구 삭제됩니다.\n정말 삭제하시겠습니까?`)?name:null;
+      }
       if(input===null)return; // 취소
       if(input.trim()!==name){this.toast('프로필 이름이 일치하지 않습니다.','error');return}
       try{

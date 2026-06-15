@@ -86,6 +86,25 @@ def init_db():
                 enabled    INTEGER DEFAULT 1,
                 sort_order INTEGER DEFAULT 0
             );
+
+            CREATE TABLE IF NOT EXISTS generation_runs (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                year            INTEGER,
+                month           INTEGER,
+                solver          TEXT,
+                success         INTEGER,
+                stopped         INTEGER,
+                relaxed         INTEGER,
+                duration_s      REAL,
+                final_gap       REAL,
+                num_vars        INTEGER,
+                num_constraints INTEGER,
+                nurse_count     INTEGER,
+                pre_filled      INTEGER,
+                time_limit      INTEGER,
+                mip_gap         REAL,
+                created_at      TEXT DEFAULT (datetime('now','localtime'))
+            );
         """)
         # 기존 DB 호환: juhu 컬럼 마이그레이션
         try:
@@ -149,9 +168,17 @@ def init_db():
             conn.execute("INSERT INTO requirements (id, data) VALUES (1, ?)", (json.dumps(default_req),))
 
         # 예시 간호사 삽입 (처음 실행 시 DB가 비어 있을 때만)
+        # 단, 저장된 근무표/사전입력이 있으면 '사용하던 DB에서 간호사만 전부
+        # 삭제된 상태'이므로 재시드하지 않는다 — 재시드하면 예시 ID(a0~c5)가
+        # valid 집합이 되어 cleanup_orphan_nurse_refs()가 저장본의 실데이터
+        # 키를 전부 유령으로 오인해 영구 삭제한다.
         existing_nurses = conn.execute("SELECT COUNT(*) FROM nurses").fetchone()[0]
         if existing_nurses == 0:
-            _seed_nurses(conn)
+            saved_rows = conn.execute(
+                "SELECT (SELECT COUNT(*) FROM schedules) + (SELECT COUNT(*) FROM prev_schedules)"
+            ).fetchone()[0]
+            if saved_rows == 0:
+                _seed_nurses(conn)
 
         # 기본 근무 시드 (shifts 테이블이 비어 있을 때만)
         existing_shifts = conn.execute("SELECT COUNT(*) FROM shifts").fetchone()[0]
@@ -367,6 +394,186 @@ def cleanup_orphan_nurse_refs() -> int:
                     conn.execute(f"UPDATE {table} SET data=? WHERE id=?",
                                  (json.dumps(data, ensure_ascii=False), row["id"]))
     return removed
+
+
+# 위시 판정용 표준 코드 집합 (저장본 기반 파생 계산 — 솔버 클래스와 독립)
+WISH_REST_LIKE = {"OF", "주", "P1"}
+WISH_LEAVE_LIKE = {"V", "생", "특", "공", "법", "병"}
+_WORK_CODES = {"DC", "D", "D1", "EC", "E", "중", "NC", "N"}
+_NIGHT_CODES = {"N", "NC"}
+
+
+def _latest_saved(conn, year: int, month: int):
+    """해당 월의 최신 저장 근무표 data(JSON dict) — 없으면 None."""
+    row = conn.execute(
+        "SELECT data FROM schedules WHERE year=? AND month=? "
+        "ORDER BY id DESC LIMIT 1", (year, month)).fetchone()
+    if not row:
+        return None
+    try:
+        return json.loads(row["data"])
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+def compute_prev_month_nights(year: int, month: int) -> Dict[str, int]:
+    """직전 달 최신 저장 근무표에서 간호사별 야간(N/NC) 횟수 — '전월N' 자동 인수인계.
+    수동으로 옮겨 적다 빼먹으면 월초 연속야간 검증이 빠지는 문제를 막는다."""
+    py, pm = (year - 1, 12) if month == 1 else (year, month - 1)
+    prefix = f"{py:04d}-{pm:02d}-"
+    out: Dict[str, int] = {}
+    with get_conn() as conn:
+        data = _latest_saved(conn, py, pm)
+    if not data:
+        return out
+    for nid, days in (data.get("schedule") or {}).items():
+        c = sum(1 for dk, s in (days or {}).items()
+                if dk.startswith(prefix) and s in _NIGHT_CODES)
+        if c:
+            out[nid] = c
+    return out
+
+
+def compute_fairness_ledger(year: int, month: int, months_back: int = 3) -> Dict:
+    """공정성 원장 — 직전 months_back개월 저장본에서 간호사별 누적 부담 집계.
+    Returns {nid: {"nights": n, "weekends": n, "holiday_work": n, "months": k}}"""
+    import datetime as _dt
+    targets = []
+    y, m = year, month
+    for _ in range(months_back):
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+        targets.append((y, m))
+    ledger: Dict = {}
+    with get_conn() as conn:
+        for ty, tm in targets:
+            data = _latest_saved(conn, ty, tm)
+            if not data:
+                continue
+            prefix = f"{ty:04d}-{tm:02d}-"
+            holidays = {h for h in (data.get("holidays") or []) if str(h).startswith(prefix)}
+            for nid, days in (data.get("schedule") or {}).items():
+                touched = False
+                ent = ledger.setdefault(
+                    nid, {"nights": 0, "weekends": 0, "holiday_work": 0, "months": 0})
+                for dk, s in (days or {}).items():
+                    if not dk.startswith(prefix) or s not in _WORK_CODES:
+                        continue
+                    touched = True
+                    if s in _NIGHT_CODES:
+                        ent["nights"] += 1
+                    try:
+                        if _dt.date.fromisoformat(dk).weekday() >= 5:
+                            ent["weekends"] += 1
+                    except ValueError:
+                        pass
+                    if dk in holidays:
+                        ent["holiday_work"] += 1
+                if touched:
+                    ent["months"] += 1
+    return ledger
+
+
+def compute_wish_ledger(year: int, month: int, months_back: int = 3) -> Dict:
+    """직전 months_back개월의 '최신 저장 근무표'에서 간호사별 위시 신청/반영 집계.
+    별도 기록 테이블 없이 저장본(저장 시점의 nurses[].wishes + schedule)만으로
+    계산하는 파생 뷰 — 같은 달을 여러 번 저장해도 최신본 1개만 본다.
+    Returns: {nurse_id: {"requested": n, "granted": m}}"""
+    targets = []
+    y, m = year, month
+    for _ in range(months_back):
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+        targets.append((y, m))
+    ledger: Dict = {}
+    with get_conn() as conn:
+        for ty, tm in targets:
+            row = conn.execute(
+                "SELECT data FROM schedules WHERE year=? AND month=? "
+                "ORDER BY id DESC LIMIT 1", (ty, tm)).fetchone()
+            if not row:
+                continue
+            try:
+                data = json.loads(row["data"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+            sched = data.get("schedule") or {}
+            for n in data.get("nurses") or []:
+                nid = n.get("id")
+                wishes = n.get("wishes") or {}
+                if not nid or not wishes:
+                    continue
+                ns = sched.get(nid) or {}
+                ent = ledger.setdefault(nid, {"requested": 0, "granted": 0})
+                for day_str, wish in wishes.items():
+                    ds = str(day_str)
+                    if "-" in ds:
+                        dk = ds
+                        if not dk.startswith(f"{ty:04d}-{tm:02d}-"):
+                            continue  # 다른 달 키는 그 달 집계에서 제외
+                    else:
+                        try:
+                            dk = f"{ty:04d}-{tm:02d}-{int(ds):02d}"
+                        except (ValueError, TypeError):
+                            continue
+                    s = ns.get(dk, "")
+                    if not s:
+                        continue
+                    ent["requested"] += 1
+                    if wish == "OFF":
+                        ok = s in WISH_REST_LIKE or s in WISH_LEAVE_LIKE
+                    else:
+                        ok = (s == wish)
+                    if ok:
+                        ent["granted"] += 1
+    return ledger
+
+
+def insert_generation_run(d: Dict):
+    """생성 이력 1건 기록. (비교 노트, 최근 5건) 반환 — 노트는 유사 규모의 직전
+    성공 이력 대비 3배 이상 느려졌을 때만 생성된다."""
+    note = None
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT duration_s, pre_filled FROM generation_runs "
+            "WHERE success=1 AND nurse_count BETWEEN ? AND ? "
+            "ORDER BY id DESC LIMIT 5",
+            (int(d.get("nurse_count") or 0) - 2, int(d.get("nurse_count") or 0) + 2),
+        ).fetchall()
+        if d.get("success") and len(rows) >= 2 and d.get("duration_s"):
+            durs = sorted(float(r["duration_s"] or 0) for r in rows)
+            med = durs[len(durs) // 2]
+            if med > 0 and float(d["duration_s"]) > 3 * med:
+                note = (f"유사 규모의 직전 생성(중앙값 {med:.0f}초) 대비 "
+                        f"{float(d['duration_s'])/med:.1f}배 느렸습니다 — 사전입력 "
+                        f"{rows[0]['pre_filled']}건 → {d.get('pre_filled')}건 변화가 "
+                        f"원인일 수 있습니다.")
+        conn.execute(
+            "INSERT INTO generation_runs (year, month, solver, success, stopped, "
+            "relaxed, duration_s, final_gap, num_vars, num_constraints, "
+            "nurse_count, pre_filled, time_limit, mip_gap) "
+            "VALUES (:year,:month,:solver,:success,:stopped,:relaxed,:duration_s,"
+            ":final_gap,:num_vars,:num_constraints,:nurse_count,:pre_filled,"
+            ":time_limit,:mip_gap)",
+            {k: d.get(k) for k in (
+                "year", "month", "solver", "success", "stopped", "relaxed",
+                "duration_s", "final_gap", "num_vars", "num_constraints",
+                "nurse_count", "pre_filled", "time_limit", "mip_gap")},
+        )
+        recent = [dict(r) for r in conn.execute(
+            "SELECT created_at, solver, success, stopped, relaxed, duration_s, "
+            "final_gap, pre_filled FROM generation_runs "
+            "ORDER BY id DESC LIMIT 5").fetchall()]
+    return note, recent
+
+
+def list_generation_runs(limit: int = 20) -> List[Dict]:
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM generation_runs ORDER BY id DESC LIMIT ?",
+            (int(limit),)).fetchall()]
 
 
 def reorder_nurses(ordered_ids: List[str]) -> None:
@@ -637,23 +844,31 @@ def delete_scoring_rule(rule_id: int) -> None:
 
 def _nurse_row_to_dict(row: sqlite3.Row) -> Dict:
     d = dict(row)
+
+    def _json(key, default):
+        # 손상된 JSON 컬럼 하나가 간호사 목록 전체(=앱 전체)를 죽이지 않도록 방어
+        try:
+            return json.loads(d.get(key) or default)
+        except (json.JSONDecodeError, TypeError):
+            return json.loads(default)
+
     return {
         "id": d["id"],
         "name": d["name"],
         "group": d["grp"],
         "gender": d["gender"],
-        "capable_shifts": json.loads(d["capable_shifts"]),
+        "capable_shifts": _json("capable_shifts", "[]"),
         "is_night_shift": bool(d["is_night_shift"]),
         "seniority": d["seniority"],
-        "wishes": json.loads(d["wishes"]),
+        "wishes": _json("wishes", "{}"),
         "juhu_day": d.get("juhu_day"),           # None or 0-6
         "juhu_auto_rotate": bool(d.get("juhu_auto_rotate", 1)),
-        "night_months": json.loads(d.get("night_months", "{}") or "{}"),
+        "night_months": _json("night_months", "{}"),
         "is_trainee": d.get("is_trainee") in (1, "1", True),
         "training_end_date": d.get("training_end_date"),
         "preceptor_id": d.get("preceptor_id"),
         "start_date": d.get("start_date"),
         "end_date": d.get("end_date"),
         "is_pregnant": d.get("is_pregnant") in (1, "1", True),
-        "pregnancy": json.loads(d.get("pregnancy", "{}") or "{}"),
+        "pregnancy": _json("pregnancy", "{}"),
     }

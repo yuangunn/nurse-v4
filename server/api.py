@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 import json
@@ -60,6 +61,17 @@ try:
                 pass
             return out
 
+    # 솔버 로그 패턴 → 사용자 행동 힌트 (run당 키별 1회만)
+    import re as _re
+    _LOG_HINTS = [
+        (_re.compile(r"Presolve\s*:?.*[Ii]nfeasible"), "presolve_infeasible",
+         "💡 전처리에서 모순 감지 — 사전입력끼리 충돌일 가능성이 높습니다. 실패 시 '정밀 충돌 분석'을 실행해 보세요."),
+        (_re.compile(r"kTimeLimit|[Tt]ime limit reached"), "time_limit",
+         "💡 시간 제한 도달 — 현재 해는 표시된 gap% 이내의 품질입니다."),
+        (_re.compile(r"kInterrupt"), "interrupted",
+         "💡 중지 신호로 탐색이 종료되었습니다."),
+    ]
+
     class _TrackableHighs(_OrigHighs):
         def run(self):
             global _last_mip_gap, _log_queue
@@ -69,10 +81,16 @@ try:
                 except Exception: break
             # 로그 콜백 등록 — 솔버 출력을 큐에 적재
             # highspy 1.8+: cbLogging.subscribe(fn) — event.message로 로그 수신
+            _hinted = set()
+
             def _on_log(event):
                 msg = getattr(event, "message", "")
                 if msg and msg.strip():
                     _log_queue.put({"type": "log", "msg": msg.rstrip()})
+                    for rx, key, hint in _LOG_HINTS:
+                        if key not in _hinted and rx.search(msg):
+                            _hinted.add(key)
+                            _log_queue.put({"type": "hint", "msg": hint})
             try:
                 self.cbLogging.subscribe(_on_log)
             except Exception:
@@ -130,6 +148,26 @@ def startup():
     prof.init_default_profiles()
     # 기본 DB 초기화 (프로필 전환 전 폴백)
     db.init_db()
+    # 직전 비정상 종료로 남은 게스트 임시 DB 정리
+    try:
+        guest_db = prof._db_path_for_profile("_guest_temp")
+        if guest_db.exists():
+            guest_db.unlink()
+    except Exception:
+        pass
+
+
+@app.on_event("shutdown")
+def shutdown():
+    """서버 종료 시 열린 프로필을 닫아 재암호화 보장 (graceful 종료 경로)."""
+    global _current_profile_id, _current_profile_password
+    if _current_profile_id:
+        try:
+            prof.close_profile(_current_profile_id, _current_profile_password or "")
+        except Exception:
+            pass
+        _current_profile_id = None
+        _current_profile_password = None
 
 
 # ── 프로필 API ────────────────────────────────────────────────────────────────
@@ -172,13 +210,21 @@ def open_profile(body: dict):
         if not prof.verify_master_password(master_pw):
             return {"ok": False, "error": "마스터 비밀번호가 틀렸습니다."}
 
-    # 현재 프로필 닫기
-    if _current_profile_id:
+    # 같은 프로필 재오픈이면 먼저 닫아 .db.enc를 최신화한 뒤 다시 연다.
+    if _current_profile_id and _current_profile_id == profile_id:
         prof.close_profile(_current_profile_id, _current_profile_password or "")
+        _current_profile_id = None
+        _current_profile_password = None
 
+    # 대상 프로필을 먼저 검증·복호화하고, 성공했을 때에만 현재 프로필을 닫는다.
+    # (실패 시 현재 프로필을 닫아버리면 평문이 사라진 상태로 전역이 옛 경로를
+    #  가리켜, 이후 요청이 빈 스텁 DB를 만들고 close가 그것을 재암호화한다.)
     result = prof.open_profile(profile_id, password)
     if not result.get("ok"):
         return result
+
+    if _current_profile_id:
+        prof.close_profile(_current_profile_id, _current_profile_password or "")
 
     # DB 경로 전환
     db_path = result["db_path"]
@@ -231,13 +277,18 @@ def change_profile_password(body: dict):
     force_reset = body.get("force_reset", False)
     if force_reset:
         # 개발자 모드: 비밀번호 강제 초기화 (제거)
+        # 마스터 비밀번호가 설정돼 있으면 검증 — 무인증 강제 초기화 방지
+        if prof.has_master_password():
+            if not prof.verify_master_password(body.get("master_password", "")):
+                raise HTTPException(403, "마스터 비밀번호가 필요합니다.")
         result = prof.force_reset_password(profile_id)
         if not result.get("ok"):
             raise HTTPException(400, result.get("error"))
         return result
     if not new_password:
         raise HTTPException(400, "새 비밀번호를 입력해주세요.")
-    result = prof.change_password(profile_id, old_password, new_password)
+    result = prof.change_password(profile_id, old_password, new_password,
+                                  is_open=(_current_profile_id == profile_id))
     if not result.get("ok"):
         raise HTTPException(400, result.get("error"))
     # 현재 열린 프로필이면 비밀번호 업데이트
@@ -311,11 +362,41 @@ def dev_info():
 @app.post("/api/dev/reset-seed")
 def dev_reset_seed():
     """예시 데이터(18명) 재생성"""
+    from .database import _seed_nurses
+    # 삭제와 시드를 같은 트랜잭션에서 — 분리하면 시드 INSERT가 커밋되지 않고
+    # GC 롤백되어 빈 테이블만 남는다.
     with db.get_conn() as conn:
         conn.execute("DELETE FROM nurses")
-    from .database import _seed_nurses
-    _seed_nurses(db.get_conn())
+        _seed_nurses(conn)
     return {"ok": True}
+
+
+@app.get("/api/fairness_ledger")
+def get_fairness_ledger(year: int, month: int, months_back: int = 3):
+    """공정성 원장 — 직전 N개월 저장본 누적 (야간/주말/공휴일 근무 + 위시)."""
+    try:
+        return {"ledger": db.compute_fairness_ledger(year, month, months_back),
+                "wish": db.compute_wish_ledger(year, month, months_back)}
+    except Exception:
+        return {"ledger": {}, "wish": {}}
+
+
+@app.get("/api/prev_month_nights")
+def get_prev_month_nights(year: int, month: int):
+    """직전 달 최신 저장 근무표 기준 간호사별 야간 수 — '전월N' 자동 채움용."""
+    try:
+        return db.compute_prev_month_nights(year, month)
+    except Exception:
+        return {}
+
+
+@app.get("/api/generation_runs")
+def get_generation_runs(limit: int = 20):
+    """생성 이력 (현재 프로필 DB 기준, 최신순)."""
+    try:
+        return db.list_generation_runs(limit=limit)
+    except Exception:
+        return []
 
 
 @app.get("/api/dev/download-db")
@@ -569,9 +650,13 @@ def _parse_nurses_csv(csv_text: str) -> dict:
             v = col(row, field)
             if not v:
                 return None
-            if not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+            # 자릿수만 검사하면 2026-02-31 같은 존재하지 않는 날짜가 통과해
+            # 전입/전출·트레이닝 종료 제약이 조용히 무시된다 — 실제 달력 검증
+            try:
+                datetime.strptime(v, "%Y-%m-%d")
+            except ValueError:
                 errors.append(err(idx, field, v, "YYYY-MM-DD",
-                                  f"{idx}행: {field} 형식 오류 → 빈값 처리"))
+                                  f"{idx}행: {field} 형식/날짜 오류 → 빈값 처리"))
                 return None
             return v
 
@@ -735,12 +820,14 @@ def nurse_import(body: dict):
     matched_ids = _resolve_nurse_ids(nurses_to_save, existing)
 
     try:
+        # 업서트를 먼저, 삭제는 마지막에 — 중간 실패 시 '삭제만 반영되고 신규는
+        # 미반영'되는 최악의 경우(데이터 소실)를 피한다.
+        for nurse in nurses_to_save:
+            db.upsert_nurse(nurse)
         if replace_all:
             for n in existing:
                 if n["id"] not in matched_ids:
                     db.delete_nurse(n["id"])
-        for nurse in nurses_to_save:
-            db.upsert_nurse(nurse)
     except Exception as e:
         raise HTTPException(500, f"DB 저장 실패: {e}")
 
@@ -862,6 +949,102 @@ def delete_shift(code: str):
 # 일별 인원 사전 검증
 from datetime import date as _date, timedelta as _td
 
+def _attach_wish_boosts(request: GenerateRequest) -> Optional[dict]:
+    """직전 달들의 위시 거절 이력에서 간호사별 가중 배수를 산출해 request에 주입.
+    배수 = 1 + 0.5×누적 미반영 (최대 3배). '지난달 거절당한 사람 우선'의 자동화."""
+    try:
+        if not any((n.wishes or {}) for n in request.nurses):
+            return None
+        ledger = db.compute_wish_ledger(request.year, request.month)
+        boosts = {}
+        for n in request.nurses:
+            ent = ledger.get(n.id)
+            if ent:
+                rejected = max(0, ent["requested"] - ent["granted"])
+                if rejected:
+                    boosts[n.id] = round(min(3.0, 1.0 + 0.5 * rejected), 2)
+        if boosts:
+            request.wish_boosts = boosts
+        return {"ledger": ledger, "boosts": boosts}
+    except Exception:
+        return None
+
+
+def _build_wish_report(request: GenerateRequest, result: dict) -> Optional[dict]:
+    """생성 결과 대비 위시 반영 리포트 — 간호사별 신청/반영/미반영 목록."""
+    if not result.get("success"):
+        return None
+    sched = result.get("schedule") or {}
+    per_nurse = []
+    total_req = total_ok = 0
+    month_prefix = f"{request.year:04d}-{request.month:02d}-"
+    for n in request.nurses:
+        wishes = n.wishes or {}
+        if not wishes:
+            continue
+        ns = sched.get(n.id) or {}
+        requested = granted = 0
+        unmet = []
+        for day_str, wish in wishes.items():
+            ds = str(day_str)
+            if "-" in ds:
+                dk = ds
+                if not dk.startswith(month_prefix):
+                    continue
+            else:
+                try:
+                    dk = f"{month_prefix}{int(ds):02d}"
+                except (ValueError, TypeError):
+                    continue
+            assigned = ns.get(dk, "")
+            if not assigned:
+                continue
+            requested += 1
+            if wish == "OFF":
+                ok = assigned in db.WISH_REST_LIKE or assigned in db.WISH_LEAVE_LIKE
+            else:
+                ok = (assigned == wish)
+            if ok:
+                granted += 1
+            else:
+                unmet.append({"date": dk, "wish": wish, "assigned": assigned})
+        if requested:
+            total_req += requested
+            total_ok += granted
+            per_nurse.append({
+                "nurse_id": n.id, "name": n.name,
+                "requested": requested, "granted": granted, "unmet": unmet,
+                "boost": (request.wish_boosts or {}).get(n.id),
+            })
+    if not per_nurse:
+        return None
+    per_nurse.sort(key=lambda r: (r["granted"] / r["requested"], -len(r["unmet"])))
+    return {"total_requested": total_req, "total_granted": total_ok,
+            "per_nurse": per_nurse}
+
+
+def _validate_locked_conflicts(request: GenerateRequest) -> Optional[str]:
+    """잠긴 셀의 사전입력이 규칙에 의해 무효화(드롭)되는 충돌 검출.
+    '잠금은 완화에서도 고정'이 약속이지만, 공휴일 OF 금지 같은 규칙이 사전입력
+    자체를 드롭하면 잠금이 적용될 수 없다 — 조용히 무시하지 말고 경고한다."""
+    locked = request.locked_cells or {}
+    prev = request.prev_schedule or {}
+    holidays = set(request.holidays or [])
+    name_by_id = {n.id: n.name for n in request.nurses}
+    bad = []
+    for nid, cells in locked.items():
+        for dt_str, flag in (cells or {}).items():
+            if not flag:
+                continue
+            pre = (prev.get(nid) or {}).get(dt_str)
+            if pre == "OF" and dt_str in holidays:
+                bad.append(f"  · {name_by_id.get(nid, nid)} {dt_str}: 공휴일 OF 잠금")
+    if not bad:
+        return None
+    return ("⚠ 공휴일에는 OF를 배정할 수 없어 아래 잠금이 적용되지 않습니다 "
+            "(법정공휴일 '법' 코드 사용 권장):\n" + "\n".join(bad[:8]))
+
+
 def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts: list) -> Optional[str]:
     """
     prev_schedule의 고정 근무를 반영한 후, 각 날짜별 근무 가능 인원이
@@ -930,7 +1113,10 @@ def estimate(request: GenerateRequest):
 @app.post("/api/generate/stop")
 def stop_generate():
     """진행 중인 스케줄 생성을 중지하고 지금까지 찾은 최선의 해를 반환하도록 신호."""
-    if solver_progress.is_active():
+    # is_active(어댑터 등록) 대신 is_running(수명주기 래치) 기준 — 모델 빌드
+    # 구간(어댑터 등록 전)에 눌린 중지도 플래그로 보존되어, register() 시점에
+    # 자동으로 cancel이 전달된다.
+    if solver_progress.is_running():
         solver_progress.request_cancel()
         return {"ok": True, "message": "중지 신호를 전송했습니다."}
     return {"ok": False, "message": "진행 중인 생성이 없습니다."}
@@ -1047,11 +1233,10 @@ def _run_race(request: GenerateRequest) -> dict:
 @app.post("/api/generate")
 def generate(request: GenerateRequest):
     global _last_mip_gap, _last_generate_result
-    # 이전 솔버가 아직 돌고 있으면 거부
-    if solver_progress.is_running():
+    # 이전 솔버가 아직 돌고 있으면 거부 (체크-시작을 원자적으로)
+    if not solver_progress.try_begin():
         raise HTTPException(status_code=409, detail="이미 생성이 진행 중입니다. 중지 후 다시 시도하세요.")
     _last_mip_gap = None
-    solver_progress.begin()
     _last_generate_result = None  # 새 생성 시작 시 이전 결과 초기화
     try:
         # shifts가 비어있으면 DB에서 로드
@@ -1069,6 +1254,22 @@ def generate(request: GenerateRequest):
         rest_shifts  = [s.code for s in request.shifts if s.period == "rest"]
 
         warning = _validate_staffing(request, leave_shifts, rest_shifts)
+        lock_warn = _validate_locked_conflicts(request)
+        if lock_warn:
+            warning = (warning + "\n\n" + lock_warn) if warning else lock_warn
+        wish_ctx = _attach_wish_boosts(request)
+        # 공정성 원장 — night_fairness가 (직전 3개월 누적 + 당월) 편차를 줄이도록
+        # 누적 야간 오프셋을 자동 주입 (저장본 파생 — 별도 기록 불필요)
+        try:
+            if any(getattr(r, "rule_type", "") == "night_fairness"
+                   for r in request.scoring_rules):
+                fl = db.compute_fairness_ledger(request.year, request.month)
+                offsets = {nid: int(ent.get("nights") or 0)
+                           for nid, ent in fl.items() if ent.get("nights")}
+                if offsets:
+                    request.fairness_offsets = offsets
+        except Exception:
+            pass
         if request.solver == "race":
             result = _run_race(request)
         elif request.solver == "cpsat":
@@ -1091,6 +1292,45 @@ def generate(request: GenerateRequest):
         elif warning:
             result["warning"] = warning
 
+        # 위시 반영 리포트 — 거절의 투명성 (누가 몇 건 신청·반영됐는지 + 보정 배수)
+        try:
+            wr = _build_wish_report(request, result)
+            if wr:
+                if wish_ctx:
+                    wr["ledger"] = wish_ctx.get("ledger") or {}
+                result["wish_report"] = wr
+        except Exception:
+            pass
+        # 생성 리포트 — run 레코더 집계 (end() 호출 전에 만들어야 함)
+        try:
+            report = solver_progress.build_report(result)
+            if report:
+                if result.get("relaxed_cells"):
+                    report["relax_attempted"] = True
+                try:
+                    note, recent = db.insert_generation_run({
+                        "year": request.year, "month": request.month,
+                        "solver": request.solver,
+                        "success": 1 if result.get("success") else 0,
+                        "stopped": 1 if result.get("stopped") else 0,
+                        "relaxed": 1 if report.get("relax_attempted") else 0,
+                        "duration_s": report.get("duration_seconds"),
+                        "final_gap": report.get("final_gap_percent"),
+                        "num_vars": report.get("num_vars"),
+                        "num_constraints": report.get("num_constraints"),
+                        "nurse_count": len(request.nurses or []),
+                        "pre_filled": sum(len(v) for v in (request.prev_schedule or {}).values()),
+                        "time_limit": request.time_limit,
+                        "mip_gap": request.mip_gap,
+                    })
+                    if note:
+                        report["history_note"] = note
+                    report["recent_runs"] = recent
+                except Exception:
+                    pass
+                result["generation_report"] = report
+        except Exception:
+            pass
         _last_generate_result = result  # 결과 보관
         solver_progress.end()
         return result
@@ -1161,6 +1401,15 @@ def save_schedule(body: ScheduleSave):
             "requirements": body.requirements.model_dump(),
             "rules": body.rules.model_dump(),
             "schedule": body.schedule,
+            "prev_schedule": body.prev_schedule or {},
+            "nurse_scores": body.nurse_scores or {},
+            "nurse_score_details": body.nurse_score_details or {},
+            "locked_cells": body.locked_cells or {},
+            "cell_notes": body.cell_notes or {},
+            "holidays": body.holidays or [],
+            "prev_day_reqs": body.prev_day_reqs or {},
+            "prev_month_nights": body.prev_month_nights or {},
+            "solver_log": body.solver_log or "",
         },
         name=body.name,
     )

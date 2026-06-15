@@ -122,13 +122,24 @@ window.ScheduleFeaturesModule = function() {
       if(!nurse||!nurse.wishes)return;
       delete nurse.wishes[this.dayKey(day)];
     },
+    getWish(nurseId,day){
+      if(!nurseId||!day)return'';
+      const n=this.nurses.find(x=>x.id===nurseId);
+      return n?.wishes?.[this.dayKey(day)]||'';
+    },
+    setWishAndSave(nurseId,day,shift){
+      // 셀 단위 위시 입력 + 간호사 레코드 영속화 (위시는 nurse.wishes에 저장됨)
+      this.setWish(nurseId,day,shift);
+      const n=this.nurses.find(x=>x.id===nurseId);
+      if(n)this.api('POST','/api/nurses',n).catch(()=>this.toast('희망 서버 저장 실패','error'));
+    },
 
     // ═══ 9. 다중 솔버 비교 ═══════════════════════════════
     multiSolveResults:[],
     async generateMultiple(count=2){
       this.multiSolveResults=[];
       for(let i=0;i<count;i++){
-        const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:Math.max(0.02,this.mipGap+i*0.02),time_limit:Math.min(this.generateTimeout*60,120),allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,unlimited_v:this.unlimitedV,solver:this.solver};
+        const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:Math.max(0.02,this.mipGap+i*0.02),time_limit:Math.min(this.generateTimeout*60,120),allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,unlimited_v:this.unlimitedV,solver:this.solver};
         try{
           const result=await this.api('POST','/api/generate',payload);
           if(result.success)this.multiSolveResults.push({idx:i+1,schedule:result.schedule,scores:result.nurse_scores||{},gap:result.mip_gap_percent,msg:result.message});
@@ -151,7 +162,7 @@ window.ScheduleFeaturesModule = function() {
       try{const raw=localStorage.getItem('ns_templates');this.templates=raw?JSON.parse(raw):[]}catch(e){this.templates=[]}
     },
     saveTemplate(){
-      const name=prompt('템플릿 이름을 입력하세요','기본 템플릿');if(!name)return;
+      const name=this._safePrompt('템플릿 이름을 입력하세요','기본 템플릿');if(!name)return;
       this.templates.push({name,nurses:JSON.parse(JSON.stringify(this.nurses)),requirements:JSON.parse(JSON.stringify(this.requirements)),rules:JSON.parse(JSON.stringify(this.rules)),shifts:JSON.parse(JSON.stringify(this.shifts)),created:new Date().toISOString().slice(0,16)});
       localStorage.setItem('ns_templates',JSON.stringify(this.templates));
     },

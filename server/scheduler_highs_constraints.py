@@ -23,25 +23,8 @@ class _HighsConstraintsMixin:
                     continue  # 재적 중 아님 → 제약 없음 (모든 변수 이미 0)
                 prob += pulp.lpSum(x[nid][d][s] for s in self.ALL_SHIFTS) == 1, f"one_{nid}_{d}"
 
-    def _add_weekly_juhu(self, prob, x):
-        """주휴 재배치 시 주당 주휴 정확히 1개"""
-        if not self.allow_juhu_relax or "주" not in self.ALL_SHIFTS:
-            return
-        first_of_month = date(self.year, self.month, 1)
-        for nurse in self.nurses:
-            nid = nurse["id"]
-            if nurse.get("is_night_shift"):
-                continue
-            for ws, we in self.weeks:
-                week_days = [d for d in range(ws, we + 1)
-                             if self.all_dates[d] >= first_of_month]
-                if not week_days:
-                    continue
-                if "주" in x[nid][week_days[0]]:
-                    prob += (
-                        pulp.lpSum(x[nid][d]["주"] for d in week_days) <= 1,
-                        f"wj2_{nid}_{ws}"
-                    )
+    # (주휴 재배치 ≤1 제약은 scheduler.py 완화 경로에 단일 구현 — 과거의
+    #  _add_weekly_juhu는 호출처가 없는 사장 코드라 제거됨)
 
     def _c_shift_eligibility(self, prob, x):
         """간호사별 가능한 근무만 배정.
@@ -98,9 +81,11 @@ class _HighsConstraintsMixin:
             override = self.per_day_req.get(date_key, {}) if is_cur else {}
             day_req = {**base_req, **override} if override else base_req
             for period, shifts in period_map.items():
-                required = day_req.get(period, 0)
-                if required <= 0:
+                if period not in day_req:
                     continue
+                required = max(0, int(day_req.get(period) or 0))
+                # 명시적 0도 == 제약으로 강제 — '정확히 일치(초과 불가)' 사양.
+                # 생략하면 0명 요구 시간대가 잉여 인력의 투입처로 쓰일 수 있다.
                 prob += (
                     pulp.lpSum(x[n["id"]][d][s] for n in self.nurses for s in shifts) == required,
                     f"req_{d}_{period}"
@@ -175,21 +160,29 @@ class _HighsConstraintsMixin:
                         continue
                     eligible_pairs.append((nid_i, nid_j, charge_s, regulars))
 
+        nurse_by_id = {n["id"]: n for n in self.nurses}
         for d, dt in enumerate(self.all_dates):
             if dt.month != self.month:
                 continue
             dt_str = dt.strftime("%Y-%m-%d")
+            is_holiday = dt_str in self.holidays
             for nid_i, nid_j, charge_s, regulars in eligible_pairs:
-                j_fixed = self.prev.get(nid_j, {}).get(dt_str)
+                # 선임 j의 '유효' 사전입력으로 게이팅 (공용 헬퍼 — 변수 생성과
+                # 동일하게 공휴일 OF·임산부 드롭 + 완화 모드 잠금 처리)
+                j_fixed = self._seniority_jfixed(nurse_by_id[nid_j], dt, dt_str, is_holiday)
                 if j_fixed and j_fixed != charge_s:
                     continue
                 v_charge = x[nid_i][d][charge_s]
-                if not isinstance(v_charge, pulp.LpVariable):
+                vc_const = not isinstance(v_charge, pulp.LpVariable)
+                if vc_const and v_charge != 1:
                     continue
                 for regular_s in regulars:
                     v_reg = x[nid_j][d][regular_s]
-                    if not isinstance(v_reg, pulp.LpVariable):
+                    vr_const = not isinstance(v_reg, pulp.LpVariable)
+                    if vr_const and v_reg != 1:
                         continue
+                    if vc_const and vr_const:
+                        continue  # 둘 다 사용자 고정 — 사용자 입력 존중
                     prob += (
                         v_charge + v_reg <= 1,
                         f"seniority_{nid_i}_{nid_j}_{d}_{charge_s}_{regular_s}"
@@ -212,18 +205,29 @@ class _HighsConstraintsMixin:
             (self.MIDDLE_SHIFTS,  self.DAY_SHIFTS),      # 중→D 금지 (19:00→06:00 = 11h)
             (self.MIDDLE_SHIFTS,  self.DAY1_SHIFTS),     # 중→D1 금지 (19:00→08:30 = 13.5h)
         ]
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             for d in range(self.T - 1):
+                # 전월(역사) 내부에 완전히 갇힌 쌍은 제외 — 과거 기록에 현재
+                # 규칙을 소급하면 불필요 infeasible. 경계를 넘는 쌍만 검사.
+                if self.all_dates[d + 1] < first_of_month:
+                    continue
                 for first_group, second_group in forbidden:
                     for s1 in first_group:
                         v1 = x[nid][d][s1]
-                        if not isinstance(v1, pulp.LpVariable):
+                        v1_const = not isinstance(v1, pulp.LpVariable)
+                        # 상수 0은 무관하지만 상수 1(잠금/주휴 고정)은 식에 반영해야
+                        # 한다 — 건너뛰면 잠긴 셀 옆 자유 변수에 금지 전환이 안 걸린다.
+                        if v1_const and v1 != 1:
                             continue
                         for s2 in second_group:
                             v2 = x[nid][d + 1][s2]
-                            if not isinstance(v2, pulp.LpVariable):
+                            v2_const = not isinstance(v2, pulp.LpVariable)
+                            if v2_const and v2 != 1:
                                 continue
+                            if v1_const and v2_const:
+                                continue  # 둘 다 사용자 고정 — 사용자 입력 존중
                             prob += (
                                 v1 + v2 <= 1,
                                 f"forbid_{nid}_{d}_{s1}_{s2}"
@@ -231,21 +235,31 @@ class _HighsConstraintsMixin:
 
     def _c_nod_pattern(self, prob, x):
         """N→휴무→D 금지: N/NC 다음날 REST_SHIFTS(OF, 주 등) 중 하나, 그 다음날 D/DC 금지"""
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             for d in range(self.T - 2):
+                # 전월(역사) 내부 완결 윈도우 제외 (경계 걸침만 검사)
+                if self.all_dates[d + 2] < first_of_month:
+                    continue
                 for ns in self.NIGHT_SHIFTS:
                     vn = x[nid][d][ns]
-                    if not isinstance(vn, pulp.LpVariable):
+                    vn_const = not isinstance(vn, pulp.LpVariable)
+                    if vn_const and vn != 1:
                         continue
                     for rs in self.REST_SHIFTS:
                         vr = x[nid][d + 1][rs]
-                        if not isinstance(vr, pulp.LpVariable):
+                        vr_const = not isinstance(vr, pulp.LpVariable)
+                        if vr_const and vr != 1:
                             continue
                         for ds in self.DAY_SHIFTS:
                             vd = x[nid][d + 2][ds]
-                            if not isinstance(vd, pulp.LpVariable):
+                            vd_const = not isinstance(vd, pulp.LpVariable)
+                            if vd_const and vd != 1:
                                 continue
+                            if vn_const and vr_const and vd_const:
+                                continue  # 전부 사용자 고정 — 사용자 입력 존중
+                            # 상수 1(잠금 고정)도 식에 반영 (예: 1+vr+vd<=2)
                             prob += (
                                 vn + vr + vd <= 2,
                                 f"nod_{nid}_{d}_{ns}_{rs}_{ds}"
@@ -292,13 +306,17 @@ class _HighsConstraintsMixin:
         weeklyOff와 동일 패턴. 야간 제외·생 면제는 변수 게이팅(_preg_forbids)으로 처리된다."""
         if "P1" not in self.ALL_SHIFTS:
             return
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             if not nurse.get("is_pregnant"):
                 continue
             nid = nurse["id"]
             for ws, we in self.weeks:
+                # 전월(역사) 날짜 제외 — weekly OF와 동일 패턴. 누락 시 확장된
+                # 전월 주의 빈 칸에 P1이 '날조' 배치된다.
                 win_days = [d for d in range(ws, we + 1)
-                            if self._nurse_active_idx(nurse, d)
+                            if self.all_dates[d] >= first_of_month
+                            and self._nurse_active_idx(nurse, d)
                             and self._preg_window_on(nid, self.all_dates[d])]
                 if not win_days:
                     continue
@@ -313,10 +331,13 @@ class _HighsConstraintsMixin:
                     prob += pulp.lpSum(p1_vars) <= 1, f"preg_p1_{nid}_{ws}"
 
     def _c_max_consecutive_work(self, prob, x, max_days: int):
-        """최대 연속 근무일 제한"""
+        """최대 연속 근무일 제한 (전월 내부 완결 윈도우는 제외 — 역사 소급 금지)"""
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             for start in range(self.T - max_days):
+                if self.all_dates[start + max_days] < first_of_month:
+                    continue
                 window = range(start, start + max_days + 1)
                 prob += (
                     pulp.lpSum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= max_days,
@@ -324,10 +345,13 @@ class _HighsConstraintsMixin:
                 )
 
     def _c_max_consecutive_night(self, prob, x, max_nights: int):
-        """최대 연속 야간 근무 제한"""
+        """최대 연속 야간 근무 제한 (전월 내부 완결 윈도우는 제외)"""
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             for start in range(self.T - max_nights):
+                if self.all_dates[start + max_nights] < first_of_month:
+                    continue
                 window = range(start, start + max_nights + 1)
                 prob += (
                     pulp.lpSum(x[nid][d][s] for d in window for s in self.NIGHT_SHIFTS) <= max_nights,
@@ -341,6 +365,7 @@ class _HighsConstraintsMixin:
         """
         min_consec = getattr(self.rules, 'restAfterNightMinConsec', 2)
         rest_days = getattr(self.rules, 'restAfterNightDays', 2)
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             if nurse.get("is_night_shift"):
@@ -376,6 +401,9 @@ class _HighsConstraintsMixin:
                     rest_d = next_d + k
                     if rest_d >= self.T:
                         break
+                    # 전월(역사) 날짜에는 휴식 강제를 소급하지 않음
+                    if self.all_dates[rest_d] < first_of_month:
+                        continue
                     work_vars = [
                         x[nid][rest_d][s]
                         for s in self.WORK_SHIFTS
@@ -416,12 +444,15 @@ class _HighsConstraintsMixin:
                 ]
                 if v_vars:
                     prob += pulp.lpSum(v_vars) <= max_v, f"max_v_{nid}"
-            # 이전달 overflow: V 금지
+            # 이전달 overflow: V 금지 — 단 사전입력으로 확정된 전월 기록(V)은
+            # 존중한다. 무조건 금지하면 1일1근무(==1)와 모순돼 전체 infeasible.
             first_of_month = date(self.year, self.month, 1)
             for d, dt in enumerate(self.all_dates):
-                if dt < first_of_month:
-                    if "V" in self.ALL_SHIFTS:
-                        prob += x[nid][d]["V"] == 0, f"no_v_overflow_{nid}_{d}"
+                if dt < first_of_month and "V" in self.ALL_SHIFTS:
+                    v = x[nid][d]["V"]
+                    pre = self.prev.get(nid, {}).get(dt.strftime("%Y-%m-%d"))
+                    if isinstance(v, pulp.LpVariable) and pre != "V":
+                        prob += v == 0, f"no_v_overflow_{nid}_{d}"
             # 이후달 overflow: V 최대 1회
             next_v_vars = [
                 x[nid][d]["V"]
@@ -463,7 +494,9 @@ class _HighsConstraintsMixin:
                 for s in self.NIGHT_SHIFTS
             ]
             if night_vars:
-                prob += pulp.lpSum(night_vars) <= max_n - prev_count, f"max_night_2mo_{nid}"
+                # RHS 음수 클램프 포함 (공용 헬퍼)
+                prob += pulp.lpSum(night_vars) <= self._two_month_rhs(nid), \
+                    f"max_night_2mo_{nid}"
 
     def _c_menstrual_leave(self, prob, x):
         """생리휴가: 여성 간호사당 당월 최대 1회 + 익월에서 사용 금지"""
@@ -478,11 +511,14 @@ class _HighsConstraintsMixin:
                           if dt.month == self.month and dt.year == self.year]
             if month_vars:
                 prob += pulp.lpSum(month_vars) <= 1, f"menstrual_{nid}"
-            # 이전달 overflow: 생 금지
+            # 이전달 overflow: 생 금지 — 사전입력된 전월 확정 기록은 존중
             first_of_month = date(self.year, self.month, 1)
             for d, dt in enumerate(self.all_dates):
                 if dt < first_of_month:
-                    prob += x[nid][d]["생"] == 0, f"no_menstrual_overflow_{nid}_{d}"
+                    v = x[nid][d]["생"]
+                    pre = self.prev.get(nid, {}).get(dt.strftime("%Y-%m-%d"))
+                    if isinstance(v, pulp.LpVariable) and pre != "생":
+                        prob += v == 0, f"no_menstrual_overflow_{nid}_{d}"
             # 이후달 overflow: 생 최대 1회
             next_m_vars = [
                 x[nid][d]["생"]
@@ -519,6 +555,10 @@ class _HighsConstraintsMixin:
 
         for nurse in night_nurses:
             nid = nurse["id"]
+            active_days, night_target = self._night_dedicated_quota(
+                nurse, month_idxs, month_days)
+            if active_days <= 0:
+                continue  # 당월 재적 없음 — ==14를 걸면 무조건 infeasible
 
             # ── 1. N/NC 외 모든 근무 금지 (당월만, overflow 제외) ──────────
             for d in month_idxs:
@@ -527,32 +567,35 @@ class _HighsConstraintsMixin:
                     if isinstance(v, pulp.LpVariable):
                         prob += v == 0, f"night_only_{nid}_{d}_{s}"
 
-            # ── 2. 5일 윈도우 <= 3 (당월 범위만) ─────────────────────────
-            for start in range(month_idxs[0], month_idxs[-1] - 3):
+            # ── 2. 5일 윈도우 <= 3 — 월 경계에 걸친 윈도우(전월 tail·익월
+            #       overflow 포함)도 검사한다 ──────────────────────────────
+            w_lo = max(0, month_idxs[0] - 4)
+            w_hi = min(self.T - 5, month_idxs[-1])
+            for start in range(w_lo, w_hi + 1):
                 prob += (
                     pulp.lpSum(
                         x[nid][d][s]
                         for d in range(start, start + 5)
-                        if d < self.T
                         for s in self.NIGHT_SHIFTS
                     ) <= 3,
                     f"night_5day_{nid}_{start}",
                 )
 
-            # ── 3. 당월 야간 근무 횟수 정확히 14일 ──────────────────────
+            # ── 3. 당월 야간 근무 일수 — 재적 비례 + N 가용일 클램프 (공용 헬퍼) ──
             night_sum = pulp.lpSum(
                 x[nid][d][s]
                 for d in month_idxs
                 for s in self.NIGHT_SHIFTS
             )
-            prob += (night_sum == 14, f"night_monthly_{nid}")
+            prob += (night_sum == night_target, f"night_monthly_{nid}")
 
-            # ── 4. 31일 달 + 여성 → 생리휴가 정확히 1회 ─────────────────
+            # ── 4. 31일 달 + 여성 → 생리휴가 정확히 1회 (부분 재적은 ≤1) ──
             if month_days == 31 and nurse.get("gender") == "female" and "생" in self.ALL_SHIFTS:
-                prob += (
-                    pulp.lpSum(x[nid][d]["생"] for d in month_idxs) == 1,
-                    f"night_menstrual_{nid}",
-                )
+                m_sum = pulp.lpSum(x[nid][d]["생"] for d in month_idxs)
+                if active_days >= month_days:
+                    prob += (m_sum == 1, f"night_menstrual_{nid}")
+                else:
+                    prob += (m_sum <= 1, f"night_menstrual_{nid}")
 
     # ── period 그룹 → shift 코드 목록 해석 ──────────────────────────────────
 
@@ -657,36 +700,52 @@ class _HighsConstraintsMixin:
             elif rt == "wish":
                 for nurse in self.nurses:
                     nid = nurse["id"]
+                    # 위시 공정성 보정 — 직전 달 거절 누적이 큰 간호사의 위시 가중 상향
+                    wsc = int(round(sc * float(self.wish_boosts.get(nid, 1.0))))
                     for day_str, wish_shift in nurse.get("wishes", {}).items():
                         try:
-                            wish_date = date(self.year, self.month, int(day_str))
+                            ds = str(day_str)
+                            # 일(day) 숫자 키와 'YYYY-MM-DD' 키 모두 허용
+                            # (프론트 dayKey는 ISO 포맷으로 저장)
+                            if "-" in ds:
+                                wish_date = date.fromisoformat(ds)
+                            else:
+                                wish_date = date(self.year, self.month, int(ds))
                             if wish_date not in self.date_to_idx:
                                 continue
                             d = self.date_to_idx[wish_date]
                             if wish_shift == "OFF":
-                                terms.append(sc * pulp.lpSum(
+                                terms.append(wsc * pulp.lpSum(
                                     x[nid][d][s] for s in self.REST_SHIFTS + self.LEAVE_SHIFTS))
                             elif wish_shift in self.ALL_SHIFTS:
-                                terms.append(sc * x[nid][d][wish_shift])
+                                terms.append(wsc * x[nid][d][wish_shift])
                         except (ValueError, KeyError):
                             pass
 
             elif rt == "night_fairness":
-                if len(self.nurses) >= 2:
+                # 공정성 풀에서 제외: 야간전담(월 14회 고정 → max 핀),
+                # N 비자격·임산부(야간 0 고정 → min 핀). 포함하면 range가
+                # 상수화되어 일반 간호사 간 편차를 전혀 벌점하지 못한다.
+                # 야간 횟수가 구조적으로 고정된 간호사 제외 (공용 헬퍼)
+                fairness_pool = self._night_fairness_pool()
+                if len(fairness_pool) >= 2:
                     night_counts = {
                         nurse["id"]: pulp.lpSum(
                             x[nurse["id"]][d][s]
                             for d in month_days
                             for s in self.NIGHT_SHIFTS
                         )
-                        for nurse in self.nurses
+                        for nurse in fairness_pool
                     }
                     max_n = pulp.LpVariable(f"max_nights_{rid}", lowBound=0, cat="Integer")
                     min_n = pulp.LpVariable(f"min_nights_{rid}", lowBound=0, cat="Integer")
-                    for nurse in self.nurses:
+                    for nurse in fairness_pool:
                         nid = nurse["id"]
-                        prob += max_n >= night_counts[nid], f"max_n_{rid}_{nid}"
-                        prob += min_n <= night_counts[nid], f"min_n_{rid}_{nid}"
+                        # 공정성 원장: (직전 달 누적 + 당월)의 편차를 최소화 —
+                        # 지난달 야간이 많았던 간호사는 이번 달 적게 받는다
+                        off = int(self.fairness_offsets.get(nid, 0))
+                        prob += max_n >= night_counts[nid] + off, f"max_n_{rid}_{nid}"
+                        prob += min_n <= night_counts[nid] + off, f"min_n_{rid}_{nid}"
                     range_var = pulp.LpVariable(f"night_range_{rid}", lowBound=0, cat="Integer")
                     prob += range_var >= max_n - min_n, f"night_range_def_{rid}"
                     terms.append(sc * range_var)

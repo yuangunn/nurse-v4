@@ -48,6 +48,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             return {"success": False, "message": "간호사가 등록되지 않았습니다.", "schedule": {}}
 
         nurse_ids = [n["id"] for n in self.nurses]
+        self._pre_soft = False  # strict 모드 — 사전입력은 변수 도메인으로 고정
         prob = pulp.LpProblem("nurse_schedule", pulp.LpMaximize)
 
         # 변수 생성: x[nurse_id][day_idx][shift] ∈ {0,1} 또는 상수 0
@@ -65,11 +66,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
-                # 공휴일에 OF 사전입력은 무시 — 솔버가 유효한 근무(법/근무 등) 선택
-                if pre == "OF" and is_holiday:
-                    pre = None
-                # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
-                pre = self._preg_effective_pre(nurse, dt, pre)
+                # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
+                pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 # 전입/전출일 범위 밖: 모든 shift 0으로 고정
                 if not self._nurse_active_on(nurse, dt):
@@ -145,6 +143,12 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
 
         # ── Solve ─────────────────────────────────────────────────────────────
 
+        from . import solver_progress as _sp
+        try:
+            _sp.record_event("model", engine="HiGHS",
+                             vars=prob.numVariables(), cons=prob.numConstraints())
+        except Exception:
+            pass
         solver = pulp.HiGHS(
             timeLimit=self.time_limit,
             mip_rel_gap=self.mip_gap,
@@ -190,10 +194,18 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 "schedule": {},
                 "extended_schedule": {},
                 "message": diagnosis,
+                # 진단이 짚은 셀 좌표 — 프론트 '충돌 위치로 이동' 칩 재사용
+                "anchored": getattr(self, "_diagnosis_anchors", []),
             }
         else:
-            # Not Solved = 타임아웃 또는 해 없이 중단
-            if self.allow_pre_relax and self.prev:
+            # Not Solved = 타임아웃 또는 해 없이 중단.
+            # 사용자 '중지' 또는 레이스 패자 취소(cancel_all) 후에는 완화 재시도를
+            # 시작하지 않는다 — 취소를 무시하고 최대 time_limit짜리 새 솔브를
+            # (등록 불가 상태로) 도는 셈이 된다.
+            from . import solver_progress
+            if (self.allow_pre_relax and self.prev
+                    and not solver_progress.is_cancelled()
+                    and not solver_progress.was_cancel_all()):
                 relax_result = self._solve_with_relaxed_pre()
                 if relax_result:
                     return relax_result
@@ -218,6 +230,11 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         성공 시 relaxed_cells 포함 결과 반환, 실패 시 None.
         """
         prob = pulp.LpProblem("nurse_schedule_relaxed", pulp.LpMaximize)
+        from . import solver_progress as _sp
+        _sp.record_event("relax_start", engine="HiGHS")
+        # 제약 함수(시니어리티 게이팅 등)에 '사전입력=소프트' 모드임을 알린다 —
+        # 완화 모드에서 원본 prev로 게이팅하면 하드 제약이 통째로 사라진다.
+        self._pre_soft = True
         pre_bonus_terms = []
         # 최소 침습 차등 보너스(높을수록 보호 → 늦게 완화). 휴무는 간호사 개인의 시간이라
         # 강하게 보호: 근무 < OFF < 연차류. 주휴(주)는 기본 하드 고정(allow_juhu_relax 시에만).
@@ -238,6 +255,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
 
         x: Dict[str, Dict[int, Dict[str, object]]] = {}
         _free_vars_r: list = []
+        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             x[nid] = {}
@@ -249,18 +267,17 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
-                # 공휴일에 OF 사전입력은 무시 — 완화 모드에서도 OF 재배치 대상
-                if pre == "OF" and is_holiday:
-                    pre = None
-                # 임산부 모성보호: 야간/생 사전입력은 무시 (솔버가 유효 근무 선택)
-                pre = self._preg_effective_pre(nurse, dt, pre)
+                # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
+                pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 # 전입/전출일 범위 밖: 모든 shift 0으로 고정
                 if not self._nurse_active_on(nurse, dt):
                     for s in self.ALL_SHIFTS:
                         x[nid][d][s] = 0
                     continue
-                # 잠긴 셀: 완화 모드에서도 사전입력 하드 고정 (보수교육 등)
-                is_locked = bool(self.locked_cells.get(nid, {}).get(dt_str))
+                # 잠긴 셀 + 전월(역사) 기록: 완화 모드에서도 하드 고정 —
+                # 전월 기록을 변수로 두면 완화가 이미 일어난 과거를 '변조'한다
+                is_locked = bool(self.locked_cells.get(nid, {}).get(dt_str)) \
+                    or dt < first_of_month
                 if is_locked and pre:
                     for s in self.ALL_SHIFTS:
                         x[nid][d][s] = 1 if s == pre else 0
@@ -277,8 +294,19 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                     # 주휴 처리
                     if pre == "주":
                         if self.allow_juhu_relax:
-                            # 주휴 무시: 주 유지 or 근무 전환 허용, 단 주→OF 금지 (무의미)
+                            # 주휴 무시: 주 유지 or 근무 전환 허용, 단 주→OF 금지(무의미).
+                            # 일반 게이팅(법 공휴일 한정·생 성별·사전입력 전용 코드 차단)도
+                            # 동일 적용 — 없으면 남성 생리휴가·비공휴일 법·특/공/병 같은
+                            # 코드가 자유 배정될 수 있다.
                             if s == "OF":
+                                x[nid][d][s] = 0
+                            elif s == "법" and (is_night or not is_holiday):
+                                x[nid][d][s] = 0
+                            elif s in ("생", "V") and is_holiday and not is_night:
+                                x[nid][d][s] = 0
+                            elif s == "생" and is_male:
+                                x[nid][d][s] = 0
+                            elif s != "주" and s != "법" and s not in self.SOLVER_SHIFTS:
                                 x[nid][d][s] = 0
                             else:
                                 v = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
@@ -338,9 +366,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         if self.rules.weeklyOff:
             self._c_weekly_off(prob, x)
         self._c_pregnancy_p1_weekly(prob, x)           # 임산부 P1 주1회 (모성보호)
-        # 주휴 재배치: 주당 주휴 정확히 1개 하드 제약
+        # 주휴 재배치: 주당 주휴 최대 1개 하드 제약
         if self.allow_juhu_relax and "주" in self.ALL_SHIFTS:
-            first_of_month = date(self.year, self.month, 1)
             for nurse in self.nurses:
                 nid = nurse["id"]
                 if nurse.get("is_night_shift"):
@@ -350,9 +377,16 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                                  if self.all_dates[d] >= first_of_month]
                     if not week_days:
                         continue
-                    if "주" in x[nid][week_days[0]]:
+                    juhu_terms = [x[nid][d]["주"] for d in week_days]
+                    var_terms = [t for t in juhu_terms if isinstance(t, pulp.LpVariable)]
+                    const_sum = sum(t for t in juhu_terms
+                                    if not isinstance(t, pulp.LpVariable))
+                    # 사용자 고정(잠금 주휴) 존중: 상수 합이 한도를 넘어도 모순
+                    # 제약(2<=1)을 만들지 않고, 솔버 자유 변수만 잔여 한도로 제한
+                    # (CP-SAT 쪽과 동일 의미로 통일).
+                    if var_terms:
                         prob += (
-                            pulp.lpSum(x[nid][d]["주"] for d in week_days) <= 1,
+                            pulp.lpSum(var_terms) <= max(0, 1 - const_sum),
                             f"weekly_juhu_{nid}_{ws}"
                         )
         if self.rules.maxConsecutiveWork:
@@ -376,18 +410,64 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         # 실현가능성에 꼭 필요할 때만, 그리고 그때도 휴식<근무<휴가 순으로 최소한만 일어난다.
         obj = self._build_objective(prob, x)
         if pre_bonus_terms:
-            scoring_bound = sum(abs(c) for c in obj.values())
-            raw_min = min(PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK, PRE_BONUS_REST)
-            dom = int(scoring_bound // max(1, raw_min)) + 2   # dom*raw_min > scoring_bound 보장
-            prob += obj + dom * pulp.lpSum(pre_bonus_terms)
+            # ── 2단계 사전순 솔브 ────────────────────────────────────────────
+            # 1단계: '사전입력 유지 보너스'만 최대화(gap 0) → 최소 침습 수준을
+            #         정확히 확정.
+            # 2단계: 그 수준을 하드 제약으로 고정하고 배점을 사용자 gap으로 최적화.
+            # → dom 가중 단일 솔브의 '거대 계수 + 상대 갭에 의한 보존 희생' 문제를
+            #   모두 제거. 1단계가 시간 내 증명 안 되면 가중 방식(gap 0)으로 폴백.
+            bonus_expr = pulp.lpSum(pre_bonus_terms)
+            prob.setObjective(bonus_expr)
+            stage1 = pulp.HiGHS(timeLimit=max(30, int(self.time_limit) // 3),
+                                mip_rel_gap=0.0, msg=False)
+            try:
+                prob.solve(stage1)
+            except Exception:
+                pass
+            s1_status = pulp.constants.LpStatus.get(prob.status, "Unknown")
+            if s1_status == "Infeasible":
+                self._pre_soft = False
+                return None
+            if s1_status == "Optimal":
+                best_keep = int(round(pulp.value(bonus_expr) or 0))
+                prob += bonus_expr >= best_keep, "keep_bonus_floor"
+                prob.setObjective(obj)
+                solver = pulp.HiGHS(timeLimit=self.time_limit,
+                                    mip_rel_gap=self.mip_gap, msg=False)
+            else:
+                # 폴백: dom 가중 단일 솔브 — 사전순 지배 스케일.
+                # 배점 상한: 이진 변수는 |계수|, 정수 보조변수(night_range·v2/v3
+                # 등, 값 상한 ≤ T)는 |계수|×T. 이진성은 bounds로 판정(pulp는
+                # cat="Binary"를 'Integer'로 정규화해 저장).
+                scoring_bound = 0
+                for var, coef in obj.items():
+                    is_bin = (getattr(var, "lowBound", None) == 0
+                              and getattr(var, "upBound", None) == 1)
+                    span = 1 if is_bin else max(1, self.T)
+                    scoring_bound += abs(coef) * span
+                # 보너스 '조합 차'의 최솟값은 gcd — 예: 휴가 1건(5000) vs
+                # 주휴3+근무8(4900)의 차는 100.
+                import math
+                bonus_gcd = 0
+                for b in (PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK, PRE_BONUS_REST):
+                    if b > 0:
+                        bonus_gcd = math.gcd(bonus_gcd, int(b))
+                dom = int(scoring_bound // max(1, bonus_gcd)) + 2
+                prob.setObjective(obj + dom * bonus_expr)
+                # 가중 방식에선 gap=0 필수 — 상대 갭만큼 보존이 희생될 수 있음
+                solver = pulp.HiGHS(timeLimit=self.time_limit,
+                                    mip_rel_gap=0.0, msg=False)
         else:
-            prob += obj
-
-        solver = pulp.HiGHS(timeLimit=self.time_limit, mip_rel_gap=self.mip_gap, msg=False)
+            prob.setObjective(obj)
+            solver = pulp.HiGHS(timeLimit=self.time_limit, mip_rel_gap=self.mip_gap, msg=False)
         try:
             prob.solve(solver)
         except Exception:
             pass
+        finally:
+            # 플래그 누수 방지 — 이후 진단(_diagnose_infeasibility)이 soft 게이팅
+            # 으로 빌드되면 strict 모델과 다른 모델을 진단하게 된다
+            self._pre_soft = False
 
         status_str = pulp.constants.LpStatus.get(prob.status, "Unknown")
         has_solution = any(
@@ -400,9 +480,10 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             schedule, extended = self._extract_solution(x, lambda v: pulp.value(v))
             nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
 
-            # 사전입력과 다르게 배정된 셀 찾기 (PRE_FLEX 내 변환은 제외)
+            # 사전입력과 다르게 배정된 셀 찾기 (PRE_FLEX 내 변환은 승격으로 분리 집계)
             relaxed_cells: Dict[str, Dict[str, Dict[str, object]]] = {}
             timeoff_changed = 0
+            charge_promotions = 0
             for nid, days in self.prev.items():
                 for dt_str, pre_shift in days.items():
                     assigned = schedule.get(nid, {}).get(dt_str)
@@ -417,6 +498,10 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                                 "assigned": assigned,
                                 "is_timeoff": is_timeoff,
                             }
+                        else:
+                            # D→DC, E→EC 차지 자동승격 — 변경은 아니지만 표가
+                            # 입력과 달라지므로 별도 집계해 사용자에게 알린다
+                            charge_promotions += 1
 
             label = "중지" if status_str not in ("Optimal", "Feasible") else status_str
             relax_count = sum(len(v) for v in relaxed_cells.values())
@@ -429,6 +514,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 if timeoff_changed:
                     relax_msg += f" · ⚠ 휴무 {timeoff_changed}건 변경(불가피 — 인원 추가/수요 감축 검토 권장)"
                 relax_msg += "."
+            if charge_promotions:
+                relax_msg += f" (차지 자동승격 {charge_promotions}건: D→DC·E→EC 등)"
             return {
                 "success": True,
                 "schedule": schedule,
@@ -437,6 +524,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 "nurse_score_details": nurse_score_details,
                 "relaxed_cells": relaxed_cells,
                 "timeoff_relaxed_count": timeoff_changed,
+                "charge_promotions": charge_promotions,
                 "message": f"근무표가 생성되었습니다. (상태: {label})\n{relax_msg}",
                 "estimated_seconds": self.estimate_seconds(),
             }
