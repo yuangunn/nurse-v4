@@ -5,16 +5,70 @@
  * ─────────────────────────────────────────────────────────────────────────── */
 window.MiscFeaturesModule = function() {
   return {
-    // ═══ 한국 공휴일 자동 입력 ═══════════════════════════
-    // 관공서 공휴일 + 대체공휴일 + 선거일 (임시공휴일은 미포함 — 직접 추가)
-    _KR_HOLIDAYS:{
-      2025:['2025-01-01','2025-01-28','2025-01-29','2025-01-30','2025-03-01','2025-03-03','2025-05-05','2025-05-06','2025-06-06','2025-08-15','2025-10-03','2025-10-05','2025-10-06','2025-10-07','2025-10-08','2025-10-09','2025-12-25'],
-      2026:['2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02','2026-05-05','2026-05-24','2026-05-25','2026-06-03','2026-06-06','2026-08-15','2026-08-17','2026-09-24','2026-09-25','2026-09-26','2026-10-03','2026-10-05','2026-10-09','2026-12-25'],
-      2027:['2027-01-01','2027-02-05','2027-02-06','2027-02-07','2027-02-08','2027-03-01','2027-05-05','2027-05-13','2027-06-06','2027-08-15','2027-08-16','2027-09-14','2027-09-15','2027-09-16','2027-10-03','2027-10-04','2027-10-09','2027-10-11','2027-12-25','2027-12-27'],
+    // ═══ 한국 공휴일 자동 계산 (음력 = KASI 한국천문연구원 기준) ═══════════
+    // 고정 양력 공휴일 + 음력 공휴일(설날·추석·부처님오신날) + 대체공휴일을 매년 규칙으로 산출.
+    // 음력은 순수 공식 변환이 불가능하므로 KASI 음력 기준일(설날 음1/1·부처님 음4/8·추석 음8/15)을
+    // 양력으로 내장(_LUNAR)하고 그 위에서 연휴 확장·대체공휴일을 계산한다.
+    // 대체공휴일 규칙(2023 개정): 설날·추석=일요일/타공휴일 겹침만, 그 외(삼일절·어린이날·광복절·
+    // 개천절·한글날·성탄절·부처님오신날)=토·일/타공휴일 겹침, 신정·현충일=대체 없음.
+    _LUNAR:{  // year: [설날 음1/1, 부처님 음4/8, 추석 음8/15] 양력 MM-DD
+      2025:['01-29','05-05','10-06'], 2026:['02-17','05-24','09-25'], 2027:['02-07','05-13','09-15'],
+      2028:['01-27','05-02','10-03'], 2029:['02-13','05-20','09-22'], 2030:['02-03','05-09','09-12'],
+      2031:['01-23','05-28','10-01'], 2032:['02-11','05-16','09-19'], 2033:['01-31','05-06','09-08'],
+      2034:['02-19','05-25','09-27'], 2035:['02-08','05-15','09-16'], 2036:['01-28','05-03','10-04'],
+      2037:['02-15','05-22','09-24'], 2038:['02-04','05-11','09-13'], 2039:['01-24','04-30','10-02'],
+      2040:['02-12','05-18','09-21'], 2041:['02-01','05-07','09-10'], 2042:['01-22','05-26','09-28'],
+      2043:['02-10','05-16','09-17'], 2044:['01-30','05-05','10-05'], 2045:['02-17','05-24','09-25'],
+      2046:['02-06','05-13','09-15'], 2047:['01-26','05-02','10-04'], 2048:['02-14','05-20','09-22'],
+      2049:['02-02','05-09','09-11'], 2050:['01-23','05-28','09-30'],
+    },
+    // 선거일·임시공휴일 — 규칙으로 계산 불가, 수동 등록 (자동계산 결과에 합산)
+    _HOLIDAY_SPECIAL:{
+      2026:['2026-06-03'],   // 제9회 전국동시지방선거
+    },
+    _lunarRange(){ const ys=Object.keys(this._LUNAR).map(Number); return [Math.min(...ys),Math.max(...ys)]; },
+    // 해당 연도 전체 공휴일(대체공휴일·특별공휴일 포함) 양력 ISO 배열. 범위 밖이면 null.
+    _computeKRHolidays(year){
+      const anchor=this._LUNAR[year];
+      if(!anchor) return null;
+      const SUN=0, SAT=6, DAY=86400000;
+      const D=(y,m,d)=>new Date(Date.UTC(y,m-1,d));
+      const iso=dt=>dt.toISOString().slice(0,10);
+      const add=(dt,n)=>new Date(dt.getTime()+n*DAY);
+      const SATSUN=new Set(['삼일절','어린이날','광복절','개천절','한글날','성탄절','부처님오신날']); // 토·일 대체
+      const SUNONLY=new Set(['설날','추석']);                                                       // 일요일만 대체
+      const byDate=new Map();  // ISO -> Set(공휴일명)
+      const put=(dt,nm)=>{ const k=iso(dt); if(!byDate.has(k))byDate.set(k,new Set()); byDate.get(k).add(nm); };
+      [[1,1,'신정'],[3,1,'삼일절'],[5,5,'어린이날'],[6,6,'현충일'],[8,15,'광복절'],[10,3,'개천절'],[10,9,'한글날'],[12,25,'성탄절']]
+        .forEach(([m,d,nm])=>put(D(year,m,d),nm));
+      const mk=s=>D(year, +s.slice(0,2), +s.slice(3,5));
+      const seollal=mk(anchor[0]), buddha=mk(anchor[1]), chuseok=mk(anchor[2]);
+      [-1,0,1].forEach(k=>put(add(seollal,k),'설날'));
+      [-1,0,1].forEach(k=>put(add(chuseok,k),'추석'));
+      put(buddha,'부처님오신날');
+      const base=new Set(byDate.keys());
+      const subs=new Set();
+      const nextFree=dt=>{ let nd=add(dt,1); while(base.has(iso(nd))||subs.has(iso(nd))||nd.getUTCDay()===SUN||nd.getUTCDay()===SAT) nd=add(nd,1); return nd; };
+      for(const k of [...byDate.keys()].sort()){
+        const names=byDate.get(k);
+        const elig=[...names].some(n=>SATSUN.has(n)||SUNONLY.has(n));
+        if(!elig) continue;
+        const dt=D(+k.slice(0,4),+k.slice(5,7),+k.slice(8,10));
+        const wd=dt.getUTCDay();
+        let lost=0;
+        if(wd===SUN || (wd===SAT && [...names].some(n=>SATSUN.has(n)))) lost++;   // 주말 손실
+        if(names.size>=2) lost+=names.size-1;                                      // 타공휴일 겹침
+        for(let i=0;i<lost;i++) subs.add(iso(nextFree(dt)));
+      }
+      const special=this._HOLIDAY_SPECIAL[year]||[];
+      return [...new Set([...base,...subs,...special])].sort();
     },
     autoFillHolidays(){
-      const table=this._KR_HOLIDAYS[this.year];
-      if(!table){this.toast(`${this.year}년 공휴일 내장 데이터가 없습니다 — 날짜 헤더 우클릭으로 직접 지정하세요`,'warn');return}
+      const table=this._computeKRHolidays(this.year);
+      if(!table){
+        const [lo,hi]=this._lunarRange();
+        this.toast(`${this.year}년 공휴일 자동계산 불가 — 내장 음력 데이터는 ${lo}~${hi}년만 지원합니다. 날짜 헤더 우클릭으로 직접 지정하세요`,'warn',6000);return;
+      }
       const prefix=`${this.year}-${String(this.month).padStart(2,'0')}-`;
       const target=table.filter(h=>h.startsWith(prefix)&&!this.holidays.includes(h));
       if(!target.length){this.toast('이 달에 추가할 공휴일이 없습니다 (이미 모두 입력됨)','info');return}
