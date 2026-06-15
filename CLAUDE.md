@@ -2,10 +2,10 @@
 
 ## 개요
 간호사 3교대 근무표 자동 생성 **Windows 데스크톱 앱**.
-수리최적화(PuLP + HiGHS) 기반 MIP 솔버로 최적 근무표 자동 생성.
+수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.0.6 (2026-04-19)
+**최신**: v4.4.0 (2026-06-15)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -19,7 +19,7 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
 | 구분 | 기술 |
 |------|------|
 | 백엔드 | Python 3.11 + FastAPI + uvicorn |
-| 스케줄링 엔진 | PuLP 2.9 + HiGHS (Python 바인딩: `highspy 1.8.1+`) |
+| 스케줄링 엔진 | PuLP 2.9 + HiGHS (`highspy 1.8.1+`) · **OR-Tools CP-SAT** 듀얼 엔진 |
 | 데이터 저장 | SQLite (프로필별 분리) + Fernet 암호화 (`cryptography`) |
 | 프론트엔드 | HTML + Tailwind CSS + Alpine.js (CDN → `frontend/lib/*.js` 번들) |
 | 데스크톱 래퍼 | Electron 38 |
@@ -36,17 +36,27 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
 nurse-v4/
 ├── main.py                  # 진입점: 포트 찾기 → stdout "PORT:N" → uvicorn + 브라우저 오픈
 ├── server/
-│   ├── api.py               # FastAPI 라우터 (프로필/간호사/규칙/스케줄/CSV/개발자 API)
-│   ├── scheduler.py         # HiGHS MIP 스케줄링 엔진 + 완화 솔버 + 진단
+│   ├── api.py               # FastAPI 라우터 (프로필/간호사/규칙/스케줄/진단/개발자)
+│   ├── scheduler_base.py    # 엔진 공유 베이스 _SchedulerBase (데이터·날짜·추출·점수·게이팅 헬퍼)
+│   ├── scheduler.py         # HiGHS(MILP) 엔진 NurseScheduler (solve/2단계 완화)
+│   ├── scheduler_highs_constraints.py # HiGHS 하드 제약 + 목적함수 믹스인
+│   ├── scheduler_highs_diagnosis.py   # HiGHS Infeasible 13-phase 진단 믹스인
+│   ├── scheduler_cpsat.py   # CP-SAT(OR-Tools) 엔진 CpSatScheduler
+│   ├── conflict_analyzer.py # 정밀 충돌 분석 (assumptions·MUS/MCS) — /api/diagnose·suggest-fix
+│   ├── solver_progress.py   # 솔버 무관 진행/취소 레지스트리 (레이스 안전 다중 어댑터)
 │   ├── database.py          # SQLite CRUD + 마이그레이션 + 유령 정리
 │   ├── models.py            # Pydantic 데이터 모델 (GenerateRequest 등)
 │   └── profiles.py          # 프로필 관리 + Fernet 암호화 (PBKDF2 100k)
 ├── frontend/
-│   ├── index.html           # SPA (5탭: 설정/사전입력/분석/스케줄/저장)
-│   ├── css/app.css          # 전역 스타일 + 다크모드 + 사이드바
-│   ├── js/app.js            # Alpine.js 앱 (~2100줄)
-│   ├── lib/                 # tailwindcss.js, alpine.min.js, lucide.min.js (오프라인 번들)
-│   └── fonts/               # Outfit, Noto Sans KR
+│   ├── index.html           # SPA (설정·사전입력·분석·스케줄·저장 + 모바일 '오늘' 홈)
+│   ├── css/                 # tokens·base·components·yginvest-skin (cascade 순서로 link)
+│   ├── js/
+│   │   ├── app.js           # Alpine.js 코어 (~530줄: 상태·computed·init·API·모듈 합성)
+│   │   └── modules/         # 14개 도메인 모듈 (analysis·solver·profiles·nurse-manage·
+│   │                        #   preinput-io·grid-interactions·schedule-features·misc-features·
+│   │                        #   settings-defs·view-helpers·paste-import·dev-tools·undo-redo·drag-select)
+│   ├── lib/                 # tailwindcss, alpine, lucide (오프라인 번들)
+│   └── fonts/               # Pretendard(주) + 번들 폰트
 ├── electron/
 │   ├── main.js              # Electron main: Python 자식 프로세스 스폰 + BrowserWindow
 │   ├── preload.js           # contextBridge (electronInfo.version 등)
@@ -55,7 +65,11 @@ nurse-v4/
 │   ├── icon.ico, icon.png   # 앱 아이콘
 │   └── make_icon.py         # 아이콘 생성 스크립트
 ├── installer/
-│   └── setup.iss            # Inno Setup 스크립트 (한국어 UI)
+│   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
+├── scripts/
+│   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
+├── tests/                   # pytest 회귀 86건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일)
+│   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
 │   ├── decisions.md         # 아키텍처 결정 + 네거티브 지식 (세션 간 공유)
@@ -93,7 +107,7 @@ npm start
 ```
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.0.6.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.4.0.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -414,11 +428,11 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.0.6.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.4.0.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.0.6.exe` (143MB) — 설치마법사
-- `NurseScheduler_v4_portable.zip` (204MB) — 포터블
+- `NurseScheduler_Setup_v4.4.0.exe` (~190MB) — 설치마법사
+- `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
 ### 제약
 - **electron-builder 사용 금지** — 26.x가 `winCodeSign` 심볼릭 링크 생성 실패 (Windows 개발자 모드 없이 불가). `@electron/packager` + 수동 ISCC로 대체.
@@ -504,7 +518,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.0.6 기준)
+## 알려진 주의사항 (v4.4.0 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)
