@@ -17,17 +17,26 @@ NurseScheduler.exe (Electron)
 
 ## 원클릭 빌드
 
+**Windows** (`cmd`):
 ```cmd
 build.bat
 ```
+**macOS** (`bash`, 사전: Python 3.11 · Node 20 — Node 24는 패키징 크래시):
+```bash
+./build-mac.sh
+```
 
-자동 수행:
+자동 수행 (두 스크립트 공통 흐름):
 1. 이전 빌드 정리
 2. Python 의존성 설치
 3. PyInstaller로 Python 서버 번들
 4. Electron 의존성 설치 (`npm install`)
-5. electron-packager로 Electron 앱 빌드
-6. 포터블 ZIP + Inno Setup 설치파일 생성
+5. electron-packager로 Electron 앱 빌드 (win32 / darwin)
+6. 배포물 생성 — Windows: 포터블 ZIP + Inno Setup 설치파일 / macOS: ad-hoc 서명 후 zip + dmg
+
+> 태그(`vX.Y.Z`) push 시 GitHub Actions(`.github/workflows/release.yml`)가 두 플랫폼을 자동
+> 빌드해 릴리스에 업로드합니다. macOS 빌드는 유료 Apple Developer 계정이 없어 **미서명(ad-hoc)**
+> 이며, 사용자는 첫 실행 시 우클릭→열기로 한 번 허용해야 합니다(현재 Apple Silicon 전용).
 
 ## 산출물
 

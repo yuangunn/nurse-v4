@@ -4,6 +4,21 @@ NurseScheduler v4의 주요 변경 이력. 최신 버전이 위쪽.
 
 ---
 
+## v4.5.0 — 2026-06-17
+
+**macOS 데스크톱 앱 지원.** Windows 전용이던 앱을 macOS(Apple Silicon)에서도 빌드·실행되도록 확장.
+
+### 🍎 macOS 지원
+- Electron `main.js`의 Windows 전용 경로(`NurseScheduler.exe` 등)를 플랫폼 분기(mac은 확장자 없는 실행파일).
+- PyInstaller 스펙 아이콘을 플랫폼별(.ico/.icns)로, macOS 아이콘(`build/icon.icns`) 추가.
+- `build-mac.sh` 추가 — PyInstaller 서버 번들 + electron-packager(darwin) + ad-hoc 서명 + `.app`의 zip/dmg 생성.
+- 솔버(HiGHS·CP-SAT)·FastAPI·SQLite를 macOS arm64로 프리즈해 동작 검증(서버 health·프론트·API).
+- CI(GitHub Actions)에 macOS 빌드 잡 추가 — 태그 push 시 Windows·macOS 산출물을 함께 릴리스에 업로드.
+- ⚠️ 미서명(ad-hoc) 배포 — 유료 Apple Developer 계정이 없어 공증 없음. 첫 실행 시 우클릭→열기 또는
+  `xattr -dr com.apple.quarantine <앱>` 필요. 현재 Apple Silicon(arm64) 전용.
+
+---
+
 ## v4.4.0 — 2026-06-15
 
 **전수 코드 분석 기반 대규모 안정화 + 신규 기능 4종.** 멀티에이전트·라인 단위 검증으로 확정된

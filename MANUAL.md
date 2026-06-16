@@ -14,7 +14,7 @@
 
 ### 설치 버전 (권장)
 
-1. **NurseScheduler_Setup_v4.4.0.exe** 다운로드
+1. **NurseScheduler_Setup_v4.5.0.exe** 다운로드 (Windows) — macOS는 `NurseScheduler_v4_mac_arm64.dmg`
 2. 실행 → 설치 마법사 진행
 3. 바탕화면 또는 시작메뉴의 **NurseScheduler** 바로가기 클릭
 
@@ -27,8 +27,12 @@
 ### 다운로드
 - GitHub Releases: https://github.com/yuangunn/nurse-v4/releases
 
+### macOS (Apple Silicon)
+1. **NurseScheduler_v4_mac_arm64.dmg** 다운로드 → 열어서 앱을 Applications로 드래그
+2. 첫 실행 시 **우클릭 → 열기** (미서명 앱이라 1회 허용 필요)
+
 ### 시스템 요구사항
-- Windows 10/11 (64bit)
+- Windows 10/11 (64bit) 또는 macOS (Apple Silicon, 14 Sonoma+ 권장)
 - Python, Node.js 설치 불필요 (모두 번들됨)
 - 인터넷 연결 불필요
 - 디스크 500MB, RAM 2GB 이상
@@ -236,4 +240,4 @@
 
 ---
 
-**NurseScheduler v4.4.0** | 개발: yuangunn | https://github.com/yuangunn/nurse-v4
+**NurseScheduler v4.5.0** | 개발: yuangunn | https://github.com/yuangunn/nurse-v4

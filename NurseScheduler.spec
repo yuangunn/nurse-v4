@@ -4,7 +4,11 @@ NurseScheduler v4 PyInstaller 스펙
 빌드: py -m PyInstaller NurseScheduler.spec
 """
 import os
+import sys
 from PyInstaller.utils.hooks import collect_all, collect_submodules, collect_dynamic_libs
+
+# 플랫폼별 아이콘: Windows=.ico, macOS=.icns
+_ICON = 'build/icon.ico' if sys.platform.startswith('win') else 'build/icon.icns'
 
 # highspy는 C 확장 + DLL 번들이 필요
 highspy_datas, highspy_binaries, highspy_hiddenimports = collect_all('highspy')
@@ -85,7 +89,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='build/icon.ico',
+    icon=_ICON,
 )
 
 coll = COLLECT(
