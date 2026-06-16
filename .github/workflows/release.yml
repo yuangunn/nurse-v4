@@ -1,0 +1,83 @@
+name: Build & Release (Windows)
+
+# 태그(vX.Y.Z) push 시 Windows 러너에서 build.bat 단계를 그대로 실행해
+# 설치파일(.exe)·포터블(zip)을 만들고 해당 태그의 릴리스에 자동 업로드한다.
+# 수동 실행(workflow_dispatch)도 지원 — 이미 만든 태그(예: v4.4.0)에 자산을 채울 때 사용.
+#
+# Python은 py 런처 모호성을 피하려고 3.11로 고정(highspy/ortools 휠 호환).
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '자산을 업로드할 릴리스 태그 (예: v4.4.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout (대상 태그 소스)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Python 3.11 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Node 18 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Inno Setup 설치
+        run: choco install innosetup -y --no-progress
+
+      - name: Python 의존성 설치
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: PyInstaller 서버 번들 (dist/NurseScheduler)
+        run: python -m PyInstaller NurseScheduler.spec --noconfirm --log-level WARN
+
+      - name: Electron 의존성 설치
+        working-directory: electron
+        run: npm install
+
+      - name: Electron 패키지 (win32 x64)
+        working-directory: electron
+        run: >
+          npx electron-packager . NurseScheduler
+          --platform=win32 --arch=x64 --out=../dist/electron --overwrite
+          --app-version=4.0.0 --app-copyright="Hospital Nursing Team"
+          --icon=../build/icon.ico --extra-resource=../dist/NurseScheduler
+
+      - name: 포터블 ZIP 생성
+        run: Compress-Archive -Path 'dist/electron/NurseScheduler-win32-x64/*' -DestinationPath 'dist/NurseScheduler_v4_portable.zip' -Force
+
+      - name: Inno Setup 설치파일 생성
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\setup.iss'
+
+      - name: 산출물 확인
+        run: Get-ChildItem dist/installer/*.exe, dist/NurseScheduler_v4_portable.zip | Select-Object Name, Length
+
+      - name: 릴리스에 자산 업로드 (${{ env.RELEASE_TAG }})
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            dist/installer/*.exe
+            dist/NurseScheduler_v4_portable.zip
+          fail_on_unmatched_files: true
