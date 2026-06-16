@@ -35,10 +35,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Node 18 설정
+      - name: Node 20 설정
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Inno Setup 설치
         run: choco install innosetup -y --no-progress
