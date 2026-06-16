@@ -13,12 +13,14 @@ let serverPort = null;
 let startupError = null;
 
 function getPythonExePath() {
-  // 패키징된 앱: resources/NurseScheduler/NurseScheduler.exe
-  // 개발 모드: ../dist/NurseScheduler/NurseScheduler.exe
+  // 패키징된 앱: resources/NurseScheduler/NurseScheduler(.exe)
+  // 개발 모드: ../dist/NurseScheduler/NurseScheduler(.exe)
+  // Windows는 .exe, macOS/Linux는 확장자 없음 (PyInstaller onedir 실행파일명)
+  const exeName = process.platform === 'win32' ? 'NurseScheduler.exe' : 'NurseScheduler';
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'NurseScheduler', 'NurseScheduler.exe');
+    return path.join(process.resourcesPath, 'NurseScheduler', exeName);
   }
-  return path.join(__dirname, '..', 'dist', 'NurseScheduler', 'NurseScheduler.exe');
+  return path.join(__dirname, '..', 'dist', 'NurseScheduler', exeName);
 }
 
 function startPythonServer() {

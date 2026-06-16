@@ -1,10 +1,12 @@
-name: Build & Release (Windows)
+name: Build & Release (Windows + macOS)
 
-# 태그(vX.Y.Z) push 시 Windows 러너에서 build.bat 단계를 그대로 실행해
-# 설치파일(.exe)·포터블(zip)을 만들고 해당 태그의 릴리스에 자동 업로드한다.
-# 수동 실행(workflow_dispatch)도 지원 — 이미 만든 태그(예: v4.4.0)에 자산을 채울 때 사용.
+# 태그(vX.Y.Z) push 시 Windows·macOS 러너에서 각각 빌드해 설치/포터블 산출물을
+# 만들고 해당 태그의 릴리스에 자동 업로드한다.
+#   · Windows: build.bat 단계 재현 → Setup .exe + portable.zip
+#   · macOS  : build-mac.sh 실행 → .app의 zip + dmg (ad-hoc 서명, 공증 없음)
+# 수동 실행(workflow_dispatch)도 지원 — 이미 만든 태그에 자산을 채울 때 사용.
 #
-# Python은 py 런처 모호성을 피하려고 3.11로 고정(highspy/ortools 휠 호환).
+# Python 3.11 고정(highspy/ortools 휠), Node 20 고정(@electron/packager가 Node 24에서 크래시).
 
 on:
   push:
@@ -80,4 +82,41 @@ jobs:
           files: |
             dist/installer/*.exe
             dist/NurseScheduler_v4_portable.zip
+          fail_on_unmatched_files: true
+
+  build-mac:
+    runs-on: macos-latest
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout (대상 태그 소스)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Python 3.11 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Node 20 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: macOS 빌드 (build-mac.sh → .app/zip/dmg, ad-hoc 서명)
+        run: bash build-mac.sh
+        env:
+          PYTHON: python3
+
+      - name: 산출물 확인
+        run: ls -lh dist/NurseScheduler_v4_mac_*.zip dist/NurseScheduler_v4_mac_*.dmg
+
+      - name: 릴리스에 자산 업로드 (${{ env.RELEASE_TAG }})
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            dist/NurseScheduler_v4_mac_*.zip
+            dist/NurseScheduler_v4_mac_*.dmg
           fail_on_unmatched_files: true
