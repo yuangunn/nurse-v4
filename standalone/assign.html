@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<!--
+  어싸인 자동 배정 — 단일 파일 (설치·인터넷 불필요, 더블클릭 실행)
+
+  사용법:
+    1. 인트라넷 근무표(Excel)에서 이름 열 + 날짜별 근무 셀을 복사
+    2. 아래 붙여넣기 칸에 붙여넣기 (첫 행=날짜, 첫 열=이름 자동 인식)
+    3. 자동 배정 결과 확인 → [Excel 복사] 또는 인쇄
+
+  로직은 nurse-v4/frontend/js/modules/assign-core.js 와 동일 (단일 소스).
+  코어 수정 후 동기화: node scripts/build-assign-standalone.mjs
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>어싸인 자동 배정</title>
+<style>
+  body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;margin:16px;background:#f7f8fa;color:#1f2937;font-size:14px}
+  h1{font-size:1.2rem;margin:0 0 12px}
+  .card{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:12px}
+  .card h2{font-size:0.95rem;margin:0 0 8px}
+  textarea{width:100%;height:110px;box-sizing:border-box;font-family:monospace;font-size:12px}
+  table{border-collapse:collapse;font-size:12px}
+  th,td{border:1px solid #d1d5db;padding:3px 6px;text-align:center}
+  th{background:#f3f4f6}
+  .lbl{display:inline-block;min-width:1.6em;padding:1px 3px;border-radius:4px;font-weight:700}
+  .pD{background:#d9e9ff;color:#1e40af}.pE{background:#d6f5e3;color:#166534}.pN{background:#ffe6c7;color:#9a4b00}
+  .dim{color:#6b7280;font-size:12px}
+  button{padding:5px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px}
+  button.pri{background:#1976d2;color:#fff;border-color:#1976d2}
+  input[type=text]{padding:3px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px}
+  label{margin-right:14px;font-size:13px}
+  .row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+  .row>div{flex:1;min-width:260px}
+  .scroll{overflow:auto;max-width:100%}
+  .daysel{cursor:pointer}
+  .daysel.on{background:#1976d2;color:#fff}
+  @media print{ .noprint{display:none} body{background:#fff} .card{border:none;padding:0} }
+</style>
+</head>
+<body>
+<h1>어싸인 자동 배정 <span class="dim">nurse-v4 부속 · 병실 단위</span></h1>
+
+<div class="card noprint">
+  <h2>1) 근무표 붙여넣기 <span class="dim">첫 행=날짜(1~31), 첫 열=이름 · 행 순서 = 연차 순(위=선임)</span></h2>
+  <textarea id="paste" placeholder="Excel에서 근무표 영역을 복사해 여기에 붙여넣기 (Ctrl+V)"></textarea>
+  <div id="parseInfo" class="dim"></div>
+</div>
+
+<div class="card noprint" id="nurseCard" style="display:none">
+  <h2>2) 차지 가능 여부 <span class="dim">체크 = 차지방 담당 가능 (근무표에 DC/EC/NC 표시가 있으면 그 사람이 우선)</span></h2>
+  <div id="nurseChecks"></div>
+</div>
+
+<div class="card noprint">
+  <h2>배정 원칙 · 방 구성</h2>
+  <div style="margin-bottom:8px">
+    <label><input type="checkbox" id="r2" checked> 원칙2 — 전일 같은 근무면 방 유지</label>
+    <label><input type="checkbox" id="r3" checked> 원칙3 — 근무 바뀌어도 방 유지</label>
+    <label><input type="checkbox" id="r4" checked> 원칙4 — 오프 복귀자 방 유지</label>
+  </div>
+  <div class="row" id="schemes"></div>
+  <div style="margin-top:8px"><button onclick="resetSchemes()">방 구성 기본값 복원</button></div>
+</div>
+
+<div class="card" id="resultCard" style="display:none">
+  <h2>3) 배정 결과
+    <span class="noprint" style="float:right">
+      <button onclick="copyTsv()">📋 Excel 복사</button>
+      <button class="pri" onclick="window.print()">🖨 인쇄</button>
+    </span>
+  </h2>
+  <div class="scroll" id="grid"></div>
+  <div id="dayDetail" style="margin-top:12px"></div>
+</div>
+
+<script>
+/*ASSIGN_CORE_BEGIN*/
+(function (root) {
+  const PERIOD_CODES = { D: ['DC', 'D'], E: ['EC', 'E'], N: ['NC', 'N'] };
+  const CHARGE_CODES = { DC: 1, EC: 1, NC: 1 };
+  const LABELS = ['차지', 'A', 'B', 'C', 'D'];
+
+  // 근무코드 → 'D'|'E'|'N'|null (중간번·D1·트레이니(/) 등은 어싸인 제외)
+  function periodOf(code) {
+    if (!code || code.charAt(0) === '/') return null;
+    for (const p in PERIOD_CODES) if (PERIOD_CODES[p].indexOf(code) >= 0) return p;
+    return null;
+  }
+
+  /**
+   * @param nurses   [{id, seniority(작을수록 선임), chargeCapable}]
+   * @param schedule {nurseId: {dateKey: code}}
+   * @param dateKeys 시간순 날짜키 배열 (연속성 위해 전월 이월일 포함 가능)
+   * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff},
+   *                  overrides:{dateKey:{P:{nurseId:label}}}}
+   * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId]}}},
+   *           byNurse:{nurseId:{dk:{period,label}}}}
+   */
+  function compute(nurses, schedule, dateKeys, opts) {
+    opts = opts || {};
+    const rules = Object.assign(
+      { keepSameShift: true, keepAcrossShift: true, keepAfterOff: true },
+      opts.rules || {}
+    );
+    const overrides = opts.overrides || {};
+    const byDay = {}, byNurse = {};
+    const lastSeen = {}; // nurseId -> {label, idx, period}
+
+    for (let idx = 0; idx < dateKeys.length; idx++) {
+      const dk = dateKeys[idx];
+      for (const P in PERIOD_CODES) {
+        const staff = nurses.filter(function (n) {
+          return periodOf((schedule[n.id] || {})[dk]) === P;
+        });
+        if (!staff.length) continue;
+
+        const labels = LABELS.slice(0, Math.min(staff.length, 5));
+        const assigned = {}; // label -> nurse
+        const taken = {};    // nurseId -> true
+        const freeLabels = function () {
+          return labels.filter(function (l) { return !assigned[l]; });
+        };
+
+        // 0) 수동 오버라이드 최우선
+        const ov = (overrides[dk] || {})[P] || {};
+        for (const nid in ov) {
+          const nurse = staff.find(function (n) { return n.id === nid; });
+          const label = ov[nid];
+          if (nurse && labels.indexOf(label) >= 0 && !assigned[label]) {
+            assigned[label] = nurse; taken[nid] = true;
+          }
+        }
+
+        // 1) 차지: DC/EC/NC 표시자 → 차지가능 최선임 → 최선임
+        if (!assigned['차지']) {
+          let c = staff.find(function (n) {
+            return !taken[n.id] && CHARGE_CODES[(schedule[n.id] || {})[dk]];
+          });
+          if (!c) {
+            const pool = staff.filter(function (n) { return !taken[n.id] && n.chargeCapable; });
+            const cand = (pool.length ? pool : staff.filter(function (n) { return !taken[n.id]; }))
+              .slice().sort(function (a, b) { return a.seniority - b.seniority; });
+            c = cand[0];
+          }
+          if (c) { assigned['차지'] = c; taken[c.id] = true; }
+        }
+
+        // 2~4) 연속성 계층 — 앞 계층이 항상 우선
+        const tiers = [];
+        if (rules.keepSameShift) tiers.push(function (info) { return info.idx === idx - 1 && info.period === P; });
+        if (rules.keepAcrossShift) tiers.push(function (info) { return info.idx === idx - 1 && info.period !== P; });
+        if (rules.keepAfterOff) tiers.push(function (info) { return info.idx < idx - 1; });
+
+        for (let t = 0; t < tiers.length; t++) {
+          const claims = {}; // label -> [{n, info}]
+          const free = freeLabels();
+          for (let s = 0; s < staff.length; s++) {
+            const n = staff[s];
+            if (taken[n.id]) continue;
+            const info = lastSeen[n.id];
+            if (info && tiers[t](info) && free.indexOf(info.label) >= 0) {
+              (claims[info.label] = claims[info.label] || []).push({ n: n, info: info });
+            }
+          }
+          for (const label in claims) {
+            claims[label].sort(function (a, b) {
+              return b.info.idx - a.info.idx || a.n.seniority - b.n.seniority;
+            });
+            assigned[label] = claims[label][0].n; taken[claims[label][0].n.id] = true;
+          }
+        }
+
+        // 5) 잔여: 선임 순으로 남은 라벨 채움
+        const leftover = staff.filter(function (n) { return !taken[n.id]; })
+          .sort(function (a, b) { return a.seniority - b.seniority; });
+        const rem = freeLabels();
+        for (let i = 0; i < rem.length && leftover.length; i++) {
+          const n = leftover.shift();
+          assigned[rem[i]] = n; taken[n.id] = true;
+        }
+        // 6인 이상: 라벨 소진 후 잔여 인원은 어싸인 없음(헬퍼)
+        const extra = leftover.map(function (n) { return n.id; });
+
+        const labelMap = {};
+        for (const l in assigned) {
+          const n = assigned[l];
+          labelMap[l] = n.id;
+          lastSeen[n.id] = { label: l, idx: idx, period: P };
+          (byNurse[n.id] = byNurse[n.id] || {})[dk] = { period: P, label: l };
+        }
+        for (let i = 0; i < extra.length; i++) {
+          (byNurse[extra[i]] = byNurse[extra[i]] || {})[dk] = { period: P, label: null };
+        }
+        (byDay[dk] = byDay[dk] || {})[P] = { labels: labelMap, extra: extra };
+      }
+    }
+    return { byDay: byDay, byNurse: byNurse };
+  }
+
+  const api = { compute: compute, periodOf: periodOf, LABELS: LABELS };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.AssignCore = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+/*ASSIGN_CORE_END*/
+
+// ── 앱 상태 ──────────────────────────────────────────────────
+const ROOM_CAP = {1001:5,1002:5,1003:5,1004:5,1005:5,1006:5,1014:5,1007:2,1008:2,1010:2,1011:2,1012:2,1009:1};
+const DEFAULT_SCHEMES = {
+  5:{차지:['1012','1014'],A:['1001','1002'],B:['1003','1004'],C:['1005','1010','1011'],D:['1006','1007','1008','1009']},
+  4:{차지:['1001','1014'],A:['1002','1003','1012'],B:['1004','1005','1011'],C:['1006','1007','1008','1009','1010']},
+  3:{차지:['1001','1012','1014'],A:['1002','1003','1004','1011'],B:['1005','1006','1007','1008','1009','1010']},
+  2:{차지:[],A:[]},
+};
+const ALIAS = {'낮':'D','데이':'D','day':'D','저녁':'E','이브닝':'E','이브':'E','evening':'E',
+  '야간':'N','나이트':'N','night':'N','밤':'N','데차':'DC','데이차지':'DC','이차':'EC','이브차지':'EC',
+  '나차':'NC','나이트차지':'NC'};
+const KNOWN = ['DC','D','EC','E','NC','N'];
+
+let schemes = loadCfg('schemes') || JSON.parse(JSON.stringify(DEFAULT_SCHEMES));
+let nurses = [], schedule = {}, dateKeys = [], result = null, selectedDay = null;
+let chargeChecks = loadCfg('charge') || {};
+
+function loadCfg(k){ try{return JSON.parse(localStorage.getItem('assign_'+k)||'null')}catch(e){return null} }
+function saveCfg(k,v){ localStorage.setItem('assign_'+k, JSON.stringify(v)) }
+
+function normCode(s){
+  const raw=(s||'').trim(); if(!raw) return null;
+  const up=raw.toUpperCase();
+  if(KNOWN.indexOf(up)>=0) return up;
+  return ALIAS[raw.toLowerCase()]||null; // 어싸인 대상 아님(OFF·중·D1 등) → null
+}
+
+function parsePaste(){
+  const text=document.getElementById('paste').value;
+  const rows=text.replace(/\r\n/g,'\n').split('\n').map(l=>l.split('\t')).filter(r=>r.some(c=>c.trim()));
+  if(!rows.length){document.getElementById('parseInfo').textContent='';return}
+  // 첫 행이 날짜 헤더인지: 셀 절반 이상이 1~31 숫자면 헤더
+  const h=rows[0].slice(1).map(c=>c.trim());
+  const nums=h.filter(c=>/^\d{1,2}$/.test(c)&&+c>=1&&+c<=31);
+  const hasHeader=nums.length>=Math.max(3,h.filter(Boolean).length*0.5);
+  const dataRows=hasHeader?rows.slice(1):rows;
+  dateKeys=hasHeader?rows[0].slice(1).map(c=>c.trim()||'?'):
+    Array.from({length:Math.max(...dataRows.map(r=>r.length-1))},(_,i)=>String(i+1));
+  nurses=[];schedule={};
+  dataRows.forEach((r,i)=>{
+    const name=(r[0]||'').trim(); if(!name)return;
+    nurses.push({id:name,name,seniority:i,chargeCapable:chargeChecks[name]!==false});
+    const sc={};
+    for(let c=1;c<r.length;c++){ const code=normCode(r[c]); if(code)sc[dateKeys[c-1]]=code }
+    schedule[name]=sc;
+  });
+  document.getElementById('parseInfo').textContent=
+    `간호사 ${nurses.length}명 · ${dateKeys.length}일 인식됨`;
+  renderNurseChecks(); recompute();
+}
+
+function renderNurseChecks(){
+  const el=document.getElementById('nurseChecks');
+  document.getElementById('nurseCard').style.display=nurses.length?'':'none';
+  el.innerHTML=nurses.map(n=>
+    `<label><input type="checkbox" ${n.chargeCapable?'checked':''} onchange="setCharge('${n.name}',this.checked)"> ${n.name}</label>`
+  ).join('');
+}
+function setCharge(name,on){ chargeChecks[name]=on; saveCfg('charge',chargeChecks);
+  const n=nurses.find(x=>x.name===name); if(n)n.chargeCapable=on; recompute(); }
+
+function rules(){ return {
+  keepSameShift:document.getElementById('r2').checked,
+  keepAcrossShift:document.getElementById('r3').checked,
+  keepAfterOff:document.getElementById('r4').checked }; }
+
+function recompute(){
+  if(!nurses.length){document.getElementById('resultCard').style.display='none';return}
+  result=AssignCore.compute(nurses,schedule,dateKeys,{rules:rules()});
+  if(!selectedDay||dateKeys.indexOf(selectedDay)<0)selectedDay=dateKeys[0];
+  document.getElementById('resultCard').style.display='';
+  renderGrid(); renderDetail();
+}
+
+function renderGrid(){
+  let html='<table><tr><th style="text-align:left">간호사</th>'+
+    dateKeys.map(dk=>`<th class="daysel${dk===selectedDay?' on':''}" onclick="selectedDay='${dk}';renderGrid();renderDetail()">${dk}</th>`).join('')+'</tr>';
+  for(const n of nurses){
+    html+=`<tr><td style="text-align:left;white-space:nowrap"><b>${n.name}</b></td>`;
+    for(const dk of dateKeys){
+      const info=result.byNurse[n.id]&&result.byNurse[n.id][dk];
+      html+= info?`<td><span class="lbl p${info.period}" title="${info.period}">${info.label==='차지'?'차':(info.label||'—')}</span></td>`:'<td></td>';
+    }
+    html+='</tr>';
+  }
+  document.getElementById('grid').innerHTML=html+'</table>';
+}
+
+function roomsStr(rooms){
+  if(!rooms||!rooms.length)return '(수동 분배)';
+  return rooms.map(r=>`${r}호(${ROOM_CAP[r]||'?'})`).join(' ');
+}
+
+function renderDetail(){
+  const day=result.byDay[selectedDay]; const P_NAME={D:'Day',E:'Evening',N:'Night'};
+  if(!day){document.getElementById('dayDetail').innerHTML='';return}
+  let html=`<h2>${selectedDay}일 상세</h2><div class="row">`;
+  for(const P of ['D','E','N']){
+    if(!day[P])continue;
+    const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
+    const scheme=schemes[Math.min(Math.max(cnt,2),5)]||{};
+    html+=`<div><b>${P_NAME[P]}</b> <span class="dim">(${cnt}인)</span><table><tr><th>어싸인</th><th>간호사</th><th>병실</th></tr>`;
+    for(const l in day[P].labels)
+      html+=`<tr><td><b>${l}</b></td><td>${day[P].labels[l]}</td><td class="dim">${roomsStr(scheme[l])}</td></tr>`;
+    if(day[P].extra.length)html+=`<tr><td class="dim">헬퍼</td><td>${day[P].extra.join(', ')}</td><td></td></tr>`;
+    html+='</table></div>';
+  }
+  document.getElementById('dayDetail').innerHTML=html+'</div>';
+}
+
+function renderSchemes(){
+  document.getElementById('schemes').innerHTML=[5,4,3,2].map(cnt=>
+    `<div><b>${cnt}인 근무</b>`+Object.keys(schemes[cnt]).map(l=>
+      `<div style="margin:3px 0"><span style="display:inline-block;width:2.5em"><b>${l}</b></span>
+       <input type="text" style="width:70%" value="${schemes[cnt][l].join(', ')}"
+        onchange="setScheme(${cnt},'${l}',this.value)"></div>`).join('')+'</div>').join('');
+}
+function setScheme(cnt,l,str){
+  schemes[cnt][l]=str.split(/[,\s]+/).map(s=>s.trim()).filter(Boolean);
+  saveCfg('schemes',schemes); recompute();
+}
+function resetSchemes(){ schemes=JSON.parse(JSON.stringify(DEFAULT_SCHEMES)); saveCfg('schemes',schemes); renderSchemes(); recompute(); }
+
+function copyTsv(){
+  const lines=['날짜\t시간대\t어싸인\t간호사\t병실'];
+  for(const dk of dateKeys){
+    const day=result.byDay[dk]; if(!day)continue;
+    for(const P of ['D','E','N']){
+      if(!day[P])continue;
+      const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
+      const scheme=schemes[Math.min(Math.max(cnt,2),5)]||{};
+      for(const l in day[P].labels)lines.push(`${dk}\t${P}\t${l}\t${day[P].labels[l]}\t${roomsStr(scheme[l])}`);
+      if(day[P].extra.length)lines.push(`${dk}\t${P}\t헬퍼\t${day[P].extra.join(', ')}\t`);
+    }
+  }
+  navigator.clipboard.writeText(lines.join('\n')).then(()=>alert('복사됨 — Excel에 붙여넣기 하세요'));
+}
+
+document.getElementById('paste').addEventListener('input',parsePaste);
+['r2','r3','r4'].forEach(id=>document.getElementById(id).addEventListener('change',recompute));
+renderSchemes();
+</script>
+</body>
+</html>

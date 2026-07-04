@@ -6,6 +6,7 @@ function app() {
       {id:'preinput', label:'사전입력'},
       {id:'analysis', label:'분석'},
       {id:'schedule', label:'스케줄'},
+      {id:'assign',   label:'어싸인'},
       {id:'saved',    label:'저장'},
     ],
     activeTab: 'settings',
@@ -84,6 +85,7 @@ function app() {
         preinput: this.countPrevEntries() > 0,
         analysis: !!this.analysisResult,
         schedule: sched,
+        assign: !!this.assignData,
         saved: false,
       };
     },
@@ -102,6 +104,7 @@ function app() {
         schedule: this.generating ? 'solving…' :
                   (sched ? (this.mipGapPercent!=null ? `gap ${this.mipGapPercent.toFixed(1)}%` : '생성 완료')
                          : 'MIP 솔버'),
+        assign: this.assignData ? '병실 배정됨' : '병실 자동 배정',
         saved: savedN ? `${savedN}건 저장됨` : 'CSV · 인쇄',
       };
     },
@@ -544,6 +547,7 @@ function app() {
     ...(window.DevToolsModule ? window.DevToolsModule() : {}),
     ...(window.ProfilesModule ? window.ProfilesModule() : {}),
     ...(window.PasteImportModule ? window.PasteImportModule() : {}),
+    ...(window.AssignModule ? window.AssignModule() : {}),
     // 동일 키가 위에 있으면 이쪽으로 덮어쓰여지므로, 모듈로 옮긴 메서드는
     // 반드시 위쪽 정의에서 제거되어야 함 (drag-select, undo-redo 모듈 참고).
     ...(window.UndoRedoModule ? window.UndoRedoModule() : {}),

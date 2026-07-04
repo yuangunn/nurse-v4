@@ -25,6 +25,8 @@
   <script src="js/modules/grid-interactions.js"></script>
   <script src="js/modules/schedule-features.js"></script>
   <script src="js/modules/misc-features.js"></script>
+  <script src="js/modules/assign-core.js"></script>
+  <script src="js/modules/assign.js"></script>
   <script src="js/app.js"></script>
 </head>
 <body>
@@ -305,7 +307,7 @@
         <span class="brand-name">NurseScheduler</span>
         <span class="brand-hospital">용인세브란스병원 · Yongin Severance Hospital</span>
       </div>
-      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.5.0</span>
+      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.6.0</span>
     </div>
     <div></div>
     <div class="appbar-meta">
@@ -368,9 +370,17 @@
         <span class="step-desc" x-text="stepperSummary.schedule"></span>
       </div>
     </div>
+    <div class="step" :class="{active: activeTab==='assign', done: stepperDone.assign}"
+         @click="activeTab='assign'">
+      <span class="step-num">05</span>
+      <div class="step-body">
+        <span class="step-name">어싸인</span>
+        <span class="step-desc" x-text="stepperSummary.assign"></span>
+      </div>
+    </div>
     <div class="step" :class="{active: activeTab==='saved', done: stepperDone.saved}"
          @click="activeTab='saved'">
-      <span class="step-num">05</span>
+      <span class="step-num">06</span>
       <div class="step-body">
         <span class="step-name">저장</span>
         <span class="step-desc" x-text="stepperSummary.saved"></span>
@@ -1337,6 +1347,111 @@
   </div>
 </div>
 
+<!-- ═══ TAB: 어싸인 (병실 자동 배정) ═══════════════════════ -->
+<div x-show="activeTab==='assign'" x-cloak class="content" x-effect="if(activeTab==='assign')assignRecompute()">
+  <div class="flex flex-wrap items-center gap-3 mb-3">
+    <div class="section-title" style="margin:0">어싸인 배정</div>
+    <div class="ym">
+      <button @click="prevMonth()" class="ym-nav">‹</button>
+      <input type="number" x-model.number="year" min="2020" max="2099" style="width:4.5em"/>
+      <span class="ym-lbl">년</span>
+      <input type="number" x-model.number="month" min="1" max="12" style="width:3em"/>
+      <span class="ym-lbl">월</span>
+      <button @click="nextMonth()" class="ym-nav">›</button>
+    </div>
+    <select x-model="assignSource" @change="assignRecompute()" class="text-xs" style="padding:4px 8px">
+      <option value="auto">근무표: 자동 (생성 스케줄 우선)</option>
+      <option value="schedule">근무표: 생성 스케줄</option>
+      <option value="prev">근무표: 사전입력</option>
+    </select>
+    <button @click="assignCfgOpen=!assignCfgOpen" :class="assignCfgOpen?'btn-primary':'btn-ghost'" class="btn btn-xs">⚙ 방 구성·원칙</button>
+    <button @click="assignCopyTsv()" class="btn btn-xs btn-ghost">📋 Excel 복사</button>
+    <button @click="assignResetOv()" class="btn btn-xs btn-ghost">수동조정 초기화</button>
+  </div>
+
+  <!-- 방 구성 + 원칙 설정 -->
+  <div x-show="assignCfgOpen" x-cloak class="card mb-3">
+    <div class="section-title" style="margin-bottom:8px">배정 원칙</div>
+    <div class="text-xs text-dim mb-2">원칙 1(차지): 근무표의 DC/EC/NC 표시자가 차지방 담당. 표시가 없으면 차지 가능자 중 최선임.</div>
+    <div class="flex flex-wrap gap-4 mb-4">
+      <label class="flex items-center gap-1.5 text-xs"><input type="checkbox" x-model="assignRules.keepSameShift" @change="assignRuleChanged()"/>원칙 2 — 전일 같은 근무면 봤던 방 유지</label>
+      <label class="flex items-center gap-1.5 text-xs"><input type="checkbox" x-model="assignRules.keepAcrossShift" @change="assignRuleChanged()"/>원칙 3 — 근무가 바뀌어도 봤던 방 유지</label>
+      <label class="flex items-center gap-1.5 text-xs"><input type="checkbox" x-model="assignRules.keepAfterOff" @change="assignRuleChanged()"/>원칙 4 — 오프 복귀자 봤던 방 유지</label>
+    </div>
+    <div class="section-title" style="margin-bottom:8px">인원수별 방 구성 <span class="text-xs text-dim font-normal">(병실 번호를 쉼표로 구분 — 2인 근무는 환자 수에 따라 수동 분배)</span></div>
+    <div class="grid grid-cols-2 gap-4" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+      <template x-for="cnt in [5,4,3,2]" :key="'sch'+cnt">
+        <div class="card-sm">
+          <div class="text-xs font-semibold mb-1.5" x-text="cnt+'인 근무'"></div>
+          <template x-for="label in Object.keys(assignSchemes[cnt])" :key="'sch'+cnt+label">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-xs w-8 font-semibold" x-text="label"></span>
+              <input type="text" :value="assignSchemeStr(cnt,label)" @change="assignSetScheme(cnt,label,$event.target.value)" class="text-xs flex-1" style="padding:3px 6px"/>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+    <button @click="assignResetSchemes()" class="btn btn-xs btn-ghost mt-2">기본값 복원</button>
+  </div>
+
+  <!-- 월 그리드 -->
+  <div x-show="assignData" class="card mb-3" style="overflow:auto">
+    <div class="text-xs text-dim mb-2">셀 클릭 = 수동 조정(같은 시간대 담당자와 스왑) · <span style="border-bottom:2px solid var(--accent)">밑줄</span> = 수동 조정됨 · 날짜 클릭 = 일별 상세</div>
+    <table class="text-xs border-collapse" style="min-width:680px">
+      <thead><tr>
+        <th class="text-left" style="position:sticky;left:0;background:var(--bg-card);padding:4px 8px">간호사</th>
+        <template x-for="d in assignDays()" :key="'ah'+dayKey(d)">
+          <th style="padding:4px 3px;cursor:pointer;min-width:2em" :style="assignSelectedDay===dayKey(d)?'background:var(--accent);color:#fff;border-radius:4px':''"
+              @click="assignSelectedDay=dayKey(d)" x-text="d.getDate()"></th>
+        </template>
+      </tr></thead>
+      <tbody>
+        <template x-for="n in nurses" :key="'ar'+n.id">
+          <tr>
+            <td class="text-left font-semibold" style="position:sticky;left:0;background:var(--bg-card);padding:3px 8px;white-space:nowrap" x-text="n.name"></td>
+            <template x-for="d in assignDays()" :key="'ac'+n.id+dayKey(d)">
+              <td style="padding:2px;text-align:center">
+                <template x-if="assignCell(n.id,d)">
+                  <span @click="assignPickOpen(n.id,d)" class="font-semibold" style="display:inline-block;min-width:1.8em;padding:2px 3px;border-radius:4px;cursor:pointer"
+                        :style="assignCellStyle(assignCell(n.id,d))+(assignCell(n.id,d)?.isOverridden?';border-bottom:2px solid var(--accent)':'')"
+                        :title="assignCell(n.id,d)?.period+' — '+(assignCell(n.id,d)?.label||'어싸인 없음(헬퍼)')"
+                        x-text="assignCell(n.id,d)?.short"></span>
+                </template>
+              </td>
+            </template>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 일별 상세 -->
+  <div x-show="assignData&&assignSelectedDay" x-cloak class="card">
+    <div class="section-title" style="margin-bottom:8px">일별 상세 — <span x-text="assignSelectedDay"></span></div>
+    <div class="grid gap-4" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+      <template x-for="g in assignDayDetail(assignSelectedDay)" :key="'ad'+g.period">
+        <div class="card-sm">
+          <div class="text-xs font-semibold mb-1.5"><span x-text="{D:'Day',E:'Evening',N:'Night'}[g.period]"></span> <span class="text-dim font-normal" x-text="'('+g.count+'인)'"></span></div>
+          <table class="tbl"><thead><tr><th>어싸인</th><th>간호사</th><th>병실</th></tr></thead>
+            <tbody>
+              <template x-for="r in g.rows" :key="'adr'+g.period+r.label">
+                <tr><td class="font-semibold" x-text="r.label"></td><td x-text="r.nurse"></td><td class="text-xs text-dim" x-text="r.rooms"></td></tr>
+              </template>
+              <template x-if="g.extra.length"><tr><td class="text-dim">헬퍼</td><td x-text="g.extra.join(', ')"></td><td></td></tr></template>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div x-show="!assignData||!Object.keys(assignScheduleSrc()||{}).length" class="empty-state">
+    <p>배정할 근무표가 없습니다</p>
+    <span class="empty-hint">스케줄 탭에서 근무표를 생성하거나, 사전입력 탭에서 근무표를 붙여넣은 뒤 이용하세요</span>
+  </div>
+</div>
+
 <!-- ═══ TAB 4: 저장 ═══════════════════════════════════════ -->
 <div x-show="activeTab==='saved'" x-cloak class="content">
   <div style="max-width:36rem">
@@ -1849,6 +1964,21 @@
     <template x-if="scoreDetailModal.rows&&scoreDetailModal.rows.length>0"><table class="tbl mb-3"><thead><tr><th>규칙</th><th class="text-center">N</th><th class="text-right">단가</th><th class="text-right">합</th></tr></thead><tbody><template x-for="row in scoreDetailModal.rows" :key="row.name"><tr><td class="text-xs" x-text="row.name"></td><td class="text-center text-xs font-mono" x-text="row.count"></td><td class="text-right font-mono text-xs" :class="row.score_per>=0?'text-green':'text-red'" x-text="(row.score_per>=0?'+':'')+row.score_per"></td><td class="text-right font-mono font-bold text-xs" :class="row.total>=0?'text-green':'text-red'" x-text="(row.total>=0?'+':'')+row.total"></td></tr></template></tbody><tfoot><tr style="border-top:1px solid rgba(255,255,255,0.06)"><td class="font-bold" colspan="3">합계</td><td class="text-right font-bold" :class="(scoreDetailModal.total||0)>=0?'text-green':'text-red'" x-text="((scoreDetailModal.total||0)>=0?'+':'')+(scoreDetailModal.total||0)"></td></tr></tfoot></table></template>
     <template x-if="!scoreDetailModal.rows||scoreDetailModal.rows.length===0"><p class="text-center text-xs py-4 mb-3 text-dim">해당 없음</p></template>
     <button @click="scoreDetailModal.open=false" class="btn btn-ghost w-full btn-sm">닫기</button>
+  </div>
+</div>
+
+<!-- ═══ 모달: 어싸인 수동 조정 ═══════════════════════════ -->
+<div x-show="assignPick.open" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="assignPick.open=false">
+  <div class="modal" style="max-width:18rem">
+    <div class="font-bold text-bright mb-2">어싸인 수동 조정</div>
+    <div class="text-xs text-dim mb-3">선택한 어싸인의 기존 담당자와 서로 교체됩니다.</div>
+    <div class="flex flex-col gap-1.5 mb-3">
+      <template x-for="l in assignPickLabels()" :key="'apl'+l">
+        <button @click="assignPickChoose(l)" class="btn btn-sm" :class="assignPick.current===l?'btn-primary':'btn-ghost'" x-text="l"></button>
+      </template>
+      <button @click="assignPickChoose(null)" class="btn btn-sm btn-ghost text-dim">↺ 자동 배정으로</button>
+    </div>
+    <button @click="assignPick.open=false" class="btn btn-ghost w-full btn-sm">닫기</button>
   </div>
 </div>
 
@@ -2455,7 +2585,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.5.0 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.6.0 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">HiGHS · CP-SAT 듀얼 솔버 · 완전 오프라인</p>
         <p class="text-dim text-xs mt-1">모성보호(임산부 P1) · 최소 침습 완화 · 정밀 충돌 진단</p>

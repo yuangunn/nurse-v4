@@ -62,19 +62,19 @@
 
 ## 다운로드
 
-> **최신 버전: v4.5.0** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
+> **최신 버전: v4.6.0** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
 
 #### 🪟 Windows
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_Setup_v4.5.0.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.5.0/NurseScheduler_Setup_v4.5.0.exe) | 설치 마법사 (권장) | ~157 MB |
-| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.5.0/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~226 MB |
+| [**NurseScheduler_Setup_v4.6.0.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.6.0/NurseScheduler_Setup_v4.6.0.exe) | 설치 마법사 (권장) | ~157 MB |
+| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.6.0/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~226 MB |
 
 #### 🍎 macOS (Apple Silicon)
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_v4_mac_arm64.dmg**](https://github.com/yuangunn/nurse-v4/releases/download/v4.5.0/NurseScheduler_v4_mac_arm64.dmg) | 디스크 이미지 (권장) | ~213 MB |
-| [**NurseScheduler_v4_mac_arm64.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.5.0/NurseScheduler_v4_mac_arm64.zip) | 포터블 (.app) | ~186 MB |
+| [**NurseScheduler_v4_mac_arm64.dmg**](https://github.com/yuangunn/nurse-v4/releases/download/v4.6.0/NurseScheduler_v4_mac_arm64.dmg) | 디스크 이미지 (권장) | ~213 MB |
+| [**NurseScheduler_v4_mac_arm64.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.6.0/NurseScheduler_v4_mac_arm64.zip) | 포터블 (.app) | ~186 MB |
 
 > 🍎 macOS 빌드는 미서명(ad-hoc)이라 첫 실행 시 **우클릭 → 열기**로 한 번 허용해야 합니다 (또는 터미널에서 `xattr -dr com.apple.quarantine /Applications/NurseScheduler.app`). 현재 **Apple Silicon(arm64) 전용**입니다.
 
@@ -122,7 +122,7 @@
 ```cmd
 build.bat
 ```
-결과물: `dist/installer/NurseScheduler_Setup_v4.5.0.exe`, `dist/NurseScheduler_v4_portable.zip`
+결과물: `dist/installer/NurseScheduler_Setup_v4.6.0.exe`, `dist/NurseScheduler_v4_portable.zip`
 
 **macOS** (사전: Python 3.11, Node.js 20 — Node 24는 패키징 단계 크래시)
 ```bash

@@ -4,6 +4,24 @@ NurseScheduler v4의 주요 변경 이력. 최신 버전이 위쪽.
 
 ---
 
+## v4.6.0 — 2026-07-04
+
+**어싸인(병실 자동 배정) 기능.** 근무표를 기반으로 간호사별 담당 병실을 자동 배정. 앱 탭 + 인트라넷용 단일 HTML + Excel VBA 3종 구현 (로직 단일 소스).
+
+### 🏥 어싸인 탭 (신규, 스텝 05)
+- 근무표(생성 스케줄 또는 사전입력) 기반 일별 D/E/N 어싸인 자동 배정 — 병실 단위.
+- 원칙: ①차지=DC/EC/NC 표시자 우선(없으면 차지가능 최선임) ②전일 같은 근무 방 유지 ③근무 변경 시 방 유지 ④오프 복귀자 방 유지 (②>③>④, 각 원칙 on/off 가능).
+- 인원수별(2~5인) 방 구성 프론트에서 편집 가능, 6인 이상은 5인 스킴 + 잔여=헬퍼. 중간번·D1·트레이니는 제외.
+- 셀 클릭 = 수동 조정(같은 시간대 담당자와 스왑, 자동 복귀 가능), 일별 상세 패널, Excel용 TSV 복사.
+- 설정·오버라이드는 localStorage에 프로필·월별 저장.
+- 코어 로직 `frontend/js/modules/assign-core.js` (순수 함수) + UI `assign.js`. 검증: `node scripts/test_assign_core.mjs`.
+
+### 📄 인트라넷용 별도 구현물 (`standalone/`)
+- `assign.html` — 단일 파일, 더블클릭 실행. Excel 근무표 붙여넣기 → 자동 배정 → 인쇄/Excel 복사. 코어 동기화: `node scripts/build-assign-standalone.mjs`.
+- `assign_vba.bas` — Excel VBA 포팅. "근무표" 시트 → "어싸인"/"어싸인상세" 시트 생성.
+
+---
+
 ## v4.5.0 — 2026-06-17
 
 **macOS 데스크톱 앱 지원.** Windows 전용이던 앱을 macOS(Apple Silicon)에서도 빌드·실행되도록 확장.
