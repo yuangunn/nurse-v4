@@ -129,6 +129,22 @@ assert.equal(periodOf('OF'), null);
   assert.equal(r.byDay.d1.D.labels['B'], 'b');
 }
 
+// ── 선입력 시드: 1일 오버라이드가 이후 연속성의 시작점 (VBA D/A 선입력과 동일 의미) ──
+{
+  const nurses = [N('a', 0), N('b', 1), N('c', 2)];
+  const sched = {
+    a: { d1: 'DC', d2: 'DC', d3: 'DC' },
+    b: { d1: 'D', d2: 'D', d3: 'D' },
+    c: { d1: 'D', d2: 'D', d3: 'D' },
+  };
+  // 선입력 없으면 b(선임)가 A — 선입력으로 1일 c를 A에 고정
+  const r = compute(nurses, sched, ['d1', 'd2', 'd3'], { overrides: { d1: { D: { c: 'A' } } } });
+  assert.equal(r.byDay.d1.D.labels['A'], 'c');
+  assert.equal(r.byDay.d2.D.labels['A'], 'c'); // 2일부터 원칙2로 A 유지
+  assert.equal(r.byDay.d3.D.labels['A'], 'c');
+  assert.equal(r.byDay.d3.D.labels['B'], 'b');
+}
+
 // ── 규칙 토글: keepAcrossShift 끄면 원칙 3 미적용 ──
 {
   const nurses = [N('a', 0), N('b', 1), N('c', 2), N('d', 3)];
