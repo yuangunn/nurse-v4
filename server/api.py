@@ -1368,6 +1368,31 @@ def diagnose(request: GenerateRequest):
         return {"conflicts": [], "message": f"충돌 분석 중 오류: {e}"}
 
 
+_feasibility_lock = threading.Lock()  # 프로브 동시 실행 방지 (편집 연타 시 CPU 보호)
+
+
+@app.post("/api/feasibility")
+def feasibility(request: GenerateRequest):
+    """사전입력 실시간 신호등 — 하드 제약만 1회 풀이(기본 5초 캡).
+    생성 솔버 실행 중이거나 다른 프로브가 도는 중엔 busy 반환 (프론트가 재시도)."""
+    if solver_progress.is_running() or not _feasibility_lock.acquire(blocking=False):
+        return {"status": "busy"}
+    try:
+        from .conflict_analyzer import check_feasibility
+        if not request.shifts:
+            from .models import ShiftDef
+            request.shifts = [ShiftDef(**s) for s in db.list_shifts()]
+        if not request.scoring_rules:
+            request.scoring_rules = [ScoringRule(**r) for r in db.list_scoring_rules()]
+        return check_feasibility(request)
+    except Exception as e:
+        logger.error("feasibility error: %s\n%s", e, traceback.format_exc())
+        # 배지는 '미확정'으로 — 실시간 피드백이 500으로 UI를 흔들지 않게
+        return {"status": "unknown", "conflicts": []}
+    finally:
+        _feasibility_lock.release()
+
+
 @app.post("/api/suggest-fix")
 def suggest_fix(request: GenerateRequest):
     """최소 수정 처방(MCS): 어떤 사전입력을 빼거나 인원을 얼마나 늘리면 생성 가능한지."""

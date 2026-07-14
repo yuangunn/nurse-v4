@@ -60,6 +60,25 @@ window.SolverModule = function() {
       try{await fetch('/api/generate/stop',{method:'POST'})}catch(e){}
     },
 
+    // ── 실시간 생성 가능성 신호등 (사전입력 편집 → 디바운스 프로브) ─────────
+    _queueFeasibility(){
+      clearTimeout(this._feasTimer);
+      this._feasTimer=setTimeout(()=>this._runFeasibility(),1200);
+    },
+    async _runFeasibility(){
+      if(!this.nurses.length)return;
+      if(this.generating){this._queueFeasibility();return} // 생성 솔버에 CPU 양보
+      const seq=++this._feasSeq;
+      this.feas={...(this.feas||{}),checking:true};
+      try{
+        const res=await this.api('POST','/api/feasibility',this._diagPayload());
+        if(seq!==this._feasSeq)return;                     // 이후 편집 발생 — 낡은 응답 폐기
+        if(res.status==='busy'){this._queueFeasibility();return}
+        this.feas={...res,checking:false};
+      }catch(e){if(seq===this._feasSeq)this.feas={status:'unknown',conflicts:[],checking:false}}
+    },
+    fmtEta(sec){if(!sec)return'';return sec<90?`약 ${sec}초`:`약 ${Math.round(sec/60)}분`},
+
     // ── 정밀 충돌 분석 (CP-SAT assumptions) ───────────────────
     _diagPayload(){return{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null}},
     async diagnoseConflicts(){

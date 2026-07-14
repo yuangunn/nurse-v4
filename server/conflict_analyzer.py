@@ -29,10 +29,8 @@ from .scheduler_base import WEEKDAY_KEYS, timeoff_class, is_protected_timeoff
 class _ConflictAnalyzer(CpSatScheduler):
     """CpSatScheduler의 _build_vars + 데이터 상속, 게이팅 모델로 충돌 분석."""
 
-    def analyze(self) -> Dict:
-        if not self.nurses:
-            return {"conflicts": [], "message": "간호사가 없습니다."}
-
+    def _gated_model(self):
+        """게이팅 모델 구성 (model, lits) — analyze(MUS 최소화)와 probe(신호등)가 공유."""
         model = cp_model.CpModel()
         x = self._build_vars(model)
         self._labels: Dict[int, str] = {}   # lit.Index() → 한국어 라벨
@@ -77,6 +75,61 @@ class _ConflictAnalyzer(CpSatScheduler):
             self._g_max_night_per_month(model, x, gate)
         if self.rules.maxNightTwoMonth:
             self._g_max_night_two_month(model, x, gate)
+        return model, lits
+
+    def probe(self, time_limit: float = 5.0) -> Dict:
+        """하드 제약 신호등 — 사전입력 실시간 피드백용 (MUS 최소화 없음).
+        1단계: 게이팅 없는 순수 하드 모델(빠름)로 feasible/infeasible 판정.
+        2단계: infeasible일 때만 게이팅 모델 1회 풀이 → SufficientAssumptions
+        라벨을 '대략적 원인'으로 반환 (비최소 집합 — 정밀 원인은 analyze() 담당).
+        게이팅+assumption 모델은 feasible 증명이 수 배 느려서(presolve 축소 불가)
+        흔한 경로(입력 중 '가능')를 순수 모델로 먼저 판정한다."""
+        if not self.nurses:
+            return {"status": "unknown", "conflicts": [], "message": "간호사가 없습니다."}
+        out = {"estimated_seconds": self.estimate_seconds()}
+        model = cp_model.CpModel()
+        x = self._build_vars(model)
+        self._apply_hard_constraints(model, x)
+        s = cp_model.CpSolver()
+        s.parameters.max_time_in_seconds = time_limit
+        st = s.Solve(model)
+        if st in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            return {**out, "status": "feasible", "conflicts": []}
+        if st != cp_model.INFEASIBLE:
+            return {**out, "status": "unknown", "conflicts": []}
+
+        gmodel, lits = self._gated_model()
+        gmodel.AddAssumptions(lits)
+        s2 = cp_model.CpSolver()
+        # 라벨 추출은 부가 정보 — 공급과잉처럼 라벨링이 오래 걸리는 케이스에서
+        # 신호등 응답을 붙잡지 않도록 더 짧게 캡 (빈 라벨이면 메시지로 안내)
+        s2.parameters.max_time_in_seconds = min(3.0, time_limit)
+        st2 = s2.Solve(gmodel)
+        labels, seen = [], set()
+        if st2 == cp_model.INFEASIBLE:
+            for i in s2.SufficientAssumptionsForInfeasibility():
+                lab = self._labels.get(i)
+                if lab and lab not in seen:
+                    seen.add(lab)
+                    labels.append(lab)
+        anchored = [{"label": c, **(self._anchor_by_label.get(c)
+                                    or {"nurse_id": None, "date": None})}
+                    for c in labels]
+        res = {**out, "status": "infeasible", "conflicts": labels, "anchored": anchored}
+        if not labels:
+            res["message"] = ("원인 자동 추출 시간 초과 — 흔한 원인은 인원 대비 수요 불일치"
+                              "(일별 필요 인원은 '정확히 일치'라 남는 인원도 배치 불가)입니다. "
+                              "주휴/휴가 사전입력으로 균형을 맞추거나 '정밀 분석'을 실행하세요."
+                              if st2 != cp_model.INFEASIBLE else
+                              "구조 제약(1일 1근무·근무 자격·알 수 없는 코드)만으로 "
+                              "충돌합니다. 사전입력 코드와 간호사 자격을 확인하세요.")
+        return res
+
+    def analyze(self) -> Dict:
+        if not self.nurses:
+            return {"conflicts": [], "message": "간호사가 없습니다."}
+
+        model, lits = self._gated_model()
 
         if not lits:
             return {"conflicts": [], "message": "분석할 완화 가능 제약이 없습니다."}
@@ -739,3 +792,9 @@ def analyze_conflicts(request: GenerateRequest) -> Dict:
 def suggest_correction(request: GenerateRequest) -> Dict:
     """최소 수정 처방(MCS) 진입점. {fixable, removals, shortfalls, message} 반환."""
     return _ConflictAnalyzer(request).suggest_correction()
+
+
+def check_feasibility(request: GenerateRequest, time_limit: float = 5.0) -> Dict:
+    """실시간 신호등 진입점 — 하드 제약 1회 풀이.
+    {status: feasible|infeasible|unknown, conflicts, anchored?, estimated_seconds} 반환."""
+    return _ConflictAnalyzer(request).probe(time_limit)

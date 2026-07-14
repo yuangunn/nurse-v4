@@ -811,6 +811,30 @@
       </div>
     </template></div>
   </div>
+  <!-- 실시간 생성 가능성 신호등 + 예상 생성 시간 (/api/feasibility 프로브) -->
+  <div x-show="feas" x-cloak class="card-sm mb-2 text-xs" style="flex-shrink:0;padding:6px 12px">
+    <div class="flex flex-wrap items-center gap-2">
+      <span x-show="feas&&feas.checking" class="text-dim">⏳ 생성 가능성 확인 중…</span>
+      <template x-if="feas&&!feas.checking&&feas.status==='feasible'">
+        <span class="font-semibold" style="color:var(--t-green,#2e9e5b)">🟢 지금 입력으로 생성 가능</span>
+      </template>
+      <template x-if="feas&&!feas.checking&&feas.status==='infeasible'">
+        <span class="font-semibold text-red">🔴 이대로는 생성 불가</span>
+      </template>
+      <template x-if="feas&&!feas.checking&&feas.status==='unknown'">
+        <span class="text-dim">⚪ 판정 미확정 — 구성이 복잡해 5초 내 판정하지 못했습니다 (생성 시 확정)</span>
+      </template>
+      <span class="text-dim" x-show="feas&&feas.estimated_seconds" x-text="'· 예상 생성 시간 '+fmtEta(feas.estimated_seconds)"></span>
+    </div>
+    <div x-show="feas&&!feas.checking&&feas.status==='infeasible'" class="mt-1 flex flex-wrap items-center gap-1">
+      <template x-for="(a,fi) in (feas.anchored||[]).slice(0,4)" :key="'fa'+fi">
+        <button @click="jumpToPreCell(a.nurse_id,a.date)" class="btn btn-xs btn-ghost text-red" style="border:1px solid rgba(239,83,80,0.25)" x-text="'➤ '+a.label"></button>
+      </template>
+      <span x-show="(feas.conflicts||[]).length>4" class="text-dim" x-text="'외 '+((feas.conflicts||[]).length-4)+'건'"></span>
+      <span x-show="feas.message" class="text-dim" x-text="feas.message"></span>
+      <button @click="diagnoseConflicts();activeTab='schedule'" :disabled="diagnosing" class="btn btn-xs btn-ghost" x-text="diagnosing?'정밀 분석 중…':'🔍 정밀 분석'" title="독립 충돌(MUS)까지 최소화해 정확한 원인을 짚습니다 — 결과는 스케줄 탭에 표시"></button>
+    </div>
+  </div>
   <!-- 제약 위반 경고 -->
   <!-- 실시간 인원 슬랙 경고 — 입력하는 순간 부족/빡빡을 알림 -->
   <div x-show="staffingAlerts&&(staffingAlerts.short.length||staffingAlerts.tight.length)" x-cloak class="card-sm mb-2 text-xs" style="flex-shrink:0;border-left:3px solid var(--amber,#e6a23c);padding:8px 12px">

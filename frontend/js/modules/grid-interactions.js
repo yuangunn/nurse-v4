@@ -68,9 +68,147 @@ window.GridInteractionsModule = function() {
           }
         }
       }
+      // ── 확장 라인트 — 세는 것만으로 확정되는 하드 제약 (솔버 의미와 1:1) ──
+      // 솔버가 '조용히 무시'하는 입력(공휴일 OF·임산부 야간 등, _effective_pre 대응)은
+      // 위반이 아니라 '무시됨' 경고로 구분한다.
+      const defByCode={};for(const s of this.shifts)defByCode[s.code]=s;
+      const workPeriods=new Set(['day','day1','evening','middle','night']);
+      const workCodes=this.shifts.filter(s=>workPeriods.has(s.period)).map(s=>s.code);
+      const workSet=new Set(workCodes);
+      const nightSet=new Set(nightCodes);
+      const restSet=new Set(this.shifts.filter(s=>s.period==='rest').map(s=>s.code));
+      const daySet=new Set(dayCodes);
+      const flexMap={D:['D','DC'],DC:['D','DC'],E:['E','EC'],EC:['E','EC'],N:['N','NC'],NC:['N','NC']}; // 서버 _PRE_FLEX
+      const monthKey=`${this.year}-${String(this.month).padStart(2,'0')}`;
+      const firstKey=`${monthKey}-01`;
+      const lastKey=this.dayKey(new Date(this.year,this.month,0));
+      const holidaySet=new Set(this.holidays||[]);
+      const r=this.rules||{};
+      const fmtD=(day)=>`${day.getDate()}${dayNames[day.getDay()]}`;
+      const extraCells=[];
+      const pregSpanOf=(n)=>{ // [early.start ~ late.end] — 야간 금지 구간 (_preg_span_on)
+        if(!n.is_pregnant)return null;
+        const b=[];
+        for(const k of['early','late']){const w=(n.pregnancy||{})[k]||{};if(w.start&&w.end&&w.start<=w.end)b.push(w)}
+        return b.length?[b.map(w=>w.start).sort()[0],b.map(w=>w.end).sort().slice(-1)[0]]:null;
+      };
+      const effByNurse={};
+
+      for(const nurse of this.nurses){
+        const nid=nurse.id;
+        const pre=this.prevSchedule[nid]||{};
+        const span=pregSpanOf(nurse);
+        const pregMonth=!!(span&&span[0]<=lastKey&&span[1]>=firstKey);
+        const nm=nurse.night_months||{};
+        let nightDed=Object.keys(nm).length?!!nm[monthKey]:!!nurse.is_night_shift;
+        if(pregMonth)nightDed=false; // 임산부 달엔 야간전담 자동 해제 (솔버 동일)
+        const capable=new Set(nurse.capable_shifts!==undefined?nurse.capable_shifts:workCodes);
+        const eff={};effByNurse[nid]=eff; // dk → 유효 사전입력 (무시분 제외)
+        const vDays=[],mDays=[],nDays=[];
+
+        for(const day of days){
+          const dk=this.dayKey(day);
+          const code=pre[dk];
+          if(!code)continue;
+          if(code.startsWith('/'))continue; // 트레이니 표시 코드 — 솔버가 스트립
+          const def=defByCode[code];
+          if(!def){v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} '${code}' 알 수 없는 근무 코드`});continue}
+          if(code==='OF'&&holidaySet.has(dk)){v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 공휴일 OF — 생성 시 무시되고 재배치됩니다`});continue}
+          if(span&&nightSet.has(code)&&dk>=span[0]&&dk<=span[1]){v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 임신 구간 야간 — 생성 시 무시됩니다 (모성보호)`});continue}
+          if(pregMonth&&code==='생'){v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 임신 달 생리휴가 — 생성 시 무시됩니다`});continue}
+          eff[dk]=code;
+          if(['day','evening','night'].includes(def.period)&&!(flexMap[code]||[code]).some(c=>capable.has(c)))
+            v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} ${code} — 가능 근무에 없음 (자격 미달)`});
+          if(nightDed&&workSet.has(code)&&def.period!=='night')
+            v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} ${code} — 야간전담은 야간(N/NC) 외 근무 불가`});
+          if(code==='생'&&nurse.gender!=='female')
+            v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 생리휴가는 여성 전용입니다`});
+          if(dk>=firstKey&&dk<=lastKey){
+            if(code==='V')vDays.push(dk);
+            if(code==='생'&&nurse.gender==='female')mDays.push(dk);
+            if(nightSet.has(code)&&!nightDed)nDays.push(dk);
+          }
+        }
+
+        const maxV=+r.maxVPerMonth||0;
+        if(maxV>0&&vDays.length>maxV)v.push({nid,dk:vDays[maxV],msg:`${nurse.name}: V ${vDays.length}회 — 월 최대 ${maxV}회 초과`});
+        if(mDays.length>1)v.push({nid,dk:mDays[1],msg:`${nurse.name}: 생리휴가 ${mDays.length}회 — 월 1회 한도 초과`});
+        if(!nightDed&&r.maxNightPerMonth&&nDays.length>(+r.maxNightPerMonthCount||6))
+          v.push({nid,dk:nDays[+r.maxNightPerMonthCount||6],msg:`${nurse.name}: 야간 ${nDays.length}회 — 월 최대 ${r.maxNightPerMonthCount}회 초과`});
+        if(!nightDed&&r.maxNightTwoMonth){
+          const prevN=+((this.prevMonthNights||{})[nid])||0;
+          const rhs=Math.max(0,(+r.maxNightTwoMonthCount||11)-prevN);
+          if(nDays.length>rhs)v.push({nid,dk:nDays[Math.min(rhs,nDays.length-1)],msg:`${nurse.name}: 당월 야간 ${nDays.length}회 + 전월 ${prevN}회 — 합산 ${r.maxNightTwoMonthCount}회 초과`});
+        }
+
+        // 연속 근무/야간 — 선입력만으로 이미 확정된 초과 (빈칸은 보수적으로 run을 끊음)
+        const maxW=r.maxConsecutiveWork?(+r.maxConsecutiveWorkDays||5):0;
+        const maxCN=r.maxConsecutiveNight?(+r.maxConsecutiveNightDays||3):0;
+        let runW=0,runN=0,flagW=false,flagN=false;
+        for(const day of days){
+          const dk=this.dayKey(day);
+          const code=eff[dk];
+          runW=code&&workSet.has(code)?runW+1:0;
+          runN=code&&nightSet.has(code)?runN+1:0;
+          if(!runW)flagW=false;
+          if(!runN)flagN=false;
+          if(maxW&&runW>maxW&&!flagW&&dk>=firstKey){flagW=true;v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)}까지 연속 근무 ${runW}일 — 최대 ${maxW}일 초과`})}
+          if(maxCN&&runN>maxCN&&!flagN&&dk>=firstKey){flagN=true;v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)}까지 연속 야간 ${runN}일 — 최대 ${maxCN}일 초과`})}
+        }
+
+        // N→휴무→D 금지 (noNOD) — 세 칸 모두 선입력일 때 확정
+        if(r.noNOD){
+          for(let i=0;i+2<days.length;i++){
+            const dk3=this.dayKey(days[i+2]);
+            if(dk3<firstKey)continue; // 전월 내부 완결 윈도우 — 솔버 미적용
+            const c1=eff[this.dayKey(days[i])],c2=eff[this.dayKey(days[i+1])],c3=eff[dk3];
+            if(c1&&c2&&c3&&nightSet.has(c1)&&restSet.has(c2)&&daySet.has(c3))
+              v.push({nid,dk:dk3,msg:`${nurse.name}: ${fmtD(days[i])}~${fmtD(days[i+2])} N→휴무→D 패턴 금지`});
+          }
+        }
+
+        // 주 1회 OF 의무 — 7일 주기(솔버 weeks와 동일 산식) 기준
+        if(r.weeklyOff&&!nightDed){
+          for(let w=0;w+6<days.length;w+=7){
+            const wk=days.slice(w,w+7);
+            const elig=wk.filter(d=>this.dayKey(d)>=firstKey&&!this.isNurseInactive(nurse,d));
+            const ofs=elig.filter(d=>eff[this.dayKey(d)]==='OF');
+            if(ofs.length>1)v.push({nid,dk:this.dayKey(ofs[1]),msg:`${nurse.name}: ${fmtD(wk[0])}~${fmtD(wk[6])} 주에 OF ${ofs.length}회 — 주 1회만 가능`});
+            else if(!ofs.length&&elig.length===7&&elig.every(d=>eff[this.dayKey(d)]))
+              v.push({nid,dk:this.dayKey(wk[6]),msg:`${nurse.name}: ${fmtD(wk[0])}~${fmtD(wk[6])} 주 7일 모두 선입력 — 의무 OF 1회를 배치할 수 없음`});
+          }
+        }
+      }
+
+      // 일별 D/E/N 사전배정 초과 — 요구는 '정확히 일치'라 초과는 확정 실패
+      const wkKeys2=['sun','mon','tue','wed','thu','fri','sat'];
+      const periodOf={day:'D',evening:'E',night:'N'};
+      for(const day of days){
+        if(this.isOverflow(day))continue;
+        const dk=this.dayKey(day);
+        const req={...(this.requirements?.[wkKeys2[day.getDay()]]||{}),...(this.prevDayReqs?.[dk]||{})};
+        const cnt={D:[],E:[],N:[]};
+        for(const n of this.nurses){
+          if(this.isNurseInactive(n,day))continue;
+          const code=(effByNurse[n.id]||{})[dk];
+          const p=code&&defByCode[code]?periodOf[defByCode[code].period]:null;
+          if(p)cnt[p].push(n.id);
+        }
+        for(const p of['D','E','N']){
+          const need=+req[p]||0;
+          if(cnt[p].length>need){
+            v.push({nid:cnt[p][0],dk,msg:`${fmtD(day)} ${p} 사전배정 ${cnt[p].length}명 — 필요 ${need}명과 정확히 일치해야 함`});
+            for(const id of cnt[p])extraCells.push(`${id}|${dk}`);
+          }
+        }
+      }
+
       this.prevViolations=v;
       this._violationSet=new Set(v.map(x=>`${x.nid}|${x.dk}`));
+      for(const k of extraCells)this._violationSet.add(k);
       this._checkStaffingSlack();
+      // 실시간 생성 가능성 신호등 — 편집이 잦으니 디바운스로 프로브
+      this._queueFeasibility&&this._queueFeasibility();
     },
 
     _checkStaffingSlack(){

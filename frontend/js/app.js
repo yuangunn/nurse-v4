@@ -61,6 +61,7 @@ function app() {
     _undoStack:[], _redoStack:[], _maxUndo:40,
     _autoSaveTimer:null, _autoSaveKey:'ns_prev_autosave',
     prevViolations:[], _violationSet:new Set(),
+    feas:null, _feasSeq:0, _feasTimer:null, // 실시간 생성 가능성 신호등 (/api/feasibility)
     _dragStart:null, _dragCells:[], _isDragging:false,
     _focusedCell:null, // {nIdx, dIdx}
     lockedCells:{}, // nurseId → {dateKey: true}
@@ -401,6 +402,7 @@ function app() {
       await Promise.all([this.loadNurses(),this.loadRules(),this.loadRequirements(),this.loadShifts(),this.loadScoringRules(),this.loadSavedList(),this.loadPrevSavesList()]);
       this._checkPendingGenerate();
       this._restoreFullState()||this._restoreAutoSave();
+      this._checkViolations(); // 복원된 사전입력 기준 라인트 + 신호등 초기 판정
       this._startAutoSave();
       this.initAutoDark();
       this.loadTemplates();
