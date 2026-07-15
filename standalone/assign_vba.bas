@@ -27,10 +27,16 @@ Option Explicit
 Private Const MAX_LABELS As Long = 5
 Private Const UI_FONT As String = "맑은 고딕"   ' 공통 서식 폰트 (모듈 선언은 반드시 프로시저 앞)
 
+' Alt+F8 매크로 목록용 진입점 — 파라미터(Optional 포함) 있는 Sub는 목록에 안 보이므로
+' 사용자용 매크로 3개는 반드시 파라미터 없이 유지할 것
+Public Sub 초기세팅생성(): 초기세팅_코어 False: End Sub
+Public Sub 근무표생성(): 근무표_코어 0, 0, False: End Sub
+Public Sub 어싸인배정실행(): 어싸인_코어 False: End Sub
+
 ' 자동화 진입점(대화상자 없이 실행) — 스크립트/AppleScript run VB macro 용
-Public Sub 자동_초기세팅(): 초기세팅생성 True: End Sub
-Public Sub 자동_근무표(ByVal 연 As Long, ByVal 월 As Long): 근무표생성 연, 월, True: End Sub
-Public Sub 자동_어싸인(): 어싸인배정실행 True: End Sub
+Public Sub 자동_초기세팅(): 초기세팅_코어 True: End Sub
+Public Sub 자동_근무표(ByVal 연 As Long, ByVal 월 As Long): 근무표_코어 연, 월, True: End Sub
+Public Sub 자동_어싸인(): 어싸인_코어 True: End Sub
 
 ' ══════════════════════════════════════════════════════════════
 ' 공통 서식 헬퍼 (깔끔·심플·사무용)
@@ -78,7 +84,7 @@ End Sub
 ' ══════════════════════════════════════════════════════════════
 ' 매크로 1: 초기세팅 시트 생성
 ' ══════════════════════════════════════════════════════════════
-Public Sub 초기세팅생성(Optional 조용히 As Boolean = False)
+Private Sub 초기세팅_코어(Optional 조용히 As Boolean = False)
     If SheetExists("설정") And Not 조용히 Then
         If MsgBox("""설정"" 시트가 이미 있습니다. 초기화할까요? (기존 세팅 삭제)", _
                   vbYesNo + vbExclamation) <> vbYes Then Exit Sub
@@ -228,7 +234,7 @@ End Sub
 ' ══════════════════════════════════════════════════════════════
 ' 매크로 2: 근무표 시트 생성
 ' ══════════════════════════════════════════════════════════════
-Public Sub 근무표생성(Optional 연 As Long = 0, Optional 월 As Long = 0, Optional 조용히 As Boolean = False)
+Private Sub 근무표_코어(Optional 연 As Long = 0, Optional 월 As Long = 0, Optional 조용히 As Boolean = False)
     If Not SheetExists("설정") Then
         If Not 조용히 Then MsgBox "먼저 [초기세팅생성] 매크로를 실행해 설정 시트를 만드세요.", vbExclamation
         Exit Sub
@@ -379,7 +385,7 @@ End Sub
 ' ══════════════════════════════════════════════════════════════
 ' 매크로 3: 어싸인 배정 (근무표 시트의 버튼이 호출)
 ' ══════════════════════════════════════════════════════════════
-Public Sub 어싸인배정실행(Optional 조용히 As Boolean = False)
+Private Sub 어싸인_코어(Optional 조용히 As Boolean = False)
     Dim src As Worksheet: Set src = ActiveSheet
     If Left(src.Name, 4) <> "근무표_" Then
         If Not 조용히 Then MsgBox "근무표_YYYY-MM 시트에서 실행하세요.", vbExclamation
