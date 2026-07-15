@@ -54,11 +54,13 @@
 
 <div class="card noprint">
   <h2>배정 원칙 · 방 구성</h2>
-  <div style="margin-bottom:8px">
-    <label><input type="checkbox" id="r2" checked> 원칙2 — 전일 같은 근무면 방 유지</label>
-    <label><input type="checkbox" id="r3" checked> 원칙3 — 근무 바뀌어도 방 유지</label>
-    <label><input type="checkbox" id="r4" checked> 원칙4 — 오프 복귀자 방 유지</label>
+  <div style="margin-bottom:4px">
+    <label><input type="checkbox" id="r1" checked> 원칙1 — 전일 같은 근무면 방 유지</label>
+    <label><input type="checkbox" id="r2" checked> 원칙2 — 근무 바뀌어도 방 유지</label>
+    <label><input type="checkbox" id="r3" checked> 원칙3 — 오프 복귀자 방 유지</label>
+    <label><input type="checkbox" id="r4"> 원칙4 — 오프 복귀자 튕기기</label>
   </div>
+  <div class="dim" style="margin-bottom:8px">※ 차지는 항상 적용(DC/EC/NC 표시자 우선) · 원칙3·4는 반대 개념 — 하나를 켜면 다른 쪽이 자동으로 꺼집니다</div>
   <div class="row" id="schemes"></div>
   <div style="margin-top:8px"><button onclick="resetSchemes()">방 구성 기본값 복원</button></div>
 </div>
@@ -92,7 +94,7 @@
    * @param nurses   [{id, seniority(작을수록 선임), chargeCapable}]
    * @param schedule {nurseId: {dateKey: code}}
    * @param dateKeys 시간순 날짜키 배열 (연속성 위해 전월 이월일 포함 가능)
-   * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff},
+   * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff,bounceAfterOff},
    *                  overrides:{dateKey:{P:{nurseId:label}}}}
    * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId]}}},
    *           byNurse:{nurseId:{dk:{period,label}}}}
@@ -100,9 +102,11 @@
   function compute(nurses, schedule, dateKeys, opts) {
     opts = opts || {};
     const rules = Object.assign(
-      { keepSameShift: true, keepAcrossShift: true, keepAfterOff: true },
+      { keepSameShift: true, keepAcrossShift: true, keepAfterOff: true, bounceAfterOff: false },
       opts.rules || {}
     );
+    // 원칙3(유지)·원칙4(튕기기)는 반대 개념 — 동시 켜지면 원칙3만 적용
+    if (rules.keepAfterOff && rules.bounceAfterOff) rules.bounceAfterOff = false;
     const overrides = opts.overrides || {};
     const byDay = {}, byNurse = {};
     const lastSeen = {}; // nurseId -> {label, idx, period}
@@ -171,12 +175,21 @@
           }
         }
 
-        // 5) 잔여: 선임 순으로 남은 라벨 채움
+        // 잔여: 선임 순으로 남은 라벨 채움
+        // 원칙4(튕기기): 오프 복귀자는 이전 방 라벨을 피해 배정 — 대안 없으면 그대로
         const leftover = staff.filter(function (n) { return !taken[n.id]; })
           .sort(function (a, b) { return a.seniority - b.seniority; });
         const rem = freeLabels();
         for (let i = 0; i < rem.length && leftover.length; i++) {
-          const n = leftover.shift();
+          let pick = 0;
+          if (rules.bounceAfterOff) {
+            const alt = leftover.findIndex(function (n) {
+              const info = lastSeen[n.id];
+              return !(info && info.label === rem[i] && info.idx < idx - 1);
+            });
+            if (alt >= 0) pick = alt;
+          }
+          const n = leftover.splice(pick, 1)[0];
           assigned[rem[i]] = n; taken[n.id] = true;
         }
         // 6인 이상: 라벨 소진 후 잔여 인원은 어싸인 없음(헬퍼)
@@ -266,9 +279,10 @@ function setCharge(name,on){ chargeChecks[name]=on; saveCfg('charge',chargeCheck
   const n=nurses.find(x=>x.name===name); if(n)n.chargeCapable=on; recompute(); }
 
 function rules(){ return {
-  keepSameShift:document.getElementById('r2').checked,
-  keepAcrossShift:document.getElementById('r3').checked,
-  keepAfterOff:document.getElementById('r4').checked }; }
+  keepSameShift:document.getElementById('r1').checked,
+  keepAcrossShift:document.getElementById('r2').checked,
+  keepAfterOff:document.getElementById('r3').checked,
+  bounceAfterOff:document.getElementById('r4').checked }; }
 
 function recompute(){
   if(!nurses.length){document.getElementById('resultCard').style.display='none';return}
@@ -343,7 +357,10 @@ function copyTsv(){
 }
 
 document.getElementById('paste').addEventListener('input',parsePaste);
-['r2','r3','r4'].forEach(id=>document.getElementById(id).addEventListener('change',recompute));
+['r1','r2','r3','r4'].forEach(id=>document.getElementById(id).addEventListener('change',recompute));
+// 원칙3(유지)·원칙4(튕기기) 상호배제 — 하나를 켜면 다른 쪽 해제
+document.getElementById('r3').addEventListener('change',e=>{if(e.target.checked)document.getElementById('r4').checked=false;recompute()});
+document.getElementById('r4').addEventListener('change',e=>{if(e.target.checked)document.getElementById('r3').checked=false;recompute()});
 renderSchemes();
 </script>
 </body>

@@ -5,10 +5,12 @@
  * standalone 갱신: node scripts/build-assign-standalone.mjs
  *
  * 원칙:
- *  1. 차지 = 근무표 DC/EC/NC 표시자 우선, 없으면 차지가능자 중 최선임.
- *  2. 전일 같은 근무에서 본 방 유지 (최우선).
- *  3. 전일 다른 근무에서 본 방 유지 (2항 다음).
- *  4. 오프 복귀자 봤던 방 유지 (3항 다음).
+ *  차지 = 근무표 DC/EC/NC 표시자 우선, 없으면 차지가능자 중 최선임 (항상 적용).
+ *  1. 전일 같은 근무에서 본 방 유지 (최우선).
+ *  2. 전일 다른 근무에서 본 방 유지 (1항 다음).
+ *  3. 오프 복귀자 봤던 방 유지 (2항 다음).
+ *  4. 오프 복귀자 튕기기 — 잔여 배정에서 이전 방 라벨 회피 (3과 동시 사용 불가,
+ *     동시 켜지면 3이 우선). 대안이 없으면 그대로 배정 (라벨 미충원 방지).
  * ─────────────────────────────────────────────────────────────────────────── */
 (function (root) {
   const PERIOD_CODES = { D: ['DC', 'D'], E: ['EC', 'E'], N: ['NC', 'N'] };
@@ -26,7 +28,7 @@
    * @param nurses   [{id, seniority(작을수록 선임), chargeCapable}]
    * @param schedule {nurseId: {dateKey: code}}
    * @param dateKeys 시간순 날짜키 배열 (연속성 위해 전월 이월일 포함 가능)
-   * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff},
+   * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff,bounceAfterOff},
    *                  overrides:{dateKey:{P:{nurseId:label}}}}
    * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId]}}},
    *           byNurse:{nurseId:{dk:{period,label}}}}
@@ -34,9 +36,11 @@
   function compute(nurses, schedule, dateKeys, opts) {
     opts = opts || {};
     const rules = Object.assign(
-      { keepSameShift: true, keepAcrossShift: true, keepAfterOff: true },
+      { keepSameShift: true, keepAcrossShift: true, keepAfterOff: true, bounceAfterOff: false },
       opts.rules || {}
     );
+    // 원칙3(유지)·원칙4(튕기기)는 반대 개념 — 동시 켜지면 원칙3만 적용
+    if (rules.keepAfterOff && rules.bounceAfterOff) rules.bounceAfterOff = false;
     const overrides = opts.overrides || {};
     const byDay = {}, byNurse = {};
     const lastSeen = {}; // nurseId -> {label, idx, period}
@@ -105,12 +109,21 @@
           }
         }
 
-        // 5) 잔여: 선임 순으로 남은 라벨 채움
+        // 잔여: 선임 순으로 남은 라벨 채움
+        // 원칙4(튕기기): 오프 복귀자는 이전 방 라벨을 피해 배정 — 대안 없으면 그대로
         const leftover = staff.filter(function (n) { return !taken[n.id]; })
           .sort(function (a, b) { return a.seniority - b.seniority; });
         const rem = freeLabels();
         for (let i = 0; i < rem.length && leftover.length; i++) {
-          const n = leftover.shift();
+          let pick = 0;
+          if (rules.bounceAfterOff) {
+            const alt = leftover.findIndex(function (n) {
+              const info = lastSeen[n.id];
+              return !(info && info.label === rem[i] && info.idx < idx - 1);
+            });
+            if (alt >= 0) pick = alt;
+          }
+          const n = leftover.splice(pick, 1)[0];
           assigned[rem[i]] = n; taken[n.id] = true;
         }
         // 6인 이상: 라벨 소진 후 잔여 인원은 어싸인 없음(헬퍼)

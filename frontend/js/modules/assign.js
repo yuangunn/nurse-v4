@@ -23,7 +23,7 @@ window.AssignModule = function () {
 
   return {
     assignData: null,          // AssignCore.compute 결과
-    assignRules: { keepSameShift: true, keepAcrossShift: true, keepAfterOff: true },
+    assignRules: { keepSameShift: true, keepAcrossShift: true, keepAfterOff: true, bounceAfterOff: false },
     assignSchemes: JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
     assignOverrides: {},       // {dk:{P:{nid:label}}}
     assignSource: 'auto',      // auto | schedule | prev
@@ -127,7 +127,12 @@ window.AssignModule = function () {
       this.assignSaveCfg(); this.assignRecompute();
       this.toast('방 구성을 기본값으로 되돌렸습니다', 'info');
     },
-    assignRuleChanged() { this.assignSaveCfg(); this.assignRecompute() },
+    assignRuleChanged(which) {
+      // 원칙3(오프 복귀 유지)·원칙4(튕기기)는 반대 개념 — 하나를 켜면 다른 쪽 자동 해제
+      if (which === 'keepAfterOff' && this.assignRules.keepAfterOff) this.assignRules.bounceAfterOff = false;
+      if (which === 'bounceAfterOff' && this.assignRules.bounceAfterOff) this.assignRules.keepAfterOff = false;
+      this.assignSaveCfg(); this.assignRecompute();
+    },
 
     // ── 수동 오버라이드 (셀 클릭 → 라벨 선택, 기존 보유자와 스왑) ──
     assignPickOpen(nid, day) {

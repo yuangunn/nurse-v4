@@ -347,7 +347,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 3. **분석**: 일자별 과부족 히트맵 + 주휴 추천 배분 → "사전입력에 적용"
 4. **스케줄**: 생성 결과 표시, 셀 직접 편집, 인원 카운트, 배점 상세
 5. **어싸인**: 근무표 기반 병실 자동 배정 (일별 D/E/N, 병실 단위)
-   - 원칙: ①차지=DC/EC/NC 우선 ②전일 같은 근무 방 유지 ③근무 변경 시 유지 ④오프 복귀 유지 (②>③>④, 토글 가능)
+   - 원칙: 차지=DC/EC/NC 우선(항상 적용) · ①전일 같은 근무 방 유지 ②근무 변경 시 유지 ③오프 복귀 유지 ④오프 복귀 튕기기(③과 상호배제 — 하나 켜면 다른 쪽 자동 해제, 기본 꺼짐). 우선순위 ①>②>③, 토글 가능
    - 인원수별(2~5인) 방 구성 편집, 셀 클릭 수동 조정(스왑), TSV 복사. 설정은 localStorage(프로필·월별)
    - 코어: `frontend/js/modules/assign-core.js` (순수 함수, 검증 `node scripts/test_assign_core.mjs`)
    - 인트라넷용: `standalone/assign.html` (단일 파일, 코어 동기화 `node scripts/build-assign-standalone.mjs`) + `standalone/assign_vba.bas` (Excel VBA)

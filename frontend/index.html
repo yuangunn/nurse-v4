@@ -1396,12 +1396,14 @@
   <!-- 방 구성 + 원칙 설정 -->
   <div x-show="assignCfgOpen" x-cloak class="card mb-3">
     <div class="section-title" style="margin-bottom:8px">배정 원칙</div>
-    <div class="text-xs text-dim mb-2">원칙 1(차지): 근무표의 DC/EC/NC 표시자가 차지방 담당. 표시가 없으면 차지 가능자 중 최선임.</div>
+    <div class="text-xs text-dim mb-2">차지(항상 적용): 근무표의 DC/EC/NC 표시자가 차지방 담당. 표시가 없으면 차지 가능자 중 최선임.</div>
     <div class="flex flex-wrap gap-4 mb-4">
-      <label class="flex items-center gap-1.5 text-xs"><input type="checkbox" x-model="assignRules.keepSameShift" @change="assignRuleChanged()"/>원칙 2 — 전일 같은 근무면 봤던 방 유지</label>
-      <label class="flex items-center gap-1.5 text-xs"><input type="checkbox" x-model="assignRules.keepAcrossShift" @change="assignRuleChanged()"/>원칙 3 — 근무가 바뀌어도 봤던 방 유지</label>
-      <label class="flex items-center gap-1.5 text-xs"><input type="checkbox" x-model="assignRules.keepAfterOff" @change="assignRuleChanged()"/>원칙 4 — 오프 복귀자 봤던 방 유지</label>
+      <label class="flex items-center gap-1.5 text-xs"><input type="checkbox" x-model="assignRules.keepSameShift" @change="assignRuleChanged('keepSameShift')"/>원칙 1 — 전일 같은 근무면 봤던 방 유지</label>
+      <label class="flex items-center gap-1.5 text-xs"><input type="checkbox" x-model="assignRules.keepAcrossShift" @change="assignRuleChanged('keepAcrossShift')"/>원칙 2 — 근무가 바뀌어도 봤던 방 유지</label>
+      <label class="flex items-center gap-1.5 text-xs"><input type="checkbox" x-model="assignRules.keepAfterOff" @change="assignRuleChanged('keepAfterOff')"/>원칙 3 — 오프 복귀자 봤던 방 유지</label>
+      <label class="flex items-center gap-1.5 text-xs"><input type="checkbox" x-model="assignRules.bounceAfterOff" @change="assignRuleChanged('bounceAfterOff')"/>원칙 4 — 오프 복귀자 튕기기 (이전 방 회피)</label>
     </div>
+    <div class="text-xs text-dim mb-4" style="margin-top:-8px">※ 원칙 3·4는 반대 개념이라 동시에 켤 수 없습니다 — 하나를 켜면 다른 쪽은 자동으로 꺼집니다.</div>
     <div class="section-title" style="margin-bottom:8px">인원수별 방 구성 <span class="text-xs text-dim font-normal">(병실 번호를 쉼표로 구분 — 2인 근무는 환자 수에 따라 수동 분배)</span></div>
     <div class="grid grid-cols-2 gap-4" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
       <template x-for="cnt in [5,4,3,2]" :key="'sch'+cnt">

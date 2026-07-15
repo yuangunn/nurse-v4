@@ -161,4 +161,28 @@ assert.equal(periodOf('OF'), null);
   assert.equal(r.byDay.d2.D.labels['A'], 'c'); // 잔여 최선임으로 우연히 A — 규칙과 무관
 }
 
+// ── 원칙4: 오프 복귀자 튕기기 (VBA 검증 시나리오와 동일) ──
+{
+  // d1: a=차지, b=A, c=B / d2: b 오프 (c는 B 유지, f가 A) / d3: b 복귀 + 신규 e
+  const nurses = [N('a', 0), N('b', 1), N('c', 2), N('e', 4), N('f', 5)];
+  const sched = {
+    a: { d1: 'DC', d2: 'DC', d3: 'DC' },
+    b: { d1: 'D', d3: 'D' },
+    c: { d1: 'D', d2: 'D', d3: 'D' },
+    e: { d3: 'D' },
+    f: { d2: 'D' },
+  };
+  const days = ['d1', 'd2', 'd3'];
+  // 원칙3(유지): 복귀자 b가 이전 방 A 유지
+  let r = compute(nurses, sched, days, { rules: { keepAfterOff: true, bounceAfterOff: false } });
+  assert.equal(r.byNurse.b.d3.label, 'A');
+  // 원칙4(튕기기): b는 A 회피 → C, A는 신규 e에게
+  r = compute(nurses, sched, days, { rules: { keepAfterOff: false, bounceAfterOff: true } });
+  assert.equal(r.byNurse.b.d3.label, 'C');
+  assert.equal(r.byNurse.e.d3.label, 'A');
+  // 동시 켜짐(금지 조합): 원칙3만 적용 — 튕기기 무시
+  r = compute(nurses, sched, days, { rules: { keepAfterOff: true, bounceAfterOff: true } });
+  assert.equal(r.byNurse.b.d3.label, 'A');
+}
+
 console.log('assign-core: 모든 검증 통과');
