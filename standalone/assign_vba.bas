@@ -142,7 +142,7 @@ Private Sub 초기세팅_코어(Optional 조용히 As Boolean = False)
     ws.Range("J4").Value = "원칙1 — 전일 같은 근무면 방 유지": ws.Range("K4").Value = "O"
     ws.Range("J5").Value = "원칙2 — 근무 바뀌어도 방 유지": ws.Range("K5").Value = "O"
     ws.Range("J6").Value = "원칙3 — 오프 복귀자 방 유지": ws.Range("K6").Value = "O"
-    ws.Range("J7").Value = "원칙4 — 오프 복귀자 튕기기 (복귀 시 이전 방 제외)": ws.Range("K7").Value = "X"
+    ws.Range("J7").Value = "원칙4 — 오프 복귀자 튕기기": ws.Range("K7").Value = "X"
     ws.Range("J8").Value = "※ 원칙3·4는 반대 개념 — 동시에 O 금지 (동시 O면 원칙3만 적용되고 배정 시 경고)"
 
     ' ── 요일별 필요인원 ──
