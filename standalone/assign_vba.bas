@@ -25,11 +25,55 @@ Option Explicit
 ' ════════════════════════════════════════════════════════════════════
 
 Private Const MAX_LABELS As Long = 5
+Private Const UI_FONT As String = "맑은 고딕"   ' 공통 서식 폰트 (모듈 선언은 반드시 프로시저 앞)
 
 ' 자동화 진입점(대화상자 없이 실행) — 스크립트/AppleScript run VB macro 용
 Public Sub 자동_초기세팅(): 초기세팅생성 True: End Sub
 Public Sub 자동_근무표(ByVal 연 As Long, ByVal 월 As Long): 근무표생성 연, 월, True: End Sub
 Public Sub 자동_어싸인(): 어싸인배정실행 True: End Sub
+
+' ══════════════════════════════════════════════════════════════
+' 공통 서식 헬퍼 (깔끔·심플·사무용)
+' ══════════════════════════════════════════════════════════════
+Private Sub SheetBase(ws As Worksheet)
+    ws.Cells.Font.Name = UI_FONT
+    ws.Cells.Font.Size = 10
+    ws.Activate
+    On Error Resume Next
+    ActiveWindow.DisplayGridlines = False
+    On Error GoTo 0
+End Sub
+
+Private Sub TitleStyle(c As Range, ByVal sz As Long)
+    c.Font.Bold = True: c.Font.Size = sz: c.Font.Color = RGB(46, 56, 77)
+End Sub
+
+Private Sub SectionHead(c As Range)
+    c.Font.Bold = True: c.Font.Size = 11: c.Font.Color = RGB(46, 56, 77)
+    BottomRule c
+End Sub
+
+Private Sub MuteStyle(c As Range)
+    c.Font.Size = 9: c.Font.Color = RGB(130, 134, 148)
+End Sub
+
+Private Sub HeadStyle(rng As Range)
+    rng.Interior.Color = RGB(237, 240, 245)
+    rng.Font.Bold = True: rng.Font.Color = RGB(55, 62, 80)
+    rng.HorizontalAlignment = xlCenter: rng.VerticalAlignment = xlCenter
+End Sub
+
+Private Sub BoxBorders(rng As Range)
+    With rng.Borders
+        .LineStyle = xlContinuous: .Color = RGB(214, 218, 226): .Weight = xlThin
+    End With
+End Sub
+
+Private Sub BottomRule(rng As Range)
+    With rng.Borders(xlEdgeBottom)
+        .LineStyle = xlContinuous: .Color = RGB(150, 158, 172): .Weight = xlMedium
+    End With
+End Sub
 
 ' ══════════════════════════════════════════════════════════════
 ' 매크로 1: 초기세팅 시트 생성
@@ -53,10 +97,18 @@ Public Sub 초기세팅생성(Optional 조용히 As Boolean = False)
     For c = 0 To UBound(hdr): ws.Cells(4, c + 1).Value = hdr(c): Next c
     ws.Range("A4:H4").Font.Bold = True
     ws.Range("A4:H4").Interior.Color = RGB(240, 240, 245)
-    ' 예시 3명 (이름을 실제로 바꿔 쓰세요)
-    ws.Range("A5").Value = "예시)김선임": ws.Range("B5:G5").Value = Array("O", "O", "O", "O", "O", "O")
-    ws.Range("A6").Value = "예시)이중견": ws.Range("C6").Value = "O": ws.Range("E6").Value = "O": ws.Range("G6").Value = "O"
-    ws.Range("A7").Value = "예시)박신입": ws.Range("C7").Value = "O": ws.Range("E7").Value = "O": ws.Range("G7").Value = "O"
+    ' 예시 18명 (이름을 실제로 바꿔 쓰세요 · 위 = 선임 · 상위 6명 = 차지 가능 예시)
+    Dim ex As Long
+    For ex = 1 To 18
+        ws.Cells(4 + ex, 1).Value = "예시)간호" & Format(ex, "00")
+        If ex <= 6 Then
+            ws.Range(ws.Cells(4 + ex, 2), ws.Cells(4 + ex, 7)).Value = "O"   ' DC D EC E NC N
+        Else
+            ws.Cells(4 + ex, 3).Value = "O"   ' D
+            ws.Cells(4 + ex, 5).Value = "O"   ' E
+            ws.Cells(4 + ex, 7).Value = "O"   ' N
+        End If
+    Next ex
 
     ' ── 배정 원칙 (J열 블록) ──
     ws.Range("J3").Value = "■ 배정 원칙 (O = 사용)": ws.Range("J3").Font.Bold = True
@@ -136,6 +188,38 @@ Public Sub 초기세팅생성(Optional 조용히 As Boolean = False)
     ws.Columns("M:Q").ColumnWidth = 5     ' 요일별 필요인원 값 열
     ws.Columns("R").ColumnWidth = 3       ' 사용법과 간격
     ws.Columns("S").ColumnWidth = 62      ' 사용법
+
+    ' ── 서식 (깔끔·사무용) ──
+    SheetBase ws
+    TitleStyle ws.Range("A1"), 14
+    SectionHead ws.Range("A3")
+    SectionHead ws.Range("J3")
+    SectionHead ws.Range("J8")
+    SectionHead ws.Range("J14")
+    SectionHead ws.Range("J31")
+    SectionHead ws.Range("S3")
+    ' 간호사 표 (예시 18명 = 5~22행)
+    HeadStyle ws.Range("A4:H4")
+    BoxBorders ws.Range("A4:H22")
+    ws.Range("A5:A22").HorizontalAlignment = xlLeft
+    ws.Range("B5:H22").HorizontalAlignment = xlCenter
+    ' 요일별 필요인원 표
+    HeadStyle ws.Range("J9:Q9")
+    BoxBorders ws.Range("J9:Q12")
+    ws.Range("K10:Q12").HorizontalAlignment = xlCenter
+    ' 방 목록 표
+    HeadStyle ws.Range("J15:K15")
+    BoxBorders ws.Range("J15:K28")
+    ws.Range("K16:K28").HorizontalAlignment = xlCenter
+    ' 어싸인별 방 구성 표
+    HeadStyle ws.Range("J32:L32")
+    BoxBorders ws.Range("J32:L46")
+    ws.Range("J33:K46").HorizontalAlignment = xlCenter
+    ' 원칙 O 표시 가운데
+    ws.Range("K4:K6").HorizontalAlignment = xlCenter
+    ws.Rows("1:46").RowHeight = 17
+    ws.Range("A1").EntireRow.RowHeight = 22
+
     Application.ScreenUpdating = True
     ws.Activate
     If Not 조용히 Then MsgBox "설정 시트를 만들었습니다." & vbLf & "간호사 목록을 수정한 뒤 [근무표생성] 매크로를 실행하세요.", vbInformation
@@ -200,9 +284,7 @@ Public Sub 근무표생성(Optional 연 As Long = 0, Optional 월 As Long = 0, O
     Dim wdName As Variant: wdName = Array("월", "화", "수", "목", "금", "토", "일")
 
     ws.Range("A1").Value = y & "년 " & m & "월 근무표"
-    ws.Range("A1").Font.Bold = True: ws.Range("A1").Font.Size = 13
     ws.Range("A2").Value = "입력: D E N (일반) · DC EC NC (차지) · D/A E/B 식 = 어싸인 선입력(고정) · OF 주 V 등 = 어싸인 제외"
-    ws.Range("A2").Font.Color = RGB(120, 120, 130)
 
     ' 헤더 (3행 날짜, 4행 요일)
     ws.Cells(3, 1).Value = "이름"
@@ -214,9 +296,14 @@ Public Sub 근무표생성(Optional 연 As Long = 0, Optional 월 As Long = 0, O
         If wd = 6 Then ws.Cells(4, 1 + d).Font.Color = RGB(30, 90, 200)
         If wd = 7 Then ws.Cells(4, 1 + d).Font.Color = RGB(200, 40, 40)
     Next d
-    ws.Range(ws.Cells(3, 1), ws.Cells(4, 1 + nD)).Font.Bold = True
-    ws.Range(ws.Cells(3, 1), ws.Cells(4, 1 + nD)).Interior.Color = RGB(240, 240, 245)
-    ws.Range(ws.Cells(3, 1), ws.Cells(4, 1 + nD)).HorizontalAlignment = xlCenter
+    With ws.Range(ws.Cells(3, 1), ws.Cells(4, 1 + nD))
+        .Font.Bold = True
+        .Interior.Color = RGB(237, 240, 245)
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+    End With
+    ws.Cells(3, 1).HorizontalAlignment = xlLeft
+    BottomRule ws.Range(ws.Cells(4, 1), ws.Cells(4, 1 + nD))
 
     ' 간호사 행
     Dim i As Long
@@ -253,12 +340,26 @@ Public Sub 근무표생성(Optional 연 As Long = 0, Optional 월 As Long = 0, O
         Next d
     Next p
 
-    ' 모양새
+    ' 모양새 (깔끔·사무용)
+    SheetBase ws
+    TitleStyle ws.Range("A1"), 13
+    MuteStyle ws.Range("A2")
     ws.Columns(1).ColumnWidth = 12
     ws.Range(ws.Columns(2), ws.Columns(1 + nD)).ColumnWidth = 4.5
-    ws.Range(ws.Cells(5, 2), ws.Cells(base + 5, 1 + nD)).HorizontalAlignment = xlCenter
-    ws.Range(ws.Cells(3, 1), ws.Cells(base + 5, 1 + nD)).Borders.LineStyle = xlContinuous
-    ws.Range(ws.Cells(3, 1), ws.Cells(base + 5, 1 + nD)).Borders.Color = RGB(200, 200, 210)
+    ' 근무 입력 그리드
+    ws.Range(ws.Cells(5, 1), ws.Cells(4 + nN, 1)).HorizontalAlignment = xlLeft
+    ws.Range(ws.Cells(5, 2), ws.Cells(4 + nN, 1 + nD)).HorizontalAlignment = xlCenter
+    BoxBorders ws.Range(ws.Cells(3, 1), ws.Cells(4 + nN, 1 + nD))
+    ' 인원/필요 카운트 블록 — 옅은 배경 + 상단 구분선으로 스케줄과 분리
+    ws.Range(ws.Cells(base, 1), ws.Cells(base + 5, 1 + nD)).Interior.Color = RGB(248, 249, 251)
+    ws.Range(ws.Cells(base, 1), ws.Cells(base + 5, 1)).Font.Color = RGB(90, 96, 110)
+    ws.Range(ws.Cells(base, 2), ws.Cells(base + 5, 1 + nD)).HorizontalAlignment = xlCenter
+    BoxBorders ws.Range(ws.Cells(base, 1), ws.Cells(base + 5, 1 + nD))
+    With ws.Range(ws.Cells(base, 1), ws.Cells(base, 1 + nD)).Borders(xlEdgeTop)
+        .LineStyle = xlContinuous: .Color = RGB(150, 158, 172): .Weight = xlMedium
+    End With
+    ws.Rows("3:" & (base + 5)).RowHeight = 17
+    ws.Rows(1).RowHeight = 22
     ws.Activate
     ws.Cells(5, 2).Select
     ActiveWindow.FreezePanes = False
@@ -498,13 +599,13 @@ End Sub
 Private Sub WriteGrid(ym As String, names() As String, nN As Long, nD As Long, _
                       resLabel() As String, resPeriod() As String, resFixed() As Boolean)
     Dim wo As Worksheet: Set wo = GetCleanSheet("어싸인_" & ym)
-    wo.Range("A1").Value = ym & " 어싸인 (DC EC NC=차지 · D/A E/B=근무/방 · D=파랑 E=초록 N=주황 · 굵게=선입력 고정 · /—=헬퍼)"
-    wo.Range("A1").Font.Bold = True
+    wo.Range("A1").Value = ym & " 어싸인표"
+    wo.Range("A2").Value = "DC EC NC=차지 · D/A E/B=근무/방 · 색=근무(D 파랑·E 초록·N 주황) · 굵게=선입력 고정 · /—=헬퍼"
     Dim i As Long, j As Long
     wo.Cells(3, 1).Value = "이름"
     For j = 1 To nD: wo.Cells(3, 1 + j).Value = j: Next j
-    wo.Range(wo.Cells(3, 1), wo.Cells(3, 1 + nD)).Font.Bold = True
-    wo.Range(wo.Cells(3, 1), wo.Cells(3, 1 + nD)).Interior.Color = RGB(240, 240, 245)
+    HeadStyle wo.Range(wo.Cells(3, 1), wo.Cells(3, 1 + nD))
+    wo.Cells(3, 1).HorizontalAlignment = xlLeft
     For i = 1 To nN
         wo.Cells(3 + i, 1).Value = names(i)
         For j = 1 To nD
@@ -527,12 +628,21 @@ Private Sub WriteGrid(ym As String, names() As String, nN As Long, nD As Long, _
             End If
         Next j
     Next i
+    ' 모양새 (깔끔·사무용)
+    SheetBase wo
+    TitleStyle wo.Range("A1"), 13
+    MuteStyle wo.Range("A2")
     wo.Columns(1).ColumnWidth = 12
     wo.Range(wo.Columns(2), wo.Columns(1 + nD)).ColumnWidth = 5.5
-    wo.Range(wo.Cells(3, 1), wo.Cells(3 + nN, 1 + nD)).HorizontalAlignment = xlCenter
-    wo.Cells(3, 1).HorizontalAlignment = xlLeft
-    wo.Range(wo.Cells(3, 1), wo.Cells(3 + nN, 1 + nD)).Borders.LineStyle = xlContinuous
-    wo.Range(wo.Cells(3, 1), wo.Cells(3 + nN, 1 + nD)).Borders.Color = RGB(200, 200, 210)
+    wo.Range(wo.Cells(4, 1), wo.Cells(3 + nN, 1)).HorizontalAlignment = xlLeft
+    wo.Range(wo.Cells(4, 2), wo.Cells(3 + nN, 1 + nD)).HorizontalAlignment = xlCenter
+    BoxBorders wo.Range(wo.Cells(3, 1), wo.Cells(3 + nN, 1 + nD))
+    wo.Rows("3:" & (3 + nN)).RowHeight = 18
+    wo.Rows(1).RowHeight = 22
+    wo.Activate
+    wo.Cells(4, 2).Select
+    ActiveWindow.FreezePanes = False
+    ActiveWindow.FreezePanes = True
 End Sub
 
 Private Sub WriteDetail(ym As String, names() As String, nN As Long, nD As Long, _
@@ -541,10 +651,9 @@ Private Sub WriteDetail(ym As String, names() As String, nN As Long, nD As Long,
     Dim wd As Worksheet: Set wd = GetCleanSheet("어싸인상세_" & ym)
     Dim LABELS As Variant: LABELS = Array("차지", "A", "B", "C", "D")
     Dim periods As Variant: periods = Array("D", "E", "N")
-    wd.Range("A1:E1").Value = Array("날짜", "시간대", "어싸인", "간호사", "병실")
-    wd.Range("A1:E1").Font.Bold = True
-    wd.Range("A1:E1").Interior.Color = RGB(240, 240, 245)
-    Dim r As Long: r = 2
+    wd.Range("A1").Value = ym & " 어싸인 상세"
+    wd.Range("A2:E2").Value = Array("날짜", "시간대", "어싸인", "간호사", "병실")
+    Dim r As Long: r = 3
     Dim j As Long, p As Long, li As Long, i As Long
     For j = 1 To nD
         For p = 0 To 2
@@ -571,7 +680,33 @@ Private Sub WriteDetail(ym As String, names() As String, nN As Long, nD As Long,
             Next i
         Next p
     Next j
-    wd.Columns.AutoFit
+    Dim lastRow As Long: lastRow = r - 1
+
+    ' 서식 (깔끔·사무용)
+    SheetBase wd
+    TitleStyle wd.Range("A1"), 13
+    HeadStyle wd.Range("A2:E2")
+    BottomRule wd.Range("A2:E2")
+    If lastRow >= 3 Then
+        BoxBorders wd.Range("A2:E" & lastRow)
+        wd.Range("A3:C" & lastRow).HorizontalAlignment = xlCenter
+        wd.Range("D3:E" & lastRow).HorizontalAlignment = xlLeft
+        Dim rr As Long
+        For rr = 3 To lastRow          ' 날짜별 옅은 밴딩 (짝수 날)
+            If (wd.Cells(rr, 1).Value Mod 2) = 0 Then _
+                wd.Range("A" & rr & ":E" & rr).Interior.Color = RGB(248, 249, 251)
+        Next rr
+    End If
+    wd.Columns(1).ColumnWidth = 6
+    wd.Columns(2).ColumnWidth = 8
+    wd.Columns(3).ColumnWidth = 8
+    wd.Columns(4).ColumnWidth = 12
+    wd.Columns(5).ColumnWidth = 34
+    wd.Rows(1).RowHeight = 22
+    wd.Activate
+    wd.Range("A3").Select
+    ActiveWindow.FreezePanes = False
+    ActiveWindow.FreezePanes = True
 End Sub
 
 ' 방 목록 문자열: "1001호(5인실) 1002호(5인실)"
