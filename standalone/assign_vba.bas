@@ -14,14 +14,15 @@ Option Explicit
 '   D, E, N          일반 근무
 '   DC, EC, NC       차지 근무 (그 사람이 차지방)
 '   D/A, E/B, N/C    어싸인 선입력 — 근무 + 방 라벨 고정 (하루만 적어도
-'                    이후 날짜는 원칙 2~4로 이어서 자동 배정됨)
+'                    이후 날짜는 원칙 1~3으로 이어서 자동 배정됨)
 '   그 외 (OF, 주, V, 중, D1 등) — 어싸인 배정 제외
 '
 ' 배정 원칙 (설정 시트에서 O/X로 on/off):
-'   1. 차지 = DC/EC/NC 표시자 우선, 없으면 차지가능(설정) 최선임
-'   2. 전일 같은 근무 → 봤던 방 유지 (최우선)
-'   3. 전일 다른 근무 → 봤던 방 유지
-'   4. 오프 복귀자 → 봤던 방 유지
+'   차지: DC/EC/NC 표시자 우선, 없으면 차지가능(설정) 최선임 (항상 적용)
+'   1. 전일 같은 근무 → 봤던 방 유지 (최우선)
+'   2. 전일 다른 근무 → 봤던 방 유지
+'   3. 오프 복귀자 → 봤던 방 유지
+'   4. 오프 복귀자 튕기기 — 복귀 시 이전 방 제외 (원칙3과 동시 O 불가)
 ' ════════════════════════════════════════════════════════════════════
 
 Private Const MAX_LABELS As Long = 5
@@ -138,37 +139,39 @@ Private Sub 초기세팅_코어(Optional 조용히 As Boolean = False)
 
     ' ── 배정 원칙 (J열 블록) ──
     ws.Range("J3").Value = "■ 배정 원칙 (O = 사용)": ws.Range("J3").Font.Bold = True
-    ws.Range("J4").Value = "원칙2 — 전일 같은 근무면 방 유지": ws.Range("K4").Value = "O"
-    ws.Range("J5").Value = "원칙3 — 근무 바뀌어도 방 유지": ws.Range("K5").Value = "O"
-    ws.Range("J6").Value = "원칙4 — 오프 복귀자 방 유지": ws.Range("K6").Value = "O"
+    ws.Range("J4").Value = "원칙1 — 전일 같은 근무면 방 유지": ws.Range("K4").Value = "O"
+    ws.Range("J5").Value = "원칙2 — 근무 바뀌어도 방 유지": ws.Range("K5").Value = "O"
+    ws.Range("J6").Value = "원칙3 — 오프 복귀자 방 유지": ws.Range("K6").Value = "O"
+    ws.Range("J7").Value = "원칙4 — 오프 복귀자 튕기기 (복귀 시 이전 방 제외)": ws.Range("K7").Value = "X"
+    ws.Range("J8").Value = "※ 원칙3·4는 반대 개념 — 동시에 O 금지 (동시 O면 원칙3만 적용되고 배정 시 경고)"
 
     ' ── 요일별 필요인원 ──
-    ws.Range("J8").Value = "■ 요일별 필요인원 (근무표 생성 시 기본값 — 근무표 하단에서 일별 수정 가능)"
-    ws.Range("J8").Font.Bold = True
+    ws.Range("J10").Value = "■ 요일별 필요인원 (근무표 생성 시 기본값 — 근무표 하단에서 일별 수정 가능)"
+    ws.Range("J10").Font.Bold = True
     Dim wdHdr As Variant: wdHdr = Array("구분", "월", "화", "수", "목", "금", "토", "일")
-    For c = 0 To 7: ws.Cells(9, 10 + c).Value = wdHdr(c): Next c
-    ws.Range("J9:Q9").Font.Bold = True: ws.Range("J9:Q9").Interior.Color = RGB(240, 240, 245)
-    ws.Range("J10").Value = "D": ws.Range("K10:Q10").Value = Array(4, 5, 5, 5, 5, 3, 3)
-    ws.Range("J11").Value = "E": ws.Range("K11:Q11").Value = Array(5, 5, 5, 5, 4, 3, 4)
-    ws.Range("J12").Value = "N": ws.Range("K12:Q12").Value = Array(3, 3, 3, 3, 3, 2, 3)
+    For c = 0 To 7: ws.Cells(11, 10 + c).Value = wdHdr(c): Next c
+    ws.Range("J11:Q11").Font.Bold = True: ws.Range("J11:Q11").Interior.Color = RGB(240, 240, 245)
+    ws.Range("J12").Value = "D": ws.Range("K12:Q12").Value = Array(4, 5, 5, 5, 5, 3, 3)
+    ws.Range("J13").Value = "E": ws.Range("K13:Q13").Value = Array(5, 5, 5, 5, 4, 3, 4)
+    ws.Range("J14").Value = "N": ws.Range("K14:Q14").Value = Array(3, 3, 3, 3, 3, 2, 3)
 
     ' ── 방 목록 ──
-    ws.Range("J14").Value = "■ 방 목록": ws.Range("J14").Font.Bold = True
-    ws.Range("J15").Value = "방번호": ws.Range("K15").Value = "유형"
-    ws.Range("J15:K15").Font.Bold = True: ws.Range("J15:K15").Interior.Color = RGB(240, 240, 245)
+    ws.Range("J16").Value = "■ 방 목록": ws.Range("J16").Font.Bold = True
+    ws.Range("J17").Value = "방번호": ws.Range("K17").Value = "유형"
+    ws.Range("J17:K17").Font.Bold = True: ws.Range("J17:K17").Interior.Color = RGB(240, 240, 245)
     Dim rooms As Variant, types As Variant, r As Long
     rooms = Array(1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1014)
     types = Array("5인실", "5인실", "5인실", "5인실", "5인실", "5인실", "2인실", "2인실", "1인실", "2인실", "2인실", "2인실", "5인실")
     For r = 0 To UBound(rooms)
-        ws.Cells(16 + r, 10).Value = rooms(r)
-        ws.Cells(16 + r, 11).Value = types(r)
+        ws.Cells(18 + r, 10).Value = rooms(r)
+        ws.Cells(18 + r, 11).Value = types(r)
     Next r
 
     ' ── 어싸인별 방 구성 ──
-    ws.Range("J31").Value = "■ 어싸인별 방 구성 (근무 인원수별 · 방번호 쉼표 구분 · 2인 근무는 비워두면 수동 분배)"
-    ws.Range("J31").Font.Bold = True
-    ws.Range("J32").Value = "인원수": ws.Range("K32").Value = "어싸인": ws.Range("L32").Value = "방 목록"
-    ws.Range("J32:L32").Font.Bold = True: ws.Range("J32:L32").Interior.Color = RGB(240, 240, 245)
+    ws.Range("J33").Value = "■ 어싸인별 방 구성 (근무 인원수별 · 방번호 쉼표 구분 · 2인 근무는 비워두면 수동 분배)"
+    ws.Range("J33").Font.Bold = True
+    ws.Range("J34").Value = "인원수": ws.Range("K34").Value = "어싸인": ws.Range("L34").Value = "방 목록"
+    ws.Range("J34:L34").Font.Bold = True: ws.Range("J34:L34").Interior.Color = RGB(240, 240, 245)
     Dim sch As Variant
     sch = Array( _
         Array("5인", "차지", "1012, 1014"), Array("5인", "A", "1001, 1002"), _
@@ -180,9 +183,9 @@ Private Sub 초기세팅_코어(Optional 조용히 As Boolean = False)
         Array("3인", "B", "1005, 1006, 1007, 1008, 1009, 1010"), _
         Array("2인", "차지", ""), Array("2인", "A", ""))
     For r = 0 To UBound(sch)
-        ws.Cells(33 + r, 10).Value = sch(r)(0)
-        ws.Cells(33 + r, 11).Value = sch(r)(1)
-        ws.Cells(33 + r, 12).Value = sch(r)(2)
+        ws.Cells(35 + r, 10).Value = sch(r)(0)
+        ws.Cells(35 + r, 11).Value = sch(r)(1)
+        ws.Cells(35 + r, 12).Value = sch(r)(2)
     Next r
 
     ' ── 사용법 (요일별 필요인원 표와 안 겹치게 S열로) ──
@@ -194,7 +197,7 @@ Private Sub 초기세팅_코어(Optional 조용히 As Boolean = False)
         "3. 근무표에 근무 입력:", _
         "   D E N = 일반 / DC EC NC = 차지 / OF 주 V 등 = 어싸인 제외", _
         "   선입력: D/A E/B N/C 식으로 쓰면 그 어싸인으로 고정되고", _
-        "   이후 날짜는 원칙 2~4로 이어서 자동 배정됩니다.", _
+        "   이후 날짜는 원칙 1~3으로 이어서 자동 배정됩니다.", _
         "   (예: 1일 하루만 어싸인을 적으면 2일부터 자동)", _
         "4. 근무표 하단 필요인원 행에서 일별 인원 수정 가능", _
         "   (인원 행이 필요와 다르면 빨간색 표시)", _
@@ -220,30 +223,31 @@ Private Sub 초기세팅_코어(Optional 조용히 As Boolean = False)
     TitleStyle ws.Range("A1"), 14
     SectionHead ws.Range("A3")
     SectionHead ws.Range("J3")
-    SectionHead ws.Range("J8")
-    SectionHead ws.Range("J14")
-    SectionHead ws.Range("J31")
+    SectionHead ws.Range("J10")
+    SectionHead ws.Range("J16")
+    SectionHead ws.Range("J33")
     SectionHead ws.Range("S3")
+    MuteStyle ws.Range("J8")   ' 원칙3·4 동시 O 금지 안내
     ' 간호사 표 (예시 18명 = 5~22행)
     HeadStyle ws.Range("A4:H4")
     BoxBorders ws.Range("A4:H22")
     ws.Range("A5:A22").HorizontalAlignment = xlLeft
     ws.Range("B5:H22").HorizontalAlignment = xlCenter
     ' 요일별 필요인원 표
-    HeadStyle ws.Range("J9:Q9")
-    BoxBorders ws.Range("J9:Q12")
-    ws.Range("K10:Q12").HorizontalAlignment = xlCenter
+    HeadStyle ws.Range("J11:Q11")
+    BoxBorders ws.Range("J11:Q14")
+    ws.Range("K12:Q14").HorizontalAlignment = xlCenter
     ' 방 목록 표
-    HeadStyle ws.Range("J15:K15")
-    BoxBorders ws.Range("J15:K28")
-    ws.Range("K16:K28").HorizontalAlignment = xlCenter
+    HeadStyle ws.Range("J17:K17")
+    BoxBorders ws.Range("J17:K30")
+    ws.Range("K18:K30").HorizontalAlignment = xlCenter
     ' 어싸인별 방 구성 표
-    HeadStyle ws.Range("J32:L32")
-    BoxBorders ws.Range("J32:L46")
-    ws.Range("J33:K46").HorizontalAlignment = xlCenter
+    HeadStyle ws.Range("J34:L34")
+    BoxBorders ws.Range("J34:L48")
+    ws.Range("J35:K48").HorizontalAlignment = xlCenter
     ' 원칙 O 표시 가운데
-    ws.Range("K4:K6").HorizontalAlignment = xlCenter
-    ws.Rows("1:46").RowHeight = 17
+    ws.Range("K4:K7").HorizontalAlignment = xlCenter
+    ws.Rows("1:48").RowHeight = 17
     ws.Range("A1").EntireRow.RowHeight = 22
 
     ' 실행 버튼 — Alt+F8 없이 시트에서 바로 (재생성 시 중복 방지 위해 삭제 후 추가)
@@ -429,15 +433,22 @@ Private Sub 어싸인_코어(Optional 조용히 As Boolean = False)
 
     ' ── 설정 읽기 ──
     Dim cfg As Worksheet: Set cfg = ThisWorkbook.Worksheets("설정")
-    Dim rule2 As Boolean, rule3 As Boolean, rule4 As Boolean
+    Dim rule1 As Boolean, rule2 As Boolean, rule3 As Boolean, rule4 As Boolean
+    Dim warns As String
     Dim rr As Long: rr = FindAnchorRow(cfg, "■ 배정 원칙")
     If rr = 0 Then
         If Not 조용히 Then MsgBox "설정 시트에서 ""■ 배정 원칙"" 섹션을 찾지 못했습니다.", vbExclamation
         Exit Sub
     End If
-    rule2 = (UCase(Trim(cfg.Cells(rr + 1, 11).Value)) = "O")
-    rule3 = (UCase(Trim(cfg.Cells(rr + 2, 11).Value)) = "O")
-    rule4 = (UCase(Trim(cfg.Cells(rr + 3, 11).Value)) = "O")
+    rule1 = (UCase(Trim(cfg.Cells(rr + 1, 11).Value)) = "O")   ' 전일 같은 근무 유지
+    rule2 = (UCase(Trim(cfg.Cells(rr + 2, 11).Value)) = "O")   ' 근무 바뀌어도 유지
+    rule3 = (UCase(Trim(cfg.Cells(rr + 3, 11).Value)) = "O")   ' 오프 복귀자 유지
+    rule4 = (UCase(Trim(cfg.Cells(rr + 4, 11).Value)) = "O")   ' 오프 복귀자 튕기기
+    If rule3 And rule4 Then
+        ' 유지와 튕기기는 반대 개념 — 동시 O면 원칙3만 적용 (설정 시트 안내와 동일)
+        rule4 = False
+        warns = warns & "· 설정: 원칙3(오프 복귀 유지)과 원칙4(튕기기)가 동시에 O — 원칙4 무시됨" & vbLf
+    End If
 
     ' 간호사 속성: 이름 → 차지가능 / 가능근무
     Dim attrName() As String, attrCharge() As Boolean, attrCap() As String, nAttr As Long
@@ -471,7 +482,7 @@ Private Sub 어싸인_코어(Optional 조용히 As Boolean = False)
     Dim capable() As String: ReDim capable(1 To nN)
     Dim shiftC() As String: ReDim shiftC(1 To nN, 1 To nD)
     Dim preLab() As String: ReDim preLab(1 To nN, 1 To nD)
-    Dim warns As String, i As Long, j As Long, k As Long
+    Dim i As Long, j As Long, k As Long
 
     For i = 1 To nN
         names(i) = Trim(src.Cells(4 + i, 1).Value)
@@ -566,9 +577,9 @@ Private Sub 어싸인_코어(Optional 조용히 As Boolean = False)
                 Next ss
             End If
 
-            ' 2~4) 연속성 계층 — 앞 계층 우선
+            ' 원칙 1~3) 연속성 계층 — 앞 계층 우선
             For t = 1 To 3
-                If (t = 1 And Not rule2) Or (t = 2 And Not rule3) Or (t = 3 And Not rule4) Then GoTo NextTier
+                If (t = 1 And Not rule1) Or (t = 2 And Not rule2) Or (t = 3 And Not rule3) Then GoTo NextTier
                 For li = 1 To nLab - 1
                     If asgn(li) = 0 Then
                         Dim best As Long, bestIdx As Long: best = 0: bestIdx = -99
@@ -588,14 +599,26 @@ Private Sub 어싸인_코어(Optional 조용히 As Boolean = False)
 NextTier:
             Next t
 
-            ' 5) 잔여: 연차(행) 순으로 남은 라벨 채움
+            ' 잔여: 연차(행) 순으로 남은 라벨 채움
+            ' 원칙4(튕기기): 오프 복귀자에겐 이전 방 라벨을 피해서 배정 — 1차에서 튕기고,
+            ' 다른 후보가 없으면 2차에서 그대로 배정 (라벨 미충원 방지)
+            Dim pass As Long
             For li = 0 To nLab - 1
-                If asgn(li) = 0 Then
-                    For ss = 1 To ns
-                        i = staff(ss)
-                        If Not takenN(i) Then asgn(li) = i: takenN(i) = True: Exit For
-                    Next ss
-                End If
+                For pass = 1 To 2
+                    If asgn(li) = 0 Then
+                        For ss = 1 To ns
+                            i = staff(ss)
+                            If Not takenN(i) Then
+                                If pass = 1 And rule4 And LABELS(li) = lastLabel(i) _
+                                   And lastIdx(i) < j - 1 And lastIdx(i) > -99 Then
+                                    ' 오프 복귀자 튕김 — 다음 후보에게
+                                Else
+                                    asgn(li) = i: takenN(i) = True: Exit For
+                                End If
+                            End If
+                        Next ss
+                    End If
+                Next pass
             Next li
 
             ' 기록 (+ 6인 이상 잔여 = 헬퍼)
