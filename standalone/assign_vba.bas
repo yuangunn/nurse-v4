@@ -38,6 +38,26 @@ Public Sub 자동_초기세팅(): 초기세팅_코어 True: End Sub
 Public Sub 자동_근무표(ByVal 연 As Long, ByVal 월 As Long): 근무표_코어 연, 월, True: End Sub
 Public Sub 자동_어싸인(): 어싸인_코어 True: End Sub
 
+' 설정 시트 버튼용 — 가장 최근 근무표_* 시트를 찾아 어싸인 실행
+Public Sub 어싸인배정_최신()
+    Dim ws As Worksheet, best As Worksheet
+    For Each ws In ThisWorkbook.Worksheets
+        If Left(ws.Name, 4) = "근무표_" Then
+            If best Is Nothing Then
+                Set best = ws
+            ElseIf ws.Name > best.Name Then   ' 근무표_YYYY-MM 문자열 정렬 = 최신
+                Set best = ws
+            End If
+        End If
+    Next ws
+    If best Is Nothing Then
+        MsgBox "근무표 시트가 없습니다. [근무표 생성] 버튼을 먼저 실행하세요.", vbExclamation
+        Exit Sub
+    End If
+    best.Activate
+    어싸인_코어 False
+End Sub
+
 ' ══════════════════════════════════════════════════════════════
 ' 공통 서식 헬퍼 (깔끔·심플·사무용)
 ' ══════════════════════════════════════════════════════════════
@@ -170,7 +190,7 @@ Private Sub 초기세팅_코어(Optional 조용히 As Boolean = False)
     Dim guide As Variant
     guide = Array( _
         "1. 이 시트의 간호사 목록·방 구성 등을 병동에 맞게 수정", _
-        "2. Alt+F8 → 근무표생성 → 년·월 입력 → 빈 근무표 시트 생성", _
+        "2. 위 [근무표 생성] 버튼 → 년·월 입력 → 빈 근무표 시트 생성", _
         "3. 근무표에 근무 입력:", _
         "   D E N = 일반 / DC EC NC = 차지 / OF 주 V 등 = 어싸인 제외", _
         "   선입력: D/A E/B N/C 식으로 쓰면 그 어싸인으로 고정되고", _
@@ -226,9 +246,19 @@ Private Sub 초기세팅_코어(Optional 조용히 As Boolean = False)
     ws.Rows("1:46").RowHeight = 17
     ws.Range("A1").EntireRow.RowHeight = 22
 
+    ' 실행 버튼 — Alt+F8 없이 시트에서 바로 (재생성 시 중복 방지 위해 삭제 후 추가)
+    On Error Resume Next
+    ws.Buttons.Delete
+    On Error GoTo 0
+    Dim b As Button
+    Set b = ws.Buttons.Add(ws.Range("J1").Left, ws.Range("J1").Top + 2, 110, 24)
+    b.OnAction = "근무표생성": b.Caption = "근무표 생성 →"
+    Set b = ws.Buttons.Add(ws.Range("J1").Left + 118, ws.Range("J1").Top + 2, 130, 24)
+    b.OnAction = "어싸인배정_최신": b.Caption = "어싸인 배정 (최근) →"
+
     Application.ScreenUpdating = True
     ws.Activate
-    If Not 조용히 Then MsgBox "설정 시트를 만들었습니다." & vbLf & "간호사 목록을 수정한 뒤 [근무표생성] 매크로를 실행하세요.", vbInformation
+    If Not 조용히 Then MsgBox "설정 시트를 만들었습니다." & vbLf & "간호사 목록을 수정한 뒤 [근무표 생성] 버튼을 누르세요.", vbInformation
 End Sub
 
 ' ══════════════════════════════════════════════════════════════
