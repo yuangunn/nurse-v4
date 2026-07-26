@@ -29,7 +29,8 @@
    * @param schedule {nurseId: {dateKey: code}}
    * @param dateKeys 시간순 날짜키 배열 (연속성 위해 전월 이월일 포함 가능)
    * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff,bounceAfterOff},
-   *                  overrides:{dateKey:{P:{nurseId:label}}}}
+   *                  overrides:{dateKey:{P:{nurseId:label}}},
+   *                  seed:{nurseId:{label,period,idx}}}  idx<0 = 전월 (말일=-1) — 연속성 이월
    * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId]}}},
    *           byNurse:{nurseId:{dk:{period,label}}}}
    */
@@ -44,6 +45,12 @@
     const overrides = opts.overrides || {};
     const byDay = {}, byNurse = {};
     const lastSeen = {}; // nurseId -> {label, idx, period}
+    // 전월 연속성 시드 — 전월 말일에 본 방을 idx=-1(전일)로 넣으면 원칙1~4가 월 경계를 넘어 작동
+    const seed = opts.seed || {};
+    for (const nid in seed) {
+      const s = seed[nid];
+      if (s && s.label && s.idx < 0) lastSeen[nid] = { label: s.label, idx: s.idx, period: s.period };
+    }
 
     for (let idx = 0; idx < dateKeys.length; idx++) {
       const dk = dateKeys[idx];

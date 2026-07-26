@@ -185,4 +185,26 @@ assert.equal(periodOf('OF'), null);
   assert.equal(r.byNurse.b.d3.label, 'A');
 }
 
+// ── 전월 연속성 시드 (opts.seed) — VBA 자동 이월과 동일 의미 ──
+{
+  const nurses = [N('a', 0), N('b', 1), N('c', 2)];
+  const sched = { a: { d1: 'DC' }, b: { d1: 'D' }, c: { d1: 'D' } };
+  // 시드 없음: b(선임)가 A
+  let r = compute(nurses, sched, ['d1']);
+  assert.equal(r.byDay.d1.D.labels['A'], 'b');
+  // 전월 말일 c=A 시드(idx=-1) → 원칙1로 c가 A 유지, b는 B
+  r = compute(nurses, sched, ['d1'], { seed: { c: { label: 'A', period: 'D', idx: -1 } } });
+  assert.equal(r.byDay.d1.D.labels['A'], 'c');
+  assert.equal(r.byDay.d1.D.labels['B'], 'b');
+  // 전월 중순 c=A(idx=-4, 월말 오프) → 원칙3(오프 복귀)로도 A 유지
+  r = compute(nurses, sched, ['d1'], { seed: { c: { label: 'A', period: 'D', idx: -4 } } });
+  assert.equal(r.byDay.d1.D.labels['A'], 'c');
+  // 같은 시드 + 원칙3 끄고 원칙4(튕기기) → c는 A 회피
+  r = compute(nurses, sched, ['d1'], {
+    rules: { keepAfterOff: false, bounceAfterOff: true },
+    seed: { c: { label: 'A', period: 'D', idx: -4 } },
+  });
+  assert.notEqual(r.byNurse.c.d1.label, 'A');
+}
+
 console.log('assign-core: 모든 검증 통과');

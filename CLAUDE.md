@@ -349,8 +349,9 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 5. **어싸인**: 근무표 기반 병실 자동 배정 (일별 D/E/N, 병실 단위)
    - 원칙: 차지=DC/EC/NC 우선(항상 적용) · ①전일 같은 근무 방 유지 ②근무 변경 시 유지 ③오프 복귀 유지 ④오프 복귀 튕기기(③과 상호배제 — 하나 켜면 다른 쪽 자동 해제, 기본 꺼짐). 우선순위 ①>②>③, 토글 가능
    - 인원수별(2~5인) 방 구성 편집, 셀 클릭 수동 조정(스왑), TSV 복사. 설정은 localStorage(프로필·월별)
-   - 코어: `frontend/js/modules/assign-core.js` (순수 함수, 검증 `node scripts/test_assign_core.mjs`)
-   - 인트라넷용: `standalone/assign.html` (단일 파일, 코어 동기화 `node scripts/build-assign-standalone.mjs`) + `standalone/assign_vba.bas` (Excel VBA)
+   - 코어: `frontend/js/modules/assign-core.js` (순수 함수, `opts.seed`=전월 이월, 검증 `node scripts/test_assign_core.mjs`)
+   - 인트라넷용 ①: `standalone/assign.html` — 단일 파일 통합본(외부 의존 0, Chrome/Edge 103+). 엑셀식 편집 그리드(붙여넣기/키입력/범위선택/파일 DnD·CP949 폴백), 년월별 localStorage 저장 + 전월 어싸인 자동 이월, 주간 배정표를 내장 `병실 배정표.xlsx` 양식 그대로 xlsx 다운로드(순수 JS zip 패치) + HTML 인쇄(고정 문구·이미지도 양식에서 추출). 동기화 `node scripts/build-assign-standalone.mjs` (코어 + 양식 base64 주입 — 양식 파일 수정 후 재실행)
+   - 인트라넷용 ②: `standalone/assign_vba.bas` (Excel VBA 매크로 4종 — 초기세팅/근무표/어싸인/주간배정표)
 6. **저장**: 생성 스케줄 저장/불러오기
 
 > 사전입력·스케줄 탭은 년월 연동. 주기 경계(7일 단위) 컬러 헤더.
