@@ -5,10 +5,14 @@ Option Explicit
 '
 ' 설치: Alt+F11 → 파일 > 파일 가져오기 → 이 .bas 파일
 '
-' 매크로 3개 (Alt+F8):
+' 매크로 4개 (Alt+F8 또는 시트 버튼):
 '   1. 초기세팅생성  — "설정" 시트 생성 (간호사·가능근무·필요인원·방·원칙)
 '   2. 근무표생성    — 선택한 년월의 빈 근무표 시트 + [어싸인 배정] 버튼 생성
 '   3. 어싸인배정실행 — 근무표를 읽어 어싸인/어싸인상세 시트 생성 (버튼이 호출)
+'      · 전월 어싸인_YYYY-MM 시트가 있으면 각자 "마지막으로 본 방"을 자동 이월
+'   4. 주간배정표생성 — 어싸인 결과를 일~토 주 단위 인쇄 양식("양식" 시트)으로 출력
+'      · "양식" 시트가 없으면 같은 폴더의 "병실 배정표.xlsx"에서 자동 복사
+'      · 그 달을 덮는 모든 주(5~6장) 생성, 월 경계 주는 이웃 달 어싸인 참조
 '
 ' 근무표 입력법:
 '   D, E, N          일반 근무
@@ -33,11 +37,13 @@ Private Const UI_FONT As String = "맑은 고딕"   ' 공통 서식 폰트 (모�
 Public Sub 초기세팅생성(): 초기세팅_코어 False: End Sub
 Public Sub 근무표생성(): 근무표_코어 0, 0, False: End Sub
 Public Sub 어싸인배정실행(): 어싸인_코어 False: End Sub
+Public Sub 주간배정표생성(): 주간배정표_코어 False: End Sub
 
 ' 자동화 진입점(대화상자 없이 실행) — 스크립트/AppleScript run VB macro 용
 Public Sub 자동_초기세팅(): 초기세팅_코어 True: End Sub
 Public Sub 자동_근무표(ByVal 연 As Long, ByVal 월 As Long): 근무표_코어 연, 월, True: End Sub
 Public Sub 자동_어싸인(): 어싸인_코어 True: End Sub
+Public Sub 자동_주간배정표(): 주간배정표_코어 True: End Sub
 
 ' 설정 시트 버튼용 — 가장 최근 근무표_* 시트를 찾아 어싸인 실행
 Public Sub 어싸인배정_최신()
@@ -204,7 +210,10 @@ Private Sub 초기세팅_코어(Optional 조용히 As Boolean = False)
         "5. 근무표 시트의 [어싸인 배정] 버튼 클릭", _
         "   → 어싸인_년-월 (그리드) / 어싸인상세_년-월 (일별 표) 생성", _
         "   굵은 글씨 = 선입력으로 고정된 칸", _
-        "6. 선입력을 고치고 버튼을 다시 누르면 재배정됩니다.")
+        "6. 선입력을 고치고 버튼을 다시 누르면 재배정됩니다.", _
+        "7. [주간 배정표] 버튼 → 일~토 주 단위 인쇄표(그 달 전체) 생성", _
+        "   양식은 ""양식"" 시트에서 수정 (없으면 병실 배정표.xlsx에서 자동 복사)", _
+        "8. 전월 어싸인 시트가 있으면 각자 마지막으로 본 방이 자동으로 이어집니다.")
     For r = 0 To UBound(guide)
         ws.Cells(4 + r, 19).Value = guide(r)   ' S열 = 19
     Next r
@@ -259,6 +268,8 @@ Private Sub 초기세팅_코어(Optional 조용히 As Boolean = False)
     b.OnAction = "근무표생성": b.Caption = "근무표 생성 →"
     Set b = ws.Buttons.Add(ws.Range("J1").Left + 118, ws.Range("J1").Top + 2, 130, 24)
     b.OnAction = "어싸인배정_최신": b.Caption = "어싸인 배정 (최근) →"
+    Set b = ws.Buttons.Add(ws.Range("J1").Left + 256, ws.Range("J1").Top + 2, 120, 24)
+    b.OnAction = "주간배정표생성": b.Caption = "주간 배정표 →"
 
     Application.ScreenUpdating = True
     ws.Activate
@@ -510,6 +521,39 @@ Private Sub 어싸인_코어(Optional 조용히 As Boolean = False)
     ReDim lastLabel(1 To nN): ReDim lastIdx(1 To nN): ReDim lastPeriod(1 To nN)
     For i = 1 To nN: lastIdx(i) = -99: Next i
 
+    ' ── 전월 연속성 자동 이월 ──────────────────────────────────
+    ' 전월 어싸인_YYYY-MM 시트가 있으면 각 간호사의 '마지막으로 본 방'을 시드.
+    ' 전월 말일 = idx 0 (당월 1일의 전일), 그 이전 = 음수 → 원칙1~4가 월 경계를 넘어 작동.
+    Dim prevYM As String, seedN As Long
+    prevYM = Format(DateSerial(Val(Left(ym, 4)), Val(Mid(ym, 6)), 1) - 1, "yyyy-mm")
+    If SheetExists("어싸인_" & prevYM) Then
+        Dim pv As Worksheet: Set pv = ThisWorkbook.Worksheets("어싸인_" & prevYM)
+        Dim pD As Long: pD = 0
+        Do While IsNumeric(pv.Cells(3, 2 + pD).Value) And CStr(pv.Cells(3, 2 + pD).Value) <> ""
+            pD = pD + 1
+        Loop
+        Dim pRow As Long, pj As Long, gPd As String, gLb As String
+        For i = 1 To nN
+            pRow = 0
+            Dim prw As Long: prw = 4
+            Do While Trim(pv.Cells(prw, 1).Value) <> ""
+                If Trim(pv.Cells(prw, 1).Value) = names(i) Then pRow = prw: Exit Do
+                prw = prw + 1
+            Loop
+            If pRow > 0 Then
+                For pj = pD To 1 Step -1
+                    ParseGridCell CStr(pv.Cells(pRow, 1 + pj).Value), gPd, gLb
+                    If gLb <> "" Then
+                        lastLabel(i) = gLb: lastPeriod(i) = gPd
+                        lastIdx(i) = pj - pD
+                        seedN = seedN + 1
+                        Exit For
+                    End If
+                Next pj
+            End If
+        Next i
+    End If
+
     Dim resLabel() As String, resPeriod() As String, resCnt() As Long, resFixed() As Boolean
     ReDim resLabel(1 To nN, 1 To nD): ReDim resPeriod(1 To nN, 1 To nD)
     ReDim resCnt(1 To nN, 1 To nD): ReDim resFixed(1 To nN, 1 To nD)
@@ -647,6 +691,7 @@ NextPeriod:
 
     Dim msg As String
     msg = "어싸인 배정 완료 → ""어싸인_" & ym & """ / ""어싸인상세_" & ym & """ 시트"
+    If seedN > 0 Then msg = msg & vbLf & "(전월 " & prevYM & " 어싸인에서 " & seedN & "명 연속성 자동 이월)"
     If warns <> "" Then msg = msg & vbLf & vbLf & "⚠ 확인 필요:" & vbLf & warns
     If Not 조용히 Then MsgBox msg, IIf(warns = "", vbInformation, vbExclamation)
     ThisWorkbook.Worksheets("어싸인_" & ym).Activate
@@ -698,6 +743,13 @@ Private Sub WriteGrid(ym As String, names() As String, nN As Long, nD As Long, _
     BoxBorders wo.Range(wo.Cells(3, 1), wo.Cells(3 + nN, 1 + nD))
     wo.Rows("3:" & (3 + nN)).RowHeight = 18
     wo.Rows(1).RowHeight = 22
+    ' [주간 배정표] 버튼 (GetCleanSheet는 셀만 지우므로 기존 버튼 중복 방지 삭제)
+    On Error Resume Next
+    wo.Buttons.Delete
+    On Error GoTo 0
+    Dim gb As Button
+    Set gb = wo.Buttons.Add(wo.Range("A1").Left + 260, wo.Range("A1").Top + 2, 130, 22)
+    gb.OnAction = "주간배정표생성": gb.Caption = "주간 배정표 인쇄 →"
     wo.Activate
     wo.Cells(4, 2).Select
     ActiveWindow.FreezePanes = False
@@ -789,6 +841,274 @@ Private Function RoomsStr(schemeMap() As String, cnt As Long, labelIdx As Long, 
         End If
     Next k
     RoomsStr = Trim(out)
+End Function
+
+' ══════════════════════════════════════════════════════════════
+' 매크로 4: 주간 배정표 (일~토 인쇄 양식 — "양식" 시트 복제 후 채움)
+' ══════════════════════════════════════════════════════════════
+' 양식 레이아웃 (병실 배정표.xlsx 기준, 요일마다 [방|이름] 2열: 일=D:E … 토=P:Q):
+'   3행 날짜 · 5~9행 D(라벨 5칸) · 10행 중간번 · 11~15행 E(5칸) · 16~18행 N(3칸)
+'   19행~ 물품체크·CPR·화재 = 고정 문구 (양식 시트에서 직접 수정)
+' 라벨 매핑: 차지→A(CN), A→B, B→C, C→D, D→E (양식이 한 칸 밀린 체계)
+Private Sub 주간배정표_코어(Optional 조용히 As Boolean = False)
+    ' 대상 월: 활성 시트(어싸인/근무표/상세)에서, 아니면 최신 어싸인 시트
+    Dim ym As String, nm As String: nm = ActiveSheet.Name
+    If Left(nm, 6) = "어싸인상세_" Then
+        ym = Mid(nm, 7)
+    ElseIf Left(nm, 4) = "어싸인_" Or Left(nm, 4) = "근무표_" Then
+        ym = Mid(nm, 5)
+    Else
+        ym = LatestAssignYM()
+    End If
+    If ym = "" Or Not SheetExists("어싸인_" & ym) Then
+        If Not 조용히 Then MsgBox "어싸인 시트가 없습니다. [어싸인 배정]을 먼저 실행하세요.", vbExclamation
+        Exit Sub
+    End If
+    If Not EnsureTemplate(조용히) Then Exit Sub
+
+    Dim y As Long, m As Long
+    y = Val(Left(ym, 4)): m = Val(Mid(ym, 6))
+    Dim lastD As Date: lastD = DateSerial(y, m + 1, 0)
+
+    Dim schemeMap(2 To 5, 0 To 4) As String
+    ReadSchemes schemeMap
+
+    Application.ScreenUpdating = False
+    ' 1일이 속한 주의 일요일부터 말일이 속한 주까지
+    Dim wkStart As Date
+    wkStart = DateSerial(y, m, 1) - (Weekday(DateSerial(y, m, 1), vbSunday) - 1)
+    Dim made As Long, warns As String, firstSheet As String
+    Do While wkStart <= lastD
+        Dim shName As String
+        shName = Format(wkStart, "yyyymmdd") & "~" & Format(wkStart + 6, "yyyymmdd")
+        If SheetExists(shName) Then
+            Application.DisplayAlerts = False
+            ThisWorkbook.Worksheets(shName).Delete
+            Application.DisplayAlerts = True
+        End If
+        ThisWorkbook.Worksheets("양식").Copy After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count)
+        Dim wk As Worksheet
+        Set wk = ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count)
+        wk.Name = shName
+        If firstSheet = "" Then firstSheet = shName
+        FillWeek wk, wkStart, schemeMap, warns
+        made = made + 1
+        wkStart = wkStart + 7
+    Loop
+    Application.ScreenUpdating = True
+
+    If firstSheet <> "" Then ThisWorkbook.Worksheets(firstSheet).Activate
+    Dim msg As String
+    msg = ym & " 주간 배정표 " & made & "장 생성 완료 (일~토 기준)"
+    If warns <> "" Then msg = msg & vbLf & vbLf & "⚠ 확인 필요:" & vbLf & warns
+    If Not 조용히 Then MsgBox msg, IIf(warns = "", vbInformation, vbExclamation)
+End Sub
+
+' 한 주(일~토) 채우기 — 날짜·각 섹션 방/이름·중간번. 이웃 달은 해당 시트 있을 때만.
+Private Sub FillWeek(wk As Worksheet, ByVal wkStart As Date, schemeMap() As String, ByRef warns As String)
+    ' 양식에 남은 예시 값(방·이름) 제거 — 우리는 데이터 있는 칸만 쓰므로 선지우기 필수.
+    ' (날짜 3행 + 섹션 5~18행의 요일 열 D:Q. 교육행사 4행·라벨 C열·고정 문구는 보존)
+    wk.Range("D3:Q3").ClearContents
+    wk.Range("D5:Q18").ClearContents
+    Dim di As Long
+    Dim cntP(0 To 2) As Long            ' 그 날 D/E/N 인원수
+    Dim nameOf(0 To 2, 0 To 4) As String ' (시간대, 라벨idx) → 이름
+    For di = 0 To 6
+        Dim d As Date: d = wkStart + di
+        Dim colR As Long: colR = 4 + di * 2       ' 방 열 (D,F,H,J,L,N,P)
+        wk.Cells(3, colR).Value = d               ' 날짜 (양식 표시형식 유지)
+        Erase cntP: Erase nameOf                  ' Dim은 1회만 실행 — 매일 리셋 필수
+        Dim ymD As String: ymD = Format(d, "yyyy-mm")
+        Dim asn As Worksheet: Set asn = SheetOrNothing("어싸인_" & ymD)
+        If asn Is Nothing Then GoTo NextDay
+        Dim dayCol As Long: dayCol = 1 + Day(d)
+        If Not IsNumeric(asn.Cells(3, dayCol).Value) Or CStr(asn.Cells(3, dayCol).Value) = "" Then GoTo NextDay
+
+        Dim r As Long, gPd As String, gLb As String
+        r = 4
+        Do While Trim(asn.Cells(r, 1).Value) <> ""
+            ParseGridCell CStr(asn.Cells(r, dayCol).Value), gPd, gLb
+            If gPd <> "" Then
+                Dim pi As Long: pi = InStr("DEN", gPd) - 1
+                cntP(pi) = cntP(pi) + 1
+                Dim li As Long: li = LabelIdx(gLb)
+                If li >= 0 Then nameOf(pi, li) = Trim(asn.Cells(r, 1).Value)
+            End If
+            r = r + 1
+        Loop
+
+        ' 섹션: D=5~9행(5칸) · E=11~15행(5칸) · N=16~18행(3칸)
+        FillSection wk, colR, 5, 5, 0, cntP(0), nameOf, schemeMap
+        FillSection wk, colR, 11, 5, 1, cntP(1), nameOf, schemeMap
+        FillSection wk, colR, 16, 3, 2, cntP(2), nameOf, schemeMap
+        Dim ov As Long
+        For ov = 3 To 4                            ' N 4명 이상 → 양식 칸(3개) 부족
+            If nameOf(2, ov) <> "" Then warns = warns & "· " & Format(d, "m/d") & " N " & _
+                nameOf(2, ov) & " — 양식 N칸(3개) 초과, 수기 기입 필요" & vbLf
+        Next ov
+
+        ' 중간번: 근무표에서 '중' 코드인 사람 이름 (10행은 요일별 2열 병합 → 좌측 셀에 기입)
+        Dim sch As Worksheet: Set sch = SheetOrNothing("근무표_" & ymD)
+        If Not sch Is Nothing Then
+            Dim mids As String: mids = ""
+            r = 5
+            Do While Trim(sch.Cells(r, 1).Value) <> ""
+                If InStr(sch.Cells(r, 1).Value, "인원") > 0 Then Exit Do
+                If Trim(CStr(sch.Cells(r, dayCol).Value)) = "중" Then _
+                    mids = mids & IIf(mids = "", "", ", ") & Trim(sch.Cells(r, 1).Value)
+                r = r + 1
+            Loop
+            If mids <> "" Then wk.Cells(10, colR).Value = mids
+        End If
+NextDay:
+    Next di
+End Sub
+
+' 한 섹션(시간대) 채우기 — 라벨별 방(축약)·이름
+Private Sub FillSection(wk As Worksheet, ByVal colR As Long, ByVal rowTop As Long, _
+                        ByVal nRows As Long, ByVal pi As Long, ByVal cnt As Long, _
+                        nameOf() As String, schemeMap() As String)
+    If cnt = 0 Then Exit Sub
+    Dim c As Long: c = cnt
+    If c < 2 Then c = 2
+    If c > 5 Then c = 5
+    Dim li As Long
+    For li = 0 To nRows - 1
+        If nameOf(pi, li) <> "" Then
+            wk.Cells(rowTop + li, colR).Value = AbbrevRooms(schemeMap(c, li))
+            wk.Cells(rowTop + li, colR + 1).Value = nameOf(pi, li)
+        End If
+    Next li
+End Sub
+
+' 어싸인 그리드 셀 파싱: "DC"→(D,차지) · "D/A"→(D,A) · "D/—"→(D,"") · 그 외 ("","")
+Private Sub ParseGridCell(ByVal v As String, ByRef p As String, ByRef lab As String)
+    p = "": lab = ""
+    v = Trim(v)
+    If v = "" Then Exit Sub
+    If InStr(v, "/") > 0 Then
+        Dim a As String, b As String
+        a = Trim(Split(v, "/")(0)): b = Trim(Split(v, "/")(1))
+        If a = "D" Or a = "E" Or a = "N" Then p = a
+        Select Case b
+            Case "A", "B", "C", "D": lab = b
+        End Select
+    ElseIf Len(v) = 2 And Right(v, 1) = "C" Then
+        Dim h As String: h = Left(v, 1)
+        If h = "D" Or h = "E" Or h = "N" Then p = h: lab = "차지"
+    End If
+End Sub
+
+Private Function LabelIdx(lab As String) As Long
+    Select Case lab
+        Case "차지": LabelIdx = 0
+        Case "A": LabelIdx = 1
+        Case "B": LabelIdx = 2
+        Case "C": LabelIdx = 3
+        Case "D": LabelIdx = 4
+        Case Else: LabelIdx = -1
+    End Select
+End Function
+
+' 방번호 축약: "1001, 1002, 1003, 1011" → "1~3.11" (같은 앞 2자리 4자리 숫자일 때만,
+' 연속 3개 이상 = a~b, 구분자 '.') — 양식 수기 관례와 동일. 그 외는 '.'로만 연결.
+Private Function AbbrevRooms(ByVal raw As String) As String
+    raw = Trim(raw)
+    If raw = "" Then AbbrevRooms = "": Exit Function
+    Dim parts As Variant: parts = Split(raw, ",")
+    Dim items() As String, n As Long, k As Long
+    ReDim items(0 To UBound(parts))
+    For k = 0 To UBound(parts)
+        If Trim(parts(k)) <> "" Then items(n) = Trim(parts(k)): n = n + 1
+    Next k
+    If n = 0 Then AbbrevRooms = "": Exit Function
+    Dim pre As String, okAll As Boolean: okAll = True
+    For k = 0 To n - 1
+        If Len(items(k)) <> 4 Or Not IsNumeric(items(k)) Then okAll = False: Exit For
+        If k = 0 Then
+            pre = Left(items(k), 2)
+        ElseIf Left(items(k), 2) <> pre Then
+            okAll = False: Exit For
+        End If
+    Next k
+    Dim out As String
+    If Not okAll Then
+        For k = 0 To n - 1: out = out & IIf(k = 0, "", ".") & items(k): Next k
+        AbbrevRooms = out: Exit Function
+    End If
+    Dim nums() As Long: ReDim nums(0 To n - 1)
+    For k = 0 To n - 1: nums(k) = CLng(Right(items(k), 2)): Next k
+    Dim a As Long, b As Long, t As Long
+    For a = 1 To n - 1                              ' 삽입 정렬
+        t = nums(a): b = a - 1
+        Do While b >= 0
+            If nums(b) > t Then nums(b + 1) = nums(b): b = b - 1 Else Exit Do
+        Loop
+        nums(b + 1) = t
+    Next a
+    Dim uniq() As Long: ReDim uniq(0 To n - 1)
+    Dim u As Long
+    For a = 0 To n - 1                              ' 중복 제거
+        If u = 0 Then
+            uniq(u) = nums(a): u = u + 1
+        ElseIf nums(a) <> uniq(u - 1) Then
+            uniq(u) = nums(a): u = u + 1
+        End If
+    Next a
+    Dim st As Long, en As Long
+    a = 0
+    Do While a < u                                  ' 연속 3개 이상 → a~b
+        st = uniq(a): en = st
+        Do While a + 1 < u
+            If uniq(a + 1) = en + 1 Then en = uniq(a + 1): a = a + 1 Else Exit Do
+        Loop
+        If en - st >= 2 Then
+            out = out & IIf(out = "", "", ".") & st & "~" & en
+        Else
+            For b = st To en
+                out = out & IIf(out = "", "", ".") & b
+            Next b
+        End If
+        a = a + 1
+    Loop
+    AbbrevRooms = out
+End Function
+
+' "양식" 시트 확보 — 없으면 같은 폴더의 "병실 배정표.xlsx" 첫 시트를 복사해 옴
+Private Function EnsureTemplate(ByVal 조용히 As Boolean) As Boolean
+    If SheetExists("양식") Then EnsureTemplate = True: Exit Function
+    Dim p As String
+    p = ThisWorkbook.Path & Application.PathSeparator & "병실 배정표.xlsx"
+    Dim wbT As Workbook
+    On Error Resume Next
+    Set wbT = Workbooks.Open(p, ReadOnly:=True)
+    On Error GoTo 0
+    If wbT Is Nothing Then
+        If Not 조용히 Then MsgBox "인쇄 양식이 없습니다." & vbLf & _
+            "이 파일과 같은 폴더에 ""병실 배정표.xlsx""를 두거나," & vbLf & _
+            "양식 시트를 ""양식"" 이름으로 직접 복사해 넣으세요.", vbExclamation
+        Exit Function
+    End If
+    wbT.Worksheets(1).Copy After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count)
+    ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count).Name = "양식"
+    wbT.Close False
+    EnsureTemplate = True
+End Function
+
+Private Function LatestAssignYM() As String
+    Dim ws As Worksheet, best As String
+    For Each ws In ThisWorkbook.Worksheets
+        If Left(ws.Name, 4) = "어싸인_" Then
+            If Mid(ws.Name, 5) > best Then best = Mid(ws.Name, 5)
+        End If
+    Next ws
+    LatestAssignYM = best
+End Function
+
+Private Function SheetOrNothing(nm As String) As Worksheet
+    On Error Resume Next
+    Set SheetOrNothing = ThisWorkbook.Worksheets(nm)
+    On Error GoTo 0
 End Function
 
 ' ══════════════════════════════════════════════════════════════
