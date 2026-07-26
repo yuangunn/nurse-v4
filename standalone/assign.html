@@ -69,6 +69,16 @@
            margin:8px 0;white-space:pre-wrap;display:none}
   #toast{position:fixed;right:14px;bottom:14px;background:#111;color:#7f7;padding:8px 14px;border-radius:6px;
          font-size:12px;display:none;z-index:100}
+  #grid td.pk{cursor:pointer}
+  #grid td.pk:hover{background:#f0f6ff}
+  #grid .ovd::after{content:'·';color:#c7384a;font-weight:900;margin-left:1px}
+  #pick{display:none;position:absolute;z-index:120;background:#fff;border:1px solid #94a3b8;border-radius:8px;
+        box-shadow:0 6px 20px rgba(0,0,0,.18);padding:8px;font-size:12px}
+  #pick button{margin:2px;min-width:2.4em}
+  #eventsGrid table{border-collapse:collapse;font-size:12px}
+  #eventsGrid th,#eventsGrid td{border:1px solid #d1d5db;padding:2px}
+  #eventsGrid th{background:#f3f4f6;min-width:70px}
+  #eventsGrid input{width:96px;border:none;font-size:11px;padding:2px}
   #drop{position:fixed;inset:0;background:rgba(27,79,195,.12);border:3px dashed #1B4FC3;display:none;
         z-index:99;align-items:center;justify-content:center;font-size:22px;color:#1B4FC3;font-weight:700}
   #drop.on{display:flex}
@@ -103,13 +113,18 @@
     <select id="selM"></select> 월
   </span>
   <span class="dim">nurse-v4 부속 · 병실 단위 · 전월 자동 이월</span>
+  <span style="margin-left:auto;display:flex;gap:6px">
+    <button id="btn-exp" title="모든 데이터(월별 근무표·설정·수동조정)를 JSON 파일로 저장">⬇ 백업</button>
+    <button id="btn-imp" title="백업 JSON 파일에서 복원 (현재 데이터 덮어씀)">⬆ 복원</button>
+    <input type="file" id="impFile" accept=".json" style="display:none">
+  </span>
 </h1>
 <p class="hint">
 엑셀에서 근무표 범위 복사 → 이 창에 <b>Ctrl+V</b> (이름 열·날짜 행 자동 인식) ·
 셀 클릭 후 <b>D E N O V W</b> 키 입력 (Shift+D/E/N = 차지, 한글 ㅈㅂㅅㅌㄱ 지원) ·
 <b>드래그</b> 범위 선택 후 키 = 일괄 입력 · <b>Ctrl+C</b> = 엑셀로 복사(색 포함) ·
 <b>더블클릭</b> = 직접 입력(선입력 <b>D/A</b> 식 어싸인 고정) · <b>Delete</b> 삭제 · <b>Ctrl+Z</b> 되돌리기 ·
-파일 드래그&드롭(.csv/.tsv)
+파일 드래그&드롭(<b>.xlsx</b>/.csv/.tsv) · 배정 결과 셀 <b>클릭 = 어싸인 수동 교환</b>
 </p>
 
 <div class="card">
@@ -141,8 +156,9 @@
 </div>
 
 <div class="card" id="resultCard" style="display:none">
-  <h2>3) 배정 결과
+  <h2>3) 배정 결과 <span class="dim">셀 클릭 = 수동 교환(·표시), 이후 날짜는 원칙따라 이어짐</span>
     <span style="float:right;display:flex;gap:6px;flex-wrap:wrap">
+      <button onclick="resetOv()">수동 조정 초기화</button>
       <button onclick="copyTsv()">📋 Excel 복사</button>
       <button class="pri" onclick="printWeekly()">🖨 주간 배정표 인쇄</button>
     </span>
@@ -151,6 +167,10 @@
   <div id="warnBox"></div>
   <div class="scroll" id="grid"></div>
   <div id="dayDetail" style="margin-top:12px"></div>
+  <details style="margin-top:10px">
+    <summary style="cursor:pointer;font-weight:600">교육 및 행사 <span class="dim">— 인쇄·xlsx 양식 상단 칸 (비우면 공란)</span></summary>
+    <div id="eventsGrid" style="margin-top:6px"></div>
+  </details>
   <div class="bar" style="margin-top:10px">
     <span style="font-weight:600">⬇ 주간 배정표 xlsx (병실 배정표 양식 그대로 · 엑셀에서 수정 가능):</span>
     <span id="weekBtns"></span>
@@ -159,8 +179,9 @@
 </div><!-- /.app -->
 
 <div id="printArea"></div>
-<div id="drop">파일을 놓으세요 (.csv / .tsv / .txt)</div>
+<div id="drop">파일을 놓으세요 (.xlsx / .csv / .tsv)</div>
 <div id="toast"></div>
+<div id="pick"></div>
 
 <script>
 /*ASSIGN_CORE_BEGIN*/
@@ -385,6 +406,8 @@ function saveCfg(k,v){ try{localStorage.setItem('assign_'+k,JSON.stringify(v))}c
 let schemes = loadCfg('schemes') || JSON.parse(JSON.stringify(DEFAULT_SCHEMES));
 let chargeChecks = loadCfg('charge') || {};
 let savedRules = loadCfg('rules');
+let events = loadCfg('events') || {};          // {iso: '교육/행사 텍스트'} — 월 무관 전역
+let manualOv = {};                             // {dk:{P:{name:label}}} — 월별 수동 교환 (ovr_YYYY-MM)
 
 /* ════════════════════════════════════════════════════════════════
  * 상태 — 월 단위 근무표
@@ -420,6 +443,7 @@ function loadMonth(){
   if(s&&s.names){ names=s.names; cells=s.cells;
     for(const row of cells){ row.length=ndays; for(let i=0;i<ndays;i++) if(row[i]==null) row[i]=''; } }
   else cells=names.map(()=>Array(ndays).fill(''));   // 새 달 — 명단 유지, 근무만 비움
+  manualOv=loadCfg('ovr_'+curYM())||{};
   sel={r:0,c:0,r2:0,c2:0};
 }
 
@@ -625,8 +649,16 @@ window.addEventListener('dragleave',e=>{if(e.relatedTarget===null)drop.classList
 window.addEventListener('drop',async e=>{
   e.preventDefault(); drop.classList.remove('on');
   const f=e.dataTransfer.files[0]; if(!f) return;
+  if(/\.json$/i.test(f.name)){ importBackup(f); return; }
+  if(/\.(xlsx|xlsm)$/i.test(f.name)){
+    try{
+      const g=await readXlsxGrid(new Uint8Array(await f.arrayBuffer()));
+      absorb(g,true);
+    }catch(err){ toast('xlsx 읽기 실패: '+err.message,4200); }
+    return;
+  }
   if(!/\.(csv|tsv|txt)$/i.test(f.name)){
-    toast(`✗ ${f.name} — 텍스트 파일만 가능. 엑셀은 범위를 복사해 Ctrl+V 하세요.`,4200); return; }
+    toast(`✗ ${f.name} — .xlsx/.csv/.tsv 파일만 가능합니다.`,4200); return; }
   const buf=await f.arrayBuffer();
   let txt;
   try{ txt=new TextDecoder('utf-8',{fatal:true}).decode(buf) }
@@ -692,6 +724,20 @@ function buildInputs(nm,cl,y,m,nd){
   });
   return {nurses,schedule,overrides,mids};
 }
+/* 셀 선입력(D/A) 오버라이드 + 수동 교환 병합 — 같은 라벨/같은 사람 충돌 시 수동이 우선 */
+function mergeOv(cellOvr,man){
+  const out={};
+  for(const dk in cellOvr){ out[dk]={}; for(const P in cellOvr[dk]) out[dk][P]={...cellOvr[dk][P]}; }
+  for(const dk in man) for(const P in man[dk]){
+    const t=((out[dk]=out[dk]||{})[P]=out[dk][P]||{});
+    for(const nm in man[dk][P]){
+      const lb=man[dk][P][nm];
+      for(const k in t) if(t[k]===lb||k===nm) delete t[k];
+      t[nm]=lb;
+    }
+  }
+  return out;
+}
 function seedFor(ym){
   const st=loadCfg('state_'+prevYM(ym));
   if(!st||!st.nurses) return {seed:null,info:''};
@@ -719,12 +765,13 @@ function recompute(){
   if(!names.length){ $('#resultCard').style.display='none'; result=null; return; }
   const {nurses,schedule,overrides}=buildInputs(names,cells,year,month,ndays);
   const {seed,info}=seedFor(curYM());
-  result=AssignCore.compute(nurses,schedule,monthKeys(),{rules:rules(),overrides,seed});
+  result=AssignCore.compute(nurses,schedule,monthKeys(),
+    {rules:rules(),overrides:mergeOv(overrides,manualOv),seed});
   saveState(curYM(),result,ndays);
   $('#seedInfo').textContent=info;
   if(!selectedDay||!selectedDay.startsWith(curYM())) selectedDay=isoOf(year,month,1);
   $('#resultCard').style.display='';
-  renderGrid(); renderDetail(); renderWeekBtns(); renderWarns();
+  renderGrid(); renderDetail(); renderWeekBtns(); renderWarns(); renderEvents();
 }
 /* 이웃 달 결과 (주간 시트 경계일용) — 저장된 근무표가 있으면 그 달 시드로 재계산 */
 function monthResult(ym){
@@ -737,7 +784,8 @@ function monthResult(ym){
   const cl=s.cells.map(row=>{const r=row.slice(0,nd);while(r.length<nd)r.push('');return r});
   const {nurses,schedule,overrides,mids}=buildInputs(s.names,cl,y,m,nd);
   const dks=[]; for(let d=1;d<=nd;d++) dks.push(isoOf(y,m,d));
-  const res=AssignCore.compute(nurses,schedule,dks,{rules:rules(),overrides,seed:seedFor(ym).seed});
+  const res=AssignCore.compute(nurses,schedule,dks,
+    {rules:rules(),overrides:mergeOv(overrides,loadCfg('ovr_'+ym)||{}),seed:seedFor(ym).seed});
   return resultCache[ym]={byNurse:res.byNurse,names:s.names,cells:cl,ndays:nd,mids};
 }
 
@@ -748,16 +796,60 @@ function renderGrid(){
   const dks=monthKeys();
   let html='<table><tr><th style="text-align:left">간호사</th>'+
     dks.map(dk=>`<th class="daysel${dk===selectedDay?' on':''}" onclick="selectedDay='${dk}';renderGrid();renderDetail()">${+dk.slice(8,10)}</th>`).join('')+'</tr>';
-  for(const n of names){
+  names.forEach((n,ni)=>{
     html+=`<tr><td style="text-align:left;white-space:nowrap"><b>${esc(n)}</b></td>`;
     for(const dk of dks){
       const info=result.byNurse[n]&&result.byNurse[n][dk];
-      html+=info?`<td><span class="lbl p${info.period}">${info.label==='차지'?'차':(info.label||'—')}</span></td>`:'<td></td>';
+      if(!info){ html+='<td></td>'; continue; }
+      const ov=manualOv[dk]&&manualOv[dk][info.period]&&(n in manualOv[dk][info.period]);
+      html+=`<td class="pk${ov?' ovd':''}" data-ni="${ni}" data-dk="${dk}" title="클릭 = 어싸인 수동 교환">`+
+        `<span class="lbl p${info.period}">${info.label==='차지'?'차':(info.label||'—')}</span></td>`;
     }
     html+='</tr>';
-  }
+  });
   $('#grid').innerHTML=html+'</table>';
 }
+/* ── 수동 교환 픽커 — 앱 어싸인 탭과 동일 의미(라벨 선택 → 기존 보유자와 스왑) ── */
+$('#grid').addEventListener('click',e=>{
+  const td=e.target.closest('td.pk'); if(!td) return;
+  openPick(+td.dataset.ni,td.dataset.dk,e.pageX,e.pageY);
+});
+let pickCtx=null;
+function openPick(ni,dk,x,y){
+  const n=names[ni], info=result.byNurse[n]&&result.byNurse[n][dk];
+  if(!info) return;
+  pickCtx={name:n,dk,period:info.period,current:info.label||''};
+  const day=result.byDay[dk]&&result.byDay[dk][info.period];
+  const labels=day?Object.keys(day.labels):[];
+  const pk=$('#pick');
+  pk.innerHTML=`<div style="margin-bottom:4px"><b>${esc(n)}</b> · ${+dk.slice(8,10)}일 ${info.period} <span class="dim">(현재 ${info.label||'헬퍼'})</span></div>`+
+    labels.map(l=>`<button ${l===pickCtx.current?'disabled':''} onclick="pickChoose('${l}')">${l==='차지'?'차':l}</button>`).join('')+
+    `<button onclick="pickChoose(null)" class="dim">자동</button> <button onclick="closePick()">✕</button>`;
+  pk.style.display='block'; pk.style.left=x+'px'; pk.style.top=(y+8)+'px';
+}
+function closePick(){ $('#pick').style.display='none'; pickCtx=null; }
+function pickChoose(label){
+  const {name,dk,period,current}=pickCtx; closePick();
+  const ov=(manualOv[dk]=manualOv[dk]||{});
+  const pv=(ov[period]=ov[period]||{});
+  if(label===null){ delete pv[name]; }
+  else{
+    const holder=result.byDay[dk]&&result.byDay[dk][period]&&result.byDay[dk][period].labels[label];
+    if(holder&&holder!==name&&current) pv[holder]=current;   // 스왑
+    pv[name]=label;
+  }
+  if(!Object.keys(pv).length) delete ov[period];
+  if(!Object.keys(ov).length) delete manualOv[dk];
+  saveCfg('ovr_'+curYM(),manualOv); recompute();
+}
+function resetOv(){
+  if(!Object.keys(manualOv).length){ toast('수동 조정 없음'); return; }
+  if(!confirm(curYM()+' 수동 조정을 모두 초기화할까요?')) return;
+  manualOv={}; saveCfg('ovr_'+curYM(),manualOv); recompute(); toast('수동 조정 초기화됨');
+}
+document.addEventListener('mousedown',e=>{
+  if($('#pick').style.display==='block'&&!e.target.closest('#pick')&&!e.target.closest('td.pk')) closePick();
+});
 function roomsStr(rooms){
   if(!rooms||!rooms.length)return '(수동 분배)';
   return rooms.map(r=>`${r}호${ROOM_CAP[r]?'('+ROOM_CAP[r]+')':''}`).join(' ');
@@ -803,6 +895,53 @@ function renderWarns(){
   el.style.display=w.length?'block':'none';
   el.textContent=w.length?('⚠ 확인 필요\n· '+w.join('\n· ')):'';
 }
+/* ── 교육 및 행사 (양식 4행) — 주×요일 입력, ISO 날짜 키라 월 경계 자동 공유 ── */
+function renderEvents(){
+  const rows=weeksOf(year,month).map(sun=>{
+    let tds='';
+    for(let i=0;i<7;i++){
+      const d=addDays(sun,i), iso=isoOf(d.getFullYear(),d.getMonth()+1,d.getDate());
+      tds+=`<td><input data-iso="${iso}" value="${esc(events[iso]||'')}" placeholder="${d.getMonth()+1}/${d.getDate()}"></td>`;
+    }
+    return '<tr>'+tds+'</tr>';
+  }).join('');
+  $('#eventsGrid').innerHTML=`<table><tr>${WD.map(w=>`<th>${w}</th>`).join('')}</tr>${rows}</table>`;
+  $('#eventsGrid').querySelectorAll('input').forEach(inp=>inp.addEventListener('change',()=>{
+    const v=inp.value.trim();
+    if(v) events[inp.dataset.iso]=v; else delete events[inp.dataset.iso];
+    saveCfg('events',events);
+  }));
+}
+
+/* ── 백업/복원 — localStorage의 assign_* 전체를 JSON 파일로 ── */
+function exportBackup(){
+  const data={};
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k&&k.startsWith('assign_')) data[k]=localStorage.getItem(k);
+  }
+  const blob=new Blob([JSON.stringify({app:'assign',ver:2,saved:new Date().toISOString(),data},null,1)],
+    {type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='어싸인백업_'+fmtYmd(new Date())+'.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  toast(Object.keys(data).length+'개 항목 백업됨');
+}
+function importBackup(file){
+  file.text().then(t=>{
+    const j=JSON.parse(t);
+    if(!j||j.app!=='assign'||!j.data) throw new Error('형식 불일치');
+    const n=Object.keys(j.data).length;
+    if(!confirm(`백업(${(j.saved||'').slice(0,10)}, ${n}개 항목)을 복원할까요?\n현재 데이터를 덮어씁니다.`)) return;
+    for(const k in j.data) localStorage.setItem(k,j.data[k]);
+    location.reload();
+  }).catch(e=>toast('복원 실패: '+e.message,4000));
+}
+$('#btn-exp').onclick=exportBackup;
+$('#btn-imp').onclick=()=>$('#impFile').click();
+$('#impFile').addEventListener('change',e=>{ if(e.target.files[0]) importBackup(e.target.files[0]); e.target.value=''; });
+
 function copyTsv(){
   const lines=['날짜\t시간대\t어싸인\t간호사\t병실'];
   for(const dk of monthKeys()){
@@ -923,6 +1062,81 @@ function parseSst(xml){
 }
 const dateSerial=(y,m,d)=>Math.round((Date.UTC(y,m-1,d)-Date.UTC(1899,11,30))/86400000);
 
+/* ── xlsx 근무표 읽기 (드래그&드롭 — 라이브러리 0, DecompressionStream) ──
+   시트 XML을 직접 파싱해 문자열 격자로 → absorb()가 이름 열·날짜 행 자동 인식.
+   날짜 서식 셀은 styles.xml numFmt 를 판정해 'M/D' 텍스트로 변환. */
+function colIdx(s){ let n=0; for(const ch of s) n=n*26+(ch.charCodeAt(0)-64); return n; }
+async function readXlsxGrid(u8){
+  const ents=readZip(u8);
+  const text=async nm=>{ const e2=ents.find(x=>x.name===nm); if(!e2) return null;
+    return dec.decode(e2.meth===8?await inflateRaw(e2.raw):e2.raw); };
+  const wb=await text('xl/workbook.xml'); if(!wb) throw new Error('엑셀 파일이 아닙니다');
+  const sheets=[...wb.matchAll(/<sheet\b[^>]*>/g)].map(m=>{
+    const nm=m[0].match(/name="([^"]*)"/), rid=m[0].match(/r:id="([^"]+)"/);
+    return {name:nm?XUN(nm[1]):'?', rid:rid?rid[1]:null};
+  }).filter(s=>s.rid);
+  if(!sheets.length) throw new Error('시트 없음');
+  let si=0;
+  if(sheets.length>1){
+    const pick=prompt('읽을 시트 번호:\n'+sheets.map((s,i)=>`${i+1}. ${s.name}`).join('\n'),'1');
+    if(pick===null) throw new Error('취소됨');
+    si=Math.min(Math.max((+pick||1)-1,0),sheets.length-1);
+  }
+  const rels=await text('xl/_rels/workbook.xml.rels')||'';
+  const relM=[...rels.matchAll(/<Relationship\b[^>]*>/g)].reduce((a,m)=>{
+    const id=m[0].match(/Id="([^"]+)"/), tg=m[0].match(/Target="([^"]+)"/);
+    if(id&&tg) a[id[1]]=tg[1]; return a; },{});
+  const target=(relM[sheets[si].rid]||'worksheets/sheet1.xml').replace(/^\/?(xl\/)?/,'');
+  const sx=await text('xl/'+target); if(!sx) throw new Error('시트를 읽을 수 없음');
+  const sst=parseSst(await text('xl/sharedStrings.xml'));
+  const st=await text('xl/styles.xml')||'';
+  const custom={};
+  [...st.matchAll(/<numFmt\b[^>]*>/g)].forEach(m=>{
+    const id=m[0].match(/numFmtId="(\d+)"/), fc=m[0].match(/formatCode="([^"]*)"/);
+    if(id&&fc) custom[+id[1]]=XUN(fc[1]); });
+  const xfIds=[];
+  const xfsM=st.match(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/);
+  if(xfsM) [...xfsM[1].matchAll(/<xf\b[^>]*\/?>/g)].forEach(m=>{
+    const id=m[0].match(/numFmtId="(\d+)"/); xfIds.push(id?+id[1]:0); });
+  const isDateId=id=>{
+    if((id>=14&&id<=22)||(id>=45&&id<=47)) return true;
+    const c=custom[id]; if(!c) return false;
+    return /[ymd]/i.test(c.replace(/"[^"]*"/g,'').replace(/\[[^\]]*\]/g,''));
+  };
+  const rows={}; let maxC=0, cellsRead=0;
+  for(const m of sx.matchAll(/<c r="([A-Z]+)(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)){
+    const col=colIdx(m[1]), row=+m[2], attrs=m[3]||'', body=m[4]||'';
+    if(row>500||col>150||++cellsRead>40000) continue;
+    const tM=attrs.match(/t="(\w+)"/); const t=tM?tM[1]:'';
+    let val='';
+    if(t==='s'){ const v=body.match(/<v>(\d+)<\/v>/); val=v?(sst[+v[1]]||''):''; }
+    else if(t==='inlineStr'||t==='str'){
+      val=XUN([...body.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(p=>p[1]).join('')); }
+    else{
+      const v=body.match(/<v>([\s\S]*?)<\/v>/);
+      if(v){
+        const num=parseFloat(v[1]);
+        const sM=attrs.match(/s="(\d+)"/);
+        if(Number.isFinite(num)&&sM&&isDateId(xfIds[+sM[1]]??0)&&num>20000&&num<80000){
+          const dt=new Date(Date.UTC(1899,11,30)+num*86400000);
+          val=(dt.getUTCMonth()+1)+'/'+dt.getUTCDate();          // parseDateCell 이 일(day) 추출
+        } else val=Number.isFinite(num)?String(+num.toPrecision(12)):XUN(v[1]);
+      }
+    }
+    if(val===''||val==null) continue;
+    (rows[row]=rows[row]||{})[col]=String(val);
+    if(col>maxC) maxC=col;
+  }
+  const g=Object.keys(rows).map(Number).sort((a,b)=>a-b).map(rn=>{
+    const out=Array(maxC).fill('');
+    for(const c in rows[rn]) out[c-1]=rows[rn][c];
+    return out;
+  });
+  if(!g.length) throw new Error('데이터 없음 — 시트 '+sheets[si].name);
+  toast(`${sheets[si].name} 시트 ${g.length}행 읽음`);
+  return g;
+}
+
 /* ── 내장 양식 로드 (1회) ── */
 let TPL=null;
 async function loadTemplate(){
@@ -1004,13 +1218,15 @@ async function downloadWeekXlsx(sun){
   const tpl=await loadTemplate();
   const days=weekData(sun);
   let xml=tpl.sheetXml;
-  // 양식에 남은 예시 값 선지우기 (날짜 3행 + 섹션 5~18행의 요일 열 D:Q — 서식은 보존)
+  // 양식에 남은 예시 값 선지우기 (날짜 3행 + 교육행사 4행 + 섹션 5~18행의 요일 열 D:Q — 서식은 보존)
   const COLS='DEFGHIJKLMNOPQ'.split('');
-  for(const col of COLS){ xml=clearCell(xml,col+'3'); for(let r=5;r<=18;r++) xml=clearCell(xml,col+r); }
+  for(const col of COLS){ for(let r=3;r<=18;r++) xml=clearCell(xml,col+r); }
   days.forEach((day,i)=>{
     const colR=String.fromCharCode(68+i*2), colN=String.fromCharCode(69+i*2); // D,F,H.. / E,G,I..
     const d=day.date;
     xml=setCellNum(xml,colR+'3',dateSerial(d.getFullYear(),d.getMonth()+1,d.getDate()));
+    const evt=events[isoOf(d.getFullYear(),d.getMonth()+1,d.getDate())];
+    if(evt) xml=setCellStr(xml,colR+'4',evt);
     if(day.blank) return;
     for(const P of ['D','E','N']){
       const sec=SEC[P], s=day.secs[P];
@@ -1092,7 +1308,10 @@ async function printWeekly(){
       <colgroup><col style="width:4.6%">${'<col style="width:7.0%"><col style="width:6.6%">'.repeat(7)}</colgroup>
       <tr><td class="hd" rowspan="2">교육 및<br>행사</td>${WD.map(w=>`<th class="hd" colspan="2">${w}</th>`).join('')}</tr>
       <tr>${days.map(d=>`<th colspan="2">${d.date.getMonth()+1}/${d.date.getDate()}</th>`).join('')}</tr>
-      <tr><td style="height:16px"></td>${days.map(()=>'<td colspan="2"></td>').join('')}</tr>`;
+      <tr><td style="height:16px"></td>${days.map(d=>{
+        const evt=events[isoOf(d.date.getFullYear(),d.date.getMonth()+1,d.date.getDate())];
+        return `<td colspan="2">${evt?esc(evt):''}</td>`;
+      }).join('')}</tr>`;
     for(const P of ['D','E','N']){
       const sec=SEC[P];
       for(let li=0;li<sec.rows;li++){
@@ -1137,8 +1356,10 @@ if(names.length) recompute();
 
 /* 헤드리스 검증 훅 */
 window.__app={get names(){return names},get cells(){return cells},get result(){return result},
+  get manualOv(){return manualOv},get events(){return events},set events(v){events=v},
   absorb,recompute,downloadWeekXlsx,printWeekly,weekData,monthResult,abbrevRooms,parseCellRaw,
-  loadTemplate,get ym(){return curYM()},switchTo(y,m){$('#selY').value=y;$('#selM').value=m;switchMonth()}};
+  loadTemplate,readXlsxGrid,openPick,pickChoose,exportBackup,
+  get ym(){return curYM()},switchTo(y,m){$('#selY').value=y;$('#selM').value=m;switchMonth()}};
 </script>
 </body>
 </html>
