@@ -1391,6 +1391,7 @@
     <button @click="assignCfgOpen=!assignCfgOpen" :class="assignCfgOpen?'btn-primary':'btn-ghost'" class="btn btn-xs">⚙ 방 구성·원칙</button>
     <button @click="assignCopyTsv()" class="btn btn-xs btn-ghost">📋 Excel 복사</button>
     <button @click="assignResetOv()" class="btn btn-xs btn-ghost">수동조정 초기화</button>
+    <span x-show="assignSeedInfo" x-text="assignSeedInfo" class="text-xs text-dim"></span>
   </div>
 
   <!-- 방 구성 + 원칙 설정 -->

@@ -27,6 +27,7 @@ window.AssignModule = function () {
     assignSchemes: JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
     assignOverrides: {},       // {dk:{P:{nid:label}}}
     assignSource: 'auto',      // auto | schedule | prev
+    assignSeedInfo: '',        // 전월 연속성 이월 안내
     assignCfgOpen: false,
     assignSelectedDay: null,   // dk (일별 상세)
     assignPick: { open: false, nid: '', dk: '', period: '', current: '' },
@@ -43,6 +44,41 @@ window.AssignModule = function () {
 
     _assignCfgKey() { return `ns_assign_cfg_${this.currentProfile || 'default'}` },
     _assignOvKey() { return `ns_assign_ov_${this.currentProfile || 'default'}_${this.year}-${this.month}` },
+    _assignStateKey(y, m) { return `ns_assign_state_${this.currentProfile || 'default'}_${y}-${m}` },
+
+    // ── 전월 연속성 이월 — 월별 '마지막으로 본 방' 상태 저장/시드 ──
+    _assignSaveState() {
+      const byNurse = this.assignData?.byNurse || {};
+      const nurses = {};
+      for (const nid in byNurse) {
+        let best = null;
+        for (const dk in byNurse[nid]) {
+          const v = byNurse[nid][dk];
+          if (v.label && (!best || dk > best.dk)) best = { dk, label: v.label, period: v.period };
+        }
+        if (best) nurses[nid] = { label: best.label, period: best.period, iso: best.dk };
+      }
+      if (!Object.keys(nurses).length) return; // 빈 결과로 기존 상태를 덮어쓰지 않음
+      try { localStorage.setItem(this._assignStateKey(this.year, this.month), JSON.stringify({ nurses })) } catch (e) { }
+    },
+    _assignSeed(firstDk) {
+      const py = this.month === 1 ? this.year - 1 : this.year;
+      const pm = this.month === 1 ? 12 : this.month - 1;
+      let st = null;
+      try { st = JSON.parse(localStorage.getItem(this._assignStateKey(py, pm)) || 'null') } catch (e) { }
+      if (!st || !st.nurses) { this.assignSeedInfo = ''; return null; }
+      const firstCur = `${this.year}-${String(this.month).padStart(2, '0')}-01`;
+      const day0 = Date.parse(firstDk + 'T00:00:00Z');
+      const seed = {}; let n = 0;
+      for (const nid in st.nurses) {
+        const s = st.nurses[nid];
+        if (!s || !s.label || !s.iso || s.iso >= firstCur) continue; // 당월 날짜는 현재 계산이 직접 다룸
+        const idx = Math.round((Date.parse(s.iso + 'T00:00:00Z') - day0) / 86400000);
+        seed[nid] = { label: s.label, period: s.period, idx }; n++;
+      }
+      this.assignSeedInfo = n ? `↩ 전월(${py}-${pm}) 어싸인 ${n}명 연속성 자동 이월` : '';
+      return n ? seed : null;
+    },
 
     assignLoadCfg() {
       if (this._assignCfgLoaded) return;
@@ -71,7 +107,9 @@ window.AssignModule = function () {
       const dateKeys = this.scheduleDays.map(d => this.dayKey(d)); // 이월일 포함 → 월초 연속성
       this.assignData = window.AssignCore.compute(nurses, this.assignScheduleSrc(), dateKeys, {
         rules: this.assignRules, overrides: this.assignOverrides,
+        seed: this._assignSeed(dateKeys[0]),
       });
+      this._assignSaveState();
       if (!this.assignSelectedDay || !dateKeys.includes(this.assignSelectedDay)) {
         const first = this.assignDays()[0];
         this.assignSelectedDay = first ? this.dayKey(first) : null;

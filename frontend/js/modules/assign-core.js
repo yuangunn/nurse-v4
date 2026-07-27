@@ -45,11 +45,14 @@
     const overrides = opts.overrides || {};
     const byDay = {}, byNurse = {};
     const lastSeen = {}; // nurseId -> {label, idx, period}
-    // 전월 연속성 시드 — 전월 말일에 본 방을 idx=-1(전일)로 넣으면 원칙1~4가 월 경계를 넘어 작동
+    // 전월 연속성 시드 — 전월에 마지막으로 본 방을 상대 idx로 주입하면 원칙1~4가 월 경계를 넘어 작동.
+    // idx는 dateKeys[0] 기준 상대값: 음수 = dateKeys 이전, 0 이상 = 이월(오버플로) 구간과 겹침
+    // (겹치는 날에 현재 데이터로 배정이 일어나면 자연히 덮어써진다).
     const seed = opts.seed || {};
     for (const nid in seed) {
       const s = seed[nid];
-      if (s && s.label && s.idx < 0) lastSeen[nid] = { label: s.label, idx: s.idx, period: s.period };
+      if (s && s.label && typeof s.idx === 'number' && s.idx < dateKeys.length)
+        lastSeen[nid] = { label: s.label, idx: s.idx, period: s.period };
     }
 
     for (let idx = 0; idx < dateKeys.length; idx++) {

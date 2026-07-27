@@ -205,6 +205,14 @@ assert.equal(periodOf('OF'), null);
     seed: { c: { label: 'A', period: 'D', idx: -4 } },
   });
   assert.notEqual(r.byNurse.c.d1.label, 'A');
+  // 이월(오버플로) 겹침: dateKeys가 전월 말일(d1)을 포함하고 그날 데이터가 없을 때,
+  // 시드 idx=0(d1 위치) → d2에서 원칙1(전일 인접)로 작동 — 앱 어싸인 탭 시나리오
+  const sched2 = { a: { d2: 'D' }, b: { d2: 'D' }, c: { d2: 'D' } };
+  r = compute(nurses, sched2, ['d1', 'd2'], { seed: { c: { label: 'A', period: 'D', idx: 0 } } });
+  assert.equal(r.byDay.d2.D.labels['A'], 'c');
+  // 범위 밖 시드(idx ≥ dateKeys.length)는 무시
+  r = compute(nurses, sched2, ['d1', 'd2'], { seed: { c: { label: 'A', period: 'D', idx: 2 } } });
+  assert.equal(r.byDay.d2.D.labels['A'], 'b');
 }
 
 console.log('assign-core: 모든 검증 통과');
