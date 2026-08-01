@@ -812,7 +812,7 @@ $('#wkBody').addEventListener('click',e=>{
     const iso=rm.dataset.iso, P=rm.dataset.p, l=rm.dataset.l;
     const day=dayInfo(iso); if(!day) return;
     const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
-    const v=prompt(`${+iso.slice(8,10)}일 ${P} ${FORM_LBL(l)} 방 — 이 날 하루만 적용 (예: 1.12.14 · 비우면 자동으로)`,
+    const v=prompt(`${+iso.slice(8,10)}일 ${P} ${FORM_LBL(l)} 방 — 이 날 하루만 적용 (예: 1, 12, 14 · 비우면 자동으로)`,
       roomsFor(P,cnt,l,iso));
     if(v===null) return;
     const ro=(store.roomOv[iso]=store.roomOv[iso]||{});
@@ -1520,7 +1520,7 @@ function weeksOf(y,m){
 function abbrevRooms(list){
   if(!list||!list.length) return '';
   const ok=list.every(s=>/^\d{4}$/.test(s))&&new Set(list.map(s=>s.slice(0,2))).size===1;
-  if(!ok) return list.join('.');
+  if(!ok) return list.join(', ');
   const nums=[...new Set(list.map(s=>+s.slice(2)))].sort((a,b)=>a-b);
   const out=[]; let i=0;
   while(i<nums.length){
@@ -1530,7 +1530,7 @@ function abbrevRooms(list){
     else for(let v=st;v<=en;v++) out.push(String(v));
     i++;
   }
-  return out.join('.');
+  return out.join(', ');
 }
 function weekData(sun){
   const days=[];

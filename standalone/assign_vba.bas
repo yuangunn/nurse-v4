@@ -1058,7 +1058,7 @@ Private Function LabelIdx(lab As String) As Long
 End Function
 
 ' 방번호 축약: "1001, 1002, 1003, 1011" → "1~3.11" (같은 앞 2자리 4자리 숫자일 때만,
-' 연속 3개 이상 = a~b, 구분자 '.') — 양식 수기 관례와 동일. 그 외는 '.'로만 연결.
+' 연속 3개 이상 = a~b, 구분자 ', ') — 예: 1, 12, 14 / 2~4, 11. 그 외는 ', '로만 연결.
 Private Function AbbrevRooms(ByVal raw As String) As String
     raw = Trim(raw)
     If raw = "" Then AbbrevRooms = "": Exit Function
@@ -1080,7 +1080,7 @@ Private Function AbbrevRooms(ByVal raw As String) As String
     Next k
     Dim out As String
     If Not okAll Then
-        For k = 0 To n - 1: out = out & IIf(k = 0, "", ".") & items(k): Next k
+        For k = 0 To n - 1: out = out & IIf(k = 0, "", ", ") & items(k): Next k
         AbbrevRooms = out: Exit Function
     End If
     Dim nums() As Long: ReDim nums(0 To n - 1)
@@ -1110,10 +1110,10 @@ Private Function AbbrevRooms(ByVal raw As String) As String
             If uniq(a + 1) = en + 1 Then en = uniq(a + 1): a = a + 1 Else Exit Do
         Loop
         If en - st >= 2 Then
-            out = out & IIf(out = "", "", ".") & st & "~" & en
+            out = out & IIf(out = "", "", ", ") & st & "~" & en
         Else
             For b = st To en
-                out = out & IIf(out = "", "", ".") & b
+                out = out & IIf(out = "", "", ", ") & b
             Next b
         End If
         a = a + 1
