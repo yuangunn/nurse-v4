@@ -1,43 +1,78 @@
 <!DOCTYPE html>
 <!--
-  어싸인 자동 배정 v2 — 단일 파일 (설치·인터넷 불필요, 더블클릭 실행)
+  어싸인 배정표 v3 — 단일 파일 (설치·인터넷 불필요)
 
-  ① 엑셀에서 근무표 범위 복사 → 이 창에 Ctrl+V (표에서 직접 수정 가능)
-  ② 자동 배정 결과 확인 (원칙 1~4 · 방 구성 · 전월 자동 이월)
-  ③ [주간 인쇄] 또는 주간 xlsx 다운로드 — '병실 배정표' 양식 그대로
+  · 켜면 바로 '이번 주 배정표'가 보입니다. ◀ ▶ 로 주 이동, 이름 클릭 = 담당 교체.
+  · 데이터는 내부망 NAS 등의 JSON 파일 하나에 저장 — 어느 PC에서 열어도 같은 내용.
+    (최초 1회 파일 만들기, 이후 열 때마다 [이어서 시작] → 브라우저 '허용' 1번)
+  · 근무표는 연속 타임라인으로 저장 — 월 경계가 없어 이웃달 연속성이 자동.
+  · 새 근무표 넣기: 엑셀 복사 → Ctrl+V → 미리보기 → [맞아요]. xlsx 파일 드롭도 가능.
+  · 주간 배정표 인쇄 + '병실 배정표.xlsx' 양식 그대로 xlsx 다운로드(⚙ 관리).
 
   로직은 nurse-v4/frontend/js/modules/assign-core.js 와 동일 (단일 소스).
   코어·양식 동기화: node scripts/build-assign-standalone.mjs
-    (양식 = standalone/병실 배정표.xlsx 를 base64 로 내장 — 양식 파일을 고치고
-     동기화를 다시 돌리면 인쇄·xlsx 출력에 그대로 반영됩니다)
-
-  요구 브라우저: Chrome/Edge 103+ (2022-06). 인터넷 불필요, file:// 로 동작.
+  요구 브라우저: Chrome/Edge 103+. file:// 더블클릭 또는 assign_app.cmd 로 실행.
 -->
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>어싸인 자동 배정</title>
+<title>어싸인 배정표</title>
 <style>
   :root{font-family:-apple-system,"Malgun Gothic","맑은 고딕","Apple SD Gothic Neo",sans-serif}
-  body{margin:0;padding:14px;background:#f7f8fa;color:#1f2937;font-size:13px}
-  h1{font-size:16px;margin:0 0 4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  h1 .dim{font-size:12px;font-weight:400}
-  .dim{color:#6b7280;font-size:12px}
-  .hint{color:#556;font-size:12px;margin:2px 0 10px;line-height:1.7}
-  .hint b{color:#1B4FC3}
-  .card{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:12px}
-  .card h2{font-size:14px;margin:0 0 8px}
-  button{font:inherit;padding:4px 11px;border:1px solid #cbd5e1;background:#fff;border-radius:5px;cursor:pointer}
-  button:hover{background:#f1f5f9}
-  button.pri{background:#1976d2;color:#fff;border-color:#1976d2}
-  select,input[type=number],input[type=text]{font:inherit;padding:3px 6px;border:1px solid #cbd5e1;border-radius:4px}
-  label{margin-right:12px;font-size:13px}
-  .row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
-  .row>div{flex:1;min-width:250px}
-  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
+  body{margin:0;padding:0;background:#f4f6f9;color:#1f2937;font-size:15px}
+  button{font:inherit;padding:8px 16px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer}
+  button:hover{background:#eef2f7}
+  button.pri{background:#1976d2;color:#fff;border-color:#1976d2;font-weight:700}
+  button.big{font-size:17px;padding:12px 22px}
+  button.ghost{border:none;background:none}
+  input[type=text],select{font:inherit;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px}
+  .dim{color:#6b7280;font-size:13px}
+  .topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid #e5e7eb;
+          position:sticky;top:0;z-index:10;flex-wrap:wrap}
+  .topbar h1{font-size:18px;margin:0}
+  .screen{max-width:1160px;margin:0 auto;padding:14px}
+  .card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:14px}
 
-  /* ── 근무표 편집 그리드 ── */
-  #wrap{overflow:auto;max-height:60vh;border:1px solid #ccd;background:#fff;position:relative}
+  /* ── 시작 화면 ── */
+  #scrStart{text-align:center;padding-top:7vh}
+  #scrStart .box{display:inline-block;text-align:left;background:#fff;border:1px solid #e5e7eb;border-radius:14px;
+    padding:28px 34px;box-shadow:0 4px 18px rgba(0,0,0,.06)}
+  #scrStart h2{margin:0 0 6px;font-size:22px}
+  #scrStart button{display:block;width:100%;margin:10px 0;font-size:17px;padding:14px}
+  #scrStart .steps{font-size:14px;color:#556;line-height:1.9;margin-top:14px}
+
+  /* ── 주간 화면 ── */
+  .wknav{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .wknav .title{font-size:20px;font-weight:800}
+  #wkTable{width:100%;border-collapse:collapse;table-layout:fixed;background:#fff}
+  #wkTable td,#wkTable th{border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;
+    overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  #wkTable .hd{background:#eef1f5;font-weight:700}
+  #wkTable .sun{color:#c7384a} #wkTable .sat{color:#1B4FC3}
+  #wkTable .seccol{background:#f7f8fa;font-weight:800;width:34px;font-size:15px}
+  #wkTable .lab{width:56px;background:#fbfcfd;font-weight:700}
+  #wkTable td.nm{cursor:pointer;font-weight:700}
+  #wkTable td.nm:hover{background:#e8f1ff}
+  #wkTable td.nm.ovd{box-shadow:inset 0 -2px 0 #c7384a}
+  #wkTable td.rm{color:#556;font-size:12px;cursor:pointer}
+  #wkTable td.rm:hover{background:#f0fff4}
+  #wkTable td.rm.rov{box-shadow:inset 0 -2px 0 #1976d2;font-weight:700}
+  #wkTable td.rm.rdup{color:#c7384a;font-weight:700}
+  #wkTable td.evt{cursor:pointer;font-size:12px;color:#334}
+  #wkTable td.evt:hover{background:#fffbe6}
+  .todayCol{background:#fffef2 !important}
+  #wkEmpty{padding:60px 10px;text-align:center;font-size:18px;color:#556}
+
+  /* ── 넣기 화면 ── */
+  #scrPaste .guide{font-size:17px;line-height:2.1}
+  #scrPaste .guide b{color:#1B4FC3}
+  #pvWrap{overflow:auto;max-height:46vh;border:1px solid #ccd;background:#fff;margin-top:10px}
+  #pvWrap table{border-collapse:collapse;font-size:12px}
+  #pvWrap th,#pvWrap td{border:1px solid #e3e6ea;padding:2px 6px;text-align:center;white-space:nowrap}
+  #pvWrap th{background:#f4f6f8}
+
+  /* ── 고치기(그리드) 화면 ── */
+  #wrap{overflow:auto;max-height:62vh;border:1px solid #ccd;background:#fff;position:relative}
   #wrap table{border-collapse:separate;border-spacing:0;font-size:12px}
   #wrap th,#wrap td{border-right:1px solid #e3e6ea;border-bottom:1px solid #e3e6ea;padding:0;text-align:center;
     min-width:30px;height:24px;box-sizing:border-box;white-space:nowrap}
@@ -53,37 +88,27 @@
   #wrap td.anchor{outline:2px solid #0b2f7a;outline-offset:-2px;box-shadow:inset 0 0 0 1px #fff}
   .lgd span{display:inline-block;padding:1px 7px;border-radius:3px;margin-right:3px;font-weight:600;font-size:11px}
 
-  /* ── 결과 그리드 ── */
-  #grid table{border-collapse:collapse;font-size:12px}
-  #grid th,#grid td{border:1px solid #d1d5db;padding:3px 6px;text-align:center}
-  #grid th{background:#f3f4f6}
-  .lbl{display:inline-block;min-width:1.6em;padding:1px 3px;border-radius:4px;font-weight:700}
-  .pD{background:#d9e9ff;color:#1e40af}.pE{background:#d6f5e3;color:#166534}.pN{background:#ffe6c7;color:#9a4b00}
-  #dayDetail table{border-collapse:collapse;font-size:12px}
-  #dayDetail th,#dayDetail td{border:1px solid #d1d5db;padding:3px 6px;text-align:center}
-  #dayDetail th{background:#f3f4f6}
-  .daysel{cursor:pointer}
-  .daysel.on{background:#1976d2 !important;color:#fff}
-  .scroll{overflow:auto;max-width:100%}
-  #warnBox{border-left:3px solid #e6a23c;background:#fffaf0;padding:6px 10px;font-size:12px;
-           margin:8px 0;white-space:pre-wrap;display:none}
-  #toast{position:fixed;right:14px;bottom:14px;background:#111;color:#7f7;padding:8px 14px;border-radius:6px;
-         font-size:12px;display:none;z-index:100}
-  #grid td.pk{cursor:pointer}
-  #grid td.pk:hover{background:#f0f6ff}
-  #grid .ovd::after{content:'·';color:#c7384a;font-weight:900;margin-left:1px}
-  #pick{display:none;position:absolute;z-index:120;background:#fff;border:1px solid #94a3b8;border-radius:8px;
-        box-shadow:0 6px 20px rgba(0,0,0,.18);padding:8px;font-size:12px}
-  #pick button{margin:2px;min-width:2.4em}
-  #eventsGrid table{border-collapse:collapse;font-size:12px}
-  #eventsGrid th,#eventsGrid td{border:1px solid #d1d5db;padding:2px}
-  #eventsGrid th{background:#f3f4f6;min-width:70px}
-  #eventsGrid input{width:96px;border:none;font-size:11px;padding:2px}
-  #drop{position:fixed;inset:0;background:rgba(27,79,195,.12);border:3px dashed #1B4FC3;display:none;
-        z-index:99;align-items:center;justify-content:center;font-size:22px;color:#1B4FC3;font-weight:700}
-  #drop.on{display:flex}
+  /* ── 관리 화면 ── */
+  #scrAdmin details{margin-bottom:10px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px}
+  #scrAdmin summary{cursor:pointer;font-weight:700;font-size:15px}
+  #seedTable td{padding:3px 6px}
+  #seedTable .segbtn{min-width:2.6em;padding:6px 10px;margin:1px}
+  #seedTable .segbtn.on{background:#1976d2;color:#fff;border-color:#1976d2;font-weight:700}
+  .schemeRow input{width:68%}
 
-  /* ── 주간 배정표 인쇄 (병실 배정표 양식 재현) ── */
+  /* ── 픽커 팝업 ── */
+  #pick{display:none;position:absolute;z-index:120;background:#fff;border:1px solid #94a3b8;border-radius:12px;
+        box-shadow:0 8px 26px rgba(0,0,0,.2);padding:12px;font-size:15px}
+  #pick button{margin:3px;min-width:3em;font-size:16px;padding:8px 14px}
+
+  #toast{position:fixed;right:14px;bottom:14px;background:#111;color:#7f7;padding:10px 16px;border-radius:8px;
+         font-size:14px;display:none;z-index:200;max-width:60vw}
+  #drop{position:fixed;inset:0;background:rgba(27,79,195,.12);border:4px dashed #1B4FC3;display:none;
+        z-index:190;align-items:center;justify-content:center;font-size:24px;color:#1B4FC3;font-weight:800}
+  #drop.on{display:flex}
+  #saveDot{font-size:12px;color:#1F8A5B}
+
+  /* ── 인쇄 ── */
   #printArea{display:none}
   @media print{
     @page{size:A4 portrait;margin:8mm}
@@ -93,7 +118,7 @@
   }
   .sheet{page-break-after:always;font-size:9pt}
   .sheet:last-child{page-break-after:auto}
-  .sheet h1{font-size:14pt;text-align:center;margin:0 0 4px;display:block}
+  .sheet h1{font-size:14pt;text-align:center;margin:0 0 4px}
   .sheet table{border-collapse:collapse;width:100%;table-layout:fixed}
   .sheet td,.sheet th{border:1px solid #333;padding:2px 3px;text-align:center;font-size:8.5pt;
     overflow:hidden;word-break:break-all}
@@ -107,79 +132,142 @@
 </head>
 <body>
 <div class="app">
-<h1>어싸인 자동 배정
-  <span>
-    <input type="number" id="selY" min="2020" max="2099" style="width:74px"> 년
-    <select id="selM"></select> 월
+<div class="topbar">
+  <h1>어싸인 배정표</h1>
+  <span id="fileInfo" class="dim"></span><span id="saveDot"></span>
+  <span style="margin-left:auto;display:flex;gap:8px">
+    <button class="ghost" onclick="show('week')" title="주간 배정표">📋 배정표</button>
+    <button class="ghost" onclick="show('admin')" title="방 구성·백업 등 관리자 설정">⚙ 관리</button>
   </span>
-  <span class="dim">nurse-v4 부속 · 병실 단위 · 전월 자동 이월</span>
-  <span style="margin-left:auto;display:flex;gap:6px">
-    <button id="btn-exp" title="모든 데이터(월별 근무표·설정·수동조정)를 JSON 파일로 저장">⬇ 백업</button>
-    <button id="btn-imp" title="백업 JSON 파일에서 복원 (현재 데이터 덮어씀)">⬆ 복원</button>
-    <input type="file" id="impFile" accept=".json" style="display:none">
-  </span>
-</h1>
-<p class="hint">
-엑셀에서 근무표 범위 복사 → 이 창에 <b>Ctrl+V</b> (이름 열·날짜 행 자동 인식) ·
-셀 클릭 후 <b>D E N O V W</b> 키 입력 (Shift+D/E/N = 차지, 한글 ㅈㅂㅅㅌㄱ 지원) ·
-<b>드래그</b> 범위 선택 후 키 = 일괄 입력 · <b>Ctrl+C</b> = 엑셀로 복사(색 포함) ·
-<b>더블클릭</b> = 직접 입력(선입력 <b>D/A</b> 식 어싸인 고정) · <b>Delete</b> 삭제 · <b>Ctrl+Z</b> 되돌리기 ·
-파일 드래그&드롭(<b>.xlsx</b>/.csv/.tsv) · 배정 결과 셀 <b>클릭 = 어싸인 수동 교환</b>
-</p>
+</div>
 
-<div class="card">
-  <h2>1) 근무표 <span class="dim" id="parseInfo"></span></h2>
-  <div class="bar">
-    <button id="btn-add">+ 간호사</button>
-    <button id="btn-clear">이 달 지우기</button>
-    <span class="lgd" id="lgd"></span>
+<!-- ══ 시작 화면 ══ -->
+<div id="scrStart" class="screen" style="display:none">
+  <div class="box">
+    <h2>어싸인 배정표</h2>
+    <div class="dim">데이터 파일을 열면 바로 이번 주 배정표가 나옵니다.</div>
+    <button id="btnResume" class="pri" style="display:none">▶ 이어서 시작</button>
+    <button id="btnOpenFile">📂 데이터 파일 열기</button>
+    <button id="btnNewFile">＋ 처음 시작 (새 데이터 파일 만들기)</button>
+    <div class="steps">
+      · 파일은 공용 폴더(내부망 NAS)에 두면 어느 컴퓨터에서나 같은 내용을 봅니다.<br>
+      · 브라우저가 "파일을 볼 수 있도록 허용하시겠습니까?" 라고 물으면 <b>허용</b>을 누르세요.<br>
+      · 데이터 파일(.json)을 이 창에 끌어다 놓아도 열립니다.
+    </div>
+    <div id="startWarn" class="dim" style="color:#c7384a"></div>
   </div>
-  <div id="wrap"></div>
 </div>
 
-<div class="card" id="nurseCard" style="display:none">
-  <h2>2) 차지 가능 <span class="dim">체크 = 차지방 담당 가능 (근무표에 DC/EC/NC 표시가 있으면 그 사람이 우선)</span></h2>
-  <div id="nurseChecks"></div>
-</div>
-
-<div class="card">
-  <h2>배정 원칙 · 방 구성</h2>
-  <div style="margin-bottom:4px">
-    <label><input type="checkbox" id="r1" checked> 원칙1 — 전일 같은 근무면 방 유지</label>
-    <label><input type="checkbox" id="r2" checked> 원칙2 — 근무 바뀌어도 방 유지</label>
-    <label><input type="checkbox" id="r3" checked> 원칙3 — 오프 복귀자 방 유지</label>
-    <label><input type="checkbox" id="r4"> 원칙4 — 오프 복귀자 튕기기</label>
-  </div>
-  <div class="dim" style="margin-bottom:8px">※ 차지는 항상 적용(DC/EC/NC 표시자 우선) · 원칙3·4는 반대 개념 — 하나를 켜면 다른 쪽이 자동으로 꺼집니다</div>
-  <div class="row" id="schemes"></div>
-  <div style="margin-top:8px"><button onclick="resetSchemes()">방 구성 기본값 복원</button></div>
-</div>
-
-<div class="card" id="resultCard" style="display:none">
-  <h2>3) 배정 결과 <span class="dim">셀 클릭 = 수동 교환(·표시), 이후 날짜는 원칙따라 이어짐</span>
-    <span style="float:right;display:flex;gap:6px;flex-wrap:wrap">
-      <button onclick="resetOv()">수동 조정 초기화</button>
-      <button onclick="copyTsv()">📋 Excel 복사</button>
-      <button class="pri" onclick="printWeekly()">🖨 주간 배정표 인쇄</button>
+<!-- ══ 주간 화면 (기본) ══ -->
+<div id="scrWeek" class="screen" style="display:none">
+  <div class="wknav">
+    <button class="big" onclick="moveWeek(-1)">◀ 지난주</button>
+    <span class="title" id="wkTitle"></span>
+    <button class="big" onclick="moveWeek(1)">다음주 ▶</button>
+    <button onclick="goToday()">오늘</button>
+    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="pri big" onclick="printWeek(false)">🖨 이번 주 인쇄</button>
+      <button class="big" onclick="show('paste')">＋ 새 근무표 넣기</button>
+      <button onclick="show('edit')">✏ 근무표 고치기</button>
     </span>
-  </h2>
-  <div id="seedInfo" class="dim" style="margin-bottom:6px"></div>
-  <div id="warnBox"></div>
-  <div class="scroll" id="grid"></div>
-  <div id="dayDetail" style="margin-top:12px"></div>
-  <details style="margin-top:10px">
-    <summary style="cursor:pointer;font-weight:600">교육 및 행사 <span class="dim">— 인쇄·xlsx 양식 상단 칸 (비우면 공란)</span></summary>
-    <div id="eventsGrid" style="margin-top:6px"></div>
-  </details>
-  <div class="bar" style="margin-top:10px">
-    <span style="font-weight:600">⬇ 주간 배정표 xlsx (병실 배정표 양식 그대로 · 엑셀에서 수정 가능):</span>
-    <span id="weekBtns"></span>
   </div>
+  <div class="card" style="padding:8px">
+    <div id="wkBody"></div>
+    <div class="dim" style="margin-top:6px">이름 클릭 = 담당 교체 · 맨 윗줄(교육·행사) 클릭 = 내용 입력 · 빨간 밑줄 = 수동으로 바꾼 칸</div>
+  </div>
+</div>
+
+<!-- ══ 새 근무표 넣기 ══ -->
+<div id="scrPaste" class="screen" style="display:none">
+  <div class="card">
+    <div class="guide">
+      <b>1.</b> 엑셀에서 근무표를 마우스로 긁어 복사하세요 (<b>Ctrl+C</b>)<br>
+      <b>2.</b> 이 창을 클릭한 다음 <b>Ctrl+V</b> 를 누르세요<br>
+      <span class="dim">엑셀 파일(.xlsx)을 이 창에 끌어다 놓아도 됩니다. 이름 열과 날짜 줄은 자동으로 알아봅니다.</span>
+    </div>
+    <div id="pvInfo" style="font-size:17px;font-weight:700;margin-top:12px"></div>
+    <div id="pvYM" style="display:none;margin-top:6px">
+      이 근무표의 시작:
+      <input type="number" id="pvY" min="2020" max="2099" style="width:76px"> 년
+      <select id="pvM"></select> 월
+      <span class="dim">— 날짜 줄에 연·월이 없으면 꼭 확인해주세요</span>
+    </div>
+    <div id="pvWrap" style="display:none"></div>
+    <div style="margin-top:12px;display:flex;gap:10px">
+      <button id="btnPvOk" class="pri big" style="display:none" onclick="confirmPaste()">✔ 맞아요, 저장</button>
+      <button id="btnPvNo" class="big" style="display:none" onclick="resetPaste()">↩ 다시</button>
+      <button onclick="show('week')">돌아가기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 근무표 고치기 ══ -->
+<div id="scrEdit" class="screen" style="display:none">
+  <div class="wknav">
+    <button onclick="moveEditMonth(-1)">◀</button>
+    <span class="title" id="edTitle"></span>
+    <button onclick="moveEditMonth(1)">▶</button>
+    <span class="dim">셀 클릭 후 D/E/N/O 키 입력 · 드래그 범위 · 더블클릭 직접 입력(D/A 선입력) · Ctrl+Z</span>
+    <span style="margin-left:auto"><button class="pri" onclick="show('week')">✔ 배정표 보기</button></span>
+  </div>
+  <div class="card" style="padding:8px">
+    <div class="lgd" id="lgd" style="margin-bottom:6px"></div>
+    <div id="wrap"></div>
+  </div>
+</div>
+
+<!-- ══ 관리 ══ -->
+<div id="scrAdmin" class="screen" style="display:none">
+  <details open>
+    <summary>지난 어싸인 직접 입력 <span class="dim">— 근무표에 지난 기록이 없을 때 시작점 (기록이 있으면 그쪽이 우선)</span></summary>
+    <table id="seedTable" style="margin-top:8px"></table>
+  </details>
+  <details>
+    <summary>주간 배정표 파일(xlsx) 내려받기 <span class="dim">— '병실 배정표' 양식 그대로, 엑셀에서 수정 가능</span></summary>
+    <div class="dim" style="margin:6px 0">기준: 현재 보고 있는 주가 속한 달</div>
+    <div id="weekBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <div style="margin-top:8px"><button onclick="printWeek(true)">🖨 이번 달 전체 인쇄 (5~6장)</button></div>
+  </details>
+  <details>
+    <summary>방 구성 <span class="dim">— 근무 인원수별 어싸인 방 배정</span></summary>
+    <div id="schemes" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px"></div>
+    <div style="margin-top:8px"><button onclick="resetSchemes()">기본값 복원</button></div>
+  </details>
+  <details>
+    <summary>배정 원칙</summary>
+    <div style="margin:8px 0">
+      <label><input type="checkbox" id="r1" checked> 원칙1 — 전일 같은 근무면 방 유지</label><br>
+      <label><input type="checkbox" id="r2" checked> 원칙2 — 근무 바뀌어도 방 유지</label><br>
+      <label><input type="checkbox" id="r3" checked> 원칙3 — 오프 복귀자 방 유지</label><br>
+      <label><input type="checkbox" id="r4"> 원칙4 — 오프 복귀자 튕기기</label>
+    </div>
+    <div class="dim">※ 차지는 항상 적용(DC/EC/NC 표시자 우선) · 원칙3·4는 반대 개념 — 하나를 켜면 다른 쪽이 꺼집니다</div>
+  </details>
+  <details>
+    <summary>차지 가능 간호사</summary>
+    <div id="nurseChecks" style="margin-top:8px;line-height:2.2"></div>
+  </details>
+  <details>
+    <summary>수동 수정 관리</summary>
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button onclick="resetOv()">담당 교체 모두 초기화</button>
+      <button onclick="resetRoomOv()">일별 방 수정 모두 초기화</button>
+      <span class="dim" id="ovCount"></span></div>
+  </details>
+  <details>
+    <summary>데이터 파일</summary>
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="pickNewLocation()">다른 파일로 저장 (위치 변경)</button>
+      <button onclick="downloadBackup()">백업 내려받기</button>
+      <button onclick="show('start')">다른 데이터 파일 열기</button>
+    </div>
+    <div class="dim" style="margin-top:6px" id="dataInfo"></div>
+  </details>
 </div>
 </div><!-- /.app -->
 
 <div id="printArea"></div>
-<div id="drop">파일을 놓으세요 (.xlsx / .csv / .tsv)</div>
+<div id="drop">파일을 놓으세요 (.xlsx 근무표 / .json 데이터)</div>
 <div id="toast"></div>
 <div id="pick"></div>
 
@@ -338,7 +426,7 @@
 <script>
 "use strict";
 /* ════════════════════════════════════════════════════════════════
- * 근무 코드 정의 + 파서 (본체 앱 paste-import.js 파서 이식)
+ * 근무 코드 · 파서
  * ════════════════════════════════════════════════════════════════ */
 const SHIFTS = {
   DC:{p:'day',bg:'#E2ECFD',fg:'#1B4FC3'},  D:{p:'day',bg:'#EEF3FE',fg:'#1B4FC3'},
@@ -359,13 +447,10 @@ const ALIAS = {};
  ['휴무','OF'],['오프','OF'],['off','OF'],['o','OF'],['주휴','주'],['w','주'],
  ['연차','V'],['휴가','V'],['연','V'],['생휴','생'],['생리','생'],['병가','병'],
  ['특별','특'],['공휴','공'],['법정','법']].forEach(([k,v])=>ALIAS[k.toLowerCase()]=v);
-
-/* 셀 원문 → {code,label} | null(비우기) | undefined(인식불가).
-   "D/A" = 근무 D + 어싸인 선입력 A (VBA ParseCell 과 동일 규약) */
 function parseCellRaw(s){
   let raw=String(s??'').trim();
   if(!raw||['-','—','x','X','·','none','없음'].includes(raw)) return null;
-  if(raw.startsWith('/')) return undefined;            // 트레이니 표기 — 어싸인 제외
+  if(raw.startsWith('/')) return undefined;
   let label='';
   const m=raw.match(/^(.+?)\s*\/\s*([A-Da-d])$/);
   if(m){ raw=m[1].trim(); label=m[2].toUpperCase(); }
@@ -374,115 +459,642 @@ function parseCellRaw(s){
   else if(SHIFTS[raw.toUpperCase()]) code=raw.toUpperCase();
   else { const a=ALIAS[raw.toLowerCase()]; if(a&&SHIFTS[a]) code=a; }
   if(!code) return undefined;
-  if(label&&!/^(DC|D|EC|E|NC|N)$/.test(code)) label='';  // 라벨은 D/E/N 계열에만 의미
+  if(label&&!/^(DC|D|EC|E|NC|N)$/.test(code)) label='';
   return {code,label};
 }
 function cellText(pc){ return pc?pc.code+(pc.label?'/'+pc.label:''):''; }
 function parseDateCell(t){
   t=String(t??'').trim(); if(!t) return null;
-  let m=t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); if(m) return +m[3];
-  m=t.match(/(\d{1,2})\s*[/.\-월]\s*(\d{1,2})/);  if(m) return +m[2];
-  m=t.match(/^(\d{1,2})\s*[일(（]/);              if(m) return +m[1];
-  m=t.match(/^(\d{1,2})$/);
-  if(m){const d=+m[1]; return d>=1&&d<=31?d:null}
+  const ok=(o)=>(o.m==null||(o.m>=1&&o.m<=12))&&o.d>=1&&o.d<=31?o:null;
+  let m=t.match(/^(\d{4})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})/);
+  if(m) return ok({y:+m[1],m:+m[2],d:+m[3]});
+  m=t.match(/^(\d{1,2})\s*[/.\-월]\s*(\d{1,2})/);  if(m) return ok({m:+m[1],d:+m[2]});
+  m=t.match(/^(\d{1,2})\s*[일(（]/);               if(m) return ok({d:+m[1]});
+  m=t.match(/^(\d{1,2})$/);                        if(m) return ok({d:+m[1]});
   return null;
 }
-
-/* ════════════════════════════════════════════════════════════════
- * 방 구성 · 기본값 (기존과 동일)
- * ════════════════════════════════════════════════════════════════ */
-const ROOM_CAP = {1001:'5인실',1002:'5인실',1003:'5인실',1004:'5인실',1005:'5인실',1006:'5인실',
-  1007:'2인실',1008:'2인실',1009:'1인실',1010:'2인실',1011:'2인실',1012:'2인실',1014:'5인실'};
 const DEFAULT_SCHEMES = {
   5:{차지:['1012','1014'],A:['1001','1002'],B:['1003','1004'],C:['1005','1010','1011'],D:['1006','1007','1008','1009']},
   4:{차지:['1001','1014'],A:['1002','1003','1012'],B:['1004','1005','1011'],C:['1006','1007','1008','1009','1010']},
   3:{차지:['1001','1012','1014'],A:['1002','1003','1004','1011'],B:['1005','1006','1007','1008','1009','1010']},
   2:{차지:[],A:[]},
 };
+const ROOM_CAP = {1001:'5인실',1002:'5인실',1003:'5인실',1004:'5인실',1005:'5인실',1006:'5인실',
+  1007:'2인실',1008:'2인실',1009:'1인실',1010:'2인실',1011:'2인실',1012:'2인실',1014:'5인실'};
 
 /* ════════════════════════════════════════════════════════════════
- * 저장 (localStorage — file:// 에서도 영속)
+ * 데이터 저장소 — NAS의 JSON 파일 하나 (File System Access API)
+ * store = {order, cells:{name:{iso:code}}, ovr:{iso:{P:{name:label}}},
+ *          events:{iso:text}, seedManual:{name:{label,period}},
+ *          charge:{name:bool}, schemes, rules, rev}
  * ════════════════════════════════════════════════════════════════ */
-function loadCfg(k){ try{return JSON.parse(localStorage.getItem('assign_'+k)||'null')}catch(e){return null} }
-function saveCfg(k,v){ try{localStorage.setItem('assign_'+k,JSON.stringify(v))}catch(e){toast('⚠ 저장 실패: '+e.name)} }
-
-let schemes = loadCfg('schemes') || JSON.parse(JSON.stringify(DEFAULT_SCHEMES));
-let chargeChecks = loadCfg('charge') || {};
-let savedRules = loadCfg('rules');
-let events = loadCfg('events') || {};          // {iso: '교육/행사 텍스트'} — 월 무관 전역
-let manualOv = {};                             // {dk:{P:{name:label}}} — 월별 수동 교환 (ovr_YYYY-MM)
-
-/* ════════════════════════════════════════════════════════════════
- * 상태 — 월 단위 근무표
- * ════════════════════════════════════════════════════════════════ */
-const now=new Date();
-let year=now.getFullYear(), month=now.getMonth()+1;
-const lastYM=loadCfg('ym'); if(lastYM){ year=+lastYM.slice(0,4); month=+lastYM.slice(5,7); }
-let names=[], cells=[];               // cells[r][c] = 원문("D","D/A","중","")
-let ndays=31;
-let sel={r:0,c:0,r2:0,c2:0}, dragging=false;
-const undoStack=[];
-let result=null, selectedDay=null;    // selectedDay = ISO
-const resultCache={};                 // ym → {byNurse, names, cells, ndays} (이웃 달 재계산 캐시)
-
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[<>&]/g,m=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]));
 const pad2=n=>String(n).padStart(2,'0');
-const ymOf=(y,m)=>y+'-'+pad2(m);
-const isoOf=(y,m,d)=>y+'-'+pad2(m)+'-'+pad2(d);
-const curYM=()=>ymOf(year,month);
-function prevYM(ym){ const y=+ym.slice(0,4),m=+ym.slice(5,7); return m===1?ymOf(y-1,12):ymOf(y,m-1); }
-function toast(msg,ms=2600){ const t=$('#toast'); t.textContent=msg; t.style.display='block';
+const isoOfD=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(d.getDate()+n);return x};
+const fmtYmd=d=>d.getFullYear()+pad2(d.getMonth()+1)+pad2(d.getDate());
+const WD=['일','월','화','수','목','금','토'];
+function toast(msg,ms=2800){ const t=$('#toast'); t.textContent=msg; t.style.display='block';
   clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',ms); }
-const rect=()=>({r1:Math.min(sel.r,sel.r2),r2:Math.max(sel.r,sel.r2),
-                 c1:Math.min(sel.c,sel.c2),c2:Math.max(sel.c,sel.c2)});
-function snapshot(){ undoStack.push(JSON.stringify({n:names,d:cells})); if(undoStack.length>40) undoStack.shift(); }
 
-function monthKeys(){ const out=[]; for(let d=1;d<=ndays;d++) out.push(isoOf(year,month,d)); return out; }
-function saveMonth(){ saveCfg('cells_'+curYM(), {names,cells}); }
-function loadMonth(){
-  ndays=new Date(year,month,0).getDate();
-  const s=loadCfg('cells_'+curYM());
-  if(s&&s.names){ names=s.names; cells=s.cells;
-    for(const row of cells){ row.length=ndays; for(let i=0;i<ndays;i++) if(row[i]==null) row[i]=''; } }
-  else cells=names.map(()=>Array(ndays).fill(''));   // 새 달 — 명단 유지, 근무만 비움
-  manualOv=loadCfg('ovr_'+curYM())||{};
-  sel={r:0,c:0,r2:0,c2:0};
+function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{},roomOv:{},events:{},
+  seedManual:{},charge:{},schemes:JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
+  rules:{keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false}}; }
+let store=emptyStore();
+let fileHandle=null, dirty=false, saveT=null;
+
+/* 핸들 영속화 (IndexedDB) */
+function idb(){ return new Promise((res,rej)=>{
+  const q=indexedDB.open('assignApp',1);
+  q.onupgradeneeded=e=>e.target.result.createObjectStore('kv');
+  q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+async function idbSet(k,v){ const db=await idb();
+  return new Promise((res,rej)=>{ const tx=db.transaction('kv','readwrite');
+    tx.objectStore('kv').put(v,k); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }
+async function idbGet(k){ const db=await idb();
+  return new Promise((res,rej)=>{ const q=db.transaction('kv').objectStore('kv').get(k);
+    q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+
+async function useHandle(h,{create=false}={}){
+  // 다른 파일로 갈아타기 전, 대기 중인 저장을 기존 파일에 먼저 반영 (편집 유실/오배달 방지)
+  clearTimeout(saveT);
+  if(dirty&&fileHandle){
+    try{ await writeStore({interactive:false}); }catch(e){}
+    if(dirty&&!confirm('저장되지 않은 변경이 있습니다. 버리고 다른 파일을 열까요?')) return;
+    dirty=false;
+  }
+  if(h.requestPermission&&await h.requestPermission({mode:'readwrite'})!=='granted')
+    throw new Error('파일 접근이 허용되지 않았습니다');
+  let txt=null;
+  if(!create){
+    try{ txt=await (await h.getFile()).text(); }
+    catch(e){ throw new Error('파일을 읽을 수 없습니다 ('+(e.message||e.name)+')'); }
+  }
+  if(txt&&txt.trim()){
+    let j;
+    try{ j=JSON.parse(txt); }
+    catch(e){ throw new Error('데이터 파일이 손상되어 열 수 없습니다 — 백업 파일로 복원하세요'); }
+    if(j.app!=='assign') throw new Error('어싸인 데이터 파일이 아닙니다');
+    store={...emptyStore(),...j};
+  } else store=emptyStore();          // 새 파일 또는 진짜 빈(0바이트) 파일만
+  fileHandle=h; window.__memoryMode=false;
+  try{ await idbSet('handle',h); }catch(e){}
+  $('#fileInfo').textContent='📄 '+h.name;
+  if(create) await writeStore();
+  afterLoad();
+}
+/* 저장 — rev는 실제 쓰기 성공 후에만 올린다(실패 시 되감김 방지),
+ * 충돌(파일 rev가 더 큼) 시: 대화형이면 [덮어쓰기/백업 내려받기], 자동 저장이면 보류.
+ * 파일을 읽을 수 없으면 절대 덮어쓰지 않고 보류한다(깨진/잠긴 파일 보호). */
+async function writeStore({interactive=true}={}){
+  if(!fileHandle){ dirty=false;
+    $('#saveDot').textContent=window.__memoryMode?'⚠ 파일 미연결 — 저장되지 않음':''; return; }
+  let fileRev=0, readOk=false;
+  try{
+    const cur=await (await fileHandle.getFile()).text();
+    if(!cur.trim()) readOk=true;
+    else{ const j=JSON.parse(cur); fileRev=j.rev||0; readOk=true; }
+  }catch(e){}
+  if(!readOk){
+    $('#saveDot').textContent='⚠ 저장 보류 (파일 확인 불가)';
+    if(interactive) toast('데이터 파일을 읽을 수 없어 저장을 보류했습니다 — 네트워크/파일을 확인하거나 ⚙ 관리에서 백업을 내려받으세요',5000);
+    return;                                            // dirty 유지 → 다음 편집/저장 때 재시도
+  }
+  if(fileRev>(store.rev||0)){
+    if(!interactive){ $('#saveDot').textContent='⚠ 다른 컴퓨터가 먼저 저장함 — 대기'; return; }
+    if(!confirm('다른 컴퓨터에서 먼저 저장한 내용이 있습니다.\n\n[확인] 내 내용으로 덮어쓰기\n[취소] 내 작업을 백업 파일로 내려받기 (파일은 그대로 둠)')){
+      downloadBackup();
+      toast('백업을 내려받았습니다. 최신 내용을 보려면 창을 새로 여세요',5200);
+      $('#saveDot').textContent='⚠ 저장 안 함 (백업 내려받음)';
+      return;
+    }
+  }
+  const newRev=Math.max(fileRev,store.rev||0)+1;       // 파일 rev 기준 전진 — 되감김 방지
+  const saved=new Date().toISOString();
+  const w=await fileHandle.createWritable();
+  await w.write(JSON.stringify({...store,rev:newRev,saved})); await w.close();
+  store.rev=newRev; store.saved=saved;                 // 성공 후에만 커밋
+  dirty=false; $('#saveDot').textContent='저장됨 ✓';
+  setTimeout(()=>{if(!dirty)$('#saveDot').textContent=''},2500);
+}
+function touch(){ dirty=true; $('#saveDot').textContent='저장 중…';
+  clearTimeout(saveT);
+  saveT=setTimeout(()=>writeStore().catch(e=>{$('#saveDot').textContent='⚠ 저장 실패';toast('⚠ 저장 실패: '+e.message,4200)}),700); }
+// 창 닫기/전환 시 대기분 즉시 저장 시도 (자동 경로라 충돌 확인창 없이 보류만)
+function flushSave(){ if(dirty&&fileHandle){ clearTimeout(saveT); writeStore({interactive:false}).catch(()=>{}); } }
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushSave(); });
+window.addEventListener('pagehide',flushSave);
+window.addEventListener('beforeunload',e=>{
+  if(dirty&&fileHandle){ flushSave(); e.preventDefault(); e.returnValue=''; }});
+
+/* 시작 화면 배선 */
+async function initStart(){
+  if(!window.showOpenFilePicker){
+    $('#startWarn').textContent='이 브라우저는 파일 저장을 지원하지 않습니다 — Edge 또는 Chrome(103+)으로 열어주세요.';
+  }
+  try{
+    const h=await idbGet('handle');
+    if(h){ const b=$('#btnResume'); b.style.display='block';
+      b.textContent='▶ 이어서 시작 ('+h.name+')';
+      b.onclick=()=>useHandle(h).catch(e=>toast('열기 실패: '+e.message,4000)); }
+  }catch(e){}
+  $('#btnOpenFile').onclick=async()=>{
+    try{ const [h]=await window.showOpenFilePicker({types:[{description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
+      await useHandle(h); }catch(e){ if(e.name!=='AbortError') toast('열기 실패: '+e.message,4000); } };
+  $('#btnNewFile').onclick=async()=>{
+    try{ const h=await window.showSaveFilePicker({suggestedName:'어싸인 데이터.json',
+        types:[{description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
+      await useHandle(h,{create:true}); toast('새 데이터 파일을 만들었습니다'); }
+    catch(e){ if(e.name!=='AbortError') toast('만들기 실패: '+e.message,4000); } };
+}
+function afterLoad(){ recompute(); show('week'); }
+
+/* ════════════════════════════════════════════════════════════════
+ * 화면 전환
+ * ════════════════════════════════════════════════════════════════ */
+const SCREENS={start:'scrStart',week:'scrWeek',paste:'scrPaste',edit:'scrEdit',admin:'scrAdmin'};
+let curScr='start';
+function show(name){
+  if(name!=='start'&&!fileHandle&&!window.__memoryMode){ name='start'; }
+  curScr=name;
+  for(const k in SCREENS) $('#'+SCREENS[k]).style.display=(k===name)?'':'none';
+  if(name==='week') renderWeek();
+  if(name==='edit'){ edY=wkSunday.getFullYear(); edM=wkSunday.getMonth()+1; renderEditGrid(); }
+  if(name==='admin') renderAdmin();
+  if(name==='paste') resetPaste();
 }
 
 /* ════════════════════════════════════════════════════════════════
- * 근무표 그리드 (엑셀식 편집)
+ * 배정 계산 — 연속 타임라인 전체 (월 경계 없음)
  * ════════════════════════════════════════════════════════════════ */
-const WD=['일','월','화','수','목','금','토'];
-let cellEls=[];
-function build(){
+let result=null, tlKeys=[];
+function timelineRange(){
+  let min=null,max=null;
+  for(const n in store.cells) for(const iso in store.cells[n]){
+    if(!min||iso<min) min=iso;
+    if(!max||iso>max) max=iso;
+  }
+  return min?{min,max}:null;
+}
+function recompute(){
+  const r=timelineRange();
+  result=null; tlKeys=[];
+  if(!r||!store.order.length){ return; }
+  let start=new Date(r.min+'T00:00:00');
+  const end=new Date(r.max+'T00:00:00');
+  const span=(end-start)/86400000;
+  if(span>400) start=addDays(end,-400);            // 성능 캡 — 1년 이상 과거는 계산에서 제외
+  tlKeys=[];
+  for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)) tlKeys.push(isoOfD(d));
+  const nurses=store.order.map((n,i)=>({id:n,name:n,seniority:i,chargeCapable:store.charge[n]!==false}));
+  const schedule={}, cellOvr={};
+  for(const n of store.order){
+    const sc={};
+    for(const iso in (store.cells[n]||{})){
+      const pc=parseCellRaw(store.cells[n][iso]);
+      if(!pc||!pc.code) continue;
+      sc[iso]=pc.code;
+      if(pc.label){
+        const P=AssignCore.periodOf(pc.code);
+        if(P) ((cellOvr[iso]=cellOvr[iso]||{})[P]=cellOvr[iso][P]||{})[n]=pc.label;
+      }
+    }
+    schedule[n]=sc;
+  }
+  // 수동 교체(ovr)가 셀 선입력과 충돌하면 수동이 우선
+  const merged={};
+  for(const dk in cellOvr){ merged[dk]={}; for(const P in cellOvr[dk]) merged[dk][P]={...cellOvr[dk][P]}; }
+  for(const dk in store.ovr) for(const P in store.ovr[dk]){
+    const t=((merged[dk]=merged[dk]||{})[P]=merged[dk][P]||{});
+    for(const nm in store.ovr[dk][P]){
+      const lb=store.ovr[dk][P][nm];
+      for(const k in t) if(t[k]===lb||k===nm) delete t[k];
+      t[nm]=lb;
+    }
+  }
+  // 지난 어싸인 직접 입력 — 타임라인 시작 전날(idx -1)로 시드. 기록이 있으면 기록이 자연히 우선.
+  const seed={};
+  for(const n in store.seedManual){
+    const s=store.seedManual[n];
+    if(s&&s.label) seed[n]={label:s.label,period:s.period||'D',idx:-1};
+  }
+  result=AssignCore.compute(nurses,schedule,tlKeys,
+    {rules:store.rules,overrides:merged,seed:Object.keys(seed).length?seed:null});
+}
+function dayInfo(iso){
+  if(!result) return null;
+  const day={D:{labels:{},extra:[]},E:{labels:{},extra:[]},N:{labels:{},extra:[]}};
+  let has=false;
+  for(const n of store.order){
+    const info=result.byNurse[n]&&result.byNurse[n][iso];
+    if(!info) continue; has=true;
+    if(info.label) day[info.period].labels[info.label]=n;
+    else day[info.period].extra.push(n);
+  }
+  return has?day:null;
+}
+function midsOf(iso){
+  const out=[];
+  for(const n of store.order){
+    const pc=parseCellRaw((store.cells[n]||{})[iso]||'');
+    if(pc&&pc.code==='중') out.push(n);
+  }
+  return out;
+}
+
+/* ════════════════════════════════════════════════════════════════
+ * 주간 화면 (기본) — 병실 배정표 모양 그대로, 인터랙티브
+ * ════════════════════════════════════════════════════════════════ */
+const SEC={D:{top:5,rows:5},E:{top:11,rows:5},N:{top:16,rows:3}};
+const LBL_ORDER=['차지','A','B','C','D'];
+const FORM_LBL=l=>l==='차지'?'A(CN)':String.fromCharCode(66+LBL_ORDER.indexOf(l)-1);
+let wkSunday=(()=>{const t=new Date();t.setHours(0,0,0,0);return addDays(t,-t.getDay())})();
+function moveWeek(n){ wkSunday=addDays(wkSunday,7*n); renderWeek(); }
+function goToday(){ const t=new Date();t.setHours(0,0,0,0); wkSunday=addDays(t,-t.getDay()); renderWeek(); }
+function weekTitle(sun){
+  const e=addDays(sun,6);
+  return `${sun.getFullYear()}년 ${sun.getMonth()+1}/${sun.getDate()} ~ `+
+    (e.getMonth()===sun.getMonth()?`${e.getDate()}`:`${e.getMonth()+1}/${e.getDate()}`)+' (일~토)';
+}
+function roomsFor(P,cnt,label,iso){
+  // 그날 하루 방 수정(roomOv)이 있으면 그 값 그대로 (예: 환자 빠져 차지가 12호 추가)
+  const ov=iso&&store.roomOv[iso]&&store.roomOv[iso][P]&&store.roomOv[iso][P][label];
+  if(ov!=null) return ov;
+  if(!cnt) return '';
+  const sc=store.schemes[Math.min(Math.max(cnt,2),5)]||{};
+  return abbrevRooms(sc[label]);
+}
+function roomTokens(str){ // "1~3.11" → ['1','2','3','11'] (중복 검사용)
+  if(!str) return [];
+  const out=[];
+  for(const part of String(str).split(/[.,\s]+/)){
+    const m=part.match(/^(\d+)~(\d+)$/);
+    if(m){ for(let v=+m[1];v<=+m[2]&&v-+m[1]<50;v++) out.push(String(v)); }
+    else if(part) out.push(part);
+  }
+  return out;
+}
+function dupRooms(iso,P,day){ // 같은 날·시간대에서 두 어싸인이 겹쳐 보는 방들
+  const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
+  const seen={},dup=new Set();
+  for(const l of LBL_ORDER){
+    if(!day[P].labels[l]) continue;
+    for(const t of roomTokens(roomsFor(P,cnt,l,iso))){
+      if(seen[t]&&seen[t]!==l) dup.add(t);
+      seen[t]=seen[t]||l;
+    }
+  }
+  return dup;
+}
+function renderWeek(){
+  $('#wkTitle').textContent=weekTitle(wkSunday);
+  const todayIso=isoOfD(new Date());
+  const days=[...Array(7)].map((_,i)=>addDays(wkSunday,i));
+  const infos=days.map(d=>dayInfo(isoOfD(d)));
+  if(infos.every(x=>!x)){
+    $('#wkBody').innerHTML=`<div id="wkEmpty">이 주의 근무표가 없습니다.<br><br>
+      <button class="pri big" onclick="show('paste')">＋ 새 근무표 넣기</button></div>`;
+    return;
+  }
+  const tdCls=d=>isoOfD(d)===todayIso?' todayCol':'';
+  let h=`<table id="wkTable"><colgroup><col style="width:56px"><col style="width:58px">${
+    '<col style="width:5.6%"><col style="width:6.8%">'.repeat(7)}</colgroup>
+  <tr><td class="hd" rowspan="2" colspan="2">교육 및<br>행사</td>${
+    days.map(d=>{const w=d.getDay();
+      return `<th class="hd ${w===0?'sun':w===6?'sat':''}" colspan="2">${WD[w]}<br>${d.getMonth()+1}/${d.getDate()}</th>`}).join('')}</tr>
+  <tr>${days.map(d=>`<td class="evt${tdCls(d)}" colspan="2" data-iso="${isoOfD(d)}" title="클릭 = 교육·행사 입력">${
+    esc(store.events[isoOfD(d)]||'')}</td>`).join('')}</tr>`;
+  const dups=days.map((d,di)=>{
+    if(!infos[di]) return null;
+    const o={}; for(const P of ['D','E','N']) o[P]=dupRooms(isoOfD(d),P,infos[di]);
+    return o;
+  });
+  for(const P of ['D','E','N']){
+    const sec=SEC[P];
+    for(let li=0;li<sec.rows;li++){
+      const label=LBL_ORDER[li];
+      h+='<tr>';
+      if(li===0) h+=`<td class="seccol" rowspan="${sec.rows}">${P}</td>`;
+      h+=`<td class="lab">${FORM_LBL(label)}</td>`;
+      days.forEach((d,di)=>{
+        const iso=isoOfD(d), day=infos[di];
+        const nm=day&&day[P].labels[label];
+        if(!nm){ h+=`<td class="rm${tdCls(d)}"></td><td class="${tdCls(d)}"></td>`; return; }
+        const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
+        const ov=store.ovr[iso]&&store.ovr[iso][P]&&(nm in store.ovr[iso][P]);
+        const rmStr=roomsFor(P,cnt,label,iso);
+        const isRov=store.roomOv[iso]&&store.roomOv[iso][P]&&(label in store.roomOv[iso][P]);
+        const hasDup=dups[di]&&roomTokens(rmStr).some(t=>dups[di][P].has(t));
+        h+=`<td class="rm${isRov?' rov':''}${hasDup?' rdup':''}${tdCls(d)}" data-iso="${iso}" data-p="${P}" data-l="${label}"`+
+           ` title="클릭 = 이 날 방 수정${hasDup?' · ⚠ 다른 어싸인과 방 겹침':''}">${esc(rmStr)}</td>`+
+           `<td class="nm${ov?' ovd':''}${tdCls(d)}" data-n="${esc(nm)}" data-iso="${iso}">${esc(nm)}</td>`;
+      });
+      h+='</tr>';
+      if(P==='D'&&li===sec.rows-1){
+        h+=`<tr><td class="hd" colspan="2">중간번</td>${days.map(d=>
+          `<td colspan="2" class="${tdCls(d)}">${midsOf(isoOfD(d)).map(esc).join(', ')}</td>`).join('')}</tr>`;
+      }
+    }
+  }
+  h+='</table>';
+  $('#wkBody').innerHTML=h;
+}
+$('#wkBody').addEventListener('click',e=>{
+  const ev=e.target.closest('td.evt');
+  if(ev){ const iso=ev.dataset.iso;
+    const v=prompt((+iso.slice(5,7))+'/'+(+iso.slice(8,10))+' 교육·행사 (비우면 삭제)',store.events[iso]||'');
+    if(v===null) return;
+    if(v.trim()) store.events[iso]=v.trim(); else delete store.events[iso];
+    touch(); renderWeek(); return; }
+  const rm=e.target.closest('td.rm');
+  if(rm&&rm.dataset.iso){
+    const iso=rm.dataset.iso, P=rm.dataset.p, l=rm.dataset.l;
+    const day=dayInfo(iso); if(!day) return;
+    const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
+    const v=prompt(`${+iso.slice(8,10)}일 ${P} ${FORM_LBL(l)} 방 — 이 날 하루만 적용 (예: 1.12.14 · 비우면 자동으로)`,
+      roomsFor(P,cnt,l,iso));
+    if(v===null) return;
+    const ro=(store.roomOv[iso]=store.roomOv[iso]||{});
+    const pv=(ro[P]=ro[P]||{});
+    if(v.trim()) pv[l]=v.trim();
+    else{ delete pv[l];
+      if(!Object.keys(pv).length) delete ro[P];
+      if(!Object.keys(ro).length) delete store.roomOv[iso]; }
+    touch(); renderWeek(); return;
+  }
+  const td=e.target.closest('td.nm'); if(!td) return;
+  openPick(td.dataset.n,td.dataset.iso,e.pageX,e.pageY);
+});
+
+/* ── 담당 교체 픽커 (큰 버튼) ── */
+let pickCtx=null;
+function openPick(name,iso,x,y){
+  const info=result&&result.byNurse[name]&&result.byNurse[name][iso];
+  if(!info) return;
+  pickCtx={name,iso,period:info.period,current:info.label||''};
+  const day=result.byDay[iso]&&result.byDay[iso][info.period];
+  const labels=day?Object.keys(day.labels):[];
+  const pk=$('#pick');
+  pk.innerHTML=`<div style="margin-bottom:8px;font-weight:700">${esc(name)} · ${+iso.slice(8,10)}일 ${info.period}
+      <span class="dim">(지금: ${FORM_LBL(info.label)||'없음'})</span></div>`+
+    `<div class="dim" style="margin-bottom:2px">어싸인 바꾸기 (상대와 자동 교환)</div>`+
+    labels.map(l=>`<button ${l===pickCtx.current?'disabled':''} onclick="pickChoose('${l}')">${FORM_LBL(l)}</button>`).join('')+
+    `<button onclick="pickChoose(null)">자동</button>`+
+    `<div class="dim" style="margin:8px 0 2px;border-top:1px solid #e5e7eb;padding-top:6px">근무 바꾸기 (이 날만)</div>`+
+    ['D','DC','E','EC','N','NC','중','OF','주','V'].map(c=>
+      `<button style="font-size:13px;padding:5px 9px" onclick="pickShift('${c}')">${c}</button>`).join('')+
+    `<button style="font-size:13px;padding:5px 9px" onclick="pickShift('')">지움</button>`+
+    `<div style="margin-top:8px;text-align:right"><button onclick="closePick()">✕ 닫기</button></div>`;
+  pk.style.display='block';
+  pk.style.left=Math.min(x,window.innerWidth-320)+'px'; pk.style.top=(y+10)+'px';
+}
+function closePick(){ $('#pick').style.display='none'; pickCtx=null; }
+function pickChoose(label){
+  const {name,iso,period,current}=pickCtx; closePick();
+  const ov=(store.ovr[iso]=store.ovr[iso]||{});
+  const pv=(ov[period]=ov[period]||{});
+  if(label===null){ delete pv[name]; }
+  else{
+    const holder=result.byDay[iso]&&result.byDay[iso][period]&&result.byDay[iso][period].labels[label];
+    if(holder&&holder!==name&&current) pv[holder]=current;
+    pv[name]=label;
+  }
+  if(!Object.keys(pv).length) delete ov[period];
+  if(!Object.keys(ov).length) delete store.ovr[iso];
+  touch(); recompute();
+  if(curScr==='week') renderWeek();
+}
+function pickShift(code){
+  const {name,iso}=pickCtx; closePick();
+  store.cells[name]=store.cells[name]||{};
+  if(code) store.cells[name][iso]=code; else delete store.cells[name][iso];
+  touch(); recompute();
+  if(curScr==='week') renderWeek();
+  toast(name+' '+(+iso.slice(8,10))+'일 근무 → '+(code||'지움'));
+}
+function resetOv(){
+  const n=Object.keys(store.ovr).length;
+  if(!n){ toast('수동 교체 없음'); return; }
+  if(!confirm('수동 교체 '+n+'일치를 모두 초기화할까요?')) return;
+  store.ovr={}; touch(); recompute(); renderAdmin(); toast('초기화됨');
+}
+function resetRoomOv(){
+  const n=Object.keys(store.roomOv).length;
+  if(!n){ toast('방 수정 없음'); return; }
+  if(!confirm('일별 방 수정 '+n+'일치를 모두 초기화할까요?')) return;
+  store.roomOv={}; touch(); renderAdmin(); if(curScr==='week') renderWeek(); toast('초기화됨');
+}
+document.addEventListener('mousedown',e=>{
+  if($('#pick').style.display==='block'&&!e.target.closest('#pick')&&!e.target.closest('td.nm')) closePick();
+});
+
+/* ════════════════════════════════════════════════════════════════
+ * 새 근무표 넣기 — 붙여넣기/드롭 → 미리보기 → 확인
+ * ════════════════════════════════════════════════════════════════ */
+let pending=null;   // {g, y, m, names:[], byName:{name:{iso:raw}}, minIso, maxIso, added, unknown:Set}
+function resetPaste(){ pending=null; $('#pvInfo').textContent=''; $('#pvWrap').style.display='none';
+  $('#pvYM').style.display='none';
+  $('#btnPvOk').style.display='none'; $('#btnPvNo').style.display='none'; }
+function guessYearMonth(md){
+  // 날짜 헤더에 월 정보가 없으면(일자만) '이번 달' 기준, 월이 있으면 오늘에 가장 가까운 연도로
+  const t=new Date();
+  if(md.y) return {y:md.y,m:md.m};
+  if(md.m==null) return {y:t.getFullYear(),m:t.getMonth()+1};
+  let y=t.getFullYear();
+  const cand=[y-1,y,y+1].map(yy=>({yy,diff:Math.abs(new Date(yy,md.m-1,1)-t)}));
+  cand.sort((a,b)=>a.diff-b.diff);
+  return {y:cand[0].yy,m:md.m};
+}
+function ingestGrid(g){
+  if(!fileHandle&&!window.__memoryMode){
+    toast('먼저 데이터 파일을 열어주세요 — 처음이면 [＋ 처음 시작]을 누르세요',5000); return; }
+  if(!g||!g.length) return toast('읽을 내용이 없습니다');
+  const looksName=v=>v&&parseCellRaw(v)===undefined&&!parseDateCell(v);
+  const col0=g.map(r=>(r[0]||'').trim());
+  const hasNameCol=col0.filter(looksName).length>=2||col0.filter(v=>store.order.includes(v)).length>=2;
+  const hdr=(g[0]||[]).slice(hasNameCol?1:0);
+  const dateHits=hdr.filter(v=>parseDateCell(v)).length;
+  if(dateHits<3) return toast('날짜 줄(1~31 또는 8/1 형태)을 찾지 못했습니다 — 날짜 줄부터 포함해 복사해주세요',4600);
+  if(!hasNameCol) return toast('이름 열을 찾지 못했습니다 — 이름 열부터 포함해 복사해주세요',4600);
+  if(curScr!=='paste') show('paste');   // 화면 전환이 미리보기를 지우지 않도록 파싱 전에 이동
+  const first=(g[0].slice(1).map(v=>parseDateCell(v)).find(x=>x))||{d:1};
+  const guess=guessYearMonth(first);
+  buildPending(g,guess.y,guess.m);
+}
+/* 헤더 → ISO 날짜열: 시작 연/월(사용자 확인 가능) 기준, 항상 시간순 전진.
+ * 월 표기가 바뀌면 그 월로(작아지면 해년), 일자만인데 줄어들면 다음 달. 역행 열은 무시. */
+function buildPending(g,y0,m0){
+  let y=y0,m=m0,prevIso=null,prevD=0;
+  const isoCols=g[0].map((v,i)=>{
+    if(i===0) return null;
+    const md=parseDateCell(v); if(!md) return null;
+    if(md.y){ y=md.y; m=md.m; }
+    else if(md.m!=null){ if(md.m<m) y++; m=md.m; }
+    else if(md.d<prevD){ m===12?(m=1,y++):m++; }
+    prevD=md.d;
+    const dim=new Date(y,m,0).getDate();
+    if(md.d>dim) return null;
+    const iso=y+'-'+pad2(m)+'-'+pad2(md.d);
+    if(prevIso&&iso<=prevIso) return null;             // 순서 역행 — 안전하게 버림
+    prevIso=iso;
+    return iso;
+  });
+  const looksName=v=>v&&parseCellRaw(v)===undefined&&!parseDateCell(v);
+  const byName={}, namesIn=[], unknown=new Set();
+  let cnt=0,minIso=null,maxIso=null;
+  for(let i=1;i<g.length;i++){
+    const nm=String(g[i][0]??'').trim();
+    if(!nm||!looksName(nm)&&!store.order.includes(nm)) continue;
+    namesIn.push(nm); byName[nm]={};
+    for(let j=1;j<g[i].length;j++){
+      const iso=isoCols[j]; if(!iso) continue;
+      const pc=parseCellRaw(g[i][j]);
+      if(pc===undefined){ if((g[i][j]||'').trim()) unknown.add(g[i][j].trim()); continue; }
+      byName[nm][iso]=pc?cellText(pc):'';
+      if(pc){ cnt++; if(!minIso||iso<minIso)minIso=iso; if(!maxIso||iso>maxIso)maxIso=iso; }
+    }
+  }
+  if(!namesIn.length||!cnt){ resetPaste(); return toast('근무 내용을 읽지 못했습니다',4000); }
+  const added=namesIn.filter(n=>!store.order.includes(n)).length;
+  pending={g,y:y0,m:m0,names:namesIn,byName,minIso,maxIso,added,unknown};
+  // 미리보기 (연도 포함 — 연/월은 사용자가 고칠 수 있음)
+  const fmtI=iso=>(+iso.slice(0,4))+'년 '+(+iso.slice(5,7))+'/'+(+iso.slice(8,10));
+  $('#pvInfo').textContent=`이렇게 읽었어요 — 간호사 ${namesIn.length}명, ${fmtI(minIso)} ~ ${fmtI(maxIso)}`+
+    (added?` (새 이름 ${added}명)`:'')+(unknown.size?` · 모르는 글자: ${[...unknown].slice(0,4).join(', ')}`:'');
+  $('#pvY').value=y0; $('#pvM').value=m0; $('#pvYM').style.display='';
+  const isoList=[]; for(let d=new Date(minIso+'T00:00:00');isoOfD(d)<=maxIso;d.setDate(d.getDate()+1)) isoList.push(isoOfD(d));
+  let h='<table><tr><th>이름</th>'+isoList.map(i=>`<th>${+i.slice(8,10)}</th>`).join('')+'</tr>';
+  for(const nm of namesIn){
+    h+=`<tr><th>${esc(nm)}</th>`+isoList.map(i=>{
+      const v=byName[nm][i]||''; const pc=v?parseCellRaw(v):null;
+      const st=pc&&pc.code&&SHIFTS[pc.code]?`style="background:${SHIFTS[pc.code].bg};color:${SHIFTS[pc.code].fg}"`:'';
+      return `<td ${st}>${esc(v)}</td>`;}).join('')+'</tr>';
+  }
+  $('#pvWrap').innerHTML=h+'</table>'; $('#pvWrap').style.display='';
+  $('#btnPvOk').style.display=''; $('#btnPvNo').style.display='';
+  $('#pvInfo').scrollIntoView({block:'nearest'});
+}
+$('#pvM').innerHTML=[...Array(12)].map((_,i)=>`<option value="${i+1}">${i+1}</option>`).join('');
+for(const id of ['pvY','pvM']) $('#'+id).addEventListener('change',()=>{
+  if(pending) buildPending(pending.g,+$('#pvY').value||pending.y,+$('#pvM').value||pending.m);
+});
+function confirmPaste(){
+  if(!pending) return;
+  snapshot();                                          // 붙여넣기도 Ctrl+Z 대상
+  for(const nm of pending.names){
+    if(!store.order.includes(nm)) store.order.push(nm);
+    store.cells[nm]=store.cells[nm]||{};
+    for(const iso in pending.byName[nm]){
+      const v=pending.byName[nm][iso];
+      if(v) store.cells[nm][iso]=v; else delete store.cells[nm][iso];
+    }
+  }
+  touch(); recompute();
+  // 넣은 기간의 첫 주로 이동
+  const d=new Date(pending.minIso+'T00:00:00'); wkSunday=addDays(d,-d.getDay());
+  toast('저장했습니다');
+  resetPaste(); show('week');
+}
+document.addEventListener('paste',e=>{
+  if(/^(INPUT|TEXTAREA)$/.test((e.target&&e.target.tagName)||'')) return;
+  if(curScr==='edit') return;                       // 고치기 화면은 그리드 paste가 처리
+  const txt=e.clipboardData.getData('text/plain'); if(!txt) return;
+  e.preventDefault();
+  const g=txt.replace(/\r\n?/g,'\n').split('\n').map(l=>l.split('\t'));
+  while(g.length&&g[g.length-1].every(c=>!c.trim())) g.pop();
+  ingestGrid(g);
+});
+
+/* ── 파일 드롭: xlsx 근무표 / json 데이터 / csv ── */
+const drop=$('#drop');
+window.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('on')});
+window.addEventListener('dragleave',e=>{if(e.relatedTarget===null)drop.classList.remove('on')});
+window.addEventListener('drop',async e=>{
+  e.preventDefault(); drop.classList.remove('on');
+  const it=e.dataTransfer.items&&e.dataTransfer.items[0];
+  const f=e.dataTransfer.files[0]; if(!f) return;
+  if(/\.json$/i.test(f.name)){
+    try{
+      if(it&&it.getAsFileSystemHandle){ const h=await it.getAsFileSystemHandle(); await useHandle(h); }
+      else{ const j=JSON.parse(await f.text()); if(j.app!=='assign') throw new Error('형식 불일치');
+        store={...emptyStore(),...j}; window.__memoryMode=true;
+        $('#fileInfo').textContent='⚠ 읽기 전용으로 열림 — 수정해도 저장되지 않습니다 (Edge/Chrome에서 여세요)';
+        afterLoad(); }
+      toast(f.name+' 열림');
+    }catch(err){ toast('열기 실패: '+err.message,4000); }
+    return;
+  }
+  if(/\.(xlsx|xlsm)$/i.test(f.name)){
+    try{ ingestGrid(await readXlsxGrid(new Uint8Array(await f.arrayBuffer()))); }
+    catch(err){ toast('xlsx 읽기 실패: '+err.message,4200); }
+    return;
+  }
+  if(/\.(csv|tsv|txt)$/i.test(f.name)){
+    const buf=await f.arrayBuffer();
+    let txt; try{ txt=new TextDecoder('utf-8',{fatal:true}).decode(buf) }
+    catch{ txt=new TextDecoder('euc-kr').decode(buf); }
+    const sep=txt.includes('\t')?'\t':',';
+    ingestGrid(txt.replace(/^﻿/,'').replace(/\r\n?/g,'\n').split('\n').filter(l=>l.trim()).map(l=>l.split(sep)));
+    return;
+  }
+  toast('✗ '+f.name+' — .xlsx/.csv/.json 만 가능합니다',4000);
+});
+
+/* ════════════════════════════════════════════════════════════════
+ * 근무표 고치기 — 월 창 편집 그리드 (연속 저장소에 직접 반영)
+ * ════════════════════════════════════════════════════════════════ */
+let edY=new Date().getFullYear(), edM=new Date().getMonth()+1, edDays=31;
+let sel={r:0,c:0,r2:0,c2:0}, dragging=false, cellEls=[];
+const undoStack=[];
+const edIso=c=>edY+'-'+pad2(edM)+'-'+pad2(c+1);
+function edGet(r,c){ return (store.cells[store.order[r]]||{})[edIso(c)]||''; }
+function edSet(r,c,v){
+  const n=store.order[r];
+  store.cells[n]=store.cells[n]||{};
+  if(v) store.cells[n][edIso(c)]=v; else delete store.cells[n][edIso(c)];
+}
+function snapshot(){ // 이름 변경/삭제가 ovr·charge·시드까지 건드리므로 함께 보존
+  undoStack.push(JSON.stringify({o:store.order,c:store.cells,v:store.ovr,rv:store.roomOv,
+    ch:store.charge,sd:store.seedManual}));
+  if(undoStack.length>40) undoStack.shift(); }
+function restoreSnapshot(s){
+  store.order=s.o; store.cells=s.c;
+  if(s.v) store.ovr=s.v; if(s.rv) store.roomOv=s.rv;
+  if(s.ch) store.charge=s.ch; if(s.sd) store.seedManual=s.sd;
+}
+function moveEditMonth(n){ edM+=n; if(edM<1){edM=12;edY--} if(edM>12){edM=1;edY++} renderEditGrid(); }
+function renderEditGrid(){
+  edDays=new Date(edY,edM,0).getDate();
+  $('#edTitle').textContent=`${edY}년 ${edM}월`;
   let h='<table><thead><tr><th class="nm">이름</th>';
-  for(let d=1;d<=ndays;d++){ const w=new Date(year,month-1,d).getDay();
+  for(let d=1;d<=edDays;d++){ const w=new Date(edY,edM-1,d).getDay();
     h+=`<th class="${w===0?'sun':w===6?'sat':''}">${d}<br><span style="font-weight:400">${WD[w]}</span></th>`; }
   h+='</tr></thead><tbody>';
-  names.forEach((n,r)=>{
+  store.order.forEach((n,r)=>{
     h+=`<tr><th class="nm" data-nr="${r}" title="클릭 = 이름 수정/삭제">${esc(n)}</th>`;
-    for(let c=0;c<ndays;c++) h+=`<td class="cell" data-r="${r}" data-c="${c}"></td>`;
+    for(let c=0;c<edDays;c++) h+=`<td class="cell" data-r="${r}" data-c="${c}"></td>`;
     h+='</tr>';
   });
   h+='</tbody><tfoot>';
   for(const k of ['D','E','N']){
     h+=`<tr><th class="nm">${k} 인원</th>`;
-    for(let c=0;c<ndays;c++) h+=`<td id="cnt-${k}-${c}"></td>`;
+    for(let c=0;c<edDays;c++) h+=`<td id="cnt-${k}-${c}"></td>`;
     h+='</tr>';
   }
   h+='</tfoot></table>';
   $('#wrap').innerHTML=h;
-  cellEls=names.map((_,r)=>[...Array(ndays)].map((_,c)=>$(`td[data-r="${r}"][data-c="${c}"]`)));
-  paint();
-  renderNurseChecks();
+  cellEls=store.order.map((_,r)=>[...Array(edDays)].map((_,c)=>$(`td[data-r="${r}"][data-c="${c}"]`)));
+  sel={r:0,c:0,r2:0,c2:0};
+  paintEdit();
 }
-function paint(){
+function paintEdit(){
   const R=rect();
-  const cnt={D:Array(ndays).fill(0),E:Array(ndays).fill(0),N:Array(ndays).fill(0)};
+  const cnt={D:Array(edDays).fill(0),E:Array(edDays).fill(0),N:Array(edDays).fill(0)};
   const bucket={day:'D',evening:'E',night:'N'};
-  for(let r=0;r<names.length;r++) for(let c=0;c<ndays;c++){
-    const td=cellEls[r][c], v=cells[r][c]||'';
+  for(let r=0;r<store.order.length;r++) for(let c=0;c<edDays;c++){
+    const td=cellEls[r][c]; if(!td) continue;
+    const v=edGet(r,c);
     const pc=v?parseCellRaw(v):null;
     const def=pc&&pc.code?SHIFTS[pc.code]:null;
     if(td.textContent!==v) td.textContent=v;
@@ -491,57 +1103,58 @@ function paint(){
     td.className='cell'+(inSel?' sel':'')+(r===sel.r&&c===sel.c?' anchor':'')+(pc&&pc.label?' pre':'');
     const b=def&&bucket[def.p]; if(b) cnt[b][c]++;
   }
-  for(const k of ['D','E','N']) for(let c=0;c<ndays;c++){
+  for(const k of ['D','E','N']) for(let c=0;c<edDays;c++){
     const el=$(`#cnt-${k}-${c}`); if(el){ el.textContent=cnt[k][c]||''; el.style.color=SHIFTS[k].fg; }
   }
-  $('#parseInfo').textContent=names.length?`${names.length}명 · ${ndays}일`:' — 엑셀 근무표를 붙여넣으세요';
 }
-let recomputeT=null;
-function touched(){ saveMonth(); clearTimeout(recomputeT); recomputeT=setTimeout(recompute,250); }
+const rect=()=>({r1:Math.min(sel.r,sel.r2),r2:Math.max(sel.r,sel.r2),
+                 c1:Math.min(sel.c,sel.c2),c2:Math.max(sel.c,sel.c2)});
+function edTouched(){ touch(); recompute(); }
 function fillSel(raw){
-  if(!names.length) return;
+  if(!store.order.length) return;
   snapshot(); const R=rect();
-  for(let r=R.r1;r<=R.r2;r++) for(let c=R.c1;c<=R.c2;c++) cells[r][c]=raw;
-  paint(); touched();
+  for(let r=R.r1;r<=R.r2;r++) for(let c=R.c1;c<=R.c2;c++) edSet(r,c,raw);
+  paintEdit(); edTouched();
 }
-function move(dr,dc){
-  if(!names.length) return;
-  sel.r2=sel.r=Math.max(0,Math.min(names.length-1,sel.r+dr));
-  sel.c2=sel.c=Math.max(0,Math.min(ndays-1,sel.c+dc));
-  cellEls[sel.r][sel.c].scrollIntoView({block:'nearest',inline:'nearest'});
-  paint();
+function moveSel(dr,dc){
+  if(!store.order.length) return;
+  sel.r2=sel.r=Math.max(0,Math.min(store.order.length-1,sel.r+dr));
+  sel.c2=sel.c=Math.max(0,Math.min(edDays-1,sel.c+dc));
+  const td=cellEls[sel.r]&&cellEls[sel.r][sel.c];
+  if(td) td.scrollIntoView({block:'nearest',inline:'nearest'});
+  paintEdit();
 }
 const KEY={D:'D',E:'E',N:'N',V:'V',O:'OF',W:'주',P:'P1'};
 const HAN={'ㅈ':'주','ㅂ':'병','ㅃ':'법','ㅅ':'생','ㅌ':'특','ㄱ':'공','ㅇ':'OF'};
 document.addEventListener('keydown',e=>{
+  if(curScr!=='edit') return;
   const t=e.target;
   if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
   const k=e.key;
-  if(k==='ArrowRight'){move(0,1);e.preventDefault();return}
-  if(k==='ArrowLeft') {move(0,-1);e.preventDefault();return}
-  if(k==='ArrowDown') {move(1,0);e.preventDefault();return}
-  if(k==='ArrowUp')   {move(-1,0);e.preventDefault();return}
-  if(k==='Tab')  {move(0,e.shiftKey?-1:1);e.preventDefault();return}
-  if(k==='Enter'){move(e.shiftKey?-1:1,0);e.preventDefault();return}
+  if(k==='ArrowRight'){moveSel(0,1);e.preventDefault();return}
+  if(k==='ArrowLeft') {moveSel(0,-1);e.preventDefault();return}
+  if(k==='ArrowDown') {moveSel(1,0);e.preventDefault();return}
+  if(k==='ArrowUp')   {moveSel(-1,0);e.preventDefault();return}
+  if(k==='Tab')  {moveSel(0,e.shiftKey?-1:1);e.preventDefault();return}
+  if(k==='Enter'){moveSel(e.shiftKey?-1:1,0);e.preventDefault();return}
   if(k==='Delete'||k==='Backspace'){fillSel('');e.preventDefault();return}
   if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='z'){
     if(undoStack.length){
-      const s=JSON.parse(undoStack.pop()), grew=s.n.length!==names.length;
-      names=s.n; cells=s.d; sel={r:0,c:0,r2:0,c2:0};
-      grew?build():paint(); touched(); toast('되돌리기');
+      restoreSnapshot(JSON.parse(undoStack.pop())); sel={r:0,c:0,r2:0,c2:0};
+      renderEditGrid(); edTouched(); toast('되돌리기');
     }
     e.preventDefault();return;
   }
-  if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='a'&&names.length){
-    sel={r:0,c:0,r2:names.length-1,c2:ndays-1};paint();e.preventDefault();return;
+  if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='a'&&store.order.length){
+    sel={r:0,c:0,r2:store.order.length-1,c2:edDays-1};paintEdit();e.preventDefault();return;
   }
-  if(e.ctrlKey||e.metaKey||e.altKey) return;                 // Ctrl+C/V 는 copy/paste 이벤트가 처리
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
   let code=KEY[k.toUpperCase()]||HAN[k];
   if(code&&e.shiftKey&&SHIFTS[code+'C']) code=code+'C';
   if(!code&&SHIFTS[k.toUpperCase()]) code=k.toUpperCase();
   if(!code&&SHIFTS[k]) code=k;
   if(code){ fillSel(code);
-    const R=rect(); if(R.r1===R.r2&&R.c1===R.c2) move(0,1);
+    const R=rect(); if(R.r1===R.r2&&R.c1===R.c2) moveSel(0,1);
     e.preventDefault(); }
 });
 $('#wrap').addEventListener('mousedown',e=>{
@@ -549,430 +1162,169 @@ $('#wrap').addEventListener('mousedown',e=>{
   if(nm){ renameNurse(+nm.dataset.nr); return; }
   const td=e.target.closest('td.cell'); if(!td) return;
   sel={r:+td.dataset.r,c:+td.dataset.c,r2:+td.dataset.r,c2:+td.dataset.c};
-  dragging=true; paint(); e.preventDefault();
+  dragging=true; paintEdit(); e.preventDefault();
 });
 $('#wrap').addEventListener('mouseover',e=>{
   if(!dragging) return;
   const td=e.target.closest('td.cell'); if(!td) return;
-  sel.r2=+td.dataset.r; sel.c2=+td.dataset.c; paint();
+  sel.r2=+td.dataset.r; sel.c2=+td.dataset.c; paintEdit();
 });
 window.addEventListener('mouseup',()=>{dragging=false});
 $('#wrap').addEventListener('dblclick',e=>{
   const td=e.target.closest('td.cell'); if(!td) return;
   const r=+td.dataset.r,c=+td.dataset.c;
-  const v=prompt('근무 입력 (예: D · DC · D/A = 어싸인 A 고정 · 비우면 삭제)',cells[r][c]||'');
+  const v=prompt('근무 입력 (예: D · DC · D/A = 어싸인 A 고정 · 비우면 삭제)',edGet(r,c));
   if(v===null) return;
   const pc=v.trim()?parseCellRaw(v):null;
   if(v.trim()&&pc===undefined){ toast('인식할 수 없는 코드: '+v); return; }
-  snapshot(); cells[r][c]=pc?cellText(pc):''; paint(); touched();
+  snapshot(); edSet(r,c,pc?cellText(pc):''); paintEdit(); edTouched();
 });
 function renameNurse(r){
-  const v=prompt('이름 수정 (비우면 이 간호사 삭제)',names[r]);
+  const v=prompt('이름 수정 (비우면 이 간호사 삭제)',store.order[r]);
   if(v===null) return;
+  const old=store.order[r], nu=v.trim();
+  if(nu&&nu!==old&&store.order.includes(nu)){
+    toast('이미 있는 이름입니다: '+nu,3600); return; }   // 기존 간호사 근무표 덮어쓰기 방지
   snapshot();
-  if(!v.trim()){ names.splice(r,1); cells.splice(r,1); }
-  else names[r]=v.trim();
-  build(); touched();
+  const migOv=(from,to)=>{ // 수동 교체(ovr)의 이름 키 이관/삭제 — 순회 목록을 먼저 고정
+    for(const dk of Object.keys(store.ovr)){
+      const day=store.ovr[dk];
+      for(const P of Object.keys(day)){
+        const pv=day[P];
+        if(from in pv){ if(to) pv[to]=pv[from]; delete pv[from]; }
+        if(!Object.keys(pv).length) delete day[P];
+      }
+      if(!Object.keys(day).length) delete store.ovr[dk];
+    }};
+  if(!nu){ store.order.splice(r,1); delete store.cells[old];
+    delete store.charge[old]; delete store.seedManual[old]; migOv(old,null); }
+  else if(nu!==old){
+    store.order[r]=nu;
+    store.cells[nu]=store.cells[old]||{}; delete store.cells[old];
+    if(old in store.charge){ store.charge[nu]=store.charge[old]; delete store.charge[old]; }
+    if(old in store.seedManual){ store.seedManual[nu]=store.seedManual[old]; delete store.seedManual[old]; }
+    migOv(old,nu);
+  }
+  renderEditGrid(); edTouched();
 }
-$('#btn-add').onclick=()=>{
-  const v=prompt('간호사 이름 (위 = 선임 순서, 아래에 추가됩니다)'); if(!v||!v.trim()) return;
-  snapshot(); names.push(v.trim()); cells.push(Array(ndays).fill('')); build(); touched();
-};
-$('#btn-clear').onclick=()=>{ if(!confirm(curYM()+' 근무표를 지울까요? (명단 유지)')) return;
-  snapshot(); cells=names.map(()=>Array(ndays).fill('')); paint(); touched(); };
-$('#lgd').innerHTML=Object.entries(SHIFTS).map(([k,v])=>
-  `<span style="background:${v.bg};color:${v.fg}">${k}</span>`).join('');
-
-/* ── 클립보드: 그리드 복사(TSV+서식 HTML) / 붙여넣기 흡수 ── */
 document.addEventListener('copy',e=>{
+  if(curScr!=='edit') return;
   if(/^(INPUT|TEXTAREA)$/.test((e.target&&e.target.tagName)||'')) return;
-  if(!names.length) return;
+  if(!store.order.length) return;
   const R=rect(), out=[];
-  for(let r=R.r1;r<=R.r2;r++) out.push(cells[r].slice(R.c1,R.c2+1).join('\t'));
+  for(let r=R.r1;r<=R.r2;r++){ const row=[];
+    for(let c=R.c1;c<=R.c2;c++) row.push(edGet(r,c));
+    out.push(row.join('\t')); }
   e.clipboardData.setData('text/plain',out.join('\n'));
   let html='<table border=1 style="border-collapse:collapse">';
   for(let r=R.r1;r<=R.r2;r++){ html+='<tr>';
     for(let c=R.c1;c<=R.c2;c++){
-      const v=cells[r][c]||'', pc=v?parseCellRaw(v):null, d=pc&&pc.code?SHIFTS[pc.code]:null;
+      const v=edGet(r,c), pc=v?parseCellRaw(v):null, d=pc&&pc.code?SHIFTS[pc.code]:null;
       html+=`<td style="background:${d?d.bg:'#fff'};color:${d?d.fg:'#000'};font-weight:bold;text-align:center">${esc(v)||'&nbsp;'}</td>`;
     } html+='</tr>'; }
   e.clipboardData.setData('text/html',html+'</table>');
   e.preventDefault(); toast(`복사 ${out.length}행 (엑셀에 색 포함 붙여넣기 가능)`);
 });
+/* 고치기 화면에서의 붙여넣기: 앵커 셀부터 우/하 (이름·날짜 자동감지는 '넣기' 화면 담당) */
 document.addEventListener('paste',e=>{
+  if(curScr!=='edit') return;
   if(/^(INPUT|TEXTAREA)$/.test((e.target&&e.target.tagName)||'')) return;
   const txt=e.clipboardData.getData('text/plain'); if(!txt) return;
   e.preventDefault();
-  const g=txt.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').map(l=>l.split('\t'));
+  const g=txt.replace(/\r\n?/g,'\n').split('\n').map(l=>l.split('\t'));
   while(g.length&&g[g.length-1].every(c=>!c.trim())) g.pop();
-  absorb(g,true);
-});
-/* 이름 열·날짜 헤더 자동 감지 흡수기 (감지 실패 시 앵커 셀부터 우/하) */
-function absorb(g,grow){
-  if(!g.length) return;
   snapshot();
-  const nameIdx={}; names.forEach((n,i)=>nameIdx[n.trim()]=i);
-  const col0=g.map(r=>(r[0]||'').trim());
-  const nameHits=col0.filter(v=>v in nameIdx).length;
-  const looksName=v=>v&&parseCellRaw(v)===undefined&&!parseDateCell(v);
-  const hasNameCol=nameHits>=2||(grow&&col0.filter(looksName).length>=2);
-  const dateHits=(g[0]||[]).slice(hasNameCol?1:0).filter(v=>parseDateCell(v)).length;
-  const hasDateRow=dateHits>=3;
-  let dayCols=null;
-  if(hasDateRow) dayCols=(g[0]||[]).map((v,i)=>i<(hasNameCol?1:0)?null:parseDateCell(v));
-  const R=rect();
-  let set=0,added=0; const unknown=new Set();
-  for(let i=hasDateRow?1:0;i<g.length;i++){
-    const row=g[i]; let r;
-    if(hasNameCol){
-      const nm=String(row[0]??'').trim();
-      if(!nm) continue;
-      if(nm in nameIdx) r=nameIdx[nm];
-      else if(grow&&looksName(nm)){ names.push(nm); cells.push(Array(ndays).fill('')); r=names.length-1; nameIdx[nm]=r; added++; }
-      else continue;
-    } else r=R.r1+(i-(hasDateRow?1:0));
-    if(r==null||r>=names.length) continue;
-    for(let j=hasNameCol?1:0;j<row.length;j++){
-      const c=hasDateRow?(dayCols[j]?dayCols[j]-1:-1):(R.c1+j-(hasNameCol?1:0));
-      if(c<0||c>=ndays) continue;
-      const pc=parseCellRaw(row[j]);
-      if(pc===undefined){ if((row[j]||'').trim()) unknown.add(row[j].trim()); continue; }
-      cells[r][c]=pc?cellText(pc):''; set++;
-    }
+  const R=rect(); let set=0;
+  for(let i=0;i<g.length;i++) for(let j=0;j<g[i].length;j++){
+    const r=R.r1+i, c=R.c1+j;
+    if(r>=store.order.length||c>=edDays) continue;
+    const pc=parseCellRaw(g[i][j]);
+    if(pc===undefined) continue;
+    edSet(r,c,pc?cellText(pc):''); set++;
   }
-  if(added||!cellEls.length) build(); else paint();
-  touched();
-  toast(`붙여넣기 ${set}칸 반영`+(added?` · ${added}명 추가`:'')
-       +(unknown.size?` · 미인식 ${[...unknown].slice(0,5).join(',')}`:''),3600);
-}
-/* ── 파일 드래그&드롭 (.csv/.tsv — CP949 자동 폴백) ── */
-const drop=$('#drop');
-window.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('on')});
-window.addEventListener('dragleave',e=>{if(e.relatedTarget===null)drop.classList.remove('on')});
-window.addEventListener('drop',async e=>{
-  e.preventDefault(); drop.classList.remove('on');
-  const f=e.dataTransfer.files[0]; if(!f) return;
-  if(/\.json$/i.test(f.name)){ importBackup(f); return; }
-  if(/\.(xlsx|xlsm)$/i.test(f.name)){
-    try{
-      const g=await readXlsxGrid(new Uint8Array(await f.arrayBuffer()));
-      absorb(g,true);
-    }catch(err){ toast('xlsx 읽기 실패: '+err.message,4200); }
-    return;
-  }
-  if(!/\.(csv|tsv|txt)$/i.test(f.name)){
-    toast(`✗ ${f.name} — .xlsx/.csv/.tsv 파일만 가능합니다.`,4200); return; }
-  const buf=await f.arrayBuffer();
-  let txt;
-  try{ txt=new TextDecoder('utf-8',{fatal:true}).decode(buf) }
-  catch{ txt=new TextDecoder('euc-kr').decode(buf); }
-  const sep=txt.includes('\t')?'\t':',';
-  const g=txt.replace(/^﻿/,'').replace(/\r\n/g,'\n').split('\n')
-             .filter(l=>l.trim()).map(l=>l.split(sep));
-  absorb(g,true);
+  paintEdit(); edTouched(); toast('붙여넣기 '+set+'칸');
 });
+$('#lgd').innerHTML=Object.entries(SHIFTS).map(([k,v])=>
+  `<span style="background:${v.bg};color:${v.fg}">${k}</span>`).join('');
 
 /* ════════════════════════════════════════════════════════════════
- * 차지 · 원칙 · 방 구성
+ * 관리 화면
  * ════════════════════════════════════════════════════════════════ */
-function renderNurseChecks(){
-  const el=$('#nurseChecks');
-  $('#nurseCard').style.display=names.length?'':'none';
-  el.innerHTML=names.map(n=>
-    `<label><input type="checkbox" ${chargeChecks[n]!==false?'checked':''} onchange="setCharge('${esc(n)}',this.checked)"> ${esc(n)}</label>`
-  ).join('');
-}
-function setCharge(name,on){ chargeChecks[name]=on; saveCfg('charge',chargeChecks); recompute(); }
-function rules(){ return {
-  keepSameShift:$('#r1').checked, keepAcrossShift:$('#r2').checked,
-  keepAfterOff:$('#r3').checked,  bounceAfterOff:$('#r4').checked }; }
-if(savedRules) for(const [id,k] of [['r1','keepSameShift'],['r2','keepAcrossShift'],['r3','keepAfterOff'],['r4','bounceAfterOff']])
-  if(k in savedRules) $('#'+id).checked=!!savedRules[k];
-['r1','r2','r3','r4'].forEach(id=>$('#'+id).addEventListener('change',()=>{saveCfg('rules',rules());recompute()}));
-$('#r3').addEventListener('change',e=>{if(e.target.checked){$('#r4').checked=false;saveCfg('rules',rules());recompute()}});
-$('#r4').addEventListener('change',e=>{if(e.target.checked){$('#r3').checked=false;saveCfg('rules',rules());recompute()}});
-function renderSchemes(){
+function renderAdmin(){
+  // 지난 어싸인 직접 입력 — 큰 토글 버튼
+  const rows=store.order.map(n=>{
+    const s=store.seedManual[n]||{};
+    const seg=(vals,cur,attr)=>vals.map(v=>
+      `<button class="segbtn${cur===v?' on':''}" onclick="setSeed('${esc(n)}','${attr}','${v}')">${v==='없음'?'없음':attr==='label'?FORM_LBL(v):v}</button>`).join('');
+    return `<tr><td style="font-weight:700;min-width:70px">${esc(n)}</td>
+      <td>${seg(['A','B','C','D','없음'],s.label||'없음','label')}</td>
+      <td>${seg(['D','E','N'],s.period||'D','period')}</td></tr>`;
+  }).join('');
+  $('#seedTable').innerHTML=`<tr><th style="text-align:left">간호사</th><th style="text-align:left">마지막 어싸인 (배정표 표기 B~E)</th><th style="text-align:left">근무</th></tr>`+
+    (rows||'<tr><td class="dim">근무표를 먼저 넣어주세요</td></tr>')+
+    `<tr><td colspan="3" class="dim">차지(A(CN))였던 사람은 '없음'으로 두세요 — 차지는 매일 자동 결정됩니다</td></tr>`;
+  // 방 구성
   $('#schemes').innerHTML=[5,4,3,2].map(cnt=>
-    `<div><b>${cnt}인 근무</b>`+Object.keys(schemes[cnt]).map(l=>
-      `<div style="margin:3px 0"><span style="display:inline-block;width:2.5em"><b>${l}</b></span>
-       <input type="text" style="width:70%" value="${schemes[cnt][l].join(', ')}"
+    `<div class="schemeRow"><b>${cnt}인 근무</b>`+Object.keys(store.schemes[cnt]).map(l=>
+      `<div style="margin:3px 0"><span style="display:inline-block;width:3.4em"><b>${FORM_LBL(l)}</b></span>
+       <input type="text" value="${store.schemes[cnt][l].join(', ')}"
         onchange="setScheme(${cnt},'${l}',this.value)"></div>`).join('')+'</div>').join('');
+  // 원칙·차지
+  for(const [id,k] of [['r1','keepSameShift'],['r2','keepAcrossShift'],['r3','keepAfterOff'],['r4','bounceAfterOff']])
+    $('#'+id).checked=!!store.rules[k];
+  $('#nurseChecks').innerHTML=store.order.map(n=>
+    `<label><input type="checkbox" ${store.charge[n]!==false?'checked':''}
+      onchange="setCharge('${esc(n)}',this.checked)"> ${esc(n)}</label>`).join('');
+  $('#ovCount').textContent=` — 담당 교체 ${Object.keys(store.ovr).length}일 · 방 수정 ${Object.keys(store.roomOv).length}일`;
+  // 주간 xlsx 버튼 (보고 있는 주가 속한 달 — 연·월 모두 주 중간일 기준, 연말 주 안전)
+  const mid=addDays(wkSunday,3);
+  $('#weekBtns').innerHTML=weeksOf(mid.getFullYear(),mid.getMonth()+1).map(sun=>{
+    const e2=addDays(sun,6);
+    return `<button onclick="downloadWeekXlsx(new Date(${sun.getFullYear()},${sun.getMonth()},${sun.getDate()})).catch(e=>toast('실패: '+e.message))">`+
+      `${sun.getMonth()+1}/${sun.getDate()}~${e2.getMonth()+1}/${e2.getDate()}</button>`;
+  }).join('');
+  const dates=timelineRange();
+  $('#dataInfo').textContent=(fileHandle?'파일: '+fileHandle.name+' · ':'')+
+    (dates?`기록 범위 ${dates.min} ~ ${dates.max}`:'기록 없음')+` · 간호사 ${store.order.length}명`;
+}
+function setSeed(name,attr,val){
+  const s=(store.seedManual[name]=store.seedManual[name]||{});
+  if(attr==='label'){ if(val==='없음'){ delete store.seedManual[name]; } else s.label=val; }
+  else s[attr]=val;
+  touch(); recompute(); renderAdmin();
 }
 function setScheme(cnt,l,str){
-  schemes[cnt][l]=str.split(/[,\s]+/).map(s=>s.trim()).filter(Boolean);
-  saveCfg('schemes',schemes); recompute();
+  store.schemes[cnt][l]=str.split(/[,\s]+/).map(s=>s.trim()).filter(Boolean);
+  touch(); recompute();
 }
-function resetSchemes(){ schemes=JSON.parse(JSON.stringify(DEFAULT_SCHEMES)); saveCfg('schemes',schemes); renderSchemes(); recompute(); }
-
-/* ════════════════════════════════════════════════════════════════
- * 배정 계산 — 전월 자동 이월 (assign-core opts.seed)
- * ════════════════════════════════════════════════════════════════ */
-function buildInputs(nm,cl,y,m,nd){
-  const nurses=nm.map((n,i)=>({id:n,name:n,seniority:i,chargeCapable:chargeChecks[n]!==false}));
-  const schedule={}, overrides={}, mids={};
-  nm.forEach((n,r)=>{
-    const sc={};
-    for(let c=0;c<nd;c++){
-      const pc=cl[r][c]?parseCellRaw(cl[r][c]):null;
-      if(!pc||!pc.code) continue;
-      const dk=isoOf(y,m,c+1);
-      sc[dk]=pc.code;
-      if(pc.code==='중') (mids[dk]=mids[dk]||[]).push(n);
-      if(pc.label){
-        const P=AssignCore.periodOf(pc.code);
-        if(P) ((overrides[dk]=overrides[dk]||{})[P]=overrides[dk][P]||{})[n]=pc.label;
-      }
-    }
-    schedule[n]=sc;
+function resetSchemes(){ store.schemes=JSON.parse(JSON.stringify(DEFAULT_SCHEMES));
+  touch(); recompute(); renderAdmin(); }
+function setCharge(name,on){ store.charge[name]=on; touch(); recompute(); }
+for(const [id,k] of [['r1','keepSameShift'],['r2','keepAcrossShift'],['r3','keepAfterOff'],['r4','bounceAfterOff']])
+  $('#'+id).addEventListener('change',e=>{
+    store.rules[k]=e.target.checked;
+    if(k==='keepAfterOff'&&e.target.checked){ store.rules.bounceAfterOff=false; $('#r4').checked=false; }
+    if(k==='bounceAfterOff'&&e.target.checked){ store.rules.keepAfterOff=false; $('#r3').checked=false; }
+    touch(); recompute();
   });
-  return {nurses,schedule,overrides,mids};
+async function pickNewLocation(){
+  try{
+    const h=await window.showSaveFilePicker({suggestedName:fileHandle?fileHandle.name:'어싸인 데이터.json',
+      types:[{description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
+    fileHandle=h; await idbSet('handle',h); await writeStore();
+    $('#fileInfo').textContent='📄 '+h.name; renderAdmin(); toast('저장 위치를 바꿨습니다');
+  }catch(e){ if(e.name!=='AbortError') toast('실패: '+e.message,4000); }
 }
-/* 셀 선입력(D/A) 오버라이드 + 수동 교환 병합 — 같은 라벨/같은 사람 충돌 시 수동이 우선 */
-function mergeOv(cellOvr,man){
-  const out={};
-  for(const dk in cellOvr){ out[dk]={}; for(const P in cellOvr[dk]) out[dk][P]={...cellOvr[dk][P]}; }
-  for(const dk in man) for(const P in man[dk]){
-    const t=((out[dk]=out[dk]||{})[P]=out[dk][P]||{});
-    for(const nm in man[dk][P]){
-      const lb=man[dk][P][nm];
-      for(const k in t) if(t[k]===lb||k===nm) delete t[k];
-      t[nm]=lb;
-    }
-  }
-  return out;
-}
-function seedFor(ym){
-  const st=loadCfg('state_'+prevYM(ym));
-  if(!st||!st.nurses) return {seed:null,info:''};
-  const seed={}; let n=0;
-  for(const nm in st.nurses){
-    const s=st.nurses[nm];
-    seed[nm]={label:s.label,period:s.period,idx:(s.day-st.lastDay)-1}; n++;
-  }
-  return {seed:n?seed:null,info:n?`전월(${prevYM(ym)}) 어싸인 ${n}명 연속성 자동 이월됨`:''};
-}
-function saveState(ym,res,nd){
-  const nurses={};
-  for(const nm in res.byNurse){
-    let best=null;
-    for(const dk in res.byNurse[nm]){
-      const v=res.byNurse[nm][dk];
-      if(v.label&&(!best||dk>best.dk)) best={dk,label:v.label,period:v.period};
-    }
-    if(best) nurses[nm]={label:best.label,period:best.period,day:+best.dk.slice(8,10)};
-  }
-  saveCfg('state_'+ym,{lastDay:nd,nurses});
-}
-function recompute(){
-  delete resultCache[curYM()];
-  if(!names.length){ $('#resultCard').style.display='none'; result=null; return; }
-  const {nurses,schedule,overrides}=buildInputs(names,cells,year,month,ndays);
-  const {seed,info}=seedFor(curYM());
-  result=AssignCore.compute(nurses,schedule,monthKeys(),
-    {rules:rules(),overrides:mergeOv(overrides,manualOv),seed});
-  saveState(curYM(),result,ndays);
-  $('#seedInfo').textContent=info;
-  if(!selectedDay||!selectedDay.startsWith(curYM())) selectedDay=isoOf(year,month,1);
-  $('#resultCard').style.display='';
-  renderGrid(); renderDetail(); renderWeekBtns(); renderWarns(); renderEvents();
-}
-/* 이웃 달 결과 (주간 시트 경계일용) — 저장된 근무표가 있으면 그 달 시드로 재계산 */
-function monthResult(ym){
-  if(ym===curYM()) return {byNurse:result?result.byNurse:{},names,cells,ndays,
-    mids:buildInputs(names,cells,year,month,ndays).mids};
-  if(resultCache[ym]) return resultCache[ym];
-  const s=loadCfg('cells_'+ym);
-  if(!s||!s.names||!s.names.length) return resultCache[ym]=null;
-  const y=+ym.slice(0,4), m=+ym.slice(5,7), nd=new Date(y,m,0).getDate();
-  const cl=s.cells.map(row=>{const r=row.slice(0,nd);while(r.length<nd)r.push('');return r});
-  const {nurses,schedule,overrides,mids}=buildInputs(s.names,cl,y,m,nd);
-  const dks=[]; for(let d=1;d<=nd;d++) dks.push(isoOf(y,m,d));
-  const res=AssignCore.compute(nurses,schedule,dks,
-    {rules:rules(),overrides:mergeOv(overrides,loadCfg('ovr_'+ym)||{}),seed:seedFor(ym).seed});
-  return resultCache[ym]={byNurse:res.byNurse,names:s.names,cells:cl,ndays:nd,mids};
-}
-
-/* ════════════════════════════════════════════════════════════════
- * 결과 표시 (그리드 · 일 상세 · 경고 · TSV 복사)
- * ════════════════════════════════════════════════════════════════ */
-function renderGrid(){
-  const dks=monthKeys();
-  let html='<table><tr><th style="text-align:left">간호사</th>'+
-    dks.map(dk=>`<th class="daysel${dk===selectedDay?' on':''}" onclick="selectedDay='${dk}';renderGrid();renderDetail()">${+dk.slice(8,10)}</th>`).join('')+'</tr>';
-  names.forEach((n,ni)=>{
-    html+=`<tr><td style="text-align:left;white-space:nowrap"><b>${esc(n)}</b></td>`;
-    for(const dk of dks){
-      const info=result.byNurse[n]&&result.byNurse[n][dk];
-      if(!info){ html+='<td></td>'; continue; }
-      const ov=manualOv[dk]&&manualOv[dk][info.period]&&(n in manualOv[dk][info.period]);
-      html+=`<td class="pk${ov?' ovd':''}" data-ni="${ni}" data-dk="${dk}" title="클릭 = 어싸인 수동 교환">`+
-        `<span class="lbl p${info.period}">${info.label==='차지'?'차':(info.label||'—')}</span></td>`;
-    }
-    html+='</tr>';
-  });
-  $('#grid').innerHTML=html+'</table>';
-}
-/* ── 수동 교환 픽커 — 앱 어싸인 탭과 동일 의미(라벨 선택 → 기존 보유자와 스왑) ── */
-$('#grid').addEventListener('click',e=>{
-  const td=e.target.closest('td.pk'); if(!td) return;
-  openPick(+td.dataset.ni,td.dataset.dk,e.pageX,e.pageY);
-});
-let pickCtx=null;
-function openPick(ni,dk,x,y){
-  const n=names[ni], info=result.byNurse[n]&&result.byNurse[n][dk];
-  if(!info) return;
-  pickCtx={name:n,dk,period:info.period,current:info.label||''};
-  const day=result.byDay[dk]&&result.byDay[dk][info.period];
-  const labels=day?Object.keys(day.labels):[];
-  const pk=$('#pick');
-  pk.innerHTML=`<div style="margin-bottom:4px"><b>${esc(n)}</b> · ${+dk.slice(8,10)}일 ${info.period} <span class="dim">(현재 ${info.label||'헬퍼'})</span></div>`+
-    labels.map(l=>`<button ${l===pickCtx.current?'disabled':''} onclick="pickChoose('${l}')">${l==='차지'?'차':l}</button>`).join('')+
-    `<button onclick="pickChoose(null)" class="dim">자동</button> <button onclick="closePick()">✕</button>`;
-  pk.style.display='block'; pk.style.left=x+'px'; pk.style.top=(y+8)+'px';
-}
-function closePick(){ $('#pick').style.display='none'; pickCtx=null; }
-function pickChoose(label){
-  const {name,dk,period,current}=pickCtx; closePick();
-  const ov=(manualOv[dk]=manualOv[dk]||{});
-  const pv=(ov[period]=ov[period]||{});
-  if(label===null){ delete pv[name]; }
-  else{
-    const holder=result.byDay[dk]&&result.byDay[dk][period]&&result.byDay[dk][period].labels[label];
-    if(holder&&holder!==name&&current) pv[holder]=current;   // 스왑
-    pv[name]=label;
-  }
-  if(!Object.keys(pv).length) delete ov[period];
-  if(!Object.keys(ov).length) delete manualOv[dk];
-  saveCfg('ovr_'+curYM(),manualOv); recompute();
-}
-function resetOv(){
-  if(!Object.keys(manualOv).length){ toast('수동 조정 없음'); return; }
-  if(!confirm(curYM()+' 수동 조정을 모두 초기화할까요?')) return;
-  manualOv={}; saveCfg('ovr_'+curYM(),manualOv); recompute(); toast('수동 조정 초기화됨');
-}
-document.addEventListener('mousedown',e=>{
-  if($('#pick').style.display==='block'&&!e.target.closest('#pick')&&!e.target.closest('td.pk')) closePick();
-});
-function roomsStr(rooms){
-  if(!rooms||!rooms.length)return '(수동 분배)';
-  return rooms.map(r=>`${r}호${ROOM_CAP[r]?'('+ROOM_CAP[r]+')':''}`).join(' ');
-}
-function dayInfo(dk){
-  const day={D:{labels:{},extra:[]},E:{labels:{},extra:[]},N:{labels:{},extra:[]}};
-  let has=false;
-  for(const n of names){
-    const info=result.byNurse[n]&&result.byNurse[n][dk];
-    if(!info) continue; has=true;
-    if(info.label) day[info.period].labels[info.label]=n;
-    else day[info.period].extra.push(n);
-  }
-  return has?day:null;
-}
-function renderDetail(){
-  const day=dayInfo(selectedDay), P_NAME={D:'Day',E:'Evening',N:'Night'};
-  if(!day){$('#dayDetail').innerHTML='';return}
-  let html=`<h2>${+selectedDay.slice(8,10)}일 상세</h2><div class="row">`;
-  for(const P of ['D','E','N']){
-    const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
-    if(!cnt) continue;
-    const scheme=schemes[Math.min(Math.max(cnt,2),5)]||{};
-    html+=`<div><b>${P_NAME[P]}</b> <span class="dim">(${cnt}인)</span><table><tr><th>어싸인</th><th>간호사</th><th>병실</th></tr>`;
-    for(const l of ['차지','A','B','C','D']) if(day[P].labels[l])
-      html+=`<tr><td><b>${l}</b></td><td>${esc(day[P].labels[l])}</td><td class="dim">${roomsStr(scheme[l])}</td></tr>`;
-    if(day[P].extra.length)html+=`<tr><td class="dim">헬퍼</td><td>${day[P].extra.map(esc).join(', ')}</td><td></td></tr>`;
-    html+='</table></div>';
-  }
-  $('#dayDetail').innerHTML=html+'</div>';
-}
-function renderWarns(){
-  const w=[];
-  for(const dk of monthKeys()){
-    const day=dayInfo(dk); if(!day) continue;
-    const d=+dk.slice(8,10);
-    const nOver=['C','D'].filter(l=>day.N.labels[l]);
-    if(nOver.length) w.push(`${d}일 N ${nOver.map(l=>day.N.labels[l]).join(', ')} — 양식 N칸(3개) 초과, 수기 기입 필요`);
-    for(const P of ['D','E','N']) if(day[P].extra.length)
-      w.push(`${d}일 ${P} 헬퍼 ${day[P].extra.join(', ')} — 어싸인 라벨 없음(6인 이상)`);
-  }
-  const el=$('#warnBox');
-  el.style.display=w.length?'block':'none';
-  el.textContent=w.length?('⚠ 확인 필요\n· '+w.join('\n· ')):'';
-}
-/* ── 교육 및 행사 (양식 4행) — 주×요일 입력, ISO 날짜 키라 월 경계 자동 공유 ── */
-function renderEvents(){
-  const rows=weeksOf(year,month).map(sun=>{
-    let tds='';
-    for(let i=0;i<7;i++){
-      const d=addDays(sun,i), iso=isoOf(d.getFullYear(),d.getMonth()+1,d.getDate());
-      tds+=`<td><input data-iso="${iso}" value="${esc(events[iso]||'')}" placeholder="${d.getMonth()+1}/${d.getDate()}"></td>`;
-    }
-    return '<tr>'+tds+'</tr>';
-  }).join('');
-  $('#eventsGrid').innerHTML=`<table><tr>${WD.map(w=>`<th>${w}</th>`).join('')}</tr>${rows}</table>`;
-  $('#eventsGrid').querySelectorAll('input').forEach(inp=>inp.addEventListener('change',()=>{
-    const v=inp.value.trim();
-    if(v) events[inp.dataset.iso]=v; else delete events[inp.dataset.iso];
-    saveCfg('events',events);
-  }));
-}
-
-/* ── 백업/복원 — localStorage의 assign_* 전체를 JSON 파일로 ── */
-function exportBackup(){
-  const data={};
-  for(let i=0;i<localStorage.length;i++){
-    const k=localStorage.key(i);
-    if(k&&k.startsWith('assign_')) data[k]=localStorage.getItem(k);
-  }
-  const blob=new Blob([JSON.stringify({app:'assign',ver:2,saved:new Date().toISOString(),data},null,1)],
-    {type:'application/json'});
+function downloadBackup(){
+  const blob=new Blob([JSON.stringify(store,null,1)],{type:'application/json'});
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='어싸인백업_'+fmtYmd(new Date())+'.json'; a.click();
+  a.href=URL.createObjectURL(blob); a.download='어싸인백업_'+fmtYmd(new Date())+'.json'; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-  toast(Object.keys(data).length+'개 항목 백업됨');
-}
-function importBackup(file){
-  file.text().then(t=>{
-    const j=JSON.parse(t);
-    if(!j||j.app!=='assign'||!j.data) throw new Error('형식 불일치');
-    const n=Object.keys(j.data).length;
-    if(!confirm(`백업(${(j.saved||'').slice(0,10)}, ${n}개 항목)을 복원할까요?\n현재 데이터를 덮어씁니다.`)) return;
-    for(const k in j.data) localStorage.setItem(k,j.data[k]);
-    location.reload();
-  }).catch(e=>toast('복원 실패: '+e.message,4000));
-}
-$('#btn-exp').onclick=exportBackup;
-$('#btn-imp').onclick=()=>$('#impFile').click();
-$('#impFile').addEventListener('change',e=>{ if(e.target.files[0]) importBackup(e.target.files[0]); e.target.value=''; });
-
-function copyTsv(){
-  const lines=['날짜\t시간대\t어싸인\t간호사\t병실'];
-  for(const dk of monthKeys()){
-    const day=dayInfo(dk); if(!day)continue;
-    const d=+dk.slice(8,10);
-    for(const P of ['D','E','N']){
-      const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
-      if(!cnt)continue;
-      const scheme=schemes[Math.min(Math.max(cnt,2),5)]||{};
-      for(const l of ['차지','A','B','C','D']) if(day[P].labels[l])
-        lines.push(`${d}\t${P}\t${l}\t${day[P].labels[l]}\t${roomsStr(scheme[l])}`);
-      if(day[P].extra.length)lines.push(`${d}\t${P}\t헬퍼\t${day[P].extra.join(', ')}\t`);
-    }
-  }
-  const text=lines.join('\n');
-  navigator.clipboard.writeText(text)
-    .then(()=>toast('복사됨 — Excel에 붙여넣기 하세요'))
-    .catch(()=>{ // 포커스 없음 등 — execCommand 폴백
-      const ta=document.createElement('textarea'); ta.value=text;
-      document.body.appendChild(ta); ta.select();
-      const ok=document.execCommand('copy'); ta.remove();
-      toast(ok?'복사됨 — Excel에 붙여넣기 하세요':'복사 실패 — 창을 클릭한 뒤 다시 시도하세요');
-    });
+  toast('백업 파일을 내려받았습니다');
 }
 
 /* ════════════════════════════════════════════════════════════════
- * xlsx 엔진 — 라이브러리 0 (zip 파싱/작성 + 셀 패치)
- * 내장된 '병실 배정표.xlsx' 양식의 셀 값만 갈아끼워 그대로 저장한다.
+ * xlsx 엔진 (zip 파싱/작성 · 셀 패치) — 검증된 v2 엔진 그대로
  * ════════════════════════════════════════════════════════════════ */
 const enc=new TextEncoder(), dec=new TextDecoder();
 function crc32(buf){let c,t=crc32.t;
@@ -1000,7 +1352,7 @@ async function inflateRaw(u8){
   const s=new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return new Uint8Array(await new Response(s).arrayBuffer());
 }
-function writeZip(ents){ // {name, meth, crc, usz, data}
+function writeZip(ents){
   const parts=[],cent=[]; let off=0;
   for(const e2 of ents){
     const nm=enc.encode(e2.name);
@@ -1064,10 +1416,6 @@ function parseSst(xml){
   });
 }
 const dateSerial=(y,m,d)=>Math.round((Date.UTC(y,m-1,d)-Date.UTC(1899,11,30))/86400000);
-
-/* ── xlsx 근무표 읽기 (드래그&드롭 — 라이브러리 0, DecompressionStream) ──
-   시트 XML을 직접 파싱해 문자열 격자로 → absorb()가 이름 열·날짜 행 자동 인식.
-   날짜 서식 셀은 styles.xml numFmt 를 판정해 'M/D' 텍스트로 변환. */
 function colIdx(s){ let n=0; for(const ch of s) n=n*26+(ch.charCodeAt(0)-64); return n; }
 async function readXlsxGrid(u8){
   const ents=readZip(u8);
@@ -1122,7 +1470,7 @@ async function readXlsxGrid(u8){
         const sM=attrs.match(/s="(\d+)"/);
         if(Number.isFinite(num)&&sM&&isDateId(xfIds[+sM[1]]??0)&&num>20000&&num<80000){
           const dt=new Date(Date.UTC(1899,11,30)+num*86400000);
-          val=(dt.getUTCMonth()+1)+'/'+dt.getUTCDate();          // parseDateCell 이 일(day) 추출
+          val=(dt.getUTCMonth()+1)+'/'+dt.getUTCDate();
         } else val=Number.isFinite(num)?String(+num.toPrecision(12)):XUN(v[1]);
       }
     }
@@ -1139,8 +1487,6 @@ async function readXlsxGrid(u8){
   toast(`${sheets[si].name} 시트 ${g.length}행 읽음`);
   return g;
 }
-
-/* ── 내장 양식 로드 (1회) ── */
 let TPL=null;
 async function loadTemplate(){
   if(TPL) return TPL;
@@ -1162,18 +1508,14 @@ async function loadTemplate(){
 }
 
 /* ════════════════════════════════════════════════════════════════
- * 주간 배정표 — 공용 데이터 → ①xlsx(양식 그대로) ②HTML 인쇄
- * 양식 좌표: 3행 날짜 · 5~9 D(차지ABCD→A(CN)~E) · 10 중간번 · 11~15 E · 16~18 N
- * 요일별 [방|이름] 2열: 일=D:E … 토=P:Q
+ * 주간 배정표 출력 — xlsx(양식 그대로) + HTML 인쇄
  * ════════════════════════════════════════════════════════════════ */
-const SEC={D:{top:5,rows:5},E:{top:11,rows:5},N:{top:16,rows:3}};
-const LBL_ORDER=['차지','A','B','C','D'];
 function weeksOf(y,m){
   const first=new Date(y,m-1,1), last=new Date(y,m,0);
-  const start=new Date(first); start.setDate(first.getDate()-first.getDay());  // 일요일
+  const start=new Date(first); start.setDate(first.getDate()-first.getDay());
   const out=[];
   for(let d=new Date(start); d<=last; d.setDate(d.getDate()+7)) out.push(new Date(d));
-  return out;   // 각 항목 = 그 주 일요일
+  return out;
 }
 function abbrevRooms(list){
   if(!list||!list.length) return '';
@@ -1190,45 +1532,32 @@ function abbrevRooms(list){
   }
   return out.join('.');
 }
-/* 한 주(일요일 시작)의 7일 데이터: [{date, blank} | {date, secs:{P:{cnt,byLabel}}, mids}] */
 function weekData(sun){
   const days=[];
   for(let i=0;i<7;i++){
-    const d=new Date(sun); d.setDate(sun.getDate()+i);
-    const ym=ymOf(d.getFullYear(),d.getMonth()+1);
-    const mr=monthResult(ym);
-    const dk=isoOf(d.getFullYear(),d.getMonth()+1,d.getDate());
-    if(!mr){ days.push({date:d,blank:true}); continue; }
+    const d=addDays(sun,i), iso=isoOfD(d);
+    const day=dayInfo(iso);
+    if(!day){ days.push({date:d,blank:true}); continue; }
     const secs={D:{cnt:0,byLabel:{}},E:{cnt:0,byLabel:{}},N:{cnt:0,byLabel:{}}};
-    for(const n of mr.names){
-      const info=mr.byNurse[n]&&mr.byNurse[n][dk];
-      if(!info) continue;
-      secs[info.period].cnt++;
-      if(info.label) secs[info.period].byLabel[info.label]=n;
+    for(const P of ['D','E','N']){
+      secs[P].cnt=Object.keys(day[P].labels).length+day[P].extra.length;
+      secs[P].byLabel=day[P].labels;
     }
-    days.push({date:d,secs,mids:(mr.mids&&mr.mids[dk])||[]});
+    days.push({date:d,secs,mids:midsOf(iso)});
   }
   return days;
 }
-function roomsFor(P,cnt,label){
-  if(!cnt) return '';
-  const sc=schemes[Math.min(Math.max(cnt,2),5)]||{};
-  return abbrevRooms(sc[label]);
-}
-
-/* ── ① xlsx 다운로드 (양식 그대로 채움) ── */
 async function downloadWeekXlsx(sun){
   const tpl=await loadTemplate();
   const days=weekData(sun);
   let xml=tpl.sheetXml;
-  // 양식에 남은 예시 값 선지우기 (날짜 3행 + 교육행사 4행 + 섹션 5~18행의 요일 열 D:Q — 서식은 보존)
   const COLS='DEFGHIJKLMNOPQ'.split('');
   for(const col of COLS){ for(let r=3;r<=18;r++) xml=clearCell(xml,col+r); }
   days.forEach((day,i)=>{
-    const colR=String.fromCharCode(68+i*2), colN=String.fromCharCode(69+i*2); // D,F,H.. / E,G,I..
+    const colR=String.fromCharCode(68+i*2), colN=String.fromCharCode(69+i*2);
     const d=day.date;
     xml=setCellNum(xml,colR+'3',dateSerial(d.getFullYear(),d.getMonth()+1,d.getDate()));
-    const evt=events[isoOf(d.getFullYear(),d.getMonth()+1,d.getDate())];
+    const evt=store.events[isoOfD(d)];
     if(evt) xml=setCellStr(xml,colR+'4',evt);
     if(day.blank) return;
     for(const P of ['D','E','N']){
@@ -1237,7 +1566,7 @@ async function downloadWeekXlsx(sun){
         const label=LBL_ORDER[li], nm=s.byLabel[label];
         if(!nm) continue;
         const row=sec.top+li;
-        const rm=roomsFor(P,s.cnt,label);
+        const rm=roomsFor(P,s.cnt,label,isoOfD(d));
         if(rm) xml=setCellStr(xml,colR+row,rm);
         xml=setCellStr(xml,colN+row,nm);
       }
@@ -1258,18 +1587,7 @@ async function downloadWeekXlsx(sun){
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);
   toast('배정표_'+span+'.xlsx 저장됨');
 }
-const addDays=(d,n)=>{const x=new Date(d);x.setDate(d.getDate()+n);return x};
-const fmtYmd=d=>d.getFullYear()+pad2(d.getMonth()+1)+pad2(d.getDate());
-function renderWeekBtns(){
-  $('#weekBtns').innerHTML=weeksOf(year,month).map((sun,i)=>{
-    const e2=addDays(sun,6);
-    return `<button onclick="downloadWeekXlsx(new Date(${sun.getFullYear()},${sun.getMonth()},${sun.getDate()})).catch(e=>toast('실패: '+e.message))">`+
-      `${sun.getMonth()+1}/${sun.getDate()}~${e2.getMonth()+1}/${e2.getDate()}</button>`;
-  }).join(' ');
-}
-
-/* ── ② HTML 인쇄 — 양식 재현 (고정 문구·이미지는 내장 양식에서 추출 = 단일 소스) ── */
-async function printWeekly(){
+async function printWeek(wholeMonth){
   let tpl;
   try{ tpl=await loadTemplate(); }
   catch(e){ toast(e.message,4200); return; }
@@ -1304,15 +1622,17 @@ async function printWeekly(){
     <tr><td>${g('B33')}</td><td>${g('J33')}</td></tr>
   </table>
   <table class="fx" style="margin-top:3px"><tr><td>${g('A34')}</td></tr></table>`;
-
-  const sheets=weeksOf(year,month).map(sun=>{
+  const suns=wholeMonth
+    ? weeksOf(addDays(wkSunday,3).getFullYear(),addDays(wkSunday,3).getMonth()+1)
+    : [wkSunday];
+  const sheets=suns.map(sun=>{
     const days=weekData(sun);
     let h=`<div class="sheet"><h1>병실 배정표</h1><table>
       <colgroup><col style="width:4.6%">${'<col style="width:7.0%"><col style="width:6.6%">'.repeat(7)}</colgroup>
       <tr><td class="hd" rowspan="2">교육 및<br>행사</td>${WD.map(w=>`<th class="hd" colspan="2">${w}</th>`).join('')}</tr>
       <tr>${days.map(d=>`<th colspan="2">${d.date.getMonth()+1}/${d.date.getDate()}</th>`).join('')}</tr>
       <tr><td style="height:16px"></td>${days.map(d=>{
-        const evt=events[isoOf(d.date.getFullYear(),d.date.getMonth()+1,d.date.getDate())];
+        const evt=store.events[isoOfD(d.date)];
         return `<td colspan="2">${evt?esc(evt):''}</td>`;
       }).join('')}</tr>`;
     for(const P of ['D','E','N']){
@@ -1321,10 +1641,10 @@ async function printWeekly(){
         const label=LBL_ORDER[li];
         h+='<tr>';
         if(li===0) h+=`<td class="seccol" rowspan="${sec.rows}">${P}</td>`;
-        h+=`<td class="lab">${li===0?'A(CN)':String.fromCharCode(66+li-1)}</td>`;
+        h+=`<td class="lab">${FORM_LBL(label)}</td>`;
         for(const day of days){
           if(day.blank||!day.secs[P].byLabel[label]){ h+='<td></td><td></td>'; continue; }
-          h+=`<td>${roomsFor(P,day.secs[P].cnt,label)}</td><td>${esc(day.secs[P].byLabel[label])}</td>`;
+          h+=`<td>${roomsFor(P,day.secs[P].cnt,label,isoOfD(day.date))}</td><td>${esc(day.secs[P].byLabel[label])}</td>`;
         }
         h+='</tr>';
         if(P==='D'&&li===sec.rows-1){
@@ -1341,28 +1661,19 @@ async function printWeekly(){
 }
 
 /* ════════════════════════════════════════════════════════════════
- * 년/월 선택 · 초기화
+ * 시작
  * ════════════════════════════════════════════════════════════════ */
-$('#selM').innerHTML=[...Array(12)].map((_,i)=>`<option value="${i+1}">${i+1}</option>`).join('');
-$('#selY').value=year; $('#selM').value=month;
-function switchMonth(){
-  saveMonth();
-  year=+$('#selY').value; month=+$('#selM').value;
-  saveCfg('ym',curYM());
-  loadMonth(); build(); recompute();
-}
-$('#selY').addEventListener('change',switchMonth);
-$('#selM').addEventListener('change',switchMonth);
+initStart();
+show('start');
 
-loadMonth(); build(); renderSchemes();
-if(names.length) recompute();
-
-/* 헤드리스 검증 훅 */
-window.__app={get names(){return names},get cells(){return cells},get result(){return result},
-  get manualOv(){return manualOv},get events(){return events},set events(v){events=v},
-  absorb,recompute,downloadWeekXlsx,printWeekly,weekData,monthResult,abbrevRooms,parseCellRaw,
-  loadTemplate,readXlsxGrid,openPick,pickChoose,exportBackup,
-  get ym(){return curYM()},switchTo(y,m){$('#selY').value=y;$('#selM').value=m;switchMonth()}};
+/* 검증 훅 */
+window.__app={get store(){return store},set store(v){store=v},
+  get result(){return result},get tlKeys(){return tlKeys},
+  ingestGrid,confirmPaste,recompute,renderWeek,weekData,downloadWeekXlsx,printWeek,
+  openPick,pickChoose,pickShift,setSeed,abbrevRooms,parseCellRaw,readXlsxGrid,loadTemplate,dayInfo,roomsFor,
+  get wkSunday(){return wkSunday},set wkSunday(v){wkSunday=v},show,
+  memoryMode(){window.__memoryMode=true;
+    $('#fileInfo').textContent='⚠ 파일 미연결 — 저장되지 않는 임시 모드';afterLoad();}};
 </script>
 </body>
 </html>

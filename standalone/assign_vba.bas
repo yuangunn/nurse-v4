@@ -194,6 +194,12 @@ Private Sub 초기세팅_코어(Optional 조용히 As Boolean = False)
         ws.Cells(35 + r, 12).Value = sch(r)(2)
     Next r
 
+    ' ── 지난 어싸인 직접 입력 (선택) — 52~61행에 기입, 표기는 주간 배정표와 동일(B~E) ──
+    ws.Range("J50").Value = "■ 지난 어싸인 (직접 입력 — 선택)": ws.Range("J50").Font.Bold = True
+    ws.Range("J51").Value = "이름": ws.Range("K51").Value = "어싸인(B/C/D/E)": ws.Range("L51").Value = "근무(D/E/N)"
+    ws.Range("J62").Value = "※ 처음 쓰는 달의 시작점 — 주간 배정표에 보이던 표기(B~E)로 적으세요." & _
+        " 전월 어싸인 시트가 있으면 그쪽 우선, 차지(A(CN))는 매일 자동 결정이라 적어도 반영되지 않습니다"
+
     ' ── 사용법 (요일별 필요인원 표와 안 겹치게 S열로) ──
     ws.Range("S3").Value = "■ 사용법": ws.Range("S3").Font.Bold = True
     Dim guide As Variant
@@ -213,7 +219,8 @@ Private Sub 초기세팅_코어(Optional 조용히 As Boolean = False)
         "6. 선입력을 고치고 버튼을 다시 누르면 재배정됩니다.", _
         "7. [주간 배정표] 버튼 → 일~토 주 단위 인쇄표(그 달 전체) 생성", _
         "   양식은 ""양식"" 시트에서 수정 (없으면 병실 배정표.xlsx에서 자동 복사)", _
-        "8. 전월 어싸인 시트가 있으면 각자 마지막으로 본 방이 자동으로 이어집니다.")
+        "8. 전월 어싸인 시트가 있으면 각자 마지막으로 본 방이 자동으로 이어집니다.", _
+        "9. 처음 쓰는 달은 아래 ""지난 어싸인"" 표에 마지막 어싸인을 적으면 이어집니다.")
     For r = 0 To UBound(guide)
         ws.Cells(4 + r, 19).Value = guide(r)   ' S열 = 19
     Next r
@@ -254,9 +261,15 @@ Private Sub 초기세팅_코어(Optional 조용히 As Boolean = False)
     HeadStyle ws.Range("J34:L34")
     BoxBorders ws.Range("J34:L48")
     ws.Range("J35:K48").HorizontalAlignment = xlCenter
+    ' 지난 어싸인 표
+    SectionHead ws.Range("J50")
+    HeadStyle ws.Range("J51:L51")
+    BoxBorders ws.Range("J51:L61")
+    ws.Range("K52:L61").HorizontalAlignment = xlCenter
+    MuteStyle ws.Range("J62")
     ' 원칙 O 표시 가운데
     ws.Range("K4:K7").HorizontalAlignment = xlCenter
-    ws.Rows("1:48").RowHeight = 17
+    ws.Rows("1:62").RowHeight = 17
     ws.Range("A1").EntireRow.RowHeight = 22
 
     ' 실행 버튼 — Alt+F8 없이 시트에서 바로 (재생성 시 중복 방지 위해 삭제 후 추가)
@@ -554,6 +567,39 @@ Private Sub 어싸인_코어(Optional 조용히 As Boolean = False)
         Next i
     End If
 
+    ' 전월 시트로 시드되지 않은 간호사는 설정의 '지난 어싸인 (직접 입력)' 표에서 (기록 우선).
+    ' 표기는 사용자가 보는 주간 배정표 라벨(B/C/D/E) → 내부 라벨(A/B/C/D)로 변환한다.
+    Dim mrow As Long, manN As Long
+    Dim mAnchor As Long: mAnchor = FindAnchorRow(cfg, "■ 지난 어싸인")
+    If mAnchor > 0 Then
+        For mrow = mAnchor + 2 To mAnchor + 11          ' 표 데이터 최대 10행
+            Dim mNm As String: mNm = Trim(CStr(cfg.Cells(mrow, 10).Value))
+            If mNm = "" Then Exit For
+            Dim mLb As String: mLb = UCase(Replace(Trim(CStr(cfg.Cells(mrow, 11).Value)), " ", ""))
+            Dim mPd As String: mPd = UCase(Trim(CStr(cfg.Cells(mrow, 12).Value)))
+            If mPd <> "D" And mPd <> "E" And mPd <> "N" Then mPd = "D"
+            If mLb = "A(CN)" Or mLb = "CN" Or mLb = "차지" Or mLb = "A" Then
+                warns = warns & "· 지난 어싸인 " & mNm & ": 차지는 매일 자동 결정 — 반영되지 않음" & vbLf
+            ElseIf mLb = "B" Or mLb = "C" Or mLb = "D" Or mLb = "E" Then
+                Dim mFound As Boolean: mFound = False
+                For i = 1 To nN
+                    If Replace(names(i), " ", "") = Replace(mNm, " ", "") Then
+                        mFound = True
+                        If lastIdx(i) = -99 Then
+                            lastLabel(i) = Chr(Asc(mLb) - 1)   ' 양식 B/C/D/E → 내부 A/B/C/D
+                            lastPeriod(i) = mPd: lastIdx(i) = 0   ' 전일 취급
+                            manN = manN + 1
+                        End If
+                        Exit For
+                    End If
+                Next i
+                If Not mFound Then warns = warns & "· 지난 어싸인 " & mNm & ": 근무표에 없는 이름 — 무시됨" & vbLf
+            ElseIf mLb <> "" Then
+                warns = warns & "· 지난 어싸인 " & mNm & ": 어싸인 '" & mLb & "' 인식 불가 (B~E로 적으세요) — 무시됨" & vbLf
+            End If
+        Next mrow
+    End If
+
     Dim resLabel() As String, resPeriod() As String, resCnt() As Long, resFixed() As Boolean
     ReDim resLabel(1 To nN, 1 To nD): ReDim resPeriod(1 To nN, 1 To nD)
     ReDim resCnt(1 To nN, 1 To nD): ReDim resFixed(1 To nN, 1 To nD)
@@ -692,6 +738,7 @@ NextPeriod:
     Dim msg As String
     msg = "어싸인 배정 완료 → ""어싸인_" & ym & """ / ""어싸인상세_" & ym & """ 시트"
     If seedN > 0 Then msg = msg & vbLf & "(전월 " & prevYM & " 어싸인에서 " & seedN & "명 연속성 자동 이월)"
+    If manN > 0 Then msg = msg & vbLf & "(지난 어싸인 직접 입력 " & manN & "명 반영)"
     If warns <> "" Then msg = msg & vbLf & vbLf & "⚠ 확인 필요:" & vbLf & warns
     If Not 조용히 Then MsgBox msg, IIf(warns = "", vbInformation, vbExclamation)
     ThisWorkbook.Worksheets("어싸인_" & ym).Activate
