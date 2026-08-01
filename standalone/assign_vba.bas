@@ -924,7 +924,7 @@ Private Sub 주간배정표_코어(Optional 조용히 As Boolean = False)
     ' 1일이 속한 주의 일요일부터 말일이 속한 주까지
     Dim wkStart As Date
     wkStart = DateSerial(y, m, 1) - (Weekday(DateSerial(y, m, 1), vbSunday) - 1)
-    Dim made As Long, warns As String, firstSheet As String
+    Dim made As Long, warns As String, firstWs As Worksheet
     Do While wkStart <= lastD
         Dim shName As String
         shName = Format(wkStart, "yyyymmdd") & "~" & Format(wkStart + 6, "yyyymmdd")
@@ -937,14 +937,17 @@ Private Sub 주간배정표_코어(Optional 조용히 As Boolean = False)
         Dim wk As Worksheet
         Set wk = ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count)
         wk.Name = shName
-        If firstSheet = "" Then firstSheet = shName
+        If firstWs Is Nothing Then Set firstWs = wk   ' 이름 재조회 대신 객체 보관 (오류 9 방지)
         FillWeek wk, wkStart, schemeMap, warns
         made = made + 1
         wkStart = wkStart + 7
     Loop
     Application.ScreenUpdating = True
 
-    If firstSheet <> "" Then ThisWorkbook.Worksheets(firstSheet).Activate
+    ' 첫 주 시트 표시는 장식 — 어떤 이유로든 실패해도 생성 결과를 망치지 않게 보호
+    On Error Resume Next
+    If Not firstWs Is Nothing Then firstWs.Activate
+    On Error GoTo 0
     Dim msg As String
     msg = ym & " 주간 배정표 " & made & "장 생성 완료 (일~토 기준)"
     If warns <> "" Then msg = msg & vbLf & vbLf & "⚠ 확인 필요:" & vbLf & warns
