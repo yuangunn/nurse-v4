@@ -172,8 +172,10 @@
     </span>
   </div>
   <div class="card" style="padding:8px">
+    <div id="wkWarn" style="display:none;border-left:3px solid #e6a23c;background:#fffaf0;
+      padding:6px 10px;font-size:13px;margin-bottom:8px;white-space:pre-wrap"></div>
     <div id="wkBody"></div>
-    <div class="dim" style="margin-top:6px">이름 클릭 = 담당 교체 · 맨 윗줄(교육·행사) 클릭 = 내용 입력 · 빨간 밑줄 = 수동으로 바꾼 칸</div>
+    <div class="dim" style="margin-top:6px">이름 클릭 = 담당 교체 · 방 칸 클릭 = 그날 병상 수정 · 맨 윗줄(교육·행사) 클릭 = 내용 입력 · 빨간 밑줄 = 수동으로 바꾼 칸</div>
   </div>
 </div>
 
@@ -244,8 +246,12 @@
     <div class="dim">※ 차지는 항상 적용(DC/EC/NC 표시자 우선) · 원칙3·4는 반대 개념 — 하나를 켜면 다른 쪽이 꺼집니다</div>
   </details>
   <details>
-    <summary>차지 가능 간호사</summary>
-    <div id="nurseChecks" style="margin-top:8px;line-height:2.2"></div>
+    <summary>간호사 관리 — 가능 근무·차지 <span class="dim">— DC/EC/NC = 그 시간대 차지 가능</span></summary>
+    <table id="capsTable" style="margin-top:8px"></table>
+  </details>
+  <details>
+    <summary>요일별 필요 인원 <span class="dim">— 근무표 고치기 화면에서 미달·초과를 빨갛게 표시</span></summary>
+    <table id="reqTable" style="margin-top:8px"></table>
   </details>
   <details>
     <summary>수동 수정 관리</summary>
@@ -285,8 +291,14 @@
     return null;
   }
 
+  // chargeCapable: boolean(전 시간대) 또는 {D,E,N} 시간대별 — 하위호환
+  function chargeOk(n, P) {
+    const c = n.chargeCapable;
+    return c && typeof c === 'object' ? !!c[P] : !!c;
+  }
+
   /**
-   * @param nurses   [{id, seniority(작을수록 선임), chargeCapable}]
+   * @param nurses   [{id, seniority(작을수록 선임), chargeCapable: bool|{D,E,N}}]
    * @param schedule {nurseId: {dateKey: code}}
    * @param dateKeys 시간순 날짜키 배열 (연속성 위해 전월 이월일 포함 가능)
    * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff,bounceAfterOff},
@@ -347,7 +359,7 @@
             return !taken[n.id] && CHARGE_CODES[(schedule[n.id] || {})[dk]];
           });
           if (!c) {
-            const pool = staff.filter(function (n) { return !taken[n.id] && n.chargeCapable; });
+            const pool = staff.filter(function (n) { return !taken[n.id] && chargeOk(n, P); });
             const cand = (pool.length ? pool : staff.filter(function (n) { return !taken[n.id]; }))
               .slice().sort(function (a, b) { return a.seniority - b.seniority; });
             c = cand[0];
@@ -498,9 +510,22 @@ const WD=['일','월','화','수','목','금','토'];
 function toast(msg,ms=2800){ const t=$('#toast'); t.textContent=msg; t.style.display='block';
   clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',ms); }
 
+const ALL_CAPS=['DC','D','EC','E','NC','N'];
+const DEFAULT_REQ={mon:{D:4,E:5,N:3},tue:{D:5,E:5,N:3},wed:{D:5,E:5,N:3},thu:{D:5,E:5,N:3},
+  fri:{D:5,E:4,N:3},sat:{D:3,E:3,N:2},sun:{D:3,E:4,N:3}};
 function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{},roomOv:{},events:{},
-  seedManual:{},charge:{},schemes:JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
+  seedManual:{},caps:{},req:JSON.parse(JSON.stringify(DEFAULT_REQ)),
+  schemes:JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
   rules:{keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false}}; }
+const capsOf=n=>store.caps[n]||ALL_CAPS;
+function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무 목록)
+  if(store.charge&&!Object.keys(store.caps||{}).length){
+    store.caps={};
+    for(const n in store.charge) if(store.charge[n]===false) store.caps[n]=['D','E','N'];
+    delete store.charge;
+  }
+  if(!store.req) store.req=JSON.parse(JSON.stringify(DEFAULT_REQ));
+}
 let store=emptyStore();
 let fileHandle=null, dirty=false, saveT=null;
 
@@ -536,7 +561,7 @@ async function useHandle(h,{create=false}={}){
     try{ j=JSON.parse(txt); }
     catch(e){ throw new Error('데이터 파일이 손상되어 열 수 없습니다 — 백업 파일로 복원하세요'); }
     if(j.app!=='assign') throw new Error('어싸인 데이터 파일이 아닙니다');
-    store={...emptyStore(),...j};
+    store={...emptyStore(),...j}; migrateStore();
   } else store=emptyStore();          // 새 파일 또는 진짜 빈(0바이트) 파일만
   fileHandle=h; window.__memoryMode=false;
   try{ await idbSet('handle',h); }catch(e){}
@@ -647,7 +672,11 @@ function recompute(){
   if(span>400) start=addDays(end,-400);            // 성능 캡 — 1년 이상 과거는 계산에서 제외
   tlKeys=[];
   for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)) tlKeys.push(isoOfD(d));
-  const nurses=store.order.map((n,i)=>({id:n,name:n,seniority:i,chargeCapable:store.charge[n]!==false}));
+  const nurses=store.order.map((n,i)=>{
+    const cp=capsOf(n);
+    return {id:n,name:n,seniority:i,
+      chargeCapable:{D:cp.includes('DC'),E:cp.includes('EC'),N:cp.includes('NC')}};
+  });
   const schedule={}, cellOvr={};
   for(const n of store.order){
     const sc={};
@@ -799,6 +828,24 @@ function renderWeek(){
   }
   h+='</table>';
   $('#wkBody').innerHTML=h;
+  // 이번 주 경고: 가능근무 위반 · 양식 N칸(3) 초과 · 헬퍼(라벨 없음)
+  const w=[];
+  for(const d of days){
+    const iso=isoOfD(d), dd=+iso.slice(8,10), mm=+iso.slice(5,7);
+    for(const n of store.order){
+      const pc=parseCellRaw((store.cells[n]||{})[iso]||'');
+      if(pc&&pc.code&&['DC','D','EC','E','NC','N'].includes(pc.code)&&!capsOf(n).includes(pc.code))
+        w.push(`${mm}/${dd} ${esc(n)}: ${pc.code} — 가능 근무가 아님 (⚙ 관리 > 간호사 관리)`);
+    }
+    const day=dayInfo(iso); if(!day) continue;
+    const nOver=['C','D'].filter(l=>day.N.labels[l]);
+    if(nOver.length) w.push(`${mm}/${dd} N ${nOver.map(l=>esc(day.N.labels[l])).join(', ')} — 양식 N칸(3개) 초과, 수기 기입 필요`);
+    for(const P of ['D','E','N']) if(day[P].extra.length)
+      w.push(`${mm}/${dd} ${P} ${day[P].extra.map(esc).join(', ')} — 어싸인 없음(6인 이상 헬퍼)`);
+  }
+  const wb=$('#wkWarn');
+  wb.style.display=w.length?'block':'none';
+  wb.textContent=w.length?('⚠ 확인 필요\n· '+w.join('\n· ')):'';
 }
 $('#wkBody').addEventListener('click',e=>{
   const ev=e.target.closest('td.evt');
@@ -1018,7 +1065,7 @@ window.addEventListener('drop',async e=>{
     try{
       if(it&&it.getAsFileSystemHandle){ const h=await it.getAsFileSystemHandle(); await useHandle(h); }
       else{ const j=JSON.parse(await f.text()); if(j.app!=='assign') throw new Error('형식 불일치');
-        store={...emptyStore(),...j}; window.__memoryMode=true;
+        store={...emptyStore(),...j}; migrateStore(); window.__memoryMode=true;
         $('#fileInfo').textContent='⚠ 읽기 전용으로 열림 — 수정해도 저장되지 않습니다 (Edge/Chrome에서 여세요)';
         afterLoad(); }
       toast(f.name+' 열림');
@@ -1056,12 +1103,12 @@ function edSet(r,c,v){
 }
 function snapshot(){ // 이름 변경/삭제가 ovr·charge·시드까지 건드리므로 함께 보존
   undoStack.push(JSON.stringify({o:store.order,c:store.cells,v:store.ovr,rv:store.roomOv,
-    ch:store.charge,sd:store.seedManual}));
+    ch:store.caps,sd:store.seedManual}));
   if(undoStack.length>40) undoStack.shift(); }
 function restoreSnapshot(s){
   store.order=s.o; store.cells=s.c;
   if(s.v) store.ovr=s.v; if(s.rv) store.roomOv=s.rv;
-  if(s.ch) store.charge=s.ch; if(s.sd) store.seedManual=s.sd;
+  if(s.ch) store.caps=s.ch; if(s.sd) store.seedManual=s.sd;
 }
 function moveEditMonth(n){ edM+=n; if(edM<1){edM=12;edY--} if(edM>12){edM=1;edY++} renderEditGrid(); }
 function renderEditGrid(){
@@ -1103,8 +1150,16 @@ function paintEdit(){
     td.className='cell'+(inSel?' sel':'')+(r===sel.r&&c===sel.c?' anchor':'')+(pc&&pc.label?' pre':'');
     const b=def&&bucket[def.p]; if(b) cnt[b][c]++;
   }
+  const WKMAP=['sun','mon','tue','wed','thu','fri','sat'];
   for(const k of ['D','E','N']) for(let c=0;c<edDays;c++){
-    const el=$(`#cnt-${k}-${c}`); if(el){ el.textContent=cnt[k][c]||''; el.style.color=SHIFTS[k].fg; }
+    const el=$(`#cnt-${k}-${c}`); if(!el) continue;
+    const need=store.req[WKMAP[new Date(edY,edM-1,c+1).getDay()]][k];
+    el.textContent=cnt[k][c]||'';
+    el.title=`필요 ${need}명`;
+    if(cnt[k][c]!==need&&(cnt[k][c]||need)){   // 미달·초과 = 빨강 (xlsm 조건부서식과 동일)
+      el.style.color='#c7384a'; el.style.fontWeight='800';
+      el.textContent=(cnt[k][c]||0)+'/'+need;
+    } else { el.style.color=SHIFTS[k].fg; el.style.fontWeight=''; }
   }
 }
 const rect=()=>({r1:Math.min(sel.r,sel.r2),r2:Math.max(sel.r,sel.r2),
@@ -1197,11 +1252,11 @@ function renameNurse(r){
       if(!Object.keys(day).length) delete store.ovr[dk];
     }};
   if(!nu){ store.order.splice(r,1); delete store.cells[old];
-    delete store.charge[old]; delete store.seedManual[old]; migOv(old,null); }
+    delete store.caps[old]; delete store.seedManual[old]; migOv(old,null); }
   else if(nu!==old){
     store.order[r]=nu;
     store.cells[nu]=store.cells[old]||{}; delete store.cells[old];
-    if(old in store.charge){ store.charge[nu]=store.charge[old]; delete store.charge[old]; }
+    if(old in store.caps){ store.caps[nu]=store.caps[old]; delete store.caps[old]; }
     if(old in store.seedManual){ store.seedManual[nu]=store.seedManual[old]; delete store.seedManual[old]; }
     migOv(old,nu);
   }
@@ -1272,9 +1327,18 @@ function renderAdmin(){
   // 원칙·차지
   for(const [id,k] of [['r1','keepSameShift'],['r2','keepAcrossShift'],['r3','keepAfterOff'],['r4','bounceAfterOff']])
     $('#'+id).checked=!!store.rules[k];
-  $('#nurseChecks').innerHTML=store.order.map(n=>
-    `<label><input type="checkbox" ${store.charge[n]!==false?'checked':''}
-      onchange="setCharge('${esc(n)}',this.checked)"> ${esc(n)}</label>`).join('');
+  $('#capsTable').innerHTML=`<tr><th style="text-align:left">간호사</th>${ALL_CAPS.map(c=>
+      `<th style="min-width:3em">${c}</th>`).join('')}</tr>`+
+    store.order.map(n=>{
+      const cp=capsOf(n);
+      return `<tr><td style="font-weight:700;min-width:70px">${esc(n)}</td>`+ALL_CAPS.map(c=>
+        `<td><button class="segbtn${cp.includes(c)?' on':''}" onclick="toggleCap('${esc(n)}','${c}')">${cp.includes(c)?'O':'·'}</button></td>`).join('')+'</tr>';
+    }).join('')||'<tr><td class="dim">근무표를 먼저 넣어주세요</td></tr>';
+  const WKK=[['mon','월'],['tue','화'],['wed','수'],['thu','목'],['fri','금'],['sat','토'],['sun','일']];
+  $('#reqTable').innerHTML=`<tr><th></th>${WKK.map(([k,l])=>`<th style="min-width:3em">${l}</th>`).join('')}</tr>`+
+    ['D','E','N'].map(P=>`<tr><td style="font-weight:700">${P}</td>`+WKK.map(([k])=>
+      `<td><input type="number" min="0" max="20" style="width:52px" value="${store.req[k][P]}"
+        onchange="setReq('${k}','${P}',this.value)"></td>`).join('')+'</tr>').join('');
   $('#ovCount').textContent=` — 담당 교체 ${Object.keys(store.ovr).length}일 · 방 수정 ${Object.keys(store.roomOv).length}일`;
   // 주간 xlsx 버튼 (보고 있는 주가 속한 달 — 연·월 모두 주 중간일 기준, 연말 주 안전)
   const mid=addDays(wkSunday,3);
@@ -1299,7 +1363,16 @@ function setScheme(cnt,l,str){
 }
 function resetSchemes(){ store.schemes=JSON.parse(JSON.stringify(DEFAULT_SCHEMES));
   touch(); recompute(); renderAdmin(); }
-function setCharge(name,on){ store.charge[name]=on; touch(); recompute(); }
+function toggleCap(name,code){
+  const cp=[...capsOf(name)];
+  const i=cp.indexOf(code);
+  if(i>=0) cp.splice(i,1); else cp.push(code);
+  store.caps[name]=cp;
+  touch(); recompute(); renderAdmin();
+  if(curScr==='week') renderWeek();
+}
+function setReq(k,P,v){ store.req[k][P]=Math.max(0,+v||0); touch();
+  if(curScr==='edit') paintEdit(); }
 for(const [id,k] of [['r1','keepSameShift'],['r2','keepAcrossShift'],['r3','keepAfterOff'],['r4','bounceAfterOff']])
   $('#'+id).addEventListener('change',e=>{
     store.rules[k]=e.target.checked;

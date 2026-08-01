@@ -657,7 +657,8 @@ Private Sub 어싸인_코어(Optional 조용히 As Boolean = False)
             If asgn(0) = 0 Then
                 For ss = 1 To ns
                     i = staff(ss)
-                    If Not takenN(i) And chargeCap(i) Then asgn(0) = i: takenN(i) = True: Exit For
+                    ' 시간대별 차지 자격 — 설정에서 해당 차지 코드(DC/EC/NC)에 O가 있는 사람만
+                    If Not takenN(i) And InStr(capable(i), "|" & PP & "C|") > 0 Then asgn(0) = i: takenN(i) = True: Exit For
                 Next ss
             End If
             If asgn(0) = 0 Then

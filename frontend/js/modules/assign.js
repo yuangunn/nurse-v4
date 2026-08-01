@@ -102,7 +102,12 @@ window.AssignModule = function () {
       }
       const nurses = this.nurses.map(n => ({
         id: n.id, seniority: n.seniority,
-        chargeCapable: (n.capable_shifts || []).some(c => ['DC', 'EC', 'NC'].includes(c)),
+        // 시간대별 차지 자격 — DC만 가능한 간호사가 N 차지로 뽑히지 않게
+        chargeCapable: {
+          D: (n.capable_shifts || []).includes('DC'),
+          E: (n.capable_shifts || []).includes('EC'),
+          N: (n.capable_shifts || []).includes('NC'),
+        },
       }));
       const dateKeys = this.scheduleDays.map(d => this.dayKey(d)); // 이월일 포함 → 월초 연속성
       this.assignData = window.AssignCore.compute(nurses, this.assignScheduleSrc(), dateKeys, {

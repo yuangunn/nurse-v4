@@ -24,8 +24,14 @@
     return null;
   }
 
+  // chargeCapable: boolean(전 시간대) 또는 {D,E,N} 시간대별 — 하위호환
+  function chargeOk(n, P) {
+    const c = n.chargeCapable;
+    return c && typeof c === 'object' ? !!c[P] : !!c;
+  }
+
   /**
-   * @param nurses   [{id, seniority(작을수록 선임), chargeCapable}]
+   * @param nurses   [{id, seniority(작을수록 선임), chargeCapable: bool|{D,E,N}}]
    * @param schedule {nurseId: {dateKey: code}}
    * @param dateKeys 시간순 날짜키 배열 (연속성 위해 전월 이월일 포함 가능)
    * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff,bounceAfterOff},
@@ -86,7 +92,7 @@
             return !taken[n.id] && CHARGE_CODES[(schedule[n.id] || {})[dk]];
           });
           if (!c) {
-            const pool = staff.filter(function (n) { return !taken[n.id] && n.chargeCapable; });
+            const pool = staff.filter(function (n) { return !taken[n.id] && chargeOk(n, P); });
             const cand = (pool.length ? pool : staff.filter(function (n) { return !taken[n.id]; }))
               .slice().sort(function (a, b) { return a.seniority - b.seniority; });
             c = cand[0];

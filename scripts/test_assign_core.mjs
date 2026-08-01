@@ -215,4 +215,23 @@ assert.equal(periodOf('OF'), null);
   assert.equal(r.byDay.d2.D.labels['A'], 'b');
 }
 
+// ── 시간대별 차지 자격 (chargeCapable: {D,E,N}) ──
+{
+  // a: D차지만 가능(선임), b: N차지만 가능 — N 근무에서 차지는 b여야 함
+  const nurses = [
+    { id: 'a', seniority: 0, chargeCapable: { D: true, E: false, N: false } },
+    { id: 'b', seniority: 1, chargeCapable: { D: false, E: false, N: true } },
+    { id: 'c', seniority: 2, chargeCapable: false },
+  ];
+  const sched = { a: { d1: 'N' }, b: { d1: 'N' }, c: { d1: 'N' } };
+  const r = compute(nurses, sched, ['d1']);
+  assert.equal(r.byDay.d1.N.labels['차지'], 'b');   // a가 선임이어도 N차지 자격 없음
+  // 아무도 자격 없으면 최선임 폴백 (기존 동작 유지)
+  const r2 = compute(nurses.map(n => ({ ...n, chargeCapable: false })), sched, ['d1']);
+  assert.equal(r2.byDay.d1.N.labels['차지'], 'a');
+  // boolean 하위호환
+  const r3 = compute(nurses.map(n => ({ ...n, chargeCapable: true })), sched, ['d1']);
+  assert.equal(r3.byDay.d1.N.labels['차지'], 'a');
+}
+
 console.log('assign-core: 모든 검증 통과');
