@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+  doc-page:not(:defined){visibility:hidden}
+  body{margin:0}
+  a{color:#1B4FC3;text-decoration:none} a:hover{color:#0F1115}
+</style>
+<script src="./doc-page.js"></script>
+</helmet>
+
+<doc-page size="a4">
+<section class="page" data-screen-label="병실 배정표 A4" style="width:210mm;height:297mm;padding:10mm;box-sizing:border-box">
+<div style="width:190mm;height:277mm;box-sizing:border-box;display:flex;flex-direction:column;font-family:'Pretendard Variable',Pretendard,-apple-system,system-ui,sans-serif;color:#0F1115;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+
+  <div style="height:9mm;flex:0 0 9mm;display:flex;align-items:center;justify-content:space-between;padding:0 4mm;border-radius:1.6mm;color:#fff;background:{{ bandColor }}">
+    <div style="font-size:13pt;font-weight:800;letter-spacing:-0.02em">병실 배정표</div>
+    <div style="font-size:8pt;font-weight:600;color:rgba(255,255,255,.62);letter-spacing:-0.01em">{{ span }}</div>
+  </div>
+
+  <div style="flex:0 0 2mm"></div>
+
+  <div style="border-radius:1.6mm;overflow:hidden;box-shadow:0 0 0 .3mm #DCE0E6;flex:0 0 {{ weekH }}mm">
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+      <colgroup><col style="width:11mm"><col style="width:12mm"><col style="width:11.93mm"><col style="width:11.93mm"><col style="width:11.93mm"><col style="width:11.93mm"><col style="width:11.93mm"><col style="width:11.93mm"><col style="width:11.93mm"><col style="width:11.93mm"><col style="width:11.93mm"><col style="width:11.93mm"><col style="width:11.93mm"><col style="width:11.93mm"><col style="width:11.93mm"><col style="width:11.93mm"></colgroup>
+      <tbody>
+        <tr style="height:9mm">
+          <td colspan="2" rowspan="2" style="width:22mm;border:.25mm solid #DCE0E6;vertical-align:bottom;text-align:center;padding-bottom:1.5mm;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#8A93A1;line-height:1.3">교육 및<br>행사</td>
+          <sc-for list="{{ days }}" as="d" hint-placeholder-count="7"><th colspan="2" style="width:23.6mm;border:.25mm solid #DCE0E6;background:#F2F3F5;padding:0"><div style="display:flex;align-items:baseline;justify-content:center;gap:1.4mm"><span style="font-size:11pt;font-weight:800;letter-spacing:-0.03em;color:#0F1115;font-variant-numeric:tabular-nums">{{ d.md }}</span><span style="font-size:8pt;font-weight:700;color:{{ d.wdColor }}">{{ d.wd }}</span></div></th></sc-for>
+        </tr>
+        <tr style="height:{{ eventH }}mm">
+          <sc-for list="{{ evts }}" as="e" hint-placeholder-count="7"><td colspan="2" style="border:.25mm solid #DCE0E6;vertical-align:top;padding:1.2mm;font-size:7pt;font-weight:600;line-height:1.4;color:#B7791F;word-break:break-all">{{ e }}</td></sc-for>
+        </tr>
+      </tbody>
+      <tbody>
+        <tr style="height:{{ rowH }}mm">
+          <td rowspan="5" style="border:.25mm solid #DCE0E6;text-align:center;background:#EEF3FE;color:#1B4FC3;font-size:11pt;font-weight:800">D</td>
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">A(CN)</td>
+          <sc-for list="{{ dRow0 }}" as="c" hint-placeholder-count="7"><td style="border:.25mm solid #DCE0E6;text-align:center;font-size:7.5pt;font-weight:600;color:#4A5160;font-variant-numeric:tabular-nums;letter-spacing:-0.02em">{{ c.rm }}</td><td style="border:.25mm solid #DCE0E6;text-align:center;font-size:9pt;font-weight:700;letter-spacing:-0.02em;color:#0F1115">{{ c.nm }}</td></sc-for>
+        </tr>
+        <sc-for list="{{ dRest }}" as="r" hint-placeholder-count="4">
+        <tr style="height:{{ rowH }}mm">
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">{{ r.lab }}</td>
+          <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="7"><td style="border:.25mm solid #DCE0E6;text-align:center;font-size:7.5pt;font-weight:600;color:#4A5160;font-variant-numeric:tabular-nums;letter-spacing:-0.02em">{{ c.rm }}</td><td style="border:.25mm solid #DCE0E6;text-align:center;font-size:9pt;font-weight:700;letter-spacing:-0.02em;color:#0F1115">{{ c.nm }}</td></sc-for>
+        </tr>
+        </sc-for>
+        <tr style="height:6.5mm">
+          <td colspan="2" style="border:.25mm solid #DCE0E6;text-align:center;background:#FBF3E2;font-size:7.5pt;font-weight:800;color:#B7791F">중간번</td>
+          <sc-for list="{{ mids }}" as="m" hint-placeholder-count="7"><td colspan="2" style="border:.25mm solid #DCE0E6;text-align:center;font-size:8.5pt;font-weight:700;color:#4A5160">{{ m }}</td></sc-for>
+        </tr>
+      </tbody>
+      <tbody>
+        <tr style="height:{{ rowH }}mm">
+          <td rowspan="5" style="border:.25mm solid #DCE0E6;text-align:center;background:#FEEFEF;color:#C7384A;font-size:11pt;font-weight:800">E</td>
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">A(CN)</td>
+          <sc-for list="{{ eRow0 }}" as="c" hint-placeholder-count="7"><td style="border:.25mm solid #DCE0E6;text-align:center;font-size:7.5pt;font-weight:600;color:#4A5160;font-variant-numeric:tabular-nums;letter-spacing:-0.02em">{{ c.rm }}</td><td style="border:.25mm solid #DCE0E6;text-align:center;font-size:9pt;font-weight:700;letter-spacing:-0.02em;color:#0F1115">{{ c.nm }}</td></sc-for>
+        </tr>
+        <sc-for list="{{ eRest }}" as="r" hint-placeholder-count="4">
+        <tr style="height:{{ rowH }}mm">
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">{{ r.lab }}</td>
+          <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="7"><td style="border:.25mm solid #DCE0E6;text-align:center;font-size:7.5pt;font-weight:600;color:#4A5160;font-variant-numeric:tabular-nums;letter-spacing:-0.02em">{{ c.rm }}</td><td style="border:.25mm solid #DCE0E6;text-align:center;font-size:9pt;font-weight:700;letter-spacing:-0.02em;color:#0F1115">{{ c.nm }}</td></sc-for>
+        </tr>
+        </sc-for>
+      </tbody>
+      <tbody>
+        <tr style="height:{{ rowH }}mm">
+          <td rowspan="3" style="border:.25mm solid #DCE0E6;text-align:center;background:#EFEBFB;color:#5B3FB0;font-size:11pt;font-weight:800">N</td>
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">A(CN)</td>
+          <sc-for list="{{ nRow0 }}" as="c" hint-placeholder-count="7"><td style="border:.25mm solid #DCE0E6;text-align:center;font-size:7.5pt;font-weight:600;color:#4A5160;font-variant-numeric:tabular-nums;letter-spacing:-0.02em">{{ c.rm }}</td><td style="border:.25mm solid #DCE0E6;text-align:center;font-size:9pt;font-weight:700;letter-spacing:-0.02em;color:#0F1115">{{ c.nm }}</td></sc-for>
+        </tr>
+        <sc-for list="{{ nRest }}" as="r" hint-placeholder-count="2">
+        <tr style="height:{{ rowH }}mm">
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">{{ r.lab }}</td>
+          <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="7"><td style="border:.25mm solid #DCE0E6;text-align:center;font-size:7.5pt;font-weight:600;color:#4A5160;font-variant-numeric:tabular-nums;letter-spacing:-0.02em">{{ c.rm }}</td><td style="border:.25mm solid #DCE0E6;text-align:center;font-size:9pt;font-weight:700;letter-spacing:-0.02em;color:#0F1115">{{ c.nm }}</td></sc-for>
+        </tr>
+        </sc-for>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="flex:0 0 3mm"></div>
+
+  <div style="flex:0 0 44.5mm;border-radius:1.6mm;overflow:hidden;box-shadow:0 0 0 .3mm #DCE0E6">
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+      <colgroup><col style="width:11mm"><col style="width:12mm"><col style="width:55mm"><col style="width:45mm"><col style="width:67mm"></colgroup>
+      <tbody>
+        <tr style="height:6.5mm">
+          <td colspan="2" style="width:22mm;border:.25mm solid #DCE0E6;text-align:center;background:#E4E9F5;font-size:8.5pt;font-weight:800;color:#0F1115">구분</td>
+          <td style="width:54mm;border:.25mm solid #DCE0E6;text-align:center;background:#EEF3FE;font-size:8.5pt;font-weight:800;color:#1B4FC3">D</td>
+          <td style="width:44mm;border:.25mm solid #DCE0E6;text-align:center;background:#FEEFEF;font-size:8.5pt;font-weight:800;color:#C7384A">E </td>
+          <td style="width:66mm;border:.25mm solid #DCE0E6;text-align:center;background:#EFEBFB;font-size:8.5pt;font-weight:800;color:#5B3FB0">N</td>
+        </tr>
+        <tr style="height:7.6mm">
+          <td rowspan="5" style="border:.25mm solid #DCE0E6;text-align:center;background:#EDEFF3;font-size:8pt;font-weight:800;color:#0F1115;letter-spacing:.02em"><div style="writing-mode:vertical-rl;text-orientation:upright;display:inline-block">물품체크</div></td>
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">A(CN)</td>
+          <td style="border:.25mm solid #DCE0E6;padding:0 2mm;font-size:7.5pt;font-weight:600;line-height:1.35;color:#0F1115">마약, 비품약, E-cart, 냉장고</td>
+          <td style="border:.25mm solid #DCE0E6;padding:0 2mm;font-size:7.5pt;font-weight:600;line-height:1.35;color:#0F1115">비품약</td>
+          <td style="border:.25mm solid #DCE0E6;padding:0 2mm;font-size:7.5pt;font-weight:600;line-height:1.35;color:#0F1115">비품약, 수액청구, OCR 장부<br>당직게시판</td>
+        </tr>
+        <tr style="height:7.6mm">
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">B</td>
+          <td style="border:.25mm solid #DCE0E6"></td>
+          <td style="border:.25mm solid #DCE0E6;padding:0 2mm;font-size:7.5pt;font-weight:600;line-height:1.35;color:#0F1115">장비체크</td>
+          <td style="border:.25mm solid #DCE0E6;padding:0 2mm;font-size:7.5pt;font-weight:600;line-height:1.35;color:#0F1115">약반환, 완료된 팀즈 삭제<br>냉장약 유효기간 확인</td>
+        </tr>
+        <tr style="height:7.6mm">
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">C</td>
+          <td style="border:.25mm solid #DCE0E6"></td>
+          <td style="border:.25mm solid #DCE0E6;padding:0 2mm;font-size:7.5pt;font-weight:600;line-height:1.35;color:#0F1115">RTLS 장비 체크</td>
+          <td style="border:.25mm solid #DCE0E6;padding:0 2mm;font-size:7.5pt;font-weight:600;line-height:1.35;color:#0F1115">CSR 물품 체크 + 신청, POCT QC </td>
+        </tr>
+        <tr style="height:7.6mm">
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">D</td>
+          <td style="border:.25mm solid #DCE0E6"></td>
+          <td style="border:.25mm solid #DCE0E6;padding:0 2mm;font-size:7.5pt;font-weight:600;line-height:1.35;color:#0F1115">CSR 물품 체크</td>
+          <td style="border:.25mm solid #DCE0E6"></td>
+        </tr>
+        <tr style="height:7.6mm">
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">E</td>
+          <td style="border:.25mm solid #DCE0E6;padding:0 2mm;font-size:7.5pt;font-weight:600;line-height:1.35;color:#0F1115">CSR 물품 체크</td>
+          <td style="border:.25mm solid #DCE0E6"></td>
+          <td style="border:.25mm solid #DCE0E6"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="flex:0 0 3mm"></div>
+
+  <div style="flex:0 0 6.5mm;display:flex;align-items:center;padding:0 4mm;border-radius:1.6mm;background:#FEF3F3;font-size:8pt;font-weight:700;color:#C7384A;letter-spacing:-0.01em">응급상황 시 Team Play : Leader의 역할분담, MOI(monitor, Oxygen, IV line), Speak up</div>
+
+  <div style="flex:0 0 1.5mm"></div>
+
+  <div style="border-radius:1.6mm;overflow:hidden;box-shadow:0 0 0 .3mm #DCE0E6;flex:0 0 {{ cprH }}mm">
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+      <colgroup><col style="width:11mm"><col style="width:12mm"><col style="width:22mm"><col style="width:95mm"><col style="width:50mm"></colgroup>
+      <tbody>
+        <tr style="height:{{ cprRowH }}mm">
+          <td rowspan="5" style="width:10.5mm;border:.25mm solid #DCE0E6;text-align:center;background:#ECF7F0;font-size:8pt;font-weight:800;color:#1F8A5B;letter-spacing:.02em"><div style="writing-mode:vertical-rl;text-orientation:upright;display:inline-block">CPR 업무분담</div></td>
+          <td style="width:11.5mm;border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">A(CN)</td>
+          <td style="width:21mm;border:.25mm solid #DCE0E6;text-align:center;font-weight:800;color:#C7384A;font-size:{{ cprPt }}pt">리더</td>
+          <td style="width:88mm;border:.25mm solid #DCE0E6;padding:0 2.5mm;font-weight:600;line-height:1.35;color:#0F1115;font-size:{{ cprPt }}pt">역할배분(해당 환자 보호자 응대)</td>
+          <td rowspan="5" style="width:45mm;border:.25mm solid #DCE0E6;padding:1.5mm;text-align:center;vertical-align:middle"><img src="assets/cpr-flow.png" alt="CPR 업무분담 도해" style="max-width:100%;object-fit:contain;height:{{ imgH }}mm"></td>
+        </tr>
+        <tr style="height:{{ cprRowH }}mm">
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">B</td>
+          <td style="border:.25mm solid #DCE0E6;text-align:center;font-weight:800;color:#C7384A;font-size:{{ cprPt }}pt;line-height:1.3">최초발견<br>(담당 간호사) </td>
+          <td style="border:.25mm solid #DCE0E6;padding:0 2.5mm;font-weight:600;line-height:1.35;color:#0F1115;font-size:{{ cprPt }}pt">기록(초기리듬확인, CPR시간 모니터링), 환자정보제공</td>
+        </tr>
+        <tr style="height:{{ cprRowH }}mm">
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">C</td>
+          <td style="border:.25mm solid #DCE0E6;text-align:center;font-weight:800;color:#C7384A;font-size:{{ cprPt }}pt">기도확보</td>
+          <td style="border:.25mm solid #DCE0E6;padding:0 2.5mm;font-weight:600;line-height:1.35;color:#0F1115;font-size:{{ cprPt }}pt">기도개방, 가슴압박(심폐소생술 팀 도착전),<br>산소, 석션, 기도삽관준비</td>
+        </tr>
+        <tr style="height:{{ cprRowH }}mm">
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">D</td>
+          <td style="border:.25mm solid #DCE0E6;text-align:center;font-weight:800;color:#C7384A;font-size:{{ cprPt }}pt">약물투여</td>
+          <td style="border:.25mm solid #DCE0E6;padding:0 2.5mm;font-weight:600;line-height:1.35;color:#0F1115;font-size:{{ cprPt }}pt">IV 확보, 약물투여(Epi 시간 확인)</td>
+        </tr>
+        <tr style="height:{{ cprRowH }}mm">
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#F8F9FB;font-size:7.5pt;font-weight:700;color:#4A5160">E</td>
+          <td style="border:.25mm solid #DCE0E6;text-align:center;font-weight:800;color:#C7384A;font-size:{{ cprPt }}pt">물품지원</td>
+          <td style="border:.25mm solid #DCE0E6;padding:0 2.5mm;font-weight:600;line-height:1.35;color:#0F1115;font-size:{{ cprPt }}pt">검체접수, 동의서, 연락(이송, 검사, 중환자실), 타환자 응대 </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="flex:0 0 3mm"></div>
+
+  <div style="flex:0 0 auto;border-radius:1.6mm;overflow:hidden;box-shadow:0 0 0 .3mm #DCE0E6">
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+      <colgroup><col style="width:11mm"><col style="width:89.5mm"><col style="width:89.5mm"></colgroup>
+      <tbody>
+        <tr style="height:6mm">
+          <td rowspan="3" style="width:10.5mm;border:.25mm solid #DCE0E6;text-align:center;background:#C7384A;color:#fff;font-size:8pt;font-weight:800;letter-spacing:.02em"><div style="writing-mode:vertical-rl;text-orientation:upright;display:inline-block">화재발생시</div></td>
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#FDECE4;font-size:8pt;font-weight:800;color:#C2410C;width:{{ fireDE }}mm">D/E</td>
+          <td style="border:.25mm solid #DCE0E6;text-align:center;background:#FDECE4;font-size:8pt;font-weight:800;color:#C2410C;width:{{ fireN }}mm">N</td>
+        </tr>
+        <tr>
+          <td style="border:.25mm solid #DCE0E6;padding:1mm 2.5mm;vertical-align:top;font-weight:600;line-height:1.4;color:#C7384A;font-size:{{ firePt }}pt">화재 발견 간호사(경보반) : “불이야”를 외치고, 소화전 비상벨을 누른다<br>책임간호사 : -119 활성화 및 대피유도반(산소필요한 환자대피, 가스차단)</td>
+          <td style="border:.25mm solid #DCE0E6;padding:1mm 2.5mm;vertical-align:top;font-weight:600;line-height:1.4;color:#C7384A;font-size:{{ firePt }}pt">화재 발견 간호사(경보반) : “불이야”를 외치고, 소화전 비상벨 누른 후 환자대피 및 화재진압<br>책임간호사 : -119 활성화 및 대피유도반(산소필요한 환자대피, 가스차단)</td>
+        </tr>
+        <tr>
+          <td style="border:.25mm solid #DCE0E6;padding:0.6mm 2.5mm;vertical-align:top;font-weight:600;line-height:1.2;color:#4A5160;font-size:{{ fireSubPt }}pt">A : 대피유도반    <br>B : 소화반<br>C : 대피유도반<br>D : 대피유도반            </td>
+          <td style="border:.25mm solid #DCE0E6;padding:0.6mm 2.5mm;vertical-align:top;font-weight:600;line-height:1.2;color:#4A5160;font-size:{{ fireSubPt }}pt">A : 대피유도반    <br>B : 소화반<br>C : 대피유도반</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="flex:1 1 1.5mm"></div>
+
+  <div style="flex:0 0 6.5mm;display:flex;align-items:center;padding:0 4mm;border-radius:1.6mm;background:#FDECE4;font-size:7.5pt;font-weight:700;color:#C2410C;letter-spacing:-0.01em">화재 시 대피 장소 : 화재발생 병실의 반대 쪽 비상구 계단으로 나가서 피난층(B1,1층,2층,4층,옥상)으로 대비(최종집결지P1주차장)</div>
+
+</div>
+</section>
+</doc-page>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;bandColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#0F1115&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#0F1115&quot;,&quot;#1B4FC3&quot;,&quot;#3182F6&quot;,&quot;#7030A0&quot;],&quot;section&quot;:&quot;제목 띠&quot;},&quot;weekRowH&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:7.2,&quot;min&quot;:6.2,&quot;max&quot;:7.2,&quot;step&quot;:0.2,&quot;unit&quot;:&quot;mm&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;A4 배분 (합계 277mm 고정)&quot;},&quot;eventRowH&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:20,&quot;min&quot;:8,&quot;max&quot;:20,&quot;step&quot;:1,&quot;unit&quot;:&quot;mm&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;A4 배분 (합계 277mm 고정)&quot;},&quot;fireDEWidth&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:82,&quot;min&quot;:70,&quot;max&quot;:96,&quot;step&quot;:2,&quot;unit&quot;:&quot;mm&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;화재발생시 칸&quot;},&quot;fireTextPt&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:7,&quot;min&quot;:5.6,&quot;max&quot;:7.6,&quot;step&quot;:0.2,&quot;unit&quot;:&quot;pt&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;화재발생시 칸&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const FL = ['A(CN)','B','C','D','E'];
+    const ROOMS = {5:['12, 14','1, 2','3, 4','5, 10, 11','6~9'],4:['1, 14','2, 3, 12','4, 5, 11','6~10'],3:['1, 12, 14','2~4, 11','5~10'],2:['','']};
+    const A = [
+      {D:['김지현','박서연','이수민'],E:['최유진','정하늘','강민아','윤채원'],N:['조은비','임소희','한지우']},
+      {D:['김지현','박서연','이수민','오예린'],E:['최유진','정하늘','강민아','윤채원','신다혜'],N:['조은비','임소희','한지우']},
+      {D:['김지현','박서연','이수민','오예린','배수아'],E:['최유진','정하늘','강민아','윤채원','신다혜'],N:['조은비','임소희','문가영']},
+      {D:['김지현','서지안','이수민','오예린','배수아'],E:['최유진','정하늘','강민아','노아름','신다혜'],N:['조은비','임소희','문가영']},
+      {D:['김지현','서지안','이수민','한지우','배수아'],E:['최유진','정하늘','윤채원','노아름','신다혜'],N:['조은비','임소희','문가영']},
+      {D:['박서연','서지안','이수민','한지우','배수아'],E:['최유진','강민아','윤채원','노아름'],N:['조은비','임소희','문가영']},
+      {D:['박서연','서지안','오예린'],E:['최유진','강민아','노아름'],N:['임소희','문가영']}
+    ];
+    const ROV = {'4|D|3':'5, 10'};
+    const WD = ['일','월','화','수','목','금','토'];
+    const days = A.map((_, i) => ({
+      wd: WD[i % 7], md: '8/' + (2 + i),
+      wdColor: i === 0 ? '#C7384A' : (i === 6 ? '#1B4FC3' : '#8A93A1')
+    }));
+    const cell = (di, P, li) => {
+      const list = A[di][P], cnt = list.length, nm = list[li] || '';
+      if (!nm) return {rm:'', nm:''};
+      const rov = ROV[di+'|'+P+'|'+li];
+      return {rm: rov || (ROOMS[cnt] ? (ROOMS[cnt][li] || '') : ''), nm};
+    };
+    const sec = (P, n) => { const rows = []; for (let li=0; li<n; li++) rows.push({lab: FL[li], cells: A.map((_,di) => cell(di,P,li))}); return rows; };
+    const dRows = sec('D',5), eRows = sec('E',5), nRows = sec('N',3);
+    // A4 210×297 · 사방 여백 10mm → 내용 190×277mm. 아래 합계는 항상 277mm.
+    const rowH = this.props.weekRowH ?? 7;
+    const eventH = this.props.eventRowH ?? 14;
+    const weekH = 9 + eventH + 13 * rowH + 6.5;
+    // 고정 블록 합계 112.5mm(제목·물품체크·Team Play·화재 32·대피·간격) + 주간표 + CPR = 277mm
+    const cprH = 277 - 112.5 - weekH;
+    // CPR 칸은 2줄이 들어가야 하므로 행 높이에서 글자 크기를 역산 (5.6~7.5pt)
+    const cprPt = Math.max(5.6, Math.min(7.5, Math.round((cprH / 5 - 1) / 2 / 1.35 / 0.3528 * 10) / 10));
+    const fireDE = this.props.fireDEWidth ?? 82;
+    const firePt = this.props.fireTextPt ?? 7;
+    return {
+      bandColor: this.props.bandColor ?? '#0F1115',
+      rowH, eventH, cprPt,
+      fireDE, fireN: Math.round((176 - fireDE) * 10) / 10,
+      firePt, fireSubPt: Math.round((firePt - 0.2) * 10) / 10,
+      weekH: Math.round(weekH * 100) / 100,
+      cprH: Math.round(cprH * 100) / 100,
+      cprRowH: Math.round(cprH / 5 * 100) / 100,
+      imgH: Math.round((cprH - 5) * 100) / 100,
+      span: '2026. 8. 2 (일) ~ 8. 8 (토) · 5A병동',
+      days,
+      evts: ['','','병동 감염관리 교육 14:00','','','심폐소생술 보수교육',''],
+      mids: ['','문가영','','윤채원','','김지현',''],
+      dRow0: dRows[0].cells, dRest: dRows.slice(1),
+      eRow0: eRows[0].cells, eRest: eRows.slice(1),
+      nRow0: nRows[0].cells, nRest: nRows.slice(1)
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  body{margin:0;background:#e7eaee}
+  a{color:#1976d2;text-decoration:none} a:hover{color:#0b2f7a;text-decoration:underline}
+</style>
+</helmet>
+
+<div style="padding:32px 32px 64px;display:flex;flex-direction:column;gap:34px;font-family:-apple-system,'Malgun Gothic','맑은 고딕','Apple SD Gothic Neo',sans-serif">
+
+<div style="font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;color:#6b7280;text-transform:uppercase">현재 화면 재현 · standalone/assign.html</div>
+
+<!-- ════ 주간 배정표 ════ -->
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font:600 12px/1 ui-monospace,Menlo,monospace;color:#6b7280">1 · 주간 배정표 (scrWeek — 기본 화면)</div>
+<div style="width:1280px;background:#f4f6f9;color:#1f2937;font-size:15px;border:1px solid #cfd5dd;overflow:hidden">
+  <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid #e5e7eb;flex-wrap:wrap">
+    <h1 style="font-size:18px;margin:0">어싸인 배정표</h1>
+    <span style="color:#6b7280;font-size:13px">파일: 배정표_5A병동.json</span>
+    <span style="font-size:12px;color:#1F8A5B">저장됨</span>
+    <span style="margin-left:auto;display:flex;gap:8px">
+      <button style="font:inherit;padding:8px 16px;border:none;background:none;border-radius:8px;cursor:pointer">📋 배정표</button>
+      <button style="font:inherit;padding:8px 16px;border:none;background:none;border-radius:8px;cursor:pointer">⚙ 관리</button>
+    </span>
+  </div>
+  <div style="max-width:1160px;margin:0 auto;padding:14px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <button style="font:inherit;font-size:17px;padding:12px 22px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer">◀ 지난주</button>
+      <span style="font-size:20px;font-weight:800">2026년 8/2 ~ 8 (일~토)</span>
+      <button style="font:inherit;font-size:17px;padding:12px 22px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer">다음주 ▶</button>
+      <button style="font:inherit;padding:8px 16px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer">오늘</button>
+      <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button style="font:inherit;font-size:17px;padding:12px 22px;background:#1976d2;color:#fff;border:1px solid #1976d2;border-radius:8px;font-weight:700;cursor:pointer">🖨 이번 주 인쇄</button>
+        <button style="font:inherit;font-size:17px;padding:12px 22px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer">＋ 새 근무표 넣기</button>
+        <button style="font:inherit;padding:8px 16px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer">✏ 근무표 고치기</button>
+      </span>
+    </div>
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:8px;margin-bottom:14px">
+      <div style="border-left:3px solid #e6a23c;background:#fffaf0;padding:6px 10px;font-size:13px;margin-bottom:8px;white-space:pre-wrap">{{ warnText }}</div>
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;background:#fff">
+        <colgroup><col style="width:56px"><col style="width:58px"><col style="width:5.6%"><col style="width:6.8%"><col style="width:5.6%"><col style="width:6.8%"><col style="width:5.6%"><col style="width:6.8%"><col style="width:5.6%"><col style="width:6.8%"><col style="width:5.6%"><col style="width:6.8%"><col style="width:5.6%"><col style="width:6.8%"><col style="width:5.6%"><col style="width:6.8%"></colgroup>
+        <tbody>
+        <tr>
+          <td rowspan="2" colspan="2" style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;background:#eef1f5;font-weight:700">교육 및<br>행사</td>
+          <sc-for list="{{ dayHead }}" as="d" hint-placeholder-count="7"><th colspan="2" style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;background:#eef1f5;font-weight:700;color:{{ d.color }}">{{ d.wd }}<br>{{ d.md }}</th></sc-for>
+        </tr>
+        <tr>
+          <sc-for list="{{ evtCells }}" as="c" hint-placeholder-count="7"><td colspan="2" style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:12px;color:#334;cursor:pointer;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;background:{{ c.bg }}">{{ c.txt }}</td></sc-for>
+        </tr>
+        </tbody>
+        <tbody>
+        <tr>
+          <td rowspan="5" style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;background:#f7f8fa;font-weight:800;font-size:15px">D</td>
+          <td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;background:#fbfcfd;font-weight:700">A(CN)</td>
+          <sc-for list="{{ dRow0 }}" as="c" hint-placeholder-count="7"><td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:12px;color:#556;cursor:pointer;overflow:hidden;white-space:nowrap;background:{{ c.bg }};box-shadow:{{ c.rmSh }}">{{ c.rm }}</td><td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;font-weight:700;cursor:pointer;overflow:hidden;white-space:nowrap;background:{{ c.bg }};box-shadow:{{ c.nmSh }}">{{ c.nm }}</td></sc-for>
+        </tr>
+        <sc-for list="{{ dRest }}" as="r" hint-placeholder-count="4">
+        <tr>
+          <td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;background:#fbfcfd;font-weight:700">{{ r.lab }}</td>
+          <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="7"><td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:12px;color:#556;cursor:pointer;overflow:hidden;white-space:nowrap;background:{{ c.bg }};box-shadow:{{ c.rmSh }}">{{ c.rm }}</td><td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;font-weight:700;cursor:pointer;overflow:hidden;white-space:nowrap;background:{{ c.bg }};box-shadow:{{ c.nmSh }}">{{ c.nm }}</td></sc-for>
+        </tr>
+        </sc-for>
+        <tr>
+          <td colspan="2" style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;background:#eef1f5;font-weight:700">중간번</td>
+          <sc-for list="{{ midCells }}" as="c" hint-placeholder-count="7"><td colspan="2" style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;overflow:hidden;white-space:nowrap;background:{{ c.bg }}">{{ c.txt }}</td></sc-for>
+        </tr>
+        </tbody>
+        <tbody>
+        <tr>
+          <td rowspan="5" style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;background:#f7f8fa;font-weight:800;font-size:15px">E</td>
+          <td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;background:#fbfcfd;font-weight:700">A(CN)</td>
+          <sc-for list="{{ eRow0 }}" as="c" hint-placeholder-count="7"><td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:12px;color:#556;cursor:pointer;overflow:hidden;white-space:nowrap;background:{{ c.bg }};box-shadow:{{ c.rmSh }}">{{ c.rm }}</td><td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;font-weight:700;cursor:pointer;overflow:hidden;white-space:nowrap;background:{{ c.bg }};box-shadow:{{ c.nmSh }}">{{ c.nm }}</td></sc-for>
+        </tr>
+        <sc-for list="{{ eRest }}" as="r" hint-placeholder-count="4">
+        <tr>
+          <td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;background:#fbfcfd;font-weight:700">{{ r.lab }}</td>
+          <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="7"><td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:12px;color:#556;cursor:pointer;overflow:hidden;white-space:nowrap;background:{{ c.bg }};box-shadow:{{ c.rmSh }}">{{ c.rm }}</td><td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;font-weight:700;cursor:pointer;overflow:hidden;white-space:nowrap;background:{{ c.bg }};box-shadow:{{ c.nmSh }}">{{ c.nm }}</td></sc-for>
+        </tr>
+        </sc-for>
+        </tbody>
+        <tbody>
+        <tr>
+          <td rowspan="3" style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;background:#f7f8fa;font-weight:800;font-size:15px">N</td>
+          <td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;background:#fbfcfd;font-weight:700">A(CN)</td>
+          <sc-for list="{{ nRow0 }}" as="c" hint-placeholder-count="7"><td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:12px;color:#556;cursor:pointer;overflow:hidden;white-space:nowrap;background:{{ c.bg }};box-shadow:{{ c.rmSh }}">{{ c.rm }}</td><td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;font-weight:700;cursor:pointer;overflow:hidden;white-space:nowrap;background:{{ c.bg }};box-shadow:{{ c.nmSh }}">{{ c.nm }}</td></sc-for>
+        </tr>
+        <sc-for list="{{ nRest }}" as="r" hint-placeholder-count="2">
+        <tr>
+          <td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;background:#fbfcfd;font-weight:700">{{ r.lab }}</td>
+          <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="7"><td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:12px;color:#556;cursor:pointer;overflow:hidden;white-space:nowrap;background:{{ c.bg }};box-shadow:{{ c.rmSh }}">{{ c.rm }}</td><td style="border:1px solid #9aa4b2;padding:4px 3px;text-align:center;font-size:14px;font-weight:700;cursor:pointer;overflow:hidden;white-space:nowrap;background:{{ c.bg }};box-shadow:{{ c.nmSh }}">{{ c.nm }}</td></sc-for>
+        </tr>
+        </sc-for>
+        </tbody>
+      </table>
+      <div style="color:#6b7280;font-size:13px;margin-top:6px">이름 클릭 = 담당 교체 · 방 칸 클릭 = 그날 병상 수정 · 맨 윗줄(교육·행사) 클릭 = 내용 입력 · 빨간 밑줄 = 수동으로 바꾼 칸</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ════ 시작 화면 ════ -->
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font:600 12px/1 ui-monospace,Menlo,monospace;color:#6b7280">2 · 시작 화면 (scrStart)</div>
+<div style="width:1280px;background:#f4f6f9;color:#1f2937;font-size:15px;border:1px solid #cfd5dd">
+  <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid #e5e7eb">
+    <h1 style="font-size:18px;margin:0">어싸인 배정표</h1>
+    <span style="margin-left:auto;display:flex;gap:8px">
+      <button style="font:inherit;padding:8px 16px;border:none;background:none;cursor:pointer">📋 배정표</button>
+      <button style="font:inherit;padding:8px 16px;border:none;background:none;cursor:pointer">⚙ 관리</button>
+    </span>
+  </div>
+  <div style="text-align:center;padding:7vh 14px 60px">
+    <div style="display:inline-block;text-align:left;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:28px 34px;box-shadow:0 4px 18px rgba(0,0,0,.06)">
+      <h2 style="margin:0 0 6px;font-size:22px">어싸인 배정표</h2>
+      <div style="color:#6b7280;font-size:13px">데이터 파일을 열면 바로 이번 주 배정표가 나옵니다.</div>
+      <button style="display:block;width:100%;margin:10px 0;font:inherit;font-size:17px;padding:14px;background:#1976d2;color:#fff;border:1px solid #1976d2;border-radius:8px;font-weight:700;cursor:pointer">▶ 이어서 시작</button>
+      <button style="display:block;width:100%;margin:10px 0;font:inherit;font-size:17px;padding:14px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer">📂 데이터 파일 열기</button>
+      <button style="display:block;width:100%;margin:10px 0;font:inherit;font-size:17px;padding:14px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer">＋ 처음 시작 (새 데이터 파일 만들기)</button>
+      <div style="font-size:14px;color:#556;line-height:1.9;margin-top:14px">
+        · 파일은 공용 폴더(내부망 NAS)에 두면 어느 컴퓨터에서나 같은 내용을 봅니다.<br>
+        · 브라우저가 "파일을 볼 수 있도록 허용하시겠습니까?" 라고 물으면 <b>허용</b>을 누르세요.<br>
+        · 데이터 파일(.json)을 이 창에 끌어다 놓아도 열립니다.
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ════ 새 근무표 넣기 ════ -->
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font:600 12px/1 ui-monospace,Menlo,monospace;color:#6b7280">3 · 새 근무표 넣기 (scrPaste)</div>
+<div style="width:1280px;background:#f4f6f9;color:#1f2937;font-size:15px;border:1px solid #cfd5dd">
+  <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid #e5e7eb">
+    <h1 style="font-size:18px;margin:0">어싸인 배정표</h1>
+    <span style="margin-left:auto;display:flex;gap:8px">
+      <button style="font:inherit;padding:8px 16px;border:none;background:none;cursor:pointer">📋 배정표</button>
+      <button style="font:inherit;padding:8px 16px;border:none;background:none;cursor:pointer">⚙ 관리</button>
+    </span>
+  </div>
+  <div style="max-width:1160px;margin:0 auto;padding:14px">
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px">
+      <div style="font-size:17px;line-height:2.1">
+        <b style="color:#1B4FC3">1.</b> 엑셀에서 근무표를 마우스로 긁어 복사하세요 (<b style="color:#1B4FC3">Ctrl+C</b>)<br>
+        <b style="color:#1B4FC3">2.</b> 이 창을 클릭한 다음 <b style="color:#1B4FC3">Ctrl+V</b> 를 누르세요<br>
+        <span style="color:#6b7280;font-size:13px">엑셀 파일(.xlsx)을 이 창에 끌어다 놓아도 됩니다. 이름 열과 날짜 줄은 자동으로 알아봅니다.<br>
+        트레이닝 중인 선생님의 근무는 <b style="color:#1B4FC3">/D /E /N</b> 으로 적어주세요 — 표시는 되지만 인력·어싸인에는 세지 않습니다.</span>
+      </div>
+      <div style="font-size:17px;font-weight:700;margin-top:12px">16명 · 8/1 ~ 8/31 · 새 이름 0명</div>
+      <div style="margin-top:6px">이 근무표의 시작:
+        <input type="text" value="2026" style="font:inherit;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;width:76px"> 년
+        <select style="font:inherit;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"><option>8</option></select> 월
+        <span style="color:#6b7280;font-size:13px">— 날짜 줄에 연·월이 없으면 꼭 확인해주세요</span>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:10px">
+        <button style="font:inherit;font-size:17px;padding:12px 22px;background:#1976d2;color:#fff;border:1px solid #1976d2;border-radius:8px;font-weight:700;cursor:pointer">✔ 맞아요, 저장</button>
+        <button style="font:inherit;font-size:17px;padding:12px 22px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer">↩ 다시</button>
+        <button style="font:inherit;padding:8px 16px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer">돌아가기</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ════ 근무표 고치기 ════ -->
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font:600 12px/1 ui-monospace,Menlo,monospace;color:#6b7280">4 · 근무표 고치기 (scrEdit)</div>
+<div style="width:1280px;background:#f4f6f9;color:#1f2937;font-size:15px;border:1px solid #cfd5dd">
+  <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid #e5e7eb">
+    <h1 style="font-size:18px;margin:0">어싸인 배정표</h1>
+    <span style="margin-left:auto;display:flex;gap:8px">
+      <button style="font:inherit;padding:8px 16px;border:none;background:none;cursor:pointer">📋 배정표</button>
+      <button style="font:inherit;padding:8px 16px;border:none;background:none;cursor:pointer">⚙ 관리</button>
+    </span>
+  </div>
+  <div style="max-width:1160px;margin:0 auto;padding:14px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <button style="font:inherit;padding:8px 16px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer">◀</button>
+      <span style="font-size:20px;font-weight:800">2026년 8월</span>
+      <button style="font:inherit;padding:8px 16px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer">▶</button>
+      <span style="color:#6b7280;font-size:13px">셀 클릭 후 D/E/N/O 키 입력 · 드래그 범위 · 더블클릭 직접 입력(D/A 선입력, 트레이닝=/D — 인력 제외) · Ctrl+Z</span>
+      <span style="margin-left:auto"><button style="font:inherit;padding:8px 16px;background:#1976d2;color:#fff;border:1px solid #1976d2;border-radius:8px;font-weight:700;cursor:pointer">✔ 배정표 보기</button></span>
+    </div>
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:8px">
+      <div style="margin-bottom:6px">
+        <sc-for list="{{ legend }}" as="g" hint-placeholder-count="20"><span style="display:inline-block;padding:1px 7px;border-radius:3px;margin-right:3px;font-weight:600;font-size:11px;background:{{ g.bg }};color:{{ g.fg }}">{{ g.k }}</span></sc-for>
+      </div>
+      <div style="overflow:auto;max-height:62vh;border:1px solid #ccd;background:#fff;position:relative">
+        <table style="border-collapse:separate;border-spacing:0;font-size:12px">
+          <thead>
+            <tr>
+              <th style="border-right:1px solid #e3e6ea;border-bottom:1px solid #e3e6ea;padding:2px 8px;height:24px;box-sizing:border-box;white-space:nowrap;position:sticky;left:0;top:0;z-index:4;background:#f4f6f8;min-width:78px;text-align:left;font-weight:600">이름</th>
+              <sc-for list="{{ edDays }}" as="d" hint-placeholder-count="31"><th style="border-right:1px solid #e3e6ea;border-bottom:1px solid #e3e6ea;padding:2px 4px;min-width:30px;height:24px;box-sizing:border-box;white-space:nowrap;text-align:center;position:sticky;top:0;z-index:3;background:#f4f6f8;font-weight:600;color:{{ d.color }}">{{ d.d }}<br><span style="font-weight:400">{{ d.wd }}</span></th></sc-for>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ edRows }}" as="r" hint-placeholder-count="16">
+            <tr>
+              <th style="border-right:1px solid #e3e6ea;border-bottom:1px solid #e3e6ea;padding:2px 8px;height:24px;box-sizing:border-box;white-space:nowrap;position:sticky;left:0;z-index:2;background:#fafbfc;min-width:78px;text-align:left;font-weight:500;cursor:pointer">{{ r.nm }}</th>
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="31"><td style="border-right:1px solid #e3e6ea;border-bottom:1px solid #e3e6ea;padding:0;text-align:center;min-width:30px;height:24px;box-sizing:border-box;white-space:nowrap;cursor:cell;user-select:none;font-weight:600;background:{{ c.bg }};color:{{ c.fg }};text-decoration:{{ c.dec }};outline:{{ c.out }};outline-offset:-2px">{{ c.v }}</td></sc-for>
+            </tr>
+            </sc-for>
+          </tbody>
+          <tfoot>
+            <sc-for list="{{ edFoot }}" as="f" hint-placeholder-count="3">
+            <tr>
+              <th style="border-right:1px solid #e3e6ea;border-bottom:1px solid #e3e6ea;padding:2px 8px;height:24px;box-sizing:border-box;white-space:nowrap;position:sticky;bottom:0;left:0;z-index:4;background:#f4f6f8;min-width:78px;text-align:left;font-size:11px;font-weight:600">{{ f.lab }}</th>
+              <sc-for list="{{ f.cells }}" as="c" hint-placeholder-count="31"><td style="border-right:1px solid #e3e6ea;border-bottom:1px solid #e3e6ea;padding:0;text-align:center;min-width:30px;height:24px;box-sizing:border-box;white-space:nowrap;position:sticky;bottom:0;z-index:3;background:#f4f6f8;font-size:11px;color:{{ c.color }};font-weight:{{ c.weight }}">{{ c.v }}</td></sc-for>
+            </tr>
+            </sc-for>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ════ 관리 ════ -->
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font:600 12px/1 ui-monospace,Menlo,monospace;color:#6b7280">5 · 관리 (scrAdmin) — 첫 항목만 펼쳐진 기본 상태</div>
+<div style="width:1280px;background:#f4f6f9;color:#1f2937;font-size:15px;border:1px solid #cfd5dd">
+  <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid #e5e7eb">
+    <h1 style="font-size:18px;margin:0">어싸인 배정표</h1>
+    <span style="margin-left:auto;display:flex;gap:8px">
+      <button style="font:inherit;padding:8px 16px;border:none;background:none;cursor:pointer">📋 배정표</button>
+      <button style="font:inherit;padding:8px 16px;border:none;background:none;cursor:pointer">⚙ 관리</button>
+    </span>
+  </div>
+  <div style="max-width:1160px;margin:0 auto;padding:14px">
+    <div style="margin-bottom:10px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px">
+      <div style="cursor:pointer;font-weight:700;font-size:15px">▾ 지난 어싸인 직접 입력 <span style="color:#6b7280;font-size:13px;font-weight:400">— 근무표에 지난 기록이 없을 때 시작점 (기록이 있으면 그쪽이 우선)</span></div>
+      <table style="margin-top:8px;border-collapse:collapse">
+        <tbody>
+        <tr><th style="text-align:left;padding:3px 6px">간호사</th><th style="text-align:left;padding:3px 6px">마지막 어싸인 (배정표 표기 B~E)</th><th style="text-align:left;padding:3px 6px">근무</th></tr>
+        <sc-for list="{{ seedRows }}" as="r" hint-placeholder-count="5">
+        <tr>
+          <td style="padding:3px 6px;font-weight:700;min-width:70px">{{ r.nm }}</td>
+          <td style="padding:3px 6px"><sc-for list="{{ r.labs }}" as="b" hint-placeholder-count="5"><button style="font:inherit;min-width:2.6em;padding:6px 10px;margin:1px;border:1px solid {{ b.bd }};background:{{ b.bg }};color:{{ b.fg }};border-radius:8px;font-weight:{{ b.fw }};cursor:pointer">{{ b.t }}</button></sc-for></td>
+          <td style="padding:3px 6px"><sc-for list="{{ r.pers }}" as="b" hint-placeholder-count="3"><button style="font:inherit;min-width:2.6em;padding:6px 10px;margin:1px;border:1px solid {{ b.bd }};background:{{ b.bg }};color:{{ b.fg }};border-radius:8px;font-weight:{{ b.fw }};cursor:pointer">{{ b.t }}</button></sc-for></td>
+        </tr>
+        </sc-for>
+        <tr><td colspan="3" style="padding:3px 6px;color:#6b7280;font-size:13px">차지(A(CN))였던 사람은 '없음'으로 두세요 — 차지는 매일 자동 결정됩니다</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <sc-for list="{{ adminRows }}" as="s" hint-placeholder-count="8">
+    <div style="margin-bottom:10px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px">
+      <div style="cursor:pointer;font-weight:700;font-size:15px">▸ {{ s.t }} <span style="color:#6b7280;font-size:13px;font-weight:400">{{ s.sub }}</span></div>
+    </div>
+    </sc-for>
+  </div>
+</div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const SHIFTS = {
+      DC:{bg:'#E2ECFD',fg:'#1B4FC3'}, D:{bg:'#EEF3FE',fg:'#1B4FC3'}, D1:{bg:'#F0F6FF',fg:'#2563EB'},
+      EC:{bg:'#FCE3E5',fg:'#C7384A'}, E:{bg:'#FEEFEF',fg:'#C7384A'}, '중':{bg:'#FBF3E2',fg:'#B7791F'},
+      NC:{bg:'#E7E0F8',fg:'#5B3FB0'}, N:{bg:'#EFEBFB',fg:'#5B3FB0'},
+      OF:{bg:'#F2F3F5',fg:'#8A93A1'}, '주':{bg:'#EDEFF3',fg:'#4A5160'}, P1:{bg:'#E3F4F4',fg:'#2C7A7B'},
+      V:{bg:'#ECF7F0',fg:'#1F8A5B'}, '생':{bg:'#FCEAF1',fg:'#B83280'}, '특':{bg:'#F1ECFB',fg:'#6D4AC0'},
+      '공':{bg:'#E8F5EE',fg:'#1F8A5B'}, '법':{bg:'#FDEEE5',fg:'#C2410C'}, '병':{bg:'#FEEAEA',fg:'#C7384A'},
+      '/D':{bg:'#F5F7FA',fg:'#94A3B8'}, '/E':{bg:'#F5F7FA',fg:'#94A3B8'}, '/N':{bg:'#F5F7FA',fg:'#94A3B8'}
+    };
+    const FL = ['A(CN)','B','C','D','E'];
+    const ROOMS = {5:['12, 14','1, 2','3, 4','5, 10, 11','6~9'],4:['1, 14','2, 3, 12','4, 5, 11','6~10'],3:['1, 12, 14','2~4, 11','5~10'],2:['','']};
+    const TODAY = 2, TBG = '#fffef2';
+    const dayHead = [
+      {wd:'일',md:'8/2',color:'#c7384a'},{wd:'월',md:'8/3',color:'inherit'},{wd:'화',md:'8/4',color:'inherit'},
+      {wd:'수',md:'8/5',color:'inherit'},{wd:'목',md:'8/6',color:'inherit'},{wd:'금',md:'8/7',color:'inherit'},
+      {wd:'토',md:'8/8',color:'#1B4FC3'}
+    ];
+    const A = [
+      {D:['김지현','박서연','이수민'],E:['최유진','정하늘','강민아','윤채원'],N:['조은비','임소희','한지우']},
+      {D:['김지현','박서연','이수민','오예린'],E:['최유진','정하늘','강민아','윤채원','신다혜'],N:['조은비','임소희','한지우']},
+      {D:['김지현','박서연','이수민','오예린','배수아'],E:['최유진','정하늘','강민아','윤채원','신다혜'],N:['조은비','임소희','문가영']},
+      {D:['김지현','서지안','이수민','오예린','배수아'],E:['최유진','정하늘','강민아','노아름','신다혜'],N:['조은비','임소희','문가영']},
+      {D:['김지현','서지안','이수민','한지우','배수아'],E:['최유진','정하늘','윤채원','노아름','신다혜'],N:['조은비','임소희','문가영']},
+      {D:['박서연','서지안','이수민','한지우','배수아'],E:['최유진','강민아','윤채원','노아름'],N:['조은비','임소희','문가영']},
+      {D:['박서연','서지안','오예린'],E:['최유진','강민아','노아름'],N:['임소희','문가영']}
+    ];
+    const OVD = {'3|D|1':1};
+    const ROV = {'4|D|3':'5, 10'};
+    const mkRow = (P, li) => ({
+      lab: FL[li],
+      cells: A.map((day, di) => {
+        const list = day[P], cnt = list.length, nm = list[li] || '';
+        const bg = di === TODAY ? TBG : 'transparent';
+        if (!nm) return {rm:'',nm:'',bg,rmSh:'none',nmSh:'none'};
+        const rov = ROV[di+'|'+P+'|'+li];
+        return {
+          rm: rov || (ROOMS[cnt] ? (ROOMS[cnt][li] || '') : ''),
+          nm, bg,
+          rmSh: rov ? 'inset 0 -2px 0 #1976d2' : 'none',
+          nmSh: OVD[di+'|'+P+'|'+li] ? 'inset 0 -2px 0 #c7384a' : 'none'
+        };
+      })
+    });
+    const sec = (P, n) => { const rows = []; for (let i=0;i<n;i++) rows.push(mkRow(P,i)); return rows; };
+    const dRows = sec('D',5), eRows = sec('E',5), nRows = sec('N',3);
+    const events = ['','','병동 감염관리 교육 14:00','','','심폐소생술 보수교육',''];
+    const mids = ['','문가영','','윤채원','','김지현',''];
+
+    // ── 근무표 고치기: 2026-08 (31일)
+    const WD = ['일','월','화','수','목','금','토'];
+    const REQ = {mon:{D:4,E:5,N:3},tue:{D:5,E:5,N:3},wed:{D:5,E:5,N:3},thu:{D:5,E:5,N:3},fri:{D:5,E:4,N:3},sat:{D:3,E:3,N:2},sun:{D:3,E:4,N:3}};
+    const WKMAP = ['sun','mon','tue','wed','thu','fri','sat'];
+    const NUR = ['김지현','박서연','이수민','최유진','정하늘','강민아','윤채원','조은비','임소희','한지우','오예린','신다혜','배수아','문가영','서지안','노아름'];
+    const CYC = ['D','D','E','E','OF','N','N','OF','주','D','E','OF','V','D','E','N','OF','주'];
+    const edDays = [];
+    for (let d=1; d<=31; d++) { const w = new Date(2026,7,d).getDay();
+      edDays.push({d, wd:WD[w], color: w===0?'#c7384a':(w===6?'#1B4FC3':'inherit')}); }
+    const raw = NUR.map((n,i) => edDays.map((_,c) => {
+      let v = CYC[(c + i*5) % CYC.length];
+      if (i < 5 && v === 'D' && (c+i) % 6 === 0) v = 'DC';
+      if (i < 6 && v === 'E' && (c+i) % 7 === 0) v = 'EC';
+      if (i > 6 && v === 'N' && (c+i) % 5 === 0) v = 'NC';
+      if (i === 11 && c % 9 === 3) v = '중';
+      return v;
+    }));
+    const edRows = NUR.map((n,i) => ({
+      nm: n,
+      cells: raw[i].map((v,c) => {
+        const s = SHIFTS[v] || {bg:'transparent',fg:'inherit'};
+        return {v, bg:s.bg, fg:s.fg, dec:'none', out: (i===0&&c===0) ? '2px solid #0b2f7a' : 'none'};
+      })
+    }));
+    const edFoot = ['D','E','N'].map(k => ({
+      lab: k + ' 인원',
+      cells: edDays.map((dd,c) => {
+        let n = 0;
+        for (let i=0;i<NUR.length;i++) { const v = raw[i][c];
+          if (k==='D' && (v==='D'||v==='DC'||v==='D1')) n++;
+          if (k==='E' && (v==='E'||v==='EC')) n++;
+          if (k==='N' && (v==='N'||v==='NC')) n++; }
+        const need = REQ[WKMAP[new Date(2026,7,dd.d).getDay()]][k];
+        if (n !== need && (n || need)) return {v: n+'/'+need, color:'#c7384a', weight:'800'};
+        return {v: n || '', color: SHIFTS[k].fg, weight:'600'};
+      })
+    }));
+
+    const seg = (t, on) => ({t, bg: on?'#1976d2':'#fff', fg: on?'#fff':'#1f2937', bd: on?'#1976d2':'#cbd5e1', fw: on?'700':'400'});
+    const seedRows = ['김지현','박서연','이수민','최유진','정하늘'].map((n,i) => ({
+      nm: n,
+      labs: ['A','B','C','D','없음'].map((v,j) => seg(v==='없음'?'없음':FL[['A','B','C','D'].indexOf(v)+1], j === (i%5))),
+      pers: ['D','E','N'].map((v,j) => seg(v, j === (i%3)))
+    }));
+    const adminRows = [
+      {t:'주간 배정표 파일(xlsx) 내려받기', sub:"— '병실 배정표' 양식 그대로, 엑셀에서 수정 가능"},
+      {t:'방 구성', sub:'— 근무 인원수별 어싸인 방 배정'},
+      {t:'병실 목록', sub:'— 호실·병상수 커스터마이징 (다른 병동은 여기서 통째로 교체)'},
+      {t:'배정 원칙', sub:''},
+      {t:'간호사 관리 — 가능 근무·차지', sub:'— DC/EC/NC = 그 시간대 차지 가능'},
+      {t:'요일별 필요 인원', sub:'— 근무표 고치기 화면에서 미달·초과를 빨갛게 표시'},
+      {t:'수동 수정 관리', sub:''},
+      {t:'데이터 파일', sub:''}
+    ];
+
+    return {
+      dayHead,
+      evtCells: events.map((txt,di) => ({txt, bg: di===TODAY?TBG:'transparent'})),
+      midCells: mids.map((txt,di) => ({txt, bg: di===TODAY?TBG:'transparent'})),
+      dRow0: dRows[0].cells, dRest: dRows.slice(1),
+      eRow0: eRows[0].cells, eRest: eRows.slice(1),
+      nRow0: nRows[0].cells, nRest: nRows.slice(1),
+      warnText: '⚠ 확인 필요\n· 8/5 노아름: E — 가능 근무가 아님 (⚙ 관리 > 간호사 관리)\n· 8/6 D 배수아: 12호 — 주지 않을 방인데 배정됨 (대안 없음)',
+      legend: Object.keys(SHIFTS).map(k => ({k, bg: SHIFTS[k].bg, fg: SHIFTS[k].fg})),
+      edDays, edRows, edFoot, seedRows, adminRows
+    };
+  }
+}
+</script>
+</body>
+</html>
