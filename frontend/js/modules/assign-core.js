@@ -36,7 +36,9 @@
    * @param dateKeys 시간순 날짜키 배열 (연속성 위해 전월 이월일 포함 가능)
    * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff,bounceAfterOff},
    *                  overrides:{dateKey:{P:{nurseId:label}}},
-   *                  seed:{nurseId:{label,period,idx}}}  idx<0 = 전월 (말일=-1) — 연속성 이월
+   *                  seed:{nurseId:{label,period,idx}},   idx<0 = 전월 (말일=-1) — 연속성 이월
+   *                  avoid:{dateKey:{P:{nurseId:[label]}}}}  금지 방 등 회피 라벨 (소프트 —
+   *                  대안 없으면 그대로 배정, 수동 오버라이드·DC/EC/NC 표시자는 회피 무시)
    * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId]}}},
    *           byNurse:{nurseId:{dk:{period,label}}}}
    */
@@ -49,6 +51,7 @@
     // 원칙3(유지)·원칙4(튕기기)는 반대 개념 — 동시 켜지면 원칙3만 적용
     if (rules.keepAfterOff && rules.bounceAfterOff) rules.bounceAfterOff = false;
     const overrides = opts.overrides || {};
+    const avoid = opts.avoid || {};
     const byDay = {}, byNurse = {};
     const lastSeen = {}; // nurseId -> {label, idx, period}
     // 전월 연속성 시드 — 전월에 마지막으로 본 방을 상대 idx로 주입하면 원칙1~4가 월 경계를 넘어 작동.
@@ -70,19 +73,22 @@
         if (!staff.length) continue;
 
         const labels = LABELS.slice(0, Math.min(staff.length, 5));
+        const av = (avoid[dk] || {})[P] || {};
+        const avOk = function (nid, label) { return (av[nid] || []).indexOf(label) < 0; };
         const assigned = {}; // label -> nurse
         const taken = {};    // nurseId -> true
         const freeLabels = function () {
           return labels.filter(function (l) { return !assigned[l]; });
         };
 
-        // 0) 수동 오버라이드 최우선
+        // 0) 수동 오버라이드 최우선 (회피 라벨보다도 우선 — 복구 패스에서 건드리지 않음)
         const ov = (overrides[dk] || {})[P] || {};
+        const ovIds = {};
         for (const nid in ov) {
           const nurse = staff.find(function (n) { return n.id === nid; });
           const label = ov[nid];
           if (nurse && labels.indexOf(label) >= 0 && !assigned[label]) {
-            assigned[label] = nurse; taken[nid] = true;
+            assigned[label] = nurse; taken[nid] = true; ovIds[nid] = true;
           }
         }
 
@@ -93,9 +99,9 @@
           });
           if (!c) {
             const pool = staff.filter(function (n) { return !taken[n.id] && chargeOk(n, P); });
-            const cand = (pool.length ? pool : staff.filter(function (n) { return !taken[n.id]; }))
-              .slice().sort(function (a, b) { return a.seniority - b.seniority; });
-            c = cand[0];
+            const pref = pool.filter(function (n) { return avOk(n.id, '차지'); });
+            const base = pref.length ? pref : (pool.length ? pool : staff.filter(function (n) { return !taken[n.id]; }));
+            c = base.slice().sort(function (a, b) { return a.seniority - b.seniority; })[0];
           }
           if (c) { assigned['차지'] = c; taken[c.id] = true; }
         }
@@ -113,7 +119,7 @@
             const n = staff[s];
             if (taken[n.id]) continue;
             const info = lastSeen[n.id];
-            if (info && tiers[t](info) && free.indexOf(info.label) >= 0) {
+            if (info && tiers[t](info) && free.indexOf(info.label) >= 0 && avOk(n.id, info.label)) {
               (claims[info.label] = claims[info.label] || []).push({ n: n, info: info });
             }
           }
@@ -131,19 +137,35 @@
           .sort(function (a, b) { return a.seniority - b.seniority; });
         const rem = freeLabels();
         for (let i = 0; i < rem.length && leftover.length; i++) {
-          let pick = 0;
-          if (rules.bounceAfterOff) {
-            const alt = leftover.findIndex(function (n) {
-              const info = lastSeen[n.id];
-              return !(info && info.label === rem[i] && info.idx < idx - 1);
-            });
-            if (alt >= 0) pick = alt;
-          }
+          const bounceOk = function (n) {
+            if (!rules.bounceAfterOff) return true;
+            const info = lastSeen[n.id];
+            return !(info && info.label === rem[i] && info.idx < idx - 1);
+          };
+          // 회피 라벨(금지 방)과 원칙4 둘 다 통과 → 회피만 통과 → 아무나 (미충원 방지)
+          let pick = leftover.findIndex(function (n) { return avOk(n.id, rem[i]) && bounceOk(n); });
+          if (pick < 0) pick = leftover.findIndex(function (n) { return avOk(n.id, rem[i]); });
+          if (pick < 0) pick = 0;
           const n = leftover.splice(pick, 1)[0];
           assigned[rem[i]] = n; taken[n.id] = true;
         }
         // 6인 이상: 라벨 소진 후 잔여 인원은 어싸인 없음(헬퍼)
         const extra = leftover.map(function (n) { return n.id; });
+
+        // 회피 라벨 복구: 회피 라벨에 배정된 간호사를 서로 문제 없는 상대와 맞교환.
+        // 연속성(원칙1~3)보다 회피(금지 방)가 우선 — 수동 오버라이드·차지는 건드리지 않음.
+        for (const l in assigned) {
+          if (l === '차지') continue;
+          const n = assigned[l];
+          if (avOk(n.id, l) || ovIds[n.id]) continue;
+          for (const l2 in assigned) {
+            if (l2 === l || l2 === '차지') continue;
+            const m = assigned[l2];
+            if (!ovIds[m.id] && avOk(n.id, l2) && avOk(m.id, l)) {
+              assigned[l] = m; assigned[l2] = n; break;
+            }
+          }
+        }
 
         const labelMap = {};
         for (const l in assigned) {

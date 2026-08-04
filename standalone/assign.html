@@ -97,9 +97,11 @@
   .schemeRow input{width:68%}
 
   /* ── 픽커 팝업 ── */
-  #pick{display:none;position:absolute;z-index:120;background:#fff;border:1px solid #94a3b8;border-radius:12px;
+  #pick,#rpick{display:none;position:absolute;z-index:120;background:#fff;border:1px solid #94a3b8;border-radius:12px;
         box-shadow:0 8px 26px rgba(0,0,0,.2);padding:12px;font-size:15px}
-  #pick button{margin:3px;min-width:3em;font-size:16px;padding:8px 14px}
+  #pick button,#rpick button{margin:3px;min-width:3em;font-size:16px;padding:8px 14px}
+  #rpick{max-width:420px}
+  #rpick button.on{background:#1976d2;color:#fff;border-color:#1976d2;font-weight:700}
 
   #toast{position:fixed;right:14px;bottom:14px;background:#111;color:#7f7;padding:10px 16px;border-radius:8px;
          font-size:14px;display:none;z-index:200;max-width:60vw}
@@ -185,7 +187,8 @@
     <div class="guide">
       <b>1.</b> 엑셀에서 근무표를 마우스로 긁어 복사하세요 (<b>Ctrl+C</b>)<br>
       <b>2.</b> 이 창을 클릭한 다음 <b>Ctrl+V</b> 를 누르세요<br>
-      <span class="dim">엑셀 파일(.xlsx)을 이 창에 끌어다 놓아도 됩니다. 이름 열과 날짜 줄은 자동으로 알아봅니다.</span>
+      <span class="dim">엑셀 파일(.xlsx)을 이 창에 끌어다 놓아도 됩니다. 이름 열과 날짜 줄은 자동으로 알아봅니다.<br>
+      트레이닝 중인 선생님의 근무는 <b>/D /E /N</b> 으로 적어주세요 — 표시는 되지만 인력·어싸인에는 세지 않습니다.</span>
     </div>
     <div id="pvInfo" style="font-size:17px;font-weight:700;margin-top:12px"></div>
     <div id="pvYM" style="display:none;margin-top:6px">
@@ -209,7 +212,7 @@
     <button onclick="moveEditMonth(-1)">◀</button>
     <span class="title" id="edTitle"></span>
     <button onclick="moveEditMonth(1)">▶</button>
-    <span class="dim">셀 클릭 후 D/E/N/O 키 입력 · 드래그 범위 · 더블클릭 직접 입력(D/A 선입력) · Ctrl+Z</span>
+    <span class="dim">셀 클릭 후 D/E/N/O 키 입력 · 드래그 범위 · 더블클릭 직접 입력(D/A 선입력, 트레이닝=/D — 인력 제외) · Ctrl+Z</span>
     <span style="margin-left:auto"><button class="pri" onclick="show('week')">✔ 배정표 보기</button></span>
   </div>
   <div class="card" style="padding:8px">
@@ -234,6 +237,12 @@
     <summary>방 구성 <span class="dim">— 근무 인원수별 어싸인 방 배정</span></summary>
     <div id="schemes" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px"></div>
     <div style="margin-top:8px"><button onclick="resetSchemes()">기본값 복원</button></div>
+  </details>
+  <details>
+    <summary>병실 목록 <span class="dim">— 호실·병상수 커스터마이징 (다른 병동은 여기서 통째로 교체)</span></summary>
+    <table id="roomTable" style="margin-top:8px"></table>
+    <div style="margin-top:8px"><button onclick="addRoom()">＋ 방 추가</button>
+      <span class="dim">호실을 바꾸면 위의 '방 구성' 호실도 같이 맞춰주세요</span></div>
   </details>
   <details>
     <summary>배정 원칙</summary>
@@ -276,6 +285,7 @@
 <div id="drop">파일을 놓으세요 (.xlsx 근무표 / .json 데이터)</div>
 <div id="toast"></div>
 <div id="pick"></div>
+<div id="rpick"></div>
 
 <script>
 /*ASSIGN_CORE_BEGIN*/
@@ -303,7 +313,9 @@
    * @param dateKeys 시간순 날짜키 배열 (연속성 위해 전월 이월일 포함 가능)
    * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff,bounceAfterOff},
    *                  overrides:{dateKey:{P:{nurseId:label}}},
-   *                  seed:{nurseId:{label,period,idx}}}  idx<0 = 전월 (말일=-1) — 연속성 이월
+   *                  seed:{nurseId:{label,period,idx}},   idx<0 = 전월 (말일=-1) — 연속성 이월
+   *                  avoid:{dateKey:{P:{nurseId:[label]}}}}  금지 방 등 회피 라벨 (소프트 —
+   *                  대안 없으면 그대로 배정, 수동 오버라이드·DC/EC/NC 표시자는 회피 무시)
    * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId]}}},
    *           byNurse:{nurseId:{dk:{period,label}}}}
    */
@@ -316,6 +328,7 @@
     // 원칙3(유지)·원칙4(튕기기)는 반대 개념 — 동시 켜지면 원칙3만 적용
     if (rules.keepAfterOff && rules.bounceAfterOff) rules.bounceAfterOff = false;
     const overrides = opts.overrides || {};
+    const avoid = opts.avoid || {};
     const byDay = {}, byNurse = {};
     const lastSeen = {}; // nurseId -> {label, idx, period}
     // 전월 연속성 시드 — 전월에 마지막으로 본 방을 상대 idx로 주입하면 원칙1~4가 월 경계를 넘어 작동.
@@ -337,19 +350,22 @@
         if (!staff.length) continue;
 
         const labels = LABELS.slice(0, Math.min(staff.length, 5));
+        const av = (avoid[dk] || {})[P] || {};
+        const avOk = function (nid, label) { return (av[nid] || []).indexOf(label) < 0; };
         const assigned = {}; // label -> nurse
         const taken = {};    // nurseId -> true
         const freeLabels = function () {
           return labels.filter(function (l) { return !assigned[l]; });
         };
 
-        // 0) 수동 오버라이드 최우선
+        // 0) 수동 오버라이드 최우선 (회피 라벨보다도 우선 — 복구 패스에서 건드리지 않음)
         const ov = (overrides[dk] || {})[P] || {};
+        const ovIds = {};
         for (const nid in ov) {
           const nurse = staff.find(function (n) { return n.id === nid; });
           const label = ov[nid];
           if (nurse && labels.indexOf(label) >= 0 && !assigned[label]) {
-            assigned[label] = nurse; taken[nid] = true;
+            assigned[label] = nurse; taken[nid] = true; ovIds[nid] = true;
           }
         }
 
@@ -360,9 +376,9 @@
           });
           if (!c) {
             const pool = staff.filter(function (n) { return !taken[n.id] && chargeOk(n, P); });
-            const cand = (pool.length ? pool : staff.filter(function (n) { return !taken[n.id]; }))
-              .slice().sort(function (a, b) { return a.seniority - b.seniority; });
-            c = cand[0];
+            const pref = pool.filter(function (n) { return avOk(n.id, '차지'); });
+            const base = pref.length ? pref : (pool.length ? pool : staff.filter(function (n) { return !taken[n.id]; }));
+            c = base.slice().sort(function (a, b) { return a.seniority - b.seniority; })[0];
           }
           if (c) { assigned['차지'] = c; taken[c.id] = true; }
         }
@@ -380,7 +396,7 @@
             const n = staff[s];
             if (taken[n.id]) continue;
             const info = lastSeen[n.id];
-            if (info && tiers[t](info) && free.indexOf(info.label) >= 0) {
+            if (info && tiers[t](info) && free.indexOf(info.label) >= 0 && avOk(n.id, info.label)) {
               (claims[info.label] = claims[info.label] || []).push({ n: n, info: info });
             }
           }
@@ -398,19 +414,35 @@
           .sort(function (a, b) { return a.seniority - b.seniority; });
         const rem = freeLabels();
         for (let i = 0; i < rem.length && leftover.length; i++) {
-          let pick = 0;
-          if (rules.bounceAfterOff) {
-            const alt = leftover.findIndex(function (n) {
-              const info = lastSeen[n.id];
-              return !(info && info.label === rem[i] && info.idx < idx - 1);
-            });
-            if (alt >= 0) pick = alt;
-          }
+          const bounceOk = function (n) {
+            if (!rules.bounceAfterOff) return true;
+            const info = lastSeen[n.id];
+            return !(info && info.label === rem[i] && info.idx < idx - 1);
+          };
+          // 회피 라벨(금지 방)과 원칙4 둘 다 통과 → 회피만 통과 → 아무나 (미충원 방지)
+          let pick = leftover.findIndex(function (n) { return avOk(n.id, rem[i]) && bounceOk(n); });
+          if (pick < 0) pick = leftover.findIndex(function (n) { return avOk(n.id, rem[i]); });
+          if (pick < 0) pick = 0;
           const n = leftover.splice(pick, 1)[0];
           assigned[rem[i]] = n; taken[n.id] = true;
         }
         // 6인 이상: 라벨 소진 후 잔여 인원은 어싸인 없음(헬퍼)
         const extra = leftover.map(function (n) { return n.id; });
+
+        // 회피 라벨 복구: 회피 라벨에 배정된 간호사를 서로 문제 없는 상대와 맞교환.
+        // 연속성(원칙1~3)보다 회피(금지 방)가 우선 — 수동 오버라이드·차지는 건드리지 않음.
+        for (const l in assigned) {
+          if (l === '차지') continue;
+          const n = assigned[l];
+          if (avOk(n.id, l) || ovIds[n.id]) continue;
+          for (const l2 in assigned) {
+            if (l2 === l || l2 === '차지') continue;
+            const m = assigned[l2];
+            if (!ovIds[m.id] && avOk(n.id, l2) && avOk(m.id, l)) {
+              assigned[l] = m; assigned[l2] = n; break;
+            }
+          }
+        }
 
         const labelMap = {};
         for (const l in assigned) {
@@ -451,6 +483,8 @@ const SHIFTS = {
   V:{p:'leave',bg:'#ECF7F0',fg:'#1F8A5B'}, '생':{p:'leave',bg:'#FCEAF1',fg:'#B83280'},
   '특':{p:'leave',bg:'#F1ECFB',fg:'#6D4AC0'}, '공':{p:'leave',bg:'#E8F5EE',fg:'#1F8A5B'},
   '법':{p:'leave',bg:'#FDEEE5',fg:'#C2410C'}, '병':{p:'leave',bg:'#FEEAEA',fg:'#C7384A'},
+  '/D':{p:'trainee',bg:'#F5F7FA',fg:'#94A3B8'}, '/E':{p:'trainee',bg:'#F5F7FA',fg:'#94A3B8'},
+  '/N':{p:'trainee',bg:'#F5F7FA',fg:'#94A3B8'},
 };
 const ALIAS = {};
 [['낮','D'],['낮번','D'],['데이','D'],['day','D'],['저녁','E'],['이브닝','E'],['이브','E'],['evening','E'],
@@ -462,7 +496,11 @@ const ALIAS = {};
 function parseCellRaw(s){
   let raw=String(s??'').trim();
   if(!raw||['-','—','x','X','·','none','없음'].includes(raw)) return null;
-  if(raw.startsWith('/')) return undefined;
+  // 트레이닝 근무 /D /E /N — 표시만 하고 인력·어싸인에서 제외
+  if(raw.startsWith('/')){
+    const t='/'+raw.slice(1).trim().toUpperCase();
+    return SHIFTS[t]?{code:t,label:''}:undefined;
+  }
   let label='';
   const m=raw.match(/^(.+?)\s*\/\s*([A-Da-d])$/);
   if(m){ raw=m[1].trim(); label=m[2].toUpperCase(); }
@@ -491,14 +529,16 @@ const DEFAULT_SCHEMES = {
   3:{차지:['1001','1012','1014'],A:['1002','1003','1004','1011'],B:['1005','1006','1007','1008','1009','1010']},
   2:{차지:[],A:[]},
 };
-const ROOM_CAP = {1001:'5인실',1002:'5인실',1003:'5인실',1004:'5인실',1005:'5인실',1006:'5인실',
-  1007:'2인실',1008:'2인실',1009:'1인실',1010:'2인실',1011:'2인실',1012:'2인실',1014:'5인실'};
+// 병실 목록 [호실, 병상수] — ⚙ 관리에서 수정 (다른 병동 호실로 교체 가능)
+const DEFAULT_ROOMS = [['1001',5],['1002',5],['1003',5],['1004',5],['1005',5],['1006',5],
+  ['1007',2],['1008',2],['1009',1],['1010',2],['1011',2],['1012',2],['1014',5]];
 
 /* ════════════════════════════════════════════════════════════════
  * 데이터 저장소 — NAS의 JSON 파일 하나 (File System Access API)
  * store = {order, cells:{name:{iso:code}}, ovr:{iso:{P:{name:label}}},
  *          events:{iso:text}, seedManual:{name:{label,period}},
- *          charge:{name:bool}, schemes, rules, rev}
+ *          caps:{name:[가능근무]}, req:{요일:{D,E,N}}, rooms:[[호실,병상수]],
+ *          banRooms:{name:[호실]}, schemes, rules, rev}
  * ════════════════════════════════════════════════════════════════ */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[<>&]/g,m=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]));
@@ -515,6 +555,7 @@ const DEFAULT_REQ={mon:{D:4,E:5,N:3},tue:{D:5,E:5,N:3},wed:{D:5,E:5,N:3},thu:{D:
   fri:{D:5,E:4,N:3},sat:{D:3,E:3,N:2},sun:{D:3,E:4,N:3}};
 function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{},roomOv:{},events:{},
   seedManual:{},caps:{},req:JSON.parse(JSON.stringify(DEFAULT_REQ)),
+  rooms:DEFAULT_ROOMS.map(r=>r.slice()),banRooms:{},
   schemes:JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
   rules:{keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false}}; }
 const capsOf=n=>store.caps[n]||ALL_CAPS;
@@ -525,6 +566,8 @@ function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무
     delete store.charge;
   }
   if(!store.req) store.req=JSON.parse(JSON.stringify(DEFAULT_REQ));
+  if(!store.rooms||!store.rooms.length) store.rooms=DEFAULT_ROOMS.map(r=>r.slice());
+  if(!store.banRooms) store.banRooms={};
 }
 let store=emptyStore();
 let fileHandle=null, dirty=false, saveT=null;
@@ -708,8 +751,30 @@ function recompute(){
     const s=store.seedManual[n];
     if(s&&s.label) seed[n]={label:s.label,period:s.period||'D',idx:-1};
   }
+  // 주지 않을 방(banRooms) → 그 방이 포함된 라벨을 간호사별 회피 목록으로 (소프트)
+  let avoid=null;
+  const banned=Object.keys(store.banRooms||{}).filter(n=>store.banRooms[n].length);
+  if(banned.length){
+    avoid={};
+    for(const dk of tlKeys){
+      for(const P of ['D','E','N']){
+        const staff=store.order.filter(n=>AssignCore.periodOf((schedule[n]||{})[dk])===P);
+        const hit=banned.filter(n=>staff.includes(n));
+        if(!hit.length) continue;
+        const nLab=Math.min(staff.length,5);
+        for(let li=0;li<nLab;li++){
+          const label=LBL_ORDER[li];
+          const toks=roomTokens(roomsFor(P,staff.length,label,dk)).map(roomFull);
+          for(const n of hit){
+            if(toks.some(t=>store.banRooms[n].includes(t)))
+              (((avoid[dk]=avoid[dk]||{})[P]=avoid[dk][P]||{})[n]=avoid[dk][P][n]||[]).push(label);
+          }
+        }
+      }
+    }
+  }
   result=AssignCore.compute(nurses,schedule,tlKeys,
-    {rules:store.rules,overrides:merged,seed:Object.keys(seed).length?seed:null});
+    {rules:store.rules,overrides:merged,seed:Object.keys(seed).length?seed:null,avoid});
 }
 function dayInfo(iso){
   if(!result) return null;
@@ -764,6 +829,21 @@ function roomTokens(str){ // "1~3.11" → ['1','2','3','11'] (중복 검사용)
   }
   return out;
 }
+// 병실 마스터가 전부 4자리·같은 앞 두 자리면 그 접두(예: '10') — 축약 표기용
+function roomsPrefix(){
+  const rs=(store.rooms||[]).map(r=>String(r[0]));
+  return rs.length&&rs.every(r=>/^\d{4}$/.test(r)&&r.slice(0,2)===rs[0].slice(0,2))
+    ? rs[0].slice(0,2) : null;
+}
+const roomShort=r=>{ const p=roomsPrefix(); return p&&String(r).startsWith(p)?String(+String(r).slice(2)):String(r); };
+function roomFull(t){ // 축약 토큰 '12' → '1012' (마스터에 있을 때만)
+  t=String(t);
+  const rs=(store.rooms||[]).map(r=>String(r[0]));
+  if(rs.includes(t)) return t;
+  const p=roomsPrefix();
+  if(p){ const c=p+t.padStart(2,'0'); if(rs.includes(c)) return c; }
+  return t;
+}
 function dupRooms(iso,P,day){ // 같은 날·시간대에서 두 어싸인이 겹쳐 보는 방들
   const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
   const seen={},dup=new Set();
@@ -784,6 +864,7 @@ function renderWeek(){
   if(infos.every(x=>!x)){
     $('#wkBody').innerHTML=`<div id="wkEmpty">이 주의 근무표가 없습니다.<br><br>
       <button class="pri big" onclick="show('paste')">＋ 새 근무표 넣기</button></div>`;
+    buildPrintArea(false).catch(()=>{});   // 빈 주도 양식 틀은 인쇄되게
     return;
   }
   const tdCls=d=>isoOfD(d)===todayIso?' todayCol':'';
@@ -840,12 +921,23 @@ function renderWeek(){
     const day=dayInfo(iso); if(!day) continue;
     const nOver=['C','D'].filter(l=>day.N.labels[l]);
     if(nOver.length) w.push(`${mm}/${dd} N ${nOver.map(l=>esc(day.N.labels[l])).join(', ')} — 양식 N칸(3개) 초과, 수기 기입 필요`);
-    for(const P of ['D','E','N']) if(day[P].extra.length)
-      w.push(`${mm}/${dd} ${P} ${day[P].extra.map(esc).join(', ')} — 어싸인 없음(6인 이상 헬퍼)`);
+    for(const P of ['D','E','N']){
+      if(day[P].extra.length)
+        w.push(`${mm}/${dd} ${P} ${day[P].extra.map(esc).join(', ')} — 어싸인 없음(6인 이상 헬퍼)`);
+      const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
+      for(const l in day[P].labels){
+        const nm=day[P].labels[l], bans=store.banRooms[nm];
+        if(!bans||!bans.length) continue;
+        const hit=roomTokens(roomsFor(P,cnt,l,iso)).map(roomFull).filter(t=>bans.includes(t));
+        if(hit.length) w.push(`${mm}/${dd} ${P} ${esc(nm)}: ${hit.map(roomShort).join(', ')}호 — 주지 않을 방인데 배정됨 (대안 없음)`);
+      }
+    }
   }
   const wb=$('#wkWarn');
   wb.style.display=w.length?'block':'none';
   wb.textContent=w.length?('⚠ 확인 필요\n· '+w.join('\n· ')):'';
+  // 브라우저 메뉴/Ctrl+P 인쇄도 양식대로 나오게 — 지금 주를 인쇄 영역에 미리 채워둔다
+  buildPrintArea(false).catch(()=>{});
 }
 $('#wkBody').addEventListener('click',e=>{
   const ev=e.target.closest('td.evt');
@@ -856,19 +948,8 @@ $('#wkBody').addEventListener('click',e=>{
     touch(); renderWeek(); return; }
   const rm=e.target.closest('td.rm');
   if(rm&&rm.dataset.iso){
-    const iso=rm.dataset.iso, P=rm.dataset.p, l=rm.dataset.l;
-    const day=dayInfo(iso); if(!day) return;
-    const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
-    const v=prompt(`${+iso.slice(8,10)}일 ${P} ${FORM_LBL(l)} 방 — 이 날 하루만 적용 (예: 1, 12, 14 · 비우면 자동으로)`,
-      roomsFor(P,cnt,l,iso));
-    if(v===null) return;
-    const ro=(store.roomOv[iso]=store.roomOv[iso]||{});
-    const pv=(ro[P]=ro[P]||{});
-    if(v.trim()) pv[l]=v.trim();
-    else{ delete pv[l];
-      if(!Object.keys(pv).length) delete ro[P];
-      if(!Object.keys(ro).length) delete store.roomOv[iso]; }
-    touch(); renderWeek(); return;
+    openRoomPick({kind:'day',iso:rm.dataset.iso,P:rm.dataset.p,l:rm.dataset.l},e.pageX,e.pageY);
+    return;
   }
   const td=e.target.closest('td.nm'); if(!td) return;
   openPick(td.dataset.n,td.dataset.iso,e.pageX,e.pageY);
@@ -930,11 +1011,101 @@ function resetRoomOv(){
   const n=Object.keys(store.roomOv).length;
   if(!n){ toast('방 수정 없음'); return; }
   if(!confirm('일별 방 수정 '+n+'일치를 모두 초기화할까요?')) return;
-  store.roomOv={}; touch(); renderAdmin(); if(curScr==='week') renderWeek(); toast('초기화됨');
+  store.roomOv={}; touch(); recompute(); renderAdmin(); if(curScr==='week') renderWeek(); toast('초기화됨');
 }
 document.addEventListener('mousedown',e=>{
   if($('#pick').style.display==='block'&&!e.target.closest('#pick')&&!e.target.closest('td.nm')) closePick();
+  if($('#rpick').style.display==='block'&&!e.target.closest('#rpick')&&!e.target.closest('td.rm')
+     &&!e.target.closest('.banBtn')) closeRoomPick();
 });
+
+/* ── 방 토글 픽커 — 일별 방 수정('day') / 간호사 금지 방('nurse') 겸용 ── */
+let rpCtx=null;
+function rpSelected(){ // 현재 선택된 방 (실호실 번호 + 목록에 없는 수기 토큰)
+  if(rpCtx.kind==='nurse') return (store.banRooms[rpCtx.name]||[]).slice();
+  const {iso,P,l}=rpCtx;
+  const day=dayInfo(iso); if(!day) return [];
+  const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
+  return roomTokens(roomsFor(P,cnt,l,iso)).map(roomFull);
+}
+function openRoomPick(ctx,x,y){
+  rpCtx=ctx;
+  renderRoomPick();
+  const el=$('#rpick');
+  el.style.display='block';
+  el.style.left=Math.max(4,Math.min(x,window.innerWidth-el.offsetWidth-20))+'px';
+  el.style.top=(y+10)+'px';
+}
+function closeRoomPick(){ $('#rpick').style.display='none'; rpCtx=null; }
+function renderRoomPick(){
+  const sel=rpSelected();
+  let beds=0,unk=0;
+  const master=(store.rooms||[]).map(r=>String(r[0]));
+  for(const t of sel){
+    const r=(store.rooms||[]).find(r2=>String(r2[0])===t);
+    if(r&&+r[1]>0) beds+=+r[1]; else unk++;
+  }
+  const head=rpCtx.kind==='nurse'
+    ? `${esc(rpCtx.name)} — 주지 않을 방 <span class="dim">(격리·중증·환자 거절 등)</span>`
+    : `${+rpCtx.iso.slice(8,10)}일 ${rpCtx.P} ${FORM_LBL(rpCtx.l)} 방 — 이 날 하루만`;
+  const extra=sel.filter(t=>!master.includes(t));
+  $('#rpick').innerHTML=
+    `<div style="font-weight:700;margin-bottom:6px">${head}</div>`+
+    master.map(r=>`<button class="${sel.includes(r)?'on':''}" onclick="toggleRoom('${esc(r)}')">${esc(roomShort(r))}호</button>`).join('')+
+    (extra.length?`<div class="dim" style="margin-top:4px">직접 쓴 값: ${extra.map(esc).join(', ')}</div>`:'')+
+    `<div style="margin-top:6px">담당 ${sel.length}개 방 · <b>병상 ${beds}개</b>${unk?` <span class="dim">(+병상수 모름 ${unk})</span>`:''}</div>`+
+    `<div style="margin-top:8px;display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap">`+
+    (rpCtx.kind==='day'
+      ? `<button onclick="roomPickAuto()">↩ 자동으로</button><button onclick="roomPickManual()">✏ 직접 입력</button>`
+      : `<button onclick="banClear()">모두 해제</button>`)+
+    `<button onclick="closeRoomPick()">✕ 닫기</button></div>`;
+}
+function toggleRoom(rm){
+  const sel=rpSelected();
+  const i=sel.indexOf(rm);
+  if(i>=0) sel.splice(i,1); else sel.push(rm);
+  const master=(store.rooms||[]).map(r=>String(r[0]));
+  sel.sort((a,b)=>{const ia=master.indexOf(a),ib=master.indexOf(b);
+    return (ia<0?999:ia)-(ib<0?999:ib)||String(a).localeCompare(b);});
+  if(rpCtx.kind==='nurse'){
+    if(sel.length) store.banRooms[rpCtx.name]=sel; else delete store.banRooms[rpCtx.name];
+    touch(); recompute(); renderRoomPick();
+    if(curScr==='week') renderWeek(); if(curScr==='admin') renderAdmin();
+  }else{
+    const {iso,P,l}=rpCtx;
+    const ro=(store.roomOv[iso]=store.roomOv[iso]||{});
+    (ro[P]=ro[P]||{})[l]=abbrevRooms(sel);
+    touch(); recompute(); renderWeek(); renderRoomPick();
+  }
+}
+function roomPickAuto(){
+  const {iso,P,l}=rpCtx; closeRoomPick();
+  const ro=store.roomOv[iso];
+  if(ro&&ro[P]){ delete ro[P][l];
+    if(!Object.keys(ro[P]).length) delete ro[P];
+    if(!Object.keys(ro).length) delete store.roomOv[iso]; }
+  touch(); recompute(); renderWeek();
+}
+function roomPickManual(){
+  const {iso,P,l}=rpCtx; closeRoomPick();
+  const day=dayInfo(iso); if(!day) return;
+  const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
+  const v=prompt(`${+iso.slice(8,10)}일 ${P} ${FORM_LBL(l)} 방 — 이 날 하루만 적용 (예: 1, 12, 14 · 비우면 자동으로)`,
+    roomsFor(P,cnt,l,iso));
+  if(v===null) return;
+  const ro=(store.roomOv[iso]=store.roomOv[iso]||{});
+  const pv=(ro[P]=ro[P]||{});
+  if(v.trim()) pv[l]=v.trim();
+  else{ delete pv[l];
+    if(!Object.keys(pv).length) delete ro[P];
+    if(!Object.keys(ro).length) delete store.roomOv[iso]; }
+  touch(); recompute(); renderWeek();
+}
+function banClear(){
+  delete store.banRooms[rpCtx.name];
+  touch(); recompute(); renderRoomPick();
+  if(curScr==='admin') renderAdmin();
+}
 
 /* ════════════════════════════════════════════════════════════════
  * 새 근무표 넣기 — 붙여넣기/드롭 → 미리보기 → 확인
@@ -1101,14 +1272,14 @@ function edSet(r,c,v){
   store.cells[n]=store.cells[n]||{};
   if(v) store.cells[n][edIso(c)]=v; else delete store.cells[n][edIso(c)];
 }
-function snapshot(){ // 이름 변경/삭제가 ovr·charge·시드까지 건드리므로 함께 보존
+function snapshot(){ // 이름 변경/삭제가 ovr·caps·금지방·시드까지 건드리므로 함께 보존
   undoStack.push(JSON.stringify({o:store.order,c:store.cells,v:store.ovr,rv:store.roomOv,
-    ch:store.caps,sd:store.seedManual}));
+    ch:store.caps,br:store.banRooms,sd:store.seedManual}));
   if(undoStack.length>40) undoStack.shift(); }
 function restoreSnapshot(s){
   store.order=s.o; store.cells=s.c;
   if(s.v) store.ovr=s.v; if(s.rv) store.roomOv=s.rv;
-  if(s.ch) store.caps=s.ch; if(s.sd) store.seedManual=s.sd;
+  if(s.ch) store.caps=s.ch; if(s.br) store.banRooms=s.br; if(s.sd) store.seedManual=s.sd;
 }
 function moveEditMonth(n){ edM+=n; if(edM<1){edM=12;edY--} if(edM>12){edM=1;edY++} renderEditGrid(); }
 function renderEditGrid(){
@@ -1252,11 +1423,12 @@ function renameNurse(r){
       if(!Object.keys(day).length) delete store.ovr[dk];
     }};
   if(!nu){ store.order.splice(r,1); delete store.cells[old];
-    delete store.caps[old]; delete store.seedManual[old]; migOv(old,null); }
+    delete store.caps[old]; delete store.banRooms[old]; delete store.seedManual[old]; migOv(old,null); }
   else if(nu!==old){
     store.order[r]=nu;
     store.cells[nu]=store.cells[old]||{}; delete store.cells[old];
     if(old in store.caps){ store.caps[nu]=store.caps[old]; delete store.caps[old]; }
+    if(old in store.banRooms){ store.banRooms[nu]=store.banRooms[old]; delete store.banRooms[old]; }
     if(old in store.seedManual){ store.seedManual[nu]=store.seedManual[old]; delete store.seedManual[old]; }
     migOv(old,nu);
   }
@@ -1328,12 +1500,21 @@ function renderAdmin(){
   for(const [id,k] of [['r1','keepSameShift'],['r2','keepAcrossShift'],['r3','keepAfterOff'],['r4','bounceAfterOff']])
     $('#'+id).checked=!!store.rules[k];
   $('#capsTable').innerHTML=`<tr><th style="text-align:left">간호사</th>${ALL_CAPS.map(c=>
-      `<th style="min-width:3em">${c}</th>`).join('')}</tr>`+
+      `<th style="min-width:3em">${c}</th>`).join('')}<th>주지 않을 방</th></tr>`+
     store.order.map(n=>{
       const cp=capsOf(n);
+      const ban=(store.banRooms[n]||[]).map(roomShort).join(', ');
       return `<tr><td style="font-weight:700;min-width:70px">${esc(n)}</td>`+ALL_CAPS.map(c=>
-        `<td><button class="segbtn${cp.includes(c)?' on':''}" onclick="toggleCap('${esc(n)}','${c}')">${cp.includes(c)?'O':'·'}</button></td>`).join('')+'</tr>';
+        `<td><button class="segbtn${cp.includes(c)?' on':''}" onclick="toggleCap('${esc(n)}','${c}')">${cp.includes(c)?'O':'·'}</button></td>`).join('')+
+        `<td><button class="segbtn banBtn${ban?' on':''}" onclick="openRoomPick({kind:'nurse',name:'${esc(n)}'},event.pageX,event.pageY)">${ban?esc(ban)+'호':'없음'}</button></td></tr>`;
     }).join('')||'<tr><td class="dim">근무표를 먼저 넣어주세요</td></tr>';
+  $('#roomTable').innerHTML=
+    `<tr><th style="text-align:left">호실</th>${store.rooms.map((r,i)=>
+       `<td><input type="text" style="width:56px" value="${esc(String(r[0]))}" onchange="setRoom(${i},0,this.value)"></td>`).join('')}</tr>`+
+    `<tr><th style="text-align:left">병상수</th>${store.rooms.map((r,i)=>
+       `<td><input type="number" min="0" max="20" style="width:56px" value="${+r[1]||''}" onchange="setRoom(${i},1,this.value)"></td>`).join('')}</tr>`+
+    `<tr><th></th>${store.rooms.map((r,i)=>
+       `<td style="text-align:center"><button class="segbtn" title="이 방 삭제" onclick="delRoom(${i})">✕</button></td>`).join('')}</tr>`;
   const WKK=[['mon','월'],['tue','화'],['wed','수'],['thu','목'],['fri','금'],['sat','토'],['sun','일']];
   $('#reqTable').innerHTML=`<tr><th></th>${WKK.map(([k,l])=>`<th style="min-width:3em">${l}</th>`).join('')}</tr>`+
     ['D','E','N'].map(P=>`<tr><td style="font-weight:700">${P}</td>`+WKK.map(([k])=>
@@ -1363,6 +1544,21 @@ function setScheme(cnt,l,str){
 }
 function resetSchemes(){ store.schemes=JSON.parse(JSON.stringify(DEFAULT_SCHEMES));
   touch(); recompute(); renderAdmin(); }
+function setRoom(i,f,v){
+  v=String(v).trim();
+  if(f===0&&!v){ renderAdmin(); return; }   // 호실을 비우면 무시 (삭제는 ✕)
+  store.rooms[i][f]=f===1?(+v||0):v;
+  touch(); recompute(); renderAdmin();
+}
+function delRoom(i){
+  if(!confirm(store.rooms[i][0]+'호를 목록에서 뺄까요?')) return;
+  store.rooms.splice(i,1); touch(); recompute(); renderAdmin();
+}
+function addRoom(){
+  const v=prompt('추가할 호실 번호 (예: 1013)');
+  if(!v||!v.trim()) return;
+  store.rooms.push([v.trim(),4]); touch(); recompute(); renderAdmin();
+}
 function toggleCap(name,code){
   const cp=[...capsOf(name)];
   const i=cp.indexOf(code);
@@ -1660,10 +1856,8 @@ async function downloadWeekXlsx(sun){
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);
   toast('배정표_'+span+'.xlsx 저장됨');
 }
-async function printWeek(wholeMonth){
-  let tpl;
-  try{ tpl=await loadTemplate(); }
-  catch(e){ toast(e.message,4200); return; }
+async function buildPrintArea(wholeMonth){
+  const tpl=await loadTemplate();
   const g=ref=>esc(getCellText(tpl.sheetXml,tpl.sst,ref)).replace(/\n/g,'<br>');
   const fixedHtml=`
   <table class="fx" style="margin-top:3px">
@@ -1730,6 +1924,10 @@ async function printWeek(wholeMonth){
     return h;
   });
   $('#printArea').innerHTML=sheets.join('');
+}
+async function printWeek(wholeMonth){
+  try{ await buildPrintArea(wholeMonth); }
+  catch(e){ toast(e.message,4200); return; }
   setTimeout(()=>window.print(),80);
 }
 
@@ -1744,6 +1942,7 @@ window.__app={get store(){return store},set store(v){store=v},
   get result(){return result},get tlKeys(){return tlKeys},
   ingestGrid,confirmPaste,recompute,renderWeek,weekData,downloadWeekXlsx,printWeek,
   openPick,pickChoose,pickShift,setSeed,abbrevRooms,parseCellRaw,readXlsxGrid,loadTemplate,dayInfo,roomsFor,
+  openRoomPick,toggleRoom,roomFull,roomShort,buildPrintArea,
   get wkSunday(){return wkSunday},set wkSunday(v){wkSunday=v},show,
   memoryMode(){window.__memoryMode=true;
     $('#fileInfo').textContent='⚠ 파일 미연결 — 저장되지 않는 임시 모드';afterLoad();}};

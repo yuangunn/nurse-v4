@@ -234,4 +234,34 @@ assert.equal(periodOf('OF'), null);
   assert.equal(r3.byDay.d1.N.labels['차지'], 'a');
 }
 
+// ── 회피 라벨 (opts.avoid — 금지 방) ──
+{
+  const nurses = [
+    { id: 'a', seniority: 0, chargeCapable: true },
+    { id: 'b', seniority: 1, chargeCapable: false },
+    { id: 'c', seniority: 2, chargeCapable: false },
+  ];
+  const sched = { a: { d1: 'D' }, b: { d1: 'D' }, c: { d1: 'D' } };
+  // b는 A 라벨 회피 → 잔여 배정에서 c가 A, b가 B
+  let r = compute(nurses, sched, ['d1'], { avoid: { d1: { D: { b: ['A'] } } } });
+  assert.equal(r.byDay.d1.D.labels['A'], 'c');
+  assert.equal(r.byDay.d1.D.labels['B'], 'b');
+  // 소프트: 전원이 회피 대상이면 그래도 채운다 (미충원 방지)
+  r = compute(nurses, sched, ['d1'], { avoid: { d1: { D: { a: ['차지'], b: ['A', 'B'], c: ['A', 'B'] } } } });
+  assert.ok(r.byDay.d1.D.labels['A'] && r.byDay.d1.D.labels['B']);
+  // 차지 회피: a가 차지 회피면 다른 차지가능자 없어도 폴백은 유지하되,
+  // b가 차지 가능하면 b가 차지
+  const n2 = nurses.map(n => n.id === 'b' ? { ...n, chargeCapable: true } : n);
+  r = compute(n2, sched, ['d1'], { avoid: { d1: { D: { a: ['차지'] } } } });
+  assert.equal(r.byDay.d1.D.labels['차지'], 'b');
+  // 원칙1(전일 유지)보다 회피 우선: b가 어제 A를 봤어도 A 회피면 유지 안 함
+  const sched3 = { a: { d1: 'D', d2: 'D' }, b: { d1: 'D', d2: 'D' }, c: { d1: 'D', d2: 'D' } };
+  r = compute(nurses, sched3, ['d1', 'd2'], { avoid: { d2: { D: { b: ['A'] } } } });
+  const bd1 = r.byNurse.b.d1.label;
+  if (bd1 === 'A') assert.notEqual(r.byNurse.b.d2.label, 'A');
+  // avoid 없는 날은 기존 동작 그대로 (연속성 유지)
+  r = compute(nurses, sched3, ['d1', 'd2']);
+  assert.equal(r.byNurse.b.d2.label, r.byNurse.b.d1.label);
+}
+
 console.log('assign-core: 모든 검증 통과');
