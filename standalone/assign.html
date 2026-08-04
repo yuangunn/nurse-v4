@@ -118,18 +118,34 @@
     .app{display:none}
     #printArea{display:block}
   }
-  .sheet{page-break-after:always;font-size:9pt}
+  /* 양식('병실 배정표.xlsx') 원본 서식 그대로 — 색·병합·행높이·글꼴 = 원본 pt × 40%(엑셀 인쇄 배율) */
+  .sheet{page-break-after:always;font-family:'Malgun Gothic','맑은 고딕','Apple SD Gothic Neo',sans-serif;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}
   .sheet:last-child{page-break-after:auto}
-  .sheet h1{font-size:14pt;text-align:center;margin:0 0 4px}
-  .sheet table{border-collapse:collapse;width:100%;table-layout:fixed}
-  .sheet td,.sheet th{border:1px solid #333;padding:2px 3px;text-align:center;font-size:8.5pt;
-    overflow:hidden;word-break:break-all}
-  .sheet .hd{background:#eef1f5;font-weight:700}
-  .sheet .seccol{background:#f7f8fa;font-weight:700;width:20px}
-  .sheet .lab{width:46px;background:#fbfcfd}
-  .sheet .fx td{text-align:left;font-size:7.5pt;line-height:1.35}
-  .sheet .fx .hd{text-align:center}
-  .sheet .cpr-img{float:right;width:96px;margin:2px}
+  .sheet table{border-collapse:collapse;width:100%;table-layout:fixed;border:1pt solid #000}
+  .sheet td{border:.5pt solid #000;padding:0 1px;text-align:center;vertical-align:middle;
+    overflow:hidden;word-break:break-all;line-height:1.15}
+  .sheet .f21{font-size:8.4pt;font-weight:700}
+  .sheet .f18{font-size:7.2pt;font-weight:700}
+  .sheet .f16{font-size:6.4pt;font-weight:700}
+  .sheet .f14{font-size:5.6pt;font-weight:700}
+  .sheet .f12{font-size:4.9pt;font-weight:700}
+  .sheet .f11{font-size:4.5pt;font-weight:700}
+  .sheet .tTitle{background:#7030A0;color:#fff}
+  .sheet .hBlue{background:#B4C6E7}
+  .sheet .lBlue{background:#D9E2F3}
+  .sheet .green{background:#92D050}
+  .sheet .lGreen{background:#E2EFDA}
+  .sheet .peach{background:#F8CBAD}
+  .sheet .fire{background:#FF0000;color:#fff}
+  .sheet .ftRed{color:#FF0000}
+  .sheet .ftBlue{color:#0000FF}
+  .sheet .ftGreen{color:#289B6E}
+  .sheet .ftGold{color:#BF9000}
+  .sheet .ftAcc{color:#4472C4}
+  .sheet .vert{writing-mode:vertical-rl;text-orientation:upright;letter-spacing:.05em;padding:1px 0}
+  .sheet .left{text-align:left;padding-left:3px}
+  .sheet .cpr-img{max-width:96%;max-height:41mm;display:block;margin:1px auto}
 </style>
 </head>
 <body>
@@ -1859,68 +1875,72 @@ async function downloadWeekXlsx(sun){
 async function buildPrintArea(wholeMonth){
   const tpl=await loadTemplate();
   const g=ref=>esc(getCellText(tpl.sheetXml,tpl.sst,ref)).replace(/\n/g,'<br>');
-  const fixedHtml=`
-  <table class="fx" style="margin-top:3px">
-    <colgroup><col style="width:52px"><col style="width:44px"><col><col><col></colgroup>
-    <tr><td class="hd">구분</td><td class="hd"></td><td class="hd">D</td><td class="hd">E</td><td class="hd">N</td></tr>
-    <tr><td class="hd" rowspan="5">물품체크</td><td class="hd">A(CN)</td><td>${g('C20')}</td><td>${g('H20')}</td><td>${g('L20')}</td></tr>
-    <tr><td class="hd">B</td><td rowspan="4" style="vertical-align:top">${g('C24')}<div class="dim" style="font-size:7pt">(B~E 공통)</div></td><td>${g('H21')}</td><td>${g('L21')}</td></tr>
-    <tr><td class="hd">C</td><td>${g('H22')}</td><td>${g('L22')}</td></tr>
-    <tr><td class="hd">D</td><td>${g('H23')}</td><td></td></tr>
-    <tr><td class="hd">E</td><td></td><td></td></tr>
-  </table>
-  <table class="fx" style="margin-top:3px">
-    <tr><td class="hd" style="text-align:center">${g('A25')}</td></tr>
-  </table>
-  <table class="fx" style="margin-top:3px">
-    <colgroup><col style="width:52px"><col style="width:44px"><col style="width:90px"><col></colgroup>
-    <tr><td class="hd" rowspan="5">CPR<br>업무분담</td><td class="hd">A(CN)</td><td>${g('C26')}</td>
-        <td rowspan="5" style="vertical-align:top">${tpl.imgUrl?`<img class="cpr-img" src="${tpl.imgUrl}">`:''}
-          <div>${g('E26')}</div><div>${g('E27')}</div><div>${g('E28')}</div><div>${g('E29')}</div><div>${g('E30')}</div></td></tr>
-    <tr><td class="hd">B</td><td>${g('C27')}</td></tr>
-    <tr><td class="hd">C</td><td>${g('C28')}</td></tr>
-    <tr><td class="hd">D</td><td>${g('C29')}</td></tr>
-    <tr><td class="hd">E</td><td>${g('C30')}</td></tr>
-  </table>
-  <table class="fx" style="margin-top:3px">
-    <colgroup><col style="width:52px"><col><col></colgroup>
-    <tr><td class="hd" rowspan="3">화재<br>발생시</td><td class="hd" style="text-align:center">D/E</td><td class="hd" style="text-align:center">N</td></tr>
-    <tr><td>${g('B32')}</td><td>${g('J32')}</td></tr>
-    <tr><td>${g('B33')}</td><td>${g('J33')}</td></tr>
-  </table>
-  <table class="fx" style="margin-top:3px"><tr><td>${g('A34')}</td></tr></table>`;
+  // 양식 원본 레이아웃 그대로 — 17열(A~Q), 병합·색·행높이 = 원본, 크기 = 원본 × 40%(엑셀 인쇄 배율)
+  const H={hdr:'6.2mm',evt:'29mm',body:'7.2mm',sec:'6.3mm',chk:'8.5mm',team:'7.4mm',
+           cpr:'8.5mm',fh:'5.3mm',f1:'8.2mm',f2:'9.6mm',esc:'5mm'};
+  // 고정 문구 아래쪽 (rows 19~34) — 모든 텍스트·라벨을 양식 파일에서 읽음
+  const fixedRows=
+    `<tr style="height:${H.sec}"><td colspan="2" class="hBlue f18">${g('A19')}</td>
+       <td colspan="5" class="hBlue f18">${g('C19')}</td><td colspan="4" class="hBlue f18">${g('H19')}</td>
+       <td colspan="6" class="hBlue f18">${g('L19')}</td></tr>`+
+    [['B20','','C20','H20','L20'],['B21','ftBlue','C21','H21','L21'],['B22','ftGreen','C22','H22','L22'],
+     ['B23','ftRed','C23','H23','L23'],['B24','ftGold','C24','H24','L24']].map(([lb,cls,cd,ce,cn],i)=>
+      `<tr style="height:${H.chk}">${i===0?`<td rowspan="5" class="lBlue vert f12">${g('A20')}</td>`:''}
+        <td class="${i===0?'f14':'f18 '+cls}">${g(lb)}</td>
+        <td colspan="5" class="f18">${g(cd)}</td><td colspan="4" class="f18">${g(ce)}</td>
+        <td colspan="6" class="f18">${g(cn)}</td></tr>`).join('')+
+    `<tr style="height:${H.team}"><td colspan="17" class="lGreen ftRed f16">${g('A25')}</td></tr>`+
+    [['B26','C26','E26'],['B27','C27','E27'],['B28','C28','E28'],['B29','C29','E29'],['B30','C30','E30']]
+      .map(([lb,role,desc],i)=>
+      `<tr style="height:${H.cpr}">${i===0?`<td rowspan="5" class="green vert f12">${g('A26')}</td>`:''}
+        <td class="lGreen ftRed f12">${g(lb)}</td>
+        <td colspan="2" class="f12">${g(role)}</td><td colspan="5" class="f12">${g(desc)}</td>${
+        i===0?`<td colspan="8" rowspan="5">${tpl.imgUrl?`<img class="cpr-img" src="${tpl.imgUrl}">`:''}</td>`:''}</tr>`).join('')+
+    `<tr style="height:${H.fh}"><td rowspan="3" class="fire vert f16">${g('A31')}</td>
+       <td colspan="8" class="peach f14">${g('B31')}</td><td colspan="8" class="peach f14">${g('J31')}</td></tr>`+
+    `<tr style="height:${H.f1}"><td colspan="8" class="ftRed f11 left">${g('B32')}</td>
+       <td colspan="8" class="ftRed f11 left">${g('J32')}</td></tr>`+
+    `<tr style="height:${H.f2}"><td colspan="8" class="f11 left">${g('B33')}</td>
+       <td colspan="8" class="f11 left">${g('J33')}</td></tr>`+
+    `<tr style="height:${H.esc}"><td colspan="17" class="peach ftRed f14">${g('A34')}</td></tr>`;
   const suns=wholeMonth
     ? weeksOf(addDays(wkSunday,3).getFullYear(),addDays(wkSunday,3).getMonth()+1)
     : [wkSunday];
   const sheets=suns.map(sun=>{
     const days=weekData(sun);
-    let h=`<div class="sheet"><h1>병실 배정표</h1><table>
-      <colgroup><col style="width:4.6%">${'<col style="width:7.0%"><col style="width:6.6%">'.repeat(7)}</colgroup>
-      <tr><td class="hd" rowspan="2">교육 및<br>행사</td>${WD.map(w=>`<th class="hd" colspan="2">${w}</th>`).join('')}</tr>
-      <tr>${days.map(d=>`<th colspan="2">${d.date.getMonth()+1}/${d.date.getDate()}</th>`).join('')}</tr>
-      <tr><td style="height:16px"></td>${days.map(d=>{
+    const wdCls=d=>{const w=d.getDay();return w===0?'ftRed':w===6?'ftAcc':''};
+    let h=`<div class="sheet"><table>
+      <colgroup><col style="width:2.7%"><col style="width:2.7%"><col style="width:4.6%">${
+        '<col style="width:6.43%">'.repeat(14)}</colgroup>
+      <tr style="height:${H.hdr}"><td colspan="17" class="tTitle f21">${g('A1')}</td></tr>
+      <tr style="height:${H.hdr}"><td colspan="2" rowspan="3" class="f16">${g('A2')}</td><td rowspan="3"></td>${
+        days.map(d=>`<td colspan="2" class="f18 ${wdCls(d.date)}">${WD[d.date.getDay()]}</td>`).join('')}</tr>
+      <tr style="height:${H.hdr}">${days.map(d=>
+        `<td colspan="2" class="f18 ${wdCls(d.date)}">${d.date.getMonth()+1}/${d.date.getDate()}</td>`).join('')}</tr>
+      <tr style="height:${H.evt}">${days.map(d=>{
         const evt=store.events[isoOfD(d.date)];
-        return `<td colspan="2">${evt?esc(evt):''}</td>`;
+        return `<td colspan="2" class="f14" style="vertical-align:top">${evt?esc(evt):''}</td>`;
       }).join('')}</tr>`;
     for(const P of ['D','E','N']){
       const sec=SEC[P];
       for(let li=0;li<sec.rows;li++){
         const label=LBL_ORDER[li];
-        h+='<tr>';
-        if(li===0) h+=`<td class="seccol" rowspan="${sec.rows}">${P}</td>`;
-        h+=`<td class="lab">${FORM_LBL(label)}</td>`;
+        h+=`<tr style="height:${H.body}">`;
+        if(li===0) h+=`<td colspan="2" rowspan="${sec.rows}" class="f16">${P}</td>`;
+        h+=`<td class="f12">${FORM_LBL(label)}</td>`;
         for(const day of days){
           if(day.blank||!day.secs[P].byLabel[label]){ h+='<td></td><td></td>'; continue; }
-          h+=`<td>${roomsFor(P,day.secs[P].cnt,label,isoOfD(day.date))}</td><td>${esc(day.secs[P].byLabel[label])}</td>`;
+          h+=`<td class="f18">${roomsFor(P,day.secs[P].cnt,label,isoOfD(day.date))}</td>`+
+             `<td class="f18">${esc(day.secs[P].byLabel[label])}</td>`;
         }
         h+='</tr>';
         if(P==='D'&&li===sec.rows-1){
-          h+=`<tr><td class="hd" colspan="2">중간번</td>${days.map(day=>
-            `<td colspan="2">${day.blank?'':day.mids.map(esc).join(', ')}</td>`).join('')}</tr>`;
+          h+=`<tr style="height:${H.body}"><td colspan="3" class="f12">중간번</td>${days.map(day=>
+            `<td colspan="2" class="f18">${day.blank?'':day.mids.map(esc).join(', ')}</td>`).join('')}</tr>`;
         }
       }
     }
-    h+='</table>'+fixedHtml+'</div>';
+    h+=fixedRows+'</table></div>';
     return h;
   });
   $('#printArea').innerHTML=sheets.join('');
