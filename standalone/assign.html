@@ -47,12 +47,33 @@
     box-shadow:0 1px 2px rgba(15,17,21,.04),0 0 0 1px rgba(15,17,21,.04)}
 
   /* ── 시작 화면 ── */
-  #scrStart{text-align:center;padding-top:7vh}
-  #scrStart .box{display:inline-block;text-align:left;background:#fff;border-radius:16px;
-    padding:28px 34px;box-shadow:0 10px 30px rgba(15,17,21,.10),0 0 0 1px rgba(15,17,21,.04)}
-  #scrStart h2{margin:0 0 6px;font-size:22px;font-weight:800;letter-spacing:-0.02em}
-  #scrStart button{display:block;width:100%;margin:10px 0;font-size:17px;padding:14px}
-  #scrStart .steps{font-size:14px;color:#4A5160;line-height:1.9;margin-top:14px}
+  #scrStart{display:flex;justify-content:center;padding:56px 20px 64px}
+  .startCol{width:520px;max-width:100%;display:flex;flex-direction:column;gap:22px}
+  .startTitle{font-size:26px;font-weight:800;letter-spacing:-0.035em;line-height:1.2}
+  .startSub{font-size:14px;color:#8A93A1;letter-spacing:-0.01em;margin-top:6px}
+  .startBtn{display:flex;align-items:center;gap:14px;width:100%;text-align:left;border-radius:16px;box-shadow:none}
+  .startBtn.resume{padding:18px 22px;background:#0F1115;color:#fff}
+  .startBtn.resume:hover{background:#23262D}
+  .startBtn.open{padding:15px 22px;background:#fff;box-shadow:0 0 0 1px #DCE0E6}
+  .startBtn.plain{padding:15px 22px;background:transparent;color:#4A5160;font-weight:700}
+  .startBtn.plain:hover{background:#EDEFF3}
+  .startBtn.promoted{background:#0F1115;color:#fff;box-shadow:none}
+  .startBtn.promoted .sub2{color:rgba(255,255,255,.55)}
+  .startBtn.promoted:hover{background:#23262D}
+  .startSteps{display:flex;flex-direction:column;gap:11px;padding:18px 20px;border-radius:16px;background:#fff;
+    box-shadow:0 0 0 1px #EBEDF0}
+  .startSteps .row{display:flex;gap:11px;align-items:flex-start;font-size:13px;line-height:1.55;color:#4A5160}
+  .startSteps .row b{color:#0F1115;font-weight:700}
+  .startSteps .n{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;
+    margin-top:1px;border-radius:9999px;background:#F2F3F5;color:#4A5160;font-size:11px;font-weight:800}
+  .startBand{display:flex;align-items:center;gap:9px;padding:12px 18px;border-radius:14px;background:#EDEFF3;
+    font-size:12px;font-weight:600;color:#4A5160;letter-spacing:-0.01em}
+  .startBand.warnBand{background:#FEEFEF;color:#C7384A}
+  #filePickCard{display:none;flex-direction:column;gap:8px;padding:18px 20px;border-radius:16px;background:#fff;
+    box-shadow:0 1px 2px rgba(15,17,21,.04),0 0 0 1px rgba(15,17,21,.04)}
+  #filePickCard .fpTitle{font-size:14px;font-weight:800;letter-spacing:-0.01em}
+  #filePickCard button.f{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border-radius:12px;
+    padding:12px 16px;box-shadow:0 0 0 1px #EBEDF0}
 
   /* ── 주간 화면 (1a) ── */
   .wknav{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
@@ -102,37 +123,136 @@
   #wkEmpty{padding:60px 10px;text-align:center;font-size:18px;color:#4A5160}
 
   /* ── 넣기 화면 ── */
-  #scrPaste .guide{font-size:17px;line-height:2.1}
-  #scrPaste .guide b{color:#1B4FC3}
-  #pvWrap{overflow:auto;max-height:46vh;border:1px solid #ccd;background:#fff;margin-top:10px}
-  #pvWrap table{border-collapse:collapse;font-size:12px}
-  #pvWrap th,#pvWrap td{border:1px solid #e3e6ea;padding:2px 6px;text-align:center;white-space:nowrap}
-  #pvWrap th{background:#f4f6f8}
+  .pasteTop{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+  .stepCard{flex:1;min-width:260px;display:flex;gap:14px;align-items:flex-start;padding:18px 20px;border-radius:16px;
+    background:#fff;box-shadow:0 1px 2px rgba(15,17,21,.04),0 0 0 1px rgba(15,17,21,.04)}
+  .stepN{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;
+    border-radius:9px;background:#0F1115;color:#fff;font-size:13px;font-weight:800}
+  .stepBody{display:flex;flex-direction:column;gap:5px}
+  .stepT{font-size:15px;font-weight:700;letter-spacing:-0.015em}
+  .stepSub{display:flex;align-items:center;gap:7px;font-size:12px;color:#8A93A1}
+  .key{padding:3px 10px;border-radius:8px;background:#F2F3F5;color:#0F1115;font-size:12px;font-weight:800;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .dropZone{flex:0 0 300px;display:flex;flex-direction:column;justify-content:center;gap:5px;padding:18px 20px;
+    border-radius:16px;background:#fff;box-shadow:0 0 0 1.5px #DCE0E6}
+  .bandInfo{display:flex;align-items:center;gap:9px;padding:11px 16px;border-radius:12px;background:#EDEFF3;
+    font-size:12px;color:#4A5160;letter-spacing:-0.01em;margin-bottom:14px;flex-wrap:wrap}
+  .bandInfo .key{background:#fff;color:#8A93A1;font-size:11px;padding:2px 8px;border-radius:7px}
+  #pvCard{display:flex;flex-direction:column;gap:12px;padding:20px 22px;border-radius:16px;background:#fff;
+    box-shadow:0 1px 2px rgba(15,17,21,.04),0 0 0 1px rgba(15,17,21,.04)}
+  .okBadge{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:9999px;
+    background:#ECF7F0;color:#1F8A5B;font-size:11px;font-weight:800}
+  #pvStats{display:flex;gap:10px;flex-wrap:wrap}
+  #pvStats .st{flex:1;min-width:130px;display:flex;flex-direction:column;gap:4px;padding:14px 18px;
+    border-radius:14px;background:#F8F9FB}
+  #pvStats .k{font-size:11px;font-weight:800;letter-spacing:.06em;color:#8A93A1}
+  #pvStats .v{font-size:20px;font-weight:800;letter-spacing:-0.03em;font-variant-numeric:tabular-nums}
+  #pvYM{display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:14px;background:#FBF3E2;flex-wrap:wrap}
+  #pvYM #pvYMTitle{font-size:13px;font-weight:800;color:#B7791F;letter-spacing:-0.01em}
+  #pvYM #pvYMSub{font-size:12px;color:#8A6A2A}
+  #pvYM .u{font-size:13px;font-weight:700;color:#B7791F}
+  #pvYM input,#pvYM select{width:74px;padding:9px 12px;border-radius:11px;background:#fff;
+    box-shadow:0 0 0 1px #E4CFA0;font-size:15px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums}
+  #pvYM select{width:64px}
+  #pvYM.calm{background:#F8F9FB}
+  #pvYM.calm #pvYMTitle{color:#4A5160}
+  #pvYM.calm #pvYMSub,#pvYM.calm .u{color:#8A93A1}
+  #pvYM.calm input,#pvYM.calm select{box-shadow:0 0 0 1px #EBEDF0}
+  #pvWrap{overflow:auto;max-height:46vh;border-radius:12px;box-shadow:0 0 0 1px #EBEDF0}
+  #pvWrap table{border-collapse:collapse;font-size:11px;width:100%}
+  #pvWrap th,#pvWrap td{height:28px;padding:0 6px;text-align:center;white-space:nowrap;border:none;
+    box-shadow:inset 0 -1px 0 #F2F3F5}
+  #pvWrap tr:first-child th{background:#F8F9FB;font-weight:700;color:#4A5160;font-variant-numeric:tabular-nums}
+  #pvWrap th.pvsun{color:#C7384A} #pvWrap th.pvsat{color:#1B4FC3}
+  #pvWrap th:first-child{text-align:left;padding:0 12px}
+  #pvWrap tr:first-child th:first-child{font-weight:800;font-size:11px;color:#8A93A1;letter-spacing:.05em}
+  #pvWrap tbody th,#pvWrap tr:not(:first-child) th{font-size:12px;font-weight:700;color:#0F1115}
+  #pvWrap td{font-weight:700}
 
   /* ── 고치기(그리드) 화면 ── */
-  #wrap{overflow:auto;max-height:62vh;border:1px solid #ccd;background:#fff;position:relative}
+  .statChip{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:12px;background:#fff;
+    box-shadow:0 0 0 1px #EBEDF0}
+  .statChip .sl{font-size:11px;font-weight:800;letter-spacing:.05em;color:#8A93A1}
+  .statChip .sv{font-size:13px;font-weight:700;color:#0F1115}
+  .statChip .ssep{width:1px;height:12px;background:#E4E7EC}
+  .statChip #edMis{font-size:13px;font-weight:800}
+  .lgdBar{display:flex;align-items:center;gap:18px;padding:11px 16px;border-radius:12px;background:#fff;
+    box-shadow:0 0 0 1px #EBEDF0;flex-wrap:wrap;margin-bottom:12px}
+  .lgdBar .lg{display:flex;align-items:center;gap:8px}
+  .lgdBar .gn{font-size:11px;font-weight:800;letter-spacing:.04em;color:#8A93A1}
+  .lgdBar .chips{display:flex;gap:3px;flex-wrap:wrap}
+  .lgdBar .chips span{display:inline-block;padding:2px 8px;border-radius:7px;font-size:11px;font-weight:800}
+  .lgdBar .keys{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:11px;color:#8A93A1;flex-wrap:wrap}
+  .lgdBar .keys b{color:#4A5160;font-weight:700}
+  #wrap{overflow:auto;max-height:62vh;background:#fff;position:relative}
   #wrap table{border-collapse:separate;border-spacing:0;font-size:12px}
-  #wrap th,#wrap td{border-right:1px solid #e3e6ea;border-bottom:1px solid #e3e6ea;padding:0;text-align:center;
-    min-width:30px;height:24px;box-sizing:border-box;white-space:nowrap}
-  #wrap thead th{position:sticky;top:0;z-index:3;background:#f4f6f8;font-weight:600;padding:2px 4px}
-  #wrap thead th.sun{color:#c7384a} #wrap thead th.sat{color:#1B4FC3}
-  #wrap th.nm{position:sticky;left:0;z-index:4;background:#f4f6f8;min-width:78px;text-align:left;padding:2px 8px}
-  #wrap tbody th.nm{z-index:2;font-weight:500;background:#fafbfc;cursor:pointer}
-  #wrap tfoot td,#wrap tfoot th{position:sticky;bottom:0;z-index:3;background:#f4f6f8;font-size:11px;font-weight:600}
-  #wrap tfoot th.nm{z-index:4}
-  #wrap td.cell{cursor:cell;user-select:none;font-weight:600}
+  #wrap th,#wrap td{border:none;padding:0;text-align:center;min-width:34px;height:30px;box-sizing:border-box;white-space:nowrap}
+  #wrap thead th{position:sticky;top:0;z-index:3;background:#fff;height:38px;box-shadow:inset 0 -1px 0 #EBEDF0}
+  #wrap thead th.wkend{background:#FAFBFC}
+  #wrap thead th .dd{font-size:13px;font-weight:800;color:#0F1115;font-variant-numeric:tabular-nums;line-height:1.15}
+  #wrap thead th .dw{font-size:10px;font-weight:600;color:#4A5160;line-height:1.15}
+  #wrap thead th.sun .dd,#wrap thead th.sun .dw{color:#C7384A}
+  #wrap thead th.sat .dd,#wrap thead th.sat .dw{color:#1B4FC3}
+  #wrap th.nm{position:sticky;left:0;z-index:4;background:#F8F9FB;min-width:92px;text-align:left;padding:0 14px;
+    font-size:11px;font-weight:800;letter-spacing:.05em;color:#8A93A1;
+    box-shadow:inset -1px 0 0 #EBEDF0,inset 0 -1px 0 #EBEDF0}
+  #wrap tbody th.nm{z-index:2;background:#fff;font-size:13px;font-weight:700;letter-spacing:-0.015em;color:#0F1115;
+    box-shadow:inset -1px 0 0 #EBEDF0,inset 0 -1px 0 #F6F7F9;cursor:pointer}
+  #wrap tfoot td,#wrap tfoot th{position:sticky;bottom:0;z-index:3;background:#F8F9FB;height:28px;font-size:11px;
+    font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 #EBEDF0}
+  #wrap tfoot th.nm{z-index:4;font-size:11px;font-weight:800;
+    box-shadow:inset -1px 0 0 #EBEDF0,inset 0 1px 0 #EBEDF0}
+  #wrap td.cell{cursor:cell;user-select:none;font-weight:800;box-shadow:inset 0 -1px 0 #F6F7F9}
   #wrap td.pre{text-decoration:underline}
-  #wrap td.sel{outline:2px solid #1B4FC3;outline-offset:-2px}
-  #wrap td.anchor{outline:2px solid #0b2f7a;outline-offset:-2px;box-shadow:inset 0 0 0 1px #fff}
-  .lgd span{display:inline-block;padding:1px 7px;border-radius:3px;margin-right:3px;font-weight:600;font-size:11px}
+  #wrap td.sel{outline:2px solid #0F1115;outline-offset:-2px}
+  #wrap td.anchor{outline:2px solid #0F1115;outline-offset:-2px;box-shadow:inset 0 0 0 1px #fff}
 
-  /* ── 관리 화면 ── */
-  #scrAdmin details{margin-bottom:10px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px}
-  #scrAdmin summary{cursor:pointer;font-weight:700;font-size:15px}
+  /* ── 관리 화면 (좌측 목록 + 단일 패널) ── */
+  #adminNav{flex:0 0 244px;display:flex;flex-direction:column;gap:16px;padding:14px 12px;border-radius:16px;background:#fff;
+    box-shadow:0 1px 2px rgba(15,17,21,.04),0 0 0 1px rgba(15,17,21,.04)}
+  .anName{padding:0 10px 5px;font-size:11px;font-weight:800;letter-spacing:.06em;color:#8A93A1}
+  .anItem{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:11px;cursor:pointer}
+  .anItem .t{flex:1;font-size:13.5px;letter-spacing:-0.015em;color:#4A5160;font-weight:500}
+  .anItem .b{font-size:11px;font-weight:700;color:#8A93A1}
+  .anItem:hover{background:#F8F9FB}
+  .anItem.on{background:#F2F3F5}
+  .anItem.on .t{color:#0F1115;font-weight:700}
+  .anItem.on .b{color:#4A5160}
+  #adminPanelBox{flex:1;display:flex;flex-direction:column;gap:12px;padding:20px 22px 22px;border-radius:16px;
+    background:#fff;box-shadow:0 1px 2px rgba(15,17,21,.04),0 0 0 1px rgba(15,17,21,.04);min-width:0}
+  .apHead{display:flex;align-items:flex-start;gap:14px}
+  .apTitle{font-size:18px;font-weight:800;letter-spacing:-0.025em}
+  .apDesc{font-size:13px;color:#8A93A1;letter-spacing:-0.01em;margin-top:4px}
+  .apDesc b{color:#4A5160;font-weight:700}
   #seedTable td{padding:3px 6px}
-  #seedTable .segbtn{min-width:2.6em;padding:6px 10px;margin:1px}
-  #seedTable .segbtn.on{background:#0F1115;color:#fff;box-shadow:none;font-weight:700}
+  .segbtn{min-width:2.6em;padding:6px 10px;margin:1px;border-radius:8px;font-size:13px}
+  .segbtn.on{background:#0F1115;color:#fff;box-shadow:none;font-weight:700}
   .schemeRow input{width:68%}
+  .capChip{display:inline-flex;align-items:center;justify-content:center;min-width:38px;height:26px;border-radius:8px;
+    font-size:11.5px;font-weight:800;cursor:pointer;background:#F8F9FB;color:#8A93A1;box-shadow:inset 0 0 0 1px #EBEDF0}
+  .capChip.on{background:#0F1115;color:#fff;box-shadow:none}
+  .banChip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:8px;background:#FEEFEF;
+    color:#C7384A;font-size:11.5px;font-weight:700}
+  .banChip .x{color:#E0A5AD;cursor:pointer;font-weight:800}
+  .addChip{display:inline-flex;align-items:center;justify-content:center;height:24px;padding:0 9px;border-radius:8px;
+    color:#B8BFC9;font-size:11.5px;font-weight:700;cursor:pointer;box-shadow:inset 0 0 0 1px #EBEDF0}
+  #capsTable{width:100%;border-collapse:collapse;table-layout:fixed}
+  #capsTable tr.hd th{height:30px;text-align:left;font-size:11px;font-weight:800;letter-spacing:.05em;color:#8A93A1;
+    box-shadow:inset 0 -1px 0 #EBEDF0}
+  #capsTable td{padding:8px 4px 8px 0;box-shadow:inset 0 -1px 0 #F6F7F9;vertical-align:middle}
+  #capsTable td.nm2{font-size:14px;font-weight:700;letter-spacing:-0.015em}
+  .rulRow{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:12px;box-shadow:0 0 0 1px #EBEDF0}
+  .rulRow .rt{font-size:14px;font-weight:700;letter-spacing:-0.01em}
+  .rulRow .rd{font-size:13px;color:#8A93A1;margin-top:2px}
+  .sw{position:relative;width:40px;height:24px;flex:0 0 auto}
+  .sw input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:1}
+  .sw i{display:block;width:40px;height:24px;border-radius:9999px;background:#E4E7EC;transition:background .12s ease}
+  .sw i:after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:9999px;background:#fff;
+    transition:left .12s ease;box-shadow:0 1px 2px rgba(15,17,21,.2)}
+  .sw input:checked+i{background:#0F1115}
+  .sw input:checked+i:after{left:19px}
+  button.danger{color:#C7384A}
+  button.danger:hover{background:#FEEFEF}
 
   /* ── 픽커 팝업 ── */
   #pick,#rpick{display:none;position:absolute;z-index:120;background:#fff;border:none;border-radius:16px;
@@ -189,18 +309,36 @@
 
 <!-- ══ 시작 화면 ══ -->
 <div id="scrStart" class="screen" style="display:none">
-  <div class="box">
-    <h2>어싸인 배정표</h2>
-    <div class="dim">데이터 파일을 열면 바로 이번 주 배정표가 나옵니다.</div>
-    <button id="btnResume" class="pri" style="display:none">▶ 이어서 시작</button>
-    <button id="btnOpenFile">📂 데이터 파일 열기</button>
-    <button id="btnNewFile">＋ 처음 시작 (새 데이터 파일 만들기)</button>
-    <div class="steps">
-      · 파일은 공용 폴더(내부망 NAS)에 두면 어느 컴퓨터에서나 같은 내용을 봅니다.<br>
-      · 브라우저가 "파일을 볼 수 있도록 허용하시겠습니까?" 라고 물으면 <b>허용</b>을 누르세요.<br>
-      · 데이터 파일(.json)을 이 창에 끌어다 놓아도 열립니다.
+  <div class="startCol">
+    <div>
+      <div class="startTitle">어싸인 배정표</div>
+      <div class="startSub">데이터 파일을 열면 바로 이번 주 배정표가 나옵니다.</div>
     </div>
-    <div id="startWarn" class="dim" style="color:#c7384a"></div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button id="btnResume" class="startBtn resume" style="display:none">
+        <span style="display:flex;flex-direction:column;gap:3px;flex:1">
+          <span style="font-size:17px;font-weight:800;letter-spacing:-0.02em">이어서 시작</span>
+          <span id="resumeSub" style="font-size:12px;font-weight:600;color:rgba(255,255,255,.55)"></span>
+        </span>
+        <span style="font-size:16px;color:rgba(255,255,255,.5)">→</span>
+      </button>
+      <button id="btnOpenFile" class="startBtn open">
+        <span style="font-size:15px;font-weight:700;letter-spacing:-0.01em;flex:1">데이터 파일 열기</span>
+        <span class="sub2" style="font-size:12px;font-weight:600;color:#8A93A1">공용 폴더에서 고르기 — 폴더 안 파일 자동 감지</span>
+      </button>
+      <button id="btnNewFile" class="startBtn plain">
+        <span style="font-size:15px;font-weight:700;letter-spacing:-0.01em;flex:1">처음 시작</span>
+        <span style="font-size:12px;font-weight:600;color:#8A93A1">새 데이터 파일 만들기</span>
+      </button>
+    </div>
+    <div id="filePickCard"></div>
+    <div class="startSteps">
+      <div class="row"><span class="n">1</span><span>파일은 공용 폴더(내부망 NAS)에 두면 <b>어느 컴퓨터에서나 같은 내용</b>을 봅니다.</span></div>
+      <div class="row"><span class="n">2</span><span>브라우저가 "파일을 볼 수 있도록 허용하시겠습니까?" 라고 물으면 <b>허용</b>을 누르세요.</span></div>
+      <div class="row"><span class="n">3</span><span>처음이라면 <b>처음 시작</b>으로 데이터 파일을 하나 만들어 공용 폴더에 두세요.</span></div>
+    </div>
+    <div class="startBand"><span style="font-weight:800">＋</span><span>데이터 파일(.json)을 이 창에 끌어다 놓아도 열립니다.</span></div>
+    <div id="startWarn" class="startBand warnBand" style="display:none"></div>
   </div>
 </div>
 
@@ -232,25 +370,55 @@
 
 <!-- ══ 새 근무표 넣기 ══ -->
 <div id="scrPaste" class="screen" style="display:none">
-  <div class="card">
-    <div class="guide">
-      <b>1.</b> 엑셀에서 근무표를 마우스로 긁어 복사하세요 (<b>Ctrl+C</b>)<br>
-      <b>2.</b> 이 창을 클릭한 다음 <b>Ctrl+V</b> 를 누르세요<br>
-      <span class="dim">엑셀 파일(.xlsx)을 이 창에 끌어다 놓아도 됩니다. 이름 열과 날짜 줄은 자동으로 알아봅니다.<br>
-      트레이닝 중인 선생님의 근무는 <b>/D /E /N</b> 으로 적어주세요 — 표시는 되지만 인력·어싸인에는 세지 않습니다.</span>
+  <div class="pasteTop">
+    <div class="stepCard">
+      <span class="stepN">1</span>
+      <span class="stepBody">
+        <span class="stepT">엑셀에서 근무표를 마우스로 긁어 복사</span>
+        <span class="stepSub"><span class="key">Ctrl+C</span><span>이름 열과 날짜 줄까지 함께</span></span>
+      </span>
     </div>
-    <div id="pvInfo" style="font-size:17px;font-weight:700;margin-top:12px"></div>
-    <div id="pvYM" style="display:none;margin-top:6px">
-      이 근무표의 시작:
-      <input type="number" id="pvY" min="2020" max="2099" style="width:76px"> 년
-      <select id="pvM"></select> 월
-      <span class="dim">— 날짜 줄에 연·월이 없으면 꼭 확인해주세요</span>
+    <div class="stepCard">
+      <span class="stepN">2</span>
+      <span class="stepBody">
+        <span class="stepT">이 창을 클릭한 다음 붙여넣기</span>
+        <span class="stepSub"><span class="key">Ctrl+V</span><span>바로 아래에 읽은 결과가 나옵니다</span></span>
+      </span>
     </div>
-    <div id="pvWrap" style="display:none"></div>
-    <div style="margin-top:12px;display:flex;gap:10px">
-      <button id="btnPvOk" class="pri big" style="display:none" onclick="confirmPaste()">✔ 맞아요, 저장</button>
-      <button id="btnPvNo" class="big" style="display:none" onclick="resetPaste()">↩ 다시</button>
-      <button onclick="show('week')">돌아가기</button>
+    <div class="dropZone">
+      <span style="font-size:13px;font-weight:700;color:#4A5160;letter-spacing:-0.01em">＋ 엑셀 파일을 여기에 놓아도 됩니다</span>
+      <span style="font-size:12px;color:#8A93A1;line-height:1.5">이름 열과 날짜 줄은 자동으로 알아봅니다</span>
+    </div>
+  </div>
+  <div class="bandInfo">
+    <span>트레이닝 중인 선생님의 근무는</span>
+    <span class="key">/D</span><span class="key">/E</span><span class="key">/N</span>
+    <span>— 표시는 되지만 인력·어싸인에는 세지 않습니다</span>
+  </div>
+  <div id="pvCard" style="display:none">
+    <div style="display:flex;align-items:center;gap:9px">
+      <span class="okBadge">✓</span>
+      <span style="font-size:15px;font-weight:800;letter-spacing:-0.02em">이렇게 읽었어요</span>
+      <span id="pvUnknown" class="dim"></span>
+    </div>
+    <div id="pvStats"></div>
+    <div id="pvYM">
+      <div style="display:flex;flex-direction:column;gap:2px;flex:1">
+        <span id="pvYMTitle"></span>
+        <span id="pvYMSub"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="number" id="pvY" min="2020" max="2099">
+        <span class="u">년</span>
+        <select id="pvM"></select>
+        <span class="u">월</span>
+      </div>
+    </div>
+    <div id="pvWrap"></div>
+    <div style="display:flex;align-items:center;gap:9px;padding-top:2px">
+      <button id="btnPvOk" class="pri" style="padding:12px 24px;border-radius:13px" onclick="confirmPaste()">맞아요, 저장</button>
+      <button id="btnPvNo" style="padding:12px 20px;border-radius:13px" onclick="resetPaste()">다시 붙여넣기</button>
+      <button class="ghost" style="color:#8A93A1;padding:12px 20px" onclick="show('week')">돌아가기</button>
     </div>
   </div>
 </div>
@@ -258,75 +426,32 @@
 <!-- ══ 근무표 고치기 ══ -->
 <div id="scrEdit" class="screen" style="display:none">
   <div class="wknav">
-    <button onclick="moveEditMonth(-1)">◀</button>
-    <span class="title" id="edTitle"></span>
-    <button onclick="moveEditMonth(1)">▶</button>
-    <span class="dim">셀 클릭 후 D/E/N/O 키 입력 · 드래그 범위 · 더블클릭 직접 입력(D/A 선입력, 트레이닝=/D — 인력 제외) · Ctrl+Z</span>
-    <span style="margin-left:auto"><button class="pri" onclick="show('week')">✔ 배정표 보기</button></span>
+    <div class="seg">
+      <button style="width:34px;height:32px;padding:0" onclick="moveEditMonth(-1)">◀</button>
+      <span class="title" id="edTitle" style="font-size:16px;padding:0 14px"></span>
+      <button style="width:34px;height:32px;padding:0" onclick="moveEditMonth(1)">▶</button>
+    </div>
+    <div class="statChip">
+      <span class="sl">이번 달</span><span class="sv" id="edStat"></span>
+      <span class="ssep"></span><span id="edMis"></span>
+    </div>
+    <span style="margin-left:auto;display:flex;gap:8px">
+      <button class="act" onclick="undoEdit()">되돌리기</button>
+      <button class="pri" onclick="show('week')">배정표 보기</button>
+    </span>
   </div>
-  <div class="card" style="padding:8px">
-    <div class="lgd" id="lgd" style="margin-bottom:6px"></div>
+  <div id="lgd" class="lgdBar"></div>
+  <div class="card" style="padding:0;overflow:hidden">
     <div id="wrap"></div>
   </div>
 </div>
 
 <!-- ══ 관리 ══ -->
 <div id="scrAdmin" class="screen" style="display:none">
-  <details open>
-    <summary>지난 어싸인 직접 입력 <span class="dim">— 근무표에 지난 기록이 없을 때 시작점 (기록이 있으면 그쪽이 우선)</span></summary>
-    <table id="seedTable" style="margin-top:8px"></table>
-  </details>
-  <details>
-    <summary>주간 배정표 파일(xlsx) 내려받기 <span class="dim">— '병실 배정표' 양식 그대로, 엑셀에서 수정 가능</span></summary>
-    <div class="dim" style="margin:6px 0">기준: 현재 보고 있는 주가 속한 달</div>
-    <div id="weekBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-    <div style="margin-top:8px"><button onclick="printWeek(true)">🖨 이번 달 전체 인쇄 (5~6장)</button></div>
-  </details>
-  <details>
-    <summary>방 구성 <span class="dim">— 근무 인원수별 어싸인 방 배정</span></summary>
-    <div id="schemes" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px"></div>
-    <div style="margin-top:8px"><button onclick="resetSchemes()">기본값 복원</button></div>
-  </details>
-  <details>
-    <summary>병실 목록 <span class="dim">— 호실·병상수 커스터마이징 (다른 병동은 여기서 통째로 교체)</span></summary>
-    <table id="roomTable" style="margin-top:8px"></table>
-    <div style="margin-top:8px"><button onclick="addRoom()">＋ 방 추가</button>
-      <span class="dim">호실을 바꾸면 위의 '방 구성' 호실도 같이 맞춰주세요</span></div>
-  </details>
-  <details>
-    <summary>배정 원칙</summary>
-    <div style="margin:8px 0">
-      <label><input type="checkbox" id="r1" checked> 원칙1 — 전일 같은 근무면 방 유지</label><br>
-      <label><input type="checkbox" id="r2" checked> 원칙2 — 근무 바뀌어도 방 유지</label><br>
-      <label><input type="checkbox" id="r3" checked> 원칙3 — 오프 복귀자 방 유지</label><br>
-      <label><input type="checkbox" id="r4"> 원칙4 — 오프 복귀자 튕기기</label>
-    </div>
-    <div class="dim">※ 차지는 항상 적용(DC/EC/NC 표시자 우선) · 원칙3·4는 반대 개념 — 하나를 켜면 다른 쪽이 꺼집니다</div>
-  </details>
-  <details>
-    <summary>간호사 관리 — 가능 근무·차지 <span class="dim">— DC/EC/NC = 그 시간대 차지 가능</span></summary>
-    <table id="capsTable" style="margin-top:8px"></table>
-  </details>
-  <details>
-    <summary>요일별 필요 인원 <span class="dim">— 근무표 고치기 화면에서 미달·초과를 빨갛게 표시</span></summary>
-    <table id="reqTable" style="margin-top:8px"></table>
-  </details>
-  <details>
-    <summary>수동 수정 관리</summary>
-    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button onclick="resetOv()">담당 교체 모두 초기화</button>
-      <button onclick="resetRoomOv()">일별 방 수정 모두 초기화</button>
-      <span class="dim" id="ovCount"></span></div>
-  </details>
-  <details>
-    <summary>데이터 파일</summary>
-    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-      <button onclick="pickNewLocation()">다른 파일로 저장 (위치 변경)</button>
-      <button onclick="downloadBackup()">백업 내려받기</button>
-      <button onclick="show('start')">다른 데이터 파일 열기</button>
-    </div>
-    <div class="dim" style="margin-top:6px" id="dataInfo"></div>
-  </details>
+  <div style="display:flex;gap:16px;align-items:flex-start">
+    <div id="adminNav"></div>
+    <div id="adminPanelBox"></div>
+  </div>
 </div>
 </div><!-- /.app -->
 
@@ -657,6 +782,7 @@ async function useHandle(h,{create=false}={}){
   } else store=emptyStore();          // 새 파일 또는 진짜 빈(0바이트) 파일만
   fileHandle=h; window.__memoryMode=false;
   try{ await idbSet('handle',h); }catch(e){}
+  try{ localStorage.setItem('assignLastFile',h.name); localStorage.setItem('assignLastAt',Date.now()); }catch(e){}
   $('#fileInfo').textContent=h.name;
   if(create) await writeStore();
   afterLoad();
@@ -707,20 +833,88 @@ window.addEventListener('pagehide',flushSave);
 window.addEventListener('beforeunload',e=>{
   if(dirty&&fileHandle){ flushSave(); e.preventDefault(); e.returnValue=''; }});
 
-/* 시작 화면 배선 */
+/* 시작 화면 배선 — 폴더 연결 시 폴더 안 데이터 파일(.json) 자동 감지 */
+function startWarnMsg(t){ const el=$('#startWarn'); el.textContent=t; el.style.display=t?'flex':'none'; }
+function fmtWhen(ms){
+  if(!ms) return '';
+  const d=new Date(+ms), now=new Date();
+  const days=Math.round((new Date(now.getFullYear(),now.getMonth(),now.getDate())
+                        -new Date(d.getFullYear(),d.getMonth(),d.getDate()))/86400000);
+  const hm=d.toLocaleTimeString('ko-KR',{hour:'numeric',minute:'2-digit'});
+  return (days<=0?'오늘':days===1?'어제':`${d.getMonth()+1}/${d.getDate()}`)+' '+hm;
+}
+// 폴더 안 어싸인 데이터 파일 스캔 (app:'assign'인 .json만, 최근 수정 순)
+async function scanDirJsons(dir){
+  const out=[];
+  for await (const e of dir.values()){
+    if(e.kind!=='file'||!/\.json$/i.test(e.name)) continue;
+    try{
+      const f=await e.getFile();
+      if(f.size>20*1024*1024) continue;
+      const j=JSON.parse(await f.text());
+      if(j&&j.app==='assign') out.push({h:e,name:e.name,mtime:f.lastModified});
+    }catch(err){}
+  }
+  out.sort((a,b)=>b.mtime-a.mtime);
+  return out;
+}
+function showFilePick(files){
+  const c=$('#filePickCard');
+  c.style.display='flex';
+  c.innerHTML=`<div class="fpTitle">이 폴더에 데이터 파일이 ${files.length}개 있습니다 — 열 파일을 고르세요</div>`+
+    files.map((f,i)=>`<button class="f" data-i="${i}">
+      <span style="flex:1;font-size:15px;font-weight:700;letter-spacing:-0.01em">${esc(f.name)}</span>
+      <span style="font-size:12px;font-weight:600;color:#8A93A1">${fmtWhen(f.mtime)}</span></button>`).join('');
+  c.querySelectorAll('button.f').forEach(b=>b.onclick=()=>{
+    c.style.display='none';
+    useHandle(files[+b.dataset.i].h).catch(e=>startWarnMsg('열기 실패: '+e.message));
+  });
+}
+// preferLast: 지난번 파일이 있으면 묻지 않고 자동 연결 (이어서 시작)
+async function openFromDir(dir,{preferLast=false}={}){
+  if(dir.requestPermission&&await dir.requestPermission({mode:'readwrite'})!=='granted')
+    throw new Error('폴더 접근이 허용되지 않았습니다');
+  const files=await scanDirJsons(dir);
+  if(!files.length){
+    startWarnMsg('이 폴더에 어싸인 데이터 파일(.json)이 없습니다 — [처음 시작]으로 만들거나 다른 폴더를 고르세요.');
+    return;
+  }
+  try{ await idbSet('dir',dir); }catch(e){}
+  const last=localStorage.getItem('assignLastFile');
+  const match=preferLast&&files.find(f=>f.name===last);
+  if(files.length===1) await useHandle(files[0].h);
+  else if(match) await useHandle(match.h);
+  else showFilePick(files);
+}
 async function initStart(){
   if(!window.showOpenFilePicker){
-    $('#startWarn').textContent='이 브라우저는 파일 저장을 지원하지 않습니다 — Edge 또는 Chrome(103+)으로 열어주세요.';
+    startWarnMsg('이 브라우저는 파일 저장을 지원하지 않습니다 — Edge 또는 Chrome(103+)으로 열어주세요.');
   }
+  let hasResume=false;
   try{
-    const h=await idbGet('handle');
-    if(h){ const b=$('#btnResume'); b.style.display='block';
-      b.textContent='▶ 이어서 시작 ('+h.name+')';
-      b.onclick=()=>useHandle(h).catch(e=>toast('열기 실패: '+e.message,4000)); }
+    const dir=await idbGet('dir'), h=await idbGet('handle');
+    if(dir||h){
+      hasResume=true;
+      const b=$('#btnResume'); b.style.display='flex';
+      const last=localStorage.getItem('assignLastFile')||(h&&h.name)||'';
+      const at=+localStorage.getItem('assignLastAt')||0;
+      $('#resumeSub').textContent=last+(at?' · '+fmtWhen(at):'');
+      b.onclick=()=>(dir?openFromDir(dir,{preferLast:true}):useHandle(h))
+        .catch(e=>startWarnMsg('열기 실패: '+e.message));
+    }
   }catch(e){}
+  if(!hasResume) $('#btnOpenFile').classList.add('promoted');
   $('#btnOpenFile').onclick=async()=>{
-    try{ const [h]=await window.showOpenFilePicker({types:[{description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
-      await useHandle(h); }catch(e){ if(e.name!=='AbortError') toast('열기 실패: '+e.message,4000); } };
+    startWarnMsg('');
+    try{
+      if(window.showDirectoryPicker){
+        const dir=await window.showDirectoryPicker();
+        await openFromDir(dir);
+      }else{
+        const [h]=await window.showOpenFilePicker({types:[{description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
+        await useHandle(h);
+      }
+    }catch(e){ if(e.name!=='AbortError') startWarnMsg('열기 실패: '+e.message); } };
   $('#btnNewFile').onclick=async()=>{
     try{ const h=await window.showSaveFilePicker({suggestedName:'어싸인 데이터.json',
         types:[{description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
@@ -1170,9 +1364,7 @@ function banClear(){
  * 새 근무표 넣기 — 붙여넣기/드롭 → 미리보기 → 확인
  * ════════════════════════════════════════════════════════════════ */
 let pending=null;   // {g, y, m, names:[], byName:{name:{iso:raw}}, minIso, maxIso, added, unknown:Set}
-function resetPaste(){ pending=null; $('#pvInfo').textContent=''; $('#pvWrap').style.display='none';
-  $('#pvYM').style.display='none';
-  $('#btnPvOk').style.display='none'; $('#btnPvNo').style.display='none'; }
+function resetPaste(){ pending=null; $('#pvCard').style.display='none'; }
 function guessYearMonth(md){
   // 날짜 헤더에 월 정보가 없으면(일자만) '이번 달' 기준, 월이 있으면 오늘에 가장 가까운 연도로
   const t=new Date();
@@ -1235,22 +1427,32 @@ function buildPending(g,y0,m0){
   if(!namesIn.length||!cnt){ resetPaste(); return toast('근무 내용을 읽지 못했습니다',4000); }
   const added=namesIn.filter(n=>!store.order.includes(n)).length;
   pending={g,y:y0,m:m0,names:namesIn,byName,minIso,maxIso,added,unknown};
-  // 미리보기 (연도 포함 — 연/월은 사용자가 고칠 수 있음)
-  const fmtI=iso=>(+iso.slice(0,4))+'년 '+(+iso.slice(5,7))+'/'+(+iso.slice(8,10));
-  $('#pvInfo').textContent=`이렇게 읽었어요 — 간호사 ${namesIn.length}명, ${fmtI(minIso)} ~ ${fmtI(maxIso)}`+
-    (added?` (새 이름 ${added}명)`:'')+(unknown.size?` · 모르는 글자: ${[...unknown].slice(0,4).join(', ')}`:'');
-  $('#pvY').value=y0; $('#pvM').value=m0; $('#pvYM').style.display='';
+  // 통계 3칸 + 연·월 확인 카드 (헤더에 연도가 있으면 회색 톤 — 경고 아님)
+  const fmtI=iso=>(+iso.slice(5,7))+'/'+(+iso.slice(8,10));
+  $('#pvStats').innerHTML=
+    `<div class="st"><span class="k">간호사</span><span class="v">${namesIn.length}명</span></div>`+
+    `<div class="st"><span class="k">기간</span><span class="v">${fmtI(minIso)} – ${fmtI(maxIso)}</span></div>`+
+    `<div class="st"><span class="k">새 이름</span><span class="v" style="color:${added?'#0F1115':'#8A93A1'}">${added?added+'명':'없음'}</span></div>`;
+  $('#pvUnknown').textContent=unknown.size?`모르는 글자: ${[...unknown].slice(0,4).join(', ')}`:'';
+  const firstMd=(g[0].slice(1).map(v=>parseDateCell(v)).find(x=>x))||{};
+  const certain=firstMd.y!=null;
+  $('#pvYM').classList.toggle('calm',certain);
+  $('#pvYMTitle').textContent=certain?'읽은 시작':'이 근무표의 시작을 확인해주세요';
+  $('#pvYMSub').textContent=certain?'날짜 줄의 연·월을 그대로 읽었습니다.'
+    :'날짜 줄에 연·월이 없어 자동으로 추정했습니다. 틀리면 이번 달을 덮어씁니다.';
+  $('#pvY').value=y0; $('#pvM').value=m0;
   const isoList=[]; for(let d=new Date(minIso+'T00:00:00');isoOfD(d)<=maxIso;d.setDate(d.getDate()+1)) isoList.push(isoOfD(d));
-  let h='<table><tr><th>이름</th>'+isoList.map(i=>`<th>${+i.slice(8,10)}</th>`).join('')+'</tr>';
+  const wdCl=i=>{const w=new Date(i+'T00:00:00').getDay();return w===0?' class="pvsun"':w===6?' class="pvsat"':''};
+  let h='<table><tr><th>이름</th>'+isoList.map(i=>`<th${wdCl(i)}>${+i.slice(8,10)}</th>`).join('')+'</tr>';
   for(const nm of namesIn){
     h+=`<tr><th>${esc(nm)}</th>`+isoList.map(i=>{
       const v=byName[nm][i]||''; const pc=v?parseCellRaw(v):null;
       const st=pc&&pc.code&&SHIFTS[pc.code]?`style="background:${SHIFTS[pc.code].bg};color:${SHIFTS[pc.code].fg}"`:'';
       return `<td ${st}>${esc(v)}</td>`;}).join('')+'</tr>';
   }
-  $('#pvWrap').innerHTML=h+'</table>'; $('#pvWrap').style.display='';
-  $('#btnPvOk').style.display=''; $('#btnPvNo').style.display='';
-  $('#pvInfo').scrollIntoView({block:'nearest'});
+  $('#pvWrap').innerHTML=h+'</table>';
+  $('#pvCard').style.display='flex';
+  $('#pvCard').scrollIntoView({block:'nearest'});
 }
 $('#pvM').innerHTML=[...Array(12)].map((_,i)=>`<option value="${i+1}">${i+1}</option>`).join('');
 for(const id of ['pvY','pvM']) $('#'+id).addEventListener('change',()=>{
@@ -1346,7 +1548,7 @@ function renderEditGrid(){
   $('#edTitle').textContent=`${edY}년 ${edM}월`;
   let h='<table><thead><tr><th class="nm">이름</th>';
   for(let d=1;d<=edDays;d++){ const w=new Date(edY,edM-1,d).getDay();
-    h+=`<th class="${w===0?'sun':w===6?'sat':''}">${d}<br><span style="font-weight:400">${WD[w]}</span></th>`; }
+    h+=`<th class="${w===0?'sun wkend':w===6?'sat wkend':''}"><div class="dd">${d}</div><div class="dw">${WD[w]}</div></th>`; }
   h+='</tr></thead><tbody>';
   store.order.forEach((n,r)=>{
     h+=`<tr><th class="nm" data-nr="${r}" title="클릭 = 이름 수정/삭제">${esc(n)}</th>`;
@@ -1355,7 +1557,7 @@ function renderEditGrid(){
   });
   h+='</tbody><tfoot>';
   for(const k of ['D','E','N']){
-    h+=`<tr><th class="nm">${k} 인원</th>`;
+    h+=`<tr><th class="nm" style="color:${SHIFTS[k].fg}">${k} 인원</th>`;
     for(let c=0;c<edDays;c++) h+=`<td id="cnt-${k}-${c}"></td>`;
     h+='</tr>';
   }
@@ -1381,16 +1583,23 @@ function paintEdit(){
     const b=def&&bucket[def.p]; if(b) cnt[b][c]++;
   }
   const WKMAP=['sun','mon','tue','wed','thu','fri','sat'];
+  const misDays=new Set();
   for(const k of ['D','E','N']) for(let c=0;c<edDays;c++){
     const el=$(`#cnt-${k}-${c}`); if(!el) continue;
     const need=store.req[WKMAP[new Date(edY,edM-1,c+1).getDay()]][k];
     el.textContent=cnt[k][c]||'';
     el.title=`필요 ${need}명`;
     if(cnt[k][c]!==need&&(cnt[k][c]||need)){   // 미달·초과 = 빨강 (xlsm 조건부서식과 동일)
-      el.style.color='#c7384a'; el.style.fontWeight='800';
+      el.style.color='#C7384A'; el.style.fontWeight='800';
       el.textContent=(cnt[k][c]||0)+'/'+need;
-    } else { el.style.color=SHIFTS[k].fg; el.style.fontWeight=''; }
+      misDays.add(c);
+    } else { el.style.color='#4A5160'; el.style.fontWeight='600'; }
   }
+  // 툴바 상태 칩
+  $('#edStat').textContent=`${store.order.length}명 · ${store.order.length*edDays}칸`;
+  const mis=$('#edMis');
+  if(misDays.size){ mis.textContent=`인원 안 맞는 날 ${misDays.size}일`; mis.style.color='#C7384A'; }
+  else{ mis.textContent='정원 맞음'; mis.style.color='#1F8A5B'; }
 }
 const rect=()=>({r1:Math.min(sel.r,sel.r2),r2:Math.max(sel.r,sel.r2),
                  c1:Math.min(sel.c,sel.c2),c2:Math.max(sel.c,sel.c2)});
@@ -1530,66 +1739,176 @@ document.addEventListener('paste',e=>{
   }
   paintEdit(); edTouched(); toast('붙여넣기 '+set+'칸');
 });
-$('#lgd').innerHTML=Object.entries(SHIFTS).map(([k,v])=>
-  `<span style="background:${v.bg};color:${v.fg}">${k}</span>`).join('');
+const LGD_GROUPS=[['근무',['DC','D','D1','중','EC','E','NC','N']],
+  ['휴무',['OF','주','V','생','특','공','법','병','P1']],
+  ['트레이닝 — 인력 제외',['/D','/E','/N']]];
+$('#lgd').innerHTML=LGD_GROUPS.map(([name,codes])=>
+  `<div class="lg"><span class="gn">${name}</span><span class="chips">${codes.map(k=>
+    `<span style="background:${SHIFTS[k].bg};color:${SHIFTS[k].fg}">${k}</span>`).join('')}</span></div>`).join('')+
+  `<div class="keys"><span>셀 클릭 후 <b>D E N O</b></span><span>드래그로 여러 칸</span>`+
+  `<span>더블클릭 직접 입력</span><span><b>Ctrl+Z</b> 되돌리기</span></div>`;
+function undoEdit(){
+  if(!undoStack.length){ toast('되돌릴 것이 없습니다'); return; }
+  restoreSnapshot(JSON.parse(undoStack.pop())); sel={r:0,c:0,r2:0,c2:0};
+  renderEditGrid(); edTouched(); toast('되돌리기');
+}
 
 /* ════════════════════════════════════════════════════════════════
  * 관리 화면
  * ════════════════════════════════════════════════════════════════ */
+let adminPanel='weekx';
+const ADMIN_NAV=[
+  ['자주 쓰는',[['weekx','주간 배정표 내려받기'],['seed','지난 어싸인 직접 입력']]],
+  ['우리 병동',[['rooms','병실 목록'],['schemes','방 구성'],['req','요일별 필요 인원']]],
+  ['간호사',[['caps','간호사 관리']]],
+  ['배정 규칙',[['rules','배정 원칙'],['manual','수동 수정 관리']]],
+  ['데이터',[['data','데이터 파일']]]];
+function adminBadge(id){
+  switch(id){
+    case 'seed': case 'caps': return store.order.length?store.order.length+'명':'';
+    case 'rooms': return (store.rooms||[]).length+'실';
+    case 'rules': return ['keepSameShift','keepAcrossShift','keepAfterOff','bounceAfterOff']
+      .filter(k=>store.rules[k]).length+'켬';
+    case 'manual': { const n=Object.keys(store.ovr).length+Object.keys(store.roomOv).length; return n?n+'건':''; }
+    default: return '';
+  }
+}
+function pickAdmin(id){ adminPanel=id; renderAdmin(); }
+function setRule(k,checked){
+  store.rules[k]=checked;
+  if(k==='keepAfterOff'&&checked) store.rules.bounceAfterOff=false;
+  if(k==='bounceAfterOff'&&checked) store.rules.keepAfterOff=false;
+  touch(); recompute(); renderAdmin();
+}
+function delBan(n,r){
+  const b=(store.banRooms[n]||[]).filter(x=>x!==r);
+  if(b.length) store.banRooms[n]=b; else delete store.banRooms[n];
+  touch(); recompute(); renderAdmin();
+}
+const ADMIN_PANELS={
+  weekx:{title:'주간 배정표 내려받기',
+    desc:"'병실 배정표' 양식 그대로 xlsx로 저장해 엑셀에서 수정할 수 있습니다. 기준: 지금 보고 있는 주가 속한 달.",
+    body(){ return `<div id="weekBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <div><button onclick="printWeek(true)">이번 달 전체 인쇄 (5~6장)</button></div>`; },
+    after(){
+      const mid=addDays(wkSunday,3);
+      $('#weekBtns').innerHTML=weeksOf(mid.getFullYear(),mid.getMonth()+1).map(sun=>{
+        const e2=addDays(sun,6);
+        return `<button onclick="downloadWeekXlsx(new Date(${sun.getFullYear()},${sun.getMonth()},${sun.getDate()})).catch(e=>toast('실패: '+e.message))">`+
+          `${sun.getMonth()+1}/${sun.getDate()}~${e2.getMonth()+1}/${e2.getDate()}</button>`;
+      }).join('');
+    }},
+  seed:{title:'지난 어싸인 직접 입력',
+    desc:'근무표에 지난 기록이 없을 때의 시작점입니다. 기록이 있으면 기록이 우선합니다.',
+    body(){ return `<table id="seedTable"></table>`; },
+    after(){
+      const rows=store.order.map(n=>{
+        const sd=store.seedManual[n]||{};
+        const seg=(vals,cur,attr)=>vals.map(v=>
+          `<button class="segbtn${cur===v?' on':''}" onclick="setSeed('${esc(n)}','${attr}','${v}')">${v==='없음'?'없음':attr==='label'?FORM_LBL(v):v}</button>`).join('');
+        return `<tr><td style="font-weight:700;min-width:70px">${esc(n)}</td>
+          <td>${seg(['A','B','C','D','없음'],sd.label||'없음','label')}</td>
+          <td>${seg(['D','E','N'],sd.period||'D','period')}</td></tr>`;
+      }).join('');
+      $('#seedTable').innerHTML=`<tr><th style="text-align:left">간호사</th><th style="text-align:left">마지막 어싸인 (배정표 표기 B~E)</th><th style="text-align:left">근무</th></tr>`+
+        (rows||'<tr><td class="dim">근무표를 먼저 넣어주세요</td></tr>')+
+        `<tr><td colspan="3" class="dim">차지(A(CN))였던 사람은 '없음'으로 두세요 — 차지는 매일 자동 결정됩니다</td></tr>`;
+    }},
+  rooms:{title:'병실 목록',
+    desc:'호실·병상수를 우리 병동에 맞게 고칩니다. <b>다른 병동</b>이라면 여기서 통째로 교체하세요.',
+    body(){ return `<table id="roomTable"></table>
+      <div style="display:flex;align-items:center;gap:8px"><button onclick="addRoom()">＋ 방 추가</button>
+      <span class="dim">호실을 바꾸면 '방 구성'의 호실도 같이 맞춰주세요</span></div>`; },
+    after(){
+      $('#roomTable').innerHTML=
+        `<tr><th style="text-align:left">호실</th>${store.rooms.map((r,i)=>
+           `<td><input type="text" style="width:56px" value="${esc(String(r[0]))}" onchange="setRoom(${i},0,this.value)"></td>`).join('')}</tr>`+
+        `<tr><th style="text-align:left">병상수</th>${store.rooms.map((r,i)=>
+           `<td><input type="number" min="0" max="20" style="width:56px" value="${+r[1]||''}" onchange="setRoom(${i},1,this.value)"></td>`).join('')}</tr>`+
+        `<tr><th></th>${store.rooms.map((r,i)=>
+           `<td style="text-align:center"><button class="segbtn danger" title="이 방 삭제" onclick="delRoom(${i})">✕</button></td>`).join('')}</tr>`;
+    }},
+  schemes:{title:'방 구성',
+    desc:'근무 인원수(2~5인)별로 어싸인마다 맡을 방을 정합니다.',
+    aux:`<button onclick="resetSchemes()">기본값 복원</button>`,
+    body(){ return `<div id="schemes" style="display:flex;gap:16px;flex-wrap:wrap"></div>`; },
+    after(){
+      $('#schemes').innerHTML=[5,4,3,2].map(cnt=>
+        `<div class="schemeRow"><b>${cnt}인 근무</b>`+Object.keys(store.schemes[cnt]).map(l=>
+          `<div style="margin:3px 0"><span style="display:inline-block;width:3.4em"><b>${FORM_LBL(l)}</b></span>
+           <input type="text" value="${store.schemes[cnt][l].join(', ')}"
+            onchange="setScheme(${cnt},'${l}',this.value)"></div>`).join('')+'</div>').join('');
+    }},
+  req:{title:'요일별 필요 인원',
+    desc:'근무표 고치기 화면에서 미달·초과를 빨갛게 표시하는 기준입니다.',
+    body(){ return `<table id="reqTable" style="width:auto"></table>`; },
+    after(){
+      const WKK=[['mon','월'],['tue','화'],['wed','수'],['thu','목'],['fri','금'],['sat','토'],['sun','일']];
+      $('#reqTable').innerHTML=`<tr><th></th>${WKK.map(([k,l])=>`<th style="min-width:3em">${l}</th>`).join('')}</tr>`+
+        ['D','E','N'].map(P=>`<tr><td style="font-weight:700;color:${SHIFTS[P].fg}">${P}</td>`+WKK.map(([k])=>
+          `<td><input type="number" min="0" max="20" style="width:52px" value="${store.req[k][P]}"
+            onchange="setReq('${k}','${P}',this.value)"></td>`).join('')+'</tr>').join('');
+    }},
+  caps:{title:'간호사 관리',
+    desc:'가능한 근무를 켜고 끕니다. <b>DC · EC · NC</b> 를 켜면 그 시간대에 차지로 뽑힐 수 있습니다.',
+    body(){ return `<table id="capsTable"></table>`; },
+    after(){
+      $('#capsTable').innerHTML=`<tr class="hd"><th style="width:92px">간호사</th><th style="width:300px">가능 근무</th><th>주지 않을 방</th></tr>`+
+        (store.order.map(n=>{
+          const cp=capsOf(n), bans=store.banRooms[n]||[];
+          return `<tr><td class="nm2">${esc(n)}</td>
+            <td><div style="display:flex;gap:4px;flex-wrap:wrap">${ALL_CAPS.map(c=>
+              `<span class="capChip${cp.includes(c)?' on':''}" onclick="toggleCap('${esc(n)}','${c}')">${c}</span>`).join('')}</div></td>
+            <td><div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">${
+              bans.map(r=>`<span class="banChip">${esc(roomShort(r))}호<span class="x" onclick="delBan('${esc(n)}','${esc(r)}')">×</span></span>`).join('')}
+              <span class="addChip banBtn" title="주지 않을 방 고르기" onclick="openRoomPick({kind:'nurse',name:'${esc(n)}'},event.pageX,event.pageY)">＋</span></div></td></tr>`;
+        }).join('')||'<tr><td class="dim" style="padding:8px 0">근무표를 먼저 넣어주세요</td></tr>');
+    }},
+  rules:{title:'배정 원칙',
+    desc:'차지는 항상 자동(DC/EC/NC 표시자 우선)입니다. 원칙 3·4는 반대 개념 — 하나를 켜면 다른 쪽이 꺼집니다.',
+    body(){
+      const R=[['keepSameShift','원칙 1 — 전일 같은 근무면 방 유지','어제 같은 시간대에 본 방을 오늘도 봅니다.'],
+        ['keepAcrossShift','원칙 2 — 근무가 바뀌어도 방 유지','근무 시간대가 바뀌어도 어제 본 방을 이어 봅니다.'],
+        ['keepAfterOff','원칙 3 — 오프 복귀자 방 유지','쉬고 돌아온 사람이 마지막으로 본 방을 다시 봅니다.'],
+        ['bounceAfterOff','원칙 4 — 오프 복귀자 튕기기','쉬고 돌아온 사람에게 이전 방을 일부러 피해서 줍니다.']];
+      return R.map(([k,t,d])=>`<div class="rulRow">
+        <div style="flex:1"><div class="rt">${t}</div><div class="rd">${d}</div></div>
+        <label class="sw"><input type="checkbox" ${store.rules[k]?'checked':''}
+          onchange="setRule('${k}',this.checked)"><i></i></label></div>`).join('');
+    }},
+  manual:{title:'수동 수정 관리',
+    desc:'배정표에서 직접 바꾼 담당 교체·일별 방 수정을 한 번에 되돌립니다.',
+    body(){ return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="danger" onclick="resetOv()">담당 교체 모두 초기화</button>
+      <button class="danger" onclick="resetRoomOv()">일별 방 수정 모두 초기화</button>
+      <span class="dim" id="ovCount"></span></div>`; },
+    after(){
+      $('#ovCount').textContent=`담당 교체 ${Object.keys(store.ovr).length}일 · 방 수정 ${Object.keys(store.roomOv).length}일`;
+    }},
+  data:{title:'데이터 파일',
+    desc:'모든 내용은 공용 폴더(NAS)의 JSON 파일 하나에 저장됩니다.',
+    body(){ return `<div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="pickNewLocation()">다른 파일로 저장 (위치 변경)</button>
+      <button onclick="downloadBackup()">백업 내려받기</button>
+      <button onclick="show('start')">다른 데이터 파일 열기</button></div>
+      <div class="dim" id="dataInfo"></div>`; },
+    after(){
+      const dates=timelineRange();
+      $('#dataInfo').textContent=(fileHandle?'파일: '+fileHandle.name+' · ':'')+
+        (dates?`기록 범위 ${dates.min} ~ ${dates.max}`:'기록 없음')+` · 간호사 ${store.order.length}명`;
+    }},
+};
 function renderAdmin(){
-  // 지난 어싸인 직접 입력 — 큰 토글 버튼
-  const rows=store.order.map(n=>{
-    const s=store.seedManual[n]||{};
-    const seg=(vals,cur,attr)=>vals.map(v=>
-      `<button class="segbtn${cur===v?' on':''}" onclick="setSeed('${esc(n)}','${attr}','${v}')">${v==='없음'?'없음':attr==='label'?FORM_LBL(v):v}</button>`).join('');
-    return `<tr><td style="font-weight:700;min-width:70px">${esc(n)}</td>
-      <td>${seg(['A','B','C','D','없음'],s.label||'없음','label')}</td>
-      <td>${seg(['D','E','N'],s.period||'D','period')}</td></tr>`;
-  }).join('');
-  $('#seedTable').innerHTML=`<tr><th style="text-align:left">간호사</th><th style="text-align:left">마지막 어싸인 (배정표 표기 B~E)</th><th style="text-align:left">근무</th></tr>`+
-    (rows||'<tr><td class="dim">근무표를 먼저 넣어주세요</td></tr>')+
-    `<tr><td colspan="3" class="dim">차지(A(CN))였던 사람은 '없음'으로 두세요 — 차지는 매일 자동 결정됩니다</td></tr>`;
-  // 방 구성
-  $('#schemes').innerHTML=[5,4,3,2].map(cnt=>
-    `<div class="schemeRow"><b>${cnt}인 근무</b>`+Object.keys(store.schemes[cnt]).map(l=>
-      `<div style="margin:3px 0"><span style="display:inline-block;width:3.4em"><b>${FORM_LBL(l)}</b></span>
-       <input type="text" value="${store.schemes[cnt][l].join(', ')}"
-        onchange="setScheme(${cnt},'${l}',this.value)"></div>`).join('')+'</div>').join('');
-  // 원칙·차지
-  for(const [id,k] of [['r1','keepSameShift'],['r2','keepAcrossShift'],['r3','keepAfterOff'],['r4','bounceAfterOff']])
-    $('#'+id).checked=!!store.rules[k];
-  $('#capsTable').innerHTML=`<tr><th style="text-align:left">간호사</th>${ALL_CAPS.map(c=>
-      `<th style="min-width:3em">${c}</th>`).join('')}<th>주지 않을 방</th></tr>`+
-    store.order.map(n=>{
-      const cp=capsOf(n);
-      const ban=(store.banRooms[n]||[]).map(roomShort).join(', ');
-      return `<tr><td style="font-weight:700;min-width:70px">${esc(n)}</td>`+ALL_CAPS.map(c=>
-        `<td><button class="segbtn${cp.includes(c)?' on':''}" onclick="toggleCap('${esc(n)}','${c}')">${cp.includes(c)?'O':'·'}</button></td>`).join('')+
-        `<td><button class="segbtn banBtn${ban?' on':''}" onclick="openRoomPick({kind:'nurse',name:'${esc(n)}'},event.pageX,event.pageY)">${ban?esc(ban)+'호':'없음'}</button></td></tr>`;
-    }).join('')||'<tr><td class="dim">근무표를 먼저 넣어주세요</td></tr>';
-  $('#roomTable').innerHTML=
-    `<tr><th style="text-align:left">호실</th>${store.rooms.map((r,i)=>
-       `<td><input type="text" style="width:56px" value="${esc(String(r[0]))}" onchange="setRoom(${i},0,this.value)"></td>`).join('')}</tr>`+
-    `<tr><th style="text-align:left">병상수</th>${store.rooms.map((r,i)=>
-       `<td><input type="number" min="0" max="20" style="width:56px" value="${+r[1]||''}" onchange="setRoom(${i},1,this.value)"></td>`).join('')}</tr>`+
-    `<tr><th></th>${store.rooms.map((r,i)=>
-       `<td style="text-align:center"><button class="segbtn" title="이 방 삭제" onclick="delRoom(${i})">✕</button></td>`).join('')}</tr>`;
-  const WKK=[['mon','월'],['tue','화'],['wed','수'],['thu','목'],['fri','금'],['sat','토'],['sun','일']];
-  $('#reqTable').innerHTML=`<tr><th></th>${WKK.map(([k,l])=>`<th style="min-width:3em">${l}</th>`).join('')}</tr>`+
-    ['D','E','N'].map(P=>`<tr><td style="font-weight:700">${P}</td>`+WKK.map(([k])=>
-      `<td><input type="number" min="0" max="20" style="width:52px" value="${store.req[k][P]}"
-        onchange="setReq('${k}','${P}',this.value)"></td>`).join('')+'</tr>').join('');
-  $('#ovCount').textContent=` — 담당 교체 ${Object.keys(store.ovr).length}일 · 방 수정 ${Object.keys(store.roomOv).length}일`;
-  // 주간 xlsx 버튼 (보고 있는 주가 속한 달 — 연·월 모두 주 중간일 기준, 연말 주 안전)
-  const mid=addDays(wkSunday,3);
-  $('#weekBtns').innerHTML=weeksOf(mid.getFullYear(),mid.getMonth()+1).map(sun=>{
-    const e2=addDays(sun,6);
-    return `<button onclick="downloadWeekXlsx(new Date(${sun.getFullYear()},${sun.getMonth()},${sun.getDate()})).catch(e=>toast('실패: '+e.message))">`+
-      `${sun.getMonth()+1}/${sun.getDate()}~${e2.getMonth()+1}/${e2.getDate()}</button>`;
-  }).join('');
-  const dates=timelineRange();
-  $('#dataInfo').textContent=(fileHandle?'파일: '+fileHandle.name+' · ':'')+
-    (dates?`기록 범위 ${dates.min} ~ ${dates.max}`:'기록 없음')+` · 간호사 ${store.order.length}명`;
+  $('#adminNav').innerHTML=ADMIN_NAV.map(([gname,items])=>
+    `<div><div class="anName">${gname}</div>${items.map(([id,t])=>{
+      const b=adminBadge(id);
+      return `<div class="anItem${id===adminPanel?' on':''}" onclick="pickAdmin('${id}')">
+        <span class="t">${t}</span>${b?`<span class="b">${b}</span>`:''}</div>`;}).join('')}</div>`).join('');
+  const P=ADMIN_PANELS[adminPanel];
+  $('#adminPanelBox').innerHTML=
+    `<div class="apHead"><div style="flex:1"><div class="apTitle">${P.title}</div>`+
+    `<div class="apDesc">${P.desc}</div></div>${P.aux||''}</div>`+P.body();
+  if(P.after) P.after();
 }
 function setSeed(name,attr,val){
   const s=(store.seedManual[name]=store.seedManual[name]||{});
@@ -1628,13 +1947,6 @@ function toggleCap(name,code){
 }
 function setReq(k,P,v){ store.req[k][P]=Math.max(0,+v||0); touch();
   if(curScr==='edit') paintEdit(); }
-for(const [id,k] of [['r1','keepSameShift'],['r2','keepAcrossShift'],['r3','keepAfterOff'],['r4','bounceAfterOff']])
-  $('#'+id).addEventListener('change',e=>{
-    store.rules[k]=e.target.checked;
-    if(k==='keepAfterOff'&&e.target.checked){ store.rules.bounceAfterOff=false; $('#r4').checked=false; }
-    if(k==='bounceAfterOff'&&e.target.checked){ store.rules.keepAfterOff=false; $('#r3').checked=false; }
-    touch(); recompute();
-  });
 async function pickNewLocation(){
   try{
     const h=await window.showSaveFilePicker({suggestedName:fileHandle?fileHandle.name:'어싸인 데이터.json',
