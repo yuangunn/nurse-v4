@@ -325,6 +325,9 @@ html.dark .holiday { background-color: rgba(214, 139, 120, 0.08); }
 .g-overflow-header { opacity: 0.3; }
 /* 사전입력 완화(relaxed) 셀 */
 .g-relaxed { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* 재조정: 사용자가 고쳐 잠근 칸(핀) / 솔버가 따라 고친 칸 */
+.g-pin { outline: 2px solid var(--warn); outline-offset: -2px; }
+.g-readj { outline: 2px dashed var(--accent); outline-offset: -2px; }
 /* 스케줄 셀 색상 (legacy fallback — Phase 4에서는 inline style이 우선) */
 .g-cell-work { background: var(--accent-soft); color: var(--accent); }
 .g-cell-rest { background: var(--paper-2); color: var(--ink-3); }

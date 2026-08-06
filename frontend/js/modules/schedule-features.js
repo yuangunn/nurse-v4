@@ -77,6 +77,83 @@ window.ScheduleFeaturesModule = function() {
       return count;
     },
 
+    // ═══ 4b. 핀포인트 수정 반영 재조정 ═══════════════════════
+    // 고친 칸은 잠그고 나머지 전체를 사전입력(유지 보너스)으로 되먹여 재생성 —
+    // 하드 제약을 다시 맞추는 데 필요한 최소한의 칸만 따라 움직인다.
+    readjustPins:{}, readjustChanged:{}, readjustSummary:'',
+    getEditedCells(){
+      if(!this._originalSchedule)return {};
+      const out={};
+      const nids=new Set([...Object.keys(this.schedule||{}),...Object.keys(this._originalSchedule||{})]);
+      for(const nid of nids){
+        const cur=this.schedule[nid]||{}, org=this._originalSchedule[nid]||{};
+        for(const dk of new Set([...Object.keys(cur),...Object.keys(org)])){
+          if((cur[dk]||'')!==(org[dk]||''))(out[nid]=out[nid]||{})[dk]=true;
+        }
+      }
+      return out;
+    },
+    // 근무표에서 일별 D/E/N 인원 역산 — 재조정 시 이 표의 인원수가 기준 (설정 기본값 무시)
+    _reqFromSchedule(sched){
+      const P={DC:'D',D:'D',EC:'E',E:'E',NC:'N',N:'N'};
+      const out={};
+      for(const days of Object.values(sched||{}))
+        for(const[dk,code]of Object.entries(days||{})){
+          const p=P[code]; if(!p)continue;
+          (out[dk]=out[dk]||{D:0,E:0,N:0})[p]++;
+        }
+      return out;
+    },
+    isReadjustPin(nurseId,day){return !!this.readjustPins[nurseId]?.[this.dayKey(day)]},
+    isReadjustChanged(nurseId,day){return !!this.readjustChanged[nurseId]?.[this.dayKey(day)]},
+    async readjustSchedule(){
+      if(this.generating)return;
+      const pins=this.getEditedCells();
+      const nPin=Object.values(pins).reduce((a,m)=>a+Object.keys(m).length,0);
+      if(!nPin){this.toast('수정한 칸이 없습니다 — 스케줄 셀을 먼저 고쳐주세요','info');return}
+      // 수정 전 표의 인원수 유지가 기준. 지운 칸은 잠그면 '하루 1근무'와 충돌 — 솔버가 채우게 둔다
+      const dayReq=this._reqFromSchedule(this._originalSchedule);
+      const locked=JSON.parse(JSON.stringify(this.lockedCells||{}));
+      const prevPayload={};
+      for(const[nid,days]of Object.entries(this.schedule)){
+        for(const[dk,v]of Object.entries(days||{})){
+          if(!v||v==='__CLEAR__')continue;
+          (prevPayload[nid]=prevPayload[nid]||{})[dk]=v;
+          if(pins[nid]?.[dk])(locked[nid]=locked[nid]||{})[dk]=true;
+        }
+      }
+      const before=JSON.parse(JSON.stringify(this.schedule));
+      await this.generate({
+        prev_schedule:prevPayload,
+        locked_cells:locked,
+        per_day_requirements:dayReq,
+        time_limit:Math.min(this.generateTimeout*60,300),
+        // 수정으로 그날 인원이 어긋난 사전입력은 완화로만 풀린다 —
+        // 잠근 칸(locked)은 완화 모드에서도 고정이므로 사용자 수정은 안전
+        allow_pre_relax:true,
+        _readjust:true,
+      });
+      if(!this.statusOk)return;          // 실패 시 수정본 유지 + 기존 진단 표시
+      const changed={}; const detail=[];
+      const nids=new Set([...Object.keys(this.schedule||{}),...Object.keys(before)]);
+      let nChg=0;
+      for(const nid of nids){
+        const cur=this.schedule[nid]||{}, prev=before[nid]||{};
+        for(const dk of new Set([...Object.keys(cur),...Object.keys(prev)])){
+          if((cur[dk]||'')===(prev[dk]||'')||pins[nid]?.[dk])continue;
+          (changed[nid]=changed[nid]||{})[dk]=true; nChg++;
+          const nurse=this.nurses.find(n=>n.id===nid);
+          detail.push(`  ${nurse?nurse.name:nid} ${dk.slice(5).replace('-','/')}: ${prev[dk]||'(빈칸)'} → ${cur[dk]||'(빈칸)'}`);
+        }
+      }
+      this.readjustPins=pins; this.readjustChanged=changed;
+      this.readjustSummary=`📌 고정 ${nPin}칸 · 따라 고침 ${nChg}칸`;
+      this.statusMessage=`✅ 재조정 완료 — 고친 ${nPin}칸은 그대로, 솔버가 ${nChg}칸을 따라 고쳤습니다.`+
+        (nChg?'\n\n📋 따라 고친 칸:\n'+detail.slice(0,20).join('\n')+(detail.length>20?`\n  … 외 ${detail.length-20}건`:''):'')+
+        '\n\n'+this.statusMessage;
+      this.toast(`재조정 완료 — 고정 ${nPin}칸, 따라 고침 ${nChg}칸`,'success',4000);
+    },
+
     // ═══ 5. 간호사별 월간 요약 ═══════════════════════════
     showNurseSummary:false,
 

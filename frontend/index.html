@@ -789,6 +789,7 @@
       <button @click="openPastePrev('wish')" class="btn btn-xs btn-ghost text-amber" title="팀즈 위시 시트를 붙여넣어 희망근무(소프트)로 일괄 등록">⭐ 위시 붙여넣기</button>
       <button @click="loadPrevMonthSchedule()" class="btn btn-xs btn-ghost text-blue" title="이전달 스케줄 이월">📅 전달이월</button>
       <button @click="autoFillHolidays()" class="btn btn-xs btn-ghost" title="이 달의 법정공휴일 자동 입력 (내장 달력 — 임시공휴일은 직접 확인)">🇰🇷 공휴일</button>
+      <button @click="applyReqFromPrev()" class="btn btn-xs btn-ghost text-blue" title="이미 완성된 근무표를 붙여넣었을 때: 일별 D/E/N 필요 인원을 설정 기본값 대신 이 표의 실제 인원수로 고정">📌 이 표대로 인원</button>
       <button @click="autoFillPrevMonthNights()" class="btn btn-xs btn-ghost" title="직전 달 저장 근무표에서 간호사별 야간 수를 자동 계산해 '전월N'에 채움">🌙 전월N 자동</button>
       <button @click="undo()" class="btn btn-xs btn-ghost" :title="`Ctrl+Z (${_undoStack.length}회 가능)`" :style="_undoStack.length?'':'opacity:0.3'">↩ 되돌리기 <span x-show="_undoStack.length>0" class="text-xs" style="margin-left:2px;font-size:0.6rem;opacity:0.6" x-text="'('+_undoStack.length+')'"></span></button>
       <button @click="redo()" class="btn btn-xs btn-ghost" :title="`Ctrl+Shift+Z (${_redoStack.length}회 가능)`" :style="_redoStack.length?'':'opacity:0.3'">↪ 다시 <span x-show="_redoStack.length>0" class="text-xs" style="margin-left:2px;font-size:0.6rem;opacity:0.6" x-text="'('+_redoStack.length+')'"></span></button>
@@ -1299,6 +1300,9 @@
       <template x-for="g in nurseGroups" :key="g"><option :value="g" x-text="g+'그룹'"></option></template>
     </select>
     <span x-show="getManualEditCount()>0" class="text-xs text-amber" x-text="`✏ 수동편집 ${getManualEditCount()}건`"></span>
+    <button x-show="getManualEditCount()>0&&!generating" @click="readjustSchedule()" class="btn btn-xs btn-primary"
+      title="고친 칸은 그대로 잠그고, 인원·규칙이 다시 맞도록 나머지를 최소한으로 재배치합니다">✨ 수정 반영 재조정</button>
+    <span x-show="readjustSummary" class="text-xs text-dim" x-text="readjustSummary"></span>
   </div>
   <!-- 경고 요약 -->
   <div x-show="scheduleWarnings.length>0&&schedule&&Object.keys(schedule).length>0" x-cloak x-data="{expanded:false}" class="card-sm mb-3" style="border-left:3px solid var(--amber)">
@@ -1352,7 +1356,7 @@
       </thead>
       <tbody><template x-for="nurse in filteredNurses" :key="nurse.id"><tr :class="nurse.is_trainee?'trainee-row hover:bg-white/[0.015]':'hover:bg-white/[0.015]'">
         <td class="g-cell name-cell"><span class="nurse-name" x-text="nurse.name"></span> <span class="nurse-group" x-text="nurse.group"></span></td>
-        <template x-for="day in scheduleDays" :key="day"><td class="g-cell p-0" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',isRelaxed(nurse.id,day)?'g-relaxed':'',isManuallyEdited(nurse.id,day)?'g-edited':'',hasScheduleViolation(nurse.id,day)?'g-violation':'',isNurseInactive(nurse,day)?'g-inactive':'',getScheduleCellClass(nurse.id,day)]" :style="getScheduleCellStyle(nurse.id,day)" :title="isNurseInactive(nurse,day)==='before'?'전입 전':(isNurseInactive(nurse,day)==='after'?'전출 후':(isRelaxed(nurse.id,day)?`완화: ${relaxedCells[nurse.id]?.[dayKey(day)]?.original} → ${relaxedCells[nurse.id]?.[dayKey(day)]?.assigned}`:''))"><span class="schedule-cell-text block" x-text="isNurseInactive(nurse,day)?'':displayShift(nurse.id,day)" @click="openShiftEdit(nurse,day)"></span></td></template>
+        <template x-for="day in scheduleDays" :key="day"><td class="g-cell p-0" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',isRelaxed(nurse.id,day)?'g-relaxed':'',isManuallyEdited(nurse.id,day)?'g-edited':'',isReadjustPin(nurse.id,day)?'g-pin':'',isReadjustChanged(nurse.id,day)?'g-readj':'',hasScheduleViolation(nurse.id,day)?'g-violation':'',isNurseInactive(nurse,day)?'g-inactive':'',getScheduleCellClass(nurse.id,day)]" :style="getScheduleCellStyle(nurse.id,day)" :title="isNurseInactive(nurse,day)==='before'?'전입 전':(isNurseInactive(nurse,day)==='after'?'전출 후':(isRelaxed(nurse.id,day)?`완화: ${relaxedCells[nurse.id]?.[dayKey(day)]?.original} → ${relaxedCells[nurse.id]?.[dayKey(day)]?.assigned}`:''))"><span class="schedule-cell-text block" x-text="isNurseInactive(nurse,day)?'':displayShift(nurse.id,day)" @click="openShiftEdit(nurse,day)"></span></td></template>
         <td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['DC','D'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['EC','E'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['NC','N'])"></td><td class="g-cell px-1 py-0.5 text-center text-sub" x-text="countShifts(nurse.id,['OF','주'])"></td>
         <td class="g-cell px-1 py-0.5 text-center text-pink" x-text="countShifts(nurse.id,['생'])||''"></td>
         <td class="g-cell px-1 py-0.5 text-center font-semibold cursor-pointer select-none text-blue" @click="openScoreDetail(nurse)" x-text="nurseScore(nurse.id)"></td>

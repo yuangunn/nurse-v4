@@ -40,6 +40,25 @@ window.PreinputIoModule = function() {
         this.prevDayReqs[k][type]=num;
       }
     },
+    // 입력된 근무표의 일별 D/E/N 인원을 그대로 필요 인원으로 고정 —
+    // 이미 완성된 표를 붙여넣었을 때 설정된 요일별 기본값 대신 이 표가 기준이 되게.
+    applyReqFromPrev(){
+      const P={DC:'D',D:'D',EC:'E',E:'E',NC:'N',N:'N'};
+      const counts={};
+      for(const days of Object.values(this.prevSchedule||{}))
+        for(const[dk,code]of Object.entries(days||{})){
+          const p=P[code]; if(!p)continue;
+          (counts[dk]=counts[dk]||{D:0,E:0,N:0})[p]++;
+        }
+      const dks=Object.keys(counts);
+      if(!dks.length){this.toast('사전입력에 D/E/N 근무가 없습니다','warn');return}
+      if(!confirm(`${dks.length}일의 필요 인원을 지금 입력된 근무표의 실제 인원수로 고정합니다.\n(설정의 요일별 기본값 대신 이 표가 기준이 됩니다)\n\n계속할까요?`))return;
+      this._pushUndo&&this._pushUndo();
+      for(const dk of dks)this.prevDayReqs[dk]={...counts[dk]};
+      this._checkViolations&&this._checkViolations();
+      this._queueFeasibility&&this._queueFeasibility();
+      this.toast(`${dks.length}일 필요 인원을 이 표대로 고정했습니다 (Ctrl+Z 취소)`,'success',4000);
+    },
 
     // ── 셀 편집 적용 ─────────────────────────────────────────
     applyShiftEdit(shift){
