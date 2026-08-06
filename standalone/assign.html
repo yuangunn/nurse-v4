@@ -237,10 +237,12 @@
   .addChip{display:inline-flex;align-items:center;justify-content:center;height:24px;padding:0 9px;border-radius:8px;
     color:#B8BFC9;font-size:11.5px;font-weight:700;cursor:pointer;box-shadow:inset 0 0 0 1px #EBEDF0}
   #capsTable{width:100%;border-collapse:collapse;table-layout:fixed}
-  #capsTable tr.hd th{height:30px;text-align:left;font-size:11px;font-weight:800;letter-spacing:.05em;color:#8A93A1;
-    box-shadow:inset 0 -1px 0 #EBEDF0}
+  #capsTable tr.hd th,#roomTable tr.hd th{height:30px;text-align:left;font-size:11px;font-weight:800;
+    letter-spacing:.05em;color:#8A93A1;box-shadow:inset 0 -1px 0 #EBEDF0}
   #capsTable td{padding:8px 4px 8px 0;box-shadow:inset 0 -1px 0 #F6F7F9;vertical-align:middle}
   #capsTable td.nm2{font-size:14px;font-weight:700;letter-spacing:-0.015em}
+  #roomTable{border-collapse:collapse}
+  #roomTable td{padding:6px 12px 6px 0;box-shadow:inset 0 -1px 0 #F6F7F9;vertical-align:middle}
   .rulRow{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:12px;box-shadow:0 0 0 1px #EBEDF0}
   .rulRow .rt{font-size:14px;font-weight:700;letter-spacing:-0.01em}
   .rulRow .rd{font-size:13px;color:#8A93A1;margin-top:2px}
@@ -1820,13 +1822,13 @@ const ADMIN_PANELS={
       <div style="display:flex;align-items:center;gap:8px"><button onclick="addRoom()">＋ 방 추가</button>
       <span class="dim">호실을 바꾸면 '방 구성'의 호실도 같이 맞춰주세요</span></div>`; },
     after(){
+      // 방 1개 = 1행 (세로 나열) — 방이 많아도 패널을 가로로 뚫지 않는다
       $('#roomTable').innerHTML=
-        `<tr><th style="text-align:left">호실</th>${store.rooms.map((r,i)=>
-           `<td><input type="text" style="width:56px" value="${esc(String(r[0]))}" onchange="setRoom(${i},0,this.value)"></td>`).join('')}</tr>`+
-        `<tr><th style="text-align:left">병상수</th>${store.rooms.map((r,i)=>
-           `<td><input type="number" min="0" max="20" style="width:56px" value="${+r[1]||''}" onchange="setRoom(${i},1,this.value)"></td>`).join('')}</tr>`+
-        `<tr><th></th>${store.rooms.map((r,i)=>
-           `<td style="text-align:center"><button class="segbtn danger" title="이 방 삭제" onclick="delRoom(${i})">✕</button></td>`).join('')}</tr>`;
+        `<tr class="hd"><th style="width:130px">호실</th><th style="width:130px">병상수</th><th></th></tr>`+
+        store.rooms.map((r,i)=>
+          `<tr><td><input type="text" style="width:90px" value="${esc(String(r[0]))}" onchange="setRoom(${i},0,this.value)"></td>`+
+          `<td><input type="number" min="0" max="20" style="width:90px" value="${+r[1]||''}" onchange="setRoom(${i},1,this.value)"></td>`+
+          `<td><button class="segbtn danger" title="이 방 삭제" onclick="delRoom(${i})">✕</button></td></tr>`).join('');
     }},
   schemes:{title:'방 구성',
     desc:'근무 인원수(2~5인)별로 어싸인마다 맡을 방을 정합니다.',
