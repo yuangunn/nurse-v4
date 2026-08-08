@@ -1,37 +1,33 @@
+
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.egg-info/
-dist/
-# build/ 중 PyInstaller 산출물은 제외, 아이콘 소스는 포함
-build/NurseScheduler/
-# *.spec — 빌드 스펙은 버전 관리
-data/
-*.db
-
-# Electron
-electron/node_modules/
-electron/dist/
-package-lock.json
-
-.superpowers/
-
-# Claude Code 로컬 설정 / 디자인 핸드오프 (커밋 제외)
 .claude/
 .design-handoff*/
-
-# pytest 캐시
+.DS_Store
 .pytest_cache/
-
+.Python
+.superpowers/
+*.db
+*.egg-info/
+*.pyc
+*.pyd
+*.pyo
+# *.spec — 빌드 스펙은 버전 관리
+# build/ 중 PyInstaller 산출물은 제외, 아이콘 소스는 포함
+# Claude Code 로컬 설정 / 디자인 핸드오프 (커밋 제외)
+# Electron
+# pytest 캐시
 # standalone 도우미 exe 빌드 산출물
-standalone/exe/build/
-standalone/exe/dist/
+# 네이티브 앱 빌드 산출물
+build/NurseScheduler/
+data/
+dist/
+electron/dist/
+electron/node_modules/
+package-lock.json
+standalone/app/bin/
+standalone/app/dist/
+standalone/app/obj/
 standalone/exe/*.spec
 standalone/exe/assign_error.log
-
-# 네이티브 앱 빌드 산출물
-standalone/app/bin/
-standalone/app/obj/
-standalone/app/dist/
+standalone/exe/build/
+standalone/exe/dist/

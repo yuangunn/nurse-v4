@@ -5,6 +5,44 @@
  * ─────────────────────────────────────────────────────────────────────────── */
 window.ScheduleFeaturesModule = function() {
   return {
+    // ═══ 0. 사람이 짠 근무표를 그대로 근무표로 확정 ═════════
+    // 이미 손으로 완성한 표를 넣고 싶을 때 솔버를 돌릴 이유가 없다.
+    // 사전입력에 붙여넣은 표를 그대로 스케줄로 옮긴다 (검증 없음 — 사람이 짠 게 정답).
+    usePrevAsSchedule(){
+      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
+      let filled=0, holes=[];
+      for(const n of this.nurses){
+        for(const d of days){
+          if(this.prevSchedule[n.id]?.[this.dayKey(d)]) filled++;
+          else holes.push(`${n.name} ${d.getMonth()+1}/${d.getDate()}`);
+        }
+      }
+      if(!filled){ this.toast('사전입력이 비어 있습니다','error'); return }
+      const msg=holes.length
+        ? `빈 칸이 ${holes.length}개 있습니다 (예: ${holes.slice(0,3).join(', ')}).\n`
+          +`빈 칸은 비워 둔 채로 넘어갑니다.\n\n${filled}건을 근무표로 확정할까요?`
+        : `${filled}건을 근무표로 확정합니다. 솔버는 돌리지 않습니다.\n계속할까요?`;
+      if(!confirm(msg)) return;
+      this.schedule=JSON.parse(JSON.stringify(this.prevSchedule));
+      this.extendedSchedule=null; this.nurseScores={}; this.nurseScoreDetails={};
+      this.relaxedCells={}; this.scheduleStopped=false; this.mipGapPercent=null;
+      this.solverLog=[]; this.generateResult=null;
+      this.activeTab='schedule';
+      this.toast(`근무표로 확정했습니다 (${filled}건) — 점수는 솔버를 돌려야 나옵니다`,'info');
+    },
+
+    // 어싸인(standalone)에 붙여넣을 수 있는 표로 복사 — 이름 + 날짜 + 근무
+    copyScheduleTsv(){
+      if(!this.schedule||!Object.keys(this.schedule).length){ this.toast('근무표가 없습니다','error'); return }
+      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
+      const lines=[['이름',...days.map(d=>`${d.getMonth()+1}/${d.getDate()}`)].join('\t')];
+      for(const n of this.nurses)
+        lines.push([n.name,...days.map(d=>this.schedule[n.id]?.[this.dayKey(d)]||'')].join('\t'));
+      navigator.clipboard.writeText(lines.join('\n'))
+        .then(()=>this.toast('복사했습니다 — 어싸인 배정표에 붙여넣으세요','info'))
+        .catch(()=>this.toast('복사 실패','error'));
+    },
+
     // ═══ 1. 엑셀 내보내기 ═══════════════════════════════════
     exportToCSV(){
       if(!this.schedule||!Object.keys(this.schedule).length)return;

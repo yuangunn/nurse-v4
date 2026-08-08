@@ -55,6 +55,7 @@ nurse-v4/
 │   │   └── modules/         # 14개 도메인 모듈 (analysis·solver·profiles·nurse-manage·
 │   │                        #   preinput-io·grid-interactions·schedule-features·misc-features·
 │   │                        #   settings-defs·view-helpers·paste-import·dev-tools·undo-redo·drag-select)
+│   │                        # + assign-core.js — standalone 배정표 전용 공유 코어 (앱은 로드 안 함)
 │   ├── lib/                 # tailwindcss, alpine, lucide (오프라인 번들)
 │   └── fonts/               # Pretendard(주) + 번들 폰트
 ├── electron/
@@ -334,30 +335,57 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 
 ---
 
-## 프론트엔드 탭 구성 (6탭)
+## 프론트엔드 탭 구성 (5탭)
 
 1. **설정**: 간호사 관리 + 요일별 인원 + 규칙 + 근무 정의 + 배점 규칙 + CSV 일괄 + 개발자 설정
-2. **사전입력**: 년월 선택 + 근무표 선입력
+2. **사전입력**: 년월 선택 + 근무표 선입력 (또는 **이미 완성된 근무표 입력**)
    - 💾 패널: 서버 저장/불러오기/삭제 (잠금·메모 포함)
    - 셀 우클릭 → **메모 + 🔒 완화 시 고정** 토글
    - 셀 드래그 → 다중 선택 + 근무 일괄 지정
    - Ctrl+Z/Shift+Ctrl+Z undo/redo (40단계)
    - 키보드: D/E/N/V/O 직접 입력, ←↑↓→ 이동, Delete 삭제
    - tfoot: 일별 D/E/N 배정 수 + 필요 수 (편집 가능)
+   - **✅ 이대로 근무표로** (`usePrevAsSchedule`): 사람이 손으로 짠 근무표를 붙여넣었을 때
+     솔버를 돌리지 않고 사전입력을 그대로 스케줄로 확정. 점수·완화 정보는 비어 있음
+     (📌 이 표대로 인원 → ✅ 이대로 근무표로 순으로 쓰면 인원 기준까지 그 표에 맞춰진다)
 3. **분석**: 일자별 과부족 히트맵 + 주휴 추천 배분 → "사전입력에 적용"
 4. **스케줄**: 생성 결과 표시, 셀 직접 편집, 인원 카운트, 배점 상세
-5. **어싸인**: 근무표 기반 병실 자동 배정 (일별 D/E/N, 병실 단위)
-   - 원칙: 차지=DC/EC/NC 우선(항상 적용) · ①전일 같은 근무 방 유지 ②근무 변경 시 유지 ③오프 복귀 유지 ④오프 복귀 튕기기(③과 상호배제 — 하나 켜면 다른 쪽 자동 해제, 기본 꺼짐). 우선순위 ①>②>③, 토글 가능
-   - 인원수별(2~5인) 방 구성 편집, 셀 클릭 수동 조정(스왑), TSV 복사. 설정은 localStorage(프로필·월별)
-   - 코어: `frontend/js/modules/assign-core.js` (순수 함수, `opts.seed`=전월 이월, 검증 `node scripts/test_assign_core.mjs`)
-   - 인트라넷용 ①: `standalone/assign.html` — 단일 파일 통합본(외부 의존 0, Chrome/Edge 103+). 엑셀식 편집 그리드(붙여넣기/키입력/범위선택/파일 DnD·CP949 폴백), 년월별 localStorage 저장 + 전월 어싸인 자동 이월, 주간 배정표를 내장 `병실 배정표.xlsx` 양식 그대로 xlsx 다운로드(순수 JS zip 패치) + HTML 인쇄(고정 문구·이미지도 양식에서 추출). 동기화 `node scripts/build-assign-standalone.mjs` (코어 + 양식 base64 주입 — 양식 파일 수정 후 재실행)
-   - 인트라넷용 ②: `standalone/assign_vba.bas` (Excel VBA 매크로 4종 — 초기세팅/근무표/어싸인/주간배정표)
-6. **저장**: 생성 스케줄 저장/불러오기
+   - **📋 어싸인용 복사** (`copyScheduleTsv`): 이름 + 날짜 + 근무 표를 클립보드로 →
+     어싸인 배정표(standalone)에 그대로 붙여넣는다
+5. **저장**: 생성 스케줄 저장/불러오기
+
+> 어싸인(병실 배정)은 **본 앱에서 뺐다** — 병동에서 실제로 쓰는 건 `standalone/assign.html`
+> 하나뿐이고(본 앱엔 배정표 출력이 없었다) 같은 로직을 두 곳에서 관리할 이유가 없다.
+> 근무표는 스케줄 탭 [📋 어싸인용 복사] → standalone 붙여넣기로 넘긴다.
+> 공유 코어 `frontend/js/modules/assign-core.js` 는 standalone 빌드가 쓰므로 **남겨 둔다**
+> (본 앱 HTML 에서는 더 이상 로드하지 않음).
 
 > 사전입력·스케줄 탭은 년월 연동. 주기 경계(7일 단위) 컬러 헤더.
 > 토요일 이후 컬럼 구분선.
 
 ---
+
+## 어싸인 (병실 배정) — 별도 도구
+
+병동 근무표가 나온 뒤 **누가 어느 방을 보는지** 정하는 도구. 본 앱과 분리돼 있다.
+
+- 코어: `frontend/js/modules/assign-core.js` (순수 함수, `opts.seed`=전월 이월,
+  `opts.roomsFor`=방 기준 연속성. 검증 `node scripts/test_assign_core.mjs`)
+- 원칙: 차지=DC/EC/NC 우선(항상) · ①전일 같은 근무 방 유지 ②근무 변경 시 유지
+  ③오프 복귀 유지 ④오프 복귀 튕기기(③과 상호배제). 우선순위 ①>②>③.
+  **연속성은 알파벳(A/B/C)이 아니라 실제 병실 겹침 기준** — 인원이 5→4로 바뀌어도
+  6~9호 보던 사람이 6~10호를 이어받는다(겹침 총합 최대 매칭).
+- 인트라넷용 ①: `standalone/assign.html` — 단일 파일 통합본(외부 의존 0, Chrome/Edge 103+).
+  엑셀식 편집 그리드(붙여넣기·근무만 붙여넣기·모르는 근무 매핑·범위선택·파일 DnD·CP949 폴백),
+  옆 폴더 `assign-data.js/json` 자동 열림(여러 개면 선택), 전월 어싸인 자동 이월,
+  주간 배정표 xlsx 내보내기(순수 JS zip 패치) + HTML 인쇄, 다크 모드, 도움말(실제 화면 GIF).
+  **병동 양식 교체**: 관리 > 배정표 양식에서 xlsx 를 올려 구조를 검사하고 채택.
+  구조가 다르면 자리표시자(`{{이름}} {{방}} {{차지:/CRN}} {{날짜}} {{요일}} {{중간번}} {{교육}}`)를
+  자동으로 꽂아 받은 뒤 엑셀에서 위치만 손보면 된다.
+  동기화 `node scripts/build-assign-standalone.mjs` (코어 + 양식 + 폰트 + 도움말 그림 + 버전 주입)
+- 인트라넷용 ②: `standalone/app/` — 같은 화면을 담은 Windows 단일 exe (WebView2, 127.0.0.1 안 씀).
+  파일 저장 권한 확인 없이 바로 저장. 빌드 `standalone/app/build.cmd`
+- 인트라넷용 ③: `standalone/assign_vba.bas` (Excel VBA 매크로 4종)
 
 ## Infeasible 진단 단계
 
