@@ -119,7 +119,8 @@ public sealed class MainForm : Form
     private void Fatal(string msg)
     {
         MessageBox.Show(this, msg, "어싸인 배정표", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        Close();
+        // Load 처리 중에 바로 Close() 하면 창이 안 닫히는 경우가 있어 한 박자 뒤로 미룬다
+        BeginInvoke(new Action(Close));
     }
 
     // ── 화면 ↔ 파일 다리 ────────────────────────────────────────────────
