@@ -398,7 +398,8 @@
       <div class="row"><span class="n">2</span><span>브라우저가 "파일을 볼 수 있도록 허용하시겠습니까?" 라고 물으면 <b>허용</b>을 누르세요.</span></div>
       <div class="row"><span class="n">3</span><span>처음이라면 <b>처음 시작</b>으로 데이터 파일을 하나 만들어 공용 폴더에 두세요.</span></div>
       <div class="row"><span class="n">＊</span><span>이 화면이 매번 뜬다면: 데이터 파일 이름을 <b>assign-data.js</b> 로 두고
-        assign.html 과 <b>같은 폴더</b>에 놓으세요 — 다음부터는 켜자마자 배정표가 바로 뜹니다.</span></div>
+        assign.html 과 <b>같은 폴더</b>에 놓으세요 — 다음부터는 켜자마자 배정표가 바로 뜹니다.
+        병동이 여럿이면 <b>assign-data-2.js</b>, <b>-3.js</b> … 로 두면 켤 때 목록에서 고릅니다.</span></div>
     </div>
     <div class="startBand"><span style="font-weight:800">＋</span><span>데이터 파일(.json)을 이 창에 끌어다 놓아도 열립니다.</span></div>
     <div id="startWarn" class="startBand warnBand" style="display:none"></div>
@@ -946,7 +947,12 @@ async function idbGet(k){ const db=await idb();
  * 데이터를 `window.__ASSIGN_DATA={...}` 형태(.js)로 두면 폴더를 다시 고르거나
  * 권한창을 거치지 않고 **켜자마자 0클릭으로** 이번 주 배정표가 뜬다.
  * 쓰기만 파일 핸들이 필요하므로 '저장 연결'은 수정할 때 한 번만 받는다. */
+/* 자동 열림 파일 이름 — 병동이 여럿이면 뒤에 -2, -3 … 을 붙여 한 폴더에 둘 수 있다.
+ * 확장자가 .js 인 이유: file:// 에서 브라우저가 권한 없이 읽을 수 있는 유일한 형식.
+ * 내용은 JSON 그대로에 껍데기만 씌운 것이라 프로그램(exe)도 같은 파일을 읽고 쓴다. */
 const SIDE_NAME='assign-data.js';
+const SIDE_NAMES=[SIDE_NAME,'assign-data-2.js','assign-data-3.js','assign-data-4.js',
+                  'assign-data-5.js','assign-data-6.js'];
 function serializeStore(obj,name){
   const j=JSON.stringify(obj);
   return /\.js$/i.test(name||'') ? 'window.__ASSIGN_DATA='+j+';\n' : j;
@@ -957,15 +963,25 @@ function parseStoreText(txt){
   const m=t.match(/^window\.__ASSIGN_DATA\s*=\s*([\s\S]*?);?\s*$/);
   return JSON.parse(m?m[1]:t);
 }
-function loadSidecar(){
+function loadSidecar(name){
   return new Promise(res=>{
     try{ delete window.__ASSIGN_DATA; }catch(e){ window.__ASSIGN_DATA=undefined; }
     const el=document.createElement('script');
-    el.src=encodeURI(SIDE_NAME)+'?v='+Date.now();   // 항상 최신 (다른 PC가 저장한 내용 반영)
+    el.src=encodeURI(name||SIDE_NAME)+'?v='+Date.now();  // 항상 최신 (다른 PC가 저장한 내용 반영)
     const done=ok=>{ el.remove(); res(ok?(window.__ASSIGN_DATA||null):null); };
     el.onload=()=>done(true); el.onerror=()=>done(false);
     document.head.appendChild(el);
   });
+}
+/* 같은 폴더의 자동 열림 파일들을 찾는다. 폴더 목록을 볼 수 없는 환경이라
+ * 정해진 이름을 하나씩 두드려 보는 방식 — 없는 이름은 즉시 실패해 금방 끝난다. */
+async function scanSidecars(){
+  const out=[];
+  for(const n of SIDE_NAMES){
+    const d=await loadSidecar(n);
+    if(d&&d.app==='assign') out.push({name:n,data:d});
+  }
+  return out;
 }
 function adoptStore(j){
   if(!j||j.app!=='assign') return false;
@@ -1194,20 +1210,42 @@ async function nativePickData(){
 async function tryAutoOpen(){
   if(await tryNative()) return true;               // 네이티브 창(exe) — 권한창·폴더 선택 없음
   if(await silentReattach()) return true;
-  const j=await loadSidecar();
-  if(!j||!adoptStore(j)) return false;
-  fileHandle=null; window.__memoryMode=true; window.__autoRead=true;
-  $('#fileInfo').textContent=SIDE_NAME+' (자동으로 읽음)';
+  const found=await scanSidecars();
+  if(!found.length) return false;
+  if(found.length===1){ openSidecar(found[0]); return true; }
+  showSidecarPick(found);            // 여러 병동 — 클릭 한 번으로 고른다 (권한창 없음)
+  return true;
+}
+function openSidecar(entry){
+  if(!adoptStore(entry.data)) return false;
+  fileHandle=null; window.__memoryMode=true; window.__autoRead=true; window.__autoReadName=entry.name;
+  $('#fileInfo').textContent=entry.name+' (자동으로 읽음)';
   saveMsg('⚠ 저장 연결 안 됨 — 수정하려면 [저장 연결]');
   $('#btnConnect').style.display='';
+  $('#filePickCard').style.display='none';
   afterLoad();
   return true;
+}
+function showSidecarPick(list){
+  const c=$('#filePickCard');
+  c.style.display='flex';
+  c.innerHTML=`<div class="fpTitle">이 폴더에 데이터 파일이 ${list.length}개 있습니다 — 열 파일을 고르세요</div>`+
+    list.map((f,i)=>{
+      const n=(f.data.order||[]).length;
+      const when=f.data.saved?fmtWhen(Date.parse(f.data.saved)):'';
+      return `<button class="f" data-i="${i}">
+        <span style="flex:1;font-size:15px;font-weight:700;letter-spacing:-0.01em">${esc(f.name)}</span>
+        <span style="font-size:12px;font-weight:600;color:var(--ink-3)">간호사 ${n}명${when?' · '+when:''}</span></button>`;
+    }).join('');
+  c.querySelectorAll('button.f').forEach(b=>b.onclick=()=>openSidecar(list[+b.dataset.i]));
 }
 /* 자동으로 읽은 상태에서 같은 파일에 쓰기 권한 연결 — 파일 하나만 고르면 끝 */
 async function connectSave(){
   try{
     const [h]=await window.showOpenFilePicker({
       types:[{description:'어싸인 데이터',accept:{'text/javascript':['.js'],'application/json':['.json']}}]});
+    if(window.__autoReadName&&h.name!==window.__autoReadName&&
+       !confirm(`지금 보고 있는 건 ${window.__autoReadName} 인데 ${h.name} 을 골랐습니다.\n그대로 진행할까요?`)) return;
     const keep=JSON.parse(JSON.stringify(store));
     await useHandle(h);
     // 고른 파일이 방금 자동으로 읽은 그 파일이면 내용이 같다. 더 최신인 쪽을 남긴다.
@@ -2489,7 +2527,7 @@ async function reloadFromFile(){
     let j=null;
     if(nativeInfo) j=(await nativeCall('load')).data;
     else if(fileHandle) j=parseStoreText(await (await fileHandle.getFile()).text());
-    else j=await loadSidecar();
+    else j=await loadSidecar(window.__autoReadName||SIDE_NAME);
     if(!adoptStore(j)) throw new Error(fileHandle?'어싸인 데이터 파일이 아닙니다'
                                                :'자동 열림 파일('+SIDE_NAME+')을 찾지 못했습니다');
     dirty=false; saveMsg(''); recompute();

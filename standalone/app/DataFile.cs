@@ -14,8 +14,10 @@ namespace AssignApp;
 /// </summary>
 public sealed class DataFile
 {
-    private const string ConfigName = "assign.ini";     // data=<경로> 한 줄
-    private const string DefaultName = "assign-data.json";
+    private const string ConfigName = "assign.ini";     // data=<경로> 한 줄 (.js / .json 둘 다 가능)
+    // 브라우저(file://)에서도 권한 없이 읽히는 형식이라 기본값을 .js 로 둔다 —
+    // 프로그램과 브라우저가 같은 파일 하나를 그대로 주고받는다.
+    private const string DefaultName = "assign-data.js";
 
     public string Path { get; private set; }
 
@@ -47,7 +49,7 @@ public sealed class DataFile
 
     public void Use(string path) => Path = path;
 
-    /// <summary>exe 옆 assign.ini 의 data= 경로 → 없으면 exe 옆 assign-data.json</summary>
+    /// <summary>exe 옆 assign.ini 의 data= 경로 → 없으면 exe 옆 assign-data.js</summary>
     private static string Resolve()
     {
         var baseDir = AppContext.BaseDirectory;
