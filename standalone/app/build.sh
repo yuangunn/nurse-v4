@@ -6,15 +6,18 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 export PATH="$HOME/.dotnet:$PATH"
-VER="$(date +%Y.%-m.%-d)"     # 버전 = 만든 날짜 (화면 표시와 같은 규칙)
+# 화면에 뜨는 버전(v260809a)을 그대로 쓴다 — assign.html 에 이미 박혀 있다
+VER="$(sed -n "s/.*const BUILD={ver:'\([^']*\)'.*/\1/p" ../assign.html | head -1)"
+VER="${VER:-v$(date +%y%m%d)a}"
+NUM="$(date +%y).$(date +%-m).$(date +%-d)"     # 파일 속성용 숫자 버전
 
 [ -f ../assign.html ] || { echo "[!] ../assign.html 없음 — node scripts/build-assign-standalone.mjs 먼저"; exit 1; }
 
 if [ "${1:-}" = "lite" ]; then
-  dotnet publish AssignApp.csproj -c Release -r win-x64 --self-contained false -p:Version=$VER \
+  dotnet publish AssignApp.csproj -c Release -r win-x64 --self-contained false -p:Version=$NUM -p:InformationalVersion=$VER \
     -p:PublishSingleFile=true -p:DebugType=none -p:AllowedReferenceRelatedFileExtensions=none -o dist
 else
-  dotnet publish AssignApp.csproj -c Release -r win-x64 --self-contained true -p:Version=$VER \
+  dotnet publish AssignApp.csproj -c Release -r win-x64 --self-contained true -p:Version=$NUM -p:InformationalVersion=$VER \
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
     -p:EnableCompressionInSingleFile=true -p:DebugType=none \
     -p:AllowedReferenceRelatedFileExtensions=none -o dist

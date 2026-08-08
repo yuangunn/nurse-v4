@@ -8,10 +8,6 @@ const tplB64 = readFileSync('standalone/병실 배정표.xlsx').toString('base64
 const fontB64 = readFileSync('frontend/fonts/PretendardVariable.woff2').toString('base64');
 
 // 도움말 그림 (standalone/help/*.gif|png) — 실제 화면을 찍은 것. 생성: scripts/make-help-media.py
-// 버전 = 만든 날짜 (v2026.08.09). 병동 PC마다 파일이 섞이므로 번호만 보고 최신본을 가린다.
-const _d = new Date();   // 표준시가 아니라 만든 사람 기준 날짜로
-const ASSIGN_VER = `v${_d.getFullYear()}.${String(_d.getMonth() + 1).padStart(2, '0')}.${String(_d.getDate()).padStart(2, '0')}`;
-
 const helpDir = 'standalone/help';
 const media = {};
 if (existsSync(helpDir)) {
@@ -25,6 +21,24 @@ if (existsSync(helpDir)) {
 
 const htmlPath = 'standalone/assign.html';
 const html = readFileSync(htmlPath, 'utf8');
+
+/* 버전 = v + 만든 날짜(YYMMDD) + 그날 몇 번째인지(a, b, c …).
+ * 병동 PC마다 파일이 섞이므로 번호만 보고 최신본을 가릴 수 있어야 한다.
+ * 직전 버전을 지금 파일에서 읽어, 같은 날이면 알파벳만 올린다. */
+const _d = new Date();      // 표준시가 아니라 만든 사람 기준 날짜로
+const stamp = `${String(_d.getFullYear()).slice(2)}`
+  + `${String(_d.getMonth() + 1).padStart(2, '0')}${String(_d.getDate()).padStart(2, '0')}`;
+const nextSuffix = (s) => {           // a→b … z→aa→ab (엑셀 열 이름과 같은 방식)
+  const a = s.split('');
+  for (let i = a.length - 1; ; i--) {
+    if (a[i] !== 'z') { a[i] = String.fromCharCode(a[i].charCodeAt(0) + 1); break; }
+    a[i] = 'a';
+    if (i === 0) { a.unshift('a'); break; }
+  }
+  return a.join('');
+};
+const prev = html.match(/const BUILD=\{ver:'v(\d{6})([a-z]+)'/);
+const ASSIGN_VER = `v${stamp}` + (prev && prev[1] === stamp ? nextSuffix(prev[2]) : 'a');
 let out = html.replace(
   /\/\*ASSIGN_CORE_BEGIN\*\/[\s\S]*?\/\*ASSIGN_CORE_END\*\//,
   '/*ASSIGN_CORE_BEGIN*/\n' + core.trim() + '\n/*ASSIGN_CORE_END*/'
