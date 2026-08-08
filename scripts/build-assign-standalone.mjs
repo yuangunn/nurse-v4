@@ -8,10 +8,9 @@ const tplB64 = readFileSync('standalone/병실 배정표.xlsx').toString('base64
 const fontB64 = readFileSync('frontend/fonts/PretendardVariable.woff2').toString('base64');
 
 // 도움말 그림 (standalone/help/*.gif|png) — 실제 화면을 찍은 것. 생성: scripts/make-help-media.py
-// 버전·빌드 날짜 — 병동 PC 파일이 최신인지 화면에서 바로 확인할 수 있게 심는다
-const ASSIGN_VER = 'v1.0';
+// 버전 = 만든 날짜 (v2026.08.09). 병동 PC마다 파일이 섞이므로 번호만 보고 최신본을 가린다.
 const _d = new Date();   // 표준시가 아니라 만든 사람 기준 날짜로
-const buildDate = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
+const ASSIGN_VER = `v${_d.getFullYear()}.${String(_d.getMonth() + 1).padStart(2, '0')}.${String(_d.getDate()).padStart(2, '0')}`;
 
 const helpDir = 'standalone/help';
 const media = {};
@@ -43,12 +42,12 @@ out = out.replace(
 );
 out = out.replace(
   /\/\*BUILD_INFO_BEGIN\*\/[\s\S]*?\/\*BUILD_INFO_END\*\//,
-  `/*BUILD_INFO_BEGIN*/const BUILD={ver:'${ASSIGN_VER}',date:'${buildDate}'};/*BUILD_INFO_END*/`
+  `/*BUILD_INFO_BEGIN*/const BUILD={ver:'${ASSIGN_VER}'};/*BUILD_INFO_END*/`
 );
 out = out.replace(
   /\/\*HELP_MEDIA_BEGIN\*\/[\s\S]*?\/\*HELP_MEDIA_END\*\//,
   '/*HELP_MEDIA_BEGIN*/const HELP_MEDIA=' + JSON.stringify(media) + ';/*HELP_MEDIA_END*/'
 );
 if (out === html) console.log('변경 없음');
-else { writeFileSync(htmlPath, out); console.log(`standalone/assign.html 동기화 완료 — ${ASSIGN_VER} (${buildDate})`,
+else { writeFileSync(htmlPath, out); console.log(`standalone/assign.html 동기화 완료 — ${ASSIGN_VER}`,
     `· 코어 + 양식 + 폰트 + 도움말 그림 ${Object.keys(media).length}개`); }

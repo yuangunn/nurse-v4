@@ -5,6 +5,8 @@ rem   사용:  build.cmd          런타임까지 품은 단일 exe (아무 PC�
 rem          build.cmd lite     작은 exe (.NET 8 데스크톱 런타임이 깔린 PC 전용)
 setlocal
 cd /d "%~dp0"
+rem 버전 = 만든 날짜 (화면 표시와 같은 규칙)
+for /f "tokens=1-3 delims=-" %%a in ('powershell -NoProfile -Command "Get-Date -Format yyyy-M-d"') do set "VER=%%a.%%b.%%c"
 
 if not exist "..\assign.html" (
   echo [!] ..\assign.html 이 없습니다. 리포 루트에서  node scripts\build-assign-standalone.mjs  먼저 실행하세요.
@@ -12,10 +14,10 @@ if not exist "..\assign.html" (
 )
 
 if /i "%~1"=="lite" (
-  dotnet publish AssignApp.csproj -c Release -r win-x64 --self-contained false ^
+  dotnet publish AssignApp.csproj -c Release -r win-x64 --self-contained false -p:Version=%VER% ^
     -p:PublishSingleFile=true -p:DebugType=none -p:AllowedReferenceRelatedFileExtensions=none -o dist
 ) else (
-  dotnet publish AssignApp.csproj -c Release -r win-x64 --self-contained true ^
+  dotnet publish AssignApp.csproj -c Release -r win-x64 --self-contained true -p:Version=%VER% ^
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true ^
     -p:EnableCompressionInSingleFile=true -p:DebugType=none ^
     -p:AllowedReferenceRelatedFileExtensions=none -o dist

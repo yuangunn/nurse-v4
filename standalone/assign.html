@@ -979,16 +979,13 @@ function toast(msg,ms=2800){ const t=$('#toast'); t.textContent=msg; t.style.dis
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v1.0',date:'2026-08-09'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v2026.08.09'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
-  mail:'rms6654@gmail.com',
-  repo:'github.com/yuangunn/nurse-v4',
-  repoNote:'비공개 저장소',
   privacy:'이 프로그램은 인터넷으로 아무것도 보내지 않습니다. 모든 내용은 지정한 데이터 파일에만 저장됩니다.',
 };
-const buildLabel=()=>ABOUT.name+' '+BUILD.ver+(BUILD.date?' · '+BUILD.date:'');
+const buildLabel=()=>ABOUT.name+' '+BUILD.ver;
 const ALL_CAPS=['DC','D','EC','E','NC','N'];
 const DEFAULT_REQ={mon:{D:4,E:5,N:3},tue:{D:5,E:5,N:3},wed:{D:5,E:5,N:3},thu:{D:5,E:5,N:3},
   fri:{D:5,E:4,N:3},sat:{D:3,E:3,N:2},sun:{D:3,E:4,N:3}};
@@ -2555,14 +2552,12 @@ const ADMIN_PANELS={
       const row=(k,v)=>`<tr><td style="width:120px;padding:9px 0;color:var(--ink-3);font-size:13px">${k}</td>`+
         `<td style="padding:9px 0;font-size:14px;font-weight:700">${v}</td></tr>`;
       return `<table style="border-collapse:collapse">`+
-        row('이름·버전',`${esc(ABOUT.name)} <span style="font-weight:600;color:var(--ink-2)">${esc(BUILD.ver)}</span>`+
-          (BUILD.date?` <span style="font-weight:600;color:var(--ink-3)">· ${esc(BUILD.date)} 만듦</span>`:''))+
+        row('이름',esc(ABOUT.name))+
+        row('버전',`<span style="font-variant-numeric:tabular-nums">${esc(BUILD.ver)}</span>`)+
         row('만든 사람',esc(ABOUT.by))+
-        (ABOUT.mail?row('문의',`<a href="mailto:${esc(ABOUT.mail)}" style="color:var(--down-deep)">${esc(ABOUT.mail)}</a>`):'')+
-        (ABOUT.repo?row('소스',`${esc(ABOUT.repo)} <span style="font-weight:600;color:var(--ink-3)">(${esc(ABOUT.repoNote)})</span>`):'')+
         `</table>
         <div class="dim" style="line-height:1.8;margin-top:6px">${esc(ABOUT.privacy)}<br>
-          이 파일이 병동 PC마다 다를 수 있습니다 — 위 <b>버전·날짜</b>로 최신본인지 확인하세요.</div>`;
+          버전 번호가 곧 만든 날짜입니다 — 병동 PC마다 파일이 다를 수 있으니 이 번호로 최신본인지 확인하세요.</div>`;
     }},
   data:{title:'데이터 파일',
     desc:'모든 내용은 공용 폴더(NAS)의 JSON 파일 하나에 저장됩니다.',
@@ -3204,7 +3199,6 @@ let helpCur=null;
 function aboutLine(){
   return `<b>${esc(buildLabel())}</b><span class="sep"></span>`+
     `만든 사람 <b>${esc(ABOUT.by)}</b>`+
-    (ABOUT.mail?`<span class="sep"></span>문의 <b>${esc(ABOUT.mail)}</b>`:'')+
     `<span style="margin-left:auto">${esc(ABOUT.privacy)}</span>`;
 }
 function openHelp(id){

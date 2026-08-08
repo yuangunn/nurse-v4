@@ -10,7 +10,7 @@
     <AssemblyName>어싸인배정표</AssemblyName>
     <Product>어싸인 배정표</Product>
     <AssemblyTitle>어싸인 배정표</AssemblyTitle>
-    <Version>1.0.0</Version>
+    <Version>1.0.0</Version>   <!-- 빌드 스크립트가 만든 날짜로 덮어쓴다 -->
     <Company>yuangunn</Company>
     <Authors>yuangunn</Authors>
     <Copyright>© yuangunn</Copyright>

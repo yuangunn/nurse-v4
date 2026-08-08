@@ -6,14 +6,15 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 export PATH="$HOME/.dotnet:$PATH"
+VER="$(date +%Y.%-m.%-d)"     # 버전 = 만든 날짜 (화면 표시와 같은 규칙)
 
 [ -f ../assign.html ] || { echo "[!] ../assign.html 없음 — node scripts/build-assign-standalone.mjs 먼저"; exit 1; }
 
 if [ "${1:-}" = "lite" ]; then
-  dotnet publish AssignApp.csproj -c Release -r win-x64 --self-contained false \
+  dotnet publish AssignApp.csproj -c Release -r win-x64 --self-contained false -p:Version=$VER \
     -p:PublishSingleFile=true -p:DebugType=none -p:AllowedReferenceRelatedFileExtensions=none -o dist
 else
-  dotnet publish AssignApp.csproj -c Release -r win-x64 --self-contained true \
+  dotnet publish AssignApp.csproj -c Release -r win-x64 --self-contained true -p:Version=$VER \
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
     -p:EnableCompressionInSingleFile=true -p:DebugType=none \
     -p:AllowedReferenceRelatedFileExtensions=none -o dist
