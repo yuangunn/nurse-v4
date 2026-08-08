@@ -264,4 +264,80 @@ assert.equal(periodOf('OF'), null);
   assert.equal(r.byNurse.b.d2.label, r.byNurse.b.d1.label);
 }
 
+// ── 방(병실) 기준 연속성 (opts.roomsFor) ──
+{
+  // 실제 기본 방 구성 — 인원수가 바뀌면 라벨의 방이 통째로 달라진다
+  const SCHEMES = {
+    5: { 차지: ['1012','1014'], A: ['1001','1002'], B: ['1003','1004'],
+         C: ['1005','1010','1011'], D: ['1006','1007','1008','1009'] },
+    4: { 차지: ['1001','1014'], A: ['1002','1003','1012'], B: ['1004','1005','1011'],
+         C: ['1006','1007','1008','1009','1010'] },
+    3: { 차지: ['1001','1012','1014'], A: ['1002','1003','1004','1011'],
+         B: ['1005','1006','1007','1008','1009','1010'] },
+    2: { 차지: [], A: [] },
+  };
+  const roomsFor = (P, cnt, label) => (SCHEMES[Math.min(Math.max(cnt, 2), 5)] || {})[label] || [];
+  const nurses = ['a','b','c','d','e'].map((id, i) => ({ id, seniority: i, chargeCapable: true }));
+  // d1: 5명 전원 D → 차지=a, A=b, B=c, C=d, D=e (선임 순)
+  // d2: b가 오프 → 4명. 방 구성이 바뀌므로 '전날 본 병실'을 따라가야 한다.
+  const sched = {
+    a: { d1: 'D', d2: 'D' }, b: { d1: 'D', d2: 'OF' },
+    c: { d1: 'D', d2: 'D' }, d: { d1: 'D', d2: 'D' }, e: { d1: 'D', d2: 'D' },
+  };
+  const r = compute(nurses, sched, ['d1', 'd2'], { roomsFor });
+  assert.equal(r.byDay.d1.D.labels['D'], 'e');          // 전날 e = 1006~1009
+  // 오늘 C = 1006~1010 → 1006~1009를 보던 e가 이어받아야 한다 (기존엔 d가 라벨 C를 물고 늘어져 e가 밀려남)
+  assert.equal(r.byDay.d2.D.labels['C'], 'e');
+  assert.equal(r.byDay.d2.D.labels['B'], 'd');          // 1005,1010,1011 → 1004,1005,1011 (겹침 2)
+  assert.equal(r.byDay.d2.D.labels['A'], 'c');          // 1003,1004 → 1002,1003,1012 (겹침 1)
+  // 회귀 대조: roomsFor 없으면 예전(라벨 기준) 동작 — d가 C를 유지하고 e가 밀려난다
+  const old = compute(nurses, sched, ['d1', 'd2']);
+  assert.equal(old.byDay.d2.D.labels['C'], 'd');
+  assert.notEqual(old.byDay.d2.D.labels['C'], 'e');
+
+  // 인원이 그대로면 방도 그대로 → 전원 같은 라벨 유지 (방 기준이어도 동일 결과)
+  const sched2 = {}; for (const n of nurses) sched2[n.id] = { d1: 'D', d2: 'D' };
+  const same = compute(nurses, sched2, ['d1', 'd2'], { roomsFor });
+  for (const l of ['차지','A','B','C','D'])
+    assert.equal(same.byDay.d2.D.labels[l], same.byDay.d1.D.labels[l]);
+
+  // 방이 없는 구성(2인)은 라벨 폴백 — 방 정보가 없다고 연속성이 깨지면 안 된다
+  const two = { a: { d1: 'D', d2: 'D' }, b: { d1: 'D', d2: 'D' } };
+  const t2 = compute(nurses.slice(0, 2), two, ['d1', 'd2'], { roomsFor });
+  assert.equal(t2.byDay.d2.D.labels['A'], t2.byDay.d1.D.labels['A']);
+
+  // 전일 근무자가 두 자리에 무차별하면(양쪽 겹침 동일) 오프 복귀자가 원래 방을 되찾는다
+  {
+    const sched3 = {
+      a: { d1: 'D', d2: 'D', d3: 'D' },   // 차지
+      b: { d1: 'D', d2: 'OF', d3: 'D' },  // 오프 복귀 — d1에 1001,1002를 봄
+      c: { d1: 'D', d2: 'D', d3: 'D' },
+      d: { d1: 'D', d2: 'D', d3: 'D' },
+      e: { d1: 'D', d2: 'D', d3: 'D' },
+    };
+    const r3 = compute(nurses, sched3, ['d1','d2','d3'], { roomsFor });
+    const bRooms = SCHEMES[5][r3.byNurse.b.d3.label];
+    assert.ok(bRooms.includes('1001') && bRooms.includes('1002'),
+      '오프 복귀자가 보던 방(1001,1002)을 되찾아야 함 — 받은 방: ' + bRooms);
+    // 원칙1(전일 근무자)이 손해 보면 안 된다 — 전원 겹침이 유지되는지 확인
+    for (const id of ['c','d','e']) {
+      const prev = SCHEMES[4][r3.byNurse[id].d2.label];
+      const now = SCHEMES[5][r3.byNurse[id].d3.label];
+      assert.ok(prev.some(x => now.includes(x)), id + ': 전일 근무자의 방 연속성 손실');
+    }
+  }
+
+  // 원칙4(튕기기)도 방 기준 — 오프 복귀자는 '보던 병실'을 피한다
+  const back = {
+    a: { d1: 'D', d2: 'D', d3: 'D' }, b: { d1: 'D', d2: 'D', d3: 'D' },
+    c: { d1: 'D', d2: 'D', d3: 'D' }, d: { d1: 'D', d2: 'D', d3: 'D' },
+    e: { d1: 'D', d2: 'OF', d3: 'D' },
+  };
+  const bd = compute(nurses, back, ['d1','d2','d3'],
+    { roomsFor, rules: { keepAfterOff: false, bounceAfterOff: true } });
+  const prevRooms = SCHEMES[5][bd.byNurse.e.d1.label];
+  const nowRooms = SCHEMES[5][bd.byNurse.e.d3.label];
+  assert.ok(!prevRooms.some(x => nowRooms.includes(x)), '튕기기: 보던 병실을 피해야 함');
+}
+
 console.log('assign-core: 모든 검증 통과');

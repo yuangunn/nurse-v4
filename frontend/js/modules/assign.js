@@ -113,6 +113,10 @@ window.AssignModule = function () {
       this.assignData = window.AssignCore.compute(nurses, this.assignScheduleSrc(), dateKeys, {
         rules: this.assignRules, overrides: this.assignOverrides,
         seed: this._assignSeed(dateKeys[0]),
+        // 연속성은 라벨이 아니라 실제 병실 기준 — 인원이 바뀌어 방 구성이 달라져도
+        // 보던 병실을 따라간다 (방 구성은 인원수·라벨로만 정해지므로 날짜 무관)
+        roomsFor: (P, cnt, label) =>
+          (this.assignSchemes[Math.min(Math.max(cnt, 2), 5)] || {})[label] || [],
       });
       this._assignSaveState();
       if (!this.assignSelectedDay || !dateKeys.includes(this.assignSelectedDay)) {

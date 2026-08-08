@@ -295,6 +295,13 @@
         box-shadow:var(--shadow-pop);padding:12px;font-size:15px}
   #pick button,#rpick button{margin:3px;min-width:3em;font-size:16px;padding:8px 14px}
   #rpick{max-width:420px}
+  #pick{min-width:280px}
+  #pick button.swapBtn{display:flex;align-items:center;gap:10px;width:100%;margin:0;padding:9px 12px;text-align:left}
+  #pick button.swapBtn .lb{flex:0 0 3.2em;font-weight:800}
+  #pick button.swapBtn .who{flex:1;font-weight:700}
+  #pick button.swapBtn .rm{font-size:12px;font-weight:600;color:var(--ink-3);font-variant-numeric:tabular-nums}
+  #pick button.swapBtn[disabled]{background:var(--rule-soft);color:var(--ink-3);box-shadow:none;cursor:default}
+  #pick button.swapBtn[disabled] .rm{color:var(--ink-4)}
   #rpick button.on{background:var(--accent);color:var(--on-accent);box-shadow:none;font-weight:700}
 
   #toast{position:fixed;right:14px;bottom:14px;background:#111;color:#7f7;padding:10px 16px;border-radius:8px;
@@ -338,6 +345,8 @@
   <h1>어싸인 배정표</h1>
   <span id="fileInfo" class="dim"></span><span id="saveDot"></span>
   <span style="margin-left:auto;display:flex;gap:8px">
+    <button id="btnConnect" class="tab" style="display:none;background:var(--warn-bg);color:var(--warn)"
+      onclick="connectSave()" title="자동으로 읽기만 한 상태입니다 — 파일을 한 번 골라 주면 이후 수정이 자동 저장됩니다">저장 연결</button>
     <button id="themeBtn" class="tab" onclick="cycleTheme()" title="화면 테마 — 자동(기기 설정 따름)/다크/라이트 전환"></button>
     <button id="tabWeek" class="tab" onclick="show('week')" title="주간 배정표">배정표</button>
     <button id="tabAdmin" class="tab" onclick="show('admin')" title="방 구성·백업 등 관리자 설정">관리</button>
@@ -373,6 +382,8 @@
       <div class="row"><span class="n">1</span><span>파일은 공용 폴더(내부망 NAS)에 두면 <b>어느 컴퓨터에서나 같은 내용</b>을 봅니다.</span></div>
       <div class="row"><span class="n">2</span><span>브라우저가 "파일을 볼 수 있도록 허용하시겠습니까?" 라고 물으면 <b>허용</b>을 누르세요.</span></div>
       <div class="row"><span class="n">3</span><span>처음이라면 <b>처음 시작</b>으로 데이터 파일을 하나 만들어 공용 폴더에 두세요.</span></div>
+      <div class="row"><span class="n">＊</span><span>이 화면이 매번 뜬다면: 데이터 파일 이름을 <b>assign-data.js</b> 로 두고
+        assign.html 과 <b>같은 폴더</b>에 놓으세요 — 다음부터는 켜자마자 배정표가 바로 뜹니다.</span></div>
     </div>
     <div class="startBand"><span style="font-weight:800">＋</span><span>데이터 파일(.json)을 이 창에 끌어다 놓아도 열립니다.</span></div>
     <div id="startWarn" class="startBand warnBand" style="display:none"></div>
@@ -518,15 +529,57 @@
     return c && typeof c === 'object' ? !!c[P] : !!c;
   }
 
+  // 방 토큰 교집합 크기 — 방 기준 연속성의 점수
+  function overlap(a, b) {
+    if (!a || !b || !a.length || !b.length) return 0;
+    let n = 0;
+    for (let i = 0; i < a.length; i++) if (b.indexOf(a[i]) >= 0) n++;
+    return n;
+  }
+
+  /* 최대 총 가중치 매칭 — W[i][j] = 간호사 i를 라벨 j에 둘 때 점수(0 = 불가).
+   * 라벨이 최대 5개라 라벨 집합을 비트마스크로 두고 정확한 최적해를 구한다
+   * (그리디는 "겹침 4를 잡느라 다른 사람 겹침 3을 통째로 날리는" 선택을 함). */
+  function maxMatch(W, nL) {
+    const full = 1 << nL;
+    let dp = new Array(full).fill(-1);
+    dp[0] = 0;
+    const choice = [];
+    for (let i = 0; i < W.length; i++) {
+      const ndp = new Array(full).fill(-1), ch = new Array(full).fill(-1);
+      for (let m = 0; m < full; m++) {
+        if (dp[m] < 0) continue;
+        if (dp[m] > ndp[m]) { ndp[m] = dp[m]; ch[m] = -1; }   // i를 비움
+        for (let j = 0; j < nL; j++) {
+          if (m & (1 << j)) continue;
+          const w = W[i][j];
+          if (w <= 0) continue;
+          const nm = m | (1 << j), v = dp[m] + w;
+          if (v > ndp[nm]) { ndp[nm] = v; ch[nm] = j; }
+        }
+      }
+      dp = ndp; choice.push(ch);
+    }
+    let best = 0;
+    for (let m = 1; m < full; m++) if (dp[m] > dp[best]) best = m;
+    const pairs = [];
+    for (let i = W.length - 1; i >= 0; i--) {
+      const j = choice[i][best];
+      if (j >= 0) { pairs.push([i, j]); best ^= (1 << j); }
+    }
+    return pairs;
+  }
+
   /**
    * @param nurses   [{id, seniority(작을수록 선임), chargeCapable: bool|{D,E,N}}]
    * @param schedule {nurseId: {dateKey: code}}
    * @param dateKeys 시간순 날짜키 배열 (연속성 위해 전월 이월일 포함 가능)
    * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff,bounceAfterOff},
    *                  overrides:{dateKey:{P:{nurseId:label}}},
-   *                  seed:{nurseId:{label,period,idx}},   idx<0 = 전월 (말일=-1) — 연속성 이월
-   *                  avoid:{dateKey:{P:{nurseId:[label]}}}}  금지 방 등 회피 라벨 (소프트 —
+   *                  seed:{nurseId:{label,period,idx,rooms?}},  idx<0 = 전월 (말일=-1)
+   *                  avoid:{dateKey:{P:{nurseId:[label]}}},  금지 방 등 회피 라벨 (소프트 —
    *                  대안 없으면 그대로 배정, 수동 오버라이드·DC/EC/NC 표시자는 회피 무시)
+   *                  roomsFor:(P,cnt,label,dateKey)=>[방 토큰]}  ← 주면 방 기준 연속성
    * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId]}}},
    *           byNurse:{nurseId:{dk:{period,label}}}}
    */
@@ -540,8 +593,9 @@
     if (rules.keepAfterOff && rules.bounceAfterOff) rules.bounceAfterOff = false;
     const overrides = opts.overrides || {};
     const avoid = opts.avoid || {};
+    const roomsFor = opts.roomsFor || null;
     const byDay = {}, byNurse = {};
-    const lastSeen = {}; // nurseId -> {label, idx, period}
+    const lastSeen = {}; // nurseId -> {label, idx, period, rooms}
     // 전월 연속성 시드 — 전월에 마지막으로 본 방을 상대 idx로 주입하면 원칙1~4가 월 경계를 넘어 작동.
     // idx는 dateKeys[0] 기준 상대값: 음수 = dateKeys 이전, 0 이상 = 이월(오버플로) 구간과 겹침
     // (겹치는 날에 현재 데이터로 배정이 일어나면 자연히 덮어써진다).
@@ -549,7 +603,7 @@
     for (const nid in seed) {
       const s = seed[nid];
       if (s && s.label && typeof s.idx === 'number' && s.idx < dateKeys.length)
-        lastSeen[nid] = { label: s.label, idx: s.idx, period: s.period };
+        lastSeen[nid] = { label: s.label, idx: s.idx, period: s.period, rooms: s.rooms || null };
     }
 
     for (let idx = 0; idx < dateKeys.length; idx++) {
@@ -568,6 +622,11 @@
         const freeLabels = function () {
           return labels.filter(function (l) { return !assigned[l]; });
         };
+        // 오늘 이 시간대의 라벨별 실제 병실 (인원수 cnt 기준 — 그날 방 구성 + 수기 수정 반영)
+        const cnt = staff.length;
+        const roomsByLabel = {};
+        if (roomsFor) for (let i = 0; i < labels.length; i++)
+          roomsByLabel[labels[i]] = roomsFor(P, cnt, labels[i], dk) || [];
 
         // 0) 수동 오버라이드 최우선 (회피 라벨보다도 우선 — 복구 패스에서 건드리지 않음)
         const ov = (overrides[dk] || {})[P] || {};
@@ -594,22 +653,57 @@
           if (c) { assigned['차지'] = c; taken[c.id] = true; }
         }
 
-        // 2~4) 연속성 계층 — 앞 계층이 항상 우선
-        const tiers = [];
-        if (rules.keepSameShift) tiers.push(function (info) { return info.idx === idx - 1 && info.period === P; });
-        if (rules.keepAcrossShift) tiers.push(function (info) { return info.idx === idx - 1 && info.period !== P; });
-        if (rules.keepAfterOff) tiers.push(function (info) { return info.idx < idx - 1; });
+        // 2~4) 연속성 — 원칙 우선순위(1 > 2 > 3)는 그대로, 자리 배치만 함께 푼다
+        const tierOf = function (info) {
+          if (rules.keepSameShift && info.idx === idx - 1 && info.period === P) return 0;   // 원칙1
+          if (rules.keepAcrossShift && info.idx === idx - 1 && info.period !== P) return 1;  // 원칙2
+          if (rules.keepAfterOff && info.idx < idx - 1) return 2;                            // 원칙3
+          return -1;
+        };
+        const cand = staff.filter(function (n) {
+          return !taken[n.id] && lastSeen[n.id] && tierOf(lastSeen[n.id]) >= 0;
+        });
 
-        for (let t = 0; t < tiers.length; t++) {
+        // (a) 방 기준 매칭 — 세 원칙을 한 번에 푼다.
+        //     점수는 계층이 절대 우선(원칙1을 한 명이라도 더 앉히는 쪽이 언제나 이김),
+        //     그 다음 겹친 병실 수, 동점이면 최근에 본 사람 → 선임 순.
+        //     한 번에 푸는 이유: 원칙1인 사람이 두 자리에 무차별할 때(양쪽 겹침 동일)
+        //     오프 복귀자가 원래 보던 방을 되찾도록 자리를 비켜 줄 수 있다.
+        if (roomsFor && cand.length) {
+          const TIER_W = [10000000000, 1000000000, 0];
+          const free = freeLabels().filter(function (l) { return roomsByLabel[l].length; });
+          if (free.length) {
+            const W = cand.map(function (n) {
+              const info = lastSeen[n.id];
+              const tw = TIER_W[tierOf(info)];
+              const recency = Math.max(-400, Math.min(400, info.idx)) + 400;   // 0~800
+              return free.map(function (l) {
+                if (!avOk(n.id, l)) return 0;
+                const o = Math.min(30, overlap(info.rooms, roomsByLabel[l]));
+                if (!o) return 0;
+                return tw + o * 1000000 + recency * 1000 + Math.max(0, 999 - n.seniority);
+              });
+            });
+            const pairs = maxMatch(W, free.length);
+            for (let k = 0; k < pairs.length; k++) {
+              const n = cand[pairs[k][0]], l = free[pairs[k][1]];
+              assigned[l] = n; taken[n.id] = true;
+            }
+          }
+        }
+
+        // (b) 라벨 유지 폴백 — 방 정보가 없거나 겹치는 방이 하나도 없을 때만.
+        //     여긴 원칙 순서대로(1→2→3) 훑는다.
+        for (let t = 0; t < 3; t++) {
           const claims = {}; // label -> [{n, info}]
-          const free = freeLabels();
-          for (let s = 0; s < staff.length; s++) {
-            const n = staff[s];
+          const free2 = freeLabels();
+          for (let s = 0; s < cand.length; s++) {
+            const n = cand[s];
             if (taken[n.id]) continue;
             const info = lastSeen[n.id];
-            if (info && tiers[t](info) && free.indexOf(info.label) >= 0 && avOk(n.id, info.label)) {
-              (claims[info.label] = claims[info.label] || []).push({ n: n, info: info });
-            }
+            if (tierOf(info) !== t) continue;
+            if (free2.indexOf(info.label) < 0 || !avOk(n.id, info.label)) continue;
+            (claims[info.label] = claims[info.label] || []).push({ n: n, info: info });
           }
           for (const label in claims) {
             claims[label].sort(function (a, b) {
@@ -620,7 +714,7 @@
         }
 
         // 잔여: 선임 순으로 남은 라벨 채움
-        // 원칙4(튕기기): 오프 복귀자는 이전 방 라벨을 피해 배정 — 대안 없으면 그대로
+        // 원칙4(튕기기): 오프 복귀자는 이전에 보던 방을 피해 배정 — 대안 없으면 그대로
         const leftover = staff.filter(function (n) { return !taken[n.id]; })
           .sort(function (a, b) { return a.seniority - b.seniority; });
         const rem = freeLabels();
@@ -628,7 +722,10 @@
           const bounceOk = function (n) {
             if (!rules.bounceAfterOff) return true;
             const info = lastSeen[n.id];
-            return !(info && info.label === rem[i] && info.idx < idx - 1);
+            if (!info || !(info.idx < idx - 1)) return true;
+            if (roomsFor && info.rooms && info.rooms.length && roomsByLabel[rem[i]].length)
+              return !overlap(info.rooms, roomsByLabel[rem[i]]);
+            return info.label !== rem[i];
           };
           // 회피 라벨(금지 방)과 원칙4 둘 다 통과 → 회피만 통과 → 아무나 (미충원 방지)
           let pick = leftover.findIndex(function (n) { return avOk(n.id, rem[i]) && bounceOk(n); });
@@ -659,7 +756,7 @@
         for (const l in assigned) {
           const n = assigned[l];
           labelMap[l] = n.id;
-          lastSeen[n.id] = { label: l, idx: idx, period: P };
+          lastSeen[n.id] = { label: l, idx: idx, period: P, rooms: roomsByLabel[l] || null };
           (byNurse[n.id] = byNurse[n.id] || {})[dk] = { period: P, label: l };
         }
         for (let i = 0; i < extra.length; i++) {
@@ -810,6 +907,37 @@ async function idbGet(k){ const db=await idb();
   return new Promise((res,rej)=>{ const q=db.transaction('kv').objectStore('kv').get(k);
     q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
 
+/* ── 자동 열림 파일 (사이드카) ────────────────────────────────────────────
+ * file:// 에서 fetch는 막히지만 <script src>로 옆 파일을 읽는 건 허용된다.
+ * 데이터를 `window.__ASSIGN_DATA={...}` 형태(.js)로 두면 폴더를 다시 고르거나
+ * 권한창을 거치지 않고 **켜자마자 0클릭으로** 이번 주 배정표가 뜬다.
+ * 쓰기만 파일 핸들이 필요하므로 '저장 연결'은 수정할 때 한 번만 받는다. */
+const SIDE_NAME='assign-data.js';
+function serializeStore(obj,name){
+  const j=JSON.stringify(obj);
+  return /\.js$/i.test(name||'') ? 'window.__ASSIGN_DATA='+j+';\n' : j;
+}
+function parseStoreText(txt){
+  const t=String(txt||'').trim();
+  if(!t) return null;
+  const m=t.match(/^window\.__ASSIGN_DATA\s*=\s*([\s\S]*?);?\s*$/);
+  return JSON.parse(m?m[1]:t);
+}
+function loadSidecar(){
+  return new Promise(res=>{
+    try{ delete window.__ASSIGN_DATA; }catch(e){ window.__ASSIGN_DATA=undefined; }
+    const el=document.createElement('script');
+    el.src=encodeURI(SIDE_NAME)+'?v='+Date.now();   // 항상 최신 (다른 PC가 저장한 내용 반영)
+    const done=ok=>{ el.remove(); res(ok?(window.__ASSIGN_DATA||null):null); };
+    el.onload=()=>done(true); el.onerror=()=>done(false);
+    document.head.appendChild(el);
+  });
+}
+function adoptStore(j){
+  if(!j||j.app!=='assign') return false;
+  store={...emptyStore(),...j}; migrateStore();
+  return true;
+}
 async function useHandle(h,{create=false}={}){
   // 다른 파일로 갈아타기 전, 대기 중인 저장을 기존 파일에 먼저 반영 (편집 유실/오배달 방지)
   clearTimeout(saveT);
@@ -827,9 +955,9 @@ async function useHandle(h,{create=false}={}){
   }
   if(txt&&txt.trim()){
     let j;
-    try{ j=JSON.parse(txt); }
+    try{ j=parseStoreText(txt); }
     catch(e){ throw new Error('데이터 파일이 손상되어 열 수 없습니다 — 백업 파일로 복원하세요'); }
-    if(j.app!=='assign') throw new Error('어싸인 데이터 파일이 아닙니다');
+    if(!j||j.app!=='assign') throw new Error('어싸인 데이터 파일이 아닙니다');
     store={...emptyStore(),...j}; migrateStore();
   } else store=emptyStore();          // 새 파일 또는 진짜 빈(0바이트) 파일만
   fileHandle=h; window.__memoryMode=false;
@@ -846,12 +974,14 @@ function saveMsg(t){ const el=$('#saveDot'); el.textContent=t;
   el.className=(t?'show':'')+(t&&t.startsWith('⚠')?' warn':''); }
 async function writeStore({interactive=true}={}){
   if(!fileHandle){ dirty=false;
-    saveMsg(window.__memoryMode?'⚠ 파일 미연결 — 저장되지 않음':''); return; }
+    saveMsg(window.__autoRead ? '⚠ 저장 연결 안 됨 — 수정하려면 [저장 연결]'
+          : window.__memoryMode ? '⚠ 파일 미연결 — 저장되지 않음' : '');
+    return; }
   let fileRev=0, readOk=false;
   try{
     const cur=await (await fileHandle.getFile()).text();
     if(!cur.trim()) readOk=true;
-    else{ const j=JSON.parse(cur); fileRev=j.rev||0; readOk=true; }
+    else{ const j=parseStoreText(cur); fileRev=(j&&j.rev)||0; readOk=true; }
   }catch(e){}
   if(!readOk){
     saveMsg('⚠ 저장 보류 (파일 확인 불가)');
@@ -870,12 +1000,17 @@ async function writeStore({interactive=true}={}){
   const newRev=Math.max(fileRev,store.rev||0)+1;       // 파일 rev 기준 전진 — 되감김 방지
   const saved=new Date().toISOString();
   const w=await fileHandle.createWritable();
-  await w.write(JSON.stringify({...store,rev:newRev,saved})); await w.close();
+  await w.write(serializeStore({...store,rev:newRev,saved},fileHandle.name)); await w.close();
   store.rev=newRev; store.saved=saved;                 // 성공 후에만 커밋
   dirty=false; saveMsg('저장됨');
   setTimeout(()=>{if(!dirty)saveMsg('')},2500);
 }
-function touch(){ dirty=true; saveMsg('저장 중…');
+function touch(){
+  if(window.__autoRead&&!window.__autoReadWarned){
+    window.__autoReadWarned=true;
+    toast('읽기 전용입니다 — 위 [저장 연결]을 눌러 파일을 한 번 골라야 저장됩니다',6000);
+  }
+  dirty=true; saveMsg('저장 중…');
   clearTimeout(saveT);
   saveT=setTimeout(()=>writeStore().catch(e=>{saveMsg('⚠ 저장 실패');toast('⚠ 저장 실패: '+e.message,4200)}),700); }
 // 창 닫기/전환 시 대기분 즉시 저장 시도 (자동 경로라 충돌 확인창 없이 보류만)
@@ -938,6 +1073,43 @@ async function openFromDir(dir,{preferLast=false}={}){
   else if(match) await useHandle(match.h);
   else showFilePick(files);
 }
+/* 이전에 쓰던 파일이 이미 '허용'된 상태면 클릭 없이 그대로 연결 (권한 재요청 안 함) */
+async function silentReattach(){
+  try{
+    const h=await idbGet('handle');
+    if(!h||!h.queryPermission) return false;
+    if(await h.queryPermission({mode:'readwrite'})!=='granted') return false;
+    await useHandle(h);
+    return true;
+  }catch(e){ return false; }
+}
+/* 자동 열림: 같은 폴더의 assign-data.js 를 권한창 없이 읽어 바로 배정표를 띄운다.
+ * 쓰기 핸들은 없으므로 '저장 연결'을 누르기 전까지는 읽기 전용. */
+async function tryAutoOpen(){
+  if(await silentReattach()) return true;
+  const j=await loadSidecar();
+  if(!j||!adoptStore(j)) return false;
+  fileHandle=null; window.__memoryMode=true; window.__autoRead=true;
+  $('#fileInfo').textContent=SIDE_NAME+' (자동으로 읽음)';
+  saveMsg('⚠ 저장 연결 안 됨 — 수정하려면 [저장 연결]');
+  $('#btnConnect').style.display='';
+  afterLoad();
+  return true;
+}
+/* 자동으로 읽은 상태에서 같은 파일에 쓰기 권한 연결 — 파일 하나만 고르면 끝 */
+async function connectSave(){
+  try{
+    const [h]=await window.showOpenFilePicker({
+      types:[{description:'어싸인 데이터',accept:{'text/javascript':['.js'],'application/json':['.json']}}]});
+    const keep=JSON.parse(JSON.stringify(store));
+    await useHandle(h);
+    // 고른 파일이 방금 자동으로 읽은 그 파일이면 내용이 같다. 더 최신인 쪽을 남긴다.
+    if((keep.rev||0)>(store.rev||0)){ store=keep; recompute(); }
+    $('#btnConnect').style.display='none';
+    window.__autoRead=false;
+    toast('저장 연결 완료 — 이제 수정하면 자동으로 저장됩니다','',3200);
+  }catch(e){ if(e.name!=='AbortError') toast('연결 실패: '+e.message,4000); }
+}
 async function initStart(){
   if(!window.showOpenFilePicker){
     startWarnMsg('이 브라우저는 파일 저장을 지원하지 않습니다 — Edge 또는 Chrome(103+)으로 열어주세요.');
@@ -968,9 +1140,13 @@ async function initStart(){
       }
     }catch(e){ if(e.name!=='AbortError') startWarnMsg('열기 실패: '+e.message); } };
   $('#btnNewFile').onclick=async()=>{
-    try{ const h=await window.showSaveFilePicker({suggestedName:'어싸인 데이터.json',
-        types:[{description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
-      await useHandle(h,{create:true}); toast('새 데이터 파일을 만들었습니다'); }
+    try{ const h=await window.showSaveFilePicker({suggestedName:SIDE_NAME,
+        types:[{description:'어싸인 데이터 (자동 열림)',accept:{'text/javascript':['.js']}},
+               {description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
+      await useHandle(h,{create:true});
+      toast(h.name===SIDE_NAME
+        ? '만들었습니다 — 이 폴더의 assign.html 은 다음부터 바로 열립니다'
+        : '새 데이터 파일을 만들었습니다 (이름을 '+SIDE_NAME+' 로 하면 다음부터 자동으로 열립니다)',5200); }
     catch(e){ if(e.name!=='AbortError') toast('만들기 실패: '+e.message,4000); } };
 }
 function afterLoad(){ recompute(); show('week'); }
@@ -1050,6 +1226,15 @@ function recompute(){
     const s=store.seedManual[n];
     if(s&&s.label) seed[n]={label:s.label,period:s.period||'D',idx:-1};
   }
+  // 연속성 판정용 라벨→병실 (수기 방 수정 반영). 수기 수정이 없는 날은 방 구성이
+  // (시간대·인원수·라벨)로만 정해지므로 그 키로 캐시한다.
+  const rfCache={};
+  const roomsForCore=(P,cnt,label,dk)=>{
+    const ovd=store.roomOv[dk]&&store.roomOv[dk][P]&&(label in store.roomOv[dk][P]);
+    const key=P+'|'+cnt+'|'+label+(ovd?'|'+dk:'');
+    if(!rfCache[key]) rfCache[key]=roomTokens(roomsFor(P,cnt,label,dk));
+    return rfCache[key];
+  };
   // 주지 않을 방(banRooms) → 그 방이 포함된 라벨을 간호사별 회피 목록으로 (소프트)
   let avoid=null;
   const banned=Object.keys(store.banRooms||{}).filter(n=>store.banRooms[n].length);
@@ -1063,7 +1248,7 @@ function recompute(){
         const nLab=Math.min(staff.length,5);
         for(let li=0;li<nLab;li++){
           const label=LBL_ORDER[li];
-          const toks=roomTokens(roomsFor(P,staff.length,label,dk)).map(roomFull);
+          const toks=roomsForCore(P,staff.length,label,dk).map(roomFull);
           for(const n of hit){
             if(toks.some(t=>store.banRooms[n].includes(t)))
               (((avoid[dk]=avoid[dk]||{})[P]=avoid[dk][P]||{})[n]=avoid[dk][P][n]||[]).push(label);
@@ -1073,7 +1258,8 @@ function recompute(){
     }
   }
   result=AssignCore.compute(nurses,schedule,tlKeys,
-    {rules:store.rules,overrides:merged,seed:Object.keys(seed).length?seed:null,avoid});
+    {rules:store.rules,overrides:merged,seed:Object.keys(seed).length?seed:null,avoid,
+     roomsFor:roomsForCore});
 }
 function dayInfo(iso){
   if(!result) return null;
@@ -1267,13 +1453,24 @@ function openPick(name,iso,x,y){
   if(!info) return;
   pickCtx={name,iso,period:info.period,current:info.label||''};
   const day=result.byDay[iso]&&result.byDay[iso][info.period];
-  const labels=day?Object.keys(day.labels):[];
+  // 배정표 표기 순서(A(CN)·B·C·D·E)로 정렬 + 지금 그 자리인 사람 이름을 함께 —
+  // 누구와 맞바꾸는지 보이지 않으면 고를 수가 없다
+  const labels=day?LBL_ORDER.filter(l=>day.labels[l]):[];
+  const cnt=day?Object.keys(day.labels).length+day.extra.length:0;
   const pk=$('#pick');
   pk.innerHTML=`<div style="margin-bottom:8px;font-weight:700">${esc(name)} · ${+iso.slice(8,10)}일 ${info.period}
       <span class="dim">(지금: ${FORM_LBL(info.label)||'없음'})</span></div>`+
-    `<div class="dim" style="margin-bottom:2px">어싸인 바꾸기 (상대와 자동 교환)</div>`+
-    labels.map(l=>`<button ${l===pickCtx.current?'disabled':''} onclick="pickChoose('${l}')">${FORM_LBL(l)}</button>`).join('')+
-    `<button onclick="pickChoose(null)">자동</button>`+
+    `<div class="dim" style="margin-bottom:2px">어싸인 바꾸기 — 누를 사람과 자리를 맞바꿉니다</div>`+
+    `<div style="display:flex;flex-direction:column;gap:4px">`+
+    labels.map(l=>{
+      const who=day.labels[l], me=who===name;
+      const rm=roomsFor(info.period,cnt,l,iso);
+      return `<button class="swapBtn" ${me?'disabled':''} onclick="pickChoose('${l}')">`+
+        `<span class="lb">${FORM_LBL(l)}</span>`+
+        `<span class="who">${esc(who)}${me?' (본인)':''}</span>`+
+        `<span class="rm">${esc(rm)}</span></button>`;
+    }).join('')+'</div>'+
+    `<button style="margin-top:4px" onclick="pickChoose(null)">자동으로 되돌리기</button>`+
     `<div class="dim" style="margin:8px 0 2px;border-top:1px solid var(--rule);padding-top:6px">근무 바꾸기 (이 날만)</div>`+
     ['D','DC','E','EC','N','NC','중','OF','주','V'].map(c=>
       `<button style="font-size:13px;padding:5px 9px" onclick="pickShift('${c}')">${c}</button>`).join('')+
@@ -1940,10 +2137,14 @@ const ADMIN_PANELS={
   data:{title:'데이터 파일',
     desc:'모든 내용은 공용 폴더(NAS)의 JSON 파일 하나에 저장됩니다.',
     body(){ return `<div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="reloadFromFile()">다시 읽기 (다른 PC가 저장한 내용 받기)</button>
       <button onclick="pickNewLocation()">다른 파일로 저장 (위치 변경)</button>
       <button onclick="downloadBackup()">백업 내려받기</button>
       <button onclick="show('start')">다른 데이터 파일 열기</button></div>
-      <div class="dim" id="dataInfo"></div>`; },
+      <div class="dim" id="dataInfo"></div>
+      <div class="dim" style="line-height:1.7">자동 열림: 데이터 파일 이름이 <b>${SIDE_NAME}</b> 이고
+        assign.html 과 같은 폴더에 있으면, 켤 때 폴더를 고르지 않아도 바로 배정표가 뜹니다
+        (읽기는 권한 없이 됩니다. 수정·저장은 [저장 연결] 한 번만 받으면 됩니다).</div>`; },
     after(){
       const dates=timelineRange();
       $('#dataInfo').textContent=(fileHandle?'파일: '+fileHandle.name+' · ':'')+
@@ -2006,6 +2207,22 @@ async function pickNewLocation(){
     fileHandle=h; await idbSet('handle',h); await writeStore();
     $('#fileInfo').textContent=h.name; renderAdmin(); toast('저장 위치를 바꿨습니다');
   }catch(e){ if(e.name!=='AbortError') toast('실패: '+e.message,4000); }
+}
+/* 파일에서 다시 읽기 — 다른 PC가 저장한 내용을 받아온다 (자동 열림 파일도 지원) */
+async function reloadFromFile(){
+  if(dirty&&!confirm('저장되지 않은 변경이 있습니다. 버리고 파일 내용을 다시 읽을까요?')) return;
+  try{
+    let j=null;
+    if(fileHandle) j=parseStoreText(await (await fileHandle.getFile()).text());
+    else j=await loadSidecar();
+    if(!adoptStore(j)) throw new Error(fileHandle?'어싸인 데이터 파일이 아닙니다'
+                                               :'자동 열림 파일('+SIDE_NAME+')을 찾지 못했습니다');
+    dirty=false; saveMsg(''); recompute();
+    if(curScr==='admin') renderAdmin();
+    if(curScr==='week') renderWeek();
+    if(curScr==='edit') renderEditGrid();
+    toast('파일에서 다시 읽었습니다');
+  }catch(e){ toast('다시 읽기 실패: '+e.message,4200); }
 }
 function downloadBackup(){
   const blob=new Blob([JSON.stringify(store,null,1)],{type:'application/json'});
@@ -2402,6 +2619,8 @@ async function printWeek(wholeMonth){
  * 시작
  * ════════════════════════════════════════════════════════════════ */
 initStart();
+tryAutoOpen().then(ok=>{ if(!ok) show('start'); })
+  .catch(()=>show('start'));
 show('start');
 
 /* 검증 훅 */
@@ -2409,7 +2628,7 @@ window.__app={get store(){return store},set store(v){store=v},
   get result(){return result},get tlKeys(){return tlKeys},
   ingestGrid,confirmPaste,recompute,renderWeek,weekData,downloadWeekXlsx,printWeek,
   openPick,pickChoose,pickShift,setSeed,abbrevRooms,parseCellRaw,readXlsxGrid,loadTemplate,dayInfo,roomsFor,
-  openRoomPick,toggleRoom,roomFull,roomShort,buildPrintArea,
+  openRoomPick,toggleRoom,roomFull,roomShort,buildPrintArea,loadSidecar,tryAutoOpen,reloadFromFile,connectSave,
   get wkSunday(){return wkSunday},set wkSunday(v){wkSunday=v},show,
   memoryMode(){window.__memoryMode=true;
     $('#fileInfo').textContent='⚠ 파일 미연결 — 저장되지 않는 임시 모드';afterLoad();}};
