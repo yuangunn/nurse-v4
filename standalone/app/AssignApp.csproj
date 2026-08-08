@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AssignApp</RootNamespace>
+    <AssemblyName>어싸인배정표</AssemblyName>
+    <Product>어싸인 배정표</Product>
+    <AssemblyTitle>어싸인 배정표</AssemblyTitle>
+    <Version>1.0.0</Version>
+    <ApplicationIcon>..\..\build\icon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- macOS/Linux 에서도 윈도우용으로 빌드할 수 있게 -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- WebView2 패키지가 WPF용도 같이 들고 와서 나는 경고 (기능엔 무관) -->
+    <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 화면(3MB)과 아이콘을 exe 안에 넣는다 — 배포는 파일 하나 -->
+    <EmbeddedResource Include="..\assign.html" LogicalName="assign.html" />
+    <EmbeddedResource Include="..\..\build\icon.ico" LogicalName="app.ico" />
+  </ItemGroup>
+
+</Project>

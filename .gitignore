@@ -30,3 +30,8 @@ standalone/exe/build/
 standalone/exe/dist/
 standalone/exe/*.spec
 standalone/exe/assign_error.log
+
+# 네이티브 앱 빌드 산출물
+standalone/app/bin/
+standalone/app/obj/
+standalone/app/dist/
