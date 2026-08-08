@@ -981,7 +981,7 @@ function toast(msg,ms=2800){ const t=$('#toast'); t.textContent=msg; t.style.dis
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260809e'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260809f'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1074,6 +1074,7 @@ async function scanSidecars(){
   return out;
 }
 function adoptStore(j){
+  overwriteOk=false;
   if(!j||j.app!=='assign') return false;
   store={...emptyStore(),...j}; migrateStore();
   return true;
@@ -1112,26 +1113,58 @@ async function useHandle(h,{create=false}={}){
  * 파일을 읽을 수 없으면 절대 덮어쓰지 않고 보류한다(깨진/잠긴 파일 보호). */
 function saveMsg(t){ const el=$('#saveDot'); el.textContent=t;
   el.className=(t?'show':'')+(t&&t.startsWith('⚠')?' warn':''); }
-async function writeStore({interactive=true}={}){
+/* 이 창을 구별하는 표식 — 파일에 같이 적어 둔다.
+ * 파일 rev가 내 것보다 커도 그걸 쓴 게 '나'라면 다른 컴퓨터가 아니다.
+ * (쓰기가 중간에 끊겨 파일 rev만 올라간 경우 등) 새로고침하면 새 표식이 되므로
+ * 정말 판단이 안 서는 상황에서는 예전처럼 물어본다. */
+const CLIENT_ID='c'+Math.random().toString(36).slice(2,10);
+/* 저장은 한 번에 하나만. 겹쳐 돌면 앞 저장이 파일 rev를 이미 올렸는데
+ * store.rev 는 아직 그대로라, 자기가 방금 쓴 파일을 '남이 먼저 저장함'으로 오해한다.
+ * 진행 중이면 끝난 뒤 한 번만 더 돌린다(여러 번 밀린 요청은 하나로 합침). */
+let _saving=null, _again=false, _againOpts={};
+/* 충돌 확인은 한 번만. 같은 파일을 두 곳에서 함께 쓰는 동안 자동 저장마다
+ * 물으면 일을 할 수가 없다. 한 번 '내 내용으로'를 고르면 그 대답을 기억한다.
+ * (다른 파일을 열면 다시 묻는다 — 판단 근거가 달라지므로) */
+let overwriteOk=false;
+function conflictOk(savedAt){
+  if(overwriteOk) return true;
+  const when=savedAt?fmtWhen(Date.parse(savedAt)):'';
+  if(!confirm('다른 곳에서 먼저 저장한 내용이 있습니다'+(when?` (${when})`:'')+'.\n\n'
+     +'[확인] 내 내용으로 저장 — 이번에 켜 둔 동안은 다시 묻지 않습니다\n'
+     +'[취소] 내 작업을 백업 파일로 내려받기 (파일은 그대로 둡니다)')) return false;
+  overwriteOk=true; return true;
+}
+function writeStore(opts={}){
+  if(_saving){ _again=true; _againOpts=opts; return _saving; }
+  _saving=_writeStore(opts).finally(()=>{
+    _saving=null;
+    if(_again){ _again=false; writeStore(_againOpts).catch(()=>{}); }
+  });
+  return _saving;
+}
+async function _writeStore({interactive=true}={}){
+  store.by=CLIENT_ID;
   if(NATIVE&&nativeInfo) return writeStoreNative({interactive});
   if(!fileHandle){ dirty=false;
     saveMsg(window.__autoRead ? '⚠ 저장 연결 안 됨 — 수정하려면 [저장 연결]'
           : window.__memoryMode ? '⚠ 파일 미연결 — 저장되지 않음' : '');
     return; }
-  let fileRev=0, readOk=false;
+  let fileRev=0, fileBy='', fileSaved='', readOk=false;
   try{
     const cur=await (await fileHandle.getFile()).text();
     if(!cur.trim()) readOk=true;
-    else{ const j=parseStoreText(cur); fileRev=(j&&j.rev)||0; readOk=true; }
+    else{ const j=parseStoreText(cur); fileRev=(j&&j.rev)||0; fileBy=(j&&j.by)||'';
+          fileSaved=(j&&j.saved)||''; readOk=true; }
   }catch(e){}
   if(!readOk){
     saveMsg('⚠ 저장 보류 (파일 확인 불가)');
     if(interactive) toast('데이터 파일을 읽을 수 없어 저장을 보류했습니다 — 네트워크/파일을 확인하거나 ⚙ 관리에서 백업을 내려받으세요',5000);
     return;                                            // dirty 유지 → 다음 편집/저장 때 재시도
   }
+  if(fileRev>(store.rev||0)&&fileBy===CLIENT_ID) store.rev=fileRev;   // 내가 쓴 것 — 물어볼 일 아니다
   if(fileRev>(store.rev||0)){
     if(!interactive){ saveMsg('⚠ 다른 컴퓨터가 먼저 저장함 — 대기'); return; }
-    if(!confirm('다른 컴퓨터에서 먼저 저장한 내용이 있습니다.\n\n[확인] 내 내용으로 덮어쓰기\n[취소] 내 작업을 백업 파일로 내려받기 (파일은 그대로 둠)')){
+    if(!conflictOk(fileSaved)){
       downloadBackup();
       toast('백업을 내려받았습니다. 최신 내용을 보려면 창을 새로 여세요',5200);
       saveMsg('⚠ 저장 안 함 (백업 내려받음)');
@@ -1141,7 +1174,7 @@ async function writeStore({interactive=true}={}){
   const newRev=Math.max(fileRev,store.rev||0)+1;       // 파일 rev 기준 전진 — 되감김 방지
   const saved=new Date().toISOString();
   const w=await fileHandle.createWritable();
-  await w.write(serializeStore({...store,rev:newRev,saved})); await w.close();
+  await w.write(serializeStore({...store,rev:newRev,saved,by:CLIENT_ID})); await w.close();
   store.rev=newRev; store.saved=saved;                 // 성공 후에만 커밋
   dirty=false; saveMsg('저장됨');
   setTimeout(()=>{if(!dirty)saveMsg('')},2500);
@@ -1262,9 +1295,20 @@ async function writeStoreNative({interactive=true}={}){
   let r;
   try{ r=await nativeCall('save',{data:store}); }
   catch(e){ saveMsg('⚠ 저장 실패: '+e.message); return; }
+  let fileSaved='';
+  if(r.conflict){
+    // 파일에 적힌 표식이 나라면 다른 컴퓨터가 아니다 — 그 rev를 받아 그대로 잇는다
+    const f=await nativeCall('load').catch(()=>null);
+    fileSaved=(f&&f.data&&f.data.saved)||'';
+    if(f&&f.data&&f.data.by===CLIENT_ID){
+      store.rev=f.data.rev||0;
+      try{ r=await nativeCall('save',{data:store}); }
+      catch(e){ saveMsg('⚠ 저장 실패: '+e.message); return; }
+    }
+  }
   if(r.conflict){
     if(!interactive){ saveMsg('⚠ 다른 컴퓨터가 먼저 저장함 — 대기'); return; }
-    if(!confirm('다른 컴퓨터에서 먼저 저장한 내용이 있습니다.\n\n[확인] 내 내용으로 덮어쓰기\n[취소] 내 작업을 백업 파일로 내려받기 (파일은 그대로 둠)')){
+    if(!conflictOk(fileSaved)){
       downloadBackup(); saveMsg('⚠ 저장 안 함 (백업 내려받음)'); return;
     }
     try{ r=await nativeCall('save',{data:store,force:true}); }
