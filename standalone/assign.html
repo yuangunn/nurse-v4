@@ -981,7 +981,7 @@ function toast(msg,ms=2800){ const t=$('#toast'); t.textContent=msg; t.style.dis
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260809d'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260809e'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -993,7 +993,7 @@ const DEFAULT_REQ={mon:{D:4,E:5,N:3},tue:{D:5,E:5,N:3},wed:{D:5,E:5,N:3},thu:{D:
   fri:{D:5,E:4,N:3},sat:{D:3,E:3,N:2},sun:{D:3,E:4,N:3}};
 function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{},roomOv:{},events:{},
   seedManual:{},caps:{},alias:{},custom:{},req:JSON.parse(JSON.stringify(DEFAULT_REQ)),
-  rooms:DEFAULT_ROOMS.map(r=>r.slice()),banRooms:{},
+  rooms:DEFAULT_ROOMS.map(r=>r.slice()),banRooms:{},form:null,
   schemes:JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
   rules:{keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false}}; }
 const capsOf=n=>store.caps[n]||ALL_CAPS;
@@ -2161,13 +2161,14 @@ function edSet(r,c,v){
 }
 function snapshot(){ // 이름 변경/삭제가 ovr·caps·금지방·시드까지 건드리므로 함께 보존
   undoStack.push(JSON.stringify({o:store.order,c:store.cells,v:store.ovr,rv:store.roomOv,
-    ch:store.caps,br:store.banRooms,sd:store.seedManual,al:store.alias,cu:store.custom}));
+    ch:store.caps,br:store.banRooms,sd:store.seedManual,al:store.alias,cu:store.custom,fm:store.form}));
   if(undoStack.length>40) undoStack.shift(); }
 function restoreSnapshot(s){
   store.order=s.o; store.cells=s.c;
   if(s.v) store.ovr=s.v; if(s.rv) store.roomOv=s.rv;
   if(s.ch) store.caps=s.ch; if(s.br) store.banRooms=s.br; if(s.sd) store.seedManual=s.sd;
   if(s.al) store.alias=s.al; if(s.cu) store.custom=s.cu;
+  if(s.fm!==undefined){ store.form=s.fm; TPL=null; }
 }
 function moveEditMonth(n){ edM+=n; if(edM<1){edM=12;edY--} if(edM>12){edM=1;edY++} renderEditGrid(); }
 function renderEditGrid(){
@@ -2406,7 +2407,7 @@ function adminBadge(id){
     case 'codes': { const n=Object.keys(store.custom||{}).length+Object.keys(store.alias||{}).length;
       return n?n+'개':''; }
     case 'about': return BUILD.ver;
-    case 'form': return '';
+    case 'form': return store.form?'우리 병동':'';
     case 'rules': return ['keepSameShift','keepAcrossShift','keepAfterOff','bounceAfterOff']
       .filter(k=>store.rules[k]).length+'켬';
     case 'manual': { const n=Object.keys(store.ovr).length+Object.keys(store.roomOv).length; return n?n+'건':''; }
@@ -2471,6 +2472,7 @@ const ADMIN_PANELS={
   form:{title:'배정표 양식',
     desc:'인쇄·엑셀 내보내기에 쓰는 <b>병실 배정표 양식</b>입니다. 양식이 바뀌었을 때 xlsx 파일을 올리면 어디가 달라졌는지, 그대로 쓸 수 있는지 알려 줍니다.',
     body(){ return `<div id="formNow" class="dim" style="line-height:1.9"></div>
+      ${store.form?`<div style="margin:2px 0 6px"><button onclick="resetForm()">기본 양식으로 되돌리기</button></div>`:''}
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px">
         <button class="pri" onclick="$('#formFile').click()">양식 파일 검사 (xlsx 고르기)</button>
         <input type="file" id="formFile" accept=".xlsx" style="display:none" onchange="checkFormFile(this)">
@@ -2653,9 +2655,11 @@ async function describeCurrentForm(){
   const el=$('#formNow'); if(!el) return;
   try{
     const tpl=await loadTemplate();
-    const L=findLayout(sheetCells(tpl));
-    el.innerHTML=`<b>지금 쓰는 양식</b> — 프로그램에 들어 있는 '병실 배정표'<br>`+
-      layoutSummary(L).map(esc).join(' · ');
+    const L=findLayout(sheetCells(tpl),sheetMerges(tpl));
+    const ph=hasPlaceholders(sheetCells(tpl));
+    el.innerHTML=`<b>지금 쓰는 양식</b> — `+
+      (store.form?`올린 파일 <b>${esc(store.form.name)}</b>`:`프로그램에 들어 있는 '병실 배정표'`)+
+      (ph?' · <b>자리표시자 방식</b>':'')+`<br>`+layoutSummary(L).map(esc).join(' · ');
   }catch(e){ el.textContent='양식을 읽지 못했습니다: '+e.message; }
 }
 function formVerdict(a,b){
@@ -2677,7 +2681,8 @@ async function checkFormFile(input){
   const box=$('#formReport'); box.innerHTML='<div class="dim">읽는 중…</div>';
   try{
     const cur=await loadTemplate();
-    const up=await parseXlsx(new Uint8Array(await f.arrayBuffer()));
+    const bytes=new Uint8Array(await f.arrayBuffer());
+    const up=await parseXlsx(bytes); up.__bytes=bytes;
     const d=diffForms(cur,up);
     const bad=formVerdict(d.layoutOld,d.layoutNew);
     const rowsHtml=[['요일 줄',x=>x.wdRow?x.wdRow+'행':'못 찾음'],
@@ -2708,9 +2713,58 @@ async function checkFormFile(input){
       ((d.added.length||d.removed.length)?`<div class="dim" style="margin-top:8px">칸 추가 ${d.added.length} · 삭제 ${d.removed.length}</div>`:'')+
       ((d.mergeAdded.length||d.mergeRemoved.length)?
         `<div class="dim" style="margin-top:8px">합친 칸 변화 — 추가 ${d.mergeAdded.length}, 해제 ${d.mergeRemoved.length}</div>`:'')+
-      `<div class="dim" style="margin-top:14px;line-height:1.8">
-        지금은 <b>검사만</b> 합니다. 이 양식으로 바꾸는 방법은 아직 정하지 않았습니다.</div>`;
+      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
+        <button class="pri" onclick="useCheckedForm()">이 양식으로 바꾸기</button>
+        <button onclick="downloadMarkedForm()">자리표시자 넣어서 내려받기</button>
+      </div>
+      <div class="dim" style="margin-top:10px;line-height:1.8">
+        구조가 다르면 <b>자리표시자</b>를 넣어 쓰세요 — 양식 엑셀에 <b>{{이름}} {{방}} {{날짜}}</b> 처럼 적어 두면
+        그 자리에 값이 들어갑니다. 위 버튼으로 자동으로 꽂아 받은 뒤, 엑셀에서 위치만 손봐서 다시 올리면 됩니다.
+        (예: 이름 뒤에 차지 표시를 붙이려면 <b>{{이름}}{{차지:/CRN}}</b>)</div>`;
+    window.__checkedForm={name:f.name,bytes:up.__bytes,tpl:up};
   }catch(e){ box.innerHTML=`<div class="tip" style="margin-top:12px"><b>읽기 실패</b><span>${esc(e.message)}</span></div>`; }
+}
+
+/* 검사한 양식을 우리 병동 양식으로 채택 — 데이터 파일에 함께 저장돼 다른 PC에서도 같이 쓴다 */
+function useCheckedForm(){
+  const c=window.__checkedForm;
+  if(!c){ toast('먼저 양식 파일을 검사하세요','',3000); return; }
+  const cells=sheetCells(c.tpl);
+  const ph=hasPlaceholders(cells);
+  const kb=Math.round(c.bytes.length/1024);
+  if(!confirm(`'${c.name}' 을 우리 병동 양식으로 씁니다.\n\n`+
+    (ph?'자리표시자가 있어 그 지시대로 채웁니다.\n':'자리표시자가 없어 기본 위치 규칙으로 채웁니다 — 구조가 다르면 [자리표시자 넣어서 내려받기]를 먼저 쓰세요.\n')+
+    `데이터 파일이 약 ${Math.round(kb*1.34)}KB 커집니다.\n\n계속할까요?`)) return;
+  snapshot();
+  store.form={name:c.name,b64:bytesToB64(c.bytes),savedAt:Date.now(),ph};
+  TPL=null; touch(); renderAdmin();
+  toast('이 양식으로 바꿨습니다 — 엑셀 내보내기부터 적용됩니다',4200);
+}
+function resetForm(){
+  if(!store.form){ toast('기본 양식을 쓰는 중입니다'); return; }
+  if(!confirm('프로그램에 들어 있는 기본 양식으로 되돌릴까요?')) return;
+  snapshot(); store.form=null; TPL=null; touch(); renderAdmin();
+  toast('기본 양식으로 되돌렸습니다');
+}
+/* 올린 양식에 자리표시자를 자동으로 꽂아 내려준다 — 엑셀에서 위치만 손보면 된다 */
+async function downloadMarkedForm(){
+  const c=window.__checkedForm;
+  if(!c){ toast('먼저 양식 파일을 검사하세요','',3000); return; }
+  try{
+    const cells=sheetCells(c.tpl);
+    const L=findLayout(cells,sheetMerges(tpl));
+    const xml=markPlaceholders(c.tpl,cells,L);
+    const nb=enc.encode(xml);
+    const out=c.tpl.ents.map(e2=>e2.name==='xl/worksheets/sheet1.xml'
+      ? {name:e2.name,meth:0,crc:crc32(nb),usz:nb.length,data:nb}
+      : {name:e2.name,meth:e2.meth,crc:e2.crc,usz:e2.usz,data:e2.raw});
+    const blob=new Blob([writeZip(out)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=c.name.replace(/\.xlsx$/i,'')+'_자리표시자.xlsx'; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    toast('자리표시자를 넣어 내려받았습니다 — 엑셀에서 확인하고 다시 올리세요',5000);
+  }catch(e){ toast('넣기 실패: '+e.message,4200); }
 }
 
 /* 파일에서 다시 읽기 — 다른 PC가 저장한 내용을 받아온다 (자동 열림 파일도 지원) */
@@ -2951,7 +3005,7 @@ function sheetCells(tpl){
 const normLabel=v=>String(v||'').replace(/\s+/g,'');
 const sheetMerges=tpl=>[...tpl.sheetXml.matchAll(/<mergeCell ref="([^"]+)"\/>/g)].map(m=>m[1]);
 /* 우리가 채워야 할 자리를 찾는다 — 행 위치가 병동마다 달라서 고정 좌표를 믿으면 안 된다 */
-function findLayout(cells){
+function findLayout(cells,merges){
   const at=(r,c)=>cells[colName(c)+r]||'';
   const rows={},cols={};
   for(const ref in cells){
@@ -2960,17 +3014,37 @@ function findLayout(cells){
     cols[colNum(m[1])]=1;
   }
   const L={};
-  // ① 요일 줄 — 일·월·화… 가 한 행에 4개 이상
+  // 합친 칸의 가로 폭 — 요일 한 칸이 몇 열인지 재는 데 쓴다
+  const mergeWidthAt=ref=>{
+    const mg=(merges||[]).find(x=>x.split(':')[0]===ref);
+    if(!mg) return 0;
+    const [a,b]=mg.split(':');
+    return colNum(b.match(/^[A-Z]+/)[0])-colNum(a.match(/^[A-Z]+/)[0])+1;
+  };
+  // ① 요일 줄 — 일·월·화… 가 한 행에 3개 이상 ({{요일}} 자리표시자도 요일로 친다)
   const WD7=['일','월','화','수','목','금','토'];
+  const isWd=v=>WD7.includes(v)||/\{\{\s*요일/.test(v);
   for(const r in rows){
-    const hit=rows[r].filter(c=>WD7.includes(at(r,c)));
-    if(hit.length>=4){ L.wdRow=+r; L.wdCols=hit.sort((a,b)=>a-b); break; }
+    const hit=rows[r].filter(c=>isWd(at(r,c)));
+    if(hit.length>=3){ L.wdRow=+r; L.wdCols=hit.sort((a,b)=>a-b); break; }
   }
-  // ② 날짜 줄 — 요일 줄 바로 아래에서 날짜(숫자·"06월 28일")가 4개 이상
+  // ② 날짜 줄 — 요일 줄 근처에서 날짜(숫자·"06월 28일"·{{날짜}})가 3개 이상
+  const isDate=v=>/^\d{1,2}\s*월/.test(v)||/^\d{4,5}$/.test(v)||/^\d{1,2}\/\d{1,2}/.test(v)
+    ||/\{\{\s*날짜/.test(v);
   if(L.wdRow) for(let r=L.wdRow;r<=L.wdRow+2;r++){
-    const hit=(rows[r]||[]).filter(c=>{const v=at(r,c);
-      return /^\d{1,2}\s*월/.test(v)||/^\d{4,5}$/.test(v)||/^\d{1,2}\/\d{1,2}/.test(v);});
-    if(hit.length>=4){ L.dateRow=r; L.dateCols=hit.sort((a,b)=>a-b); break; }
+    const hit=(rows[r]||[]).filter(c=>isDate(at(r,c)));
+    if(hit.length>=3){ L.dateRow=r; L.dateCols=hit.sort((a,b)=>a-b); break; }
+  }
+  // 요일 칸 간격을 확정하고 7칸으로 정규화 —
+  // 자리표시자를 넣으면 첫 칸이 날짜로 안 보여 시작 열이 밀리는 일이 있다
+  if(!L.dateCols&&L.wdCols) { L.dateRow=L.wdRow; L.dateCols=L.wdCols.slice(); }
+  if(L.dateCols&&L.dateCols.length){
+    const first=Math.min(L.dateCols[0],(L.wdCols||[1e9])[0]);
+    let stride=L.dateCols.length>=2?L.dateCols[1]-L.dateCols[0]
+      :mergeWidthAt(colName(first)+L.dateRow)||1;
+    if(L.dateCols[0]!==first&&L.dateCols.length>=2) stride=L.dateCols[1]-L.dateCols[0];
+    if(stride<1) stride=1;
+    L.dateCols=[...Array(7)].map((_,i)=>first+stride*i);
   }
   // ③ 어싸인 라벨 열 — A(CN)/CRN/A~E 가 세로로 이어지는 열 (구역보다 먼저 찾는다.
   //    라벨 열에도 'D','E' 가 있어 구역과 헷갈리기 때문)
@@ -3018,15 +3092,25 @@ function findLayout(cells){
       sec.end=end===1e9?null:end;
     });
   }
-  // ⑤ 중간번·교육행사 같은 이름표 행
+  // ⑤ 중간번·교육행사 같은 이름표 행.
+  //    이름표가 세로로 합쳐져 있으면(교육 및 행사가 요일·날짜 줄까지 덮는 식)
+  //    값이 들어가는 줄은 그 합친 범위의 마지막 줄이다.
+  const valueRow=(ref)=>{
+    const mg=(merges||[]).find(x=>x.split(':')[0]===ref);
+    if(!mg) return +ref.match(/\d+/)[0];
+    return +mg.split(':')[1].match(/\d+/)[0];
+  };
   for(const r in rows) for(const c of rows[r]){
-    const v=at(r,c);
-    if(/^중(간번)?$/.test(v)&&c<=3) L.midRow=+r;
-    if(/교육/.test(v)&&/행사/.test(v)) L.eventRow=+r;
-    if(/파트장/.test(v)) L.partRow=+r;
+    const v=normLabel(at(r,c)); const ref=colName(c)+r;
+    if(/^중(간번)?$/.test(v)&&c<=3) L.midRow=valueRow(ref);
+    if(/교육/.test(v)&&/행사/.test(v)) L.eventRow=valueRow(ref);
+    if(/파트장/.test(v)) L.partRow=valueRow(ref);
   }
+  // 요일·날짜 줄과 겹치면 이름표 줄이 아니라 그 아래가 값 자리다
+  if(L.eventRow&&(L.eventRow===L.wdRow||L.eventRow===L.dateRow)) L.eventRow=Math.max(L.wdRow||0,L.dateRow||0)+1;
   // ⑥ 요일당 칸 수 (병합 폭) — 날짜 줄의 열 간격으로 추정
   if(L.dateCols&&L.dateCols.length>=2) L.perDay=L.dateCols[1]-L.dateCols[0];
+  else if(L.wdCols&&L.wdCols.length>=2) L.perDay=L.wdCols[1]-L.wdCols[0];
   return L;
 }
 function layoutSummary(L){
@@ -3058,10 +3142,17 @@ function diffForms(oldT,newT){
   const byPos=(x,y)=>{const p=sortRef(x),q=sortRef(y);return p[0]-q[0]||p[1]-q[1];};
   return {changed:changed.sort(byPos),added:added.sort(byPos),removed:removed.sort(byPos),
     mergeAdded:mb.filter(x=>!ma.includes(x)),mergeRemoved:ma.filter(x=>!mb.includes(x)),
-    layoutOld:findLayout(a),layoutNew:findLayout(b)};
+    layoutOld:findLayout(a,sheetMerges(oldT)),layoutNew:findLayout(b,sheetMerges(newT))};
 }
 async function loadTemplate(){
-  if(TPL) return TPL;
+  // 병동이 올린 양식이 있으면 그걸 쓴다 (없으면 프로그램에 들어 있는 기본 양식)
+  if(store.form&&store.form.b64){
+    if(TPL&&TPL.__custom===store.form.savedAt) return TPL;
+    const u8=b64ToBytes(store.form.b64);
+    TPL=await parseXlsx(u8); TPL.__custom=store.form.savedAt;
+    return TPL;
+  }
+  if(TPL&&!TPL.__custom) return TPL;
   const b64=($('#tplB64').textContent||'').replace(/\/\*[^*]*\*\//g,'').trim();
   if(!b64) throw new Error('양식이 내장되지 않았습니다 — build-assign-standalone.mjs 를 실행하세요');
   const bin=atob(b64); const u8=new Uint8Array(bin.length);
@@ -3078,6 +3169,11 @@ async function loadTemplate(){
     imgUrl=URL.createObjectURL(new Blob([bytes],{type:'image/png'})); }
   return TPL={ents,sheetXml,wbXml,sst,imgUrl};
 }
+const b64ToBytes=b64=>{const bin=atob(b64);const u8=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);return u8;};
+const bytesToB64=u8=>{let s='';const CH=0x8000;
+  for(let i=0;i<u8.length;i+=CH) s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));
+  return btoa(s);};
 
 /* ════════════════════════════════════════════════════════════════
  * 주간 배정표 출력 — xlsx(양식 그대로) + HTML 인쇄
@@ -3119,10 +3215,118 @@ function weekData(sun){
   }
   return days;
 }
+/* ── 자리표시자 방식 양식 채우기 ────────────────────────────────────────
+ * 병동마다 배정표가 다른데(어싸인 라벨 체계·방 표기·칸 구성) 그걸 전부 알아맞히려
+ * 하면 규칙이 끝없이 늘어난다. 그래서 판단을 양식 파일에 맡긴다 —
+ * 엑셀에 {{이름}} {{방}} 처럼 적어 두면 그 자리에 값을 넣는다.
+ *
+ *   {{이름}}        그 줄의 담당 간호사       {{이름:D.A}} 처럼 자리를 못 박을 수도 있다
+ *   {{방}}          그 줄의 담당 병실
+ *   {{차지:/CRN}}   그 사람이 차지일 때만 '/CRN' 을 붙인다
+ *   {{날짜}}        그 날짜   {{요일}} 일·월·화…
+ *   {{중간번}}      그 날 중간번   {{교육}} 교육·행사
+ *
+ * 요일 칸은 하나만 적으면 된다 — 날짜 줄에서 잰 간격만큼 오른쪽으로 복제한다. */
+const PH_RE=/\{\{\s*(이름|방|차지|날짜|요일|중간번|교육)\s*(?::([^}]*))?\s*\}\}/g;
+function hasPlaceholders(cells){
+  for(const ref in cells) if(/\{\{\s*(이름|방|차지|날짜|요일|중간번|교육)/.test(cells[ref])) return true;
+  return false;
+}
+/* 줄 → 어느 구역의 몇 번째 자리인지 */
+function rowSlots(L){
+  const map={};
+  for(const sec of (L.sections||[])){
+    const rows=(L.labelRows||[]).filter(r=>r>=sec.row&&(!sec.end||r<sec.end));
+    rows.forEach((r,i)=>{ if(i<LBL_ORDER.length) map[r]={P:sec.P,label:LBL_ORDER[i]}; });
+  }
+  return map;
+}
+function fillByPlaceholders(tpl,cells,L,days){
+  let xml=tpl.sheetXml;
+  const slots=rowSlots(L);
+  const dayCols=L.dateCols||[];
+  if(dayCols.length<2) throw new Error('양식에서 날짜 칸을 찾지 못했습니다');
+  const stride=dayCols[1]-dayCols[0];
+  const firstCol=dayCols[0], lastFirstBlock=firstCol+stride;
+  // 표시자가 있는 줄은 요일 칸을 통째로 비운다 — 양식에 남아 있던 예시값이 섞이면 안 된다
+  const phRows=new Set();
+  for(const ref in cells){
+    PH_RE.lastIndex=0;
+    const m=ref.match(/^([A-Z]+)(\d+)$/);
+    if(m&&PH_RE.test(cells[ref])&&colNum(m[1])>=firstCol) phRows.add(+m[2]);
+  }
+  const lastCol=dayCols[dayCols.length-1]+stride-1;
+  for(const r of phRows) for(let c=firstCol;c<=lastCol;c++) xml=clearCell(xml,colName(c)+r);
+  for(const ref in cells){
+    const txt=cells[ref];
+    PH_RE.lastIndex=0;
+    if(!PH_RE.test(txt)) continue;
+    const m=ref.match(/^([A-Z]+)(\d+)$/); if(!m) continue;
+    const col=colNum(m[1]), row=+m[2];
+    // 첫 요일 칸에 적힌 것만 복제 대상 (그 밖은 그 자리에서 한 번만 채운다)
+    const inFirst=col>=firstCol&&col<lastFirstBlock;
+    const nDays=inFirst?Math.min(7,dayCols.length):1;
+    for(let k=0;k<nDays;k++){
+      const tgtCol=inFirst?col+stride*k:col;
+      const tgtRef=colName(tgtCol)+row;
+      const day=days[k]||null;
+      const out=txt.replace(PH_RE,(_,kind,arg)=>phValue(kind,arg,slots[row],day));
+      if(out.trim()) xml=setCellStr(xml,tgtRef,out.trim());
+      else xml=clearCell(xml,tgtRef);
+    }
+  }
+  return xml;
+}
+function phValue(kind,arg,slot,day){
+  if(!day||day.blank) return '';
+  if(kind==='요일') return WD[day.date.getDay()];
+  if(kind==='날짜'){
+    const d=day.date;
+    return (arg||'M/D').replace('YYYY',d.getFullYear()).replace('MM',pad2(d.getMonth()+1))
+      .replace('DD',pad2(d.getDate())).replace('M',d.getMonth()+1).replace('D',d.getDate());
+  }
+  if(kind==='중간번') return (day.mids||[]).join(', ');
+  if(kind==='교육') return store.events[isoOfD(day.date)]||'';
+  // 자리(구역·라벨)가 필요한 것들
+  let P=slot&&slot.P, label=slot&&slot.label;
+  if(arg&&/^[DEN]\./.test(arg)){ P=arg[0]; label=arg.slice(2)==='차지'?'차지':arg.slice(2); }
+  if(!P||!label) return '';
+  const sec=day.secs&&day.secs[P]; if(!sec) return '';
+  const nm=sec.byLabel[label]; if(!nm) return '';
+  if(kind==='이름') return nm;
+  if(kind==='방') return roomsFor(P,sec.cnt,label,isoOfD(day.date));
+  if(kind==='차지') return label==='차지'?(arg||'/CN'):'';
+  return '';
+}
+/* 올린 양식에 자리표시자를 자동으로 꽂아 준다 — 손으로 다 적지 않게 */
+function markPlaceholders(tpl,cells,L){
+  let xml=tpl.sheetXml;
+  const slots=rowSlots(L);
+  const dayCols=L.dateCols||[];
+  if(dayCols.length<2) throw new Error('날짜 칸을 찾지 못해 자리표시자를 넣을 수 없습니다');
+  const c0=dayCols[0], stride=dayCols[1]-dayCols[0];
+  const put=(col,row,txt)=>{ xml=setCellStr(xml,colName(col)+row,txt); };
+  if(L.wdRow) put(c0,L.wdRow,'{{요일}}');
+  if(L.dateRow) put(c0,L.dateRow,'{{날짜}}');
+  for(const r in slots){
+    put(c0,+r,'{{방}}');                       // 첫 칸 = 방
+    if(stride>1) put(c0+1,+r,'{{이름}}');       // 둘째 칸 = 이름
+    else put(c0,+r,'{{이름}}');                 // 칸이 하나면 이름만
+  }
+  if(L.midRow) put(c0,L.midRow,'{{중간번}}');
+  if(L.eventRow) put(c0,L.eventRow,'{{교육}}');
+  return xml;
+}
 async function downloadWeekXlsx(sun){
   const tpl=await loadTemplate();
   const days=weekData(sun);
   let xml=tpl.sheetXml;
+  // 양식에 자리표시자가 있으면 그 지시대로 채운다 (병동마다 다른 양식을 그대로 지원)
+  const cells=sheetCells(tpl);
+  if(hasPlaceholders(cells)){
+    xml=fillByPlaceholders(tpl,cells,findLayout(cells,sheetMerges(tpl)),days);
+    return saveWeekXlsx(tpl,xml,sun);
+  }
   const COLS='DEFGHIJKLMNOPQ'.split('');
   for(const col of COLS){ for(let r=3;r<=18;r++) xml=clearCell(xml,col+r); }
   days.forEach((day,i)=>{
@@ -3145,6 +3349,9 @@ async function downloadWeekXlsx(sun){
     }
     if(day.mids.length) xml=setCellStr(xml,colR+'10',day.mids.join(', '));
   });
+  return saveWeekXlsx(tpl,xml,sun);
+}
+function saveWeekXlsx(tpl,xml,sun){
   const span=fmtYmd(sun)+'~'+fmtYmd(addDays(sun,6));
   const wb=tpl.wbXml.replace(/(<sheet[^>]*name=")[^"]*(")/,'$1'+span+'$2');
   const nb=enc.encode(xml), wbB=enc.encode(wb);
