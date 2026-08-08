@@ -473,7 +473,8 @@
     <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
       <button class="act" onclick="show('edit')">근무표 고치기</button>
       <button class="act" onclick="show('paste')">새 근무표 넣기</button>
-      <button class="pri" onclick="printWeek(false)">이번 주 인쇄</button>
+      <button class="act" onclick="printWeek(false)">인쇄</button>
+      <button class="pri" onclick="exportWeekXlsx()">이번 주 배정표 엑셀로 내보내기</button>
     </span>
   </div>
   <div id="wkWarn"></div>
@@ -483,6 +484,7 @@
       <span>이름 클릭 = 담당 교체</span><span>방 칸 클릭 = 그날 병상 수정</span><span>맨 윗줄 클릭 = 교육·행사 입력</span>
       <span class="lg"><i style="background:var(--err)"></i>수동 교체</span>
       <span class="lg"><i style="background:var(--down-deep)"></i>방 수정</span>
+      <span style="margin-left:auto">엑셀로 내보내면 병동 양식 그대로 열려 고칠 수 있습니다</span>
     </div>
   </div>
 </div>
@@ -2392,7 +2394,7 @@ function undoEdit(){
 let adminPanel='weekx';
 const ADMIN_NAV=[
   ['자주 쓰는',[['weekx','주간 배정표 내려받기'],['seed','지난 어싸인 직접 입력']]],
-  ['우리 병동',[['rooms','병실 목록'],['schemes','방 구성'],['req','요일별 필요 인원'],['codes','근무 표기']]],
+  ['우리 병동',[['rooms','병실 목록'],['schemes','방 구성'],['req','요일별 필요 인원'],['codes','근무 표기'],['form','배정표 양식']]],
   ['간호사',[['caps','간호사 관리']]],
   ['배정 규칙',[['rules','배정 원칙'],['manual','수동 수정 관리']]],
   ['데이터',[['data','데이터 파일']]],
@@ -2404,6 +2406,7 @@ function adminBadge(id){
     case 'codes': { const n=Object.keys(store.custom||{}).length+Object.keys(store.alias||{}).length;
       return n?n+'개':''; }
     case 'about': return BUILD.ver;
+    case 'form': return '';
     case 'rules': return ['keepSameShift','keepAcrossShift','keepAfterOff','bounceAfterOff']
       .filter(k=>store.rules[k]).length+'켬';
     case 'manual': { const n=Object.keys(store.ovr).length+Object.keys(store.roomOv).length; return n?n+'건':''; }
@@ -2423,8 +2426,8 @@ function delBan(n,r){
   touch(); recompute(); renderAdmin();
 }
 const ADMIN_PANELS={
-  weekx:{title:'주간 배정표 내려받기',
-    desc:"'병실 배정표' 양식 그대로 xlsx로 저장해 엑셀에서 수정할 수 있습니다. 기준: 지금 보고 있는 주가 속한 달.",
+  weekx:{title:'주간 배정표 내려받기 (여러 주)',
+    desc:"한 주만 받으려면 배정표 화면의 <b>[이번 주 배정표 엑셀로 내보내기]</b>가 빠릅니다. 여기서는 그 달 주차를 골라 받습니다.",
     body(){ return `<div id="weekBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
       <div><button onclick="printWeek(true)">이번 달 전체 인쇄 (5~6장)</button></div>`; },
     after(){
@@ -2465,6 +2468,16 @@ const ADMIN_PANELS={
           `<td><input type="number" min="0" max="20" style="width:90px" value="${+r[1]||''}" onchange="setRoom(${i},1,this.value)"></td>`+
           `<td><button class="segbtn danger" title="이 방 삭제" onclick="delRoom(${i})">✕</button></td></tr>`).join('');
     }},
+  form:{title:'배정표 양식',
+    desc:'인쇄·엑셀 내보내기에 쓰는 <b>병실 배정표 양식</b>입니다. 양식이 바뀌었을 때 xlsx 파일을 올리면 어디가 달라졌는지, 그대로 쓸 수 있는지 알려 줍니다.',
+    body(){ return `<div id="formNow" class="dim" style="line-height:1.9"></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px">
+        <button class="pri" onclick="$('#formFile').click()">양식 파일 검사 (xlsx 고르기)</button>
+        <input type="file" id="formFile" accept=".xlsx" style="display:none" onchange="checkFormFile(this)">
+        <span class="dim">파일은 검사만 하고 저장하지 않습니다</span>
+      </div>
+      <div id="formReport"></div>`; },
+    after(){ describeCurrentForm(); }},
   codes:{title:'근무 표기',
     desc:'기본 목록에 없는 병동 표기(경가·조가 등)를 여기서 정합니다. 근무표를 붙여넣을 때도 그 자리에서 바로 정할 수 있습니다.',
     aux:`<button onclick="addCodeMapping()">＋ 표기 추가</button>`,
@@ -2635,6 +2648,71 @@ async function pickNewLocation(){
     $('#fileInfo').textContent=h.name; renderAdmin(); toast('저장 위치를 바꿨습니다');
   }catch(e){ if(e.name!=='AbortError') toast('실패: '+e.message,4000); }
 }
+/* ── 배정표 양식 검사 ─────────────────────────────────────────────────── */
+async function describeCurrentForm(){
+  const el=$('#formNow'); if(!el) return;
+  try{
+    const tpl=await loadTemplate();
+    const L=findLayout(sheetCells(tpl));
+    el.innerHTML=`<b>지금 쓰는 양식</b> — 프로그램에 들어 있는 '병실 배정표'<br>`+
+      layoutSummary(L).map(esc).join(' · ');
+  }catch(e){ el.textContent='양식을 읽지 못했습니다: '+e.message; }
+}
+function formVerdict(a,b){
+  const same=(x,y)=>JSON.stringify(x)===JSON.stringify(y);
+  const bad=[];
+  if(a.wdRow!==b.wdRow) bad.push('요일 줄 위치');
+  if(a.dateRow!==b.dateRow) bad.push('날짜 줄 위치');
+  if(a.perDay!==b.perDay) bad.push('요일당 칸 수');
+  if(!same((a.sections||[]).map(x=>[x.P,x.row,x.rows]),(b.sections||[]).map(x=>[x.P,x.row,x.rows])))
+    bad.push('D·E·N 구역 위치나 줄 수');
+  if(!same(a.labels,b.labels)) bad.push('어싸인 라벨');
+  if(a.midRow!==b.midRow) bad.push('중간번 줄');
+  if(a.eventRow!==b.eventRow) bad.push('교육·행사 줄');
+  return bad;
+}
+async function checkFormFile(input){
+  const f=input.files&&input.files[0]; input.value='';
+  if(!f) return;
+  const box=$('#formReport'); box.innerHTML='<div class="dim">읽는 중…</div>';
+  try{
+    const cur=await loadTemplate();
+    const up=await parseXlsx(new Uint8Array(await f.arrayBuffer()));
+    const d=diffForms(cur,up);
+    const bad=formVerdict(d.layoutOld,d.layoutNew);
+    const rowsHtml=[['요일 줄',x=>x.wdRow?x.wdRow+'행':'못 찾음'],
+      ['날짜 줄',x=>x.dateRow?x.dateRow+'행':'못 찾음'],
+      ['요일당 칸',x=>x.perDay?x.perDay+'칸':'?'],
+      ['D·E·N 구역',x=>(x.sections||[]).map(y=>y.P+' '+y.row+'행/'+y.rows+'줄').join(', ')||'못 찾음'],
+      ['어싸인 라벨',x=>(x.labels||[]).join(', ')||'못 찾음'],
+      ['중간번 줄',x=>x.midRow?x.midRow+'행':'없음'],
+      ['교육·행사 줄',x=>x.eventRow?x.eventRow+'행':'없음']]
+      .map(([k,fn])=>{
+        const A=fn(d.layoutOld),B=fn(d.layoutNew), diff=A!==B;
+        return `<tr><td style="padding:6px 12px 6px 0;color:var(--ink-3);font-size:13px">${k}</td>`+
+          `<td style="padding:6px 16px 6px 0;font-size:13px">${esc(A)}</td>`+
+          `<td style="padding:6px 0;font-size:13px;font-weight:${diff?'800':'400'};color:${diff?'var(--err)':'var(--ink-2)'}">${esc(B)}${diff?' ← 다름':''}</td></tr>`;
+      }).join('');
+    const txt=d.changed.slice(0,20).map(c=>
+      `<div style="font-size:13px;padding:3px 0"><b>${c.ref}</b> ${esc(c.from.slice(0,34))} → <b>${esc(c.to.slice(0,34))}</b></div>`).join('');
+    box.innerHTML=
+      `<div style="margin-top:14px;padding:13px 16px;border-radius:12px;background:${bad.length?'var(--err-bg)':'var(--ok-bg)'};
+        color:${bad.length?'var(--err)':'var(--ok)'};font-weight:800;font-size:14px">`+
+        (bad.length?`구조가 다릅니다 — ${esc(bad.join(', '))}`
+                   :'구조가 같습니다 — 이 양식으로 그대로 채울 수 있습니다')+`</div>`+
+      `<div class="dim" style="margin:10px 0 2px">채우는 자리 비교 <span style="color:var(--ink-4)">(가운데=지금, 오른쪽=올린 파일)</span></div>`+
+      `<table style="border-collapse:collapse">${rowsHtml}</table>`+
+      (d.changed.length?`<div class="dim" style="margin:14px 0 2px">바뀐 문구 ${d.changed.length}곳</div>${txt}`
+        +(d.changed.length>20?`<div class="dim">… 외 ${d.changed.length-20}곳</div>`:''):
+        `<div class="dim" style="margin-top:14px">바뀐 문구 없음</div>`)+
+      ((d.added.length||d.removed.length)?`<div class="dim" style="margin-top:8px">칸 추가 ${d.added.length} · 삭제 ${d.removed.length}</div>`:'')+
+      ((d.mergeAdded.length||d.mergeRemoved.length)?
+        `<div class="dim" style="margin-top:8px">합친 칸 변화 — 추가 ${d.mergeAdded.length}, 해제 ${d.mergeRemoved.length}</div>`:'')+
+      `<div class="dim" style="margin-top:14px;line-height:1.8">
+        지금은 <b>검사만</b> 합니다. 이 양식으로 바꾸는 방법은 아직 정하지 않았습니다.</div>`;
+  }catch(e){ box.innerHTML=`<div class="tip" style="margin-top:12px"><b>읽기 실패</b><span>${esc(e.message)}</span></div>`; }
+}
+
 /* 파일에서 다시 읽기 — 다른 PC가 저장한 내용을 받아온다 (자동 열림 파일도 지원) */
 async function reloadFromFile(){
   if(dirty&&!confirm('저장되지 않은 변경이 있습니다. 버리고 파일 내용을 다시 읽을까요?')) return;
@@ -2825,6 +2903,163 @@ async function readXlsxGrid(u8){
   return g;
 }
 let TPL=null;
+/* ── 양식(xlsx) 읽기·구조 인식·차이 비교 ──────────────────────────────────
+ * 병동마다 배정표 양식이 다르고, 같은 병동도 업무가 바뀌면 양식을 고친다.
+ * 그래서 ①올린 양식을 뜯어 구조를 알아보고 ②지금 쓰는 양식과 뭐가 달라졌는지
+ * 짚어 주는 도구. '어디를 채워야 하는지'는 아래 findLayout 이 판단한다. */
+async function parseXlsx(u8){
+  const ents=readZip(u8);
+  const get=async nm=>{const e2=ents.find(x=>x.name===nm); if(!e2) return null;
+    return dec.decode(e2.meth===8?await inflateRaw(e2.raw):e2.raw); };
+  const sheetXml=await get('xl/worksheets/sheet1.xml');
+  if(!sheetXml) throw new Error('엑셀 시트를 찾지 못했습니다 (xlsx 파일이 맞나요?)');
+  const wbXml=await get('xl/workbook.xml');
+  const sst=parseSst(await get('xl/sharedStrings.xml'));
+  const img=ents.find(x=>x.name.startsWith('xl/media/'));
+  let imgUrl=null;
+  if(img){ const bytes=img.meth===8?await inflateRaw(img.raw):img.raw;
+    imgUrl=URL.createObjectURL(new Blob([bytes],{type:'image/png'})); }
+  return {ents,sheetXml,wbXml,sst,imgUrl};
+}
+const colNum=c=>{let n=0;for(const ch of c)n=n*26+(ch.charCodeAt(0)-64);return n;};
+const colName=n=>{let s='';while(n>0){const r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=(n-r-1)/26;}return s;};
+/* 시트의 글자 있는 칸을 모두 뽑는다 → {A1:'구분', ...} */
+function sheetCells(tpl){
+  const out={};
+  // 빈 칸은 <c r="B1" s="60"/> 처럼 혼자 닫힌다 — 이걸 구분하지 않으면
+  // 뒤쪽 칸의 값을 끌어와 표가 통째로 어긋난다.
+  const re=/<c r="([A-Z]+\d+)"([^>]*?)(\/>|>([\s\S]*?)<\/c>)/g;
+  let m;
+  while((m=re.exec(tpl.sheetXml))){
+    const ref=m[1], attr=m[2], selfClose=m[3]==='/>', inner=m[4]||'';
+    if(selfClose) continue;
+    const isStr=/\bt="s"/.test(attr);
+    const isInline=/\bt="(inlineStr|str)"/.test(attr);
+    let v=null;
+    if(isInline||/<is>/.test(inner)){
+      v=[...inner.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(x=>x[1]).join('');
+    }else{
+      const mv=inner.match(/<v>([\s\S]*?)<\/v>/);
+      if(mv) v=isStr?tpl.sst[+mv[1]]:mv[1];
+    }
+    if(v==null) continue;
+    v=String(v).replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').trim();
+    if(v) out[ref]=v;
+  }
+  return out;
+}
+const normLabel=v=>String(v||'').replace(/\s+/g,'');
+const sheetMerges=tpl=>[...tpl.sheetXml.matchAll(/<mergeCell ref="([^"]+)"\/>/g)].map(m=>m[1]);
+/* 우리가 채워야 할 자리를 찾는다 — 행 위치가 병동마다 달라서 고정 좌표를 믿으면 안 된다 */
+function findLayout(cells){
+  const at=(r,c)=>cells[colName(c)+r]||'';
+  const rows={},cols={};
+  for(const ref in cells){
+    const m=ref.match(/^([A-Z]+)(\d+)$/); if(!m) continue;
+    (rows[+m[2]]=rows[+m[2]]||[]).push(colNum(m[1]));
+    cols[colNum(m[1])]=1;
+  }
+  const L={};
+  // ① 요일 줄 — 일·월·화… 가 한 행에 4개 이상
+  const WD7=['일','월','화','수','목','금','토'];
+  for(const r in rows){
+    const hit=rows[r].filter(c=>WD7.includes(at(r,c)));
+    if(hit.length>=4){ L.wdRow=+r; L.wdCols=hit.sort((a,b)=>a-b); break; }
+  }
+  // ② 날짜 줄 — 요일 줄 바로 아래에서 날짜(숫자·"06월 28일")가 4개 이상
+  if(L.wdRow) for(let r=L.wdRow;r<=L.wdRow+2;r++){
+    const hit=(rows[r]||[]).filter(c=>{const v=at(r,c);
+      return /^\d{1,2}\s*월/.test(v)||/^\d{4,5}$/.test(v)||/^\d{1,2}\/\d{1,2}/.test(v);});
+    if(hit.length>=4){ L.dateRow=r; L.dateCols=hit.sort((a,b)=>a-b); break; }
+  }
+  // ③ 어싸인 라벨 열 — A(CN)/CRN/A~E 가 세로로 이어지는 열 (구역보다 먼저 찾는다.
+  //    라벨 열에도 'D','E' 가 있어 구역과 헷갈리기 때문)
+  const labRe=/^(A\(CN\)|A\(CRN\)|CN|CRN|A|B|C|D|E)$/;
+  const runs={};
+  for(const r in rows) for(const c of rows[r]){
+    if(c>5) continue;
+    if(L.dateRow&&+r<=L.dateRow) continue;
+    if(labRe.test(normLabel(at(r,c)))) (runs[c]=runs[c]||[]).push(+r);
+  }
+  let best=null;
+  for(const c in runs) if(!best||runs[c].length>runs[best].length) best=c;
+  if(best){ L.labelCol=+best; L.labelRows=runs[best].sort((a,b)=>a-b);
+    L.labels=[...new Set(L.labelRows.map(r=>normLabel(at(r,+best))))]; }
+
+  // ④ D·E·N 구역 — 라벨 열이 아닌 왼쪽 열에서 D/E/N 이 한 번씩 나오는 열
+  const cand={};
+  for(const r in rows) for(const c of rows[r]){
+    if(c>4||c===L.labelCol) continue;
+    if(L.dateRow&&+r<=L.dateRow) continue;
+    const v=normLabel(at(r,c));
+    if(v==='D'||v==='E'||v==='N') (cand[c]=cand[c]||[]).push({P:v,row:+r});
+  }
+  let sc=null;
+  for(const c in cand){
+    const kinds=new Set(cand[c].map(x=>x.P)).size;
+    const scoreOf=k=>new Set(cand[k].map(x=>x.P)).size*100-cand[k].length;  // 세 종류 다 있고 군더더기 적은 열
+    if(kinds>=2&&(sc===null||scoreOf(c)>scoreOf(sc))) sc=c;
+  }
+  L.sectionCol=sc?+sc:null;
+  L.sections=[];
+  if(sc){
+    const seen={};
+    for(const x of cand[sc].sort((a,b)=>a.row-b.row)) if(!seen[x.P]){ seen[x.P]=1; L.sections.push({...x}); }
+    L.sections.sort((a,b)=>a.row-b.row);
+    // 구역이 어디서 끝나는지 = 왼쪽 칸(구분·중간번·구역 등)에 다음 글자가 나오는 줄.
+    // 그냥 다음 구역까지로 잡으면 아래 블록(구분·물품체크)의 라벨까지 세어 버린다.
+    const leftRows=[...new Set(Object.keys(cells).map(ref=>{
+      const m=ref.match(/^([A-Z]+)(\d+)$/);
+      return m&&colNum(m[1])<=Math.max(2,L.sectionCol||2)?+m[2]:0;
+    }).filter(Boolean))].sort((a,b)=>a-b);
+    L.sections.forEach(sec=>{
+      const end=leftRows.find(r=>r>sec.row)||1e9;
+      sec.rows=(L.labelRows||[]).filter(r=>r>=sec.row&&r<end).length;
+      sec.end=end===1e9?null:end;
+    });
+  }
+  // ⑤ 중간번·교육행사 같은 이름표 행
+  for(const r in rows) for(const c of rows[r]){
+    const v=at(r,c);
+    if(/^중(간번)?$/.test(v)&&c<=3) L.midRow=+r;
+    if(/교육/.test(v)&&/행사/.test(v)) L.eventRow=+r;
+    if(/파트장/.test(v)) L.partRow=+r;
+  }
+  // ⑥ 요일당 칸 수 (병합 폭) — 날짜 줄의 열 간격으로 추정
+  if(L.dateCols&&L.dateCols.length>=2) L.perDay=L.dateCols[1]-L.dateCols[0];
+  return L;
+}
+function layoutSummary(L){
+  const s=[];
+  s.push(L.wdRow?`요일 줄 ${L.wdRow}행 (${L.wdCols.length}칸)`:'요일 줄 못 찾음');
+  s.push(L.dateRow?`날짜 줄 ${L.dateRow}행`:'날짜 줄 못 찾음');
+  s.push(L.sections.length
+    ? `구역 ${L.sections.map(x=>x.P+' '+x.row+'행부터 '+(x.rows||'?')+'줄').join(' · ')}`
+    : 'D/E/N 구역 못 찾음');
+  s.push(L.labels?`어싸인 라벨 ${L.labels.join(',')} (${colName(L.labelCol)}열 ${L.labelRows.length}줄)`:'라벨 열 못 찾음');
+  if(L.perDay) s.push(`요일당 ${L.perDay}칸`);
+  if(L.midRow) s.push(`중간번 ${L.midRow}행`);
+  if(L.eventRow) s.push(`교육·행사 ${L.eventRow}행`);
+  if(L.partRow) s.push(`파트장일정 ${L.partRow}행`);
+  return s;
+}
+/* 지금 양식과 올린 양식의 차이 */
+function diffForms(oldT,newT){
+  const a=sheetCells(oldT),b=sheetCells(newT);
+  const refs=[...new Set([...Object.keys(a),...Object.keys(b)])];
+  const changed=[],added=[],removed=[];
+  for(const r of refs){
+    if(a[r]&&b[r]){ if(a[r]!==b[r]) changed.push({ref:r,from:a[r],to:b[r]}); }
+    else if(b[r]) added.push({ref:r,to:b[r]});
+    else removed.push({ref:r,from:a[r]});
+  }
+  const ma=sheetMerges(oldT),mb=sheetMerges(newT);
+  const sortRef=x=>{const m=(x.ref||x).match(/^([A-Z]+)(\d+)$/);return m?[+m[2],colNum(m[1])]:[0,0];};
+  const byPos=(x,y)=>{const p=sortRef(x),q=sortRef(y);return p[0]-q[0]||p[1]-q[1];};
+  return {changed:changed.sort(byPos),added:added.sort(byPos),removed:removed.sort(byPos),
+    mergeAdded:mb.filter(x=>!ma.includes(x)),mergeRemoved:ma.filter(x=>!mb.includes(x)),
+    layoutOld:findLayout(a),layoutNew:findLayout(b)};
+}
 async function loadTemplate(){
   if(TPL) return TPL;
   const b64=($('#tplB64').textContent||'').replace(/\/\*[^*]*\*\//g,'').trim();
@@ -3036,6 +3271,10 @@ async function buildPrintArea(wholeMonth){
     </div></div>`;
   });
   $('#printArea').innerHTML=sheets.join('');
+}
+/* 지금 보고 있는 주를 '병실 배정표' 양식 그대로 xlsx 로 — 엑셀에서 고쳐 쓰라고 */
+function exportWeekXlsx(){
+  downloadWeekXlsx(wkSunday).catch(e=>toast('내보내기 실패: '+e.message,4200));
 }
 async function printWeek(wholeMonth){
   try{ await buildPrintArea(wholeMonth); }
