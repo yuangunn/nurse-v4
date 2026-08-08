@@ -112,9 +112,11 @@ public sealed class DataFile
         data["rev"] = rev;
         data["saved"] = saved;
 
-        var body = data.ToJsonString(new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
-        if (Path.EndsWith(".js", StringComparison.OrdinalIgnoreCase))
-            body = "window.__ASSIGN_DATA=" + body + ";\n";
+        // 쓰기는 항상 JS 형식(확장자 무관) — 그래야 브라우저로 열 때도 권한 없이 바로 읽힌다.
+        // 내용은 JSON 그대로에 껍데기 한 줄이라 이 프로그램은 어느 쪽이든 읽는다.
+        var body = "window.__ASSIGN_DATA="
+                 + data.ToJsonString(new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })
+                 + ";\n";
 
         try
         {

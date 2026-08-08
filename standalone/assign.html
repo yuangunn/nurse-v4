@@ -951,11 +951,14 @@ async function idbGet(k){ const db=await idb();
  * 확장자가 .js 인 이유: file:// 에서 브라우저가 권한 없이 읽을 수 있는 유일한 형식.
  * 내용은 JSON 그대로에 껍데기만 씌운 것이라 프로그램(exe)도 같은 파일을 읽고 쓴다. */
 const SIDE_NAME='assign-data.js';
-const SIDE_NAMES=[SIDE_NAME,'assign-data-2.js','assign-data-3.js','assign-data-4.js',
-                  'assign-data-5.js','assign-data-6.js'];
-function serializeStore(obj,name){
-  const j=JSON.stringify(obj);
-  return /\.js$/i.test(name||'') ? 'window.__ASSIGN_DATA='+j+';\n' : j;
+const SIDE_NAMES=['assign-data.js','assign-data.json',
+  'assign-data-2.js','assign-data-2.json','assign-data-3.js','assign-data-3.json',
+  'assign-data-4.js','assign-data-4.json','assign-data-5.js','assign-data-5.json'];
+/* 쓰기는 항상 JS 형식 — 확장자가 .json 이어도 껍데기를 씌운다.
+ * 그래야 다음에 켤 때 권한 없이 바로 읽힌다(file:// 에서 읽을 수 있는 유일한 형식).
+ * 내용은 JSON 그대로라 프로그램(exe)도 같은 파일을 읽고 쓴다. */
+function serializeStore(obj){
+  return 'window.__ASSIGN_DATA='+JSON.stringify(obj)+';\n';
 }
 function parseStoreText(txt){
   const t=String(txt||'').trim();
@@ -963,24 +966,29 @@ function parseStoreText(txt){
   const m=t.match(/^window\.__ASSIGN_DATA\s*=\s*([\s\S]*?);?\s*$/);
   return JSON.parse(m?m[1]:t);
 }
-function loadSidecar(name){
+/* 파일 존재 여부와 내용을 함께 돌려준다 —
+ * '파일이 없음'과 '파일은 있는데 옛 형식(순수 JSON)'을 구분해 안내하기 위해. */
+function probeSidecar(name){
   return new Promise(res=>{
     try{ delete window.__ASSIGN_DATA; }catch(e){ window.__ASSIGN_DATA=undefined; }
     const el=document.createElement('script');
-    el.src=encodeURI(name||SIDE_NAME)+'?v='+Date.now();  // 항상 최신 (다른 PC가 저장한 내용 반영)
-    const done=ok=>{ el.remove(); res(ok?(window.__ASSIGN_DATA||null):null); };
+    el.src=encodeURI(name)+'?v='+Date.now();      // 항상 최신 (다른 PC가 저장한 내용 반영)
+    const done=exists=>{ el.remove(); res({exists,data:window.__ASSIGN_DATA||null}); };
     el.onload=()=>done(true); el.onerror=()=>done(false);
     document.head.appendChild(el);
   });
 }
+async function loadSidecar(name){ return (await probeSidecar(name||SIDE_NAME)).data; }
 /* 같은 폴더의 자동 열림 파일들을 찾는다. 폴더 목록을 볼 수 없는 환경이라
  * 정해진 이름을 하나씩 두드려 보는 방식 — 없는 이름은 즉시 실패해 금방 끝난다. */
 async function scanSidecars(){
-  const out=[];
+  const out=[]; const stale=[];
   for(const n of SIDE_NAMES){
-    const d=await loadSidecar(n);
-    if(d&&d.app==='assign') out.push({name:n,data:d});
+    const r=await probeSidecar(n);
+    if(r.data&&r.data.app==='assign') out.push({name:n,data:r.data});
+    else if(r.exists) stale.push(n);          // 파일은 있는데 옛 형식이라 못 읽음
   }
+  out.stale=stale;
   return out;
 }
 function adoptStore(j){
@@ -1051,7 +1059,7 @@ async function writeStore({interactive=true}={}){
   const newRev=Math.max(fileRev,store.rev||0)+1;       // 파일 rev 기준 전진 — 되감김 방지
   const saved=new Date().toISOString();
   const w=await fileHandle.createWritable();
-  await w.write(serializeStore({...store,rev:newRev,saved},fileHandle.name)); await w.close();
+  await w.write(serializeStore({...store,rev:newRev,saved})); await w.close();
   store.rev=newRev; store.saved=saved;                 // 성공 후에만 커밋
   dirty=false; saveMsg('저장됨');
   setTimeout(()=>{if(!dirty)saveMsg('')},2500);
@@ -1085,11 +1093,11 @@ function fmtWhen(ms){
 async function scanDirJsons(dir){
   const out=[];
   for await (const e of dir.values()){
-    if(e.kind!=='file'||!/\.json$/i.test(e.name)) continue;
+    if(e.kind!=='file'||!/\.(json|js)$/i.test(e.name)) continue;
     try{
       const f=await e.getFile();
       if(f.size>20*1024*1024) continue;
-      const j=JSON.parse(await f.text());
+      const j=parseStoreText(await f.text());       // 순수 JSON·껍데기 형식 둘 다
       if(j&&j.app==='assign') out.push({h:e,name:e.name,mtime:f.lastModified});
     }catch(err){}
   }
@@ -1211,7 +1219,12 @@ async function tryAutoOpen(){
   if(await tryNative()) return true;               // 네이티브 창(exe) — 권한창·폴더 선택 없음
   if(await silentReattach()) return true;
   const found=await scanSidecars();
-  if(!found.length) return false;
+  if(!found.length){
+    if(found.stale.length) startWarnMsg(
+      found.stale[0]+' 파일을 찾았지만 옛 형식이라 바로 열 수 없습니다 — '+
+      '[데이터 파일 열기]로 한 번 연 뒤 아무거나 고치면 다음부터 자동으로 열립니다.');
+    return false;
+  }
   if(found.length===1){ openSidecar(found[0]); return true; }
   showSidecarPick(found);            // 여러 병동 — 클릭 한 번으로 고른다 (권한창 없음)
   return true;
