@@ -11,6 +11,10 @@
     <Product>어싸인 배정표</Product>
     <AssemblyTitle>어싸인 배정표</AssemblyTitle>
     <Version>1.0.0</Version>
+    <Company>yuangunn</Company>
+    <Authors>yuangunn</Authors>
+    <Copyright>© yuangunn</Copyright>
+    <Description>병동 어싸인(병실 배정) 자동 편성·인쇄</Description>
     <ApplicationIcon>..\..\build\icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>

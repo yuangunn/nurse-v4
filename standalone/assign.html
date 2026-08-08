@@ -332,6 +332,10 @@
   .hHead b{font-size:17px;font-weight:800;letter-spacing:-0.02em}
   .hHead input{flex:1;max-width:340px}
   .hBody{flex:1;display:flex;min-height:0}
+  .hFoot{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:11px 18px;font-size:12px;
+    color:var(--ink-3);box-shadow:inset 0 1px 0 var(--rule);background:var(--card-warm)}
+  .hFoot b{color:var(--ink-2);font-weight:700}
+  .hFoot .sep{width:1px;height:11px;background:var(--rule-2)}
   #helpNav{flex:0 0 232px;overflow:auto;padding:12px;background:var(--card-warm);
     box-shadow:inset -1px 0 0 var(--rule)}
   #helpNav .hcat{padding:10px 10px 4px;font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--ink-3)}
@@ -453,6 +457,7 @@
     </div>
     <div class="startBand"><span style="font-weight:800">＋</span><span>데이터 파일(.json)을 이 창에 끌어다 놓아도 열립니다.</span></div>
     <div id="startWarn" class="startBand warnBand" style="display:none"></div>
+    <div id="startSign" class="dim" style="text-align:center;font-size:12px;line-height:1.8"></div>
   </div>
 </div>
 
@@ -587,6 +592,7 @@
       </span>
     </div>
     <div class="hBody"><div id="helpNav"></div><div id="helpDoc"></div></div>
+    <div class="hFoot" id="helpFoot"></div>
   </div>
 </div>
 <div id="intro"><div id="introBox"></div></div>
@@ -971,6 +977,18 @@ const WD=['일','월','화','수','목','금','토'];
 function toast(msg,ms=2800){ const t=$('#toast'); t.textContent=msg; t.style.display='block';
   clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',ms); }
 
+/* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
+ * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v1.0',date:'2026-08-09'};/*BUILD_INFO_END*/
+const ABOUT={
+  name:'어싸인 배정표',
+  by:'yuangunn',
+  mail:'rms6654@gmail.com',
+  repo:'github.com/yuangunn/nurse-v4',
+  repoNote:'비공개 저장소',
+  privacy:'이 프로그램은 인터넷으로 아무것도 보내지 않습니다. 모든 내용은 지정한 데이터 파일에만 저장됩니다.',
+};
+const buildLabel=()=>ABOUT.name+' '+BUILD.ver+(BUILD.date?' · '+BUILD.date:'');
 const ALL_CAPS=['DC','D','EC','E','NC','N'];
 const DEFAULT_REQ={mon:{D:4,E:5,N:3},tue:{D:5,E:5,N:3},wed:{D:5,E:5,N:3},thu:{D:5,E:5,N:3},
   fri:{D:5,E:4,N:3},sat:{D:3,E:3,N:2},sun:{D:3,E:4,N:3}};
@@ -1333,7 +1351,13 @@ async function connectSave(){
     toast('저장 연결 완료 — 이제 수정하면 자동으로 저장됩니다','',3200);
   }catch(e){ if(e.name!=='AbortError') toast('연결 실패: '+e.message,4000); }
 }
+function renderSign(){
+  const el=$('#startSign'); if(!el) return;
+  el.innerHTML=`${esc(buildLabel())} · 만든 사람 ${esc(ABOUT.by)}<br>`+
+    `<span style="color:var(--ink-4)">${esc(ABOUT.privacy)}</span>`;
+}
 async function initStart(){
+  renderSign();
   if(!window.showOpenFilePicker){
     startWarnMsg('이 브라우저는 파일 저장을 지원하지 않습니다 — Edge 또는 Chrome(103+)으로 열어주세요.');
   }
@@ -2374,13 +2398,15 @@ const ADMIN_NAV=[
   ['우리 병동',[['rooms','병실 목록'],['schemes','방 구성'],['req','요일별 필요 인원'],['codes','근무 표기']]],
   ['간호사',[['caps','간호사 관리']]],
   ['배정 규칙',[['rules','배정 원칙'],['manual','수동 수정 관리']]],
-  ['데이터',[['data','데이터 파일']]]];
+  ['데이터',[['data','데이터 파일']]],
+  ['정보',[['about','이 프로그램']]]];
 function adminBadge(id){
   switch(id){
     case 'seed': case 'caps': return store.order.length?store.order.length+'명':'';
     case 'rooms': return (store.rooms||[]).length+'실';
     case 'codes': { const n=Object.keys(store.custom||{}).length+Object.keys(store.alias||{}).length;
       return n?n+'개':''; }
+    case 'about': return BUILD.ver;
     case 'rules': return ['keepSameShift','keepAcrossShift','keepAfterOff','bounceAfterOff']
       .filter(k=>store.rules[k]).length+'켬';
     case 'manual': { const n=Object.keys(store.ovr).length+Object.keys(store.roomOv).length; return n?n+'건':''; }
@@ -2521,6 +2547,22 @@ const ADMIN_PANELS={
       <span class="dim" id="ovCount"></span></div>`; },
     after(){
       $('#ovCount').textContent=`담당 교체 ${Object.keys(store.ovr).length}일 · 방 수정 ${Object.keys(store.roomOv).length}일`;
+    }},
+  about:{title:'이 프로그램',
+    desc:'병동 어싸인(병실 배정)을 자동으로 짜고 병실 배정표 양식 그대로 인쇄하는 프로그램입니다.',
+    aux:`<button onclick="openHelp('open')">도움말 열기</button>`,
+    body(){
+      const row=(k,v)=>`<tr><td style="width:120px;padding:9px 0;color:var(--ink-3);font-size:13px">${k}</td>`+
+        `<td style="padding:9px 0;font-size:14px;font-weight:700">${v}</td></tr>`;
+      return `<table style="border-collapse:collapse">`+
+        row('이름·버전',`${esc(ABOUT.name)} <span style="font-weight:600;color:var(--ink-2)">${esc(BUILD.ver)}</span>`+
+          (BUILD.date?` <span style="font-weight:600;color:var(--ink-3)">· ${esc(BUILD.date)} 만듦</span>`:''))+
+        row('만든 사람',esc(ABOUT.by))+
+        (ABOUT.mail?row('문의',`<a href="mailto:${esc(ABOUT.mail)}" style="color:var(--down-deep)">${esc(ABOUT.mail)}</a>`):'')+
+        (ABOUT.repo?row('소스',`${esc(ABOUT.repo)} <span style="font-weight:600;color:var(--ink-3)">(${esc(ABOUT.repoNote)})</span>`):'')+
+        `</table>
+        <div class="dim" style="line-height:1.8;margin-top:6px">${esc(ABOUT.privacy)}<br>
+          이 파일이 병동 PC마다 다를 수 있습니다 — 위 <b>버전·날짜</b>로 최신본인지 확인하세요.</div>`;
     }},
   data:{title:'데이터 파일',
     desc:'모든 내용은 공용 폴더(NAS)의 JSON 파일 하나에 저장됩니다.',
@@ -3159,7 +3201,14 @@ const HELP=[
 ];
 const HELP_FOR_SCREEN={start:'open',week:'week',paste:'paste',edit:'edit',admin:'rules'};
 let helpCur=null;
+function aboutLine(){
+  return `<b>${esc(buildLabel())}</b><span class="sep"></span>`+
+    `만든 사람 <b>${esc(ABOUT.by)}</b>`+
+    (ABOUT.mail?`<span class="sep"></span>문의 <b>${esc(ABOUT.mail)}</b>`:'')+
+    `<span style="margin-left:auto">${esc(ABOUT.privacy)}</span>`;
+}
 function openHelp(id){
+  $('#helpFoot').innerHTML=aboutLine();
   helpCur=id||HELP_FOR_SCREEN[curScr]||'open';
   $('#helpWrap').classList.add('on');
   renderHelpNav($('#helpQ').value||'');
