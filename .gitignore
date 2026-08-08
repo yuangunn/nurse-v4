@@ -24,3 +24,9 @@ package-lock.json
 
 # pytest 캐시
 .pytest_cache/
+
+# standalone 도우미 exe 빌드 산출물
+standalone/exe/build/
+standalone/exe/dist/
+standalone/exe/*.spec
+standalone/exe/assign_error.log

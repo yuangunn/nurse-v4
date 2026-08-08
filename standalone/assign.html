@@ -1007,6 +1007,7 @@ async function useHandle(h,{create=false}={}){
 function saveMsg(t){ const el=$('#saveDot'); el.textContent=t;
   el.className=(t?'show':'')+(t&&t.startsWith('⚠')?' warn':''); }
 async function writeStore({interactive=true}={}){
+  if(srvBase) return writeStoreSrv({interactive});
   if(!fileHandle){ dirty=false;
     saveMsg(window.__autoRead ? '⚠ 저장 연결 안 됨 — 수정하려면 [저장 연결]'
           : window.__memoryMode ? '⚠ 파일 미연결 — 저장되지 않음' : '');
@@ -1048,11 +1049,11 @@ function touch(){
   clearTimeout(saveT);
   saveT=setTimeout(()=>writeStore().catch(e=>{saveMsg('⚠ 저장 실패');toast('⚠ 저장 실패: '+e.message,4200)}),700); }
 // 창 닫기/전환 시 대기분 즉시 저장 시도 (자동 경로라 충돌 확인창 없이 보류만)
-function flushSave(){ if(dirty&&fileHandle){ clearTimeout(saveT); writeStore({interactive:false}).catch(()=>{}); } }
+function flushSave(){ if(dirty&&(fileHandle||srvBase)){ clearTimeout(saveT); writeStore({interactive:false}).catch(()=>{}); } }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushSave(); });
 window.addEventListener('pagehide',flushSave);
 window.addEventListener('beforeunload',e=>{
-  if(dirty&&fileHandle){ flushSave(); e.preventDefault(); e.returnValue=''; }});
+  if(dirty&&(fileHandle||srvBase)){ flushSave(); e.preventDefault(); e.returnValue=''; }});
 
 /* 시작 화면 배선 — 폴더 연결 시 폴더 안 데이터 파일(.json) 자동 감지 */
 function startWarnMsg(t){ const el=$('#startWarn'); el.textContent=t; el.style.display=t?'flex':'none'; }
@@ -1117,9 +1118,56 @@ async function silentReattach(){
     return true;
   }catch(e){ return false; }
 }
+/* ── 도우미 프로그램(exe)으로 열렸을 때 ─────────────────────────────────
+ * 도우미가 http://127.0.0.1 로 띄워 주면 브라우저의 file:// 제약이 없어져
+ * 폴더 선택도 권한창도 없이 데이터 파일을 바로 읽고 쓴다. */
+let srvBase=null;   // {t, file, path, writable}
+const srvUrl=p=>p+(p.includes('?')?'&':'?')+'t='+encodeURIComponent(srvBase.t);
+async function trySrv(){
+  if(!/^https?:$/.test(location.protocol)) return false;
+  const t=new URLSearchParams(location.search).get('t')||'';
+  try{
+    const r=await fetch('api/ping?t='+encodeURIComponent(t),{cache:'no-store'});
+    if(!r.ok) return false;
+    const j=await r.json();
+    if(!j||j.app!=='assign-helper') return false;
+    srvBase={t,file:j.file,path:j.path,writable:j.writable};
+    const d=await (await fetch(srvUrl('api/data'),{cache:'no-store'})).json();
+    if(d&&d.app==='assign'){ store={...emptyStore(),...d}; migrateStore(); } else store=emptyStore();
+    fileHandle=null; window.__memoryMode=false; window.__autoRead=false;
+    $('#fileInfo').textContent=j.file+(j.writable?'':' (읽기 전용 폴더)');
+    saveMsg(''); afterLoad();
+    setInterval(()=>fetch('api/ping?t='+encodeURIComponent(t)).catch(()=>{}),30000); // 창 닫히면 도우미 종료
+    return true;
+  }catch(e){ return false; }
+}
+async function writeStoreSrv({interactive=true}={}){
+  const body={...store};
+  let res;
+  try{ res=await fetch(srvUrl('api/data'),{method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body)}); }
+  catch(e){ saveMsg('⚠ 저장 실패 (도우미 응답 없음)'); return; }
+  if(res.status===409){
+    let info={}; try{ info=await res.json(); }catch(e){}
+    if(info.error==='read_failed'){ saveMsg('⚠ 저장 보류 (파일 확인 불가)'); return; }
+    if(!interactive){ saveMsg('⚠ 다른 컴퓨터가 먼저 저장함 — 대기'); return; }
+    if(!confirm('다른 컴퓨터에서 먼저 저장한 내용이 있습니다.\n\n[확인] 내 내용으로 덮어쓰기\n[취소] 내 작업을 백업 파일로 내려받기 (파일은 그대로 둠)')){
+      downloadBackup(); saveMsg('⚠ 저장 안 함 (백업 내려받음)'); return;
+    }
+    try{ res=await fetch(srvUrl('api/data'),{method:'PUT',
+      headers:{'Content-Type':'application/json','X-Force':'1'},body:JSON.stringify(body)}); }
+    catch(e){ saveMsg('⚠ 저장 실패'); return; }
+  }
+  if(!res.ok){ saveMsg('⚠ 저장 실패'); return; }
+  const j=await res.json();
+  store.rev=j.rev; store.saved=j.saved;
+  dirty=false; saveMsg('저장됨');
+  setTimeout(()=>{if(!dirty)saveMsg('')},2500);
+}
 /* 자동 열림: 같은 폴더의 assign-data.js 를 권한창 없이 읽어 바로 배정표를 띄운다.
  * 쓰기 핸들은 없으므로 '저장 연결'을 누르기 전까지는 읽기 전용. */
 async function tryAutoOpen(){
+  if(await trySrv()) return true;                  // 도우미(exe)로 열린 경우 — 가장 편한 길
   if(await silentReattach()) return true;
   const j=await loadSidecar();
   if(!j||!adoptStore(j)) return false;
@@ -1190,8 +1238,9 @@ function afterLoad(){ recompute(); show('week'); }
  * ════════════════════════════════════════════════════════════════ */
 const SCREENS={start:'scrStart',week:'scrWeek',paste:'scrPaste',edit:'scrEdit',admin:'scrAdmin'};
 let curScr='start';
+const connected=()=>!!fileHandle||!!srvBase||!!window.__memoryMode;
 function show(name){
-  if(name!=='start'&&!fileHandle&&!window.__memoryMode){ name='start'; }
+  if(name!=='start'&&!connected()){ name='start'; }
   curScr=name;
   for(const k in SCREENS) $('#'+SCREENS[k]).style.display=(k===name)?'':'none';
   $('#tabWeek').classList.toggle('on',['week','paste','edit'].includes(name));
@@ -1666,7 +1715,7 @@ let pasteCtx=null;   // {mode,g,hasNameCol,hasDateHdr,startRow,startIso,y,m}
 const looksNameCell=v=>v&&parseCellRaw(v)===undefined&&!parseDateCell(v);
 
 function ingestGrid(g){
-  if(!fileHandle&&!window.__memoryMode){
+  if(!connected()){
     toast('먼저 데이터 파일을 열어주세요 — 처음이면 [＋ 처음 시작]을 누르세요',5000); return; }
   if(!g||!g.length) return toast('읽을 내용이 없습니다');
   let w=Math.max(...g.map(r=>r.length));
@@ -2345,7 +2394,9 @@ const ADMIN_PANELS={
         (읽기는 권한 없이 됩니다. 수정·저장은 [저장 연결] 한 번만 받으면 됩니다).</div>`; },
     after(){
       const dates=timelineRange();
-      $('#dataInfo').textContent=(fileHandle?'파일: '+fileHandle.name+' · ':'')+
+      if(srvBase) $('#dataInfo').innerHTML=`도우미 프로그램으로 열렸습니다 — 권한 확인 없이 바로 저장됩니다.<br>`+
+        `데이터 파일: <b>${esc(srvBase.path||srvBase.file)}</b>`+(srvBase.writable?'':' <b style="color:var(--err)">(쓰기 불가 폴더)</b>');
+      else $('#dataInfo').textContent=(fileHandle?'파일: '+fileHandle.name+' · ':'')+
         (dates?`기록 범위 ${dates.min} ~ ${dates.max}`:'기록 없음')+` · 간호사 ${store.order.length}명`;
     }},
 };
@@ -2411,7 +2462,8 @@ async function reloadFromFile(){
   if(dirty&&!confirm('저장되지 않은 변경이 있습니다. 버리고 파일 내용을 다시 읽을까요?')) return;
   try{
     let j=null;
-    if(fileHandle) j=parseStoreText(await (await fileHandle.getFile()).text());
+    if(srvBase) j=await (await fetch(srvUrl('api/data'),{cache:'no-store'})).json();
+    else if(fileHandle) j=parseStoreText(await (await fileHandle.getFile()).text());
     else j=await loadSidecar();
     if(!adoptStore(j)) throw new Error(fileHandle?'어싸인 데이터 파일이 아닙니다'
                                                :'자동 열림 파일('+SIDE_NAME+')을 찾지 못했습니다');
