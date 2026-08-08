@@ -256,6 +256,40 @@ window.PasteImportModule = function() {
       setTimeout(()=>this.onPasteTextChange(),0);
     },
 
+    /* 붙여넣은 표에 있는데 간호사 목록엔 없는 이름 — 그냥 추가해 주는 게 낫다.
+     * (없는 사람은 조용히 버려져서 "왜 몇 명이 비지?" 하고 헤매게 된다) */
+    async addUnmatchedNurses(){
+      const names=[...new Set((this.pastePrev.diff?.unmatchedNames||[])
+        .map(s=>String(s).replace(/^\*+/,'').trim()).filter(Boolean))]
+        .filter(n=>!this.nurses.some(x=>x.name===n));
+      if(!names.length){this.toast('추가할 이름이 없습니다','warn');return}
+      if(!confirm(`간호사 ${names.length}명을 새로 추가합니다.\n\n${names.join(', ')}\n\n`+
+                  `근무 자격은 전부 가능으로, 순서(시니어리티)는 맨 뒤로 들어갑니다.\n계속할까요?`))return;
+      const loading=this.toast('간호사 추가 중...','loading');
+      let added=0;
+      try{
+        let seniority=this.nurses.length;
+        for(const name of names){
+          await this.api('POST','/api/nurses',{
+            id:crypto.randomUUID(),name,group:'',gender:'female',
+            capable_shifts:['DC','D','EC','E','NC','N'],
+            is_night_shift:false,night_months:{},seniority:seniority++,wishes:{},
+            juhu_day:null,juhu_auto_rotate:true,is_trainee:false,training_end_date:null,
+            preceptor_id:null,start_date:null,end_date:null,is_pregnant:false,pregnancy:{},
+          });
+          added++;
+        }
+        await this.loadNurses();
+        this._matchPasteGrid();          // 새 이름까지 포함해 다시 맞춘다
+        this.dismissToast(loading);
+        this.toast(`간호사 ${added}명 추가 — 다시 맞췄습니다. 아래에서 확인하고 적용하세요`,'info',4500);
+      }catch(e){
+        this.dismissToast(loading);
+        await this.loadNurses().catch(()=>{});
+        this.toast(`추가 중 실패 (${added}명까지 됨): ${e.message}`,'error',5000);
+      }
+    },
+
     applyPastePrev(){
       const diff=this.pastePrev.diff;
       if(!diff)return;

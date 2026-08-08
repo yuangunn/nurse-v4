@@ -2189,7 +2189,12 @@
 
       <template x-if="pastePrev.diff?.unmatchedNames.length">
         <div class="mb-2 card-sm" style="border-left:3px solid var(--amber);padding:6px 10px">
-          <div class="text-xs font-semibold text-amber mb-1">⚠ 매칭 실패 이름 (간호사 목록에 없음)</div>
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <div class="text-xs font-semibold text-amber">⚠ 간호사 목록에 없는 이름 — 이대로 적용하면 이 사람들은 빠집니다</div>
+            <button @click="addUnmatchedNurses()" class="btn btn-xs btn-primary" style="white-space:nowrap">
+              ＋ 간호사로 추가하고 다시 맞추기
+            </button>
+          </div>
           <div class="flex flex-wrap gap-1.5 text-xs">
             <template x-for="(n,i) in pastePrev.diff.unmatchedNames" :key="'unn'+i">
               <span class="pill" style="background:rgba(245,158,11,0.1)" x-text="n"></span>
