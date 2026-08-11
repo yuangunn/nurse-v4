@@ -374,6 +374,10 @@
   #introBox .st .t b{color:var(--ink)}
   #toast{position:fixed;right:14px;bottom:76px;background:#111;color:#7f7;padding:10px 16px;border-radius:8px;
          font-size:14px;display:none;z-index:200;max-width:60vw}
+  /* 되돌릴 수 있는 알림 — 눌러서 취소. 툴바에 버튼을 더 얹으면 표가 더 잘려서 여기에 둔다 */
+  #toast.undo{cursor:pointer;background:#1B4FC3;color:#fff;font-weight:700;padding:12px 18px;
+              box-shadow:0 6px 20px rgba(0,0,0,.3)}
+  #toast.undo:hover{background:#2A5FD6}
   #drop{position:fixed;inset:0;background:rgba(27,79,195,.12);border:4px dashed var(--down-deep);display:none;
         z-index:190;align-items:center;justify-content:center;font-size:24px;color:var(--down-deep);font-weight:800}
   #drop.on{display:flex}
@@ -976,12 +980,17 @@ const isoOfD=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(d.getDate()+n);return x};
 const fmtYmd=d=>d.getFullYear()+pad2(d.getMonth()+1)+pad2(d.getDate());
 const WD=['일','월','화','수','목','금','토'];
-function toast(msg,ms=2800){ const t=$('#toast'); t.textContent=msg; t.style.display='block';
-  clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',ms); }
+/* undoable=true 면 알림을 눌러 방금 한 일을 되돌린다 (스냅샷을 먼저 찍은 동작에만) */
+function toast(msg,ms=2800,undoable=false){ const t=$('#toast');
+  t.textContent=msg+(undoable?'  ↩ 되돌리려면 누르세요':'');
+  t.classList.toggle('undo',undoable);
+  t.onclick=undoable?()=>{ t.style.display='none'; undoAny(); }:null;
+  t.style.display='block';
+  clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',undoable?Math.max(ms,7000):ms); }
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260809f'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260811b'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1726,8 +1735,10 @@ $('#wkBody').addEventListener('click',e=>{
   if(ev){ const iso=ev.dataset.iso;
     const v=prompt((+iso.slice(5,7))+'/'+(+iso.slice(8,10))+' 교육·행사 (비우면 삭제)',store.events[iso]||'');
     if(v===null) return;
+    snapshot();
     if(v.trim()) store.events[iso]=v.trim(); else delete store.events[iso];
-    touch(); renderWeek(); return; }
+    touch(); renderWeek();
+    toast('교육·행사 '+(v.trim()?'적었습니다':'지웠습니다'),2800,true); return; }
   const rm=e.target.closest('td.rm');
   if(rm&&rm.dataset.iso){
     openRoomPick({kind:'day',iso:rm.dataset.iso,P:rm.dataset.p,l:rm.dataset.l},e.pageX,e.pageY);
@@ -1773,6 +1784,7 @@ function openPick(name,iso,x,y){
 function closePick(){ $('#pick').style.display='none'; pickCtx=null; }
 function pickChoose(label){
   const {name,iso,period,current}=pickCtx; closePick();
+  snapshot();
   const ov=(store.ovr[iso]=store.ovr[iso]||{});
   const pv=(ov[period]=ov[period]||{});
   if(label===null){ delete pv[name]; }
@@ -1785,14 +1797,16 @@ function pickChoose(label){
   if(!Object.keys(ov).length) delete store.ovr[iso];
   touch(); recompute();
   if(curScr==='week') renderWeek();
+  toast(name+' '+(+iso.slice(8,10))+'일 어싸인 '+(label===null?'자동으로':'→ '+FORM_LBL(label)),2800,true);
 }
 function pickShift(code){
   const {name,iso}=pickCtx; closePick();
+  snapshot();                                          // 근무를 덮어쓰는 유일한 화면 밖 경로 — 되돌릴 수 있어야 한다
   store.cells[name]=store.cells[name]||{};
   if(code) store.cells[name][iso]=code; else delete store.cells[name][iso];
   touch(); recompute();
   if(curScr==='week') renderWeek();
-  toast(name+' '+(+iso.slice(8,10))+'일 근무 → '+(code||'지움'));
+  toast(name+' '+(+iso.slice(8,10))+'일 근무 → '+(code||'지움'),2800,true);
 }
 function resetOv(){
   const n=Object.keys(store.ovr).length;
@@ -2142,8 +2156,8 @@ function confirmPaste(){
   touch(); recompute();
   // 넣은 기간의 첫 주로 이동
   const d=new Date(pending.minIso+'T00:00:00'); wkSunday=addDays(d,-d.getDay());
-  toast('저장했습니다');
   resetPaste(); show('week');
+  toast('저장했습니다',2800,true);                       // show() 뒤 — 화면 전환이 알림을 지우지 않게
 }
 document.addEventListener('paste',e=>{
   if(/^(INPUT|TEXTAREA)$/.test((e.target&&e.target.tagName)||'')) return;
@@ -2205,13 +2219,14 @@ function edSet(r,c,v){
 }
 function snapshot(){ // 이름 변경/삭제가 ovr·caps·금지방·시드까지 건드리므로 함께 보존
   undoStack.push(JSON.stringify({o:store.order,c:store.cells,v:store.ovr,rv:store.roomOv,
-    ch:store.caps,br:store.banRooms,sd:store.seedManual,al:store.alias,cu:store.custom,fm:store.form}));
+    ch:store.caps,br:store.banRooms,sd:store.seedManual,al:store.alias,cu:store.custom,fm:store.form,
+    ev:store.events}));
   if(undoStack.length>40) undoStack.shift(); }
 function restoreSnapshot(s){
   store.order=s.o; store.cells=s.c;
   if(s.v) store.ovr=s.v; if(s.rv) store.roomOv=s.rv;
   if(s.ch) store.caps=s.ch; if(s.br) store.banRooms=s.br; if(s.sd) store.seedManual=s.sd;
-  if(s.al) store.alias=s.al; if(s.cu) store.custom=s.cu;
+  if(s.al) store.alias=s.al; if(s.cu) store.custom=s.cu; if(s.ev) store.events=s.ev;
   if(s.fm!==undefined){ store.form=s.fm; TPL=null; }
 }
 function moveEditMonth(n){ edM+=n; if(edM<1){edM=12;edY--} if(edM>12){edM=1;edY++} renderEditGrid(); }
@@ -2305,13 +2320,7 @@ document.addEventListener('keydown',e=>{
   if(k==='Tab')  {moveSel(0,e.shiftKey?-1:1);e.preventDefault();return}
   if(k==='Enter'){moveSel(e.shiftKey?-1:1,0);e.preventDefault();return}
   if(k==='Delete'||k==='Backspace'){fillSel('');e.preventDefault();return}
-  if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='z'){
-    if(undoStack.length){
-      restoreSnapshot(JSON.parse(undoStack.pop())); sel={r:0,c:0,r2:0,c2:0};
-      renderEditGrid(); edTouched(); toast('되돌리기');
-    }
-    e.preventDefault();return;
-  }
+  if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='z'){ undoAny(); e.preventDefault();return; }
   if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='a'&&store.order.length){
     sel={r:0,c:0,r2:store.order.length-1,c2:edDays-1};paintEdit();e.preventDefault();return;
   }
@@ -2427,11 +2436,18 @@ function renderLegend(){
     `<span>더블클릭 직접 입력</span><span><b>Ctrl+Z</b> 되돌리기</span></div>`;
 }
 renderLegend();
-function undoEdit(){
+/* 되돌리기는 화면과 무관하게 같은 스택을 쓴다 —
+ * 배정표 화면에서 한 수정(근무 바꾸기·어싸인 교체·붙여넣기 확정)도 여기로 살아난다 */
+function undoAny(){
   if(!undoStack.length){ toast('되돌릴 것이 없습니다'); return; }
   restoreSnapshot(JSON.parse(undoStack.pop())); sel={r:0,c:0,r2:0,c2:0};
-  renderEditGrid(); edTouched(); toast('되돌리기');
+  touch(); recompute();
+  if(curScr==='edit') renderEditGrid();
+  else if(curScr==='week') renderWeek();
+  else if(curScr==='admin') renderAdmin();
+  toast('되돌렸습니다');
 }
+const undoEdit=undoAny;
 
 /* ════════════════════════════════════════════════════════════════
  * 관리 화면
@@ -3569,7 +3585,8 @@ const HELP=[
         '바꿀 상대를 누르면 두 사람이 서로 자리를 맞바꿉니다.',
         '되돌리려면 다시 눌러 [자동으로 되돌리기]를 고르면 됩니다.'],
  tips:['손으로 바꾼 칸은 이름 아래 <b>빨간 밑줄</b>이 생깁니다.',
-       '같은 창에서 [근무 바꾸기]로 그 날 근무 자체(D·E·N·OF·V 등)를 바꿀 수도 있습니다 — 그러면 인원이 달라져 뒤의 어싸인이 자동으로 다시 맞춰집니다.'],media:'swap'},
+       '같은 창에서 [근무 바꾸기]로 그 날 근무 자체(D·E·N·OF·V 등)를 바꿀 수도 있습니다 — 그러면 인원이 달라져 뒤의 어싸인이 자동으로 다시 맞춰집니다.',
+       '<b>잘못 눌렀을 때</b>: 오른쪽 아래에 뜨는 <b>파란 알림을 누르면</b> 방금 한 것이 그대로 되돌아갑니다. <kbd>Ctrl+Z</kbd> 도 같습니다 — 근무 바꾸기·교육 입력·새 근무표 넣기 모두 됩니다.'],media:'swap'},
 {cat:'이번 주 배정표',id:'rooms',title:'그날 병실 고치기 (방 칸 클릭)',
  lead:'환자가 줄거나 늘어 그날만 병실을 다르게 볼 때 씁니다. 그 날 하루에만 적용됩니다.',
  steps:['고칠 자리의 <b>방 칸(왼쪽)</b>을 클릭합니다.',
@@ -3748,7 +3765,10 @@ function hideIntro(){
 document.addEventListener('keydown',e=>{
   if(e.key==='F1'){ e.preventDefault(); $('#helpWrap').classList.contains('on')?closeHelp():openHelp(); return; }
   if(e.key==='Escape'){ if($('#helpWrap').classList.contains('on')) closeHelp();
-    else if($('#intro').classList.contains('on')) hideIntro(); }
+    else if($('#intro').classList.contains('on')) hideIntro();
+    else { closePick(); closeRoomPick(); } return; }
+  // 배정표 화면 되돌리기 (고치기 화면은 그리드 키 처리기가 맡는다)
+  if(curScr==='week'&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); undoAny(); }
 });
 $('#helpWrap').addEventListener('mousedown',e=>{ if(e.target.id==='helpWrap') closeHelp(); });
 
