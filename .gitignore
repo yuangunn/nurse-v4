@@ -31,3 +31,5 @@ standalone/exe/*.spec
 standalone/exe/assign_error.log
 standalone/exe/build/
 standalone/exe/dist/
+standalone/assign-data*.js
+standalone/assign-data*.json

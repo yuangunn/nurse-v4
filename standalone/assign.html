@@ -456,7 +456,7 @@
       <div class="row"><span class="n">2</span><span>브라우저가 "파일을 볼 수 있도록 허용하시겠습니까?" 라고 물으면 <b>허용</b>을 누르세요.</span></div>
       <div class="row"><span class="n">3</span><span>처음이라면 <b>처음 시작</b>으로 데이터 파일을 하나 만들어 공용 폴더에 두세요.</span></div>
       <div class="row"><span class="n">＊</span><span>이 화면이 매번 뜬다면: 데이터 파일 이름을 <b>assign-data.js</b> 로 두고
-        assign.html 과 <b>같은 폴더</b>에 놓으세요 — 다음부터는 켜자마자 배정표가 바로 뜹니다.
+        <b>이 파일과 같은 폴더</b>에 놓으세요 — 다음부터는 켜자마자 배정표가 바로 뜹니다.
         병동이 여럿이면 <b>assign-data-2.js</b>, <b>-3.js</b> … 로 두면 켤 때 목록에서 고릅니다.</span></div>
     </div>
     <div class="startBand"><span style="font-weight:800">＋</span><span>데이터 파일(.json)을 이 창에 끌어다 놓아도 열립니다.</span></div>
@@ -990,7 +990,7 @@ function toast(msg,ms=2800,undoable=false){ const t=$('#toast');
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260811b'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260812a'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1444,7 +1444,7 @@ async function initStart(){
                {description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
       await useHandle(h,{create:true});
       toast(h.name===SIDE_NAME
-        ? '만들었습니다 — 이 폴더의 assign.html 은 다음부터 바로 열립니다'
+        ? '만들었습니다 — 이 폴더에서는 다음부터 켜자마자 배정표가 뜹니다'
         : '새 데이터 파일을 만들었습니다 (이름을 '+SIDE_NAME+' 로 하면 다음부터 자동으로 열립니다)',5200); }
     catch(e){ if(e.name!=='AbortError') toast('만들기 실패: '+e.message,4000); } };
 }
@@ -2643,7 +2643,7 @@ const ADMIN_PANELS={
       <button onclick="show('start')">다른 데이터 파일 열기</button></div>
       <div class="dim" id="dataInfo"></div>
       <div class="dim" style="line-height:1.7">자동 열림: 데이터 파일 이름이 <b>${SIDE_NAME}</b> 이고
-        assign.html 과 같은 폴더에 있으면, 켤 때 폴더를 고르지 않아도 바로 배정표가 뜹니다
+        이 파일과 같은 폴더에 있으면, 켤 때 폴더를 고르지 않아도 바로 배정표가 뜹니다
         (읽기는 권한 없이 됩니다. 수정·저장은 [저장 연결] 한 번만 받으면 됩니다).</div>`; },
     after(){
       const dates=timelineRange();
@@ -3560,7 +3560,7 @@ const HELP=[
 {cat:'시작하기',id:'open',title:'켜기와 데이터 파일',
  lead:'모든 내용은 <b>데이터 파일 하나</b>에 저장됩니다. 그 파일을 공용 폴더(NAS)에 두면 어느 컴퓨터에서 열어도 같은 내용을 봅니다.',
  steps:['프로그램(어싸인배정표.exe)으로 열면 — 두 번 누르면 끝. 고치는 대로 바로 저장됩니다.',
-        '브라우저로 열면 — 데이터 파일이 assign.html 과 <b>같은 폴더</b>에 있으면 켜자마자 이번 주 배정표가 뜹니다.',
+        '브라우저로 열면 — 데이터 파일이 <b>이 파일과 같은 폴더</b>에 있으면 켜자마자 이번 주 배정표가 뜹니다.',
         '폴더에 데이터 파일이 여러 개면 목록이 떠서 고릅니다 (병동별로 나눠 쓸 때).',
         '브라우저에서 <b>수정</b>하려면 오른쪽 위 [저장 연결]을 한 번 눌러 그 파일을 고르세요. 그 뒤로는 자동 저장입니다.'],
  tips:['브라우저는 보안 규칙 때문에 파일에 쓰기 전 한 번은 사용자가 파일을 골라야 합니다. 프로그램(exe)으로 열면 그 과정이 없습니다.']},
@@ -3695,7 +3695,7 @@ const HELP=[
  tips:['인쇄물은 화면 밝기와 상관없이 항상 밝은 양식 그대로 나옵니다.']},
 {cat:'그 밖에',id:'trouble',title:'안 될 때',
  lead:'자주 나오는 상황과 해결법입니다.',
- steps:['<b>켰는데 시작 화면만 나온다</b> — 데이터 파일이 assign.html 과 같은 폴더에 있는지, 이름이 맞는지 확인하세요.',
+ steps:['<b>켰는데 시작 화면만 나온다</b> — 데이터 파일이 이 파일과 같은 폴더에 있는지, 이름이 맞는지 확인하세요.',
         '<b>고쳤는데 저장이 안 된다</b> — 브라우저로 열었다면 오른쪽 위 [저장 연결]을 한 번 누르세요.',
         '<b>인쇄가 백지로 나온다</b> — 배정표 화면에서 인쇄하세요(다른 화면에서는 그 주 내용이 준비되지 않습니다).',
         '<b>붙여넣었는데 칸이 비어 있다</b> — 모르는 표기일 수 있습니다. 미리보기의 노란 카드에서 정해 주세요.'],
