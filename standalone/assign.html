@@ -276,6 +276,12 @@
   #seedTable td{padding:3px 6px}
   .segbtn{min-width:2.6em;padding:6px 10px;margin:1px;border-radius:8px;font-size:13px}
   .segbtn.on{background:var(--accent);color:var(--on-accent);box-shadow:none;font-weight:700}
+  /* 주간 배정표 내려받기 — 달마다 한 줄 */
+  #weekBtns{display:flex;flex-direction:column;gap:9px}
+  .wkRow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .wkLab{flex:0 0 92px;display:flex;align-items:baseline;gap:5px;font-size:12px;color:var(--ink-3)}
+  .wkLab b{font-size:14px;font-weight:800;color:var(--ink-2)}
+  .wkSet{display:flex;gap:6px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
   .schemeRow input{width:68%}
   .capChip{display:inline-flex;align-items:center;justify-content:center;min-width:38px;height:26px;border-radius:8px;
     font-size:11.5px;font-weight:800;cursor:pointer;background:var(--card-warm);color:var(--ink-3);box-shadow:inset 0 0 0 1px var(--rule)}
@@ -980,6 +986,8 @@ const isoOfD=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(d.getDate()+n);return x};
 const fmtYmd=d=>d.getFullYear()+pad2(d.getMonth()+1)+pad2(d.getDate());
 const WD=['일','월','화','수','목','금','토'];
+/* 화면 날짜는 전부 mm/dd 두 자리 — 인쇄·엑셀 양식이 'mm월 dd일' 이라 거기에 맞춘다 */
+const fmtMD=d=>pad2(d.getMonth()+1)+'/'+pad2(d.getDate());
 /* undoable=true 면 알림을 눌러 방금 한 일을 되돌린다 (스냅샷을 먼저 찍은 동작에만) */
 function toast(msg,ms=2800,undoable=false){ const t=$('#toast');
   t.textContent=msg+(undoable?'  ↩ 되돌리려면 누르세요':'');
@@ -990,7 +998,7 @@ function toast(msg,ms=2800,undoable=false){ const t=$('#toast');
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260812a'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260812b'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1211,7 +1219,7 @@ function fmtWhen(ms){
   const days=Math.round((new Date(now.getFullYear(),now.getMonth(),now.getDate())
                         -new Date(d.getFullYear(),d.getMonth(),d.getDate()))/86400000);
   const hm=d.toLocaleTimeString('ko-KR',{hour:'numeric',minute:'2-digit'});
-  return (days<=0?'오늘':days===1?'어제':`${d.getMonth()+1}/${d.getDate()}`)+' '+hm;
+  return (days<=0?'오늘':days===1?'어제':fmtMD(d))+' '+hm;
 }
 // 폴더 안 어싸인 데이터 파일 스캔 (app:'assign'인 .json만, 최근 수정 순)
 async function scanDirJsons(dir){
@@ -1593,8 +1601,8 @@ function moveWeek(n){ wkSunday=addDays(wkSunday,7*n); renderWeek(); }
 function goToday(){ const t=new Date();t.setHours(0,0,0,0); wkSunday=addDays(t,-t.getDay()); renderWeek(); }
 function weekTitle(sun){
   const e=addDays(sun,6);
-  return `${sun.getFullYear()}. ${sun.getMonth()+1}. ${sun.getDate()} – `+
-    (e.getMonth()===sun.getMonth()?'':`${e.getMonth()+1}. `)+e.getDate();
+  return `${sun.getFullYear()}. ${pad2(sun.getMonth()+1)}. ${pad2(sun.getDate())} – `+
+    (e.getMonth()===sun.getMonth()?'':`${pad2(e.getMonth()+1)}. `)+pad2(e.getDate());
 }
 function roomsFor(P,cnt,label,iso){
   // 그날 하루 방 수정(roomOv)이 있으면 그 값 그대로 (예: 환자 빠져 차지가 12호 추가)
@@ -1659,7 +1667,7 @@ function renderWeek(){
     days.map(d=>{const w=d.getDay(),today=isoOfD(d)===todayIso;
       return `<th class="day${today?' today':''}" colspan="2"><div class="wd ${w===0?'sun':w===6?'sat':''}">${WD[w]}</div>`+
         `<div style="display:flex;align-items:center;justify-content:center;gap:5px"><span class="md">${
-        d.getMonth()+1}/${d.getDate()}</span>${today?'<span class="chip">오늘</span>':''}</div></th>`}).join('')}</tr>
+        fmtMD(d)}</span>${today?'<span class="chip">오늘</span>':''}</div></th>`}).join('')}</tr>
   <tr style="height:28px">${days.map(d=>`<td class="evt${tdCls(d)}" colspan="2" data-iso="${isoOfD(d)}" title="클릭 = 교육·행사 입력">${
     esc(store.events[isoOfD(d)]||'')}</td>`).join('')}</tr>`;
   const dups=days.map((d,di)=>{
@@ -1699,7 +1707,7 @@ function renderWeek(){
   // 이번 주 경고: 가능근무 위반 · 양식 N칸(3) 초과 · 헬퍼(라벨 없음) · 금지 방 배정
   const w=[];
   for(const d of days){
-    const iso=isoOfD(d), dd=+iso.slice(8,10), mm=+iso.slice(5,7);
+    const iso=isoOfD(d), dd=iso.slice(8,10), mm=iso.slice(5,7);
     for(const n of store.order){
       const pc=parseCellRaw((store.cells[n]||{})[iso]||'');
       if(pc&&pc.code&&['DC','D','EC','E','NC','N'].includes(pc.code)&&!capsOf(n).includes(pc.code))
@@ -1733,7 +1741,7 @@ function renderWeek(){
 $('#wkBody').addEventListener('click',e=>{
   const ev=e.target.closest('td.evt');
   if(ev){ const iso=ev.dataset.iso;
-    const v=prompt((+iso.slice(5,7))+'/'+(+iso.slice(8,10))+' 교육·행사 (비우면 삭제)',store.events[iso]||'');
+    const v=prompt(iso.slice(5,7)+'/'+iso.slice(8,10)+' 교육·행사 (비우면 삭제)',store.events[iso]||'');
     if(v===null) return;
     snapshot();
     if(v.trim()) store.events[iso]=v.trim(); else delete store.events[iso];
@@ -2059,7 +2067,7 @@ function buildPending(){
   pending={g,y:cx.y,m:cx.m,names:namesIn,byName,minIso,maxIso,added,unknown:unkKeys};
 
   // ── 통계 ──────────────────────────────────────────────────────────────
-  const fmtI=iso=>(+iso.slice(5,7))+'/'+(+iso.slice(8,10));
+  const fmtI=iso=>iso.slice(5,7)+'/'+iso.slice(8,10);
   $('#pvStats').innerHTML=
     `<div class="st"><span class="k">간호사</span><span class="v">${namesIn.length}명</span></div>`+
     `<div class="st"><span class="k">기간</span><span class="v">${fmtI(minIso)} – ${fmtI(maxIso)}</span></div>`+
@@ -2488,15 +2496,23 @@ function delBan(n,r){
 }
 const ADMIN_PANELS={
   weekx:{title:'주간 배정표 내려받기 (여러 주)',
-    desc:"한 주만 받으려면 배정표 화면의 <b>[이번 주 배정표 엑셀로 내보내기]</b>가 빠릅니다. 여기서는 그 달 주차를 골라 받습니다.",
-    body(){ return `<div id="weekBtns" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-      <div><button onclick="printWeek(true)">이번 달 전체 인쇄 (5~6장)</button></div>`; },
+    desc:"한 주만 받으려면 배정표 화면의 <b>[이번 주 배정표 엑셀로 내보내기]</b>가 빠릅니다. "+
+         "여기서는 <b>지난달·이번달·다음달</b> 중 원하는 주를 골라 받습니다. 근무표가 들어 있는 주면 언제든 받을 수 있습니다.",
+    body(){ return `<div id="weekBtns"></div>
+      <div><button onclick="printWeek(true)">${addDays(wkSunday,3).getMonth()+1}월 전체 인쇄 (5~6장)</button></div>`; },
     after(){
-      const mid=addDays(wkSunday,3);
-      $('#weekBtns').innerHTML=weeksOf(mid.getFullYear(),mid.getMonth()+1).map(sun=>{
-        const e2=addDays(sun,6);
-        return `<button onclick="downloadWeekXlsx(new Date(${sun.getFullYear()},${sun.getMonth()},${sun.getDate()})).catch(e=>toast('실패: '+e.message))">`+
-          `${sun.getMonth()+1}/${sun.getDate()}~${e2.getMonth()+1}/${e2.getDate()}</button>`;
+      // 달을 바꾸려고 배정표 화면으로 나갔다 올 필요가 없게 세 달을 한 번에 편다.
+      // 기준은 보고 있던 주의 수요일이 속한 달 — 걸친 주는 양쪽 달에 모두 나온다.
+      const mid=addDays(wkSunday,3), cur=fmtYmd(wkSunday);
+      $('#weekBtns').innerHTML=[-1,0,1].map(off=>{
+        const M=new Date(mid.getFullYear(),mid.getMonth()+off,1);   // Date 가 0월·13월을 알아서 넘긴다
+        return `<div class="wkRow"><span class="wkLab">${['지난달','이번달','다음달'][off+1]}<b>${M.getMonth()+1}월</b></span>`+
+          `<span class="wkSet">${weeksOf(M.getFullYear(),M.getMonth()+1).map(sun=>{
+            const e2=addDays(sun,6), on=fmtYmd(sun)===cur;
+            return `<button class="segbtn${on?' on':''}"${on?' title="지금 배정표 화면에서 보고 있는 주"':''}`+
+              ` onclick="downloadWeekXlsx(new Date(${sun.getFullYear()},${sun.getMonth()},${sun.getDate()})).catch(e=>toast('실패: '+e.message))">`+
+              `${fmtMD(sun)}~${fmtMD(e2)}</button>`;
+          }).join('')}</span></div>`;
       }).join('');
     }},
   seed:{title:'지난 어싸인 직접 입력',
@@ -3490,7 +3506,7 @@ async function buildPrintArea(wholeMonth){
       <tr style="height:9mm"><td colspan="2" rowspan="2" style="background:#F8F9FB;vertical-align:bottom;padding-bottom:1.5mm;font-size:7.5pt;font-weight:700;color:#8A93A1;line-height:1.3">교육 및<br>행사</td>${
         days.map(d=>{const w=d.date.getDay();
           return `<th colspan="2" style="background:#F2F3F5"><div style="display:flex;align-items:baseline;justify-content:center;gap:1.4mm">`+
-            `<span style="font-size:11pt;font-weight:800;letter-spacing:-0.03em;font-variant-numeric:tabular-nums">${d.date.getMonth()+1}/${d.date.getDate()}</span>`+
+            `<span style="font-size:11pt;font-weight:800;letter-spacing:-0.03em;font-variant-numeric:tabular-nums">${fmtMD(d.date)}</span>`+
             `<span style="font-size:8pt;font-weight:700;color:${wdC(w)}">${WD[w]}</span></div></th>`}).join('')}</tr>
       <tr style="height:${eventH}mm">${days.map(d=>{
         const evt=store.events[isoOfD(d.date)];
