@@ -10,6 +10,7 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
 **라이선스**: All Rights Reserved
 
 > 아키텍처 결정·네거티브 지식은 [`docs/decisions.md`](docs/decisions.md) 참조.
+> 기능 로드맵·남은 작업은 [`docs/milestones.md`](docs/milestones.md) 참조 (세션 간 이어서 작업).
 > 세션별 작업 노트는 [`docs/session_notes/`](docs/session_notes/) 참조.
 
 ---
@@ -307,6 +308,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 | GET/POST | `/api/requirements` | 요일별 필요 인원 |
 | GET/POST/DELETE | `/api/shifts[/code]` | 근무 정의 |
 | GET/POST/DELETE | `/api/scoring_rules[/id]` | 배점 규칙 |
+| POST | `/api/parse-table-file` | 표 파일(xlsx/xlsm/csv/tsv, base64) → 시트별 2D 그리드 — 붙여넣기 모달 '파일에서 읽기' |
 
 ### 스케줄 생성 API
 | Method | Path | 설명 |
@@ -353,6 +355,12 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
    - **📋 어싸인용 복사** (`copyScheduleTsv`): 이름 + 날짜 + 근무 표를 클립보드로 →
      어싸인 배정표(standalone)에 그대로 붙여넣는다
 5. **저장**: 생성 스케줄 저장/불러오기
+   - **📥 근무표 업로드**: 이미 완성된 번표를 엑셀 파일(xlsx/csv) 업로드 또는 붙여넣기로
+     저장 목록에 바로 추가 (솔버 안 돌림, 표 역산 일별 인원을 함께 저장)
+
+> 엑셀 붙여넣기/파일 읽기의 날짜 해석은 **멀티월**: 날짜에 월이 있으면(5/26 등) 그대로,
+> 일자만 있으면 감소 지점을 월 경계로 해석해 당월 밖 날짜에도 모두 적용된다
+> (`paste-import.js:_resolveHeaderDates`).
 
 > 어싸인(병실 배정)은 **본 앱에서 뺐다** — 병동에서 실제로 쓰는 건 `standalone/assign.html`
 > 하나뿐이고(본 앱엔 배정표 출력이 없었다) 같은 로직을 두 곳에서 관리할 이유가 없다.
@@ -588,6 +596,7 @@ self.cbLogging.subscribe(_on_log)
 
 ## 참고 문서
 
+- [`docs/milestones.md`](docs/milestones.md) — 기능 로드맵 + 남은 작업 (세션 간 이어서 작업)
 - [`docs/decisions.md`](docs/decisions.md) — 아키텍처 결정 + 네거티브 지식 (컴팩팅 내성)
 - [`docs/session_notes/`](docs/session_notes/) — 세션별 작업 일지
 - [`MANUAL.md`](MANUAL.md) — 사용자 매뉴얼
