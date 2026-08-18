@@ -301,9 +301,9 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 | GET/POST | `/api/nurses` | 간호사 목록/추가 |
 | POST | `/api/nurses/reorder` | 순서(시니어리티) 변경 |
 | DELETE | `/api/nurses/{id}` | 삭제 + **저장본 캐스케이드 정리** |
-| GET | `/api/nurses/template` | CSV 템플릿 다운로드 |
-| GET | `/api/nurses/export` | 현재 간호사 CSV 내보내기 |
-| POST | `/api/nurses/import` | CSV 일괄 등록/업데이트 |
+| GET | `/api/nurses/template.xlsx` | 명부 엑셀 템플릿 (드롭다운·안내 시트, 기본) — `/template`은 CSV 호환용 |
+| GET | `/api/nurses/export.xlsx` | 현재 간호사 엑셀 내보내기 (기본) — `/export`는 CSV 호환용 |
+| POST | `/api/nurses/import` | 명부 일괄 등록/업데이트 — xlsx(매직 바이트 자동 감지)·CSV 모두 허용 |
 | GET/POST | `/api/rules` | 규칙 |
 | GET/POST | `/api/requirements` | 요일별 필요 인원 |
 | GET/POST/DELETE | `/api/shifts[/code]` | 근무 정의 |

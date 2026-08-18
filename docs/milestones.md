@@ -92,11 +92,26 @@
 
 ---
 
-## M3. 간호사 명부 CSV 입출력 대체 — ⬜ 조사 완료, 구현 대기
+## M3. 간호사 명부 CSV 입출력 대체 — 🔶 1차(xlsx 왕복) 완료 (2026-08-18) · 2차(명부 붙여넣기)는 백로그
 
 ### 배경 (사용자 요청)
 "간호사 템플릿 csv로 저장하고 내보내는 게 너무 불편해. 다른 방식으로 해줄 수
-있는지 알아봐줘." — 조사 결과와 권장안을 아래에 정리. **구현은 다음 세션**.
+있는지 알아봐줘." — 아래 조사에 따라 **권장 1차(A. xlsx 왕복)를 구현 완료**.
+
+### 구현된 것 (1차 — xlsx 왕복)
+- `GET /api/nurses/template.xlsx` / `GET /api/nurses/export.xlsx` — 같은 형식 공유
+  (헤더 서식·열 폭·틀 고정 + **드롭다운**: 성별/야간전담/주휴요일/주휴로테이션/트레이닝
+  + '작성 방법' 안내 시트). 내보내서 고치고 그대로 가져오는 왕복 편집.
+- 가져오기: 기존 preview/diff 모달 그대로, 파일이 xlsx면 **매직 바이트(PK)로 자동 감지**
+  (확장자·파일명 무관) → `_parse_xlsx_sheets` → '이름' 헤더 있는 시트 선택
+  (`_pick_nurse_sheet_rows`) → 공통 행 파서. 날짜 셀은 ISO로, '여/남'도 기존처럼 인식.
+- 리팩토링: `_parse_nurses_csv(text)` → `_parse_nurses_rows(rows)` (CSV·xlsx 공용,
+  `#` 주석 행 무시 유지), `_decode_csv_input` → `_decode_nurse_table_rows`,
+  내보내기 행 변환은 `_nurse_to_row`로 공용화. **CSV 경로는 호환 유지**
+  (`/api/nurses/template`·`/api/nurses/export` 존치, 가져오기는 CSV도 그대로 받음).
+- 프론트: 템플릿/내보내기 버튼이 xlsx를 받고, 가져오기 accept·드롭존이 xlsx 허용.
+- 검증: `tests/test_nurse_xlsx.py` 5건 (템플릿 구조/드롭다운·내보내기 형식·xlsx 가져오기
+  왕복(날짜 셀→ISO·여→female·시트 선택)·CSV 회귀·주석 행) + E2E(설정 탭 xlsx 가져오기 → 등록).
 
 ### 현행 흐름과 불편 지점
 - 템플릿: `GET /api/nurses/template` → `#` 주석 안내 행이 붙은 CSV (14컬럼:
@@ -117,15 +132,11 @@
 | **B. 명부 붙여넣기 (권장 2차)** | 파일 없이 엑셀 범위 복사→붙여넣기로 명부 등록/일괄 수정 | 파일 자체가 사라짐 — 근무표 붙여넣기와 UX 통일. 이미 붙여넣기에서 간호사 자동 추가(f6c00e0)가 있어 자연 확장 | 헤더 컬럼 자동 매핑(이름/그룹/성별…) + 미리보기 모달. paste-import 인프라 재사용 |
 | C. CSV 유지 + 소폭 개선 | 주석 행 제거, 안내를 화면으로 이동 | 최소 변경 | 1·2·4 불편이 그대로 |
 
-### 권장 구현 순서 (다음 세션 착수 가이드)
-1. **A**: `GET /api/nurses/template.xlsx`, `GET /api/nurses/export.xlsx`
-   (openpyxl `DataValidation`으로 성별=여/남, Y/N, 주휴요일=일~토 드롭다운).
-   가져오기는 프론트 CSV 업로드 자리에 xlsx 허용 추가 → 서버에서
-   `_parse_xlsx_sheets` 재사용 → 첫 행 헤더 매칭 → `_parse_nurses_csv`와 같은
-   행 파서로 정규화 → **기존 preview/diff 모달 그대로** 사용.
-   기존 CSV 경로는 호환용으로 유지.
-2. **B**: 설정 탭 간호사 섹션에 "표 붙여넣기" 버튼 → 컬럼 매핑 미리보기 → 적용.
-3. 문서: MANUAL.md 갱신, 이 파일 상태 갱신.
+### 남은 작업 (2차 — 백로그)
+- [ ] **B. 명부 붙여넣기**: 설정 탭 간호사 섹션에 "표 붙여넣기" 버튼 → 컬럼 매핑
+      미리보기 → 적용 (paste-import 인프라 재사용). 실사용에서 파일 왕복이 불편하다는
+      피드백이 나오면 착수.
+- [ ] MANUAL.md 갱신 (M1 잔여와 함께 릴리즈 전에).
 
 ### 파일 포인터 (착수 시 볼 곳)
 `server/api.py` (`_NURSE_CSV_HEADER`/`_parse_nurses_csv`/`nurse_import_preview` ~440-840행 부근,

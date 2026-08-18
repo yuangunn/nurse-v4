@@ -471,43 +471,47 @@ def nurse_template():
     )
 
 
+_JUHU_REV = {0: "일", 1: "월", 2: "화", 3: "수", 4: "목", 5: "금", 6: "토"}
+
+
+def _nurse_to_row(n: dict) -> list:
+    """간호사 dict → 템플릿 컬럼 순서의 행 (CSV·xlsx 내보내기 공용)."""
+    capable = n.get("capable_shifts", [])
+    if isinstance(capable, str):
+        capable = [capable]
+    juhu_day = n.get("juhu_day")
+    juhu_ko = _JUHU_REV.get(juhu_day, "") if juhu_day is not None else ""
+    return [
+        n.get("id", ""),
+        n.get("name", ""),
+        n.get("group", ""),
+        n.get("gender", ""),
+        ",".join(capable),
+        "Y" if n.get("is_night_shift") else "N",
+        str(n.get("seniority", 0)),
+        juhu_ko,
+        "Y" if n.get("juhu_auto_rotate", True) else "N",
+        "Y" if n.get("is_trainee") else "N",
+        n.get("training_end_date") or "",
+        n.get("preceptor_id") or "",
+        n.get("start_date") or "",
+        n.get("end_date") or "",
+    ]
+
+
 @app.get("/api/nurses/export")
 def nurse_export():
-    """현재 등록된 간호사 목록을 템플릿 형식 CSV로 내보내기"""
+    """현재 등록된 간호사 목록을 템플릿 형식 CSV로 내보내기 (호환용 — 기본은 export.xlsx)"""
     import io
     import csv
     from fastapi.responses import Response
 
-    nurses = db.get_nurses()
     buf = io.StringIO()
     buf.write("\ufeff")  # UTF-8 BOM
     writer = csv.writer(buf)
     writer.writerow(_NURSE_CSV_HEADER)
-
-    juhu_rev = {0: "일", 1: "월", 2: "화", 3: "수", 4: "목", 5: "금", 6: "토"}
-    for n in nurses:
-        capable = n.get("capable_shifts", [])
-        if isinstance(capable, str):
-            capable = [capable]
-        juhu_day = n.get("juhu_day")
-        juhu_ko = juhu_rev.get(juhu_day, "") if juhu_day is not None else ""
-
-        writer.writerow([
-            n.get("id", ""),
-            n.get("name", ""),
-            n.get("group", ""),
-            n.get("gender", ""),
-            ",".join(capable),
-            "Y" if n.get("is_night_shift") else "N",
-            str(n.get("seniority", 0)),
-            juhu_ko,
-            "Y" if n.get("juhu_auto_rotate", True) else "N",
-            "Y" if n.get("is_trainee") else "N",
-            n.get("training_end_date") or "",
-            n.get("preceptor_id") or "",
-            n.get("start_date") or "",
-            n.get("end_date") or "",
-        ])
+    for n in db.get_nurses():
+        writer.writerow(_nurse_to_row(n))
 
     content = buf.getvalue().encode("utf-8")
     return Response(
@@ -519,14 +523,109 @@ def nurse_export():
     )
 
 
+_XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _build_nurse_xlsx(data_rows: list) -> bytes:
+    """간호사 명부 xlsx 생성 — 헤더 서식·열 폭·드롭다운(성별/Y·N/요일) + '작성 방법' 시트.
+    템플릿(예시 행)과 내보내기(현재 명부)가 같은 형식을 공유해 왕복 편집이 된다."""
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "간호사 명부"
+    ws.append(_NURSE_CSV_HEADER)
+    head_font = Font(bold=True, color="FFFFFF")
+    head_fill = PatternFill("solid", fgColor="4A6FA5")
+    for cell in ws[1]:
+        cell.font = head_font
+        cell.fill = head_fill
+        cell.alignment = Alignment(horizontal="center")
+    for row in data_rows:
+        ws.append(list(row))
+    widths = [12, 12, 7, 10, 24, 9, 10, 9, 13, 9, 15, 12, 12, 12]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = "A2"
+
+    def add_dropdown(col_name, options):
+        dv = DataValidation(type="list", formula1=f'"{options}"',
+                            allow_blank=True, showErrorMessage=False)
+        ws.add_data_validation(dv)
+        col = get_column_letter(_NURSE_CSV_HEADER.index(col_name) + 1)
+        dv.add(f"{col}2:{col}400")
+
+    add_dropdown("성별", "female,male,여,남")
+    add_dropdown("야간전담", "Y,N")
+    add_dropdown("주휴요일", "일,월,화,수,목,금,토")
+    add_dropdown("주휴로테이션", "Y,N")
+    add_dropdown("트레이닝", "Y,N")
+
+    guide = wb.create_sheet("작성 방법")
+    for line in _NURSE_CSV_GUIDE:
+        guide.append([line[0].lstrip("#").strip()])
+    guide.column_dimensions["A"].width = 72
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@app.get("/api/nurses/template.xlsx")
+def nurse_template_xlsx():
+    """간호사 일괄 등록용 엑셀 템플릿 — 드롭다운·안내 시트 포함 ('CSV로 저장' 단계 불필요)"""
+    from fastapi.responses import Response
+
+    return Response(
+        content=_build_nurse_xlsx(_NURSE_CSV_EXAMPLE),
+        media_type=_XLSX_MEDIA,
+        headers={"Content-Disposition": 'attachment; filename="nurses_template.xlsx"'},
+    )
+
+
+@app.get("/api/nurses/export.xlsx")
+def nurse_export_xlsx():
+    """현재 간호사 목록을 템플릿과 같은 형식의 엑셀로 내보내기"""
+    from fastapi.responses import Response
+
+    rows = [_nurse_to_row(n) for n in db.get_nurses()]
+    return Response(
+        content=_build_nurse_xlsx(rows),
+        media_type=_XLSX_MEDIA,
+        headers={"Content-Disposition": 'attachment; filename="nurses_current.xlsx"'},
+    )
+
+
 # ── CSV 파싱 헬퍼 (preview / import 양쪽에서 사용) ─────────────────────
 
 _CSV_ENCODINGS = ("utf-8-sig", "cp949", "euc-kr", "utf-8")
 
 
-def _decode_csv_input(body: dict) -> str:
-    """body에서 CSV 텍스트 추출. csv_b64(바이트)면 인코딩 자동 감지."""
+def _pick_nurse_sheet_rows(sheets: list) -> list:
+    """명부가 든 시트 선택: '이름' 헤더가 있는 첫 시트 → 없으면 데이터 최다 시트."""
+    for s in sheets:
+        for row in s["rows"][:5]:
+            if any(str(c).strip() == "이름" for c in row):
+                return s["rows"]
+    if not sheets:
+        raise HTTPException(400, "파일에서 표를 찾지 못했습니다.")
+    return max(
+        sheets,
+        key=lambda s: sum(1 for r in s["rows"] for c in r if str(c).strip()),
+    )["rows"]
+
+
+def _decode_nurse_table_rows(body: dict) -> list:
+    """가져오기 입력(body) → 2D 문자열 rows.
+    csv_b64가 xlsx면 매직 바이트(PK)로 감지해 시트 파싱 — 파일명·확장자 무관.
+    텍스트면 인코딩 자동 감지(UTF-8/CP949) 후 CSV 파싱."""
     import base64
+    import csv as _csv
+    import io
 
     csv_b64 = body.get("csv_b64")
     if csv_b64:
@@ -534,36 +633,41 @@ def _decode_csv_input(body: dict) -> str:
             raw = base64.b64decode(csv_b64)
         except Exception as e:
             raise HTTPException(400, f"base64 디코딩 실패: {e}")
+        if raw[:4] == b"PK\x03\x04":  # zip 컨테이너 = xlsx/xlsm
+            return _pick_nurse_sheet_rows(_parse_xlsx_sheets(raw))
+        text = None
         for enc in _CSV_ENCODINGS:
             try:
-                return raw.decode(enc)
+                text = raw.decode(enc)
+                break
             except UnicodeDecodeError:
                 continue
-        raise HTTPException(400, "지원되지 않는 인코딩 (UTF-8 / CP949 모두 실패)")
+        if text is None:
+            raise HTTPException(400, "지원되지 않는 인코딩 (UTF-8 / CP949 모두 실패)")
+    else:
+        text = body.get("csv", "")
+        if not text:
+            raise HTTPException(400, "CSV 내용이 비어 있습니다.")
 
-    csv_text = body.get("csv", "")
-    if not csv_text:
-        raise HTTPException(400, "CSV 내용이 비어 있습니다.")
-    if csv_text.startswith("\ufeff"):
-        csv_text = csv_text[1:]
-    return csv_text
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    return [r for r in _csv.reader(io.StringIO(text))]
 
 
-def _parse_nurses_csv(csv_text: str) -> dict:
-    """CSV 텍스트 → {nurses, errors[{row,col,got,expected,message}]}.
-    id 비어 있으면 자동 생성."""
-    import io
-    import csv as _csv
-    import re
+def _parse_nurses_rows(rows_in: list) -> dict:
+    """2D 문자열 rows → {nurses, errors[{row,col,got,expected,message}]}.
+    id 비어 있으면 자동 생성. '#' 시작 행(안내 주석)·빈 행은 무시.
+    CSV·xlsx 어느 쪽 입력이든 _decode_nurse_table_rows가 rows로 맞춰 준다."""
     import uuid
 
-    if csv_text.startswith("\ufeff"):
-        csv_text = csv_text[1:]
-
-    lines = [ln for ln in csv_text.splitlines() if not ln.lstrip().startswith("#")]
-    cleaned = "\n".join(lines)
-    reader = _csv.reader(io.StringIO(cleaned))
-    rows = [r for r in reader if any(c.strip() for c in r)]
+    rows = []
+    for r in rows_in:
+        cells = ["" if c is None else str(c) for c in r]
+        if cells and cells[0].lstrip().startswith("#"):
+            continue
+        if not any(c.strip() for c in cells):
+            continue
+        rows.append(cells)
 
     if len(rows) < 2:
         return {
@@ -779,10 +883,10 @@ def _build_diff(parsed_nurses: list, existing_nurses: list, matched_ids: set,
 @app.post("/api/nurses/import/preview")
 def nurse_import_preview(body: dict):
     """업로드 전 미리보기: 어떤 행이 추가/수정/삭제될지 계산만 하고 DB는 건드리지 않음."""
-    csv_text = _decode_csv_input(body)
+    rows = _decode_nurse_table_rows(body)
     replace_all = bool(body.get("replace_all", False))
 
-    parsed = _parse_nurses_csv(csv_text)
+    parsed = _parse_nurses_rows(rows)
     existing = db.get_nurses()
     matched_ids = _resolve_nurse_ids(parsed["nurses"], existing)
     diff = _build_diff(parsed["nurses"], existing, matched_ids, replace_all)
@@ -802,10 +906,10 @@ def nurse_import(body: dict):
     CSV 파싱 + 매칭 + 저장.
     body: {"csv": "<text>"} 또는 {"csv_b64": "<base64>"} + "replace_all"(bool)
     """
-    csv_text = _decode_csv_input(body)
+    rows = _decode_nurse_table_rows(body)
     replace_all = bool(body.get("replace_all", False))
 
-    parsed = _parse_nurses_csv(csv_text)
+    parsed = _parse_nurses_rows(rows)
     nurses_to_save = parsed["nurses"]
     errors = parsed["errors"]
 
