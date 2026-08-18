@@ -56,6 +56,9 @@ a = Analysis(
         'uvicorn.protocols.websockets.auto',
         'uvicorn.lifespan',
         'uvicorn.lifespan.on',
+        # 표 파일 파싱 (/api/parse-table-file) — api.py에서 지연 임포트하므로 명시
+        'openpyxl',
+        'et_xmlfile',
     ] + highspy_hiddenimports + crypto_hiddenimports + pulp_hiddenimports + ort_hiddenimports,
     hookspath=[],
     hooksconfig={},

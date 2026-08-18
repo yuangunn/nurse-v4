@@ -1370,7 +1370,14 @@
 <!-- ═══ TAB 4: 저장 ═══════════════════════════════════════ -->
 <div x-show="activeTab==='saved'" x-cloak class="content">
   <div style="max-width:36rem">
-    <div class="flex items-center justify-between mb-3"><div class="section-title" style="margin:0">저장된 스케줄</div><button @click="loadSavedList()" class="text-xs text-blue">새로고침</button></div>
+    <div class="flex items-center justify-between mb-3">
+      <div class="section-title" style="margin:0">저장된 스케줄</div>
+      <div class="flex items-center gap-2">
+        <button @click="openPastePrev('saved')" class="btn btn-xs btn-ghost text-green"
+                title="이미 완성된 근무표를 엑셀 파일 업로드 또는 붙여넣기로 저장 목록에 추가합니다 (솔버 안 돌림)">📥 근무표 업로드</button>
+        <button @click="loadSavedList()" class="text-xs text-blue">새로고침</button>
+      </div>
+    </div>
     <div class="space-y-2"><template x-for="item in savedSchedules" :key="item.id">
       <div class="card-sm flex items-center justify-between">
         <div><span class="text-body font-medium" x-text="item.name||`${item.year}년 ${item.month}월`"></span><span class="ml-2 text-xs text-dim" x-text="item.created_at"></span></div>
@@ -1380,7 +1387,7 @@
     <div x-show="savedSchedules.length===0" class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
       <p>저장된 스케줄이 없습니다</p>
-      <span class="empty-hint">스케줄 탭에서 생성 후 저장할 수 있습니다</span>
+      <span class="empty-hint">스케줄 탭에서 생성 후 저장하거나, [📥 근무표 업로드]로 기존 근무표를 올릴 수 있습니다</span>
     </div>
     </div>
   </div>
@@ -1927,17 +1934,28 @@
 <div x-show="pastePrev.open" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="closePastePrev()">
   <div class="modal" style="max-width:48rem;max-height:88vh;display:flex;flex-direction:column">
     <div class="flex items-center justify-between mb-2">
-      <div class="font-bold text-lg text-bright">📋 엑셀 사전입력 붙여넣기</div>
+      <div class="font-bold text-lg text-bright" x-text="pastePrev.target==='saved'?'📥 기존 근무표 업로드':'📋 엑셀 사전입력 붙여넣기'"></div>
       <button @click="closePastePrev()" class="text-dim text-lg" title="닫기">×</button>
     </div>
     <p class="text-xs text-sub mb-2">
-      엑셀/구글시트에서 표 영역을 선택해 복사(Ctrl+C)한 뒤 아래 영역에 <kbd>Ctrl+V</kbd>로 붙여넣으세요.
+      엑셀/구글시트에서 표 영역을 선택해 복사(Ctrl+C)한 뒤 아래 영역에 <kbd>Ctrl+V</kbd>로 붙여넣거나,
+      <strong>파일 열기</strong>로 엑셀(xlsx)/CSV 파일을 직접 읽으세요.
       이름과 날짜를 자동 감지해 매칭하고, <strong>적용 전 미리보기</strong>를 보여줍니다.
+      날짜에 월이 있으면(<span class="font-mono">5/26</span> 등) 여러 달에 걸친 표도 각 날짜에 그대로 적용됩니다.
     </p>
-    <div class="flex items-center gap-3 mb-2 text-xs">
+    <div class="flex items-center gap-3 mb-2 text-xs" x-show="pastePrev.target!=='saved'">
       <span class="text-sub font-semibold">적용 대상:</span>
       <label class="flex items-center gap-1 cursor-pointer"><input type="radio" value="prev" x-model="pastePrev.target"/><span :class="pastePrev.target==='prev'?'text-bright font-bold':'text-dim'">사전입력 (확정)</span></label>
       <label class="flex items-center gap-1 cursor-pointer"><input type="radio" value="wish" x-model="pastePrev.target"/><span :class="pastePrev.target==='wish'?'text-amber font-bold':'text-dim'">★ 희망근무 (소프트)</span></label>
+    </div>
+    <!-- 저장탭 업로드(단일 표): 저장 년월(=날짜에 월이 없을 때 해석 기준) + 저장 이름 -->
+    <div x-show="pastePrev.target==='saved' && !pastePrev.batch" x-cloak class="flex flex-wrap items-center gap-2 mb-2 text-xs">
+      <span class="text-sub font-semibold">저장할 년월:</span>
+      <input type="number" x-model.number="pastePrev.anchorY" @change="pastePrev.anchorTouched=true;_matchPasteGrid()" min="2020" max="2099" style="width:4.5em"/><span>년</span>
+      <input type="number" x-model.number="pastePrev.anchorM" @change="pastePrev.anchorTouched=true;_matchPasteGrid()" min="1" max="12" style="width:3em"/><span>월</span>
+      <span class="text-sub font-semibold ml-2">저장 이름:</span>
+      <input type="text" x-model="pastePrev.saveName" :placeholder="`${pastePrev.anchorY}년 ${pastePrev.anchorM}월 (업로드)`" style="width:11em"/>
+      <span class="text-dim">날짜에 월이 있으면 표에서 자동 감지합니다</span>
     </div>
     <div x-show="pastePrev.target==='wish'" x-cloak class="text-xs text-amber mb-2">
       위시 시트를 그대로 붙여넣으세요. 휴무 계열(OF·연차 등)은 '쉬고 싶음(OFF)' 희망으로 저장되어
@@ -1945,7 +1963,7 @@
       둘째 행이 요일(월~일)이어도 자동으로 무시합니다.
     </div>
     <!-- 형식 예시 + 인식 코드 범례 -->
-    <div class="card-sm mb-2" style="padding:6px 10px;background:var(--card-warm,rgba(0,0,0,0.02))">
+    <div x-show="!pastePrev.batch" class="card-sm mb-2" style="padding:6px 10px;background:var(--card-warm,rgba(0,0,0,0.02))">
       <div class="text-xs text-dim mb-1">권장 형식 — <strong>첫 행 = 날짜, 첫 열 = 이름</strong> (예시):</div>
       <pre class="text-xs" style="margin:0;font-family:'Courier New',monospace;overflow-x:auto;color:var(--ink-2)">이름   1   2   3   4
 김지현  D   D   OF  N
@@ -1957,7 +1975,75 @@
         <br>매칭 안 된 이름·미인식 코드는 아래에 ⚠로 표시되고 그 칸만 건너뜁니다.
       </div>
     </div>
+    <!-- 파일에서 읽기 (엑셀/CSV → 서버 파싱 → 붙여넣기와 동일 파이프라인) -->
+    <div class="flex flex-wrap items-center gap-2 mb-2 text-xs">
+      <label class="btn btn-xs btn-ghost cursor-pointer" title="xlsx/xlsm/csv/tsv 파일을 직접 읽습니다 (병합 셀·CP949 인코딩 지원)">
+        📂 엑셀/CSV 파일 열기
+        <input type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt" style="display:none" @change="onPasteFileSelect($event)"/>
+      </label>
+      <span x-show="pastePrev.fileName" x-cloak class="pill" style="background:rgba(59,130,246,0.12);color:var(--t-blue)">
+        📄 <span x-text="pastePrev.fileName"></span>
+      </span>
+      <button x-show="pastePrev.fileName" x-cloak @click="_clearPasteFile()" class="text-xs text-dim" title="파일을 해제하고 붙여넣기로 돌아갑니다">✕ 파일 해제</button>
+      <template x-if="(pastePrev.sheets?.length||0)>1 && !pastePrev.batch">
+        <span class="flex items-center gap-1">
+          <span class="text-dim">시트:</span>
+          <select @change="_selectPasteSheet(parseInt($event.target.value))" class="text-xs">
+            <template x-for="(s,i) in pastePrev.sheets" :key="'sh'+i">
+              <option :value="i" :selected="i===pastePrev.sheetIdx" x-text="s.name"></option>
+            </template>
+          </select>
+        </span>
+      </template>
+    </div>
+
+    <!-- 멀티시트 일괄 업로드: 시트 ↔ 년월 매핑 표 -->
+    <div x-show="pastePrev.target==='saved' && pastePrev.batch" x-cloak class="card-sm mb-2" style="padding:8px 10px">
+      <div class="text-xs font-semibold text-bright mb-1">🗂 시트 여러 개 감지 — 각 시트를 월별 근무표로 일괄 저장</div>
+      <div class="text-xs text-dim mb-1.5">
+        시트 이름·내용에서 년/월을 감지했습니다. 잘못 잡힌 년월은 고치고, 올리지 않을 시트는 체크를 끄세요.
+        행을 클릭하면 그 시트를 아래에서 미리봅니다.
+      </div>
+      <div style="max-height:11rem;overflow-y:auto">
+        <table class="text-xs" style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr class="text-dim" style="text-align:left">
+              <th style="padding:2px 4px;width:1.5rem"></th>
+              <th style="padding:2px 4px">시트</th>
+              <th style="padding:2px 4px">년</th>
+              <th style="padding:2px 4px">월</th>
+              <th style="padding:2px 4px">인식</th>
+              <th style="padding:2px 4px">이름</th>
+              <th style="padding:2px 4px"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="row in pastePrev.batch?.rows||[]" :key="'bt'+row.idx">
+              <tr @click="_previewBatchRow(row.idx)" style="cursor:pointer"
+                  :style="row.idx===pastePrev.sheetIdx?'background:rgba(59,130,246,0.08)':''">
+                <td style="padding:2px 4px" @click.stop><input type="checkbox" x-model="row.checked"/></td>
+                <td style="padding:2px 4px" class="font-medium" x-text="row.name"></td>
+                <td style="padding:2px 4px" @click.stop>
+                  <input type="number" x-model.number="row.y" @change="_refreshBatchRow(row)" min="2020" max="2099" style="width:4.5em"/>
+                </td>
+                <td style="padding:2px 4px" @click.stop>
+                  <input type="number" x-model.number="row.m" @change="_refreshBatchRow(row)" min="1" max="12" style="width:3em"/>
+                </td>
+                <td style="padding:2px 4px" x-text="row.count+'건'" :class="row.count?'':'text-red'"></td>
+                <td style="padding:2px 4px" class="text-dim" x-text="row.nameMatched+'/'+row.nameTotal"></td>
+                <td style="padding:2px 4px">
+                  <span x-show="!row.m" class="pill" style="background:rgba(239,68,68,0.12);color:#ef4444">월 미상</span>
+                  <span x-show="row.dup" class="pill" style="background:rgba(239,68,68,0.12);color:#ef4444">중복 년월</span>
+                  <span x-show="row.exists" class="pill" style="background:rgba(245,158,11,0.12);color:#f59e0b" title="같은 년월의 저장본이 이미 있습니다 — 저장하면 별도 항목으로 추가됩니다">기존 저장본 있음</span>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
     <textarea id="paste-prev-textarea"
+              x-show="!pastePrev.batch"
               x-model="pastePrev.rawText"
               @paste="onPasteRawPaste($event)"
               @input="onPasteTextChange()"
@@ -1982,16 +2068,26 @@
       <span x-show="pastePrev.matches" class="text-dim">·</span>
       <span x-show="pastePrev.matches" class="text-blue"
             x-text="`이름 매칭 ${pastePrev.matches?.nameRow?.filter(x=>x.matched).length||0}/${pastePrev.matches?.nameRow?.length||0}, 날짜 매칭 ${pastePrev.matches?.dateCol?.filter(x=>x.matched).length||0}/${pastePrev.matches?.dateCol?.length||0}`"></span>
+      <span x-show="pastePrev.matches?.dateFrom" x-cloak class="text-dim font-mono"
+            x-text="`날짜 해석: ${pastePrev.matches?.dateFrom} ~ ${pastePrev.matches?.dateTo}`"></span>
     </div>
 
     <!-- 결과 요약 배지 -->
     <div class="flex flex-wrap gap-2 mb-2 text-xs" x-show="pastePrev.diff">
-      <span class="pill" style="background:rgba(34,197,94,0.15);color:#22c55e">
+      <span x-show="pastePrev.target!=='saved'" class="pill" style="background:rgba(34,197,94,0.15);color:#22c55e">
         ✏ 변경 <strong x-text="pastePrev.diff?.will_set.length"></strong>건
       </span>
-      <span x-show="pastePrev.diff?.will_clear.length" class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444">
+      <span x-show="pastePrev.target==='saved'" x-cloak class="pill" style="background:rgba(34,197,94,0.15);color:#22c55e">
+        📥 인식 <strong x-text="pastePrev.diff?.matched_all?.length||0"></strong>건
+      </span>
+      <span x-show="pastePrev.target!=='saved'&&pastePrev.diff?.will_clear.length" class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444">
         🗑 비움 <strong x-text="pastePrev.diff?.will_clear.length"></strong>건
       </span>
+      <template x-for="mo in pastePrev.diff?.months||[]" :key="'mo'+mo.ym">
+        <span class="pill" style="background:rgba(59,130,246,0.12);color:var(--t-blue)">
+          📅 <span x-text="`${mo.label} ${mo.count}건`"></span>
+        </span>
+      </template>
       <span x-show="pastePrev.diff?.unrecognized.length" class="pill" style="background:rgba(245,158,11,0.15);color:#f59e0b">
         ⚠ 미인식 코드 <strong x-text="pastePrev.diff?.unrecognized.length"></strong>종
       </span>
@@ -2000,9 +2096,42 @@
       </span>
     </div>
 
+    <!-- 당월 주기 밖 날짜 안내 (멀티월 붙여넣기) -->
+    <div x-show="pastePrev.target!=='saved'&&pastePrev.diff?.outsideCycle>0" x-cloak
+         class="text-xs text-amber mb-2">
+      🗓 지금 보는 달 주기 밖 날짜 <strong x-text="pastePrev.diff?.outsideCycle"></strong>건 포함 —
+      함께 적용되며, 해당 년월로 이동하면 보입니다.
+    </div>
+
     <!-- 상세 -->
     <div x-show="pastePrev.diff" style="flex:1;overflow-y:auto;min-height:0;padding-right:4px">
-      <template x-if="pastePrev.diff?.will_set.length">
+      <template x-if="pastePrev.target==='saved'&&pastePrev.diff?.matched_all?.length">
+        <div class="mb-2">
+          <div class="text-xs font-semibold mb-1" style="color:#22c55e">📥 저장될 근무</div>
+          <div style="max-height:36vh;overflow-y:auto">
+            <table class="text-xs" style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr class="text-dim" style="text-align:left">
+                  <th style="padding:2px 6px">이름</th>
+                  <th style="padding:2px 6px">날짜</th>
+                  <th style="padding:2px 6px">근무</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="(it,i) in pastePrev.diff.matched_all" :key="'sv'+i">
+                  <tr style="background:rgba(34,197,94,0.05)">
+                    <td style="padding:2px 6px" class="font-medium" x-text="it.name"></td>
+                    <td style="padding:2px 6px" class="font-mono text-dim" x-text="it.dk"></td>
+                    <td style="padding:2px 6px" class="font-mono font-bold text-blue" x-text="it.code"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="pastePrev.target!=='saved'&&pastePrev.diff?.will_set.length">
         <div class="mb-2">
           <div class="text-xs font-semibold mb-1" style="color:#22c55e">✏ 적용 예정</div>
           <div style="max-height:36vh;overflow-y:auto">
@@ -2030,7 +2159,7 @@
         </div>
       </template>
 
-      <template x-if="pastePrev.diff?.will_clear.length">
+      <template x-if="pastePrev.target!=='saved'&&pastePrev.diff?.will_clear.length">
         <div class="mb-2">
           <div class="text-xs font-semibold mb-1" style="color:#ef4444">🗑 비움 예정</div>
           <div style="max-height:20vh;overflow-y:auto">
@@ -2072,9 +2201,14 @@
         </div>
       </template>
 
-      <template x-if="pastePrev.diff && !pastePrev.diff.will_set.length && !pastePrev.diff.will_clear.length">
+      <template x-if="pastePrev.target!=='saved' && pastePrev.diff && !pastePrev.diff.will_set.length && !pastePrev.diff.will_clear.length">
         <div class="text-center text-dim py-6 text-sm">
           변경 사항이 없습니다.
+        </div>
+      </template>
+      <template x-if="pastePrev.target==='saved' && pastePrev.diff && !pastePrev.diff.matched_all.length">
+        <div class="text-center text-dim py-6 text-sm">
+          인식된 근무가 없습니다 — 이름·날짜 매칭을 확인하세요.
         </div>
       </template>
     </div>
@@ -2083,9 +2217,11 @@
     <div class="flex gap-2 mt-3" style="flex-shrink:0">
       <button @click="closePastePrev()" class="btn btn-sm btn-ghost flex-1">취소</button>
       <button @click="applyPastePrev()"
-              :disabled="!pastePrev.diff || (!pastePrev.diff.will_set.length && !pastePrev.diff.will_clear.length)"
-              class="btn btn-sm btn-primary flex-1">
-        적용
+              :disabled="pastePrev.batch ? !pastePrev.batch.rows.some(r=>r.checked&&r.count>0&&r.m)
+                : (!pastePrev.diff || (pastePrev.target==='saved' ? !pastePrev.diff.matched_all.length : (!pastePrev.diff.will_set.length && !pastePrev.diff.will_clear.length)))"
+              class="btn btn-sm btn-primary flex-1"
+              x-text="pastePrev.batch ? `${pastePrev.batch.rows.filter(r=>r.checked&&r.count>0&&r.m).length}개 월 일괄 저장`
+                : (pastePrev.target==='saved'?'근무표로 저장':'적용')">
       </button>
     </div>
   </div>

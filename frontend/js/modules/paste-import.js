@@ -1,5 +1,9 @@
 /* ────────────────────────────────────────────────────────────────────────────
- * 엑셀 사전입력 붙여넣기 — 클립보드 표 파싱·그리드 매칭·적용 (사전입력 탭)
+ * 엑셀 사전입력 붙여넣기 — 클립보드/파일 표 파싱·그리드 매칭·적용
+ *
+ * 대상 3종: 'prev'=사전입력(확정) | 'wish'=희망근무(소프트 ★) | 'saved'=저장탭 근무표 업로드
+ * 날짜 해석은 월 인식(5/26, 5월 26일, 2026-05-26) + 일자만 있는 시퀀스의 감소 지점을
+ * 월 경계로 보는 멀티월 해석 — 당월 주기 밖 날짜에도 그대로 적용된다.
  *
  * 사용: app() 반환 객체에 `...PasteImportModule()` 로 스프레드. 모든 메서드는 this.* 사용.
  * ─────────────────────────────────────────────────────────────────────────── */
@@ -11,14 +15,29 @@ window.PasteImportModule = function() {
       rawText:'',
       grid:[],          // 2D array of pasted cells (string)
       mode:'auto',      // 'auto' | 'name-date' | 'cursor'
-      target:'prev',    // 'prev'=사전입력(확정) | 'wish'=희망근무(소프트 ★)
+      target:'prev',    // 'prev'=사전입력(확정) | 'wish'=희망근무(소프트 ★) | 'saved'=저장탭 업로드
       hasNameCol:true,
       hasDateRow:true,
-      matches:null,     // {nameRow:[{r,name,nurseId,matched}], dateCol:[{c,day,dk,matched}]}
-      diff:null,        // {will_set, will_clear, matched_all, unrecognized, unmatchedNames, unmatchedDates}
+      matches:null,     // {nameRow:[{r,name,nurseId,matched}], dateCol:[{c,raw,dk,matched}], dateFrom, dateTo}
+      diff:null,        // {will_set, will_clear, matched_all, unrecognized, unmatchedNames, unmatchedDates, months, outsideCycle}
+      // 파일 업로드 (엑셀/CSV → 서버 파싱 → grid)
+      sheets:null,      // [{name, rows}] — /api/parse-table-file 결과
+      sheetIdx:0,
+      fileName:'',
+      batch:null,       // 멀티시트 일괄 업로드('saved'): {rows:[{idx,name,y,m,count,...}]}
+      // 저장탭 업로드('saved') 전용
+      anchorY:null,     // 날짜에 월이 없을 때 해석 기준 + 저장 년월
+      anchorM:null,
+      anchorTouched:false,
+      saveName:'',
     },
     openPastePrev(target){
-      this.pastePrev={open:true,rawText:'',grid:[],mode:'auto',target:target||'prev',hasNameCol:true,hasDateRow:true,matches:null,diff:null};
+      this.pastePrev={
+        open:true,rawText:'',grid:[],mode:'auto',target:target||'prev',
+        hasNameCol:true,hasDateRow:true,matches:null,diff:null,
+        sheets:null,sheetIdx:0,fileName:'',batch:null,
+        anchorY:this.year,anchorM:this.month,anchorTouched:false,saveName:'',
+      };
       this.$nextTick&&this.$nextTick(()=>{
         const ta=document.getElementById('paste-prev-textarea');
         if(ta)ta.focus();
@@ -71,26 +90,93 @@ window.PasteImportModule = function() {
       return undefined;  // 인식 불가
     },
 
+    // ── 날짜 헤더 해석 (멀티월) ────────────────────────────────
     _parseDateCell(cell){
-      // "5/3", "5월 3일", "3", "2026-05-03" 등에서 일자 숫자 추출
+      // 날짜 셀 → {y,m,d} (y/m는 없으면 null). 인식 불가 시 null.
       const t=(cell||'').trim();
       if(!t)return null;
-      // YYYY-MM-DD
-      let m=t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-      if(m)return parseInt(m[3],10);
-      // M/D or M-D
-      m=t.match(/(\d{1,2})\s*[/.\-월]\s*(\d{1,2})/);
-      if(m)return parseInt(m[2],10);
-      // (M월 D일)
-      m=t.match(/(\d{1,2})\s*일/);
-      if(m)return parseInt(m[1],10);
-      // 단순 숫자 (1~31)
-      m=t.match(/^(\d{1,2})$/);
-      if(m){const d=parseInt(m[1],10);return(d>=1&&d<=31)?d:null}
-      // "1(일)", "2(월)" 등
-      m=t.match(/^(\d{1,2})\s*[(\(]/);
-      if(m){const d=parseInt(m[1],10);return(d>=1&&d<=31)?d:null}
+      let m=t.match(/^(\d{4})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/);  // 2026-05-03, 2026년 5월 3일
+      if(m){const mo=+m[2],d=+m[3];return(mo>=1&&mo<=12&&d>=1&&d<=31)?{y:+m[1],m:mo,d}:null}
+      m=t.match(/(\d{1,2})\s*[/.\-월]\s*(\d{1,2})/);                          // 5/3, 5월 3일, 5-3, 5.3
+      if(m){const mo=+m[1],d=+m[2];if(mo>=1&&mo<=12&&d>=1&&d<=31)return{y:null,m:mo,d}}
+      m=t.match(/(\d{1,2})\s*일/);                                            // 3일
+      if(m){const d=+m[1];return(d>=1&&d<=31)?{y:null,m:null,d}:null}
+      m=t.match(/^(\d{1,2})$/);                                               // 단순 숫자 (1~31)
+      if(m){const d=+m[1];return(d>=1&&d<=31)?{y:null,m:null,d}:null}
+      m=t.match(/^(\d{1,2})\s*[(\(]/);                                        // "1(일)", "2(월)" 등
+      if(m){const d=+m[1];return(d>=1&&d<=31)?{y:null,m:null,d}:null}
       return null;
+    },
+
+    _ymShift(y,m,delta){const t=y*12+(m-1)+delta;return{y:Math.floor(t/12),m:(t%12+12)%12+1}},
+    _ymNearestYear(m,anchorY,anchorM){
+      // 월만 있을 때 앵커 년월에 가장 가까운 연도 선택 (동률이면 과거 — 기존 표 업로드가 주 용도)
+      let best=null;
+      for(const y of[anchorY-1,anchorY,anchorY+1]){
+        const delta=Math.abs((y*12+m)-(anchorY*12+anchorM));
+        if(!best||delta<best.delta||(delta===best.delta&&y<best.y))best={y,delta};
+      }
+      return best.y;
+    },
+    _isoOf(y,m,d){
+      const dt=new Date(y,m-1,d);
+      if(dt.getFullYear()!==y||dt.getMonth()!==m-1||dt.getDate()!==d)return null;  // 2/30 등 실존 안 함
+      return`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    },
+    _resolveHeaderDates(parsed,anchorY,anchorM){
+      // parsed: ({y,m,d}|null)[] → ISO 날짜 문자열|null 배열 (컬럼 정렬 유지).
+      // 월이 명시된 셀은 그대로(연도는 앵커에 가장 가까운 해), 일자만 있는 셀은
+      // 앞뒤 문맥으로 월을 잇고 일자가 줄어드는 지점을 다음 달로 해석한다.
+      const out=new Array(parsed.length).fill(null);
+      const idxs=[];
+      for(let i=0;i<parsed.length;i++)if(parsed[i])idxs.push(i);
+      if(!idxs.length)return out;
+
+      if(idxs.some(i=>parsed[i].m)){
+        // ① 명시 월 셀 → 직접 해석, 그 뒤 일자만 셀은 순방향 전파 (감소 = +1개월)
+        let ctx=null,prevD=null;
+        for(const i of idxs){
+          const p=parsed[i];
+          if(p.m){
+            const y=p.y||this._ymNearestYear(p.m,anchorY,anchorM);
+            ctx={y,m:p.m};
+            out[i]=this._isoOf(y,p.m,p.d);
+          }else if(ctx){
+            if(prevD!=null&&p.d<prevD)ctx=this._ymShift(ctx.y,ctx.m,1);
+            out[i]=this._isoOf(ctx.y,ctx.m,p.d);
+          }
+          prevD=p.d;
+        }
+        // 첫 명시 월 셀보다 앞에 있는 일자만 셀 → 역방향 전파 (증가 = -1개월)
+        const firstExpPos=idxs.findIndex(i=>parsed[i].m);
+        if(firstExpPos>0){
+          const fp=parsed[idxs[firstExpPos]];
+          let rctx={y:fp.y||this._ymNearestYear(fp.m,anchorY,anchorM),m:fp.m},rPrevD=fp.d;
+          for(let k=firstExpPos-1;k>=0;k--){
+            const p=parsed[idxs[k]];
+            if(p.d>rPrevD)rctx=this._ymShift(rctx.y,rctx.m,-1);
+            out[idxs[k]]=this._isoOf(rctx.y,rctx.m,p.d);
+            rPrevD=p.d;
+          }
+        }
+      }else{
+        // ② 전부 일자만 → 감소 지점에서 run 분리. 1로 시작하는 첫 run이 앵커 년월,
+        //    그 앞 run은 한 달씩 이전, 뒤 run은 한 달씩 다음 (주기 이월 표·여러 달 연속 표 지원)
+        const runs=[];let cur=[],prevD=null;
+        for(const i of idxs){
+          const d=parsed[i].d;
+          if(prevD!=null&&d<prevD){runs.push(cur);cur=[]}
+          cur.push(i);prevD=d;
+        }
+        runs.push(cur);
+        let anchorIdx=runs.findIndex(r=>parsed[r[0]].d===1);
+        if(anchorIdx<0)anchorIdx=0;
+        for(let ri=0;ri<runs.length;ri++){
+          const{y,m}=this._ymShift(anchorY,anchorM,ri-anchorIdx);
+          for(const i of runs[ri])out[i]=this._isoOf(y,m,parsed[i].d);
+        }
+      }
+      return out;
     },
 
     _parsePasteText(text){
@@ -102,18 +188,13 @@ window.PasteImportModule = function() {
       return grid;
     },
 
-    _matchPasteGrid(){
-      // 헤더 행/이름 컬럼 자동 감지
-      const grid=this.pastePrev.grid;
-      if(!grid.length){this.pastePrev.matches=null;this.pastePrev.diff=null;return}
-
-      // 옵션별 점수 계산: hasNameCol / hasDateRow 조합 4가지
+    _matchGrid(grid,opts){
+      // 그리드 → 이름/날짜 매칭 + diff 계산. pastePrev 상태와 독립 —
+      // 모달 본문(_matchPasteGrid)과 멀티시트 일괄 분석(_analyzeBatch)이 공유한다.
+      // opts: {anchorY, anchorM, mode, hasNameCol, hasDateRow, target, focusedCell}
+      const anchorY=opts.anchorY;
+      const anchorM=opts.anchorM;
       const days=this.scheduleDays;
-      const dayByNum={};
-      for(const d of days){
-        if(this.isOverflow(d))continue;  // 당월에 한정
-        dayByNum[d.getDate()]=d;
-      }
       const nurseByName={};
       for(const n of this.nurses)nurseByName[(n.name||'').trim()]=n;
 
@@ -148,20 +229,24 @@ window.PasteImportModule = function() {
         }
         if(useDateRow){
           const ncols=Math.max(...grid.map(rw=>rw.length));
+          const raws=[],parsed=[];
           for(let c=startC;c<ncols;c++){
             const raw=(grid[0][c]||'').trim();
-            const dnum=this._parseDateCell(raw);
-            const day=dnum?dayByNum[dnum]:null;
-            dateCol.push({c,raw,day,dk:day?this.dayKey(day):null,matched:!!day});
-            if(day)dateMatches++;
+            raws.push(raw);
+            parsed.push(this._parseDateCell(raw));
+          }
+          const resolved=this._resolveHeaderDates(parsed,anchorY,anchorM);
+          for(let k=0;k<raws.length;k++){
+            const dk=resolved[k];
+            dateCol.push({c:startC+k,raw:raws[k],dk,matched:!!dk});
+            if(dk)dateMatches++;
           }
         }
         return{useNameCol,useDateRow,nameMatches,dateMatches,nameRow,dateCol,score:nameMatches*2+dateMatches};
       };
 
-      const auto=this.pastePrev.mode==='auto';
       let best;
-      if(auto){
+      if(opts.mode==='auto'){
         const cands=[
           tryMatch(true,true),
           tryMatch(true,false),
@@ -169,17 +254,17 @@ window.PasteImportModule = function() {
           tryMatch(false,false),
         ];
         best=cands.reduce((a,b)=>b.score>a.score?b:a);
-        this.pastePrev.hasNameCol=best.useNameCol;
-        this.pastePrev.hasDateRow=best.useDateRow;
       }else{
-        best=tryMatch(this.pastePrev.hasNameCol,this.pastePrev.hasDateRow);
+        best=tryMatch(opts.hasNameCol,opts.hasDateRow);
       }
-      this.pastePrev.matches=best;
+      const matchedDks=best.dateCol.filter(x=>x.dk).map(x=>x.dk).sort();
+      best.dateFrom=matchedDks[0]||null;
+      best.dateTo=matchedDks[matchedDks.length-1]||null;
 
       // 차이 계산
       const willSet=[];
       const willClear=[];
-      const matchedAll=[]; // 인식된 모든 (간호사,날짜,코드) — 위시 임포트용 (prev 비교 무관)
+      const matchedAll=[]; // 인식된 모든 (간호사,날짜,코드) — 위시/저장탭 업로드용 (prev 비교 무관)
       const unrecognized=new Set();
       const startR=best.useDateRow?1:0;
       const startC=best.useNameCol?1:0;
@@ -188,7 +273,7 @@ window.PasteImportModule = function() {
       // (사용자가 보통 1일~말일 시퀀스로 paste한다고 가정)
       const monthStartIdx=days.findIndex(d=>!this.isOverflow(d)&&d.getDate()===1);
       const fallbackStart=monthStartIdx>=0?monthStartIdx:0;
-      const fallbackCols=days.slice(fallbackStart).map((d,i)=>({c:startC+i,day:d,dk:this.dayKey(d),matched:!this.isOverflow(d)}));
+      const fallbackCols=days.slice(fallbackStart).map((d,i)=>({c:startC+i,dk:this.dayKey(d),matched:!this.isOverflow(d)}));
 
       // name-date 모드: 매칭된 행/열만 처리
       if(best.useNameCol||best.useDateRow){
@@ -214,9 +299,9 @@ window.PasteImportModule = function() {
             }
           }
         }
-      }else if(this._focusedCell){
+      }else if(opts.focusedCell){
         // cursor paste: 포커스 셀에서 우/하 방향
-        const{nIdx,dIdx}=this._focusedCell;
+        const{nIdx,dIdx}=opts.focusedCell;
         for(let r=0;r<grid.length;r++){
           const nurse=this.nurses[nIdx+r];
           if(!nurse)continue;
@@ -242,18 +327,246 @@ window.PasteImportModule = function() {
       const unmatchedNames=best.nameRow?best.nameRow.filter(x=>!x.matched&&x.name&&!x.weekdayHeader).map(x=>x.name):[];
       const unmatchedDates=best.dateCol?best.dateCol.filter(x=>!x.matched&&x.raw).map(x=>x.raw):[];
 
-      this.pastePrev.diff={will_set:willSet,will_clear:willClear,matched_all:matchedAll,unrecognized:[...unrecognized],unmatchedNames,unmatchedDates};
+      // 월별 적용 건수 + 당월 주기 밖 건수 — 멀티월 붙여넣기의 결과를 명시적으로 보여준다
+      const affected=opts.target==='prev'
+        ?[...willSet,...willClear]
+        :matchedAll;
+      const monthCnt={};
+      const cycleKeys=this._cycleDateKeys();
+      let outsideCycle=0;
+      for(const it of affected){
+        const ym=it.dk.slice(0,7);
+        monthCnt[ym]=(monthCnt[ym]||0)+1;
+        if(!cycleKeys.has(it.dk))outsideCycle++;
+      }
+      const months=Object.keys(monthCnt).sort().map(ym=>({ym,label:`${+ym.slice(0,4)}년 ${+ym.slice(5,7)}월`,count:monthCnt[ym]}));
+
+      const diff={will_set:willSet,will_clear:willClear,matched_all:matchedAll,unrecognized:[...unrecognized],unmatchedNames,unmatchedDates,months,outsideCycle};
+      return{best,diff,hasNameCol:best.useNameCol,hasDateRow:best.useDateRow};
+    },
+
+    _matchPasteGrid(){
+      // 모달 본문 그리드 매칭 — pastePrev 상태로 _matchGrid 호출 + 결과 반영
+      const grid=this.pastePrev.grid;
+      if(!grid.length){this.pastePrev.matches=null;this.pastePrev.diff=null;return}
+      const r=this._matchGrid(grid,{
+        anchorY:parseInt(this.pastePrev.anchorY)||this.year,
+        anchorM:parseInt(this.pastePrev.anchorM)||this.month,
+        mode:this.pastePrev.mode,
+        hasNameCol:this.pastePrev.hasNameCol,
+        hasDateRow:this.pastePrev.hasDateRow,
+        target:this.pastePrev.target,
+        focusedCell:this._focusedCell,
+      });
+      if(this.pastePrev.mode==='auto'){
+        this.pastePrev.hasNameCol=r.hasNameCol;
+        this.pastePrev.hasDateRow=r.hasDateRow;
+      }
+      this.pastePrev.matches=r.best;
+      this.pastePrev.diff=r.diff;
+    },
+
+    _afterGridChange(){
+      this._matchPasteGrid();
+      this._maybeAutoAnchor();
+    },
+    _majorityYM(best){
+      // 매칭된 날짜 컬럼들의 다수 년월
+      const cnt={};
+      for(const c of best?.dateCol||[])if(c.dk){const ym=c.dk.slice(0,7);cnt[ym]=(cnt[ym]||0)+1}
+      let top=null;
+      for(const[ym,n]of Object.entries(cnt))if(!top||n>top.n)top={ym,n};
+      return top?{y:+top.ym.slice(0,4),m:+top.ym.slice(5,7)}:null;
+    },
+    _hasExplicitMonth(best){
+      // 날짜 헤더에 월이 명시된 셀이 하나라도 있는지 (있으면 내용이 시트 이름보다 우선)
+      return(best?.dateCol||[]).some(c=>{const p=this._parseDateCell(c.raw);return p&&p.m});
+    },
+    _maybeAutoAnchor(){
+      // 저장탭 업로드: 날짜에 월이 명시돼 있으면 저장 년월을 표에서 자동 감지 (1회 재해석)
+      if(this.pastePrev.target!=='saved'||this.pastePrev.anchorTouched)return;
+      const maj=this._majorityYM(this.pastePrev.matches);
+      if(!maj)return;
+      if(maj.y===(parseInt(this.pastePrev.anchorY)||this.year)&&maj.m===(parseInt(this.pastePrev.anchorM)||this.month))return;
+      this.pastePrev.anchorY=maj.y;this.pastePrev.anchorM=maj.m;
+      this._matchPasteGrid();
+    },
+
+    // ── 멀티시트 일괄 업로드: 시트 이름/파일 이름/내용 → 년월 매핑 ──
+    _parseSheetNameYM(name){
+      // 시트 이름 → {y,m} (없는 쪽은 null). "2026년 1월", "26년 1월", "2026-1", "1월", "1" 등
+      const t=String(name||'').trim();
+      let m=t.match(/(\d{4})\s*[년.\-/\s]\s*(\d{1,2})(?:\s*월)?/);
+      if(m&&+m[2]>=1&&+m[2]<=12)return{y:+m[1],m:+m[2]};
+      m=t.match(/(\d{2})\s*년\s*(\d{1,2})\s*월/);
+      if(m&&+m[2]>=1&&+m[2]<=12)return{y:2000+ +m[1],m:+m[2]};
+      m=t.match(/(\d{1,2})\s*월/);
+      if(m&&+m[1]>=1&&+m[1]<=12)return{y:null,m:+m[1]};
+      m=t.match(/^(\d{4})$/);
+      if(m&&+m[1]>=2000&&+m[1]<=2099)return{y:+m[1],m:null};
+      m=t.match(/^(\d{1,2})$/);
+      if(m&&+m[1]>=1&&+m[1]<=12)return{y:null,m:+m[1]};
+      return null;
+    },
+    _parseFileNameYear(name){
+      // 파일 이름 → 연도. "2026", "26년" 형태
+      const t=String(name||'');
+      let m=t.match(/(20\d{2})/);
+      if(m)return +m[1];
+      m=t.match(/(\d{2})\s*년/);
+      if(m)return 2000+ +m[1];
+      return null;
+    },
+    _analyzeBatch(){
+      // 시트가 2개 이상인 파일('saved' 대상)을 시트별로 년월에 매핑.
+      // 우선순위: 내용의 명시 월(다수) > 시트 이름 > 파일 이름 연도 > 보는 년월.
+      const sheets=this.pastePrev.sheets||[];
+      if(this.pastePrev.target!=='saved'||sheets.length<2){this.pastePrev.batch=null;return}
+      const fileY=this._parseFileNameYear(this.pastePrev.fileName);
+      const rows=sheets.map((s,idx)=>{
+        const nameYM=this._parseSheetNameYM(s.name)||{};
+        let y=nameYM.y||fileY||this.year;
+        let m=nameYM.m||null;
+        const grid=s.rows.map(r=>r.map(c=>String(c??'')));
+        let res=this._matchGrid(grid,{anchorY:y,anchorM:m||this.month,mode:'auto',hasNameCol:true,hasDateRow:true,target:'saved'});
+        const hasExplicit=this._hasExplicitMonth(res.best);
+        if(hasExplicit){
+          const maj=this._majorityYM(res.best);
+          if(maj&&(maj.y!==y||maj.m!==(m||this.month))){
+            y=maj.y;m=maj.m;
+            res=this._matchGrid(grid,{anchorY:y,anchorM:m,mode:'auto',hasNameCol:true,hasDateRow:true,target:'saved'});
+          }else if(maj){y=maj.y;m=maj.m}
+        }
+        const count=res.diff.matched_all.length;
+        const detected=nameYM.m!=null||hasExplicit;
+        return{
+          idx,name:s.name,y,m:detected?m:null,count,
+          nameMatched:(res.best.nameRow||[]).filter(x=>x.matched).length,
+          nameTotal:(res.best.nameRow||[]).filter(x=>!x.weekdayHeader&&x.name).length,
+          checked:count>0&&detected&&m!=null,
+          exists:detected&&m!=null?(this.savedSchedules||[]).some(sv=>sv.year===y&&sv.month===m):false,
+          dup:false,
+        };
+      });
+      this.pastePrev.batch={rows};
+      this._refreshBatchDups();
+    },
+    _refreshBatchDups(){
+      const rows=this.pastePrev.batch?.rows||[];
+      const cnt={};
+      for(const r of rows)if(r.m)cnt[`${r.y}-${r.m}`]=(cnt[`${r.y}-${r.m}`]||0)+1;
+      for(const r of rows)r.dup=!!r.m&&cnt[`${r.y}-${r.m}`]>1;
+    },
+    _refreshBatchRow(row){
+      // 사용자가 배치 행의 년/월을 고쳤을 때 재매칭
+      const sheet=this.pastePrev.sheets?.[row.idx];
+      if(!sheet)return;
+      const y=parseInt(row.y)||this.year;
+      const m=parseInt(row.m)||null;
+      row.y=y;row.m=m;
+      if(!m){row.count=0;row.checked=false;this._refreshBatchDups();return}
+      const grid=sheet.rows.map(r=>r.map(c=>String(c??'')));
+      const res=this._matchGrid(grid,{anchorY:y,anchorM:m,mode:'auto',hasNameCol:true,hasDateRow:true,target:'saved'});
+      row.count=res.diff.matched_all.length;
+      row.nameMatched=(res.best.nameRow||[]).filter(x=>x.matched).length;
+      row.nameTotal=(res.best.nameRow||[]).filter(x=>!x.weekdayHeader&&x.name).length;
+      row.exists=(this.savedSchedules||[]).some(sv=>sv.year===y&&sv.month===m);
+      if(row.count>0)row.checked=true;
+      this._refreshBatchDups();
+      if(row.idx===this.pastePrev.sheetIdx)this._previewBatchRow(row.idx);
+    },
+    _previewBatchRow(i){
+      // 배치 행 클릭 → 그 시트를 아래 미리보기에 표시 (배치 상태는 유지)
+      const sheet=this.pastePrev.sheets?.[i];
+      if(!sheet)return;
+      this.pastePrev.sheetIdx=i;
+      const row=this.pastePrev.batch?.rows?.find(r=>r.idx===i);
+      if(row&&row.m){this.pastePrev.anchorY=row.y;this.pastePrev.anchorM=row.m;this.pastePrev.anchorTouched=true}
+      this.pastePrev.grid=sheet.rows.map(r=>r.map(c=>String(c??'')));
+      this._matchPasteGrid();
+    },
+    _clearPasteFile(){
+      // 파일 해제 → 붙여넣기 모드로 복귀
+      this.pastePrev.sheets=null;this.pastePrev.batch=null;this.pastePrev.fileName='';
+      this.pastePrev.sheetIdx=0;this.pastePrev.grid=[];this.pastePrev.rawText='';
+      this.pastePrev.matches=null;this.pastePrev.diff=null;
     },
 
     onPasteTextChange(){
+      // 직접 붙여넣기/타이핑은 파일 로드 상태를 대체한다
+      this.pastePrev.sheets=null;this.pastePrev.fileName='';this.pastePrev.sheetIdx=0;this.pastePrev.batch=null;
       this.pastePrev.grid=this._parsePasteText(this.pastePrev.rawText);
-      this._matchPasteGrid();
+      this._afterGridChange();
     },
 
     onPasteRawPaste(event){
       // textarea의 paste 이벤트 가로채서 자동 분석
       // (default paste 동작 진행 후 다음 tick에 분석)
       setTimeout(()=>this.onPasteTextChange(),0);
+    },
+
+    // ── 엑셀/CSV 파일에서 읽기 (서버 파싱 → 붙여넣기와 동일 파이프라인) ──
+    async onPasteFileSelect(event){
+      const file=event.target?.files?.[0];
+      if(event.target)event.target.value='';
+      if(!file)return;
+      await this._loadPasteFile(file);
+    },
+    async _loadPasteFile(file){
+      if(/\.xls$/i.test(file.name)){
+        this.toast('구형 xls(97-2003)는 지원되지 않습니다 — 엑셀에서 xlsx로 다시 저장하거나, 표를 복사해 붙여넣으세요','warn',6000);
+        return;
+      }
+      if(!/\.(xlsx|xlsm|csv|tsv|txt)$/i.test(file.name)){
+        this.toast('xlsx / csv / tsv 파일만 지원합니다 (또는 표를 복사해 붙여넣으세요)','warn',5000);
+        return;
+      }
+      const loading=this.toast(`'${file.name}' 읽는 중...`,'loading');
+      try{
+        const b64=this._arrayBufferToBase64(await file.arrayBuffer());
+        const res=await this.api('POST','/api/parse-table-file',{file_b64:b64,filename:file.name});
+        const sheets=(res.sheets||[]).filter(s=>s.rows&&s.rows.length);
+        this.dismissToast(loading);
+        if(!sheets.length){this.toast('파일에서 표를 찾지 못했습니다','warn');return}
+        // 데이터 셀이 가장 많은 시트를 기본 선택
+        let bestIdx=0,bestScore=-1;
+        sheets.forEach((s,i)=>{
+          const sc=s.rows.reduce((a,r)=>a+r.filter(c=>String(c??'').trim()).length,0);
+          if(sc>bestScore){bestScore=sc;bestIdx=i}
+        });
+        this.pastePrev.sheets=sheets;
+        this.pastePrev.fileName=file.name;
+        this.pastePrev.rawText='';
+        this._analyzeBatch();
+        if(this.pastePrev.batch){
+          // 멀티시트 일괄 모드: 첫 체크된 시트(없으면 첫 시트)를 미리보기로
+          const first=this.pastePrev.batch.rows.find(r=>r.checked)||this.pastePrev.batch.rows[0];
+          this._previewBatchRow(first.idx);
+        }else{
+          this._selectPasteSheet(bestIdx);
+          this._applySheetNameAnchor(sheets[bestIdx]);
+        }
+      }catch(e){
+        this.dismissToast(loading);
+        this.toast(`파일 읽기 실패: ${e.message}`,'error',6000);
+      }
+    },
+    _selectPasteSheet(i){
+      const sheet=this.pastePrev.sheets?.[i];
+      if(!sheet)return;
+      this.pastePrev.sheetIdx=i;
+      this.pastePrev.grid=sheet.rows.map(r=>r.map(c=>String(c??'')));
+      this._afterGridChange();
+    },
+    _applySheetNameAnchor(sheet){
+      // 단일 시트 파일('saved'): 내용에 월이 없을 때 시트/파일 이름의 년월을 앵커로
+      if(this.pastePrev.target!=='saved'||this.pastePrev.anchorTouched||!sheet)return;
+      if(this._hasExplicitMonth(this.pastePrev.matches))return;  // 내용이 우선 (_maybeAutoAnchor가 처리)
+      const nameYM=this._parseSheetNameYM(sheet.name);
+      if(!nameYM?.m)return;
+      this.pastePrev.anchorY=nameYM.y||this._parseFileNameYear(this.pastePrev.fileName)||this.year;
+      this.pastePrev.anchorM=nameYM.m;
+      this._matchPasteGrid();
     },
 
     /* 붙여넣은 표에 있는데 간호사 목록엔 없는 이름 — 그냥 추가해 주는 게 낫다.
@@ -291,8 +604,10 @@ window.PasteImportModule = function() {
     },
 
     applyPastePrev(){
+      if(this.pastePrev.target==='saved'&&this.pastePrev.batch){this._applyBatchSaved();return}
       const diff=this.pastePrev.diff;
       if(!diff)return;
+      if(this.pastePrev.target==='saved'){this._applyPasteSaved();return}
       if(this.pastePrev.target==='wish'){
         // 위시 임포트: 사전입력과 비교하지 않고 인식된 전 셀을 희망으로 등록.
         // 휴무/휴가 계열 코드는 'OFF 희망'으로 정규화 (배점 규칙의 OFF 위시 의미)
@@ -322,8 +637,78 @@ window.PasteImportModule = function() {
         if(this.prevSchedule[item.nid])delete this.prevSchedule[item.nid][item.dk];
       }
       this._checkViolations&&this._checkViolations();
-      this.toast(`사전입력 ${diff.will_set.length}건 설정${diff.will_clear.length?', '+diff.will_clear.length+'건 비움':''}`,'info');
+      const monthsNote=(diff.months||[]).length>1
+        ?` (${diff.months.map(x=>`${+x.ym.slice(5,7)}월 ${x.count}`).join(' · ')})`
+        :'';
+      this.toast(`사전입력 ${diff.will_set.length}건 설정${diff.will_clear.length?', '+diff.will_clear.length+'건 비움':''}${monthsNote}`,'info',monthsNote?4500:3000);
       this.closePastePrev();
+    },
+
+    // ── 저장탭 멀티시트 일괄 업로드: 체크된 시트를 각각 월별 근무표로 저장 ──
+    async _applyBatchSaved(){
+      const rows=(this.pastePrev.batch?.rows||[]).filter(r=>r.checked&&r.count>0&&r.y&&r.m);
+      if(!rows.length){this.toast('저장할 시트가 없습니다 — 체크와 년/월을 확인하세요','warn');return}
+      const lines=rows.map(r=>`· ${r.name} → ${r.y}년 ${r.m}월 (${r.count}건)`).join('\n');
+      if(!confirm(`${rows.length}개 시트를 각각 저장된 근무표로 추가합니다.\n\n${lines}\n\n계속할까요?`))return;
+      const loading=this.toast('월별 일괄 저장 중...','loading');
+      let ok=0;const fails=[];
+      for(const row of rows){
+        try{
+          const sheet=this.pastePrev.sheets[row.idx];
+          const grid=sheet.rows.map(r2=>r2.map(c=>String(c??'')));
+          const res=this._matchGrid(grid,{anchorY:row.y,anchorM:row.m,mode:'auto',hasNameCol:true,hasDateRow:true,target:'saved'});
+          const schedule={};
+          for(const it of res.diff.matched_all)(schedule[it.nid]=schedule[it.nid]||{})[it.dk]=it.code;
+          await this.api('POST','/api/schedules',{
+            year:row.y,month:row.m,nurses:this.nurses,requirements:this.requirements,rules:this.rules,
+            schedule,name:`${row.y}년 ${row.m}월 (업로드)`,
+            prev_day_reqs:this._reqFromSchedule(schedule),
+          });
+          ok++;
+        }catch(e){fails.push(`${row.name}: ${e.message}`)}
+      }
+      await this.loadSavedList();
+      this.dismissToast(loading);
+      if(fails.length){
+        this.toast(`저장 ${ok}건 · 실패 ${fails.length}건 — ${fails[0]}`,'error',8000);
+      }else{
+        this.closePastePrev();
+        this.activeTab='saved';
+        this.toast(`${ok}개 월 근무표 저장 완료 — 목록에서 확인하세요`,'success',4500);
+      }
+    },
+
+    // ── 저장탭 업로드: 인식된 표를 그대로 저장된 근무표로 등록 ──
+    async _applyPasteSaved(){
+      const diff=this.pastePrev.diff;
+      const cells=diff?.matched_all||[];
+      if(!cells.length){this.toast('인식된 근무가 없습니다','warn');return}
+      const y=parseInt(this.pastePrev.anchorY)||this.year;
+      const m=parseInt(this.pastePrev.anchorM)||this.month;
+      const schedule={};
+      const nids=new Set();
+      for(const it of cells){(schedule[it.nid]=schedule[it.nid]||{})[it.dk]=it.code;nids.add(it.nid)}
+      const monthsLabel=(diff.months||[]).map(x=>`${x.label} ${x.count}건`).join(' · ');
+      if(!confirm(`${cells.length}건(간호사 ${nids.size}명)을 ${y}년 ${m}월 근무표로 저장합니다.\n${monthsLabel}\n\n저장 탭 목록에 새 항목으로 추가됩니다. 계속할까요?`))return;
+      const name=(this.pastePrev.saveName||'').trim()||`${y}년 ${m}월 (업로드)`;
+      const loading=this.toast('저장 중...','loading');
+      try{
+        await this.api('POST','/api/schedules',{
+          year:y,month:m,nurses:this.nurses,requirements:this.requirements,rules:this.rules,
+          schedule,name,
+          // 이 표의 실제 인원수를 일별 필요 인원으로 함께 저장 —
+          // 불러온 뒤 재조정/재생성할 때 설정 기본값 대신 이 표가 기준이 되게
+          prev_day_reqs:this._reqFromSchedule(schedule),
+        });
+        await this.loadSavedList();
+        this.dismissToast(loading);
+        this.closePastePrev();
+        this.activeTab='saved';
+        this.toast(`'${name}' 저장 완료 — 목록에서 불러오기로 열 수 있습니다`,'success',4500);
+      }catch(e){
+        this.dismissToast(loading);
+        this.toast(`저장 실패: ${e.message}`,'error',6000);
+      }
     },
 
   };

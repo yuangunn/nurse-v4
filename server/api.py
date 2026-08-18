@@ -839,6 +839,126 @@ def nurse_import(body: dict):
     }
 
 
+# ── 표 파일 파싱 (붙여넣기 모달의 '파일에서 읽기') ────────────────────────────
+
+_TABLE_FILE_MAX_CELLS = 200_000  # 시트당 셀 상한 — 실수로 올린 초대형 파일 방어
+
+
+def _cell_to_str(v) -> str:
+    """엑셀 셀 값 → 문자열. 날짜는 ISO(YYYY-MM-DD)로 — 클라이언트 날짜 해석이 월·연도까지 받게."""
+    import datetime as _dt
+
+    if v is None:
+        return ""
+    if isinstance(v, _dt.datetime):
+        if v.hour == 0 and v.minute == 0 and v.second == 0:
+            return v.date().isoformat()
+        return f"{v.date().isoformat()} {v.hour:02d}:{v.minute:02d}"
+    if isinstance(v, _dt.date):
+        return v.isoformat()
+    if isinstance(v, _dt.time):
+        return f"{v.hour:02d}:{v.minute:02d}"
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v)
+
+
+def _parse_xlsx_sheets(raw: bytes) -> list:
+    """xlsx/xlsm 바이트 → [{name, rows}]. 병합 셀은 좌상단 값을 범위 전체로 전파."""
+    import io
+
+    try:
+        import openpyxl
+    except ImportError:
+        raise HTTPException(500, "openpyxl이 설치되어 있지 않습니다 (pip install openpyxl)")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True)
+    except Exception as e:
+        raise HTTPException(400, f"엑셀 파일을 열 수 없습니다: {e}")
+
+    sheets = []
+    for ws in wb.worksheets:
+        if ws.max_row * ws.max_column > _TABLE_FILE_MAX_CELLS:
+            raise HTTPException(400, f"시트 '{ws.title}'가 너무 큽니다 (셀 {_TABLE_FILE_MAX_CELLS:,}개 초과)")
+        grid = [[_cell_to_str(c) for c in row] for row in ws.iter_rows(values_only=True)]
+        # 병합 셀 전파 — 병동 양식은 날짜/이름 헤더가 병합돼 있는 경우가 많다
+        for rng in ws.merged_cells.ranges:
+            top = _cell_to_str(ws.cell(rng.min_row, rng.min_col).value)
+            if not top:
+                continue
+            for r in range(rng.min_row - 1, rng.max_row):
+                for c in range(rng.min_col - 1, rng.max_col):
+                    if r < len(grid) and c < len(grid[r]) and not grid[r][c]:
+                        grid[r][c] = top
+        # 끝쪽 빈 행/열 정리
+        while grid and not any(s.strip() for s in grid[-1]):
+            grid.pop()
+        for row in grid:
+            while row and not row[-1].strip():
+                row.pop()
+        if grid:
+            sheets.append({"name": ws.title, "rows": grid})
+    return sheets
+
+
+def _parse_delimited_sheets(raw: bytes, filename: str) -> list:
+    """csv/tsv/txt 바이트 → [{name, rows}]. 인코딩 자동 감지(CP949 폴백)."""
+    import csv as _csv
+    import io
+
+    text = None
+    for enc in _CSV_ENCODINGS:
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        raise HTTPException(400, "지원되지 않는 인코딩 (UTF-8 / CP949 모두 실패)")
+    if text.startswith("\ufeff"):
+        text = text[1:]
+
+    lines = text.splitlines()
+    first_line = lines[0] if lines else ""
+    delimiter = "\t" if "\t" in first_line else ","
+    rows = [row for row in _csv.reader(io.StringIO(text), delimiter=delimiter)]
+    while rows and not any(s.strip() for s in rows[-1]):
+        rows.pop()
+    return [{"name": filename, "rows": rows}] if rows else []
+
+
+@app.post("/api/parse-table-file")
+def parse_table_file(body: dict):
+    """
+    xlsx/xlsm/csv/tsv 파일(base64) → 시트별 2D 문자열 그리드.
+    붙여넣기 모달의 '파일에서 읽기' — 결과는 클라이언트 매칭 파이프라인에 그대로 공급된다.
+    body: {"file_b64": "<base64>", "filename": "표.xlsx"}
+    """
+    import base64
+
+    filename = str(body.get("filename") or "")
+    file_b64 = body.get("file_b64")
+    if not file_b64:
+        raise HTTPException(400, "file_b64가 비어 있습니다.")
+    try:
+        raw = base64.b64decode(file_b64)
+    except Exception as e:
+        raise HTTPException(400, f"base64 디코딩 실패: {e}")
+
+    lower = filename.lower()
+    if lower.endswith(".xls"):
+        raise HTTPException(400, "구형 xls(97-2003)는 지원되지 않습니다 — 엑셀에서 xlsx로 다시 저장하거나, 표를 복사해 붙여넣으세요.")
+    if lower.endswith((".xlsx", ".xlsm")):
+        sheets = _parse_xlsx_sheets(raw)
+    elif lower.endswith((".csv", ".tsv", ".txt")):
+        sheets = _parse_delimited_sheets(raw, filename)
+    else:
+        raise HTTPException(400, "지원 형식: xlsx, xlsm, csv, tsv, txt")
+
+    return {"ok": True, "sheets": sheets}
+
+
 @app.get("/health")
 def health():
     return {"status": "healthy", "message": "서버가 정상 동작 중입니다."}
