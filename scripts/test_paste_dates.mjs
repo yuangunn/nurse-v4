@@ -74,4 +74,26 @@ assert.deepEqual(
 // 월 중간 부분 표 (1-시작 run 없음) → 첫 run이 앵커 월
 assert.deepEqual(resolve(['15', '16'], 2026, 6), ['2026-06-15', '2026-06-16']);
 
+// ── _parseSheetNameYM (멀티시트 일괄 업로드의 시트 이름 → 년월) ──
+const sheetYM = (s) => mod._parseSheetNameYM(s);
+assert.deepEqual(sheetYM('2026년 1월'), { y: 2026, m: 1 });
+assert.deepEqual(sheetYM('26년 1월'), { y: 2026, m: 1 });
+assert.deepEqual(sheetYM('2026-1'), { y: 2026, m: 1 });
+assert.deepEqual(sheetYM('2026.12'), { y: 2026, m: 12 });
+assert.deepEqual(sheetYM('1월'), { y: null, m: 1 });
+assert.deepEqual(sheetYM('12월 근무표'), { y: null, m: 12 });
+assert.deepEqual(sheetYM('3'), { y: null, m: 3 });
+assert.deepEqual(sheetYM('2026'), { y: 2026, m: null });
+assert.equal(sheetYM('통계'), null);
+assert.equal(sheetYM('명단'), null);
+assert.equal(sheetYM('13월'), null);   // 월 13 없음
+assert.equal(sheetYM(''), null);
+
+// ── _parseFileNameYear (파일 이름 → 연도) ──
+const fileY = (s) => mod._parseFileNameYear(s);
+assert.equal(fileY('26년 번표.xlsx'), 2026);
+assert.equal(fileY('2026 번표.xlsx'), 2026);
+assert.equal(fileY('번표_2025.xlsx'), 2025);
+assert.equal(fileY('번표.xlsx'), null);
+
 console.log('test_paste_dates: 모든 검증 통과');
