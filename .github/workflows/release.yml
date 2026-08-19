@@ -6,6 +6,9 @@ name: Build & Release (Windows + macOS)
 #   · macOS  : build-mac.sh 실행 → .app의 zip + dmg (ad-hoc 서명, 공증 없음)
 # 수동 실행(workflow_dispatch)도 지원 — 이미 만든 태그에 자산을 채울 때 사용.
 #
+# 릴리스 본문은 리포 루트 RELEASE_NOTES.md 로 채운다(body_path) — 버전 올릴 때
+# 이 파일도 새 내용으로 갱신할 것 (CLAUDE.md 커밋/릴리즈 정책의 동기화 목록 참조).
+#
 # Python 3.11 고정(highspy/ortools 휠), Node 20 고정(@electron/packager가 Node 24에서 크래시).
 
 on:
@@ -79,6 +82,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
+          body_path: RELEASE_NOTES.md
           files: |
             dist/installer/*.exe
             dist/NurseScheduler_v4_portable.zip
@@ -116,6 +120,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
+          body_path: RELEASE_NOTES.md
           files: |
             dist/NurseScheduler_v4_mac_*.zip
             dist/NurseScheduler_v4_mac_*.dmg

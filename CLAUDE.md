@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.6.0 (2026-07-04, 어싸인 병실 자동 배정 추가)
+**최신**: v4.7.0 (2026-08-19, 번표 반입 경로 + 사실-클램프)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -110,7 +110,7 @@ npm start
 ```
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.5.0.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.7.0.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -481,10 +481,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.5.0.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.7.0.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.5.0.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.7.0.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -572,7 +572,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.5.0 기준)
+## 알려진 주의사항 (v4.7.0 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)
@@ -593,7 +593,8 @@ self.cbLogging.subscribe(_on_log)
 - 브랜치: `main` (릴리즈)
 - 태그: `v4.0.X` 형식
 - 릴리즈 자산: 설치파일 + 포터블 ZIP 모두 GitHub Releases에 업로드
-- 버전 올릴 시 동기화 파일: `electron/package.json`, `electron/preload.js`, `installer/setup.iss`, `frontend/index.html` (버전 표시 라인), `README.md` 다운로드 섹션
+- 버전 올릴 시 동기화 파일: `electron/package.json`, `electron/preload.js`, `installer/setup.iss`, `frontend/index.html` (버전 표시 라인 2곳), `README.md` 다운로드 섹션, `CLAUDE.md` 최신 라인, `CHANGELOG.md` (미출시 → 버전 확정), **`RELEASE_NOTES.md`** (릴리스 본문 — CI가 `body_path`로 사용)
+- 태그 push(vX.Y.Z) → `.github/workflows/release.yml`이 Windows·macOS 산출물을 빌드해 릴리스에 자동 업로드 (본문은 RELEASE_NOTES.md)
 
 ---
 
