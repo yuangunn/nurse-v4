@@ -595,6 +595,7 @@ self.cbLogging.subscribe(_on_log)
 - 릴리즈 자산: 설치파일 + 포터블 ZIP 모두 GitHub Releases에 업로드
 - 버전 올릴 시 동기화 파일: `electron/package.json`, `electron/preload.js`, `installer/setup.iss`, `frontend/index.html` (버전 표시 라인 2곳), `README.md` 다운로드 섹션, `CLAUDE.md` 최신 라인, `CHANGELOG.md` (미출시 → 버전 확정), **`RELEASE_NOTES.md`** (릴리스 본문 — CI가 `body_path`로 사용)
 - 태그 push(vX.Y.Z) → `.github/workflows/release.yml`이 Windows·macOS 산출물을 빌드해 릴리스에 자동 업로드 (본문은 RELEASE_NOTES.md)
+- 원격(Claude) 세션은 git 프록시가 태그 push를 막음(403) → `tag.yml` workflow_dispatch로 태그 생성 후, `release.yml`을 같은 태그로 workflow_dispatch (GITHUB_TOKEN 태그는 push 트리거를 발동시키지 않음)
 
 ---
 
