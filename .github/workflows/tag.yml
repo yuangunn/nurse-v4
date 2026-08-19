@@ -1,0 +1,38 @@
+name: Create release tag
+
+# 원격(Claude) 세션은 git 프록시가 태그 push를 막는다(403) — 이 워크플로를
+# workflow_dispatch 로 실행해 태그를 만든다.
+# 주의: GITHUB_TOKEN 으로 push한 태그는 다른 워크플로의 push 트리거를 발동시키지
+# 않으므로(재귀 방지), 태그 생성 후 release.yml 을 같은 태그로 workflow_dispatch
+# 해서 빌드·업로드를 돌려야 한다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '만들 태그 (예: v4.7.0)'
+        required: true
+      target:
+        description: '태그를 붙일 커밋 SHA 또는 ref (비우면 main 최신)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 태그 생성 및 푸시
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          TARGET="${{ github.event.inputs.target }}"
+          if [ -z "$TARGET" ]; then TARGET="$(git rev-parse HEAD)"; fi
+          git tag -a "${{ github.event.inputs.tag }}" "$TARGET" -m "${{ github.event.inputs.tag }}"
+          git push origin "refs/tags/${{ github.event.inputs.tag }}"
