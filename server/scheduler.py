@@ -49,6 +49,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
 
         nurse_ids = [n["id"] for n in self.nurses]
         self._pre_soft = False  # strict 모드 — 사전입력은 변수 도메인으로 고정
+        self._build_pin_index()  # 사실-클램프: 확정 셀 인덱스 (완화 요청 시 빈 dict)
         prob = pulp.LpProblem("nurse_schedule", pulp.LpMaximize)
 
         # 변수 생성: x[nurse_id][day_idx][shift] ∈ {0,1} 또는 상수 0
@@ -69,6 +70,10 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
                 pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
+                # 사실-클램프: 날 전체가 확정이면 문자 그대로 (차지 승격 여지도 불필요 —
+                # 인원/차지 제약이 스킵되므로 플렉스를 남기면 임의 승격이 생긴다)
+                if pre and self._pin and self._day_all_pinned(d, dt):
+                    pre_flex = {pre}
                 # 전입/전출일 범위 밖: 모든 shift 0으로 고정
                 if not self._nurse_active_on(nurse, dt):
                     for s in self.ALL_SHIFTS:
@@ -172,7 +177,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             schedule, extended = self._extract_solution(x, lambda v: pulp.value(v))
             nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
             label = "중지" if status_str not in ("Optimal", "Feasible") else status_str
-            return {
+            return self._attach_pin_notes({
                 "success": True,
                 "schedule": schedule,
                 "extended_schedule": extended,
@@ -180,7 +185,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 "nurse_score_details": nurse_score_details,
                 "message": f"근무표가 생성되었습니다. (상태: {label})",
                 "estimated_seconds": self.estimate_seconds(),
-            }
+            })
         elif status_str == "Infeasible":
             # ── 사전입력 완화 재시도 ────────────────────────────────────
             if self.allow_pre_relax and self.prev:
@@ -240,6 +245,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         # 제약 함수(시니어리티 게이팅 등)에 '사전입력=소프트' 모드임을 알린다 —
         # 완화 모드에서 원본 prev로 게이팅하면 하드 제약이 통째로 사라진다.
         self._pre_soft = True
+        self._pin = {}  # 사실-클램프 비활성 — 완화 모드에선 제약이 온전히 걸려야 함
         pre_bonus_terms = []
         # 최소 침습 차등 보너스(높을수록 보호 → 늦게 완화). 휴무는 간호사 개인의 시간이라
         # 강하게 보호: 근무 < OFF < 연차류. 주휴(주)는 기본 하드 고정(allow_juhu_relax 시에만).

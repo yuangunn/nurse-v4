@@ -45,8 +45,8 @@ def test_solver_output_roundtrips_as_full_preinput():
 
 
 def test_night_dedicated_15_nights_pinned_table_confirmed():
-    """야간전담이 15일 야간을 선 15일(규정 14일)인 완성표 — 과거엔 infeasible,
-    이제는 그대로 확정 + '15일' 안내. (사용자 시나리오: 지나간 달의 실제 번표)"""
+    """야간전담이 15일 야간인 완성표(규정 14일) — 과거엔 infeasible,
+    이제는 그대로 성공 + '15일' 안내. (사용자 시나리오: 지나간 달의 실제 번표)"""
     nurses = [
         Nurse(id="a0", name="*야간", group="A", gender="female",
               capable_shifts=["NC", "N"], is_night_shift=True),
@@ -79,7 +79,7 @@ def test_night_dedicated_15_nights_pinned_table_confirmed():
     )
     r = NurseScheduler(req).solve()
     assert r["success"], r["message"]
-    assert r.get("pinned_confirmed") is True
+    # 사실-클램프로 솔버가 직접 성공 — 15일 실측은 안내로만
     assert any("15일" in n and "야간" in n for n in r["pinned_notes"]), r["pinned_notes"]
     # 표는 변형되지 않는다
     assert sum(1 for c in r["schedule"]["a0"].values() if c in ("N", "NC")) == 15

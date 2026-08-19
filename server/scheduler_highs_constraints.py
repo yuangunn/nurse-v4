@@ -40,6 +40,8 @@ class _HighsConstraintsMixin:
             capable = set(nurse.get("capable_shifts", self.WORK_SHIFTS))
             impossible = [s for s in eligible_check if s not in capable]
             for d in range(self.T):
+                if self._pin.get((nid, d)):
+                    continue  # 확정 셀 — 자격을 소급 검증하지 않음 (사실 존중)
                 for s in impossible:
                     v = x[nid][d][s]
                     if isinstance(v, pulp.LpVariable):
@@ -80,10 +82,15 @@ class _HighsConstraintsMixin:
             is_cur = (dt.month == self.month and dt.year == self.year)
             override = self.per_day_req.get(date_key, {}) if is_cur else {}
             day_req = {**base_req, **override} if override else base_req
+            # 사실-클램프: 날 전체가 확정이면 그 날은 사실 — 인원 검증 스킵.
+            # 일부만 확정이면 확정분만큼 요구를 상향 (확정 셀 수용 + 자유 셀이 잔여 충족)
+            if self._day_all_pinned(d, dt):
+                continue
             for period, shifts in period_map.items():
                 if period not in day_req:
                     continue
                 required = max(0, int(day_req.get(period) or 0))
+                required = max(required, self._pin_day_period_count(d, shifts))
                 # 명시적 0도 == 제약으로 강제 — '정확히 일치(초과 불가)' 사양.
                 # 생략하면 0명 요구 시간대가 잉여 인력의 투입처로 쓰일 수 있다.
                 prob += (
@@ -111,6 +118,8 @@ class _HighsConstraintsMixin:
             is_cur = (dt.month == self.month and dt.year == self.year)
             override = self.per_day_req.get(date_key, {}) if is_cur else {}
             day_req = {**base_req, **override} if override else base_req
+            if self._day_all_pinned(d, dt):
+                continue  # 사실-클램프: 확정된 날의 차지 구성은 표 그대로
             for s in charge_shifts:
                 req_key = period_to_req.get(s["period"])
                 if req_key and day_req.get(req_key, 0) > 0:
@@ -167,6 +176,9 @@ class _HighsConstraintsMixin:
             dt_str = dt.strftime("%Y-%m-%d")
             is_holiday = dt_str in self.holidays
             for nid_i, nid_j, charge_s, regulars in eligible_pairs:
+                # 사실-클램프: 두 셀 모두 확정이면 사용자 배치 그대로
+                if self._pin.get((nid_i, d)) and self._pin.get((nid_j, d)):
+                    continue
                 # 선임 j의 '유효' 사전입력으로 게이팅 (공용 헬퍼 — 변수 생성과
                 # 동일하게 공휴일 OF·임산부 드롭 + 완화 모드 잠금 처리)
                 j_fixed = self._seniority_jfixed(nurse_by_id[nid_j], dt, dt_str, is_holiday)
@@ -213,6 +225,9 @@ class _HighsConstraintsMixin:
                 # 규칙을 소급하면 불필요 infeasible. 경계를 넘는 쌍만 검사.
                 if self.all_dates[d + 1] < first_of_month:
                     continue
+                # 사실-클램프: 두 셀 모두 확정 = 사용자 사실 — 검증하지 않음
+                if self._pin.get((nid, d)) and self._pin.get((nid, d + 1)):
+                    continue
                 for first_group, second_group in forbidden:
                     for s1 in first_group:
                         v1 = x[nid][d][s1]
@@ -241,6 +256,10 @@ class _HighsConstraintsMixin:
             for d in range(self.T - 2):
                 # 전월(역사) 내부 완결 윈도우 제외 (경계 걸침만 검사)
                 if self.all_dates[d + 2] < first_of_month:
+                    continue
+                # 사실-클램프: 세 셀 모두 확정 = 사용자 사실
+                if (self._pin.get((nid, d)) and self._pin.get((nid, d + 1))
+                        and self._pin.get((nid, d + 2))):
                     continue
                 for ns in self.NIGHT_SHIFTS:
                     vn = x[nid][d][ns]
@@ -288,16 +307,19 @@ class _HighsConstraintsMixin:
                              and self._nurse_active_idx(nurse, d)]
                 if not week_days:
                     continue
-                # 재적 기간이 일주일 전체가 아니면 OF 강제 안 함 (<=1로 완화)
-                full_week = (we - ws + 1) == len(week_days) and ws >= 0
+                # 사실-클램프: 주 전체 확정이면 스킵, 일부 확정이면 확정 OF만큼 상향
+                # (확정 OF 2회 → 자유 셀 추가 금지 + 기존 2회 수용)
+                if all(self._pin.get((nid, d)) for d in week_days):
+                    continue
+                bound = max(1, self._pin_nurse_count(nid, week_days, ("OF",)))
                 if len(week_days) >= 7:
                     prob += (
-                        pulp.lpSum(x[nid][d][of_code] for d in week_days) == 1,
+                        pulp.lpSum(x[nid][d][of_code] for d in week_days) == bound,
                         f"weekly_of_{nid}_{ws}"
                     )
                 else:
                     prob += (
-                        pulp.lpSum(x[nid][d][of_code] for d in week_days) <= 1,
+                        pulp.lpSum(x[nid][d][of_code] for d in week_days) <= bound,
                         f"weekly_of_{nid}_{ws}"
                     )
 
@@ -324,11 +346,15 @@ class _HighsConstraintsMixin:
                            if isinstance(x[nid][d].get("P1"), pulp.LpVariable)]
                 if not p1_vars:
                     continue
+                # 사실-클램프: 구간 전체 확정이면 스킵, 일부 확정이면 확정 P1만큼 상향
+                if all(self._pin.get((nid, d)) for d in win_days):
+                    continue
+                bound = max(1, self._pin_nurse_count(nid, win_days, ("P1",)))
                 full_week = (we - ws + 1) == len(win_days)
                 if full_week and len(win_days) >= 7:
-                    prob += pulp.lpSum(p1_vars) == 1, f"preg_p1_{nid}_{ws}"
+                    prob += pulp.lpSum(p1_vars) == bound, f"preg_p1_{nid}_{ws}"
                 else:
-                    prob += pulp.lpSum(p1_vars) <= 1, f"preg_p1_{nid}_{ws}"
+                    prob += pulp.lpSum(p1_vars) <= bound, f"preg_p1_{nid}_{ws}"
 
     def _c_max_consecutive_work(self, prob, x, max_days: int):
         """최대 연속 근무일 제한 (전월 내부 완결 윈도우는 제외 — 역사 소급 금지)"""
@@ -339,6 +365,8 @@ class _HighsConstraintsMixin:
                 if self.all_dates[start + max_days] < first_of_month:
                     continue
                 window = range(start, start + max_days + 1)
+                if all(self._pin.get((nid, d)) for d in window):
+                    continue  # 사실-클램프: 윈도우 전체 확정 = 사용자 사실
                 prob += (
                     pulp.lpSum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= max_days,
                     f"consec_work_{nid}_{start}"
@@ -353,6 +381,8 @@ class _HighsConstraintsMixin:
                 if self.all_dates[start + max_nights] < first_of_month:
                     continue
                 window = range(start, start + max_nights + 1)
+                if all(self._pin.get((nid, d)) for d in window):
+                    continue  # 사실-클램프: 윈도우 전체 확정 = 사용자 사실
                 prob += (
                     pulp.lpSum(x[nid][d][s] for d in window for s in self.NIGHT_SHIFTS) <= max_nights,
                     f"consec_night_{nid}_{start}"
@@ -404,6 +434,9 @@ class _HighsConstraintsMixin:
                     # 전월(역사) 날짜에는 휴식 강제를 소급하지 않음
                     if self.all_dates[rest_d] < first_of_month:
                         continue
+                    # 사실-클램프: 확정된 휴식일 셀은 사용자 선택 그대로
+                    if self._pin.get((nid, rest_d)):
+                        continue
                     work_vars = [
                         x[nid][rest_d][s]
                         for s in self.WORK_SHIFTS
@@ -437,13 +470,13 @@ class _HighsConstraintsMixin:
             nid = nurse["id"]
             # 당월 V 제한 (unlimited_v면 상한 제거)
             if max_v > 0 and not self.unlimited_v:
-                v_vars = [
-                    x[nid][d]["V"]
-                    for d, dt in enumerate(self.all_dates)
-                    if dt.month == self.month and dt.year == self.year
-                ]
+                month_idx = [d for d, dt in enumerate(self.all_dates)
+                             if dt.month == self.month and dt.year == self.year]
+                v_vars = [x[nid][d]["V"] for d in month_idx]
                 if v_vars:
-                    prob += pulp.lpSum(v_vars) <= max_v, f"max_v_{nid}"
+                    # 사실-클램프: 확정 V만큼 상한 상향 (자유 셀 추가는 여전히 한도 내)
+                    cap = max(max_v, self._pin_nurse_count(nid, month_idx, ("V",)))
+                    prob += pulp.lpSum(v_vars) <= cap, f"max_v_{nid}"
             # 이전달 overflow: V 금지 — 단 사전입력으로 확정된 전월 기록(V)은
             # 존중한다. 무조건 금지하면 1일1근무(==1)와 모순돼 전체 infeasible.
             first_of_month = date(self.year, self.month, 1)
@@ -453,14 +486,13 @@ class _HighsConstraintsMixin:
                     pre = self.prev.get(nid, {}).get(dt.strftime("%Y-%m-%d"))
                     if isinstance(v, pulp.LpVariable) and pre != "V":
                         prob += v == 0, f"no_v_overflow_{nid}_{d}"
-            # 이후달 overflow: V 최대 1회
-            next_v_vars = [
-                x[nid][d]["V"]
-                for d, dt in enumerate(self.all_dates)
-                if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month
-            ]
+            # 이후달 overflow: V 최대 1회 (확정 V만큼 상향)
+            next_idx = [d for d, dt in enumerate(self.all_dates)
+                        if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month]
+            next_v_vars = [x[nid][d]["V"] for d in next_idx]
             if next_v_vars:
-                prob += pulp.lpSum(next_v_vars) <= 1, f"max_v_next_{nid}"
+                cap = max(1, self._pin_nurse_count(nid, next_idx, ("V",)))
+                prob += pulp.lpSum(next_v_vars) <= cap, f"max_v_next_{nid}"
 
     def _c_max_night_per_month(self, prob, x):
         """월 최대 야간 횟수 제한 (수면OFF 최소화) — 야간전담 제외"""
@@ -469,14 +501,12 @@ class _HighsConstraintsMixin:
             if nurse.get("is_night_shift"):
                 continue
             nid = nurse["id"]
-            night_vars = [
-                x[nid][d][s]
-                for d, dt in enumerate(self.all_dates)
-                if dt.month == self.month and dt.year == self.year
-                for s in self.NIGHT_SHIFTS
-            ]
+            month_idx = [d for d, dt in enumerate(self.all_dates)
+                         if dt.month == self.month and dt.year == self.year]
+            night_vars = [x[nid][d][s] for d in month_idx for s in self.NIGHT_SHIFTS]
             if night_vars:
-                prob += pulp.lpSum(night_vars) <= max_n, f"max_night_month_{nid}"
+                cap = max(max_n, self._pin_nurse_count(nid, month_idx, self.NIGHT_SHIFTS))
+                prob += pulp.lpSum(night_vars) <= cap, f"max_night_month_{nid}"
 
     def _c_max_night_two_month(self, prob, x):
         """홀짝월 합산 야간 제한 (이전달 야간 + 당월 야간 <= maxNightTwoMonthCount) — 야간전담 제외"""
@@ -487,16 +517,14 @@ class _HighsConstraintsMixin:
                 continue
             nid = nurse["id"]
             prev_count = prev_nights.get(nid, 0)
-            night_vars = [
-                x[nid][d][s]
-                for d, dt in enumerate(self.all_dates)
-                if dt.month == self.month and dt.year == self.year
-                for s in self.NIGHT_SHIFTS
-            ]
+            month_idx = [d for d, dt in enumerate(self.all_dates)
+                         if dt.month == self.month and dt.year == self.year]
+            night_vars = [x[nid][d][s] for d in month_idx for s in self.NIGHT_SHIFTS]
             if night_vars:
-                # RHS 음수 클램프 포함 (공용 헬퍼)
-                prob += pulp.lpSum(night_vars) <= self._two_month_rhs(nid), \
-                    f"max_night_2mo_{nid}"
+                # RHS 음수 클램프 포함 (공용 헬퍼) + 사실-클램프 (확정 야간만큼 상향)
+                cap = max(self._two_month_rhs(nid),
+                          self._pin_nurse_count(nid, month_idx, self.NIGHT_SHIFTS))
+                prob += pulp.lpSum(night_vars) <= cap, f"max_night_2mo_{nid}"
 
     def _c_menstrual_leave(self, prob, x):
         """생리휴가: 여성 간호사당 당월 최대 1회 + 익월에서 사용 금지"""
@@ -506,11 +534,13 @@ class _HighsConstraintsMixin:
             nid = nurse["id"]
             if nurse.get("gender") != "female":
                 continue
-            # 당월만 최대 1회 (항상 하드 제약)
-            month_vars = [x[nid][d]["생"] for d, dt in enumerate(self.all_dates)
-                          if dt.month == self.month and dt.year == self.year]
+            # 당월만 최대 1회 (항상 하드 제약, 확정 생만큼 상향)
+            month_idx = [d for d, dt in enumerate(self.all_dates)
+                         if dt.month == self.month and dt.year == self.year]
+            month_vars = [x[nid][d]["생"] for d in month_idx]
             if month_vars:
-                prob += pulp.lpSum(month_vars) <= 1, f"menstrual_{nid}"
+                cap = max(1, self._pin_nurse_count(nid, month_idx, ("생",)))
+                prob += pulp.lpSum(month_vars) <= cap, f"menstrual_{nid}"
             # 이전달 overflow: 생 금지 — 사전입력된 전월 확정 기록은 존중
             first_of_month = date(self.year, self.month, 1)
             for d, dt in enumerate(self.all_dates):
@@ -519,14 +549,13 @@ class _HighsConstraintsMixin:
                     pre = self.prev.get(nid, {}).get(dt.strftime("%Y-%m-%d"))
                     if isinstance(v, pulp.LpVariable) and pre != "생":
                         prob += v == 0, f"no_menstrual_overflow_{nid}_{d}"
-            # 이후달 overflow: 생 최대 1회
-            next_m_vars = [
-                x[nid][d]["생"]
-                for d, dt in enumerate(self.all_dates)
-                if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month
-            ]
+            # 이후달 overflow: 생 최대 1회 (확정 생만큼 상향)
+            next_idx = [d for d, dt in enumerate(self.all_dates)
+                        if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month]
+            next_m_vars = [x[nid][d]["생"] for d in next_idx]
             if next_m_vars:
-                prob += pulp.lpSum(next_m_vars) <= 1, f"max_menstrual_next_{nid}"
+                cap = max(1, self._pin_nurse_count(nid, next_idx, ("생",)))
+                prob += pulp.lpSum(next_m_vars) <= cap, f"max_menstrual_next_{nid}"
 
     def _c_night_shift_nurses(self, prob, x):
         """
@@ -562,6 +591,8 @@ class _HighsConstraintsMixin:
 
             # ── 1. N/NC 외 모든 근무 금지 (당월만, overflow 제외) ──────────
             for d in month_idxs:
+                if self._pin.get((nid, d)):
+                    continue  # 사실-클램프: 확정 셀은 코드 그대로 (소급 검증 안 함)
                 for s in non_night_work:
                     v = x[nid][d].get(s)
                     if isinstance(v, pulp.LpVariable):
@@ -572,22 +603,32 @@ class _HighsConstraintsMixin:
             w_lo = max(0, month_idxs[0] - 4)
             w_hi = min(self.T - 5, month_idxs[-1])
             for start in range(w_lo, w_hi + 1):
+                window = range(start, start + 5)
+                if all(self._pin.get((nid, d)) for d in window):
+                    continue  # 사실-클램프
+                w_cap = max(3, self._pin_nurse_count(nid, window, self.NIGHT_SHIFTS))
                 prob += (
                     pulp.lpSum(
                         x[nid][d][s]
-                        for d in range(start, start + 5)
+                        for d in window
                         for s in self.NIGHT_SHIFTS
-                    ) <= 3,
+                    ) <= w_cap,
                     f"night_5day_{nid}_{start}",
                 )
 
-            # ── 3. 당월 야간 근무 일수 — 재적 비례 + N 가용일 클램프 (공용 헬퍼) ──
+            # ── 3. 당월 야간 근무 일수 — 재적 비례 + N 가용일 클램프 (공용 헬퍼)
+            #       + 사실-클램프: 확정분이 목표를 넘으면 실측 존중, 자유 일수가
+            #       모자라면 달성 가능한 만큼만 요구 ──────────────────────────
+            pin_n = self._pin_nurse_count(nid, month_idxs, self.NIGHT_SHIFTS)
+            free_days = sum(1 for d in month_idxs
+                            if self._nurse_active_idx(nurse, d) and not self._pin.get((nid, d)))
+            eff_target = min(max(night_target, pin_n), pin_n + free_days)
             night_sum = pulp.lpSum(
                 x[nid][d][s]
                 for d in month_idxs
                 for s in self.NIGHT_SHIFTS
             )
-            prob += (night_sum == night_target, f"night_monthly_{nid}")
+            prob += (night_sum == eff_target, f"night_monthly_{nid}")
 
             # (과거 규칙 4 '여성+31일달 생 정확히 1회'는 제거 — 생휴는 보장이
             #  아니라 '주어질 수 있다'는 사용자 원칙. 월 ≤1 상한은

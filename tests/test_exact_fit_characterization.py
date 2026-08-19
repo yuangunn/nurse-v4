@@ -8,9 +8,10 @@
      주(주휴)·특·공·병·D1·중은 사전입력 전용이라, 잉여 인력·빈 칸이 주당 2칸
      이상이면 채울 코드가 없어 구조적으로 infeasible.
      → 주휴 사전입력 없이는 '주 5일 근무' 구조 자체가 성립 불가 (EXP2).
-  ② 빈칸 없이 완전 확정된 표는 2026-08-19부터 '검증 대상'이 아니라 '주어진
-     사실'로 취급한다 — 솔버가 infeasible이어도 표를 그대로 확정하고
-     (pinned_confirmed) 규칙 차이는 안내 목록(pinned_notes)으로만 알려준다.
+  ② 확정된 부분은 '검증 대상'이 아니라 '주어진 사실'이다 (사실-클램프, 2026-08-19).
+     확정만으로 결정되는 제약(일 전체·쌍·윈도우·주 전체 확정)은 걸지 않고,
+     확정+자유 혼합 카운트 제약은 확정분만큼 상한을 올린다. 완전 확정 표는
+     솔버가 직접 성공하며 규칙 차이는 pinned_notes 안내로만 남는다.
      (과거엔 표 속 1칸의 위반이 곧 전체 infeasible이었다.)
   ③ 진단 품질: 전환·V·OF몰림은 정확히 짚는다. ①의 구조적 휴무 부족은 부분
      입력에서 여전히 마지막 상한 단계(생리휴가)에서 터지지만, 안내문이 '쉴 코드
@@ -123,8 +124,9 @@ def test_of_pileup_fully_pinned_confirmed_with_note():
     t["a2"][2], t["a3"][2] = "N", "OF"
     r = solve(4, to_prev(t, DATES_W1), 7)
     assert r["success"], r["message"]
-    assert r.get("pinned_confirmed") is True
+    # 사실-클램프로 솔버가 직접 성공 (폴백 불필요) — 규칙 차이는 notes로만
     assert any("OF 2회" in n for n in r["pinned_notes"]), r["pinned_notes"]
+    assert any("OF 0회" in n for n in r["pinned_notes"]), r["pinned_notes"]
     # 표가 변형되지 않았는지 — 스왑한 셀 그대로
     assert r["schedule"]["a3"]["2026-03-03"] == "OF"
     assert r["schedule"]["a2"]["2026-03-03"] == "N"
@@ -136,7 +138,6 @@ def test_backward_transition_fully_pinned_confirmed_with_note():
     t["a0"][3], t["a1"][3] = "E", "D"
     r = solve(4, to_prev(t, DATES_W1), 7)
     assert r["success"], r["message"]
-    assert r.get("pinned_confirmed") is True
     assert any("E→D" in n for n in r["pinned_notes"]), r["pinned_notes"]
 
 
@@ -149,7 +150,6 @@ def test_v_over_monthly_cap_fully_pinned_confirmed_with_note():
     prev14["a0"]["2026-03-13"] = "V"
     r = solve(4, prev14, 14)
     assert r["success"], r["message"]
-    assert r.get("pinned_confirmed") is True
     assert any("V 2회" in n for n in r["pinned_notes"]), r["pinned_notes"]
 
 
