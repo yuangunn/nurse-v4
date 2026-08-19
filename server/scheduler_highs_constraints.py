@@ -534,7 +534,7 @@ class _HighsConstraintsMixin:
           1. N/NC만 배정 (낮·저녁·중간번·상근 모두 금지)
           2. 5일 윈도우 내 근무 <= 3 → 3일 연속 후 2일 휴무 자동 보장
           3. 당월 정확히 14일 근무 (N+NC)
-          4. 여성 간호사 + 31일 달 → 생리휴가 정확히 1회 (hard)
+        (생리휴가는 강제하지 않음 — 월 ≤1 상한만, _c_menstrual_leave)
         주휴는 _c_weekly_off 에서 일반과 동일하게 처리.
         OF는 _c_weekly_off 에서 야간전담은 제외 → 무제한.
         """
@@ -589,13 +589,9 @@ class _HighsConstraintsMixin:
             )
             prob += (night_sum == night_target, f"night_monthly_{nid}")
 
-            # ── 4. 31일 달 + 여성 → 생리휴가 정확히 1회 (부분 재적은 ≤1) ──
-            if month_days == 31 and nurse.get("gender") == "female" and "생" in self.ALL_SHIFTS:
-                m_sum = pulp.lpSum(x[nid][d]["생"] for d in month_idxs)
-                if active_days >= month_days:
-                    prob += (m_sum == 1, f"night_menstrual_{nid}")
-                else:
-                    prob += (m_sum <= 1, f"night_menstrual_{nid}")
+            # (과거 규칙 4 '여성+31일달 생 정확히 1회'는 제거 — 생휴는 보장이
+            #  아니라 '주어질 수 있다'는 사용자 원칙. 월 ≤1 상한은
+            #  _c_menstrual_leave가 모든 여성에게 동일하게 적용한다.)
 
     # ── period 그룹 → shift 코드 목록 해석 ──────────────────────────────────
 

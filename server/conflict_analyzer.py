@@ -367,17 +367,8 @@ class _ConflictAnalyzer(CpSatScheduler):
                 if any(not isinstance(t, int) for t in m_terms):
                     lit = gate(f"{self._fmt_nurse_label(nurse)} 생리휴가 월 1회 한도", nid=nid)
                     model.Add(sum(m_terms) <= 1).OnlyEnforceIf(lit)
-            if nurse.get("is_night_shift") and month_days == 31 and nurse.get("gender") == "female":
-                # 솔버와 동일하게 부분 재적은 ≤1 (전 기간 재적만 ==1)
-                active_days = sum(1 for d in month_idxs if self._nurse_active_idx(nurse, d))
-                if active_days <= 0:
-                    continue
-                m_sum = sum(x[nid][d]["생"] for d in month_idxs)
-                lit = gate(f"{self._fmt_nurse_label(nurse)} 야간전담 생리휴가 1회(31일달)", nid=nid)
-                if active_days >= month_days:
-                    model.Add(m_sum == 1).OnlyEnforceIf(lit)
-                else:
-                    model.Add(m_sum <= 1).OnlyEnforceIf(lit)
+            # (야간전담 '여성+31일달 생 정확히 1회' 게이트는 제거 — 생휴는 보장이
+            #  아니라는 사용자 원칙. 솔버에서도 같은 강제를 제거함 — 패리티)
 
     def _g_forbidden(self, model, x, gate):
         """9개 금지 전환 전체 (가장 흔한 사전입력 충돌). per (nurse, date-pair)."""

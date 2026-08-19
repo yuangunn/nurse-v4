@@ -103,7 +103,46 @@ window.AnalysisModule = function() {
         else if(da.slack<2)warnings.push({type:'warn',msg:`${da.day.getMonth()+1}/${da.date}(${da.dowName}) 여유 부족 (${da.slack}명) — 주휴/OF 배치 공간 빡빡`});
       }
 
+      // 사전입력 구조 검사 — 생성 실패를 부르는 주별 OF/주 패턴을 미리 짚는다
+      // (자동으로 바꾸지 않는다 — 주휴는 사람이 결정. 여기서는 알려주기만.)
+      warnings.push(...this._prevStructureWarnings());
+
       return {days:dayAnalysis, weeks, warnings, totalNurses:this.nurses.length};
+    },
+
+    _prevStructureWarnings(){
+      const out=[];
+      const days=this.scheduleDays;
+      if(!days.length||!this.nurses.length)return out;
+      const weeks=[];
+      for(let i=0;i+6<days.length;i+=7)weeks.push(days.slice(i,i+7));
+      let count=0;
+      for(const nurse of this.nurses){
+        if(this.isNightThisMonth&&this.isNightThisMonth(nurse))continue; // 야간전담은 OF 규칙 제외
+        const pre=this.prevSchedule[nurse.id]||{};
+        for(let wi=0;wi<weeks.length;wi++){
+          const wd=weeks[wi].filter(d=>!this.isOverflow(d));
+          if(!wd.length)continue;
+          const codes=wd.map(d=>pre[this.dayKey(d)]||'');
+          const ofs=codes.filter(c=>c==='OF').length;
+          const jus=codes.filter(c=>c==='주').length;
+          const filled=codes.filter(Boolean).length;
+          const full=wd.length===7;
+          if(ofs>1){
+            count++;
+            const hint=jus===0?" — 하나를 '주'로 바꾸면 규칙에 맞습니다 (주휴 배치는 직접 결정)":'';
+            out.push({type:'danger',msg:`${nurse.name}: ${wi+1}주차 OF ${ofs}회 — 생성 규칙은 주당 1회${hint}`});
+          }else if(full&&filled===7&&ofs===0){
+            count++;
+            out.push({type:'danger',msg:`${nurse.name}: ${wi+1}주차 OF 0회 (모든 칸 입력됨) — 생성 규칙은 주당 정확히 1회`});
+          }
+          if(count>=12){
+            out.push({type:'warn',msg:'… 사전입력 구조 경고가 더 있습니다 (12건까지만 표시)'});
+            return out;
+          }
+        }
+      }
+      return out;
     },
 
     _recommendJuhu(analysis){

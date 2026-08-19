@@ -187,6 +187,9 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 relax_result = self._solve_with_relaxed_pre()
                 if relax_result:
                     return relax_result
+            # ── 완전 확정 표: 검증 거부 대신 그대로 확정 (+규칙 차이 안내) ──
+            if self._fully_pinned():
+                return self._confirm_pinned_result()
             # 즉시 판정된 Infeasible → 진단 실행 (각 단계 10초 이내)
             diagnosis = self._diagnose_infeasibility()
             return {
@@ -209,6 +212,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 relax_result = self._solve_with_relaxed_pre()
                 if relax_result:
                     return relax_result
+            if self._fully_pinned():
+                return self._confirm_pinned_result()
             return {
                 "success": False,
                 "schedule": {},

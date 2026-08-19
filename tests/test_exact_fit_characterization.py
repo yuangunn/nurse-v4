@@ -8,13 +8,15 @@
      주(주휴)·특·공·병·D1·중은 사전입력 전용이라, 잉여 인력·빈 칸이 주당 2칸
      이상이면 채울 코드가 없어 구조적으로 infeasible.
      → 주휴 사전입력 없이는 '주 5일 근무' 구조 자체가 성립 불가 (EXP2).
-  ② 사전입력은 도메인 고정(D↔DC류 승격만 허용)이라 표 속 1칸의 규칙 위반
-     (OF 몰림·역방향 전환·V 월2회)이 곧 전체 infeasible — 일별 == 제약 때문에
-     다른 칸으로 흡수도 안 된다 (EXP4/5/6b).
-  ③ 진단 품질 격차: 전환·V·OF몰림은 정확히 짚지만, ①의 구조적 휴무 부족은
-     13단계 누적 진단의 마지막 상한(생리휴가 단계)에서 터져 '생리휴가 제약
-     충돌'로 오진된다 (EXP2 메시지).
-  ④ allow_pre_relax(완화)는 실제로 탈출구가 된다 — 단 표가 변형됨 (EXP7).
+  ② 빈칸 없이 완전 확정된 표는 2026-08-19부터 '검증 대상'이 아니라 '주어진
+     사실'로 취급한다 — 솔버가 infeasible이어도 표를 그대로 확정하고
+     (pinned_confirmed) 규칙 차이는 안내 목록(pinned_notes)으로만 알려준다.
+     (과거엔 표 속 1칸의 위반이 곧 전체 infeasible이었다.)
+  ③ 진단 품질: 전환·V·OF몰림은 정확히 짚는다. ①의 구조적 휴무 부족은 부분
+     입력에서 여전히 마지막 상한 단계(생리휴가)에서 터지지만, 안내문이 '쉴 코드
+     공급 부족'을 설명하도록 개선됐다.
+  ④ allow_pre_relax(완화)는 폴백보다 우선한다 — 사용자가 명시로 켰다면 표를
+     최소 변형해서라도 규칙에 맞추는 쪽을 원한 것 (EXP7).
 
 주의: 테스트 폴백 shifts는 auto_assign이 전부 True가 돼 주·특·공까지 솔버가
 배정한다(실서비스와 다름!). 실서비스 재현에는 반드시 PROD_SHIFTS를 넘길 것.
@@ -94,13 +96,13 @@ def test_juhu_preinput_makes_free_solve_feasible():
     assert r["success"], r["message"]
 
 
-def test_no_juhu_structural_infeasible_and_misdiagnosed():
-    """①·③: 주휴 없이는 잉여 인력이 쉴 코드가 없어 infeasible.
-    주간 휴무 수요 21칸 > 공급 최대 16칸 (OF 6 + V 6 + 생 4).
-    현재 진단은 이를 '생리휴가 제약 충돌'로 오진한다 — 진단 개선(M4) 대상."""
+def test_no_juhu_structural_infeasible_with_supply_hint():
+    """①·③: 주휴 없이는 잉여 인력이 쉴 코드가 없어 infeasible (부분 입력이라
+    폴백 없음). 주간 휴무 수요 21칸 > 공급 최대 16칸 (OF 6 + V 6 + 생 4).
+    진단이 '쉴 코드 공급 부족'을 설명해야 한다 (2026-08-19 개선)."""
     r = solve(6, {}, 7, rules_kw=dict(maxConsecutiveWorkDays=6))
     assert not r["success"]
-    assert "생리휴가" in r["message"]  # 오진 특성화 — 개선되면 이 단언을 갱신할 것
+    assert "공급 부족" in r["message"] and "주휴" in r["message"]
 
 
 def test_exact_fit_table_conforming_succeeds():
@@ -114,35 +116,41 @@ def test_exact_fit_table_conforming_succeeds():
     assert r["success"], r["message"]
 
 
-def test_of_pileup_same_counts_infeasible():
-    """②: 일별 인원 동일한 셀 스왑으로 OF 2회/0회 주 발생 → infeasible.
-    진단은 2회 케이스를 정확히 짚는다 (0회 간호사는 미표기 — 개선 여지)."""
+def test_of_pileup_fully_pinned_confirmed_with_note():
+    """②: OF 2회/0회 주가 있어도 완전 확정 표는 그대로 확정된다.
+    규칙 차이는 pinned_notes로만 안내 (OF 횟수 언급)."""
     t = {k: v[:] for k, v in BASE7.items()}
     t["a2"][2], t["a3"][2] = "N", "OF"
     r = solve(4, to_prev(t, DATES_W1), 7)
-    assert not r["success"]
-    assert "2회" in r["message"] and "OF" in r["message"]
+    assert r["success"], r["message"]
+    assert r.get("pinned_confirmed") is True
+    assert any("OF 2회" in n for n in r["pinned_notes"]), r["pinned_notes"]
+    # 표가 변형되지 않았는지 — 스왑한 셀 그대로
+    assert r["schedule"]["a3"]["2026-03-03"] == "OF"
+    assert r["schedule"]["a2"]["2026-03-03"] == "N"
 
 
-def test_backward_transition_same_counts_infeasible():
-    """②: E→D 역방향 전환 1건 → infeasible. 진단이 셀 좌표까지 짚는다."""
+def test_backward_transition_fully_pinned_confirmed_with_note():
+    """②: E→D 역방향 전환이 있어도 완전 확정 표는 그대로 확정 + 전환 안내."""
     t = {k: v[:] for k, v in BASE7.items()}
     t["a0"][3], t["a1"][3] = "E", "D"
     r = solve(4, to_prev(t, DATES_W1), 7)
-    assert not r["success"]
-    assert "E→D" in r["message"]
+    assert r["success"], r["message"]
+    assert r.get("pinned_confirmed") is True
+    assert any("E→D" in n for n in r["pinned_notes"]), r["pinned_notes"]
 
 
-def test_v_over_monthly_cap_infeasible():
-    """②: V 월 2회 → infeasible. 진단이 날짜까지 짚는다."""
+def test_v_over_monthly_cap_fully_pinned_confirmed_with_note():
+    """②: V 월 2회가 있어도 완전 확정 표는 그대로 확정 + V 횟수 안내."""
     prev14 = to_prev(BASE7, DATES_W1)
     for nid, days in to_prev(BASE_W2, DATES_W2).items():
         prev14[nid].update(days)
     prev14["a0"]["2026-03-05"] = "V"
     prev14["a0"]["2026-03-13"] = "V"
     r = solve(4, prev14, 14)
-    assert not r["success"]
-    assert "V" in r["message"] and "한도" in r["message"]
+    assert r["success"], r["message"]
+    assert r.get("pinned_confirmed") is True
+    assert any("V 2회" in n for n in r["pinned_notes"]), r["pinned_notes"]
 
 
 def test_pre_relax_recovers_of_pileup():

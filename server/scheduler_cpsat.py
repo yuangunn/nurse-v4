@@ -163,6 +163,9 @@ class CpSatScheduler(_SchedulerBase):
                 relaxed = self._solve_relaxed()
                 if relaxed:
                     return relaxed
+            # 완전 확정 표: 검증 거부 대신 그대로 확정 (HiGHS 패리티)
+            if self._fully_pinned():
+                return self._confirm_pinned_result()
             msg = "CP-SAT: 제약을 모두 만족하는 근무표가 없습니다 (infeasible)."
             # 인라인 정밀분석은 단독 CP-SAT 모드에서만 — 레이스 패자의 분석은
             # 결과가 폐기되는데 분~수십 분 CPU를 태울 수 있고 취소도 안 된다.
@@ -184,6 +187,8 @@ class CpSatScheduler(_SchedulerBase):
             relaxed = self._solve_relaxed()
             if relaxed:
                 return relaxed
+        if self._fully_pinned():
+            return self._confirm_pinned_result()
         return {
             "success": False, "schedule": {}, "extended_schedule": {},
             "message": f"CP-SAT: 제한 시간 내에 해를 찾지 못했습니다 (상태: {solver.StatusName(status)}).",
@@ -881,7 +886,7 @@ class CpSatScheduler(_SchedulerBase):
                 model.Add(sum(next_m) <= 1)
 
     def _cs_night_shift_nurses(self, model, x):
-        """야간전담: N/NC만, 5일 윈도우<=3, 당월 정확 14일, 여성·31일달 생 1회."""
+        """야간전담: N/NC만, 5일 윈도우<=3, 당월 정확 14일. (생휴 강제 없음 — ≤1 상한만)"""
         night_nurses = [n for n in self.nurses if n.get("is_night_shift")]
         if not night_nurses:
             return
@@ -912,12 +917,8 @@ class CpSatScheduler(_SchedulerBase):
                               for s in self.NIGHT_SHIFTS) <= 3)
             # 야간 일수 — 재적 비례 + N 가용일 클램프 (공용 헬퍼, HiGHS 패리티)
             model.Add(sum(x[nid][d][s] for d in month_idxs for s in self.NIGHT_SHIFTS) == night_target)
-            if month_days == 31 and nurse.get("gender") == "female" and "생" in self.ALL_SHIFTS:
-                m_sum = sum(x[nid][d]["생"] for d in month_idxs)
-                if active_days >= month_days:
-                    model.Add(m_sum == 1)
-                else:
-                    model.Add(m_sum <= 1)
+            # (과거 '여성+31일달 생 정확히 1회' 강제는 제거 — 생휴는 보장이 아님.
+            #  월 ≤1 상한은 _cs_menstrual_leave가 담당. HiGHS 패리티)
 
     # ── 목적함수 (Soft Constraints, 정수 가중합) — 4d ─────────────────────────
     def _build_objective_cpsat(self, model, x) -> list:
