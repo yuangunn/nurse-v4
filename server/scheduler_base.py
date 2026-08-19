@@ -82,6 +82,10 @@ class _SchedulerBase:
         "NC": {"N", "NC"},
     }
 
+    # 사전입력 사실(fact) 인덱스 — strict 솔브 시작 시 _build_pin_index()가 채운다.
+    # (클래스 기본값은 읽기 전용 폴백 — 제약 메서드를 단독 호출하는 테스트 대비)
+    _pin: Dict = {}
+
     _DAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
 
     def __init__(self, request: GenerateRequest):
@@ -666,6 +670,323 @@ class _SchedulerBase:
         return scores, details
 
     # ── 솔루션 추출 (값 읽기는 엔진별 value_fn 주입) ──────────────────────────
+
+    # ── 사전입력 사실-클램프 (부분 확정 일반화, 2026-08-19 사용자 지시) ──────────
+    #
+    # "1월 2주차까지만 꽉 채우고 바꾸고 싶은 부분만 비워서 생성"하는 경우에도
+    # 확정된 부분은 검증 대상이 아니라 주어진 사실이어야 한다:
+    #   · 제약에 걸리는 셀이 전부 확정이면 그 제약은 걸지 않는다 (일 전체 확정 =
+    #     그 날 확정, 인접 쌍/윈도우/주 전체 확정 = 그 구간 확정)
+    #   · 확정+자유가 섞인 주/월 단위 카운트 제약은 확정분만큼 상한을 올린다
+    #     (예: 확정 OF 2회인 주 → 자유 셀에 OF 추가 금지, 기존 2회는 수용)
+    # 완화(allow_pre_relax)를 명시로 켰다면 "표를 고쳐서라도 규칙을 맞춰라"는
+    # 뜻이므로 클램프를 끈다 (strict 시도 → infeasible → 완화 경로 유지).
+
+    def _build_pin_index(self):
+        """(nid, day_idx) → 유효 사전입력 코드. strict 솔브 시작 시 호출."""
+        self._pin = {}
+        if self.allow_pre_relax:
+            return
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            pre_days = self.prev.get(nid, {})
+            if not pre_days:
+                continue
+            for d, dt in enumerate(self.all_dates):
+                if not self._nurse_active_on(nurse, dt):
+                    continue
+                pre = pre_days.get(dt.strftime("%Y-%m-%d"))
+                if not pre:
+                    continue
+                pre = self._effective_pre(nurse, dt, pre, dt.strftime("%Y-%m-%d") in self.holidays)
+                if pre:
+                    self._pin[(nid, d)] = pre
+
+    def _day_all_pinned(self, d, dt) -> bool:
+        """그 날 재적 간호사 셀이 전부 확정인가 (= 그 날은 사실)."""
+        active = [n for n in self.nurses if self._nurse_active_on(n, dt)]
+        return bool(active) and all((n["id"], d) in self._pin for n in active)
+
+    def _pin_day_period_count(self, d, codes) -> int:
+        """그 날 확정 셀 중 코드 그룹에 속하는 수 (D↔DC류 플렉스는 period 불변)."""
+        codes = set(codes)
+        return sum(1 for n in self.nurses if self._pin.get((n["id"], d)) in codes)
+
+    def _pin_nurse_count(self, nid, day_idxs, codes) -> int:
+        """간호사 nid의 확정 셀 중 코드 그룹 개수 (day_idxs 범위)."""
+        codes = set(codes)
+        return sum(1 for d in day_idxs if self._pin.get((nid, d)) in codes)
+
+    def _attach_pin_notes(self, result: Dict) -> Dict:
+        """strict 성공 결과에 '확정 사실 vs 앱 규칙' 차이 안내를 덧붙인다 (정보 제공)."""
+        if not self._pin or not result.get("success"):
+            return result
+        pin_sched: Dict[str, Dict[str, str]] = {}
+        for (nid, d), code in self._pin.items():
+            pin_sched.setdefault(nid, {})[self.all_dates[d].strftime("%Y-%m-%d")] = code
+        notes = self._pinned_rule_notes(pin_sched)
+        if notes:
+            shown = notes[:12]
+            result["pinned_notes"] = notes
+            result["message"] += (
+                f"\n\n📋 사전입력(확정 사실)이 앱 규칙과 다른 부분 {len(notes)}건 "
+                "(참고용 — 확정 셀은 그대로 유지됨):\n"
+                + "\n".join("  · " + n for n in shown))
+            if len(notes) > 12:
+                result["message"] += f"\n  · … 외 {len(notes) - 12}건"
+        return result
+
+    # ── 완전 확정 표 (완성 번표 입력) — 검증 대상이 아니라 주어진 사실 ─────────
+    #
+    # 이미 만들어진(지나간) 번표를 사전입력에 빈칸 없이 넣고 생성을 누르는 사용자
+    # 시나리오: 솔버가 infeasible을 내면 표를 거부하는 대신 그대로 확정하고,
+    # 앱 규칙과 다른 부분은 참고용으로만 알려준다 (2026-08-19 사용자 지시).
+
+    def _fully_pinned(self) -> bool:
+        """당월 재적 셀이 전부 사전입력으로 확정돼 있는가."""
+        if not self.nurses:
+            return False
+        for nurse in self.nurses:
+            pre_days = self.prev.get(nurse["id"], {})
+            for dt in self.all_dates:
+                if dt.month != self.month or dt.year != self.year:
+                    continue
+                if not self._nurse_active_on(nurse, dt):
+                    continue
+                if not pre_days.get(dt.strftime("%Y-%m-%d")):
+                    return False
+        return True
+
+    def _confirm_pinned_result(self) -> Dict:
+        """빈칸 없는 확정 표 → 솔버 결과 대신 표를 그대로 근무표로 확정.
+        점수는 계산하고, 앱 규칙 기준 차이는 참고 목록으로만 첨부한다."""
+        schedule: Dict[str, Dict[str, str]] = {}
+        extended: Dict[str, Dict[str, str]] = {}
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            for dt in self.all_dates:
+                dt_str = dt.strftime("%Y-%m-%d")
+                code = self.prev.get(nid, {}).get(dt_str)
+                if not code or not self._nurse_active_on(nurse, dt):
+                    continue
+                extended.setdefault(nid, {})[dt_str] = code
+                if dt.month == self.month and dt.year == self.year:
+                    schedule.setdefault(nid, {})[dt_str] = code
+        nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
+        notes = self._pinned_rule_notes(extended)
+        msg = ("✅ 사전입력이 빈칸 없이 확정되어 있어 표를 그대로 근무표로 확정했습니다.\n"
+               "(완성된 표는 검증 대상이 아니라 주어진 사실로 취급 — 솔버가 표를 바꾸지 않음)")
+        if notes:
+            shown = notes[:12]
+            msg += ("\n\n📋 앱 규칙 기준으로 다른 부분 (참고용 — 표는 그대로 유지됨):\n"
+                    + "\n".join("  · " + n for n in shown))
+            if len(notes) > 12:
+                msg += f"\n  · … 외 {len(notes) - 12}건"
+        else:
+            msg += "\n앱 규칙 기준으로도 차이가 없습니다."
+        return {
+            "success": True,
+            "schedule": schedule,
+            "extended_schedule": extended,
+            "nurse_scores": nurse_scores,
+            "nurse_score_details": nurse_score_details,
+            "message": msg,
+            "pinned_confirmed": True,
+            "pinned_notes": notes,
+            "estimated_seconds": 0,
+        }
+
+    def _pinned_rule_notes(self, sched: Dict[str, Dict[str, str]]) -> List[str]:
+        """확정 표가 앱 규칙과 다른 지점 목록 (정보 제공용 — 어떤 것도 강제하지 않음)."""
+        notes: List[str] = []
+        first_of_month = date(self.year, self.month, 1)
+        weekday_keys = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        day_kr = ["월", "화", "수", "목", "금", "토", "일"]
+        name_of = {n["id"]: (n.get("name") or n["id"]) for n in self.nurses}
+
+        def md(dt):
+            return f"{dt.strftime('%m/%d')}({day_kr[dt.weekday()]})"
+
+        # ① 일별 D/E/N 인원 vs 기준 — 그 날이 표에서 '전부 채워진' 경우만 비교
+        #    (부분 확정 날은 자유 셀이 채우므로 비교 무의미)
+        req_dict = self.req.model_dump()
+        period_map = {"D": set(self.DAY_SHIFTS), "E": set(self.EVENING_SHIFTS),
+                      "N": set(self.NIGHT_SHIFTS)}
+        diffs = []
+        for dt in self.all_dates:
+            if dt.month != self.month or dt.year != self.year:
+                continue
+            dt_str = dt.strftime("%Y-%m-%d")
+            active = [n for n in self.nurses if self._nurse_active_on(n, dt)]
+            if not active or not all(sched.get(n["id"], {}).get(dt_str) for n in active):
+                continue
+            base = req_dict.get(weekday_keys[dt.weekday()], {})
+            override = self.per_day_req.get(dt_str) or {}
+            day_req = {**base, **override}
+            for p, codes in period_map.items():
+                want = max(0, int(day_req.get(p) or 0))
+                got = sum(1 for days in sched.values() if days.get(dt_str) in codes)
+                if got != want:
+                    diffs.append(f"{md(dt)} {p} {got}명(기준 {want})")
+        if diffs:
+            notes.append(f"일별 인원이 기준과 다른 날 {len(diffs)}건: "
+                         + ", ".join(diffs[:4]) + (" …" if len(diffs) > 4 else ""))
+
+        # ② 금지 전환 (전월 내부 완결은 역사로 보고 제외)
+        forb = [
+            (set(self.EVENING_SHIFTS), set(self.DAY_SHIFTS), "E→D"),
+            (set(self.EVENING_SHIFTS), set(self.DAY1_SHIFTS), "E→D1"),
+            (set(self.EVENING_SHIFTS), set(self.MIDDLE_SHIFTS), "E→중"),
+            (set(self.NIGHT_SHIFTS), set(self.EVENING_SHIFTS), "N→E"),
+            (set(self.NIGHT_SHIFTS), set(self.DAY_SHIFTS), "N→D"),
+            (set(self.NIGHT_SHIFTS), set(self.DAY1_SHIFTS), "N→D1"),
+            (set(self.NIGHT_SHIFTS), set(self.MIDDLE_SHIFTS), "N→중"),
+            (set(self.MIDDLE_SHIFTS), set(self.DAY_SHIFTS), "중→D"),
+            (set(self.MIDDLE_SHIFTS), set(self.DAY1_SHIFTS), "중→D1"),
+        ]
+        for nid, days in sched.items():
+            for i in range(len(self.all_dates) - 1):
+                d1, d2 = self.all_dates[i], self.all_dates[i + 1]
+                if d2 < first_of_month:
+                    continue
+                c1 = days.get(d1.strftime("%Y-%m-%d"))
+                c2 = days.get(d2.strftime("%Y-%m-%d"))
+                if not c1 or not c2:
+                    continue
+                for g1, g2, label in forb:
+                    if c1 in g1 and c2 in g2:
+                        notes.append(f"{name_of.get(nid, nid)} {md(d1)} {c1} → {md(d2)} {c2} ({label} 전환)")
+
+        # ③ 주별 OF 횟수 (야간전담 제외 — 완전한 주 기준 1회)
+        for nurse in self.nurses:
+            if nurse.get("is_night_shift"):
+                continue
+            nid = nurse["id"]
+            days = sched.get(nid, {})
+            for wi, (ws, we) in enumerate(self.weeks):
+                wd = [d for d in range(ws, we + 1)
+                      if self.all_dates[d] >= first_of_month
+                      and self._nurse_active_idx(nurse, d)]
+                if not wd:
+                    continue
+                ofs = sum(1 for d in wd
+                          if days.get(self.all_dates[d].strftime("%Y-%m-%d")) == "OF")
+                covered = all(days.get(self.all_dates[d].strftime("%Y-%m-%d")) for d in wd)
+                if ofs > 1:
+                    notes.append(f"{name_of[nid]} {wi + 1}주차 OF {ofs}회 (생성 규칙은 주 1회)")
+                elif len(wd) >= 7 and covered and ofs == 0:
+                    notes.append(f"{name_of[nid]} {wi + 1}주차 OF 0회 (생성 규칙은 주 1회)")
+
+        # ④ V 월 한도 / ⑤ 월 최대 야간 / ⑥ 연속 근무·야간 한도
+        month_idxs = [i for i, dt in enumerate(self.all_dates)
+                      if dt.month == self.month and dt.year == self.year]
+        work_set = set(self.WORK_SHIFTS)
+        night_set = set(self.NIGHT_SHIFTS)
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            days = sched.get(nid, {})
+            month_codes = [days.get(self.all_dates[i].strftime("%Y-%m-%d")) for i in month_idxs]
+            if self.rules.maxVPerMonth > 0 and not self.unlimited_v:
+                v = sum(1 for c in month_codes if c == "V")
+                if v > self.rules.maxVPerMonth:
+                    notes.append(f"{name_of[nid]} V {v}회 (생성 규칙은 월 {self.rules.maxVPerMonth}회)")
+            if self.rules.maxNightPerMonth and not nurse.get("is_night_shift"):
+                n_cnt = sum(1 for c in month_codes if c in night_set)
+                if n_cnt > self.rules.maxNightPerMonthCount:
+                    notes.append(f"{name_of[nid]} 야간 {n_cnt}회 (생성 규칙은 월 {self.rules.maxNightPerMonthCount}회)")
+            # 연속 근무/야간 — 전월 내부 완결 run은 제외 (당월에 닿는 run만)
+            def _max_run(pred):
+                best = run = 0
+                run_end_cur = False
+                best_cur = 0
+                for i, dt in enumerate(self.all_dates):
+                    c = days.get(dt.strftime("%Y-%m-%d"))
+                    if c and pred(c):
+                        run += 1
+                        run_end_cur = run_end_cur or dt >= first_of_month
+                    else:
+                        if run_end_cur:
+                            best_cur = max(best_cur, run)
+                        run = 0
+                        run_end_cur = False
+                if run_end_cur:
+                    best_cur = max(best_cur, run)
+                return best_cur
+            if self.rules.maxConsecutiveWork:
+                mw = _max_run(lambda c: c in work_set)
+                if mw > self.rules.maxConsecutiveWorkDays:
+                    notes.append(f"{name_of[nid]} 연속 근무 {mw}일 (생성 규칙은 ≤{self.rules.maxConsecutiveWorkDays}일)")
+            if self.rules.maxConsecutiveNight:
+                mn = _max_run(lambda c: c in night_set)
+                if mn > self.rules.maxConsecutiveNightDays:
+                    notes.append(f"{name_of[nid]} 연속 야간 {mn}일 (생성 규칙은 ≤{self.rules.maxConsecutiveNightDays}일)")
+
+        # ⑧ 연속 야간 후 휴무 (restAfterNight) — 확정만으로 완결된 위반 안내
+        if getattr(self.rules, "restAfterNight", False):
+            min_consec = getattr(self.rules, "restAfterNightMinConsec", 2)
+            ran_days = getattr(self.rules, "restAfterNightDays", 2)
+            work_non_night = work_set - night_set
+            for nurse in self.nurses:
+                if nurse.get("is_night_shift"):
+                    continue
+                days = sched.get(nurse["id"], {})
+                codes = [days.get(dt.strftime("%Y-%m-%d")) for dt in self.all_dates]
+                run = 0
+                for i, c in enumerate(codes):
+                    if c in night_set:
+                        run += 1
+                        continue
+                    if run >= min_consec:
+                        for k in range(ran_days):
+                            rd = i + k
+                            if rd >= len(codes):
+                                break
+                            if (codes[rd] in work_non_night
+                                    and self.all_dates[rd] >= first_of_month):
+                                seq = "→".join(self.all_dates[j].strftime("%m/%d")
+                                               for j in range(i - run, i))
+                                notes.append(
+                                    f"{name_of[nurse['id']]} {seq} 연속 야간 직후 "
+                                    f"{md(self.all_dates[rd])} '{codes[rd]}' 근무 "
+                                    f"(생성 규칙은 야간 후 {ran_days}일 휴무)")
+                                break
+                    run = 0
+
+        # ⑨ N→휴무→D 패턴 (noNOD) — 확정만으로 완결된 위반 안내
+        if getattr(self.rules, "noNOD", False):
+            rest_set = set(self.REST_SHIFTS)
+            day_set = set(self.DAY_SHIFTS)
+            for nid, days in sched.items():
+                for i in range(len(self.all_dates) - 2):
+                    if self.all_dates[i + 2] < first_of_month:
+                        continue
+                    c1 = days.get(self.all_dates[i].strftime("%Y-%m-%d"))
+                    c2 = days.get(self.all_dates[i + 1].strftime("%Y-%m-%d"))
+                    c3 = days.get(self.all_dates[i + 2].strftime("%Y-%m-%d"))
+                    if c1 in night_set and c2 in rest_set and c3 in day_set:
+                        notes.append(
+                            f"{name_of.get(nid, nid)} {md(self.all_dates[i])} {c1} → "
+                            f"{c2} → {md(self.all_dates[i + 2])} {c3} (N→휴무→D 패턴)")
+
+        # ⑦ 야간전담 당월 야간 일수 vs 규정
+        import calendar
+        month_days = calendar.monthrange(self.year, self.month)[1]
+        for nurse in self.nurses:
+            if not nurse.get("is_night_shift"):
+                continue
+            nid = nurse["id"]
+            days = sched.get(nid, {})
+            active_days, target = self._night_dedicated_quota(nurse, month_idxs, month_days)
+            if active_days <= 0:
+                continue
+            n_cnt = sum(1 for i in month_idxs
+                        if days.get(self.all_dates[i].strftime("%Y-%m-%d")) in night_set)
+            covered = all(days.get(self.all_dates[i].strftime("%Y-%m-%d"))
+                          for i in month_idxs if self._nurse_active_idx(nurse, i))
+            if n_cnt > target or (covered and n_cnt != target):
+                notes.append(f"{name_of[nid]} (야간전담) 당월 야간 {n_cnt}일 (생성 규칙은 {target}일)")
+
+        return notes
 
     def _extract_solution(
         self, x: Dict, value_fn: Callable

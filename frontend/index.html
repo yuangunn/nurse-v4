@@ -496,8 +496,8 @@
            style="position:absolute;inset:0;background:rgba(59,130,246,0.12);border:2px dashed #3b82f6;border-radius:inherit;z-index:5;display:flex;align-items:center;justify-content:center;pointer-events:none">
         <div class="text-center">
           <div style="font-size:2.5rem">📤</div>
-          <div class="font-semibold text-blue">CSV 파일을 놓으세요</div>
-          <div class="text-xs text-dim mt-1">UTF-8 / CP949 자동 감지</div>
+          <div class="font-semibold text-blue">엑셀(xlsx)/CSV 파일을 놓으세요</div>
+          <div class="text-xs text-dim mt-1">xlsx 자동 인식 · CSV는 UTF-8/CP949 자동 감지</div>
         </div>
       </div>
       <div class="flex items-center justify-between mb-2">
@@ -507,10 +507,10 @@
           <template x-for="(t,i) in templates" :key="'tpl'+i">
             <button @click="loadTemplate(i)" class="btn btn-xs btn-ghost" :title="t.name" x-text="'📂 '+t.name"></button>
           </template>
-          <button @click="downloadNurseTemplate()" class="btn btn-xs btn-ghost" title="빈 CSV 템플릿 다운로드">📥 템플릿</button>
-          <button @click="exportNursesToCSV()" class="btn btn-xs btn-ghost" title="현재 간호사 목록을 CSV로 내보내기">💾 내보내기</button>
-          <button @click="$refs.nurseCsvInput.click()" class="btn btn-xs btn-ghost" title="CSV 파일로 일괄 등록 (또는 카드에 끌어다 놓기)">📤 가져오기</button>
-          <input type="file" x-ref="nurseCsvInput" accept=".csv,.txt" style="display:none" @change="importNursesFromCSV($event)"/>
+          <button @click="downloadNurseTemplate()" class="btn btn-xs btn-ghost" title="엑셀 템플릿 다운로드 — 드롭다운·안내 시트 포함, 채워서 그대로 가져오기">📥 템플릿</button>
+          <button @click="exportNursesToCSV()" class="btn btn-xs btn-ghost" title="현재 간호사 목록을 엑셀(xlsx)로 내보내기 — 수정 후 다시 가져오면 반영">💾 내보내기</button>
+          <button @click="$refs.nurseCsvInput.click()" class="btn btn-xs btn-ghost" title="엑셀(xlsx) 또는 CSV 파일로 일괄 등록/수정 (또는 카드에 끌어다 놓기)">📤 가져오기</button>
+          <input type="file" x-ref="nurseCsvInput" accept=".xlsx,.xlsm,.csv,.txt" style="display:none" @change="importNursesFromCSV($event)"/>
           <button @click="openNurseModal(null)" class="btn btn-sm btn-primary">+ 추가</button>
         </div>
       </div>
@@ -650,7 +650,7 @@
             <tr x-show="nurses.length===0">
               <td colspan="9"><div class="empty-state" style="padding:24px">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="width:32px;height:32px"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-                <p style="font-size:0.8rem">간호사를 추가하거나 CSV를 끌어다 놓으세요</p>
+                <p style="font-size:0.8rem">간호사를 추가하거나 엑셀(xlsx)/CSV 파일을 끌어다 놓으세요</p>
               </div></td>
             </tr>
           </tbody>
@@ -2231,7 +2231,7 @@
 <div x-show="csvImportPreview.open" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="closeCsvImport()">
   <div class="modal" style="max-width:42rem;max-height:80vh;display:flex;flex-direction:column">
     <div class="flex items-center justify-between mb-2">
-      <div class="font-bold text-lg text-bright">CSV 가져오기 미리보기</div>
+      <div class="font-bold text-lg text-bright">명부 가져오기 미리보기</div>
       <button @click="closeCsvImport()" class="text-dim text-lg" title="닫기">×</button>
     </div>
     <p class="text-xs text-sub mb-2">

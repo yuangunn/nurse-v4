@@ -178,10 +178,11 @@ npm start
 | 최대 연속 야간 | 기본 3일 (설정 가능) |
 | 연속야간 후 휴무 | 2연속 이상 야간 후 2일 휴무 (기본값) |
 | V 월 최대 | 기본 월 1회 (hard, unlimited_v 모드 해제 가능) |
-| 생 월 최대 | 여성 간호사 월 1회 |
+| 생 월 최대 | 여성 간호사 월 **≤1회 (보장 아님)** — 스케줄상 안 나오면 못 받는 것. 강제 배정 없음 (2026-08-19 야간전담 예외도 제거) |
+| **사전입력 사실-클램프** | 확정(사전입력) 셀은 검증 대상이 아니라 **주어진 사실** — 제약에 걸리는 셀이 전부 확정이면 그 제약은 스킵(일 전체·인접 쌍·윈도우·주 전체 확정, 완전 확정 날은 변수 리터럴화), 확정+자유 혼합 카운트 제약은 상한을 `max(규칙, 확정분)`으로 클램프(자유 셀이 위반을 더 늘리는 건 금지). 부분 확정("2주차까지만 꽉 채움")도 동일 작동. 규칙 차이는 성공 결과에 `pinned_notes` 안내만. 완화(allow_pre_relax) 명시 시엔 클램프 OFF(완화 우선). 완전 확정 표 폴백(`pinned_confirmed`)은 타임아웃 안전망으로 유지. 결정 1-15 |
 | 월 최대 야간 | 기본 월 6회 (수면OFF 임계) |
 | 홀짝월 합산 야간 | 전월+당월 ≤ 11회 (선택적) |
-| **야간전담 규칙** | N/NC만 배정, 5일 윈도우 내 ≤3 야간, 당월 정확히 14일 근무, 여성+31일 달엔 생 1회 |
+| **야간전담 규칙** | N/NC만 배정, 5일 윈도우 내 ≤3 야간, 당월 정확히 14일 근무 (생휴 강제 없음 — 월 ≤1 상한만) |
 | **임산부 모성보호** | `is_pregnant`+`pregnancy`{early,late} 설정 시: ①P1 구간 완전 포함 주마다 P1 정확히 1회(부분 주 ≤1) ②임신 전 구간 `[early.start~late.end]` N/NC 금지 ③임신-중-달 생(生) 면제(배정 금지) ④임산부 달엔 야간전담 자동 해제. P1은 임산부+구간 또는 사전입력 P1에서만 허용(그 외 변수 0). HiGHS·CP-SAT·conflict_analyzer 패리티. 헬퍼: `_preg_window_on`/`_preg_span_on`/`_preg_active_in_month`/`_preg_forbids`/`_preg_effective_pre` (scheduler_base) |
 | 전입/전출 재적 | start_date ≤ d ≤ end_date 범위에서만 배정 |
 | **셀 잠금** | `locked_cells[nurse][date]=true`인 셀은 완화 모드에서도 사전입력 고정 |
@@ -301,9 +302,9 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 | GET/POST | `/api/nurses` | 간호사 목록/추가 |
 | POST | `/api/nurses/reorder` | 순서(시니어리티) 변경 |
 | DELETE | `/api/nurses/{id}` | 삭제 + **저장본 캐스케이드 정리** |
-| GET | `/api/nurses/template` | CSV 템플릿 다운로드 |
-| GET | `/api/nurses/export` | 현재 간호사 CSV 내보내기 |
-| POST | `/api/nurses/import` | CSV 일괄 등록/업데이트 |
+| GET | `/api/nurses/template.xlsx` | 명부 엑셀 템플릿 (드롭다운·안내 시트, 기본) — `/template`은 CSV 호환용 |
+| GET | `/api/nurses/export.xlsx` | 현재 간호사 엑셀 내보내기 (기본) — `/export`는 CSV 호환용 |
+| POST | `/api/nurses/import` | 명부 일괄 등록/업데이트 — xlsx(매직 바이트 자동 감지)·CSV 모두 허용 |
 | GET/POST | `/api/rules` | 규칙 |
 | GET/POST | `/api/requirements` | 요일별 필요 인원 |
 | GET/POST/DELETE | `/api/shifts[/code]` | 근무 정의 |

@@ -289,34 +289,35 @@ window.ScheduleFeaturesModule = function() {
     },
     deleteTemplate(idx){this.templates.splice(idx,1);localStorage.setItem('ns_templates',JSON.stringify(this.templates))},
 
-    // ═══ 간호사 CSV 템플릿 다운로드/업로드 ═══════════════════
+    // ═══ 간호사 명부 템플릿 다운로드/업로드 (xlsx 기본, CSV도 가져오기 허용) ═══
     async downloadNurseTemplate(){
       try{
-        const res=await fetch('/api/nurses/template');
+        // 드롭다운·안내 시트가 든 엑셀 템플릿 — "CSV로 저장" 단계가 필요 없다
+        const res=await fetch('/api/nurses/template.xlsx');
         if(!res.ok)throw new Error('템플릿 다운로드 실패');
         const blob=await res.blob();
         const url=URL.createObjectURL(blob);
         const a=document.createElement('a');
-        a.href=url;a.download='nurses_template.csv';
+        a.href=url;a.download='nurses_template.xlsx';
         document.body.appendChild(a);a.click();
         document.body.removeChild(a);URL.revokeObjectURL(url);
-        this.toast('템플릿 다운로드 완료','info');
+        this.toast('엑셀 템플릿 다운로드 완료 — 채워서 그대로 가져오기 하세요','info',4000);
       }catch(e){this.toast(e.message||'다운로드 실패','error')}
     },
 
     async exportNursesToCSV(){
       if(!this.nurses.length){this.toast('내보낼 간호사가 없습니다','warn');return}
       try{
-        const res=await fetch('/api/nurses/export');
+        const res=await fetch('/api/nurses/export.xlsx');
         if(!res.ok)throw new Error('내보내기 실패');
         const blob=await res.blob();
         const url=URL.createObjectURL(blob);
         const ymd=new Date().toISOString().slice(0,10);
         const a=document.createElement('a');
-        a.href=url;a.download=`nurses_${ymd}.csv`;
+        a.href=url;a.download=`nurses_${ymd}.xlsx`;
         document.body.appendChild(a);a.click();
         document.body.removeChild(a);URL.revokeObjectURL(url);
-        this.toast(`${this.nurses.length}명 내보내기 완료`,'info');
+        this.toast(`${this.nurses.length}명 엑셀 내보내기 완료`,'info');
       }catch(e){this.toast(e.message||'내보내기 실패','error')}
     },
 
@@ -350,8 +351,8 @@ window.ScheduleFeaturesModule = function() {
       this.csvDragOver=false;
       const file=event.dataTransfer?.files?.[0];
       if(!file){return}
-      if(!/\.(csv|txt)$/i.test(file.name)){
-        this.toast('CSV 또는 TXT 파일만 가능합니다','warn');
+      if(!/\.(xlsx|xlsm|csv|txt)$/i.test(file.name)){
+        this.toast('엑셀(xlsx) 또는 CSV/TXT 파일만 가능합니다','warn');
         return;
       }
       await this._loadCsvFile(file);

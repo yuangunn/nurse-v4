@@ -1,12 +1,11 @@
-"""야간전담(14일·N/NC only·생휴) + 생리휴가 캡 단위 테스트 — 후보 C.
+"""야간전담(14일·N/NC only) + 생리휴가 캡 단위 테스트 — 후보 C.
 
 '당월 정확히 14 야간' 규칙은 월 전체가 필요하다(7일 윈도잉 LimitedScheduler로는
 14를 채울 수 없어 항상 infeasible). 그래서 일별 수요 제약 없이 해당 제약만 격리한
 서브모델을 직접 풀어 핵심 규칙을 검증한다:
   - 야간전담: N/NC만, 주간/이브닝 0, 당월 정확히 14 야간
-  - 여성 + 31일 달: 생 1회
-  - 남성: 생 제약 없음
-  - 정규 여성: 생 당월 최대 1회 (_cs_menstrual_leave)
+  - 생휴는 강제하지 않는다 — "월 1회 주어질 수 있다"일 뿐 보장이 아님
+    (2026-08-19 사용자 원칙, decisions.md). 월 ≤1 상한만 (_cs_menstrual_leave)
 """
 from __future__ import annotations
 
@@ -33,12 +32,13 @@ def _night_request(gender: str) -> GenerateRequest:
 
 
 def _solve_night_only(req: GenerateRequest):
-    """'1일 1근무 + 야간전담' 만 건 격리 서브모델."""
+    """'1일 1근무 + 야간전담 + 생 월상한' 만 건 격리 서브모델."""
     sch = CpSatScheduler(req)
     model = cp_model.CpModel()
     x = sch._build_vars(model)
     sch._cs_one_shift_per_day(model, x)
     sch._cs_night_shift_nurses(model, x)
+    sch._cs_menstrual_leave(model, x)
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = 30
     solver.parameters.num_workers = 8
@@ -61,8 +61,9 @@ def _count(sch, solver, x, nid, codes, days=None) -> int:
                if not isinstance(x[nid][d][s], int))
 
 
-def test_night_dedicated_female_14_nights_and_menstrual():
-    """여성 야간전담: 정확히 14 야간 + 주간/이브닝 0 + 생 1회."""
+def test_night_dedicated_female_14_nights_menstrual_not_forced():
+    """여성 야간전담: 정확히 14 야간 + 주간/이브닝 0.
+    생은 강제되지 않는다(보장 아님) — 월 ≤1 상한만."""
     sch, solver, x, status = _solve_night_only(_night_request("female"))
     assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
     nights = _count(sch, solver, x, "a0", sch.NIGHT_SHIFTS)
@@ -70,7 +71,7 @@ def test_night_dedicated_female_14_nights_and_menstrual():
     saeng = _count(sch, solver, x, "a0", ["생"])
     assert nights == 14, f"야간전담은 당월 정확히 14 야간 (실제 {nights})"
     assert day_eve == 0, f"야간전담은 주간/이브닝 0 (실제 {day_eve})"
-    assert saeng == 1, f"여성+31일달 야간전담은 생 1회 (실제 {saeng})"
+    assert saeng <= 1, f"생은 월 최대 1회 상한만 — 강제 아님 (실제 {saeng})"
 
 
 def test_night_dedicated_male_no_menstrual():

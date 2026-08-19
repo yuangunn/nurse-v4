@@ -46,20 +46,37 @@ def test_phase5_action_suggestions(build_request, solve_small, small_nurses):
 # ── Phase 4: 역순 전환 — 셀 기여도 ranking ──────────────────────────────────
 
 
-def test_phase4_cell_ranking(build_request, solve_small, small_nurses):
-    """
-    사전입력에 E→D 역순 전환 포함 → Phase 4 트리거.
-    셀 기여도 ranking 라인이 출력되어야 함.
-    """
+def test_phase4_pinned_pair_now_succeeds_as_fact(build_request, solve_small, small_nurses):
+    """사전입력 E→D 역순 전환(양쪽 확정)은 사실-클램프(2026-08-19)로 이제
+    성공하고 pinned_notes가 전환을 안내한다 — 진단 대신 수용."""
     nurses = small_nurses(6)
     nid = nurses[0].id
-    # day 2 = E, day 3 = D → E→D 금지
     prev = {nid: {"2026-03-02": "E", "2026-03-03": "D"}}
     result = _solve(
         build_request, solve_small,
         nurses=nurses, prev_schedule=prev, add_juhu=False,
     )
-    assert not result["success"], "사전입력 위반은 infeasible 이어야 함"
+    assert result["success"], result["message"]
+    assert any("E→D" in n for n in result["pinned_notes"]), result["pinned_notes"]
+
+
+def test_phase4_cell_ranking_when_relax_also_fails(small_nurses):
+    """완화(allow_pre_relax)를 명시로 켜면 클램프가 꺼진다 — 완화조차 실패하는
+    입력(실서비스 shifts + 주휴 없음 = 구조적 부족)이면 Phase 4 진단이
+    E→D 역순 셀 기여도 ranking을 출력해야 한다."""
+    from server.models import GenerateRequest
+    from .conftest import make_limited, _mini_requirements
+    from .test_exact_fit_characterization import PROD_SHIFTS
+
+    nurses = small_nurses(6)
+    prev = {nurses[0].id: {"2026-03-02": "E", "2026-03-03": "D"}}
+    req = GenerateRequest(
+        year=2026, month=3, nurses=nurses, requirements=_mini_requirements(),
+        rules=Rules(maxConsecutiveWorkDays=6), prev_schedule=prev,
+        shifts=PROD_SHIFTS, allow_pre_relax=True, time_limit=60,
+    )
+    result = make_limited(req, days=7).solve()
+    assert not result["success"], "완화도 불가한 구성이어야 진단이 발동"
     msg = result["message"]
     assert "역순" in msg or "금지" in msg or "셀 기여도" in msg, (
         f"Phase 4 진단 미발동:\n{msg}"

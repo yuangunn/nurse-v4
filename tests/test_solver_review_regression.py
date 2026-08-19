@@ -146,23 +146,50 @@ def test_analyzer_detects_explicit_zero_requirement_conflict():
 
 # ── 13단계 진단 신규 단계 (restAfterNight·P1) + anchored ──────────────────────
 
-def test_diagnosis_names_rest_after_night_cause(build_request):
-    """연속 야간 직후 근무 사전입력으로만 infeasible인 입력: '원인 불명'이 아니라
-    연속야간 휴무 규칙을 원인으로 짚고, 셀 점프 앵커를 제공해야 한다."""
-    nurses = _mini_nurses(6)
-    year, month, days = 2026, 3, 7
+def _rest_after_night_prev(nurses, year, month, days):
+    """a1: 3/1~3/2 N 연속 → 3/3 주휴(헬퍼) → 3/4 E — 금지 전환은 없지만
+    '2연속 야간 후 2일 휴무' 위반 (휴무 2일째에 근무가 박힘)."""
     prev = _juhu_prev(nurses, year, month, days)
-    # a1: 3/1~3/2 N 연속 → 3/3 주휴(헬퍼) → 3/4 E — 금지 전환은 없지만
-    # '2연속 야간 후 2일 휴무' 위반 (휴무 2일째에 근무가 박힘)
     prev.setdefault("a1", {})["2026-03-01"] = "N"
     prev["a1"]["2026-03-02"] = "N"
     prev["a1"]["2026-03-04"] = "E"
+    return prev
 
+
+def test_rest_after_night_pinned_window_is_fact(build_request):
+    """연속 야간 직후 근무가 사전입력으로 '확정'된 입력은 사실-클램프
+    (2026-08-19)로 이제 성공하고, pinned_notes가 위반 셀을 안내한다."""
+    nurses = _mini_nurses(6)
+    year, month, days = 2026, 3, 7
+    prev = _rest_after_night_prev(nurses, year, month, days)
     req = build_request(nurses=nurses, prev_schedule=prev, year=year,
                         month=month, days=days,
                         requirements=_mini_requirements(1, 2, 1))
     result = make_limited(req, days=days, solver="highs").solve()
-    assert not result["success"]
+    assert result["success"], result["message"]
+    assert result["schedule"]["a1"]["2026-03-04"] in ("E", "EC")
+    assert any("연속 야간 직후" in n and "03/04" in n
+               for n in result["pinned_notes"]), result["pinned_notes"]
+
+
+def test_diagnosis_names_rest_after_night_cause():
+    """완화(allow_pre_relax) 명시 시 클램프가 꺼진다 — 완화조차 실패하는 입력
+    (실서비스 shifts + 주휴 사전입력 전무 = 구조적 부족이라 소프트 완화로도
+    회복 불가)이면 진단이 '원인 불명'이 아니라 연속야간 휴무 규칙을 원인으로
+    짚고, 셀 점프 앵커를 제공해야 한다."""
+    from tests.test_exact_fit_characterization import PROD_SHIFTS
+    nurses = _mini_nurses(6)
+    year, month, days = 2026, 3, 7
+    prev = {"a1": {"2026-03-01": "N", "2026-03-02": "N", "2026-03-04": "E"}}
+    req = GenerateRequest(
+        year=year, month=month, nurses=nurses,
+        requirements=_mini_requirements(),
+        rules=Rules(maxConsecutiveWorkDays=6),
+        prev_schedule=prev, shifts=PROD_SHIFTS,
+        allow_pre_relax=True, time_limit=60,
+    )
+    result = make_limited(req, days=days, solver="highs").solve()
+    assert not result["success"], "완화도 불가한 구성이어야 진단이 발동"
     assert "연속 야간 후" in result["message"], result["message"]
     assert "원인 불명" not in result["message"]
     anchors = result.get("anchored") or []
