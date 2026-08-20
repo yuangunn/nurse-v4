@@ -465,7 +465,7 @@
         <b>이 파일과 같은 폴더</b>에 놓으세요 — 다음부터는 켜자마자 배정표가 바로 뜹니다.
         병동이 여럿이면 <b>assign-data-2.js</b>, <b>-3.js</b> … 로 두면 켤 때 목록에서 고릅니다.</span></div>
     </div>
-    <div class="startBand"><span style="font-weight:800">＋</span><span>데이터 파일(.json)을 이 창에 끌어다 놓아도 열립니다.</span></div>
+    <div class="startBand"><span style="font-weight:800">＋</span><span>데이터 파일(.js/.json)을 이 창에 끌어다 놓아도 열립니다.</span></div>
     <div id="startWarn" class="startBand warnBand" style="display:none"></div>
     <div id="startSign" class="dim" style="text-align:center;font-size:12px;line-height:1.8"></div>
   </div>
@@ -609,7 +609,7 @@
 </div>
 <div id="intro"><div id="introBox"></div></div>
 <div id="printArea"></div>
-<div id="drop">파일을 놓으세요 (.xlsx 근무표 / .json 데이터)</div>
+<div id="drop">파일을 놓으세요 (.xlsx 근무표 / .js·.json 데이터)</div>
 <div id="toast"></div>
 <div id="pick"></div>
 <div id="rpick"></div>
@@ -998,7 +998,7 @@ function toast(msg,ms=2800,undoable=false){ const t=$('#toast');
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260812c'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260820a'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1211,7 +1211,7 @@ window.addEventListener('pagehide',flushSave);
 window.addEventListener('beforeunload',e=>{
   if(dirty&&(fileHandle||nativeInfo)){ flushSave(); e.preventDefault(); e.returnValue=''; }});
 
-/* 시작 화면 배선 — 폴더 연결 시 폴더 안 데이터 파일(.json) 자동 감지 */
+/* 시작 화면 배선 — 폴더 연결 시 폴더 안 데이터 파일(.js/.json) 자동 감지 */
 function startWarnMsg(t){ const el=$('#startWarn'); el.textContent=t; el.style.display=t?'flex':'none'; }
 function fmtWhen(ms){
   if(!ms) return '';
@@ -1221,7 +1221,7 @@ function fmtWhen(ms){
   const hm=d.toLocaleTimeString('ko-KR',{hour:'numeric',minute:'2-digit'});
   return (days<=0?'오늘':days===1?'어제':fmtMD(d))+' '+hm;
 }
-// 폴더 안 어싸인 데이터 파일 스캔 (app:'assign'인 .json만, 최근 수정 순)
+// 폴더 안 어싸인 데이터 파일 스캔 (app:'assign'인 .js/.json만, 최근 수정 순)
 async function scanDirJsons(dir){
   const out=[];
   for await (const e of dir.values()){
@@ -1254,7 +1254,7 @@ async function openFromDir(dir,{preferLast=false}={}){
     throw new Error('폴더 접근이 허용되지 않았습니다');
   const files=await scanDirJsons(dir);
   if(!files.length){
-    startWarnMsg('이 폴더에 어싸인 데이터 파일(.json)이 없습니다 — [처음 시작]으로 만들거나 다른 폴더를 고르세요.');
+    startWarnMsg('이 폴더에 어싸인 데이터 파일(.js/.json)이 없습니다 — [처음 시작]으로 만들거나 다른 폴더를 고르세요.');
     return;
   }
   try{ await idbSet('dir',dir); }catch(e){}
@@ -1442,7 +1442,7 @@ async function initStart(){
         const dir=await window.showDirectoryPicker();
         await openFromDir(dir);
       }else{
-        const [h]=await window.showOpenFilePicker({types:[{description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
+        const [h]=await window.showOpenFilePicker({types:[{description:'어싸인 데이터',accept:{'text/javascript':['.js'],'application/json':['.json']}}]});
         await useHandle(h);
       }
     }catch(e){ if(e.name!=='AbortError') startWarnMsg('열기 실패: '+e.message); } };
@@ -2177,7 +2177,7 @@ document.addEventListener('paste',e=>{
   ingestGrid(g);
 });
 
-/* ── 파일 드롭: xlsx 근무표 / json 데이터 / csv ── */
+/* ── 파일 드롭: xlsx 근무표 / js·json 데이터 / csv ── */
 const drop=$('#drop');
 window.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('on')});
 window.addEventListener('dragleave',e=>{if(e.relatedTarget===null)drop.classList.remove('on')});
@@ -2185,10 +2185,10 @@ window.addEventListener('drop',async e=>{
   e.preventDefault(); drop.classList.remove('on');
   const it=e.dataTransfer.items&&e.dataTransfer.items[0];
   const f=e.dataTransfer.files[0]; if(!f) return;
-  if(/\.json$/i.test(f.name)){
+  if(/\.(json|js)$/i.test(f.name)){
     try{
       if(it&&it.getAsFileSystemHandle){ const h=await it.getAsFileSystemHandle(); await useHandle(h); }
-      else{ const j=JSON.parse(await f.text()); if(j.app!=='assign') throw new Error('형식 불일치');
+      else{ const j=parseStoreText(await f.text()); if(!j||j.app!=='assign') throw new Error('형식 불일치');
         store={...emptyStore(),...j}; migrateStore(); window.__memoryMode=true;
         $('#fileInfo').textContent='⚠ 읽기 전용으로 열림 — 수정해도 저장되지 않습니다 (Edge/Chrome에서 여세요)';
         afterLoad(); }
@@ -2209,7 +2209,7 @@ window.addEventListener('drop',async e=>{
     ingestGrid(txt.replace(/^﻿/,'').replace(/\r\n?/g,'\n').split('\n').filter(l=>l.trim()).map(l=>l.split(sep)));
     return;
   }
-  toast('✗ '+f.name+' — .xlsx/.csv/.json 만 가능합니다',4000);
+  toast('✗ '+f.name+' — .xlsx/.csv/.js/.json 만 가능합니다',4000);
 });
 
 /* ════════════════════════════════════════════════════════════════
@@ -2720,8 +2720,9 @@ function setReq(k,P,v){ store.req[k][P]=Math.max(0,+v||0); touch();
   if(curScr==='edit') paintEdit(); }
 async function pickNewLocation(){
   try{
-    const h=await window.showSaveFilePicker({suggestedName:fileHandle?fileHandle.name:'어싸인 데이터.json',
-      types:[{description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
+    const h=await window.showSaveFilePicker({suggestedName:fileHandle?fileHandle.name:SIDE_NAME,
+      types:[{description:'어싸인 데이터 (자동 열림)',accept:{'text/javascript':['.js']}},
+             {description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
     fileHandle=h; await idbSet('handle',h); await writeStore();
     $('#fileInfo').textContent=h.name; renderAdmin(); toast('저장 위치를 바꿨습니다');
   }catch(e){ if(e.name!=='AbortError') toast('실패: '+e.message,4000); }
