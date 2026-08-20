@@ -64,8 +64,6 @@ def test_holiday_scope_is_generation_cycle_not_month():
     ))
     assert s.all_dates[0] == date(2026, 12, 27) and s.all_dates[-1] == date(2027, 2, 6)
     assert s.holidays == {"2027-01-01", "2027-02-06"}
-    # 마지막 주(1/31~2/6)가 '공휴일 낀 주'로 인식돼야 오프특근 판정이 성립한다
+    # 마지막 주(1/31~2/6)가 '공휴일 낀 주'로 인식돼야 그 날의 OF/V/생 금지가 걸린다
     ws, we = s.weeks[-1]
     assert s._week_has_holiday(range(ws, we + 1))
-    # 법휴 부여가 없으면 면제는 안 된다 (제1원칙 3)
-    assert not s._week_off_exempt(s.nurses[0], list(range(ws, we + 1)))

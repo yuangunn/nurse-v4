@@ -64,7 +64,9 @@ def test_two_weeks_pinned_rest_free():
     # 규칙 차이는 안내로만
     notes = r["pinned_notes"]
     assert any("OF 2회" in n for n in notes), notes
-    assert any("OF 0회" in n for n in notes), notes
+    # OF 0회는 규칙 차이가 아니다 — 결원 시 불가피한 오프특근(제1원칙 3)이라
+    # 안내가 아니라 off_teukgeun 리포트로 보고된다.
+    assert not any("OF 0회" in n for n in notes), notes
     assert any("V 2회" in n for n in notes), notes
     # 자유 주(3주차)는 앱 규칙 준수: 일별 인원 정확, 간호사별 OF 1회
     for dk in DATES_W3:

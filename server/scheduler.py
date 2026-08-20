@@ -527,7 +527,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 relax_msg += "."
             if charge_promotions:
                 relax_msg += f" (차지 자동승격 {charge_promotions}건: D→DC·E→EC 등)"
-            return {
+            return self._attach_reports({
                 "success": True,
                 "schedule": schedule,
                 "extended_schedule": extended,
@@ -538,7 +538,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 "charge_promotions": charge_promotions,
                 "message": f"근무표가 생성되었습니다. (상태: {label})\n{relax_msg}",
                 "estimated_seconds": self.estimate_seconds(),
-            }
+            })
         return None
 
     # ── 결과 추출 ────────────────────────────────────────────────────────────

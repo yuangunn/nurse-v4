@@ -8,7 +8,7 @@ from datetime import date
 
 import pulp
 
-from .scheduler_base import WEEKDAY_KEYS
+from .scheduler_base import WEEKDAY_KEYS, _OFF_TEUKGEUN_PENALTY
 
 
 class _HighsConstraintsMixin:
@@ -292,6 +292,7 @@ class _HighsConstraintsMixin:
         이전달 overflow 날짜는 제외 (다른 달 야간전담 상태의 사전입력이 있을 수 있음).
         """
         of_code = "OF"
+        self._off_slack = []          # 오프특근 슬랙 (목적함수에서 페널티)
         if of_code not in self.SOLVER_SHIFTS:
             return
         first_of_month = date(self.year, self.month, 1)
@@ -313,16 +314,15 @@ class _HighsConstraintsMixin:
                     continue
                 bound = max(1, self._pin_nurse_count(nid, week_days, ("OF",)))
                 of_sum = pulp.lpSum(x[nid][d][of_code] for d in week_days)
-                prob += (of_sum <= bound, f"weekly_of_max_{nid}_{ws}")
                 if len(week_days) < 7:
+                    prob += (of_sum <= bound, f"weekly_of_{nid}_{ws}")
                     continue                      # 부분 주는 상한만
-                # 오프특근(제1원칙 3): 그 주 공휴일에 법휴를 받았거나 근무한
-                # 사람은 OF를 뺄 수 있다 → 그 근거가 하나도 없으면 OF 1회 의무.
-                #   Σ OF + Σ(그 주 공휴일의 법·근무) >= 1
-                relief = [x[nid][d][s]
-                          for d, s in self._week_off_exempt_shifts(week_days)
-                          if s in x[nid][d]]
-                prob += (of_sum + pulp.lpSum(relief) >= 1, f"weekly_of_duty_{nid}_{ws}")
+                # 오프특근(제1원칙 3): 결원으로 휴무가 몰리면 남은 사람이 OF를
+                # 반납하고 근무를 메꾼다 — 어쩔 수 없을 때만이다. 하드 ==1로 박으면
+                # 그런 달이 통째로 실패하므로 슬랙 s + 압도적 페널티로 건다.
+                sl = pulp.LpVariable(f"of_slack_{nid}_{ws}", cat="Binary")
+                prob += (of_sum + sl == bound, f"weekly_of_{nid}_{ws}")
+                self._off_slack.append(sl)
 
     def _c_pregnancy_p1_weekly(self, prob, x):
         """임산부(모성보호): P1 구간에 완전히 포함된 주마다 P1 정확히 1회 (부분 주 ≤1).
@@ -874,5 +874,11 @@ class _HighsConstraintsMixin:
                 prob += m2 >= m_total - 1, f"m2_ge_{nid}"
                 # 2회부터: -20000 (1회 +100 보상 대비 압도적 감점)
                 terms.append(-20100 * m2)
+
+        # ── 오프특근 페널티 (제1원칙 3) ─────────────────────────────────────
+        # 주 1회 OF는 최대한 지킨다. 다른 어떤 배점보다 큰 페널티라, 슬랙이 켜지는
+        # 것은 '그러지 않으면 근무표가 성립하지 않을 때'뿐이다.
+        for sl in getattr(self, "_off_slack", []):
+            terms.append(-_OFF_TEUKGEUN_PENALTY * sl)
 
         return pulp.lpSum(terms)

@@ -118,15 +118,16 @@ def test_exact_fit_table_conforming_succeeds():
 
 
 def test_of_pileup_fully_pinned_confirmed_with_note():
-    """②: OF 2회/0회 주가 있어도 완전 확정 표는 그대로 확정된다.
-    규칙 차이는 pinned_notes로만 안내 (OF 횟수 언급)."""
+    """②: OF 2회 주가 있어도 완전 확정 표는 그대로 확정된다.
+    규칙 차이는 pinned_notes로만 안내. (OF 0회는 규칙 차이가 아니다 —
+    결원 시 불가피한 오프특근이라 off_teukgeun 리포트로 따로 보고된다.)"""
     t = {k: v[:] for k, v in BASE7.items()}
     t["a2"][2], t["a3"][2] = "N", "OF"
     r = solve(4, to_prev(t, DATES_W1), 7)
     assert r["success"], r["message"]
     # 사실-클램프로 솔버가 직접 성공 (폴백 불필요) — 규칙 차이는 notes로만
     assert any("OF 2회" in n for n in r["pinned_notes"]), r["pinned_notes"]
-    assert any("OF 0회" in n for n in r["pinned_notes"]), r["pinned_notes"]
+    assert not any("OF 0회" in n for n in r["pinned_notes"]), r["pinned_notes"]
     # 표가 변형되지 않았는지 — 스왑한 셀 그대로
     assert r["schedule"]["a3"]["2026-03-03"] == "OF"
     assert r["schedule"]["a2"]["2026-03-03"] == "N"

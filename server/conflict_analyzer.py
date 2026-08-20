@@ -297,18 +297,11 @@ class _ConflictAnalyzer(CpSatScheduler):
                 week_days = [d for d in range(ws, we + 1)
                              if self.all_dates[d] >= first and self._nurse_active_idx(nurse, d)]
                 if len(week_days) >= 7:
+                    # 오프특근(제1원칙 3): OF 주 1회는 슬랙으로 양보되므로 생성 실패의
+                    # 원인이 될 수 없다 — 상한(주 2회 금지)만 게이팅한다.
                     of_sum = sum(x[nid][d]["OF"] for d in week_days)
-                    label = f"{self._fmt_nurse_label(nurse)} {wi+1}주차 OF 1회 의무"
-                    relief = []
-                    if self._week_has_holiday(week_days):
-                        # 오프특근(제1원칙 3): 그 주 공휴일에 법휴를 받았거나 근무했으면 면제
-                        label += " (공휴일 주 — 법휴·공휴일 근무 시 면제)"
-                        relief = [x[nid][d][s]
-                                  for d, s in self._week_off_exempt_shifts(week_days)
-                                  if s in x[nid][d]]
-                    lit = gate(label, nid=nid)
+                    lit = gate(f"{self._fmt_nurse_label(nurse)} {wi+1}주차 OF 2회 이상 금지", nid=nid)
                     model.Add(of_sum <= 1).OnlyEnforceIf(lit)
-                    model.Add(of_sum + sum(relief) >= 1).OnlyEnforceIf(lit)
 
     def _g_pregnancy_p1(self, model, x, gate):
         """임산부 P1 주1회 — 게이팅 (충돌 시 라벨 핀포인트). 야간 제외·생 면제는 변수 도메인 처리."""

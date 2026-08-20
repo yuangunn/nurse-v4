@@ -17,7 +17,7 @@ from typing import Dict
 from ortools.sat.python import cp_model
 
 from .models import GenerateRequest
-from .scheduler_base import _SchedulerBase, WEEKDAY_KEYS, timeoff_class
+from .scheduler_base import _SchedulerBase, WEEKDAY_KEYS, timeoff_class, _OFF_TEUKGEUN_PENALTY
 
 
 class _CpSatProgress:
@@ -447,7 +447,7 @@ class CpSatScheduler(_SchedulerBase):
             relax_msg += "."
         if charge_promotions:
             relax_msg += f" (차지 자동승격 {charge_promotions}건: D→DC·E→EC 등)"
-        return {
+        return self._attach_reports({
             "success": True,
             "schedule": schedule,
             "extended_schedule": extended,
@@ -459,7 +459,7 @@ class CpSatScheduler(_SchedulerBase):
             "mip_gap_percent": prog.gap_percent if prog.gap_percent is not None else 0.0,
             "message": f"근무표가 생성되었습니다. (CP-SAT 완화)\n{relax_msg}",
             "estimated_seconds": self.estimate_seconds(),
-        }
+        })
 
     # ── 변수 도메인 (HiGHS solve()의 변수 생성 블록과 동일 규칙) ──────────────
     def _build_vars(self, model) -> Dict[str, Dict[int, Dict[str, object]]]:
@@ -599,6 +599,7 @@ class CpSatScheduler(_SchedulerBase):
 
     def _cs_weekly_off(self, model, x):
         of_code = "OF"
+        self._off_slack = []          # 오프특근 슬랙 (목적함수에서 페널티)
         if of_code not in self.SOLVER_SHIFTS:
             return
         first_of_month = date(self.year, self.month, 1)
@@ -616,15 +617,14 @@ class CpSatScheduler(_SchedulerBase):
                     continue  # 사실-클램프: 주 전체 확정
                 bound = max(1, self._pin_nurse_count(nid, week_days, ("OF",)))
                 of_sum = sum(x[nid][d][of_code] for d in week_days)
-                model.Add(of_sum <= bound)
                 if len(week_days) < 7:
+                    model.Add(of_sum <= bound)
                     continue                      # 부분 주는 상한만
-                # 오프특근(제1원칙 3, HiGHS 패리티): 그 주 공휴일에 법휴를 받았거나
-                # 근무한 사람은 OF를 뺄 수 있다 → 근거가 없으면 OF 1회 의무.
-                relief = [x[nid][d][s]
-                          for d, s in self._week_off_exempt_shifts(week_days)
-                          if s in x[nid][d]]
-                model.Add(of_sum + sum(relief) >= 1)
+                # 오프특근(제1원칙 3, HiGHS 패리티): 슬랙 + 압도적 페널티 —
+                # 결원으로 성립이 안 될 때만 OF를 반납한다.
+                sl = model.NewBoolVar(f"of_slack_{nid}_{ws}")
+                model.Add(of_sum + sl == bound)
+                self._off_slack.append(sl)
 
     def _cs_pregnancy_p1_weekly(self, model, x):
         """임산부: P1 구간 완전 포함 주마다 P1 정확히 1회 (부분 주 ≤1).
@@ -1186,5 +1186,9 @@ class CpSatScheduler(_SchedulerBase):
                 m2 = model.NewIntVar(0, ub_nights, f"m2_{nid}")
                 model.Add(m2 >= lin(m_vars) - 1)
                 terms.append(-20100 * m2)
+
+        # ── 오프특근 페널티 (제1원칙 3, HiGHS 패리티) ────────────────────────
+        for sl in getattr(self, "_off_slack", []):
+            terms.append(-_OFF_TEUKGEUN_PENALTY * sl)
 
         return terms

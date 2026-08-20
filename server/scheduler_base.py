@@ -28,6 +28,15 @@ _LEAVE_CODES = frozenset({"V", "생", "특", "공", "법", "병"})  # 연차류 
 _OFF_CODES = frozenset({"OF", "P1"})                          # 휴식(비번) + 임부휴무(모성보호)
 _OFF_CODE = "OF"                                              # 휴식(비번)
 _JUHU_CODE = "주"                                            # 주휴(고정)
+# 오프특근 페널티 — 제1원칙 3(2026-08-20 사용자 명시).
+# "오프특근은 어쩔 수 없으면 발생한다. 경가·조가 등으로 휴무가 갑자기 많아지면 남은
+#  근무자가 오프를 줄여가며 근무를 뛴다. 그에 대한 최소한의 휴무 보장이 주휴다."
+# → 주 1회 OF는 '조건부 면제'가 아니라 **최대한 지키는 의무**다. 하드로 못 박으면
+#   결원이 생긴 달이 통째로 실패하므로, 슬랙 변수 + 압도적 페널티로 건다:
+#     Σ(주간 OF) + s = bound,  목적함수 -= 1_000_000 × s
+#   다른 어떤 배점 조합보다 크므로 s=1(오프특근)은 '그러지 않으면 근무표가 성립하지
+#   않을 때'만 켜진다. 켜진 주는 결과의 off_teukgeun 리포트로 보고한다.
+_OFF_TEUKGEUN_PENALTY = 1_000_000
 
 def timeoff_class(code: str) -> str:
     """사전입력 코드의 보호 등급: 'leave' | 'off' | 'juhu' | 'work'.
@@ -710,41 +719,41 @@ class _SchedulerBase:
         return any(self.all_dates[d].strftime("%Y-%m-%d") in self.holidays
                    for d in week_days)
 
-    def _week_off_exempt(self, nurse, week_days, codes=None) -> bool:
-        """오프특근 — 이 주 이 간호사의 'OF 주 1회' 의무가 면제되는가 (사후 판정).
+    def _off_teukgeun_report(self, schedule: dict) -> list:
+        """오프특근 발생 목록 — 완전한 주인데 OF가 0회인 (간호사, 주) 기록.
 
-        제1원칙 3(2026-08-20): "주 1회 OFF는 정말 불가피한 경우 뺄 수 있다. 보통
-        공휴일이 몰린 주에, 그 주에 법휴가 부여되었다면 OFF 특근이 가능하다."
-        → **그 주 공휴일에 법휴(법)를 받았거나 실제로 근무한 사람**만 면제.
-        연휴 주에 근무도 법휴도 없이(전부 주휴·연차 등) 지낸 사람은 종전대로 OF 1회.
-
-        `codes`가 없으면 사전입력(self.prev) 기준으로 본다. 모델 안에서의 강제는
-        선형식(`_week_off_duty_terms`)이 담당한다 — 자유 셀의 근무·법휴까지
-        솔버가 선택할 수 있어야 하기 때문.
+        제1원칙 3: 결원으로 휴무 공급이 모자라면 남은 사람이 OF를 줄여 근무를
+        메꾼다. 엔진은 이를 마지막 수단으로만 허용하므로(슬랙+페널티), 실제로
+        발생했다면 **누가 오프를 반납했는지 사람이 알아야 한다**(수당·보상 처리).
         """
-        if not self._week_has_holiday(week_days):
-            return False
-        by_day = codes if codes is not None else self.prev.get(nurse["id"], {})
-        work = set(self.WORK_SHIFTS)
-        for d in week_days:
-            dk = self.all_dates[d].strftime("%Y-%m-%d")
-            if dk not in self.holidays:
-                continue
-            c = by_day.get(dk)
-            if c == "법" or c in work:
-                return True
-        return False
-
-    def _week_off_exempt_shifts(self, week_days):
-        """오프특근 면제 근거가 되는 (날짜 인덱스, 근무코드) 목록 —
-        그 주 공휴일의 '법' + 모든 근무 코드. 모델의 선형식에 쓴다."""
+        if not self.rules.weeklyOff:
+            return []
+        first_of_month = date(self.year, self.month, 1)
+        name_of = {n["id"]: n.get("name", n["id"]) for n in self.nurses}
         out = []
-        for d in week_days:
-            dk = self.all_dates[d].strftime("%Y-%m-%d")
-            if dk not in self.holidays:
-                continue
-            for s in ["법"] + list(self.WORK_SHIFTS):
-                out.append((d, s))
+        for nurse in self.nurses:
+            if nurse.get("is_night_shift"):
+                continue          # 야간전담은 OF 규칙 대상이 아니다
+            nid = nurse["id"]
+            days = schedule.get(nid, {})
+            for wi, (ws, we) in enumerate(self.weeks):
+                wd = [d for d in range(ws, we + 1)
+                      if self.all_dates[d] >= first_of_month
+                      and self._nurse_active_idx(nurse, d)]
+                if len(wd) < 7:
+                    continue
+                dks = [self.all_dates[d].strftime("%Y-%m-%d") for d in wd]
+                if not all(days.get(dk) for dk in dks):
+                    continue      # 그 주가 다 채워지지 않았으면 판단 보류
+                if any(days.get(dk) == "OF" for dk in dks):
+                    continue
+                out.append({
+                    "nurse_id": nid,
+                    "name": name_of[nid],
+                    "week": wi + 1,
+                    "start": dks[0],
+                    "end": dks[-1],
+                })
         return out
 
     def _day_all_pinned(self, d, dt) -> bool:
@@ -762,8 +771,24 @@ class _SchedulerBase:
         codes = set(codes)
         return sum(1 for d in day_idxs if self._pin.get((nid, d)) in codes)
 
+    def _attach_reports(self, result: Dict) -> Dict:
+        """성공 결과에 오프특근 발생 목록을 덧붙인다 (제1원칙 3 — 누가 오프를
+        반납했는지는 사람이 알아야 한다)."""
+        if not result.get("success"):
+            return result
+        rows = self._off_teukgeun_report(result.get("schedule") or {})
+        if rows:
+            result["off_teukgeun"] = rows
+            shown = ", ".join(f"{r['name']} {r['week']}주차" for r in rows[:8])
+            more = f" 외 {len(rows) - 8}건" if len(rows) > 8 else ""
+            result["message"] += (
+                f"\n\n⚠ 오프특근 {len(rows)}건 — 휴무 공급이 모자라 OF를 반납한 주가 "
+                f"있습니다 (주휴는 유지): {shown}{more}")
+        return result
+
     def _attach_pin_notes(self, result: Dict) -> Dict:
         """strict 성공 결과에 '확정 사실 vs 앱 규칙' 차이 안내를 덧붙인다 (정보 제공)."""
+        result = self._attach_reports(result)
         if not self._pin or not result.get("success"):
             return result
         pin_sched: Dict[str, Dict[str, str]] = {}
@@ -919,10 +944,8 @@ class _SchedulerBase:
                 covered = all(days.get(self.all_dates[d].strftime("%Y-%m-%d")) for d in wd)
                 if ofs > 1:
                     notes.append(f"{name_of[nid]} {wi + 1}주차 OF {ofs}회 (생성 규칙은 주 1회)")
-                elif (len(wd) >= 7 and covered and ofs == 0
-                      and not self._week_off_exempt(nurse, wd, codes=days)):
-                    # 그 주 공휴일에 법휴를 받았거나 근무했으면 OF 0회는 오프특근(제1원칙 3)
-                    notes.append(f"{name_of[nid]} {wi + 1}주차 OF 0회 (생성 규칙은 주 1회)")
+                # OF 0회는 '규칙 차이'가 아니다 — 결원 시 불가피한 오프특근(제1원칙 3).
+                # 발생 사실은 _off_teukgeun_report 가 따로 보고한다.
 
         # ④ V 월 한도 / ⑤ 월 최대 야간 / ⑥ 연속 근무·야간 한도
         month_idxs = [i for i, dt in enumerate(self.all_dates)

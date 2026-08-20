@@ -106,17 +106,16 @@ m = run({ nurses: [nurse('a')], prev: { a: { '2026-03-02': 'D', '2026-03-03': 'D
 assert.equal(m.v.length, 0, m.v.join('\n'));
 assert.equal(m.n.length, 0, m.n.join('\n'));
 
-// 14. 오프특근(제1원칙 3) — 그 주 공휴일에 '법'을 받은 사람만 OF 0회가 정상
+// 14. 오프특근(제1원칙 3) — OF 0회는 경고하지 않는다.
+//     결원으로 휴무가 몰리면 남은 사람이 오프를 반납하고 근무를 메꾼다.
+//     최소 보장은 주휴이고, OF 0회는 규칙 위반이 아니라 그 결과다.
 const week1 = ['2026-03-01','2026-03-02','2026-03-03','2026-03-04','2026-03-05','2026-03-06','2026-03-07'];
 const fill = (codes) => Object.fromEntries(week1.map((d, i) => [d, codes[i]]));
-//  · 법휴 받은 사람: OF 0회여도 참고 없음
-m = run({ nurses: [nurse('a')], holidays: ['2026-03-04'],
-          prev: { a: fill(['D','D','D','법','D','주','D']) } });
+m = run({ nurses: [nurse('a')], prev: { a: fill(['D','D','D','D','D','주','D']) } });
 assert.ok(!has(m.n, 'OF 0회'), m.n.join('\n'));
-//  · 법휴 없는 사람: OF 0회면 참고 (엔진은 OF ==1을 요구)
-m = run({ nurses: [nurse('a')], holidays: ['2026-03-04'],
-          prev: { a: fill(['D','D','D','V','D','주','D']) } });
-assert.ok(has(m.n, 'OF 0회'), m.n.join('\n'));
+//  · 반대로 주 2회는 여전히 참고 (하드 상한 ≤1)
+m = run({ nurses: [nurse('a')], prev: { a: fill(['OF','D','OF','D','D','주','D']) } });
+assert.ok(has(m.n, 'OF 2회'), m.n.join('\n'));
 
 // 15. 생성 불가는 알 수 없는 코드뿐 — 나머지는 전부 참고로 분류된다
 m = run({ nurses: [nurse('a')], prev: { a: { '2026-03-02': 'E', '2026-03-03': 'D', '2026-03-09': 'V', '2026-03-10': 'V' } } });
