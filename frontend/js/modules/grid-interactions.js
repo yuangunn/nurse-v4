@@ -174,7 +174,8 @@ window.GridInteractionsModule = function() {
             const elig=wk.filter(d=>this.dayKey(d)>=firstKey&&!this.isNurseInactive(nurse,d));
             const ofs=elig.filter(d=>eff[this.dayKey(d)]==='OF');
             if(ofs.length>1)v.push({nid,dk:this.dayKey(ofs[1]),msg:`${nurse.name}: ${fmtD(wk[0])}~${fmtD(wk[6])} 주에 OF ${ofs.length}회 — 주 1회만 가능`});
-            else if(!ofs.length&&elig.length===7&&elig.every(d=>eff[this.dayKey(d)]))
+            else if(!ofs.length&&elig.length===7&&!elig.some(d=>this.isHoliday(d))&&elig.every(d=>eff[this.dayKey(d)]))
+              // 공휴일 포함 주는 오프특근(제1원칙 3)으로 OF 0회가 정상이라 제외
               v.push({nid,dk:this.dayKey(wk[6]),msg:`${nurse.name}: ${fmtD(wk[0])}~${fmtD(wk[6])} 주 7일 모두 선입력 — 의무 OF 1회를 배치할 수 없음`});
           }
         }

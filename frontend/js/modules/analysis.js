@@ -132,7 +132,8 @@ window.AnalysisModule = function() {
             count++;
             const hint=jus===0?" — 하나를 '주'로 바꾸면 규칙에 맞습니다 (주휴 배치는 직접 결정)":'';
             out.push({type:'danger',msg:`${nurse.name}: ${wi+1}주차 OF ${ofs}회 — 생성 규칙은 주당 1회${hint}`});
-          }else if(full&&filled===7&&ofs===0){
+          }else if(full&&filled===7&&ofs===0&&!wd.some(d=>this.isHoliday(d))){
+            // 공휴일 포함 주의 OF 0회는 오프특근(제1원칙 3)이라 경고하지 않는다
             count++;
             out.push({type:'danger',msg:`${nurse.name}: ${wi+1}주차 OF 0회 (모든 칸 입력됨) — 생성 규칙은 주당 정확히 1회`});
           }

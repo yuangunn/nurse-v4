@@ -312,7 +312,8 @@ class _HighsConstraintsMixin:
                 if all(self._pin.get((nid, d)) for d in week_days):
                     continue
                 bound = max(1, self._pin_nurse_count(nid, week_days, ("OF",)))
-                if len(week_days) >= 7:
+                # 오프특근(제1원칙 3): 공휴일 포함 주는 OF를 뺄 수 있다 → ≤ bound
+                if len(week_days) >= 7 and not self._week_has_holiday(week_days):
                     prob += (
                         pulp.lpSum(x[nid][d][of_code] for d in week_days) == bound,
                         f"weekly_of_{nid}_{ws}"

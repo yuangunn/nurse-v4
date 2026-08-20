@@ -616,7 +616,8 @@ class CpSatScheduler(_SchedulerBase):
                     continue  # 사실-클램프: 주 전체 확정
                 bound = max(1, self._pin_nurse_count(nid, week_days, ("OF",)))
                 of_sum = sum(x[nid][d][of_code] for d in week_days)
-                if len(week_days) >= 7:
+                # 오프특근(제1원칙 3): 공휴일 포함 주는 OF를 뺄 수 있다 → ≤ bound
+                if len(week_days) >= 7 and not self._week_has_holiday(week_days):
                     model.Add(of_sum == bound)
                 else:
                     model.Add(of_sum <= bound)

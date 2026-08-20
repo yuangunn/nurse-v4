@@ -87,6 +87,11 @@ class _ConflictAnalyzer(CpSatScheduler):
         if not self.nurses:
             return {"status": "unknown", "conflicts": [], "message": "간호사가 없습니다."}
         out = {"estimated_seconds": self.estimate_seconds()}
+        # 사실-클램프 동기화 (결정 1-15): 신호등은 '생성이 되는가'의 판정자이므로
+        # 엔진과 같은 의미론(확정 셀 = 주어진 사실)으로 본다. 클램프 없이 보면
+        # 엔진이 수용하는 입력(예: 확정 OF 2회 주)에 거짓 빨강이 뜬다.
+        # analyze()/suggest_correction()은 의도적으로 클램프 없이 전수 설명 유지.
+        self._build_pin_index()
         model = cp_model.CpModel()
         x = self._build_vars(model)
         self._apply_hard_constraints(model, x)
@@ -292,8 +297,13 @@ class _ConflictAnalyzer(CpSatScheduler):
                 week_days = [d for d in range(ws, we + 1)
                              if self.all_dates[d] >= first and self._nurse_active_idx(nurse, d)]
                 if len(week_days) >= 7:
-                    lit = gate(f"{self._fmt_nurse_label(nurse)} {wi+1}주차 OF 1회 의무", nid=nid)
-                    model.Add(sum(x[nid][d]["OF"] for d in week_days) == 1).OnlyEnforceIf(lit)
+                    # 오프특근(제1원칙 3): 공휴일 포함 주는 OF ≤1 (0회 허용)
+                    if self._week_has_holiday(week_days):
+                        lit = gate(f"{self._fmt_nurse_label(nurse)} {wi+1}주차 OF ≤1 (공휴일 주 오프특근)", nid=nid)
+                        model.Add(sum(x[nid][d]["OF"] for d in week_days) <= 1).OnlyEnforceIf(lit)
+                    else:
+                        lit = gate(f"{self._fmt_nurse_label(nurse)} {wi+1}주차 OF 1회 의무", nid=nid)
+                        model.Add(sum(x[nid][d]["OF"] for d in week_days) == 1).OnlyEnforceIf(lit)
 
     def _g_pregnancy_p1(self, model, x, gate):
         """임산부 P1 주1회 — 게이팅 (충돌 시 라벨 핀포인트). 야간 제외·생 면제는 변수 도메인 처리."""

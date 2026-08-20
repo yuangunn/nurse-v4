@@ -162,7 +162,7 @@ def init_db():
                 "wed": {"D": 5, "E": 5, "N": 3},
                 "thu": {"D": 5, "E": 5, "N": 3},
                 "fri": {"D": 5, "E": 4, "N": 3},
-                "sat": {"D": 3, "E": 3, "N": 2},
+                "sat": {"D": 4, "E": 3, "N": 2},  # 제1원칙 4 (2026-08-20): 토 최소 4/3/2
                 "sun": {"D": 3, "E": 4, "N": 3},
             }
             conn.execute("INSERT INTO requirements (id, data) VALUES (1, ?)", (json.dumps(default_req),))
