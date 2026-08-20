@@ -116,6 +116,21 @@ window.AnalysisModule = function() {
       if(!days.length||!this.nurses.length)return out;
       const weeks=[];
       for(let i=0;i+6<days.length;i+=7)weeks.push(days.slice(i,i+7));
+      // 연휴 주 안내 — 공휴일이 낀 완전한 주는 [공휴일 OF 금지 × OF 주1회]로
+      // 비공휴일 휴무 자리가 만석이 되기 쉽다. 탈출구는 오프특근이고, 그건
+      // '그 주 공휴일에 법휴를 받았거나 근무한 사람'에게 열린다 (제1원칙 3).
+      const holWeeks=[];
+      for(let wi=0;wi<weeks.length;wi++){
+        const wd=weeks[wi].filter(d=>!this.isOverflow(d));
+        if(wd.length<7||!wd.some(d=>this.isHoliday(d)))continue;
+        let beop=0;
+        for(const n of this.nurses){
+          const pre=this.prevSchedule[n.id]||{};
+          if(wd.some(d=>this.isHoliday(d)&&pre[this.dayKey(d)]==='법'))beop++;
+        }
+        holWeeks.push(`${wi+1}주차(법휴 ${beop}명)`);
+      }
+      if(holWeeks.length)out.push({type:'note',msg:`공휴일이 낀 주: ${holWeeks.join(', ')} — 공휴일엔 OF를 넣을 수 없습니다. 그 주 공휴일에 법휴를 받았거나 근무한 사람만 OF를 뺄 수 있으니(오프특근), 생성이 막히면 공휴일에 '법'을 넣어 쉴 사람을 정해 주세요`});
       let count=0;
       for(const nurse of this.nurses){
         if(this.isNightThisMonth&&this.isNightThisMonth(nurse))continue; // 야간전담은 OF 규칙 제외
@@ -128,14 +143,17 @@ window.AnalysisModule = function() {
           const jus=codes.filter(c=>c==='주').length;
           const filled=codes.filter(Boolean).length;
           const full=wd.length===7;
+          // 확정 셀만으로 정해지는 것은 '위반'이 아니라 '참고' — 엔진이 사실로
+          // 수용한다(사실-클램프, 결정 1-15). 오프특근(제1원칙 3)은 그 주 공휴일에
+          // '법'을 받은 사람만 OF 0회가 정상이다.
+          const exempt=wd.some(d=>this.isHoliday(d)&&pre[this.dayKey(d)]==='법');
           if(ofs>1){
             count++;
-            const hint=jus===0?" — 하나를 '주'로 바꾸면 규칙에 맞습니다 (주휴 배치는 직접 결정)":'';
-            out.push({type:'danger',msg:`${nurse.name}: ${wi+1}주차 OF ${ofs}회 — 생성 규칙은 주당 1회${hint}`});
-          }else if(full&&filled===7&&ofs===0&&!wd.some(d=>this.isHoliday(d))){
-            // 공휴일 포함 주의 OF 0회는 오프특근(제1원칙 3)이라 경고하지 않는다
+            const hint=jus===0?" — 하나를 '주'로 바꾸면 규칙대로가 됩니다 (주휴 배치는 직접 결정)":'';
+            out.push({type:'note',msg:`${nurse.name}: ${wi+1}주차 OF ${ofs}회 — 규칙은 주당 1회 (확정으로 수용)${hint}`});
+          }else if(full&&filled===7&&ofs===0&&!exempt){
             count++;
-            out.push({type:'danger',msg:`${nurse.name}: ${wi+1}주차 OF 0회 (모든 칸 입력됨) — 생성 규칙은 주당 정확히 1회`});
+            out.push({type:'note',msg:`${nurse.name}: ${wi+1}주차 OF 0회 (모든 칸 입력됨) — 오프특근은 그 주 공휴일에 '법'을 받은 경우만 (확정으로 수용)`});
           }
           if(count>=12){
             out.push({type:'warn',msg:'… 사전입력 구조 경고가 더 있습니다 (12건까지만 표시)'});

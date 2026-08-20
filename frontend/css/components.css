@@ -669,6 +669,12 @@ html.dark .juhu-new {
   50% { outline-color: transparent; }
 }
 
+/* 규칙과 다르지만 '확정으로 수용'되는 셀 — 위반(빨강 점멸)과 구분한다 */
+.g-pinnote {
+  outline: 1px dashed var(--warn) !important;
+  outline-offset: -1px;
+}
+
 .g-drag-sel {
   outline: 2px solid var(--accent) !important;
   outline-offset: -2px;

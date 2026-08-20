@@ -60,6 +60,7 @@ function app() {
     _undoStack:[], _redoStack:[], _maxUndo:40,
     _autoSaveTimer:null, _autoSaveKey:'ns_prev_autosave',
     prevViolations:[], _violationSet:new Set(),
+    prevPinNotes:[], _pinNoteSet:new Set(),   // 규칙과 다르지만 확정으로 수용되는 항목 (사실-클램프)
     feas:null, _feasSeq:0, _feasTimer:null, // 실시간 생성 가능성 신호등 (/api/feasibility)
     _dragStart:null, _dragCells:[], _isDragging:false,
     _focusedCell:null, // {nIdx, dIdx}

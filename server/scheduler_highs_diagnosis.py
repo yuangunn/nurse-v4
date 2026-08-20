@@ -635,6 +635,23 @@ class _HighsDiagnosisMixin:
             lines.append("  [원인] 주휴/OF 배정과 인원 요구사항이 충돌합니다.")
             if self.holidays:
                 lines.append(f"    ※ 법정공휴일 {len(self.holidays)}일 지정됨 — 공휴일에는 OF/생/V 배정이 차단됩니다.")
+                # 오프특근 안내 — 연휴 주는 법휴 부여가 유일한 정공법 탈출구
+                hol_weeks = []
+                _first = date(self.year, self.month, 1)
+                for wi, (ws, we) in enumerate(self.weeks):
+                    wdays = [d for d in range(ws, we + 1) if self.all_dates[d] >= _first]
+                    if len(wdays) >= 7 and self._week_has_holiday(wdays):
+                        exempt = sum(1 for n in self.nurses
+                                     if not n.get("is_night_shift")
+                                     and self._week_off_exempt(n, wdays))
+                        hol_weeks.append((wi + 1, len(wdays), exempt))
+                for wi, _n, exempt in hol_weeks:
+                    lines.append(
+                        f"    ※ {wi}주차는 공휴일이 낀 주입니다 — 그 주 공휴일에 법휴(법)를 "
+                        f"받았거나 근무한 간호사는 OF를 뺄 수 있습니다(오프특근). "
+                        f"사전입력 기준 면제 대상 {exempt}명. 연휴 주가 안 풀리면 "
+                        f"공휴일에 '법'을 넣어 쉴 사람을 정해 주세요."
+                    )
             DAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
 
             # ── 원인 1: 같은 주에 OF 또는 주휴 중복 사전입력 ─────────────────
@@ -1093,8 +1110,12 @@ class _HighsDiagnosisMixin:
                                 pre_off += 1
                             elif pre in busy_shifts:  # N/NC/D1/중/휴가 (휴무 제외)
                                 pre_busy_non_off += 1
-                        # 의무 주휴+OF: 완전한 주일 때 2, 부분 주는 (active_days * 2 / 7) 올림 근사
-                        required_off = 2 if active_days >= 7 else (active_days * 2 + 6) // 7
+                        # 의무 주휴+OF: 완전한 주일 때 2(주휴 1 + OF 1).
+                        # 공휴일이 낀 주는 오프특근(제1원칙 3)으로 OF가 면제될 수 있어
+                        # (그 주 공휴일에 법휴·근무가 있으면) 주휴 1만 의무로 본다 —
+                        # 여기서 2로 세면 있지도 않은 '주간 총량 부족'을 보고하게 된다.
+                        duty = 1 if self._week_has_holiday(week_dates_idx) else 2
+                        required_off = duty if active_days >= 7 else (active_days * duty + 6) // 7
                         off_shortfall = max(0, required_off - pre_off)
                         free_days = active_days - pre_de - pre_off - pre_busy_non_off
                         # D/E 공급 = 이미 배정된 DE + (남은 자유일 - 아직 못 채운 off 의무)

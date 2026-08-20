@@ -312,17 +312,17 @@ class _HighsConstraintsMixin:
                 if all(self._pin.get((nid, d)) for d in week_days):
                     continue
                 bound = max(1, self._pin_nurse_count(nid, week_days, ("OF",)))
-                # 오프특근(제1원칙 3): 공휴일 포함 주는 OF를 뺄 수 있다 → ≤ bound
-                if len(week_days) >= 7 and not self._week_has_holiday(week_days):
-                    prob += (
-                        pulp.lpSum(x[nid][d][of_code] for d in week_days) == bound,
-                        f"weekly_of_{nid}_{ws}"
-                    )
-                else:
-                    prob += (
-                        pulp.lpSum(x[nid][d][of_code] for d in week_days) <= bound,
-                        f"weekly_of_{nid}_{ws}"
-                    )
+                of_sum = pulp.lpSum(x[nid][d][of_code] for d in week_days)
+                prob += (of_sum <= bound, f"weekly_of_max_{nid}_{ws}")
+                if len(week_days) < 7:
+                    continue                      # 부분 주는 상한만
+                # 오프특근(제1원칙 3): 그 주 공휴일에 법휴를 받았거나 근무한
+                # 사람은 OF를 뺄 수 있다 → 그 근거가 하나도 없으면 OF 1회 의무.
+                #   Σ OF + Σ(그 주 공휴일의 법·근무) >= 1
+                relief = [x[nid][d][s]
+                          for d, s in self._week_off_exempt_shifts(week_days)
+                          if s in x[nid][d]]
+                prob += (of_sum + pulp.lpSum(relief) >= 1, f"weekly_of_duty_{nid}_{ws}")
 
     def _c_pregnancy_p1_weekly(self, prob, x):
         """임산부(모성보호): P1 구간에 완전히 포함된 주마다 P1 정확히 1회 (부분 주 ≤1).

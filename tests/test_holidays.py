@@ -35,3 +35,37 @@ def test_golden_fixture_sane():
     # 2025 설날 연휴(1/28~30) + 추석 연휴(10/5~7) + 대체(10/8)
     for d in ("2025-01-28", "2025-01-29", "2025-01-30", "2025-10-06", "2025-10-08"):
         assert d in y2025, f"{d} 누락"
+
+
+def test_holiday_scope_is_generation_cycle_not_month():
+    """공휴일 인정 범위 = 생성 주기(전월 말·익월 초 패딩 포함).
+
+    당월 프리픽스로 자르면 월경계 주에 걸린 익월 공휴일(신정·설날·삼일절)을
+    못 봐서 ① 그 날에 OF/V/생이 배정되고 ② 오프특근 판정도 어긋난다.
+    2027-01 주기는 2026-12-27~2027-02-06 — 마지막 주에 설날(2/6)이 들어온다.
+    """
+    from datetime import date
+
+    from server.models import DayRequirement, GenerateRequest, Nurse, Requirements, Rules
+    from server.scheduler_cpsat import CpSatScheduler
+
+    req = Requirements()
+    for day in ("mon", "tue", "wed", "thu", "fri", "sat", "sun"):
+        setattr(req, day, DayRequirement(D=2, E=0, N=0))
+    nurses = [Nurse(id=f"a{i}", name=f"*간호{i}", group="A", gender="female",
+                    capable_shifts=["DC", "D", "EC", "E", "NC", "N"], seniority=i)
+              for i in range(3)]
+    s = CpSatScheduler(GenerateRequest(
+        year=2027, month=1, nurses=nurses, requirements=req, rules=Rules(),
+        holidays=["2026-12-25",        # 주기 밖(앞) — 버려야 함
+                  "2027-01-01",        # 당월
+                  "2027-02-06",        # 익월 패딩 — 살아야 함 (설날)
+                  "2027-03-01"],       # 주기 밖(뒤) — 버려야 함
+    ))
+    assert s.all_dates[0] == date(2026, 12, 27) and s.all_dates[-1] == date(2027, 2, 6)
+    assert s.holidays == {"2027-01-01", "2027-02-06"}
+    # 마지막 주(1/31~2/6)가 '공휴일 낀 주'로 인식돼야 오프특근 판정이 성립한다
+    ws, we = s.weeks[-1]
+    assert s._week_has_holiday(range(ws, we + 1))
+    # 법휴 부여가 없으면 면제는 안 된다 (제1원칙 3)
+    assert not s._week_off_exempt(s.nurses[0], list(range(ws, we + 1)))

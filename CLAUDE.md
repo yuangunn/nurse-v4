@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.8.0 (2026-08-20, 병동 제1원칙 + 오프특근 규칙)
+**최신**: v4.9.0 (2026-08-20, 오프특근 정밀화 + 월경계 공휴일 + 참고형 경고)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -41,8 +41,11 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
 > ⓐ 토요일 인원 → DB 시드·문서·시뮬레이터 모두 **4/3/2**로 수정.
 > ⓑ 인원이 숫자보다 남는 날의 실제 처리 = **연차·휴가로 소진** → 하드 제약
 >   "정확히 일치(`==`)"는 현행 유지 (초과 출근 없음).
-> ⓒ 오프특근 → **엔진 규칙으로 구현** (조건 단순화: 공휴일 포함 완전한 주는
->   OF `==1`이 아니라 `≤1` — 0회 허용). 양 엔진·분석기·안내문·프론트 경고 동기화.
+> ⓒ 오프특근 → **엔진 규칙으로 구현**. v4.8.0은 "공휴일 포함 주면 누구나 `≤1`"로
+>   단순화했으나, v4.9.0에서 조건을 원문에 맞춰 조였다 — **그 주 공휴일에 법휴를
+>   받았거나 근무한 사람만 면제**(`ΣOF + Σ(그 주 공휴일의 법·근무) ≥ 1`).
+>   연휴 내내 근무도 법휴도 없이 쉰 사람은 OF 1회 의무가 그대로다.
+>   양 엔진·분석기·진단·안내문·프론트 경고 동기화.
 
 ---
 
@@ -141,7 +144,7 @@ npm start
 ```
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.8.0.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.9.0.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -201,10 +204,10 @@ npm start
 | **9개 금지 전환** | E→D, E→D1, E→중, N→E, N→D, N→D1, N→중, 중→D, 중→D1 (물리적 간격 < 8h) |
 | N→OF→D 금지 | `noNOD` 규칙 시 Night→Off→Day 패턴 금지 |
 | **공휴일 OF 금지** | 법정공휴일에는 OF 배정 불가 (일반/완화/진단 모두 적용) |
-| 법은 공휴일에만 | 법정공휴일 코드 `법`은 공휴일 날짜에만 배정 |
+| 법은 공휴일에만 | 법정공휴일 코드 `법`은 공휴일 날짜에만 **자유 배정** (사전입력 확정 셀은 사실로 수용) |
 | 야간전담 공휴일 제외 | 야간전담에게 법/생/V 공휴일 배정 차단 규칙 다름 |
-| 주휴 1회/주 | 매주 정확히 주 1회 (완화 모드엔 `<=1`) |
-| OF 1회/주 | 완전한 주 정확히 1회, 부분 주 `<=1`. **공휴일 포함 주는 `<=1`(0회 허용 — 오프특근, 제1원칙 3)** |
+| 주휴(주) | **엔진이 배정하지 않는다** — 사전입력 전용(auto_assign ✗). 일반 모드엔 강제 없음(사람이 넣은 그대로), 주휴 재배치 완화(`allow_juhu_relax`)를 켰을 때만 주당 `<=1` |
+| OF 1회/주 | 완전한 주 `<=1` + **OF 1회 의무**. 단 **오프특근(제1원칙 3): 그 주 공휴일에 `법`을 받았거나 근무했으면 면제** (모델은 `ΣOF + Σ(그 주 공휴일의 법·근무) ≥ 1`). 연휴 내내 근무도 법휴도 없이 쉰 사람은 `==1` 그대로. 부분 주는 상한만 |
 | 최대 연속 근무 | 기본 5일 (설정 가능) |
 | 최대 연속 야간 | 기본 3일 (설정 가능) |
 | 연속야간 후 휴무 | 2연속 이상 야간 후 2일 휴무 (기본값) |
@@ -512,10 +515,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.8.0.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.9.0.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.8.0.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.9.0.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -603,7 +606,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.8.0 기준)
+## 알려진 주의사항 (v4.9.0 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)
@@ -615,6 +618,10 @@ self.cbLogging.subscribe(_on_log)
 - CSS: `var(--card)` 사용 금지 → `var(--bg-card)` (다크모드 fallback 버그 방지)
 - CSS: `input[type="text"]` 속성 셀렉터는 type 명시 없는 input 매칭 안 됨 → `input:not([type])` 포함 또는 HTML에 `type="text"` 명시
 - 사전입력 저장/로드는 `locked_cells`, `cell_notes`, `holidays`, `prev_day_reqs`, `prev_month_nights` 포함 필수 (v4.0.6에서 추가)
+- **공휴일은 '생성 주기 범위' 기준** (v4.9.0) — 당월만이 아니라 전월 말·익월 초
+  패딩 날짜의 공휴일도 인정한다. 당월 프리픽스로 자르면 월경계 주에 걸린 신정·
+  설날·삼일절을 못 봐서 그 날에 OF/V/생이 배정되고 오프특근 판정도 어긋난다.
+  프론트 `autoFillHolidays`도 주기 범위를 채운다 — 한쪽만 고치면 다시 어긋난다
 - 간호사 삭제는 API 경유 — 저장본 캐스케이드 정리 자동 실행
 
 ---

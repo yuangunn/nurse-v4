@@ -64,18 +64,26 @@ window.MiscFeaturesModule = function() {
       return [...new Set([...base,...subs,...special])].sort();
     },
     autoFillHolidays(){
-      const table=this._computeKRHolidays(this.year);
-      if(!table){
+      // 주기 범위(전월 말·익월 초 패딩 포함) 전체를 채운다 — 서버도 주기 범위의
+      // 공휴일만 인정하므로, 월경계 주에 걸린 익월 공휴일(신정·설날·삼일절)이
+      // 빠지면 그 날에 OF가 배정되고 오프특근 판정도 어긋난다.
+      const days=this.scheduleDays;
+      const years=[...new Set(days.map(d=>d.getFullYear()))];
+      const table=[];let missing=false;
+      for(const y of years){const t=this._computeKRHolidays(y);if(t)table.push(...t);else missing=true}
+      if(!table.length){
         const [lo,hi]=this._lunarRange();
-        this.toast(`${this.year}년 공휴일 자동계산 불가 — 내장 음력 데이터는 ${lo}~${hi}년만 지원합니다. 날짜 헤더 우클릭으로 직접 지정하세요`,'warn',6000);return;
+        this.toast(`${years.join('·')}년 공휴일 자동계산 불가 — 내장 음력 데이터는 ${lo}~${hi}년만 지원합니다. 날짜 헤더 우클릭으로 직접 지정하세요`,'warn',6000);return;
       }
-      const prefix=`${this.year}-${String(this.month).padStart(2,'0')}-`;
-      const target=table.filter(h=>h.startsWith(prefix)&&!this.holidays.includes(h));
-      if(!target.length){this.toast('이 달에 추가할 공휴일이 없습니다 (이미 모두 입력됨)','info');return}
+      const inRange=new Set(days.map(d=>this.dayKey(d)));
+      const target=table.filter(h=>inRange.has(h)&&!this.holidays.includes(h));
+      if(!target.length){this.toast('이 주기에 추가할 공휴일이 없습니다 (이미 모두 입력됨)','info');return}
       this._pushUndo();
       this.holidays=[...this.holidays,...target];
       this._checkViolations&&this._checkViolations();
-      this.toast(`🇰🇷 공휴일 ${target.length}일 입력: ${target.map(h=>+h.slice(8)+'일').join(', ')} — 임시공휴일·변경은 직접 확인하세요`,'info',5000);
+      const label=target.map(h=>+h.slice(5,7)+'/'+ +h.slice(8)).join(', ');
+      const warn=missing?' (일부 연도는 음력 데이터 범위 밖 — 직접 확인하세요)':'';
+      this.toast(`🇰🇷 공휴일 ${target.length}일 입력: ${label} — 임시공휴일·변경은 직접 확인하세요${warn}`,'info',5000);
     },
 
     // ═══ 전월N 자동 인수인계 ═════════════════════════════
