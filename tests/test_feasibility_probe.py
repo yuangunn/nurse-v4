@@ -20,11 +20,32 @@ def test_probe_infeasible_supply(build_request, small_nurses):
     assert "estimated_seconds" in res
 
 
-def test_probe_infeasible_preinput_transition(build_request, small_nurses):
-    """사전입력 E→D 금지전환 → infeasible (사전입력 실시간 감지 시나리오)."""
+def test_probe_pinned_pair_is_fact_feasible(build_request, small_nurses):
+    """사전입력 E→D '양쪽 확정' 쌍은 사실-클램프로 엔진이 수용한다 — 신호등도
+    같은 의미론이어야 한다 (feasible). 과거엔 거짓 빨강 (2026-08-19 수정)."""
     nurses = small_nurses(6)
     prev = {nurses[0].id: {"2026-03-02": "E", "2026-03-03": "D"}}
     res = check_feasibility(build_request(nurses=nurses, prev_schedule=prev, add_juhu=False))
+    assert res["status"] == "feasible", res
+
+
+def test_probe_pinned_double_of_week_feasible(build_request, small_nurses):
+    """한 주에 확정 OF 2개(신청 OFF 몰림)도 엔진이 수용 → 신호등 feasible."""
+    nurses = small_nurses(6)
+    prev = {nurses[0].id: {"2026-03-03": "OF", "2026-03-05": "OF"}}
+    res = check_feasibility(build_request(nurses=nurses, prev_schedule=prev, add_juhu=False))
+    assert res["status"] == "feasible", res
+
+
+def test_probe_one_side_pin_transition_infeasible(build_request, small_nurses, small_requirements):
+    """확정 N 4명(월) 다음날 화 D=2 — 전날 D였던 1명 외엔 전부 N/E 뒤라 D 불가
+    → infeasible. 한쪽만 확정인 전환 제약은 자유 셀에 그대로 걸린다."""
+    nurses = small_nurses(6)
+    req = small_requirements()
+    req.tue.D = 2
+    prev = {f"a{i}": {"2026-03-02": "N"} for i in range(4)}
+    res = check_feasibility(build_request(
+        nurses=nurses, prev_schedule=prev, requirements=req, add_juhu=False))
     assert res["status"] == "infeasible", res
 
 

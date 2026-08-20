@@ -87,6 +87,11 @@ class _ConflictAnalyzer(CpSatScheduler):
         if not self.nurses:
             return {"status": "unknown", "conflicts": [], "message": "간호사가 없습니다."}
         out = {"estimated_seconds": self.estimate_seconds()}
+        # 사실-클램프 동기화 (결정 1-15): 신호등은 '생성이 되는가'의 판정자이므로
+        # 엔진과 같은 의미론(확정 셀 = 주어진 사실)으로 본다. 클램프 없이 보면
+        # 엔진이 수용하는 입력(예: 확정 OF 2회 주)에 거짓 빨강이 뜬다.
+        # analyze()/suggest_correction()은 의도적으로 클램프 없이 전수 설명 유지.
+        self._build_pin_index()
         model = cp_model.CpModel()
         x = self._build_vars(model)
         self._apply_hard_constraints(model, x)
