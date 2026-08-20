@@ -256,6 +256,18 @@ html.dark .tbl tbody tr.row-selected td {
   font-weight: 700;
 }
 .nurse-edit-tbl button.cell-toggle.cell-night-off { color: var(--text-dim); }
+/* 다른 달에만 야간전담 — 당월은 아니므로 약하게 (뱃지 텍스트는 그대로 보인다) */
+.nurse-edit-tbl button.cell-toggle.cell-night-other {
+  color: #b45309;
+  background-color: rgba(245,158,11,0.06);
+  border-color: rgba(245,158,11,0.22);
+}
+html.dark .nurse-edit-tbl button.cell-toggle.cell-night-other { color: #fbbf24; }
+/* 월 목록이 길어져도 줄바꿈 없이 한 줄 — 전체 목록은 title 툴팁 */
+.nurse-edit-tbl button.cell-toggle.night-badge {
+  max-width: 100%; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
 
 .nurse-edit-tbl button.shift-chip {
   display: inline-block;
