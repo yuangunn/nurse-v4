@@ -101,6 +101,32 @@ def test_fairness_ledger_and_prev_month_nights(tmp_path, monkeypatch):
     assert nights == {"a1": 2}
 
 
+def test_prev_month_nights_excludes_night_kept_month(tmp_path, monkeypatch):
+    """나이트킵(야간전담) 달의 야간은 '전월N'에서 제외된다.
+
+    2026-08-20 사용자 명시: 나이트킵 때 한 나이트는 수면오프와 무관하다.
+    이 값이 홀짝월 합산(≤11) 상한에 쓰이므로, 14회를 그대로 넘기면 다음 달
+    야간 상한이 0이 되어 나이트킵을 마친 사람만 야간을 못 받는다.
+    """
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from server import database as db
+    db.init_db()
+    days_a1 = {f"2026-05-{i:02d}": "N" for i in range(1, 15)}   # 나이트킵 14회
+    days_a2 = {f"2026-05-{i:02d}": "N" for i in range(1, 4)}    # 일반 3회
+    db.save_schedule(
+        year=2026, month=5,
+        data={
+            "nurses": [
+                {"id": "a1", "name": "나이트킵", "night_months": {"2026-05": True}},
+                {"id": "a2", "name": "정규", "night_months": {}},
+            ],
+            "schedule": {"a1": days_a1, "a2": days_a2},
+        },
+        name="5월 확정",
+    )
+    assert db.compute_prev_month_nights(2026, 6) == {"a2": 3}
+
+
 @pytest.mark.parametrize("solver", ["highs", "cpsat"])
 def test_fairness_offsets_shift_nights_to_low_cumulative(build_request, solver):
     """공정성 원장 오프셋: 누적 야간이 많은 간호사는 당월 야간을 적게 받아야 한다."""

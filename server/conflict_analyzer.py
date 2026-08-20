@@ -566,9 +566,16 @@ class _ConflictAnalyzer(CpSatScheduler):
                 # 솔버와 동일한 클램프 (공용 헬퍼) — 미클램프 시 자체 모순 리터럴이
                 # 항상 단독 MUS로 검출돼 실제 원인을 가린다
                 rhs = self._two_month_rhs(nid)
-                label = (f"{self._fmt_nurse_label(nurse)} 홀짝월 합산 야간 ≤{max_n}회(전월 {prev_count})"
-                         if rhs > 0 else
-                         f"{self._fmt_nurse_label(nurse)} 전월 야간 {prev_count}회로 상한 초과 — 당월 야간 0회")
+                py, pm = ((self.year - 1, 12) if self.month == 1
+                          else (self.year, self.month - 1))
+                if self._night_dedicated_in(nid, py, pm):
+                    # 나이트킵 달의 야간은 수면오프와 무관 — 합산에서 제외됨
+                    label = (f"{self._fmt_nurse_label(nurse)} 홀짝월 합산 야간 ≤{max_n}회"
+                             f" (전월 나이트킵은 합산 제외)")
+                elif rhs > 0:
+                    label = f"{self._fmt_nurse_label(nurse)} 홀짝월 합산 야간 ≤{max_n}회(전월 {prev_count})"
+                else:
+                    label = f"{self._fmt_nurse_label(nurse)} 전월 야간 {prev_count}회로 상한 초과 — 당월 야간 0회"
                 lit = gate(label, nid=nid)
                 model.Add(sum(night_vars) <= rhs).OnlyEnforceIf(lit)
 

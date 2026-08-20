@@ -402,8 +402,31 @@ class _SchedulerBase:
             j_fixed = None
         return j_fixed
 
+    def _night_dedicated_in(self, nid: str, year: int, month: int) -> bool:
+        """그 달에 이 간호사가 야간전담(나이트킵)이었는가 — night_months 기준."""
+        key = f"{year:04d}-{month:02d}"
+        for n in getattr(self, "_all_nurses", None) or self.nurses:
+            if n.get("id") != nid:
+                continue
+            nm = n.get("night_months") or {}
+            if nm:
+                return bool(nm.get(key))
+            # night_months 미사용 명부: is_night_shift는 상시 설정이라 당월 판정과 동일
+            return bool(n.get("is_night_shift"))
+        return False
+
     def _two_month_rhs(self, nid: str) -> int:
-        """홀짝월 합산 야간의 당월 RHS — 전월 초과(야간전담→일반 전환)는 0 클램프."""
+        """홀짝월 합산 야간의 당월 RHS.
+
+        **야간전담(나이트킵) 달의 야간은 수면오프와 무관하다** (2026-08-20 사용자
+        명시). 홀짝월 합산은 수면오프(월 7회 이상 시 발생)를 피하려는 규칙이므로,
+        전월이 그 간호사의 야간전담 달이었다면 그 달 야간은 합산에서 제외한다.
+        (제외하지 않으면 전월 14회 → 당월 상한 0 이 되어 나이트킵을 마친 사람이
+         다음 달에 야간을 아예 못 받는다.)
+        """
+        py, pm = (self.year - 1, 12) if self.month == 1 else (self.year, self.month - 1)
+        if self._night_dedicated_in(nid, py, pm):
+            return self.rules.maxNightTwoMonthCount
         prev_nights = getattr(self, "prev_month_nights", None) or {}
         return max(0, self.rules.maxNightTwoMonthCount - (prev_nights.get(nid) or 0))
 

@@ -140,7 +140,10 @@ window.GridInteractionsModule = function() {
         if(!nightDed&&r.maxNightPerMonth&&nDays.length>(+r.maxNightPerMonthCount||6))
           notes.push({nid,dk:nDays[+r.maxNightPerMonthCount||6],msg:`${nurse.name}: 야간 ${nDays.length}회 — 월 최대 ${r.maxNightPerMonthCount}회 (확정분은 그대로 수용)`});
         if(!nightDed&&r.maxNightTwoMonth){
-          const prevN=+((this.prevMonthNights||{})[nid])||0;
+          // 나이트킵(야간전담) 달의 야간은 수면오프와 무관 → 합산에서 제외 (서버 동일)
+          const pk=this.month===1?`${this.year-1}-12`:`${this.year}-${String(this.month-1).padStart(2,'0')}`;
+          const prevKept=Object.keys(nm).length?!!nm[pk]:!!nurse.is_night_shift;
+          const prevN=prevKept?0:(+((this.prevMonthNights||{})[nid])||0);
           const rhs=Math.max(0,(+r.maxNightTwoMonthCount||11)-prevN);
           if(nDays.length>rhs)notes.push({nid,dk:nDays[Math.min(rhs,nDays.length-1)],msg:`${nurse.name}: 당월 야간 ${nDays.length}회 + 전월 ${prevN}회 — 합산 ${r.maxNightTwoMonthCount}회 (확정분은 그대로 수용)`});
         }

@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import pytest
 from ortools.sat.python import cp_model
 
 from server.models import GenerateRequest, Nurse, Requirements, Rules
@@ -101,3 +102,60 @@ def test_menstrual_leave_caps_female_at_one_per_month():
     assert status == cp_model.OPTIMAL
     total = sum(solver.Value(v) for v in saeng_vars)
     assert total == 1, f"여성 생은 당월 최대 1회 (실제 {total})"
+
+
+# ── 나이트킵 → 다음 달 일반 전환 (홀짝월 합산과 무관해야 한다) ─────────────
+
+
+def _two_month_request(night_months: dict, prev_nights: dict,
+                       night_only_a0: bool = False) -> GenerateRequest:
+    """6명 중 a0만 night_months 지정.
+
+    night_only_a0=True 면 야간 가능자를 a0 하나로 좁혀서 '야간을 받을 수 있는가'가
+    솔버의 선택이 아니라 강제가 되게 한다 (막히면 곧바로 infeasible)."""
+    from .conftest import _mini_nurses, _mini_requirements
+
+    nurses = _mini_nurses(6)
+    a0 = next(n for n in nurses if n.id == "a0")
+    a0.night_months = night_months
+    if night_only_a0:
+        for n in nurses:
+            if n.id != "a0":
+                n.capable_shifts = ["DC", "D", "EC", "E"]
+    return GenerateRequest(
+        year=2026, month=3, nurses=nurses,
+        requirements=_mini_requirements(1, 1, 1),
+        rules=Rules(maxNightTwoMonth=True, maxNightTwoMonthCount=11),
+        prev_schedule={},
+        prev_month_nights=prev_nights,
+    )
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_night_kept_month_excluded_from_two_month_sum(solver):
+    """전월 나이트킵(14N)이어도 당월 야간 배정이 막히면 안 된다.
+
+    2026-08-20 사용자 명시: "나이트킵 때 한 나이트는 수면오프와 전혀 연관 없는
+    나이트". 홀짝월 합산(≤11)은 수면오프 회피 규칙이므로 야간전담 달의 야간은
+    합산 대상이 아니다 — 그대로 더하면 전월 14회 → 당월 상한 0이 되어 나이트킵을
+    마친 사람만 야간을 못 받는다.
+    """
+    from .conftest import make_limited
+
+    req = _two_month_request({"2026-02": True}, {"a0": 14}, night_only_a0=True)
+    sched = make_limited(req, days=3, solver=solver)
+    assert sched._two_month_rhs("a0") == 11, "나이트킵 달 야간이 합산에서 빠져야 한다"
+
+    result = sched.solve()
+    assert result["success"], result.get("message")
+    a0_nights = sum(1 for c in result["schedule"]["a0"].values() if c in ("N", "NC"))
+    assert a0_nights == 3, f"야간 가능자가 a0뿐인데 야간을 못 받았다: {result['schedule']['a0']}"
+
+
+def test_regular_prev_month_nights_still_capped():
+    """일반 근무로 쌓은 전월 야간은 종전대로 합산에 들어간다 (규칙 자체는 유지)."""
+    from .conftest import make_limited
+
+    req = _two_month_request({}, {"a0": 6})
+    sched = make_limited(req, days=7, solver="highs")
+    assert sched._two_month_rhs("a0") == 5
