@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.10.1 (2026-08-20, 나이트킵 다음 달 야간 0회 버그 수정)
+**최신**: v4.10.2 (2026-08-20, 명부에 야간전담 월 뱃지)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -149,7 +149,7 @@ npm start
 ```
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.10.1.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.10.2.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -380,6 +380,9 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 ## 프론트엔드 탭 구성 (5탭)
 
 1. **설정**: 간호사 관리 + 요일별 인원 + 규칙 + 근무 정의 + 배점 규칙 + CSV 일괄 + 개발자 설정
+   - 명부의 **야간전담 뱃지**: `3월 야간전담`·`3,5월 야간전담`처럼 **지정된 달**을 보여준다
+     (당월 포함이면 진한 강조, 다른 달만이면 옅게). 클릭 = 보고 있는 달 토글.
+     구현 `nurse-manage.js:nightMonthsBadge`, 검증 `node scripts/test_night_badge.mjs`
 2. **사전입력**: 년월 선택 + 근무표 선입력 (또는 **이미 완성된 근무표 입력**)
    - 💾 패널: 서버 저장/불러오기/삭제 (잠금·메모 포함)
    - 셀 우클릭 → **메모 + 🔒 완화 시 고정** 토글
@@ -520,10 +523,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.10.1.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.10.2.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.10.1.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.10.2.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -611,7 +614,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.10.1 기준)
+## 알려진 주의사항 (v4.10.2 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)

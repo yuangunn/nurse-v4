@@ -9,6 +9,32 @@ window.NurseManageModule = function() {
     async loadNurses(){this.nurses=await this.api('GET','/api/nurses')},
     _monthKey(){return `${this.year}-${String(this.month).padStart(2,'0')}`},
     isNightThisMonth(nurse){const mk=this._monthKey();const nm=nurse.night_months||{};return Object.keys(nm).length>0?!!nm[mk]:nurse.is_night_shift},
+    // 야간전담(나이트킵) 뱃지 — '3월 야간전담' / '3,5월 야간전담' 처럼 어느 달인지 보여준다.
+    // 당월만 켜고 끄는 표시로는 "이 사람이 언제 나이트킵인지"를 명부에서 알 수 없다.
+    nightMonthsBadge(nurse){
+      const nm=nurse.night_months||{};
+      const keys=Object.keys(nm).filter(k=>nm[k]).sort();
+      const on=this.isNightThisMonth(nurse);
+      if(!keys.length){
+        return nurse.is_night_shift
+          ? {text:'상시 야간전담',title:'월별 지정 없음 — 모든 달 야간전담',on:true,any:true}
+          : {text:'—',title:'야간전담 아님 (클릭하면 '+this.month+'월 지정)',on:false,any:false};
+      }
+      const yr=String(this.year);
+      const cur=keys.filter(k=>k.slice(0,4)===yr).map(k=>+k.slice(5,7)).sort((a,b)=>a-b);
+      const other=keys.filter(k=>k.slice(0,4)!==yr);
+      const parts=[];
+      if(cur.length){
+        // 달이 많으면 요약하되 '이번 달 포함' 여부는 남긴다 (전체 목록은 툴팁)
+        if(cur.length>6)parts.push(on?`${this.month}월 외 ${cur.length-1}개월`:`${cur.length}개월`);
+        else parts.push(`${cur.join(',')}월`);
+      }
+      for(const k of other)parts.push(`${k.slice(0,4)}년 ${+k.slice(5,7)}월`);
+      const full=keys.map(k=>`${k.slice(0,4)}년 ${+k.slice(5,7)}월`).join(', ');
+      return {text:`${parts.join(' · ')} 야간전담`,
+              title:`${full} 야간전담 — 클릭하면 ${this.month}월을 켜고 끕니다`,
+              on, any:true};
+    },
     toggleNightMonthModal(m,checked){const mk=`${this.year}-${String(m).padStart(2,'0')}`;if(!this.nurseModal.data.night_months)this.nurseModal.data.night_months={};if(checked)this.nurseModal.data.night_months[mk]=true;else delete this.nurseModal.data.night_months[mk]},
     openNurseModal(nurse){
       this.nurseModal.isNew=!nurse;
