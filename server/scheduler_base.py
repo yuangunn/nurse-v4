@@ -702,6 +702,13 @@ class _SchedulerBase:
                 if pre:
                     self._pin[(nid, d)] = pre
 
+    def _week_has_holiday(self, week_days) -> bool:
+        """주(당월 날짜 인덱스 목록)에 법정공휴일이 있는가 — 오프특근 판단.
+        제1원칙 3(2026-08-20): 공휴일이 몰린 주는 주 1회 OFF를 뺄 수 있다(오프특근)
+        → 공휴일 포함 완전한 주의 OF 의무는 ==1이 아니라 ≤1."""
+        return any(self.all_dates[d].strftime("%Y-%m-%d") in self.holidays
+                   for d in week_days)
+
     def _day_all_pinned(self, d, dt) -> bool:
         """그 날 재적 간호사 셀이 전부 확정인가 (= 그 날은 사실)."""
         active = [n for n in self.nurses if self._nurse_active_on(n, dt)]
@@ -874,7 +881,9 @@ class _SchedulerBase:
                 covered = all(days.get(self.all_dates[d].strftime("%Y-%m-%d")) for d in wd)
                 if ofs > 1:
                     notes.append(f"{name_of[nid]} {wi + 1}주차 OF {ofs}회 (생성 규칙은 주 1회)")
-                elif len(wd) >= 7 and covered and ofs == 0:
+                elif (len(wd) >= 7 and covered and ofs == 0
+                      and not self._week_has_holiday(wd)):
+                    # 공휴일 포함 주의 OF 0회는 오프특근(제1원칙 3)이라 정상
                     notes.append(f"{name_of[nid]} {wi + 1}주차 OF 0회 (생성 규칙은 주 1회)")
 
         # ④ V 월 한도 / ⑤ 월 최대 야간 / ⑥ 연속 근무·야간 한도

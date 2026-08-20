@@ -202,3 +202,59 @@ def test_prev_schedule_juhu_preserved(build_request, solve_small, solver):
             assert schedule.get(nid, {}).get(d) == code, (
                 f"{nid} {d}: 사전 '{code}' → 결과 '{schedule.get(nid, {}).get(d)}'"
             )
+
+
+# ── 오프특근 (제1원칙 3, 2026-08-20) ─────────────────────────────────────────
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_off_teukgeun_holiday_week_allows_zero_of(solver):
+    """공휴일 포함 완전한 주는 OF ==1이 아니라 ≤1 (오프특근 — 0회 허용).
+
+    3명·일 D=2 → 하루 휴무 자리 1칸. 월~금이 전부 공휴일이라 OF 가능 날은
+    일·토 2칸뿐 → 종전 규칙(전원 OF 정확 1회 = 3칸 필요)이면 infeasible.
+    오프특근 규칙으로 1명은 OF 0회(법휴로 쉼)로 생성돼야 한다."""
+    from server.models import GenerateRequest, Nurse
+    from .conftest import make_limited
+    from .test_exact_fit_characterization import PROD_SHIFTS
+
+    nurses = [Nurse(id=f"a{i}", name=f"*간호{i}", group="A", gender="male",
+                    capable_shifts=["DC", "D", "EC", "E", "NC", "N"], seniority=i)
+              for i in range(3)]
+    req = Requirements()
+    for day in ("mon", "tue", "wed", "thu", "fri", "sat", "sun"):
+        setattr(req, day, DayRequirement(D=2, E=0, N=0))
+    holidays = [f"2026-03-{i:02d}" for i in range(2, 7)]  # 월~금 전부 공휴일
+
+    r = make_limited(GenerateRequest(
+        year=2026, month=3, nurses=nurses, requirements=req, rules=Rules(),
+        prev_schedule={}, shifts=PROD_SHIFTS, holidays=holidays, time_limit=60,
+    ), days=7, solver=solver).solve()
+    assert r["success"], r["message"]
+    of_counts = {nid: sum(1 for c in days.values() if c == "OF")
+                 for nid, days in r["schedule"].items()}
+    assert all(c <= 1 for c in of_counts.values()), of_counts
+    assert any(c == 0 for c in of_counts.values()), of_counts  # 오프특근 발생
+    # 공휴일에 OF는 여전히 금지 — 공휴일 휴무는 법/V 등
+    for nid, days in r["schedule"].items():
+        for dk in holidays:
+            assert days.get(dk) != "OF", (nid, dk)
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_weekly_of_exact_kept_for_normal_weeks(solver):
+    """공휴일 없는 완전한 주는 종전대로 OF 정확 1회 유지 (오프특근 미적용)."""
+    from server.models import GenerateRequest
+    from .conftest import make_limited, _juhu_prev, _mini_nurses, _mini_requirements
+    from .test_exact_fit_characterization import PROD_SHIFTS
+
+    nurses = _mini_nurses(6)
+    r = make_limited(GenerateRequest(
+        year=2026, month=3, nurses=nurses, requirements=_mini_requirements(),
+        rules=Rules(maxConsecutiveWorkDays=6),
+        prev_schedule=_juhu_prev(nurses, 2026, 3, 7), shifts=PROD_SHIFTS,
+        holidays=[], time_limit=60,
+    ), days=7, solver=solver).solve()
+    assert r["success"], r["message"]
+    for nid, days in r["schedule"].items():
+        assert sum(1 for c in days.values() if c == "OF") == 1, nid

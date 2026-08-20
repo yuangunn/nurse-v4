@@ -297,8 +297,13 @@ class _ConflictAnalyzer(CpSatScheduler):
                 week_days = [d for d in range(ws, we + 1)
                              if self.all_dates[d] >= first and self._nurse_active_idx(nurse, d)]
                 if len(week_days) >= 7:
-                    lit = gate(f"{self._fmt_nurse_label(nurse)} {wi+1}주차 OF 1회 의무", nid=nid)
-                    model.Add(sum(x[nid][d]["OF"] for d in week_days) == 1).OnlyEnforceIf(lit)
+                    # 오프특근(제1원칙 3): 공휴일 포함 주는 OF ≤1 (0회 허용)
+                    if self._week_has_holiday(week_days):
+                        lit = gate(f"{self._fmt_nurse_label(nurse)} {wi+1}주차 OF ≤1 (공휴일 주 오프특근)", nid=nid)
+                        model.Add(sum(x[nid][d]["OF"] for d in week_days) <= 1).OnlyEnforceIf(lit)
+                    else:
+                        lit = gate(f"{self._fmt_nurse_label(nurse)} {wi+1}주차 OF 1회 의무", nid=nid)
+                        model.Add(sum(x[nid][d]["OF"] for d in week_days) == 1).OnlyEnforceIf(lit)
 
     def _g_pregnancy_p1(self, model, x, gate):
         """임산부 P1 주1회 — 게이팅 (충돌 시 라벨 핀포인트). 야간 제외·생 면제는 변수 도메인 처리."""

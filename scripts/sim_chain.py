@@ -1,11 +1,9 @@
 """12개월 연속(이월 체인) 근무 생성 시뮬레이션 — 사용자 시나리오 (2026-08-19).
 
-⚠️ 2026-08-20 사용자 정정 — 이 버전의 가정 중 오류 (CLAUDE.md 제1원칙 참조):
-  · "명절 주간 주휴를 공휴일에 배치"(juhu_pins의 hols 분기)는 **존재하지 않는
-    관행** — 실제 기전은 오프특근(공휴일 몰린 주 + 법휴 부여 시 OF 면제).
-  · 17명 체제(임산부 전출) 구간은 임의 가정 — 실제는 18명 유지 전제.
-  · 요일표는 사용자 기준 토 4/3/2 (여기선 DB 시드 3/3/2 사용).
-  재모델링 전까지 결과 해석 주의. 재실행 전 제1원칙과 대조할 것.
+2026-08-20 사용자 정정 반영 완료 (CLAUDE.md 제1원칙 대조):
+  · 명절 주휴-이동 분기 제거 — 공휴일 몰린 주는 엔진 오프특근 규칙(OF ≤1)이 처리.
+  · 18명 유지 (PREG_END_DATE=None), 요일표 토 4/3/2.
+  이전 리포트(주휴 드리프트 12개월)는 정정 전 가정의 수치임에 유의.
 
 구성: 간호사 18명 (임산부 1 · 야간전담 2 매달 교대 · 차지가능 9/불가 9)
 사전입력: 주휴(앱 추천과 동일한 전역 4주기 -1 시프트 공식) + 인당 랜덤 OFF 2개
@@ -61,11 +59,11 @@ def ward_requirements() -> Requirements:
     """실서비스 DB 시드 기본 요일표 (Requirements() 파이덴틱 기본값 3/3/3과 다름!)."""
     from server.models import DayRequirement
     vals = {"mon": (4, 5, 3), "tue": (5, 5, 3), "wed": (5, 5, 3), "thu": (5, 5, 3),
-            "fri": (5, 4, 3), "sat": (3, 3, 2), "sun": (3, 4, 3)}
+            "fri": (5, 4, 3), "sat": (4, 3, 2), "sun": (3, 4, 3)}  # 토 4/3/2 (제1원칙 4)
     return Requirements(**{k: DayRequirement(D=d, E=e, N=n) for k, (d, e, n) in vals.items()})
 
 
-WARD_REQ_BY_JSDOW = {0: 10, 1: 12, 2: 13, 3: 13, 4: 13, 5: 12, 6: 8}  # 총 근무 인원
+WARD_REQ_BY_JSDOW = {0: 10, 1: 12, 2: 13, 3: 13, 4: 13, 5: 12, 6: 9}  # 총 근무 인원
 
 
 HOLIDAYS = sorted(
@@ -122,7 +120,7 @@ PREG = {
     "early": {"start": "2026-09-01", "end": "2026-10-31"},
     "late": {"start": "2027-03-01", "end": "2027-04-30"},
 }
-PREG_END_DATE = "2027-04-30"  # 출산휴가 → 전출 처리 (이후 17명 체제)
+PREG_END_DATE = None  # 18명 유지 (제1원칙 4) — 전출 시나리오는 값 지정 시에만
 
 
 def build_nurses(ym: str) -> list[Nurse]:
@@ -155,7 +153,7 @@ def night_pair(month_seq: int) -> tuple[str, str]:
 
 
 def active_on(nid: str, d: date) -> bool:
-    if nid == PREGNANT and d > date.fromisoformat(PREG_END_DATE):
+    if nid == PREGNANT and PREG_END_DATE and d > date.fromisoformat(PREG_END_DATE):
         return False
     return True
 
@@ -196,12 +194,9 @@ def juhu_pins(y: int, m: int, taken: dict | None = None) -> dict[str, dict[str, 
                     and d.isoformat() not in taken.get(nid, {})]
             if not week:
                 continue
-            hols = [d for d in week if d.isoformat() in HOLIDAY_SET]
+            # 명절 주간 주휴-이동 분기는 제거됨(존재하지 않는 관행 — 제1원칙 5).
+            # 공휴일 몰린 주는 엔진의 오프특근 규칙(공휴일 포함 주 OF ≤1)이 처리한다.
             target = None
-            if hols:  # ⚠️ 가정 오류(2026-08-20 정정): 이런 관행 없음 — 재모델링 대기
-                best = max(hols, key=remaining)
-                if remaining(best) > 1:
-                    target = best
             if target is None:
                 effd = next((d for d in week if js_dow(d) == eff), None)
                 if effd is not None and remaining(effd) > 1:
