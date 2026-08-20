@@ -32,6 +32,7 @@ window.SolverModule = function() {
         this.statusOk=result.success;this.statusMessage=result.message;
         this.generationReport=result.generation_report||null;
         this.wishReport=result.wish_report||null;
+        this.offTeukgeun=result.off_teukgeun||[];
         this.loadFairnessLedger&&this.loadFairnessLedger();
         // 13단계 진단이 짚은 셀 좌표 → 정밀분석과 동일한 '충돌 위치로 이동' 칩 표시
         if(!result.success&&Array.isArray(result.anchored)&&result.anchored.length){this.diagResult={anchored:result.anchored}}

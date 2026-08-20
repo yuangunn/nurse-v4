@@ -18,10 +18,12 @@ def _solve(build_request, solve_small, **overrides):
 # ── Phase 5: 주휴/OF 부족 — 액션 제안 ────────────────────────────────────────
 
 
-def test_phase5_action_suggestions(build_request, solve_small, small_nurses):
-    """
-    6명 × D=E=2, N=1 구성은 주휴 포함시 인원 부족 → Phase 5 진단 트리거.
-    출력에 구체 수치(간호사 +N명, 일평균 -K명)가 포함되어야 한다.
+def test_short_rest_supply_yields_off_teukgeun(build_request, solve_small, small_nurses):
+    """휴무 자리가 모자란 구성(6명 × D=E=2,N=1 = 하루 5명 근무)은 이제 실패하지 않는다.
+
+    제1원칙 3(2026-08-20): 결원으로 휴무가 몰리면 남은 사람이 오프를 반납하고
+    근무를 뛴다(오프특근). 최소 보장은 주휴 — 그건 지켜진다.
+    대신 **누가 반납했는지**를 결과가 알려줘야 한다.
     """
     nurses = small_nurses(6)
     req = Requirements()
@@ -32,15 +34,13 @@ def test_phase5_action_suggestions(build_request, solve_small, small_nurses):
         build_request, solve_small,
         nurses=nurses, requirements=req,
     )
-    assert not result["success"], "이 구성은 infeasible 이어야 함"
-    msg = result["message"]
-
-    # Phase 5 헤더 확인
-    assert "주차별 분석" in msg, f"Phase 5 진단 미발동:\n{msg}"
-    # 새로 추가된 액션 제안 확인
-    assert "★ 해결 (택1)" in msg, f"액션 제안 헤더 누락:\n{msg}"
-    assert "간호사 +" in msg and "명 추가" in msg, f"간호사 추가 수치 누락:\n{msg}"
-    assert "일평균" in msg and "목표" in msg, f"demand 감축 수치 누락:\n{msg}"
+    assert result["success"], result["message"]
+    rows = result.get("off_teukgeun") or []
+    assert rows, "오프특근이 발생했는데 보고되지 않았다"
+    assert "오프특근" in result["message"]
+    # 주휴(최소 보장)는 전원 유지
+    for nid, days in result["schedule"].items():
+        assert sum(1 for c in days.values() if c == "주") >= 1, (nid, days)
 
 
 # ── Phase 4: 역순 전환 — 셀 기여도 ranking ──────────────────────────────────
@@ -89,11 +89,13 @@ def test_phase4_cell_ranking_when_relax_also_fails(small_nurses):
 
 
 def test_infeasible_result_has_message(build_request, solve_small, small_nurses):
-    """infeasible 시 결과 dict는 success=False + 비어있지 않은 message를 가져야 함."""
+    """infeasible 시 결과 dict는 success=False + 비어있지 않은 message를 가져야 함.
+
+    (요구 인원 > 재적 인원 — 오프특근으로도 메울 수 없는 진짜 불가능 구성)"""
     nurses = small_nurses(6)
     req = Requirements()
     for day in ("mon", "tue", "wed", "thu", "fri", "sat", "sun"):
-        setattr(req, day, DayRequirement(D=2, E=2, N=1))
+        setattr(req, day, DayRequirement(D=3, E=3, N=2))
 
     result = _solve(build_request, solve_small, nurses=nurses, requirements=req)
     assert result["success"] is False

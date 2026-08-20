@@ -305,7 +305,7 @@
         <span class="brand-name">NurseScheduler</span>
         <span class="brand-hospital">용인세브란스병원 · Yongin Severance Hospital</span>
       </div>
-      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.9.0</span>
+      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.10.0</span>
     </div>
     <div></div>
     <div class="appbar-meta">
@@ -1184,6 +1184,20 @@
         </div>
       </div>
     </template>
+  </div>
+  <!-- 오프특근 리포트 — 휴무 공급이 모자라 OF를 반납한 주 (제1원칙 3) -->
+  <div x-show="offTeukgeun.length" x-cloak class="mb-3">
+    <button @click="showOffTeukgeun=!showOffTeukgeun" class="btn btn-xs btn-ghost" style="border:1px solid var(--warn)">
+      ⚠ 오프특근 <span class="text-sub" x-text="offTeukgeun.length+'건'"></span> <span x-text="showOffTeukgeun?'▾':'▸'"></span>
+    </button>
+    <div x-show="showOffTeukgeun" x-cloak class="card-sm mt-1.5 text-xs">
+      <div class="text-sub mb-2">휴무 자리가 모자라 <strong class="text-bright">주 1회 OFF를 반납</strong>한 주입니다 (주휴는 유지). 결원·휴가가 몰린 주에 불가피하게 발생합니다 — 수당·보상은 별도로 챙기세요.</div>
+      <div class="flex flex-wrap gap-1">
+        <template x-for="(t,ti) in offTeukgeun" :key="'ot'+ti">
+          <span class="badge" style="border:1px solid var(--warn)" x-text="t.name+' '+t.week+'주차 ('+t.start.slice(5)+'~'+t.end.slice(5)+')'"></span>
+        </template>
+      </div>
+    </div>
   </div>
   <!-- 위시 반영 리포트 -->
   <div x-show="wishReport" x-cloak class="mb-3">
@@ -2636,7 +2650,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.9.0 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.10.0 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">HiGHS · CP-SAT 듀얼 솔버 · 완전 오프라인</p>
         <p class="text-dim text-xs mt-1">모성보호(임산부 P1) · 최소 침습 완화 · 정밀 충돌 진단</p>

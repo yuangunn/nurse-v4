@@ -177,12 +177,9 @@ window.GridInteractionsModule = function() {
             const wk=days.slice(w,w+7);
             const elig=wk.filter(d=>this.dayKey(d)>=firstKey&&!this.isNurseInactive(nurse,d));
             const ofs=elig.filter(d=>eff[this.dayKey(d)]==='OF');
-            // 오프특근(제1원칙 3): 그 주 공휴일에 법휴를 받았거나 근무한 사람은 OF를 뺄 수 있다
-            const exempt=elig.some(d=>{const c=eff[this.dayKey(d)];
-              return this.isHoliday(d)&&(c==='법'||workSet.has(c))});
+            // OF 0회는 경고하지 않는다 — 결원으로 휴무가 몰리면 남은 사람이 오프를
+            // 반납하고 근무를 메꾼다(오프특근, 제1원칙 3). 최소 보장은 주휴다.
             if(ofs.length>1)notes.push({nid,dk:this.dayKey(ofs[1]),msg:`${nurse.name}: ${fmtD(wk[0])}~${fmtD(wk[6])} 주에 OF ${ofs.length}회 — 규칙은 주 1회 (확정으로 수용)`});
-            else if(!ofs.length&&elig.length===7&&!exempt&&elig.every(d=>eff[this.dayKey(d)]))
-              notes.push({nid,dk:this.dayKey(wk[6]),msg:`${nurse.name}: ${fmtD(wk[0])}~${fmtD(wk[6])} 주 OF 0회 — 오프특근은 그 주 공휴일에 법휴·근무가 있는 경우만 (확정으로 수용)`});
           }
         }
       }

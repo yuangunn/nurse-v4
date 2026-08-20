@@ -208,11 +208,15 @@ def test_diagnosis_names_pregnancy_p1_cause(build_request):
     a2.pregnancy = {"early": {"start": "2026-03-01", "end": "2026-03-14"},
                     "late": {"start": "2026-03-20", "end": "2026-03-31"}}
     prev = _juhu_prev(nurses, year, month, days)
-    # a2의 주: 주휴(3/4, 헬퍼) 외 전부 사전입력 — 남은 3/6 하루를 OF(주1회 의무)와
-    # P1(주1회 의무)이 동시에 요구 → P1 단계에서만 잡히는 충돌
+    # a2의 주: 주휴(3/4, 헬퍼) 외 3/6만 비우고 전부 사전입력.
+    # 그리고 3/6은 다른 2명이 쉬어서 남은 4명(=수요)이 전원 근무해야 한다
+    # → a2가 근무해야 하므로 P1(주 1회 의무)을 놓을 자리가 없다.
+    # (OF 주 1회는 오프특근으로 양보되므로 더 이상 충돌 재료가 아니다 — 제1원칙 3)
     a2p = prev.setdefault("a2", {})
     a2p.update({"2026-03-01": "D", "2026-03-02": "D", "2026-03-03": "E",
-                "2026-03-05": "E", "2026-03-07": "D"})
+                "2026-03-05": "D", "2026-03-07": "D"})
+    # 3/6(금)은 a4가 주휴(헬퍼) + a0가 OF → 남은 4명(a1·a2·a3·a5)=수요 4명
+    prev.setdefault("a0", {})["2026-03-06"] = "OF"
 
     req = build_request(nurses=nurses, prev_schedule=prev, year=year,
                         month=month, days=days,
