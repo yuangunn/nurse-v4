@@ -5,7 +5,7 @@
   · 18명 유지 (PREG_END_DATE=None), 요일표 토 4/3/2.
   이전 리포트(주휴 드리프트 12개월)는 정정 전 가정의 수치임에 유의.
 
-구성: 간호사 18명 (임산부 1 · 야간전담 2 매달 교대 · 차지가능 9/불가 9)
+구성: 간호사 18명 (임산부 1 · 야간전담 2 매달 교대 · 차지가능 9/불가 9 · 남 2/여 16)
 사전입력: 주휴(앱 추천과 동일한 전역 4주기 -1 시프트 공식) + 인당 랜덤 OFF 2개
 체인: 전월 '생성된' 당월 셀을 그대로 다음달 prev_schedule에 넣고 이어서 생성.
 관찰: 주휴 요일 드리프트(주말 몰림 → 평일 몰림)가 생성 가능성에 미치는 영향.
@@ -54,6 +54,34 @@ PROD_SHIFTS = [
     ShiftDef(code="법", name="법정공휴일", period="leave"),
     ShiftDef(code="병", name="병가", period="leave", auto_assign=False),
 ]
+
+SEED_SCORING = [  # DB 시드와 동일 — V 페널티 -500·생 보상 +80 등 (없으면 솔버가 V/생 무차별!)
+    ("D→N 전환 페널티", "transition", {"from": "day", "to": "night"}, -30),
+    ("N→공 전환 페널티", "transition", {"from": "night", "to": "specific:공"}, -40),
+    ("V(연차) 사용 페널티", "specific_shift", {"shift_code": "V", "condition": "all"}, -500),
+    ("생리휴가 보상", "specific_shift", {"shift_code": "생", "condition": "female_only"}, 80),
+    ("D→E 순방향 보상", "transition", {"from": "day", "to": "evening"}, 20),
+    ("E→N 순방향 보상", "transition", {"from": "evening", "to": "night"}, 20),
+    ("연속 동일 낮 근무 보상", "consecutive_same", {"period": "day"}, 15),
+    ("연속 동일 저녁 근무 보상", "consecutive_same", {"period": "evening"}, 15),
+    ("연속 동일 야간 근무 보상", "consecutive_same", {"period": "night"}, 15),
+    ("연속 휴일 보상", "consecutive_same", {"period": "rest"}, 30),
+    ("희망 근무 반영 보상", "wish", {}, 50),
+    ("야간 근무 공평성", "night_fairness", {}, -50),
+    ("퐁당퐁당 회피", "pattern", {"pattern": ["work", "rest_leave", "work"]}, -20),
+    ("법정공휴일 휴가 보상", "specific_shift", {"shift_code": "법", "condition": "all"}, 30),
+    ("공휴일 근무 보상", "holiday_work", {}, 20),
+    ("주말 경감근무 보상", "weekend_work", {"slots": [{"weekday": 5, "periods": ["evening", "night"]}, {"weekday": 6, "periods": ["day"]}]}, 20),
+    ("공휴일 OFF 페널티", "holiday_off", {}, -500),
+]
+
+
+def seed_scoring_rules():
+    from server.models import ScoringRule
+    return [ScoringRule(id=i, name=n, rule_type=rt, params=pr, score=s, enabled=True,
+                        sort_order=i)
+            for i, (n, rt, pr, s) in enumerate(SEED_SCORING)]
+
 
 def ward_requirements() -> Requirements:
     """실서비스 DB 시드 기본 요일표 (Requirements() 파이덴틱 기본값 3/3/3과 다름!)."""
@@ -114,7 +142,7 @@ JUHU_START = {  # nid → 9월에 보일 요일 (사용자 코드)
     "n06": 3, "n15": 3, "n07": 4, "n16": 4,
     "n08": 5, "n17": 5,
 }
-MALE = {"n03", "n07", "n12", "n16"}
+MALE = {"n03", "n07"}  # 남 2 · 여 16 (2026-08-20 사용자 지정)
 PREGNANT = "n10"
 PREG = {
     "early": {"start": "2026-09-01", "end": "2026-10-31"},
@@ -320,6 +348,7 @@ def run(months: int = 12, engine: str = "cpsat", time_limit: int = 180):
             year=y, month=m, nurses=nurses, requirements=ward_requirements(),
             rules=Rules(), prev_schedule=dict(prev), shifts=PROD_SHIFTS,
             holidays=HOLIDAYS, prev_month_nights=prev_month_nights,
+            scoring_rules=seed_scoring_rules(),
             time_limit=time_limit, solver=engine,
         )
         t0 = time.time()
