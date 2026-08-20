@@ -138,9 +138,8 @@ class _SchedulerBase:
         self.locked_cells = request.locked_cells or {}  # {nurse_id: {date_str: true}} — 완화 시에도 고정
         self.mip_gap = request.mip_gap
         self.time_limit = request.time_limit
-        # 법정공휴일: 당월 날짜만 필터링 (다른 달 공휴일은 무시)
-        month_prefix = f"{self.year}-{self.month:02d}-"
-        self.holidays = set(h for h in (request.holidays or []) if h.startswith(month_prefix))
+        # 법정공휴일: 범위 좁히기는 _build_date_range() 뒤에서 (생성 주기 기준)
+        self.holidays = set(request.holidays or [])
         self.allow_pre_relax = request.allow_pre_relax
         self.allow_juhu_relax = request.allow_juhu_relax
         self.unlimited_v = request.unlimited_v
@@ -182,6 +181,10 @@ class _SchedulerBase:
         #  2) 당월 날짜 범위만 통과 — 범위 밖 날짜 무시
         #  3) "/" 접두어는 트레이니 표시용이라 스트립 (프리셉터 근무가 자동 적용)
         valid_dates = set(dt.strftime("%Y-%m-%d") for dt in self.all_dates)
+        # 법정공휴일은 '생성 주기 범위' 안의 날짜만 사용한다 — 당월만 필터하면
+        # 월경계 주에 걸린 익월 공휴일(신정·설날·삼일절)을 못 봐서 ① 그 날에
+        # OF/V/생을 배정해 버리고 ② 오프특근 판정에서도 빠진다. (2026-08-20)
+        self.holidays = set(h for h in self.holidays if h in valid_dates)
         valid_nurse_ids = set(n["id"] for n in self._all_nurses)
         def _normalize_pre(s: str) -> str:
             if not s:
@@ -703,11 +706,46 @@ class _SchedulerBase:
                     self._pin[(nid, d)] = pre
 
     def _week_has_holiday(self, week_days) -> bool:
-        """주(당월 날짜 인덱스 목록)에 법정공휴일이 있는가 — 오프특근 판단.
-        제1원칙 3(2026-08-20): 공휴일이 몰린 주는 주 1회 OFF를 뺄 수 있다(오프특근)
-        → 공휴일 포함 완전한 주의 OF 의무는 ==1이 아니라 ≤1."""
+        """주(날짜 인덱스 목록)에 법정공휴일이 있는가."""
         return any(self.all_dates[d].strftime("%Y-%m-%d") in self.holidays
                    for d in week_days)
+
+    def _week_off_exempt(self, nurse, week_days, codes=None) -> bool:
+        """오프특근 — 이 주 이 간호사의 'OF 주 1회' 의무가 면제되는가 (사후 판정).
+
+        제1원칙 3(2026-08-20): "주 1회 OFF는 정말 불가피한 경우 뺄 수 있다. 보통
+        공휴일이 몰린 주에, 그 주에 법휴가 부여되었다면 OFF 특근이 가능하다."
+        → **그 주 공휴일에 법휴(법)를 받았거나 실제로 근무한 사람**만 면제.
+        연휴 주에 근무도 법휴도 없이(전부 주휴·연차 등) 지낸 사람은 종전대로 OF 1회.
+
+        `codes`가 없으면 사전입력(self.prev) 기준으로 본다. 모델 안에서의 강제는
+        선형식(`_week_off_duty_terms`)이 담당한다 — 자유 셀의 근무·법휴까지
+        솔버가 선택할 수 있어야 하기 때문.
+        """
+        if not self._week_has_holiday(week_days):
+            return False
+        by_day = codes if codes is not None else self.prev.get(nurse["id"], {})
+        work = set(self.WORK_SHIFTS)
+        for d in week_days:
+            dk = self.all_dates[d].strftime("%Y-%m-%d")
+            if dk not in self.holidays:
+                continue
+            c = by_day.get(dk)
+            if c == "법" or c in work:
+                return True
+        return False
+
+    def _week_off_exempt_shifts(self, week_days):
+        """오프특근 면제 근거가 되는 (날짜 인덱스, 근무코드) 목록 —
+        그 주 공휴일의 '법' + 모든 근무 코드. 모델의 선형식에 쓴다."""
+        out = []
+        for d in week_days:
+            dk = self.all_dates[d].strftime("%Y-%m-%d")
+            if dk not in self.holidays:
+                continue
+            for s in ["법"] + list(self.WORK_SHIFTS):
+                out.append((d, s))
+        return out
 
     def _day_all_pinned(self, d, dt) -> bool:
         """그 날 재적 간호사 셀이 전부 확정인가 (= 그 날은 사실)."""
@@ -882,8 +920,8 @@ class _SchedulerBase:
                 if ofs > 1:
                     notes.append(f"{name_of[nid]} {wi + 1}주차 OF {ofs}회 (생성 규칙은 주 1회)")
                 elif (len(wd) >= 7 and covered and ofs == 0
-                      and not self._week_has_holiday(wd)):
-                    # 공휴일 포함 주의 OF 0회는 오프특근(제1원칙 3)이라 정상
+                      and not self._week_off_exempt(nurse, wd, codes=days)):
+                    # 그 주 공휴일에 법휴를 받았거나 근무했으면 OF 0회는 오프특근(제1원칙 3)
                     notes.append(f"{name_of[nid]} {wi + 1}주차 OF 0회 (생성 규칙은 주 1회)")
 
         # ④ V 월 한도 / ⑤ 월 최대 야간 / ⑥ 연속 근무·야간 한도

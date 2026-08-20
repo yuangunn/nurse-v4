@@ -616,11 +616,15 @@ class CpSatScheduler(_SchedulerBase):
                     continue  # 사실-클램프: 주 전체 확정
                 bound = max(1, self._pin_nurse_count(nid, week_days, ("OF",)))
                 of_sum = sum(x[nid][d][of_code] for d in week_days)
-                # 오프특근(제1원칙 3): 공휴일 포함 주는 OF를 뺄 수 있다 → ≤ bound
-                if len(week_days) >= 7 and not self._week_has_holiday(week_days):
-                    model.Add(of_sum == bound)
-                else:
-                    model.Add(of_sum <= bound)
+                model.Add(of_sum <= bound)
+                if len(week_days) < 7:
+                    continue                      # 부분 주는 상한만
+                # 오프특근(제1원칙 3, HiGHS 패리티): 그 주 공휴일에 법휴를 받았거나
+                # 근무한 사람은 OF를 뺄 수 있다 → 근거가 없으면 OF 1회 의무.
+                relief = [x[nid][d][s]
+                          for d, s in self._week_off_exempt_shifts(week_days)
+                          if s in x[nid][d]]
+                model.Add(of_sum + sum(relief) >= 1)
 
     def _cs_pregnancy_p1_weekly(self, model, x):
         """임산부: P1 구간 완전 포함 주마다 P1 정확히 1회 (부분 주 ≤1).

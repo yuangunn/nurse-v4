@@ -27,7 +27,11 @@ window.GridInteractionsModule = function() {
 
     // ── 실시간 제약 위반 경고 ──────────────────────────────
     _checkViolations(){
-      const v=[];
+      // v     = 생성을 실제로 막는 것 (알 수 없는 코드 등)
+      // notes = 규칙과 다르지만 엔진이 '사실'로 수용하는 것 (사실-클램프, 결정 1-15)
+      //         — 확정 셀만으로 결정되는 제약은 스킵/상한 클램프되므로 위반이 아니다.
+      //         솔버가 조용히 무시하는 입력(공휴일 OF·임산부 야간/생)도 여기.
+      const v=[],notes=[];
       const days=this.scheduleDays;
       const dayNames=['일','월','화','수','목','금','토'];
       const eveningCodes=this.shifts.filter(s=>s.period==='evening').map(s=>s.code);
@@ -64,7 +68,7 @@ window.GridInteractionsModule = function() {
 
           for(const[fromCodes,toCodes,label]of forbidden){
             if(fromCodes.includes(s1)&&toCodes.includes(s2))
-              v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (${label} 금지)`});
+              notes.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (${label} — 규칙과 다르지만 확정으로 수용)`});
           }
         }
       }
@@ -113,16 +117,16 @@ window.GridInteractionsModule = function() {
           if(code.startsWith('/'))continue; // 트레이니 표시 코드 — 솔버가 스트립
           const def=defByCode[code];
           if(!def){v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} '${code}' 알 수 없는 근무 코드`});continue}
-          if(code==='OF'&&holidaySet.has(dk)){v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 공휴일 OF — 생성 시 무시되고 재배치됩니다`});continue}
-          if(span&&nightSet.has(code)&&dk>=span[0]&&dk<=span[1]){v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 임신 구간 야간 — 생성 시 무시됩니다 (모성보호)`});continue}
-          if(pregMonth&&code==='생'){v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 임신 달 생리휴가 — 생성 시 무시됩니다`});continue}
+          if(code==='OF'&&holidaySet.has(dk)){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 공휴일 OF — 생성 시 무시되고 재배치됩니다`});continue}
+          if(span&&nightSet.has(code)&&dk>=span[0]&&dk<=span[1]){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 임신 구간 야간 — 생성 시 무시됩니다 (모성보호)`});continue}
+          if(pregMonth&&code==='생'){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 임신 달 생리휴가 — 생성 시 무시됩니다`});continue}
           eff[dk]=code;
           if(['day','evening','night'].includes(def.period)&&!(flexMap[code]||[code]).some(c=>capable.has(c)))
-            v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} ${code} — 가능 근무에 없음 (자격 미달)`});
+            notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} ${code} — 가능 근무에 없음 (자격 미달, 확정으로 수용)`});
           if(nightDed&&workSet.has(code)&&def.period!=='night')
-            v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} ${code} — 야간전담은 야간(N/NC) 외 근무 불가`});
+            notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} ${code} — 야간전담의 야간 외 근무 (확정으로 수용)`});
           if(code==='생'&&nurse.gender!=='female')
-            v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 생리휴가는 여성 전용입니다`});
+            notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 생리휴가는 여성 전용 (확정으로 수용)`});
           if(dk>=firstKey&&dk<=lastKey){
             if(code==='V')vDays.push(dk);
             if(code==='생'&&nurse.gender==='female')mDays.push(dk);
@@ -131,14 +135,14 @@ window.GridInteractionsModule = function() {
         }
 
         const maxV=+r.maxVPerMonth||0;
-        if(maxV>0&&vDays.length>maxV)v.push({nid,dk:vDays[maxV],msg:`${nurse.name}: V ${vDays.length}회 — 월 최대 ${maxV}회 초과`});
-        if(mDays.length>1)v.push({nid,dk:mDays[1],msg:`${nurse.name}: 생리휴가 ${mDays.length}회 — 월 1회 한도 초과`});
+        if(maxV>0&&vDays.length>maxV)notes.push({nid,dk:vDays[maxV],msg:`${nurse.name}: V ${vDays.length}회 — 월 최대 ${maxV}회 (확정분은 그대로 수용)`});
+        if(mDays.length>1)notes.push({nid,dk:mDays[1],msg:`${nurse.name}: 생리휴가 ${mDays.length}회 — 월 1회 한도 (확정분은 그대로 수용)`});
         if(!nightDed&&r.maxNightPerMonth&&nDays.length>(+r.maxNightPerMonthCount||6))
-          v.push({nid,dk:nDays[+r.maxNightPerMonthCount||6],msg:`${nurse.name}: 야간 ${nDays.length}회 — 월 최대 ${r.maxNightPerMonthCount}회 초과`});
+          notes.push({nid,dk:nDays[+r.maxNightPerMonthCount||6],msg:`${nurse.name}: 야간 ${nDays.length}회 — 월 최대 ${r.maxNightPerMonthCount}회 (확정분은 그대로 수용)`});
         if(!nightDed&&r.maxNightTwoMonth){
           const prevN=+((this.prevMonthNights||{})[nid])||0;
           const rhs=Math.max(0,(+r.maxNightTwoMonthCount||11)-prevN);
-          if(nDays.length>rhs)v.push({nid,dk:nDays[Math.min(rhs,nDays.length-1)],msg:`${nurse.name}: 당월 야간 ${nDays.length}회 + 전월 ${prevN}회 — 합산 ${r.maxNightTwoMonthCount}회 초과`});
+          if(nDays.length>rhs)notes.push({nid,dk:nDays[Math.min(rhs,nDays.length-1)],msg:`${nurse.name}: 당월 야간 ${nDays.length}회 + 전월 ${prevN}회 — 합산 ${r.maxNightTwoMonthCount}회 (확정분은 그대로 수용)`});
         }
 
         // 연속 근무/야간 — 선입력만으로 이미 확정된 초과 (빈칸은 보수적으로 run을 끊음)
@@ -152,8 +156,8 @@ window.GridInteractionsModule = function() {
           runN=code&&nightSet.has(code)?runN+1:0;
           if(!runW)flagW=false;
           if(!runN)flagN=false;
-          if(maxW&&runW>maxW&&!flagW&&dk>=firstKey){flagW=true;v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)}까지 연속 근무 ${runW}일 — 최대 ${maxW}일 초과`})}
-          if(maxCN&&runN>maxCN&&!flagN&&dk>=firstKey){flagN=true;v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)}까지 연속 야간 ${runN}일 — 최대 ${maxCN}일 초과`})}
+          if(maxW&&runW>maxW&&!flagW&&dk>=firstKey){flagW=true;notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)}까지 연속 근무 ${runW}일 — 최대 ${maxW}일 (확정으로 수용)`})}
+          if(maxCN&&runN>maxCN&&!flagN&&dk>=firstKey){flagN=true;notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)}까지 연속 야간 ${runN}일 — 최대 ${maxCN}일 (확정으로 수용)`})}
         }
 
         // N→휴무→D 금지 (noNOD) — 세 칸 모두 선입력일 때 확정
@@ -163,7 +167,7 @@ window.GridInteractionsModule = function() {
             if(dk3<firstKey)continue; // 전월 내부 완결 윈도우 — 솔버 미적용
             const c1=eff[this.dayKey(days[i])],c2=eff[this.dayKey(days[i+1])],c3=eff[dk3];
             if(c1&&c2&&c3&&nightSet.has(c1)&&restSet.has(c2)&&daySet.has(c3))
-              v.push({nid,dk:dk3,msg:`${nurse.name}: ${fmtD(days[i])}~${fmtD(days[i+2])} N→휴무→D 패턴 금지`});
+              notes.push({nid,dk:dk3,msg:`${nurse.name}: ${fmtD(days[i])}~${fmtD(days[i+2])} N→휴무→D 패턴 (확정으로 수용)`});
           }
         }
 
@@ -173,10 +177,12 @@ window.GridInteractionsModule = function() {
             const wk=days.slice(w,w+7);
             const elig=wk.filter(d=>this.dayKey(d)>=firstKey&&!this.isNurseInactive(nurse,d));
             const ofs=elig.filter(d=>eff[this.dayKey(d)]==='OF');
-            if(ofs.length>1)v.push({nid,dk:this.dayKey(ofs[1]),msg:`${nurse.name}: ${fmtD(wk[0])}~${fmtD(wk[6])} 주에 OF ${ofs.length}회 — 주 1회만 가능`});
-            else if(!ofs.length&&elig.length===7&&!elig.some(d=>this.isHoliday(d))&&elig.every(d=>eff[this.dayKey(d)]))
-              // 공휴일 포함 주는 오프특근(제1원칙 3)으로 OF 0회가 정상이라 제외
-              v.push({nid,dk:this.dayKey(wk[6]),msg:`${nurse.name}: ${fmtD(wk[0])}~${fmtD(wk[6])} 주 7일 모두 선입력 — 의무 OF 1회를 배치할 수 없음`});
+            // 오프특근(제1원칙 3): 그 주 공휴일에 법휴를 받았거나 근무한 사람은 OF를 뺄 수 있다
+            const exempt=elig.some(d=>{const c=eff[this.dayKey(d)];
+              return this.isHoliday(d)&&(c==='법'||workSet.has(c))});
+            if(ofs.length>1)notes.push({nid,dk:this.dayKey(ofs[1]),msg:`${nurse.name}: ${fmtD(wk[0])}~${fmtD(wk[6])} 주에 OF ${ofs.length}회 — 규칙은 주 1회 (확정으로 수용)`});
+            else if(!ofs.length&&elig.length===7&&!exempt&&elig.every(d=>eff[this.dayKey(d)]))
+              notes.push({nid,dk:this.dayKey(wk[6]),msg:`${nurse.name}: ${fmtD(wk[0])}~${fmtD(wk[6])} 주 OF 0회 — 오프특근은 그 주 공휴일에 법휴·근무가 있는 경우만 (확정으로 수용)`});
           }
         }
       }
@@ -198,15 +204,17 @@ window.GridInteractionsModule = function() {
         for(const p of['D','E','N']){
           const need=+req[p]||0;
           if(cnt[p].length>need){
-            v.push({nid:cnt[p][0],dk,msg:`${fmtD(day)} ${p} 사전배정 ${cnt[p].length}명 — 필요 ${need}명과 정확히 일치해야 함`});
+            notes.push({nid:cnt[p][0],dk,msg:`${fmtD(day)} ${p} 사전배정 ${cnt[p].length}명 — 필요 ${need}명 (확정분에 맞춰 그날 인원이 상향됩니다)`});
             for(const id of cnt[p])extraCells.push(`${id}|${dk}`);
           }
         }
       }
 
       this.prevViolations=v;
+      this.prevPinNotes=notes;
       this._violationSet=new Set(v.map(x=>`${x.nid}|${x.dk}`));
-      for(const k of extraCells)this._violationSet.add(k);
+      this._pinNoteSet=new Set(notes.map(x=>`${x.nid}|${x.dk}`));
+      for(const k of extraCells)this._pinNoteSet.add(k);
       this._checkStaffingSlack();
       // 실시간 생성 가능성 신호등 — 편집이 잦으니 디바운스로 프로브
       this._queueFeasibility&&this._queueFeasibility();
@@ -240,6 +248,9 @@ window.GridInteractionsModule = function() {
     },
     hasViolation(nurseId,day){
       return this._violationSet?.has(`${nurseId}|${this.dayKey(day)}`)||false;
+    },
+    hasPinNote(nurseId,day){
+      return this._pinNoteSet?.has(`${nurseId}|${this.dayKey(day)}`)||false;
     },
 
     // ── 드래그 다중 선택 ───────────────────────────────────

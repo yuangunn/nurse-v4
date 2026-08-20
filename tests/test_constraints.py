@@ -207,15 +207,13 @@ def test_prev_schedule_juhu_preserved(build_request, solve_small, solver):
 # ── 오프특근 (제1원칙 3, 2026-08-20) ─────────────────────────────────────────
 
 
-@pytest.mark.parametrize("solver", ["highs", "cpsat"])
-def test_off_teukgeun_holiday_week_allows_zero_of(solver):
-    """공휴일 포함 완전한 주는 OF ==1이 아니라 ≤1 (오프특근 — 0회 허용).
+def _teukgeun_request(pre, hol_range=range(2, 7)):
+    """오프특근 검증용 요청 — 3명·일 D=2, 월~금 전부 공휴일인 완전한 주.
 
-    3명·일 D=2 → 하루 휴무 자리 1칸. 월~금이 전부 공휴일이라 OF 가능 날은
-    일·토 2칸뿐 → 종전 규칙(전원 OF 정확 1회 = 3칸 필요)이면 infeasible.
-    오프특근 규칙으로 1명은 OF 0회(법휴로 쉼)로 생성돼야 한다."""
+    하루 휴무 자리 1칸 × 7일 = 7칸. 공휴일엔 OF 금지라 OF 가능 날은 일·토 2칸뿐.
+    → 전원 'OF 정확히 1회'(3칸 필요)는 불가능. 제1원칙 3의 오프특근 —
+    '그 주 공휴일에 법휴를 받았거나 근무한 사람은 OF를 뺄 수 있다' — 로 풀린다."""
     from server.models import GenerateRequest, Nurse
-    from .conftest import make_limited
     from .test_exact_fit_characterization import PROD_SHIFTS
 
     nurses = [Nurse(id=f"a{i}", name=f"*간호{i}", group="A", gender="male",
@@ -224,21 +222,54 @@ def test_off_teukgeun_holiday_week_allows_zero_of(solver):
     req = Requirements()
     for day in ("mon", "tue", "wed", "thu", "fri", "sat", "sun"):
         setattr(req, day, DayRequirement(D=2, E=0, N=0))
-    holidays = [f"2026-03-{i:02d}" for i in range(2, 7)]  # 월~금 전부 공휴일
+    holidays = [f"2026-03-{i:02d}" for i in hol_range]
+    # 연속 근무 한도는 이 시나리오의 관심사가 아니다 (3명뿐이라 연휴를 이어 일하게 됨)
+    return GenerateRequest(
+        year=2026, month=3, nurses=nurses, requirements=req,
+        rules=Rules(maxConsecutiveWorkDays=7),
+        prev_schedule=pre, shifts=PROD_SHIFTS, holidays=holidays, time_limit=60,
+    ), holidays
 
-    r = make_limited(GenerateRequest(
-        year=2026, month=3, nurses=nurses, requirements=req, rules=Rules(),
-        prev_schedule={}, shifts=PROD_SHIFTS, holidays=holidays, time_limit=60,
-    ), days=7, solver=solver).solve()
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_off_teukgeun_only_for_holiday_work_or_beop(solver):
+    """OF 0회는 '그 주 공휴일에 법휴를 받았거나 근무한 사람'에게만 허용된다.
+
+    a0에게 법휴를 부여한 구성. 누가 OF 0회가 되든 그 근거(법휴·공휴일 근무)가
+    반드시 있어야 한다 — 근거 없는 면제가 생기면 규칙이 헐거워진 것."""
+    from .conftest import make_limited
+
+    req, holidays = _teukgeun_request({"a0": {"2026-03-02": "법"}})
+    r = make_limited(req, days=7, solver=solver).solve()
     assert r["success"], r["message"]
-    of_counts = {nid: sum(1 for c in days.values() if c == "OF")
-                 for nid, days in r["schedule"].items()}
-    assert all(c <= 1 for c in of_counts.values()), of_counts
-    assert any(c == 0 for c in of_counts.values()), of_counts  # 오프특근 발생
-    # 공휴일에 OF는 여전히 금지 — 공휴일 휴무는 법/V 등
+    work = {"DC", "D", "D1", "EC", "E", "중", "NC", "N"}
     for nid, days in r["schedule"].items():
+        ofs = sum(1 for c in days.values() if c == "OF")
+        assert ofs <= 1, (nid, days)
+        if ofs == 0:
+            grounds = [dk for dk in holidays
+                       if days.get(dk) == "법" or days.get(dk) in work]
+            assert grounds, f"{nid}: 근거 없는 OF 면제 — {days}"
+        # 공휴일에 OF는 여전히 금지 — 공휴일 휴무는 법/V 등
         for dk in holidays:
             assert days.get(dk) != "OF", (nid, dk)
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_off_teukgeun_not_for_idle_nurse(solver):
+    """연휴 내내 근무도 법휴도 없는 사람은 종전대로 OF 1회 의무.
+
+    a0을 공휴일 5일 전부 '주'로 확정 → 공휴일 근무 0·법휴 0 → 면제 근거 없음.
+    (a1·a2는 공휴일을 일하므로 오프특근 대상이 된다.)"""
+    from .conftest import make_limited
+
+    hol = range(2, 5)   # 월~수 3일 연휴
+    pre = {"a0": {f"2026-03-{i:02d}": "주" for i in hol}}
+    req, _ = _teukgeun_request(pre, hol_range=hol)
+    r = make_limited(req, days=7, solver=solver).solve()
+    assert r["success"], r["message"]
+    a0 = r["schedule"]["a0"]
+    assert sum(1 for c in a0.values() if c == "OF") == 1, a0
 
 
 @pytest.mark.parametrize("solver", ["highs", "cpsat"])

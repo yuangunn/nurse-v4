@@ -190,9 +190,8 @@ def juhu_pins(y: int, m: int, taken: dict | None = None) -> dict[str, dict[str, 
     """앱 분석탭 추천(2단계: juhu_day 고정 + 전역 4주기 -1 시프트)과 동일한
     순수 공식으로 당월 날짜에 주휴 핀 생성 (요일제).
 
-    명절 주간 관행 반영: 공휴일이 낀 주에는 그 주의 주휴를 공휴일 날짜로 이동
-    (공휴일 OF 금지 탓에 비공휴일 캐파가 주휴+전원 OF로 만석이 되는 교착 —
-    2026-09 추석 주간에서 재현·확정 — 을 병동이 실제로 푸는 방식)."""
+    주휴를 공휴일로 몰아주는 관행은 없다 (제1원칙 5 — 주휴·공휴 중복은 중복수당
+    으로 보상). 연휴 주의 교착은 법휴 부여 + 오프특근으로 푼다 → beop_pins()."""
     pins: dict[str, dict[str, str]] = defaultdict(dict)
     taken = taken or {}
     first, last = date(y, m, 1), max(month_days(y, m))
@@ -238,6 +237,52 @@ def juhu_pins(y: int, m: int, taken: dict | None = None) -> dict[str, dict[str, 
                 pins[nid][target.isoformat()] = "주"
                 used[target.isoformat()] += 1
     return pins
+
+
+def beop_pins(y: int, m: int, pins, night_ids, taken: dict | None = None
+              ) -> dict[str, dict[str, str]]:
+    """공휴일에 법휴(법)를 부여한다 — 제1원칙 1(공휴일에 법휴 가능)·3(오프특근).
+
+    병동이 공휴일에 누구를 쉬게 할지 정하는 일이다. 엔진의 오프특근(그 주 OF 의무
+    면제)은 **그 주 공휴일에 법휴를 받았거나 근무한 사람**에게 열리므로, 법휴는
+    "공휴일에 일하지도 않고 쉬는" 사람에게 근거를 만들어 준다.
+
+    일별 휴무 캐파 안에서(자리 1개는 남겨둠) 주당 1회씩, 적게 받은 사람 우선.
+    야간전담은 법휴 대상이 아니다 (엔진에서 야간전담의 법 변수는 0 고정)."""
+    taken = taken or {}
+    used = Counter()
+    REST = ("OF", "주", "P1", "V", "생", "법", "특", "공", "병")
+    for nid, cells in taken.items():
+        for dk, c in cells.items():
+            if dk.startswith(f"{y:04d}-{m:02d}") and c in REST:
+                used[dk] += 1
+    for cells in pins.values():
+        for dk in cells:
+            used[dk] += 1
+
+    out: dict[str, dict[str, str]] = defaultdict(dict)
+    got: dict[str, set[int]] = defaultdict(set)   # nid → 이미 법휴 받은 주
+    for d in month_days(y, m):
+        dk = d.isoformat()
+        if dk not in HOLIDAY_SET:
+            continue
+        room = (18 - WARD_REQ_BY_JSDOW[js_dow(d)]) - used[dk] - 1
+        if room <= 0:
+            continue
+        w = week_idx(d)
+        cand = [f"n{i:02d}" for i in range(18)]
+        cand = [nid for nid in cand
+                if nid not in night_ids
+                and active_on(nid, d)
+                and dk not in pins.get(nid, {})
+                and dk not in taken.get(nid, {})
+                and w not in got[nid]]
+        cand.sort(key=lambda nid: (len(got[nid]), nid))
+        for nid in cand[:room]:
+            out[nid][dk] = "법"
+            got[nid].add(w)
+            used[dk] += 1
+    return out
 
 
 def wish_offs(y: int, m: int, pins, rng, taken: dict | None = None) -> dict[str, dict[str, str]]:
@@ -324,8 +369,11 @@ def run(months: int = 12, engine: str = "cpsat", time_limit: int = 180):
         ym = f"{y:04d}-{m:02d}"
         rng = random.Random(f"sim-{ym}")
         pins = juhu_pins(y, m, taken=confirmed)
-        offs = wish_offs(y, m, pins, rng, taken=confirmed)
         na, nb = night_pair(seq)
+        beop = beop_pins(y, m, pins, {na, nb}, taken=confirmed)
+        for nid, cells in beop.items():          # 법휴도 확정 핀 (신청 OFF 캐파에 반영)
+            pins[nid].update(cells)
+        offs = wish_offs(y, m, pins, rng, taken=confirmed)
 
         prev: dict[str, dict[str, str]] = defaultdict(dict)
         # 전월 확정분 + 전월 솔브가 이미 정한 당월 초 패딩(주기 걸침) 이월

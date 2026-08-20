@@ -305,7 +305,7 @@
         <span class="brand-name">NurseScheduler</span>
         <span class="brand-hospital">용인세브란스병원 · Yongin Severance Hospital</span>
       </div>
-      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.8.0</span>
+      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.9.0</span>
     </div>
     <div></div>
     <div class="appbar-meta">
@@ -851,12 +851,22 @@
   </div>
   <div x-show="prevViolations.length>0" x-cloak class="card-sm mb-2" style="flex-shrink:0;border-left:3px solid var(--red);padding:8px 12px">
     <div class="flex items-center justify-between">
-      <span class="text-xs font-semibold text-red" x-text="`⚠ 제약 위반 ${prevViolations.length}건`"></span>
+      <span class="text-xs font-semibold text-red" x-text="`⚠ 생성 불가 ${prevViolations.length}건`"></span>
       <button @click="prevViolations=[]" class="text-xs text-dim">닫기</button>
     </div>
     <div class="text-xs text-red mt-1 space-y-0.5" style="max-height:80px;overflow-y:auto">
       <template x-for="(v,i) in prevViolations.slice(0,10)" :key="i"><div x-text="v.msg"></div></template>
       <div x-show="prevViolations.length>10" class="text-dim" x-text="`... 외 ${prevViolations.length-10}건`"></div>
+    </div>
+  </div>
+  <div x-show="prevPinNotes.length>0" x-cloak class="card-sm mb-2" style="flex-shrink:0;border-left:3px solid var(--warn);padding:8px 12px">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-semibold" style="color:var(--warn)" x-text="`📌 규칙과 다른 사전입력 ${prevPinNotes.length}건 — 확정으로 수용됩니다`"></span>
+      <button @click="prevPinNotes=[]" class="text-xs text-dim">닫기</button>
+    </div>
+    <div class="text-xs text-sub mt-1 space-y-0.5" style="max-height:80px;overflow-y:auto">
+      <template x-for="(v,i) in prevPinNotes.slice(0,10)" :key="i"><div x-text="v.msg"></div></template>
+      <div x-show="prevPinNotes.length>10" class="text-dim" x-text="`... 외 ${prevPinNotes.length-10}건`"></div>
     </div>
   </div>
   <div class="mobile-note fs-hide">📱 작은 화면에서는 <strong>보기 전용</strong>을 권장합니다. 셀 편집·근무표 생성은 가로 화면 또는 PC에서 하세요. (표는 좌우로 스크롤됩니다)</div>
@@ -900,7 +910,7 @@
           <span x-show="copySource&&copySource!==nurse.id" @click="pasteRow(nurse.id)" class="text-xs text-green ml-1 cursor-pointer" title="붙여넣기">📥</span>
         </td>
         <template x-for="(day,dIdx) in scheduleDays" :key="day">
-          <td class="g-cell p-0" :data-cell="nurse.id+'|'+dayKey(day)" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',hasViolation(nurse.id,day)?'g-violation':'',isDragSelected(nurse.id,day)?'g-drag-sel':'',isFocused(nIdx,dIdx)?'g-focused':'',isLocked(nurse.id,day)?'g-locked':'',isNurseInactive(nurse,day)?'g-inactive':'']" :style="getPrevShift(nurse.id,day)?getShiftStyle(getPrevShift(nurse.id,day)):{}" :title="isNurseInactive(nurse,day)==='before'?'전입 전':(isNurseInactive(nurse,day)==='after'?'전출 후':'더블클릭=편집 · 우클릭=메모 · 드래그=다중선택 · D/E/N/V/O 키로 직접 입력')"
+          <td class="g-cell p-0" :data-cell="nurse.id+'|'+dayKey(day)" :class="[day.getDay()===6?'g-sat g-sat-bg':'',day.getDay()===0?'g-sun':'',isCycleStart(day)&&day.getDate()!==1?'g-cycle':'',isOverflow(day)?'g-overflow':'',hasViolation(nurse.id,day)?'g-violation':'',hasPinNote(nurse.id,day)?'g-pinnote':'',isDragSelected(nurse.id,day)?'g-drag-sel':'',isFocused(nIdx,dIdx)?'g-focused':'',isLocked(nurse.id,day)?'g-locked':'',isNurseInactive(nurse,day)?'g-inactive':'']" :style="getPrevShift(nurse.id,day)?getShiftStyle(getPrevShift(nurse.id,day)):{}" :title="isNurseInactive(nurse,day)==='before'?'전입 전':(isNurseInactive(nurse,day)==='after'?'전출 후':'더블클릭=편집 · 우클릭=메모 · 드래그=다중선택 · D/E/N/V/O 키로 직접 입력')"
             @mousedown="onCellMouseDown(nurse,day,$event)" @mouseover="onCellMouseOver(nurse,day)" @click="focusCell(nIdx,dIdx)" @dblclick="openPrevEdit(nurse,day)" @contextmenu.prevent="openNote(nurse.id,day)">
             <template x-if="getPrevShift(nurse.id,day)"><span class="schedule-cell-text block" x-text="getPrevShift(nurse.id,day)"></span></template>
             <template x-if="!getPrevShift(nurse.id,day)"><span class="schedule-cell block" :style="hasWish(nurse.id,day)?'color:var(--accent);opacity:0.3':'color:rgba(255,255,255,0.05)'" x-text="hasWish(nurse.id,day)?'★':'·'"></span></template>
@@ -1179,7 +1189,7 @@
   <div x-show="wishReport" x-cloak class="mb-3">
     <button @click="showWishReport=!showWishReport" class="btn btn-xs btn-ghost">⭐ 위시 반영 <span class="text-sub" x-text="wishReport?wishReport.total_granted+'/'+wishReport.total_requested:''"></span> <span x-text="showWishReport?'▾':'▸'"></span></button>
     <div x-show="showWishReport" x-cloak class="card-sm mt-1.5 text-xs">
-      <div class="text-sub mb-2">전체 반영률 <strong class="text-bright" x-text="Math.round(wishReport.total_granted/Math.max(1,wishReport.total_requested)*100)+'%'"></strong> — 미반영 위시는 <strong>다음 달 생성에서 자동 가중</strong>됩니다 (위시 공정성 보정 ×1.5/건, 최대 ×3).</div>
+      <div class="text-sub mb-2">전체 반영률 <strong class="text-bright" x-text="Math.round((wishReport?.total_granted||0)/Math.max(1,wishReport?.total_requested||1)*100)+'%'"></strong> — 미반영 위시는 <strong>다음 달 생성에서 자동 가중</strong>됩니다 (위시 공정성 보정 ×1.5/건, 최대 ×3).</div>
       <template x-for="r in wishReport.per_nurse" :key="'wr'+r.nurse_id">
         <div class="mb-1.5 flex flex-wrap items-center gap-1">
           <span class="font-medium text-bright" x-text="r.name"></span>
@@ -1197,9 +1207,9 @@
     <button @click="showGenReport=!showGenReport" class="btn btn-xs btn-ghost">📈 생성 리포트 <span x-text="showGenReport?'▾':'▸'"></span></button>
     <div x-show="showGenReport" x-cloak class="card-sm mt-1.5 text-xs">
       <div class="flex flex-wrap gap-x-4 gap-y-1 mb-2">
-        <span class="text-sub">소요 <strong class="text-bright" x-text="Math.round(generationReport.duration_seconds||0)+'초'"></strong></span>
-        <span class="text-sub" x-show="generationReport.final_gap_percent!=null">최종 gap <strong class="text-bright" x-text="generationReport.final_gap_percent+'%'"></strong></span>
-        <span class="text-sub" x-show="generationReport.num_vars">변수 <strong class="text-bright" x-text="(generationReport.num_vars||0).toLocaleString('ko-KR')"></strong> · 제약 <strong class="text-bright" x-text="(generationReport.num_constraints||0).toLocaleString('ko-KR')"></strong></span>
+        <span class="text-sub">소요 <strong class="text-bright" x-text="Math.round(generationReport?.duration_seconds||0)+'초'"></strong></span>
+        <span class="text-sub" x-show="generationReport.final_gap_percent!=null">최종 gap <strong class="text-bright" x-text="(generationReport?.final_gap_percent??'-')+'%'"></strong></span>
+        <span class="text-sub" x-show="generationReport.num_vars">변수 <strong class="text-bright" x-text="(generationReport?.num_vars||0).toLocaleString('ko-KR')"></strong> · 제약 <strong class="text-bright" x-text="(generationReport?.num_constraints||0).toLocaleString('ko-KR')"></strong></span>
         <span x-show="generationReport.relax_attempted" class="text-amber">완화 발동</span>
         <span x-show="generationReport.stopped" class="text-amber">중지됨</span>
       </div>
@@ -1219,7 +1229,7 @@
           </template>
         </div>
       </template>
-      <div x-show="generationReport.history_note" class="mb-2 text-amber" x-text="generationReport.history_note"></div>
+      <div x-show="generationReport.history_note" class="mb-2 text-amber" x-text="generationReport?.history_note"></div>
       <template x-if="ruleScoreSummary.length">
         <div class="mb-1">
           <div class="text-sub mb-1">배점 규칙별 득점 (전체 간호사 합산 — 배점 튜닝 참고)</div>
@@ -1425,9 +1435,9 @@
     <!-- 경고 -->
     <div x-show="analysisResult?.warnings?.length>0" class="mb-4 space-y-2">
       <template x-for="(w,i) in analysisResult?.warnings||[]" :key="i">
-        <div class="card-sm flex items-center gap-2" :style="w.type==='danger'?'border-left:3px solid var(--red)':'border-left:3px solid var(--amber)'">
-          <span :class="w.type==='danger'?'text-red':'text-amber'" style="font-size:1rem" x-text="w.type==='danger'?'⚠':'⚡'"></span>
-          <span class="text-sm" :class="w.type==='danger'?'text-red':'text-amber'" x-text="w.msg"></span>
+        <div class="card-sm flex items-center gap-2" :style="w.type==='danger'?'border-left:3px solid var(--red)':(w.type==='note'?'border-left:3px solid var(--border)':'border-left:3px solid var(--amber)')">
+          <span :class="w.type==='danger'?'text-red':(w.type==='note'?'text-dim':'text-amber')" style="font-size:1rem" x-text="w.type==='danger'?'⚠':(w.type==='note'?'📌':'⚡')"></span>
+          <span class="text-sm" :class="w.type==='danger'?'text-red':(w.type==='note'?'text-sub':'text-amber')" x-text="w.msg"></span>
         </div>
       </template>
     </div>
@@ -2626,7 +2636,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.8.0 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.9.0 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">HiGHS · CP-SAT 듀얼 솔버 · 완전 오프라인</p>
         <p class="text-dim text-xs mt-1">모성보호(임산부 P1) · 최소 침습 완화 · 정밀 충돌 진단</p>
