@@ -1,5 +1,12 @@
 """12개월 연속(이월 체인) 근무 생성 시뮬레이션 — 사용자 시나리오 (2026-08-19).
 
+⚠️ 2026-08-20 사용자 정정 — 이 버전의 가정 중 오류 (CLAUDE.md 제1원칙 참조):
+  · "명절 주간 주휴를 공휴일에 배치"(juhu_pins의 hols 분기)는 **존재하지 않는
+    관행** — 실제 기전은 오프특근(공휴일 몰린 주 + 법휴 부여 시 OF 면제).
+  · 17명 체제(임산부 전출) 구간은 임의 가정 — 실제는 18명 유지 전제.
+  · 요일표는 사용자 기준 토 4/3/2 (여기선 DB 시드 3/3/2 사용).
+  재모델링 전까지 결과 해석 주의. 재실행 전 제1원칙과 대조할 것.
+
 구성: 간호사 18명 (임산부 1 · 야간전담 2 매달 교대 · 차지가능 9/불가 9)
 사전입력: 주휴(앱 추천과 동일한 전역 4주기 -1 시프트 공식) + 인당 랜덤 OFF 2개
 체인: 전월 '생성된' 당월 셀을 그대로 다음달 prev_schedule에 넣고 이어서 생성.
@@ -191,7 +198,7 @@ def juhu_pins(y: int, m: int, taken: dict | None = None) -> dict[str, dict[str, 
                 continue
             hols = [d for d in week if d.isoformat() in HOLIDAY_SET]
             target = None
-            if hols:  # 명절 주간: 공휴일 우선 (OF 금지 탓 비공휴일 캐파 절약)
+            if hols:  # ⚠️ 가정 오류(2026-08-20 정정): 이런 관행 없음 — 재모델링 대기
                 best = max(hols, key=remaining)
                 if remaining(best) > 1:
                     target = best
