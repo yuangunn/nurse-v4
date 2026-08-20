@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.10.0 (2026-08-20, 오프특근 재정의 — 휴무 부족 시 마지막 수단)
+**최신**: v4.10.1 (2026-08-20, 나이트킵 다음 달 야간 0회 버그 수정)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -34,7 +34,10 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
    **주휴·공휴 중복수당**으로 보상하는 것이다 (근로기준법의 주휴 개념 참조).
 6. 이 프로그램은 **대학병원 3교대 외과병동** 기준이다 — 주말에 전원 OFF가 발생할
    수 없는 구조.
-7. **사전입력(원티드)에는 반드시 사유가 있다** — 제사·생일·가족여행·부동산 계약·
+7. **나이트킵(야간전담) 달의 야간은 수면오프와 전혀 무관하다.** 홀짝월 합산
+   (수면오프 회피)은 일반 근무로 쌓은 야간에만 적용된다 — 나이트킵 달의 14회를
+   합산에 넣으면 그 사람만 다음 달 야간을 못 받는다.
+8. **사전입력(원티드)에는 반드시 사유가 있다** — 제사·생일·가족여행·부동산 계약·
    결혼 준비·결혼·부모님 외래진료 동행 등. 근무표와 사전입력은 **한 개인의 한 달을
    결정하는 일**이다. 조정이 불가피할 때도 V(연차) 자동 대량 사용은 납득 불가 —
    **원티드 미반영 안내·주휴 조정이 우선** 검토 대상이다.
@@ -146,7 +149,7 @@ npm start
 ```
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.10.0.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.10.1.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -217,7 +220,7 @@ npm start
 | 생 월 최대 | 여성 간호사 월 **≤1회 (보장 아님)** — 스케줄상 안 나오면 못 받는 것. 강제 배정 없음 (2026-08-19 야간전담 예외도 제거) |
 | **사전입력 사실-클램프** | 확정(사전입력) 셀은 검증 대상이 아니라 **주어진 사실** — 제약에 걸리는 셀이 전부 확정이면 그 제약은 스킵(일 전체·인접 쌍·윈도우·주 전체 확정, 완전 확정 날은 변수 리터럴화), 확정+자유 혼합 카운트 제약은 상한을 `max(규칙, 확정분)`으로 클램프(자유 셀이 위반을 더 늘리는 건 금지). 부분 확정("2주차까지만 꽉 채움")도 동일 작동. 규칙 차이는 성공 결과에 `pinned_notes` 안내만. 완화(allow_pre_relax) 명시 시엔 클램프 OFF(완화 우선). 완전 확정 표 폴백(`pinned_confirmed`)은 타임아웃 안전망으로 유지. 결정 1-15 |
 | 월 최대 야간 | 기본 월 6회 (수면OFF 임계) |
-| 홀짝월 합산 야간 | 전월+당월 ≤ 11회 (선택적) |
+| 홀짝월 합산 야간 | 전월+당월 ≤ 11회 (선택적). **나이트킵 달의 야간은 합산 제외** (제1원칙 7) — 전월N 자동 인수인계(`compute_prev_month_nights`)와 엔진 `_two_month_rhs` 양쪽에서 뺀다 |
 | **야간전담 규칙** | N/NC만 배정, 5일 윈도우 내 ≤3 야간, 당월 정확히 14일 근무 (생휴 강제 없음 — 월 ≤1 상한만) |
 | **임산부 모성보호** | `is_pregnant`+`pregnancy`{early,late} 설정 시: ①P1 구간 완전 포함 주마다 P1 정확히 1회(부분 주 ≤1) ②임신 전 구간 `[early.start~late.end]` N/NC 금지 ③임신-중-달 생(生) 면제(배정 금지) ④임산부 달엔 야간전담 자동 해제. P1은 임산부+구간 또는 사전입력 P1에서만 허용(그 외 변수 0). HiGHS·CP-SAT·conflict_analyzer 패리티. 헬퍼: `_preg_window_on`/`_preg_span_on`/`_preg_active_in_month`/`_preg_forbids`/`_preg_effective_pre` (scheduler_base) |
 | 전입/전출 재적 | start_date ≤ d ≤ end_date 범위에서만 배정 |
@@ -517,10 +520,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.10.0.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.10.1.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.10.0.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.10.1.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -608,7 +611,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.10.0 기준)
+## 알려진 주의사항 (v4.10.1 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)

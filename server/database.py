@@ -418,15 +418,36 @@ def _latest_saved(conn, year: int, month: int):
 
 def compute_prev_month_nights(year: int, month: int) -> Dict[str, int]:
     """직전 달 최신 저장 근무표에서 간호사별 야간(N/NC) 횟수 — '전월N' 자동 인수인계.
-    수동으로 옮겨 적다 빼먹으면 월초 연속야간 검증이 빠지는 문제를 막는다."""
+    수동으로 옮겨 적다 빼먹으면 월초 연속야간 검증이 빠지는 문제를 막는다.
+
+    **야간전담(나이트킵)이었던 달은 0으로 센다** (2026-08-20 사용자 명시:
+    "나이트킵 때 한 나이트는 수면오프와 전혀 연관 없는 나이트"). 이 값은 홀짝월
+    합산(수면오프 회피) 상한에 쓰이므로, 나이트킵 14회를 그대로 넘기면 다음 달
+    야간 상한이 0이 되어 그 사람만 야간을 아예 못 받는다.
+    """
     py, pm = (year - 1, 12) if month == 1 else (year, month - 1)
     prefix = f"{py:04d}-{pm:02d}-"
+    key = f"{py:04d}-{pm:02d}"
     out: Dict[str, int] = {}
     with get_conn() as conn:
         data = _latest_saved(conn, py, pm)
     if not data:
         return out
+    # 저장본에 함께 담긴 그 달의 명부로 야간전담 여부 판정 (없으면 현재 명부)
+    saved_nurses = data.get("nurses") or []
+    if not saved_nurses:
+        try:
+            saved_nurses = get_nurses()
+        except Exception:
+            saved_nurses = []
+    night_kept = set()
+    for n in saved_nurses:
+        nm = n.get("night_months") or {}
+        if (nm.get(key) if nm else n.get("is_night_shift")):
+            night_kept.add(n.get("id"))
     for nid, days in (data.get("schedule") or {}).items():
+        if nid in night_kept:
+            continue                      # 나이트킵 달 — 수면오프와 무관
         c = sum(1 for dk, s in (days or {}).items()
                 if dk.startswith(prefix) and s in _NIGHT_CODES)
         if c:
