@@ -87,6 +87,14 @@ class _ConflictAnalyzer(CpSatScheduler):
         if not self.nurses:
             return {"status": "unknown", "conflicts": [], "message": "간호사가 없습니다."}
         out = {"estimated_seconds": self.estimate_seconds()}
+        # 쉴 코드 수급 산술 (M4-P1) — 솔버를 돌리기 전에 확정 판정이 나온다.
+        # 수요 하한 vs 공급 상한이라 부족이 나오면 무조건 infeasible.
+        rest_short = self.rest_supply_shortfall()
+        if rest_short:
+            return {**out, "status": "infeasible",
+                    "conflicts": ["잉여 인력이 쉴 코드 부족 (주휴 미입력)"],
+                    "anchored": [], "rest_shortfall": rest_short,
+                    "message": self.rest_supply_message(rest_short)}
         # 사실-클램프 동기화 (결정 1-15): 신호등은 '생성이 되는가'의 판정자이므로
         # 엔진과 같은 의미론(확정 셀 = 주어진 사실)으로 본다. 클램프 없이 보면
         # 엔진이 수용하는 입력(예: 확정 OF 2회 주)에 거짓 빨강이 뜬다.

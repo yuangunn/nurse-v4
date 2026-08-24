@@ -51,7 +51,7 @@ PROD_SHIFTS = [
     ShiftDef(code="생", name="생리휴가", period="leave"),
     ShiftDef(code="특", name="특별휴가", period="leave", auto_assign=False),
     ShiftDef(code="공", name="공적업무", period="leave", auto_assign=False),
-    ShiftDef(code="법", name="법정공휴일", period="leave"),
+    ShiftDef(code="법", name="법정공휴일", period="leave", auto_assign=False),
     ShiftDef(code="병", name="병가", period="leave", auto_assign=False),
 ]
 
@@ -100,10 +100,17 @@ def test_juhu_preinput_makes_free_solve_feasible():
 def test_no_juhu_structural_infeasible_with_supply_hint():
     """①·③: 주휴 없이는 잉여 인력이 쉴 코드가 없어 infeasible (부분 입력이라
     폴백 없음). 주간 휴무 수요 21칸 > 공급 최대 16칸 (OF 6 + V 6 + 생 4).
-    진단이 '쉴 코드 공급 부족'을 설명해야 한다 (2026-08-19 개선)."""
+
+    기준선 갱신 (2026-08-24, M4-P1): 예전에는 13단계를 다 쌓은 뒤 마지막 상한
+    단계에서 '생리휴가(생) 제약 충돌'로 터지고 안내문만 공급 부족을 설명했다.
+    이제는 **솔버 이전에 산술로 확정**해 1급 원인으로 먼저 짚는다 —
+    수치(필요/가능 칸)와 해결 경로(분석 탭 주휴 배분)가 함께 나온다."""
     r = solve(6, {}, 7, rules_kw=dict(maxConsecutiveWorkDays=6))
     assert not r["success"]
-    assert "공급 부족" in r["message"] and "주휴" in r["message"]
+    msg = r["message"]
+    assert "쉴 코드가 없습니다" in msg and "주휴" in msg, msg
+    assert "휴무 필요 21칸" in msg and "놓을 수 있는 휴무 16칸" in msg, msg
+    assert "생리휴가(생) 제약 충돌" not in msg, "오진 문구가 다시 1급으로 나오면 안 된다"
 
 
 def test_exact_fit_table_conforming_succeeds():
