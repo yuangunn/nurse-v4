@@ -143,6 +143,32 @@ window.AnalysisModule = function() {
       return out;
     },
 
+    /* 한 블록(4주기)의 주휴 요일을 고른다.
+     * 기준 요일이 블록의 모든 주를 덮으면 **옮기지 않는다** — 이동은 자리가 없을 때만.
+     * 못 덮으면 덮는 주가 가장 많은 요일, 동률이면 여유가 큰 요일을 고른다.
+     * (여유 = 재적 − 그날 필요 인원. 주말이 필요 인원이 적어 자연히 유리하다.) */
+    _pickBlockDow(periodWeeks,baseDow,daySlack,assignedWeeks){
+      const need=periodWeeks.filter(w=>!assignedWeeks.has(w.weekIdx)&&w.days.length);
+      if(!need.length)return{dow:null,covered:0};
+      const score=dow=>{
+        let cov=0,slack=0;
+        for(const w of need){
+          const t=w.days.find(d=>d.dow===dow);
+          if(t&&daySlack[t.dk]&&daySlack[t.dk].currentSlack>0){cov++;slack+=daySlack[t.dk].currentSlack}
+        }
+        return{cov,slack};
+      };
+      const b=score(baseDow);
+      if(b.cov===need.length)return{dow:baseDow,covered:b.cov};
+      let best={dow:null,cov:-1,slack:-1};
+      for(let dow=0;dow<7;dow++){
+        const sc=score(dow);
+        if(sc.cov>best.cov||(sc.cov===best.cov&&sc.slack>best.slack))best={dow,cov:sc.cov,slack:sc.slack};
+      }
+      if(best.cov<=0)return{dow:baseDow,covered:0};   // 어디에도 자리가 없다 — 기준 유지
+      return{dow:best.dow,covered:best.cov};
+    },
+
     _recommendJuhu(analysis){
       if(!analysis)return null;
       const {days,weeks,totalNurses}=analysis;
@@ -185,27 +211,38 @@ window.AnalysisModule = function() {
       const nurseAssignedWeeks={};  // nurseId → Set of weekIdx (배정 완료)
       for(const n of nurses)nurseAssignedWeeks[n.id]=new Set(nurseExistingJuhu[n.id]);
 
+      const DOWN=['일','월','화','수','목','금','토'];
+      const firstPeriodIdx0=periods.length?periods[0][0]:0;
       for(const nurse of nurses){
         const jd=nurse.juhu_day;
         if(jd===null||jd===undefined)continue;
-
+        const rotate=nurse.juhu_auto_rotate!==false;
+        // 블록(4주기) 안에서는 한 요일을 유지하고, 4주기→1주기 경계에서만 하루 당긴다.
+        // 당긴 요일에 자리가 없으면 그 블록 4주를 통째로 다른 요일로 옮기고,
+        // 옮긴 요일이 다음 블록의 기준이 된다 (사용자 규칙, 2026-08-24).
+        // 여유가 큰 요일이 뽑히므로 결과적으로 주말에 몰린다 — 토 4/3/2 로 필요
+        // 인원이 가장 적기 때문. 별도의 '권장 요일' 설정이 필요 없는 이유.
+        let base=rotate?((jd-firstPeriodIdx0)%7+7)%7:jd;
         for(const[periodIdx,periodWeeks]of periods){
+          if(rotate&&periodIdx>firstPeriodIdx0)base=(base-1+7)%7;
+          const pick=this._pickBlockDow(periodWeeks,base,daySlack,nurseAssignedWeeks[nurse.id]);
+          if(pick.dow===null)continue;             // 이 블록은 이미 다 배정됐거나 자리가 없다
+          if(pick.dow!==base){
+            const cyc=periodWeeks[0]?periodWeeks[0].cycle:'';
+            warnings.push({type:'warn',msg:`${nurse.name}: ${cyc}주기 ${DOWN[base]}→${DOWN[pick.dow]} 주휴 이동 (${DOWN[base]} 자리 부족) — 이후 주기는 ${DOWN[pick.dow]} 기준`});
+            base=pick.dow;                          // 옮긴 요일이 새 기준
+          }
           for(const week of periodWeeks){
             if(nurseAssignedWeeks[nurse.id].has(week.weekIdx))continue;
-            const weekDays=week.days;
-            if(!weekDays.length)continue;
-
-            let effectiveDay=jd;
-            if(nurse.juhu_auto_rotate!==false){
-              effectiveDay=((jd-periodIdx)%7+7)%7;
+            const target=week.days.find(d=>d.dow===pick.dow);
+            if(!target||!daySlack[target.dk]||daySlack[target.dk].currentSlack<=0){
+              warnings.push({type:'danger',msg:`${nurse.name}: ${week.cycle}주기에 주휴 배정 불가`});
+              continue;
             }
-            const target=weekDays.find(d=>d.dow===effectiveDay);
-            if(target&&daySlack[target.dk]&&daySlack[target.dk].currentSlack>0){
-              if(!assignments[nurse.id])assignments[nurse.id]=[];
-              assignments[nurse.id].push({day:target.day,dk:target.dk,date:target.date,dow:target.dow,dowName:target.dowName,cycle:target.cycle,weekIdx:week.weekIdx,existing:false});
-              daySlack[target.dk].currentSlack--;
-              nurseAssignedWeeks[nurse.id].add(week.weekIdx);
-            }
+            if(!assignments[nurse.id])assignments[nurse.id]=[];
+            assignments[nurse.id].push({day:target.day,dk:target.dk,date:target.date,dow:target.dow,dowName:target.dowName,cycle:target.cycle,weekIdx:week.weekIdx,existing:false});
+            daySlack[target.dk].currentSlack--;
+            nurseAssignedWeeks[nurse.id].add(week.weekIdx);
           }
         }
       }
@@ -276,36 +313,30 @@ window.AnalysisModule = function() {
           if(!dowGroupCount[chosenDow][nurseGroup])dowGroupCount[chosenDow][nurseGroup]=0;
           dowGroupCount[chosenDow][nurseGroup]++;
 
-          // 모든 period에 걸쳐 배정 (4주 동일 요일, period 간 -1 시프트)
+          // 모든 period에 걸쳐 배정 — 블록 안은 한 요일, 경계에서만 -1 시프트.
+          // 자리가 없으면 주 단위로 흩뜨리지 않고 **블록 전체를** 다른 요일로 옮긴다
+          // (예전에는 그 주만 다른 날로 빠져 4주 동일 요일 규칙이 깨졌다).
+          let base3=chosenDow;
           for(const[periodIdx,periodWeeks]of periods){
-            const shiftedDow=((chosenDow-(periodIdx-firstPeriodIdx))%7+7)%7;
+            if(periodIdx>firstPeriodIdx)base3=(base3-1+7)%7;
+            const pick=this._pickBlockDow(periodWeeks,base3,daySlack,nurseAssignedWeeks[nurse.id]);
+            if(pick.dow===null)continue;
+            if(pick.dow!==base3){
+              const cyc=periodWeeks[0]?periodWeeks[0].cycle:'';
+              warnings.push({type:'warn',msg:`${nurse.name}: ${cyc}주기 주휴 요일 이동 (자리 부족) — 이후 주기는 ${['일','월','화','수','목','금','토'][pick.dow]} 기준`});
+              base3=pick.dow;
+            }
             for(const week of periodWeeks){
               if(nurseAssignedWeeks[nurse.id].has(week.weekIdx))continue;
-              const weekDays=week.days;
-              if(!weekDays.length)continue;
-
-              const target=weekDays.find(d=>d.dow===shiftedDow);
-              if(target&&daySlack[target.dk]&&daySlack[target.dk].currentSlack>0){
-                if(!assignments[nurse.id])assignments[nurse.id]=[];
-                assignments[nurse.id].push({day:target.day,dk:target.dk,date:target.date,dow:target.dow,dowName:target.dowName,cycle:target.cycle,weekIdx:week.weekIdx,existing:false});
-                daySlack[target.dk].currentSlack--;
-                nurseAssignedWeeks[nurse.id].add(week.weekIdx);
-              }else if(target){
-                // 여유 없으면 같은 주 다른 날 중 가장 여유로운 날 대체
-                const fallback=weekDays
-                  .filter(d=>daySlack[d.dk]&&daySlack[d.dk].currentSlack>0)
-                  .sort((a,b)=>daySlack[b.dk].currentSlack-daySlack[a.dk].currentSlack);
-                if(fallback.length>0){
-                  const fb=fallback[0];
-                  if(!assignments[nurse.id])assignments[nurse.id]=[];
-                  assignments[nurse.id].push({day:fb.day,dk:fb.dk,date:fb.date,dow:fb.dow,dowName:fb.dowName,cycle:fb.cycle,weekIdx:week.weekIdx,existing:false});
-                  daySlack[fb.dk].currentSlack--;
-                  nurseAssignedWeeks[nurse.id].add(week.weekIdx);
-                  warnings.push({type:'warn',msg:`${nurse.name}: ${fb.cycle}주기 ${fb.date}일 — 요일 변경 (여유 부족)`});
-                }else{
-                  warnings.push({type:'danger',msg:`${nurse.name}: ${week.cycle}주기에 주휴 배정 불가`});
-                }
+              const target=week.days.find(d=>d.dow===pick.dow);
+              if(!target||!daySlack[target.dk]||daySlack[target.dk].currentSlack<=0){
+                warnings.push({type:'danger',msg:`${nurse.name}: ${week.cycle}주기에 주휴 배정 불가`});
+                continue;
               }
+              if(!assignments[nurse.id])assignments[nurse.id]=[];
+              assignments[nurse.id].push({day:target.day,dk:target.dk,date:target.date,dow:target.dow,dowName:target.dowName,cycle:target.cycle,weekIdx:week.weekIdx,existing:false});
+              daySlack[target.dk].currentSlack--;
+              nurseAssignedWeeks[nurse.id].add(week.weekIdx);
             }
           }
         }
