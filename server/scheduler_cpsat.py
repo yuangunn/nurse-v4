@@ -319,6 +319,7 @@ class CpSatScheduler(_SchedulerBase):
         self._pin = {}  # 사실-클램프 비활성 — 완화 모드에선 제약이 온전히 걸려야 함
         x, pre_keeps = self._build_vars_relaxed(model)
         self._apply_hard_constraints(model, x)
+        self._cs_juhu_block_dow(model, x)
         # 주휴 재배치 시 주당 주휴 ≤1 (HiGHS weekly_juhu 패리티 — 야간전담 제외)
         if self.allow_juhu_relax and "주" in self.ALL_SHIFTS:
             first_of_month = date(self.year, self.month, 1)
@@ -514,6 +515,27 @@ class CpSatScheduler(_SchedulerBase):
                     else:
                         x[nid][d][s] = model.NewBoolVar(f"x_{nid}_{d}_{s}")
         return x
+
+    def _cs_juhu_block_dow(self, model, x):
+        """HiGHS _c_juhu_block_dow 패리티 — 재배치해도 블록(4주기) 안에서는 같은 요일."""
+        if not (self.allow_juhu_relax and self.juhu_block_lock):
+            return
+        if "주" not in self.ALL_SHIFTS:
+            return
+        for nurse in self.nurses:
+            if nurse.get("is_night_shift"):
+                continue
+            nid = nurse["id"]
+            blocks = self._juhu_block_items(
+                nurse, x, lambda t: not isinstance(t, int))
+            for blk, items in blocks.items():
+                dows = sorted({wd for _, wd, _ in items})
+                if len(dows) <= 1:
+                    continue
+                y = {wd: model.NewBoolVar(f"juhudow_{nid}_{blk}_{wd}") for wd in dows}
+                model.Add(sum(y.values()) <= 1)
+                for _d, wd, t in items:
+                    model.Add(t <= y[wd])
 
     # ── 선형 하드 제약 (각각 HiGHS _c_* 와 1:1) ──────────────────────────────
     def _cs_one_shift_per_day(self, model, x):

@@ -1051,6 +1051,7 @@
     <label class="flex items-center gap-1.5" :class="solver!=='highs'?'opacity-40':'cursor-pointer'"><input type="checkbox" x-model="allowPreRelax" :disabled="solver!=='highs'"/><span class="text-dim">사전입력 완화</span></label>
     <button x-show="allowPreRelax&&solver==='highs'" @click="showPreBonusSettings=!showPreBonusSettings" class="btn btn-xs btn-ghost" style="padding:1px 6px;font-size:0.65rem" x-text="showPreBonusSettings?'▾ 완화 설정':'▸ 완화 설정'"></button>
     <label class="flex items-center gap-1.5" :class="solver!=='highs'?'opacity-40':'cursor-pointer'"><input type="checkbox" x-model="allowJuhuRelax" :disabled="solver!=='highs'"/><span class="text-dim">주휴 무시</span></label>
+    <label x-show="allowJuhuRelax" class="flex items-center gap-1.5 cursor-pointer" title="기본값은 재배치하더라도 한 블록(1~4주기) 안에서는 같은 요일을 지킵니다. 이걸 켜면 주마다 요일이 흩어질 수 있습니다 — 정말 안 풀릴 때만."><input type="checkbox" :checked="!juhuBlockLock" @change="juhuBlockLock=!$event.target.checked"/><span class="text-dim">주휴 이동 제한 풀기</span></label>
     <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="unlimitedV"/><span class="text-dim">V 무제한</span></label>
     <span x-show="unlimitedV" class="text-xs text-dim">(번표 생성이 안 될 때 사용 — V 사용 시 큰 감점 적용)</span>
   </div>

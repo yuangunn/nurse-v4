@@ -151,6 +151,7 @@ class _SchedulerBase:
         self.holidays = set(request.holidays or [])
         self.allow_pre_relax = request.allow_pre_relax
         self.allow_juhu_relax = request.allow_juhu_relax
+        self.juhu_block_lock = getattr(request, 'juhu_block_lock', True)
         self.unlimited_v = request.unlimited_v
         # 위시 공정성 보정 (서버가 거절 이력에서 산출) — {nid: 배수}
         self.wish_boosts = getattr(request, "wish_boosts", None) or {}
@@ -736,6 +737,29 @@ class _SchedulerBase:
                 pre = self._effective_pre(nurse, dt, pre, dt.strftime("%Y-%m-%d") in self.holidays)
                 if pre:
                     self._pin[(nid, d)] = pre
+
+    # 프론트 view-helpers.js 의 _CYCLE_REF 와 같아야 한다 — 주기 표시(getCycleNum)와
+    # 엔진의 블록 번호가 어긋나면 화면의 '3주기'와 엔진의 블록이 다른 것을 가리킨다.
+    _CYCLE_REF = date(2026, 3, 1)
+
+    def _juhu_block(self, d: int) -> int:
+        """절대 4주 블록 번호. 1~4주기가 한 블록이고, 블록이 바뀔 때만 주휴 요일이 바뀐다."""
+        return ((self.all_dates[d] - self._CYCLE_REF).days // 7) // 4
+
+    def _juhu_block_items(self, nurse, x, is_var):
+        """블록 → [(날짜 인덱스, 파이썬 weekday, 주휴 변수)] — 양 엔진 공용 수집기.
+        재배치 대상(자유 변수)인 주휴 칸만 모은다."""
+        first_of_month = date(self.year, self.month, 1)
+        nid = nurse["id"]
+        blocks = {}
+        for d, dt in enumerate(self.all_dates):
+            if dt < first_of_month or not self._nurse_active_idx(nurse, d):
+                continue
+            t = x.get(nid, {}).get(d, {}).get("주")
+            if not is_var(t):
+                continue
+            blocks.setdefault(self._juhu_block(d), []).append((d, dt.weekday(), t))
+        return blocks
 
     def _week_has_holiday(self, week_days) -> bool:
         """주(날짜 인덱스 목록)에 법정공휴일이 있는가."""
