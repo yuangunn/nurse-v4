@@ -167,7 +167,7 @@ nurse-v4/
 │   ├── lib/                 # tailwindcss, alpine, lucide (오프라인 번들)
 │   ├── fonts/               # Pretendard(주) + 번들 폰트
 │   └── assets/              # 아이콘·이미지
-├── tests/                   # pytest 회귀 86건 (제약·진단·CP-SAT 동등성·충돌·야간전담·레이스·완화·모성보호·공휴일)
+├── tests/                   # pytest 회귀 137건 (제약·진단·CP-SAT 동등성·충돌·야간전담·레이스·완화·모성보호·공휴일·오프특근)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 기준 2025~2050 공휴일 골든셋)
 ├── pytest.ini
 ├── electron/                # Electron main.js / preload.js / package.json

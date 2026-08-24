@@ -109,7 +109,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 86건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일)
+├── tests/                   # pytest 회귀 137건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -121,7 +121,8 @@ nurse-v4/
 ├── BUILD.md                 # 상세 빌드 가이드
 ├── MANUAL.md                # 사용자 매뉴얼
 ├── README.md                # 리포 소개
-├── requirements.txt         # Python 의존성
+├── requirements.txt         # Python 런타임 의존성 (PyInstaller 번들 대상)
+├── requirements-dev.txt     # + pytest·httpx (테스트 전용, 번들 제외)
 └── CLAUDE.md                # 이 파일
 ```
 
@@ -147,6 +148,20 @@ npm install
 # 또는 dist/NurseScheduler/NurseScheduler.exe (PyInstaller 번들) 존재 시:
 npm start
 ```
+
+### 테스트
+```bash
+pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
+python3 -m pytest -q                  # 137건
+node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
+  && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
+  && node scripts/verify_holidays.mjs
+```
+
+> `httpx` 는 앱이 쓰지 않지만 `starlette.testclient` 가 요구한다 — 없으면
+> `test_nurse_xlsx.py`·`test_parse_table_file.py` 11건이 **수집 자체가 안 된다**
+> (통과가 아니라 조용히 안 도는 상태). 런타임 번들이 커지므로 requirements.txt 가 아니라
+> requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
 - `NurseScheduler_Setup_v4.10.2.exe` 실행 → 설치 마법사 → 바로 실행

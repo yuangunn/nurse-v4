@@ -1,0 +1,6 @@
+# 개발·테스트 전용 — 배포 번들에는 들어가지 않는다 (PyInstaller 는 requirements.txt 만 본다).
+# 설치: pip install -r requirements-dev.txt
+-r requirements.txt
+
+pytest>=8.0            # pytest.ini 가 이미 있는데 선언은 없었다
+httpx>=0.27            # starlette.testclient 요구 — 없으면 test_nurse_xlsx / test_parse_table_file 이 수집조차 안 된다
