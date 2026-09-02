@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.10.2 (2026-08-20, 명부에 야간전담 월 뱃지)
+**최신**: v4.10.3 (2026-08-20, M6 P0 — 완화 등급 정합 + 🔒 잠금 안내)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -41,6 +41,10 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
    결혼 준비·결혼·부모님 외래진료 동행 등. 근무표와 사전입력은 **한 개인의 한 달을
    결정하는 일**이다. 조정이 불가피할 때도 V(연차) 자동 대량 사용은 납득 불가 —
    **원티드 미반영 안내·주휴 조정이 우선** 검토 대상이다.
+9. **차지(DC/EC/NC)는 시니어리티가 높은 사람이 맡는다 — 차지 횟수를 공정성 항목에 넣지 않는다.**
+   차지의 부담은 **어싸인에서 환자를 적게 보는 것**으로 이미 보상·균형이 맞춰져 있다
+   (2026-08-20). 차지 횟수 균등 배점을 제안하지 말 것. 지켜야 할 사전입력의 보호 채널은
+   **잠금(🔒)** 하나다 — 셀 메모는 기록용이지 보호 등급이 아니다.
 
 > ✅ **확인 완료 (2026-08-20 사용자 답변 — 반영됨)**:
 > ⓐ 토요일 인원 → DB 시드·문서·시뮬레이터 모두 **4/3/2**로 수정.
@@ -149,7 +153,7 @@ npm start
 ```
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.10.2.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.10.3.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -242,7 +246,7 @@ npm start
 - 생 사용 (여성) 보상 (+80)
 - 법정공휴일 휴가 보상 (+30)
 - 공휴일 근무 보상 (+20)
-- **사전입력 유지 보너스**: 휴가 `preBonusLeave=5000`, 근무 `preBonusWork=500`, 휴무 `preBonusRest=300`
+- **사전입력 유지 보너스**(완화 시 뒤집히는 순서의 역순): 휴가 `preBonusLeave=5000` > 쉬는 날(OF·P1) `preBonusOff=3000` > 근무 `preBonusWork=500` > 주휴 `preBonusRest=300`(주휴 무시 시에만). 절대 못 건드리는 셀은 🔒 잠금(`locked_cells`)
 
 ---
 
@@ -523,10 +527,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.10.2.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.10.3.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.10.2.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.10.3.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -614,7 +618,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.10.2 기준)
+## 알려진 주의사항 (v4.10.3 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)

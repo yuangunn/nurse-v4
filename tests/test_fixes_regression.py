@@ -187,3 +187,22 @@ def test_overflow_prev_month_v_prefill_not_infeasible(solver):
     assert result["success"], result.get("message")
     assert result["extended_schedule"]["a1"].get("2026-03-30") == "V" or \
         result["schedule"]["a1"].get("2026-03-30") == "V", "전월 V 기록이 보존되어야 함"
+
+
+def test_pre_bonus_grades_are_ordered_and_exposed():
+    """완화 유지 보너스 등급이 모델에 전부 노출되고 순서가 문서(결정 1-9)와 같다.
+
+    휴가 > 쉬는 날(OF·P1) > 근무 > 주휴. preBonusOff 가 모델에 없던 시절엔 코드의
+    getattr 기본값(3000)만 있어 UI·매뉴얼이 '쉬는 날 300'으로 잘못 안내했다 (M6 F4)."""
+    from server.models import Rules
+    from server.scheduler_base import timeoff_class
+
+    r = Rules()
+    assert r.preBonusLeave > r.preBonusOff > r.preBonusWork > r.preBonusRest
+    assert r.preBonusOff == 3000
+    # 등급 매핑: OF·P1 은 'off'(강한 보호), 주휴는 'juhu', 나머지 근무
+    assert timeoff_class("OF") == "off" and timeoff_class("P1") == "off"
+    assert timeoff_class("V") == "leave" and timeoff_class("주") == "juhu"
+    assert timeoff_class("D") == "work"
+    # 라운드트립: 모델 → dict → 모델 에서 값 보존 (rules 저장은 key-value)
+    assert Rules(**r.model_dump()).preBonusOff == 3000

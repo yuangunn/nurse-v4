@@ -27,7 +27,7 @@ function app() {
       maxNightPerMonth:true, maxNightPerMonthCount:6,
       maxNightTwoMonth:false, maxNightTwoMonthCount:11,
       patternOptimization:true, autoMenstrualLeave:true, maxVPerMonth:1,
-      preBonusLeave:5000, preBonusWork:500, preBonusRest:300,
+      preBonusLeave:5000, preBonusOff:3000, preBonusWork:500, preBonusRest:300,
     },
     schedule:{}, extendedSchedule:{},
     generating:false, generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,

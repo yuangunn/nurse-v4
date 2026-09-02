@@ -305,7 +305,7 @@
         <span class="brand-name">NurseScheduler</span>
         <span class="brand-hospital">용인세브란스병원 · Yongin Severance Hospital</span>
       </div>
-      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.10.2</span>
+      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.10.3</span>
     </div>
     <div></div>
     <div class="appbar-meta">
@@ -1056,7 +1056,7 @@
   </div>
   <!-- 사전입력 완화 차등 보너스 설정 -->
   <div x-show="allowPreRelax&&showPreBonusSettings" x-cloak class="card-sm mb-3" style="border-left:3px solid var(--accent)">
-    <div class="text-xs text-sub mb-2">사전입력 종류별 유지 보너스 점수 (높을수록 해당 입력이 유지됨)</div>
+    <div class="text-xs text-sub mb-2">사전입력 종류별 유지 보너스 (높을수록 늦게 뒤집힘 — 사연 있는 셀은 <strong>🔒 잠금</strong>이 확실합니다. 잠긴 셀은 완화에서도 절대 안 바뀝니다)</div>
     <div class="space-y-2">
       <div class="flex items-center gap-2">
         <span class="text-xs w-24 text-pink">휴가 (V/생/특/공/법/병)</span>
@@ -1065,20 +1065,27 @@
         <span class="text-xs text-dim">(기본 5000)</span>
       </div>
       <div class="flex items-center gap-2">
+        <span class="text-xs w-24 text-amber">쉬는 날 (OF/P1)</span>
+        <input type="range" min="0" max="10000" step="100" x-model.number="rules.preBonusOff" class="flex-1" style="max-width:200px;accent-color:#f59e0b"/>
+        <span class="text-xs font-mono w-14 text-right" x-text="rules.preBonusOff"></span>
+        <span class="text-xs text-dim">(기본 3000)</span>
+      </div>
+      <div class="flex items-center gap-2">
         <span class="text-xs w-24 text-blue">근무 (D/E/N/...)</span>
         <input type="range" min="0" max="5000" step="50" x-model.number="rules.preBonusWork" class="flex-1" style="max-width:200px;accent-color:#3b82f6"/>
         <span class="text-xs font-mono w-14 text-right" x-text="rules.preBonusWork"></span>
         <span class="text-xs text-dim">(기본 500)</span>
       </div>
       <div class="flex items-center gap-2">
-        <span class="text-xs w-24 text-dim">쉬는 날 (OF/주)</span>
+        <span class="text-xs w-24 text-dim">주휴 (주휴 무시 시)</span>
         <input type="range" min="0" max="5000" step="50" x-model.number="rules.preBonusRest" class="flex-1" style="max-width:200px;accent-color:#6b7280"/>
         <span class="text-xs font-mono w-14 text-right" x-text="rules.preBonusRest"></span>
         <span class="text-xs text-dim">(기본 300)</span>
       </div>
     </div>
-    <p class="text-xs text-dim mt-2">• <strong class="text-pink">휴가</strong>는 간호사의 요청 사항이므로 높게 유지 권장. 낮추면 솔버가 연차/생휴를 무시할 수 있음.<br/>
-      • <strong class="text-blue">근무</strong>와 <strong>쉬는 날</strong>은 낮을수록 솔버가 유연하게 교체 → infeasible 회피에 도움.</p>
+    <p class="text-xs text-dim mt-2">• 뒤집히는 순서: <strong class="text-blue">근무</strong> → <strong class="text-amber">쉬는 날</strong> → <strong class="text-pink">휴가</strong>. 같은 등급 안에서는 <strong>뒤집는 셀 수가 가장 적은</strong> 안을 먼저 확정한 뒤 배점을 맞춥니다.<br/>
+      • <strong class="text-pink">휴가</strong>와 <strong class="text-amber">쉬는 날</strong>은 간호사 개인의 시간 — 낮추지 마세요. <strong>주휴</strong>는 '주휴 무시'를 켰을 때만 변수가 됩니다.<br/>
+      • 제사·결혼·외래 동행처럼 <strong>절대 못 바꾸는 날은 🔒 잠금</strong>으로 표시하세요 (사전입력 셀 팝업). 메모는 기록용이고, 보호는 잠금이 합니다.</p>
   </div>
   <!-- 배점 슬라이더 -->
   <div class="mb-3">
@@ -1845,7 +1852,7 @@
     </div>
     <div class="flex gap-2">
       <button x-show="(shiftEdit.mode==='prev'||shiftEdit.mode==='prev_multi')&&(shiftEdit.mode==='prev_multi'||getPrevShift(shiftEdit.nurse?.id,shiftEdit.day))" @click="shiftEdit.mode==='prev_multi'?applyMultiShiftEdit('__CLEAR__'):applyShiftEditWithUndo('__CLEAR__')" class="flex-1 py-1 rounded text-xs text-red" style="border:1px solid rgba(239,83,80,0.15)">초기화</button>
-      <button x-show="shiftEdit.mode==='prev'&&shiftEdit.nurse" @click="toggleLock(shiftEdit.nurse.id,shiftEdit.day);shiftEdit.open=false" class="flex-1 py-1 rounded text-xs" :class="isLocked(shiftEdit.nurse?.id,shiftEdit.day)?'text-amber':'text-dim'" style="border:1px solid rgba(255,255,255,0.08)" x-text="isLocked(shiftEdit.nurse?.id,shiftEdit.day)?'🔒 잠금 해제':'🔒 셀 잠금'"></button>
+      <button x-show="shiftEdit.mode==='prev'&&shiftEdit.nurse" @click="toggleLock(shiftEdit.nurse.id,shiftEdit.day);shiftEdit.open=false" class="flex-1 py-1 rounded text-xs" :class="isLocked(shiftEdit.nurse?.id,shiftEdit.day)?'text-amber':'text-dim'" style="border:1px solid rgba(255,255,255,0.08)" title="잠긴 셀은 사전입력 완화·재조정에서도 절대 바뀌지 않습니다 — 사연이 있는 날(제사·결혼·외래 동행 등)에 쓰세요" x-text="isLocked(shiftEdit.nurse?.id,shiftEdit.day)?'🔒 잠금 해제':'🔒 셀 잠금'"></button>
     </div>
     <!-- ★ 희망(소프트) — 사전입력(확정)과 구분: 가능하면 반영, 미반영 시 다음 달 가중 -->
     <div x-show="shiftEdit.mode==='prev'&&shiftEdit.nurse" x-cloak class="mt-2 pt-2" style="border-top:1px dashed rgba(127,127,127,0.2)">
@@ -2650,7 +2657,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.10.2 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.10.3 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">HiGHS · CP-SAT 듀얼 솔버 · 완전 오프라인</p>
         <p class="text-dim text-xs mt-1">모성보호(임산부 P1) · 최소 침습 완화 · 정밀 충돌 진단</p>
