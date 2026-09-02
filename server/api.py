@@ -381,6 +381,15 @@ def get_fairness_ledger(year: int, month: int, months_back: int = 3):
         return {"ledger": {}, "wish": {}}
 
 
+@app.get("/api/relax_ledger")
+def get_relax_ledger(year: int, month: int, months_back: int = 3):
+    """완화 이력 원장 — 직전 N개월 저장본에서 간호사별 뒤집힌 원티드 수 (M6 P2①)."""
+    try:
+        return db.compute_relax_ledger(year, month, months_back)
+    except Exception:
+        return {}
+
+
 @app.get("/api/prev_month_nights")
 def get_prev_month_nights(year: int, month: int):
     """직전 달 최신 저장 근무표 기준 간호사별 야간 수 — '전월N' 자동 채움용."""
@@ -1194,6 +1203,26 @@ def _attach_wish_boosts(request: GenerateRequest) -> Optional[dict]:
         return None
 
 
+def _attach_relax_boosts(request: GenerateRequest) -> Optional[dict]:
+    """직전 달들에 원티드(사전입력)가 완화로 뒤집힌 간호사에게 유지 보너스 배수를 주입.
+    배수 = 1 + 0.5×누적 뒤집힘 (최대 3배) — 위시 보정과 같은 공식. '지난달 당한 사람은
+    이번 달 더 지킨다'의 자동화 (제1원칙 8, M6 P2①)."""
+    try:
+        if not request.prev_schedule:
+            return None
+        ledger = db.compute_relax_ledger(request.year, request.month)
+        boosts = {}
+        for n in request.nurses:
+            ent = ledger.get(n.id)
+            if ent and ent.get("overridden"):
+                boosts[n.id] = round(min(3.0, 1.0 + 0.5 * ent["overridden"]), 2)
+        if boosts:
+            request.relax_boosts = boosts
+        return {"ledger": ledger, "boosts": boosts}
+    except Exception:
+        return None
+
+
 def _build_wish_report(request: GenerateRequest, result: dict) -> Optional[dict]:
     """생성 결과 대비 위시 반영 리포트 — 간호사별 신청/반영/미반영 목록."""
     if not result.get("success"):
@@ -1487,6 +1516,7 @@ def generate(request: GenerateRequest):
         if lock_warn:
             warning = (warning + "\n\n" + lock_warn) if warning else lock_warn
         wish_ctx = _attach_wish_boosts(request)
+        relax_ctx = _attach_relax_boosts(request)
         # 공정성 원장 — night_fairness가 (직전 3개월 누적 + 당월) 편차를 줄이도록
         # 누적 야간 오프셋을 자동 주입 (저장본 파생 — 별도 기록 불필요)
         try:
@@ -1534,6 +1564,8 @@ def generate(request: GenerateRequest):
         try:
             report = solver_progress.build_report(result)
             if report:
+                if relax_ctx and relax_ctx.get("boosts"):
+                    result["relax_boosts"] = relax_ctx["boosts"]
                 if result.get("relaxed_cells"):
                     report["relax_attempted"] = True
                 try:
@@ -1696,7 +1728,7 @@ def save_prev_schedule(body: dict):
     # 저장 전 정규화: 삭제된 간호사(유령) 엔트리 제거
     data = body.get("data") or {}
     valid_ids = set(n["id"] for n in db.get_nurses())
-    for key in ("schedule", "prev_month_nights", "locked_cells", "cell_notes"):
+    for key in ("schedule", "prev_month_nights", "locked_cells", "cell_notes", "relaxed_cells"):
         sub = data.get(key)
         if isinstance(sub, dict):
             data[key] = {k: v for k, v in sub.items() if k in valid_ids}

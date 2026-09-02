@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.11.2 (2026-08-24, M6 P1 — 뒤집힌 원티드에 사유 표시)
+**최신**: v4.11.3 (2026-08-24, M6 P2① — 완화 이력 원장: 지난달 뒤집힌 원티드는 이번 달 더 지킨다)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -168,7 +168,7 @@ node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.11.2.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.11.3.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -402,6 +402,8 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 | GET/DELETE | `/api/schedules/{id}` | 개별 조회/삭제 |
 | GET/POST | `/api/prev_schedules` | 사전입력 저장 (유령 자동 제거) |
 | GET/DELETE | `/api/prev_schedules/{id}` | 개별 조회/삭제 |
+| GET | `/api/relax_ledger` | 완화 이력 원장 — 직전 N개월 저장본의 간호사별 뒤집힌 원티드 수 (결정 1-20) |
+| GET | `/api/fairness_ledger` · `/api/prev_month_nights` | 공정성 원장(야간·주말·공휴일·위시) · 전월 야간 자동 인수인계(나이트킵 달 제외) |
 
 ### 개발자 API
 | Method | Path | 설명 |
@@ -558,10 +560,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.11.2.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.11.3.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.11.2.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.11.3.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -633,7 +635,7 @@ self.cbLogging.subscribe(_on_log)
 ## 프론트엔드 핵심 상태 / 저장 라운드트립 (v4.0.6)
 
 ### 스케줄 저장 (`saveSchedule`) 포함 필드
-`nurses, requirements, rules, schedule, prev_schedule, nurse_scores, nurse_score_details, locked_cells, cell_notes, holidays, prev_day_reqs, prev_month_nights, solver_log`
+`nurses, requirements, rules, schedule, prev_schedule, nurse_scores, nurse_score_details, locked_cells, cell_notes, holidays, prev_day_reqs, prev_month_nights, relaxed_cells, solver_log`
 
 ### 사전입력 저장 (`savePrevToServer`) 포함 필드
 `schedule, day_reqs, holidays, prev_month_nights, locked_cells, cell_notes`
@@ -649,7 +651,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.11.2 기준)
+## 알려진 주의사항 (v4.11.3 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)

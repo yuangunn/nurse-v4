@@ -36,6 +36,7 @@ function app() {
     stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, juhuBlockLock:true, unlimitedV:false, relaxedCells:{},
     generationReport:null, showGenReport:false, wishReport:null, showWishReport:false,
     offTeukgeun:[], showOffTeukgeun:false,   // 오프특근(휴무 부족으로 OF 반납) 발생 목록
+    relaxBoosts:{},   // 완화 이력 보정 배수 {nid: ×} — 지난달 원티드가 뒤집힌 사람 (서버 산출)
     staffingAlerts:null, fairnessLedger3m:null,
     solver:'highs', diagnosing:false, fixing:false, diagResult:null, fixResult:null,
     tableFullscreen:false,
@@ -468,7 +469,7 @@ function app() {
         const name=`자동저장 ${this.year}-${String(this.month).padStart(2,'0')}`;
         // 수동 저장(saveSchedule)과 동일한 스키마 — 이전 payload는 ScheduleSave
         // 필수 필드가 없어 항상 422로 무음 실패했다.
-        await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights});
+        await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights,relaxed_cells:this.relaxedCells});
         this.toast('스케줄 자동 저장됨','info');
         this.loadSavedList();
       }catch(e){console.warn('자동저장 실패:',e)}
