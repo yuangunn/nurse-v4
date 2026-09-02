@@ -337,7 +337,37 @@ class _HighsDiagnosisMixin:
 
     # ── Infeasible 진단 ──────────────────────────────────────────────────────
 
+    # 꼬리 단계에서 터진 진단은 대개 '쉴 코드 부족'의 그림자다 (M4-P1).
+    # V·생은 그 전 단계까지 사실상 무제한이라, 구조적 휴무 부족이 있어도 앞 단계가
+    # 전부 feasible 로 통과하고 마지막 상한에서야 걸린다.
+    _REST_SHADOW_PHASES = ("생리휴가(생) 제약 충돌", "홀짝월", "월 최대 야간")
+
     def _diagnose_infeasibility(self) -> str:
+        """13단계 진단 + 쉴 코드 수급 산술(M4-P1).
+
+        산술은 솔버 없이 확정 판정이 나오지만, 단계 진단이 짚는 **구체적인 셀**
+        (금지 전환·V 초과 등)까지 가려서는 안 된다. 그래서 단계 진단을 먼저 돌리고
+        ① 꼬리 단계 오진이면 산술로 **대체**, ② 구체 원인이 따로 있으면 **함께** 붙인다.
+        """
+        rest_short = self.rest_supply_shortfall()
+        msg = self._diagnose_phases()
+        if not rest_short:
+            return msg
+        block = ["  [원인] 잉여 인력이 쉴 코드가 없습니다 (산술 확정)."]
+        for w in rest_short[:6]:
+            block.append(
+                f"    · {w['week']}주차 ({w['start'][5:]}~{w['end'][5:]}, "
+                f"재적 {w['nurses']}명): 휴무 필요 {w['demand']}칸 / "
+                f"놓을 수 있는 휴무 {w['supply']}칸 — 부족 {w['shortfall']}칸")
+        block.append("    ※ 솔버가 놓을 수 있는 휴무는 OF(주1)·V(월1)·생(월1·여성)뿐입니다.")
+        block.append("       주휴(주)·특·공·법·병은 사전입력 전용이라 사람이 넣어야 합니다.")
+        block.append("  → 해결: 분석 탭 '주휴 추천 배분 → 사전입력에 적용' 후 다시 생성하세요.")
+        block.append("     (인원을 늘리면 오히려 악화됩니다 — 쉴 사람이 늘어납니다.)")
+        if any(t in msg for t in self._REST_SHADOW_PHASES):
+            return "\n".join(["근무표 생성 실패 - 원인 진단 결과:"] + block)
+        return msg + "\n" + "\n".join(block)
+
+    def _diagnose_phases(self) -> str:
         """
         제약을 단계적으로 추가하면서 어느 조건이 Infeasible을 만드는지 찾아 반환.
         빠른 진단을 위해 각 단계는 timeLimit=10초만 사용.
@@ -345,6 +375,7 @@ class _HighsDiagnosisMixin:
         # 완화 솔브가 남긴 _pre_soft 등 모드 플래그를 리셋 — 진단은 strict 모델과
         # 동일한 게이팅으로 빌드되어야 한다 (소프트 게이팅 잔존 시 오진)
         self._pre_soft = False
+
         QUICK = pulp.HiGHS(timeLimit=10, msg=False)
         N = len(self.nurses)
         req_dict = self.req.model_dump()
@@ -672,6 +703,7 @@ class _HighsDiagnosisMixin:
                 lines.extend(dup_found[:10])
                 lines.append("  → 해결: 해당 사전입력을 수정하세요.")
                 return "\n".join(lines)
+
 
             # ── 원인 2: 휴가 + OF + 주휴 → 주 내 off가 너무 많아 슬랙 부족 ──
             lines.append("  [주차별 분석]")

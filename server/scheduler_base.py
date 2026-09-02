@@ -151,6 +151,7 @@ class _SchedulerBase:
         self.holidays = set(request.holidays or [])
         self.allow_pre_relax = request.allow_pre_relax
         self.allow_juhu_relax = request.allow_juhu_relax
+        self.juhu_block_lock = getattr(request, 'juhu_block_lock', True)
         self.unlimited_v = request.unlimited_v
         # 위시 공정성 보정 (서버가 거절 이력에서 산출) — {nid: 배수}
         self.wish_boosts = getattr(request, "wish_boosts", None) or {}
@@ -737,10 +738,152 @@ class _SchedulerBase:
                 if pre:
                     self._pin[(nid, d)] = pre
 
+    # 프론트 view-helpers.js 의 _CYCLE_REF 와 같아야 한다 — 주기 표시(getCycleNum)와
+    # 엔진의 블록 번호가 어긋나면 화면의 '3주기'와 엔진의 블록이 다른 것을 가리킨다.
+    _CYCLE_REF = date(2026, 3, 1)
+
+    def _juhu_block(self, d: int) -> int:
+        """절대 4주 블록 번호. 1~4주기가 한 블록이고, 블록이 바뀔 때만 주휴 요일이 바뀐다."""
+        return ((self.all_dates[d] - self._CYCLE_REF).days // 7) // 4
+
+    def _juhu_block_items(self, nurse, x, is_var):
+        """블록 → [(날짜 인덱스, 파이썬 weekday, 주휴 변수)] — 양 엔진 공용 수집기.
+        재배치 대상(자유 변수)인 주휴 칸만 모은다."""
+        first_of_month = date(self.year, self.month, 1)
+        nid = nurse["id"]
+        blocks = {}
+        for d, dt in enumerate(self.all_dates):
+            if dt < first_of_month or not self._nurse_active_idx(nurse, d):
+                continue
+            t = x.get(nid, {}).get(d, {}).get("주")
+            if not is_var(t):
+                continue
+            blocks.setdefault(self._juhu_block(d), []).append((d, dt.weekday(), t))
+        return blocks
+
     def _week_has_holiday(self, week_days) -> bool:
         """주(날짜 인덱스 목록)에 법정공휴일이 있는가."""
         return any(self.all_dates[d].strftime("%Y-%m-%d") in self.holidays
                    for d in week_days)
+
+    def rest_supply_shortfall(self) -> list:
+        """주별 '쉴 코드' 수급 산술 — 솔버 없이 즉시 판정 (M4-P1).
+
+        일별 인원이 '정확히 일치'라 남는 인력은 **반드시 휴무 칸**에 들어가야 한다.
+        그런데 솔버가 놓을 수 있는 휴무는 OF(주1)·V(월1)·생(월1·여성)·P1(임산부)뿐이고
+        주휴(주)·특·공·법·병은 사전입력 전용이다. 주휴를 안 넣으면 채울 코드가 없어
+        infeasible 이 되는데, 13단계 진단에서는 마지막 상한 단계에서야 터져
+        '생리휴가(생) 제약 충돌'로 오진된다. 인원이 남을수록 심해지는 것도 이 때문.
+
+        수요는 하한, 공급은 상한으로 잡는다 — **부족이 나오면 확정적으로 infeasible**
+        (거짓 양성 없음). 반대로 0이라고 생성이 보장되는 것은 아니다.
+
+        반환: [{"week","start","end","demand","supply","shortfall","nurses"}]
+        """
+        if not self.weeks or not self.nurses:
+            return []
+        req_dict = self.req.model_dump()
+        rest_codes = set(self.REST_SHIFTS) | set(self.LEAVE_SHIFTS)
+        # 솔버가 놓을 수 있는 휴무 중 '주당 상한이 있는' 코드만 부족을 만든다.
+        # 병동이 주휴(주)·특·공 등을 auto_assign 으로 열어 뒀다면 그 코드로 얼마든지
+        # 채울 수 있으므로 이 산술은 성립하지 않는다 — 아예 판정하지 않는다.
+        # (상한을 과대평가해서라도 거짓 부족은 내지 않는다.)
+        solver_rest = set(self.SOLVER_SHIFTS) & rest_codes
+        uncapped = solver_rest - {"OF", "V", "생", "P1"}
+        if uncapped:
+            return []
+        if "OF" in solver_rest and not self.rules.weeklyOff:
+            return []          # OF 주 1회 제한이 꺼져 있으면 OF 로 무한정 채운다
+        first_of_month = date(self.year, self.month, 1)
+        month_idxs = [d for d, dt in enumerate(self.all_dates) if dt.month == self.month
+                      and dt.year == self.year]
+
+        # 월 단위 한도(V·생)는 그 달 사전입력으로 이미 쓴 만큼 차감
+        max_v = 0 if self.unlimited_v else max(0, int(getattr(self.rules, "maxVPerMonth", 0) or 0))
+        used = {}
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            cells = [self.prev.get(nid, {}).get(self.all_dates[d].strftime("%Y-%m-%d"), "")
+                     for d in month_idxs]
+            used[nid] = {"V": cells.count("V"), "생": cells.count("생")}
+
+        out = []
+        for wi, (ws, we) in enumerate(self.weeks):
+            idxs = [d for d in range(ws, we + 1) if self.all_dates[d] >= first_of_month]
+            if not idxs:
+                continue
+            # 월 경계에 걸친 주는 판정하지 않는다 — V·생의 '월 한도'가 다음 달 몫으로
+            # 넘어가 공급이 실제로는 더 크다. 여기서 세면 거짓 부족이 된다.
+            if any(self.all_dates[d].month != self.month
+                   or self.all_dates[d].year != self.year for d in idxs):
+                continue
+            work_need = night_need = 0
+            for d in idxs:
+                dt = self.all_dates[d]
+                base = req_dict.get(WEEKDAY_KEYS[dt.weekday()], {})
+                ovr = self.per_day_req.get(dt.strftime("%Y-%m-%d"), {})
+                dr = {**base, **ovr} if ovr else base
+                work_need += sum(int(dr.get(pp) or 0) for pp in ("D", "E", "N"))
+                night_need += int(dr.get("N") or 0)
+
+            cells = supply = n_reg = nd_cells = 0
+            for nurse in self.nurses:
+                nid = nurse["id"]
+                act = [d for d in idxs if self._nurse_active_idx(nurse, d)]
+                if not act:
+                    continue
+                # 야간전담은 OF 무제한이라 이 부족을 만들지 않는다 — 수급 양쪽에서 뺀다
+                if self._night_dedicated_in(nid, self.year, self.month):
+                    nd_cells += len(act)
+                    continue
+                n_reg += 1
+                cells += len(act)
+                pins = [self.prev.get(nid, {}).get(self.all_dates[d].strftime("%Y-%m-%d"), "")
+                        for d in act]
+                pinned_rest = sum(1 for c in pins if c in rest_codes)
+                pinned_work = sum(1 for c in pins if c and c not in rest_codes)
+                free = len(act) - pinned_rest - pinned_work
+                # 자유 칸에 솔버가 놓을 수 있는 휴무 (상한)
+                slots = 0
+                if "OF" in self.SOLVER_SHIFTS and "OF" not in pins:
+                    slots += 1
+                if "V" in self.SOLVER_SHIFTS and (self.unlimited_v or used[nid]["V"] < max_v):
+                    slots += 1 if not self.unlimited_v else free
+                if ("생" in self.SOLVER_SHIFTS and nurse.get("gender") == "female"
+                        and used[nid]["생"] < 1):
+                    slots += 1
+                if "P1" in self.SOLVER_SHIFTS and nurse.get("is_pregnant"):
+                    slots += 1
+                supply += pinned_rest + min(free, slots)
+
+            # 야간전담이 채울 수 있는 근무는 최대치로 잡아 수요를 하한으로 만든다
+            regular_work = max(0, work_need - min(nd_cells, night_need))
+            demand = cells - regular_work
+            gap = demand - supply
+            if gap > 0:
+                out.append({
+                    "week": wi + 1,
+                    "start": self.all_dates[idxs[0]].strftime("%Y-%m-%d"),
+                    "end": self.all_dates[idxs[-1]].strftime("%Y-%m-%d"),
+                    "demand": demand, "supply": supply, "shortfall": gap, "nurses": n_reg,
+                })
+        return out
+
+    @staticmethod
+    def rest_supply_message(rows: list) -> str:
+        """rest_supply_shortfall() 결과를 사람 문장으로. 비어 있으면 ''."""
+        if not rows:
+            return ""
+        w = rows[0]
+        head = (f"잉여 인력이 쉴 코드가 없습니다 — {w['week']}주차"
+                f"({w['start'][5:]}~{w['end'][5:]}) 휴무 {w['demand']}칸이 필요한데 "
+                f"놓을 수 있는 휴무는 {w['supply']}칸뿐입니다 (부족 {w['shortfall']}칸).")
+        why = ("일별 인원이 '정확히 일치'라 남는 인력은 반드시 쉬어야 하는데, "
+               "솔버가 놓을 수 있는 휴무는 OF(주1)·V(월1)·생(월1)뿐입니다. "
+               "주휴(주)는 사전입력 전용이라 사람이 넣어야 합니다.")
+        how = "→ 분석 탭 '주휴 추천 배분 → 사전입력에 적용' 후 다시 생성하세요."
+        more = (f" (같은 부족이 {len(rows)}개 주에서 발생)" if len(rows) > 1 else "")
+        return f"{head} {why}{more}\n{how}"
 
     def _off_teukgeun_report(self, schedule: dict) -> list:
         """오프특근 발생 목록 — 완전한 주인데 OF가 0회인 (간호사, 주) 기록.

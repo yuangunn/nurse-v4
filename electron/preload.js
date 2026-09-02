@@ -6,7 +6,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronInfo', {
   isElectron: true,
-  version: '4.10.3',
+  version: '4.11.1',
 });
 
 // 커스텀 제목표시줄(프레임리스) 창 제어 — frontend .titlebar 버튼에서 호출

@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.10.3 (2026-08-20, M6 P0 — 완화 등급 정합 + 🔒 잠금 안내)
+**최신**: v4.11.1 (2026-08-24, M6 P0 — 완화 등급 정합 + 🔒 잠금 안내)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -113,7 +113,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 86건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일)
+├── tests/                   # pytest 회귀 153건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -125,7 +125,8 @@ nurse-v4/
 ├── BUILD.md                 # 상세 빌드 가이드
 ├── MANUAL.md                # 사용자 매뉴얼
 ├── README.md                # 리포 소개
-├── requirements.txt         # Python 의존성
+├── requirements.txt         # Python 런타임 의존성 (PyInstaller 번들 대상)
+├── requirements-dev.txt     # + pytest·httpx (테스트 전용, 번들 제외)
 └── CLAUDE.md                # 이 파일
 ```
 
@@ -152,8 +153,22 @@ npm install
 npm start
 ```
 
+### 테스트
+```bash
+pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
+python3 -m pytest -q                  # 153건
+node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
+  && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
+  && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs
+```
+
+> `httpx` 는 앱이 쓰지 않지만 `starlette.testclient` 가 요구한다 — 없으면
+> `test_nurse_xlsx.py`·`test_parse_table_file.py` 11건이 **수집 자체가 안 된다**
+> (통과가 아니라 조용히 안 도는 상태). 런타임 번들이 커지므로 requirements.txt 가 아니라
+> requirements-dev.txt 에 둔다.
+
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.10.3.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.11.1.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -270,6 +285,22 @@ effective_day = (juhu_day - cycle) % 7   # 4주마다 1일 당기기
 ### 간호사별 설정
 - `juhu_day`: None(임의) 또는 0~6 (요일 고정)
 - `juhu_auto_rotate`: True(4주 순환) / False(고정)
+
+### 블록 안에서는 한 요일 (2026-08-24)
+1~4주기 동안 주휴 요일이 **같고**, 4주기→1주기로 넘어갈 때만 하루 당긴다.
+당긴 요일에 자리가 없으면 **그 블록 4주를 통째로** 다른 요일로 옮기고, 옮긴
+요일이 다음 블록의 기준이 된다. 주 단위로 흩뜨리지 않는다.
+
+- 추천(분석 탭): `analysis.js:_pickBlockDow` — 기준 요일이 블록 전체를 덮으면
+  옮기지 않는다. 못 덮으면 덮는 주가 많은 요일 > 여유가 큰 요일.
+  여유 = 재적 − 그날 필요 인원이라 토(4/3/2)·일이 자연히 뽑힌다
+  ('주말에 많이, 주중에 적게'에 별도 설정이 필요 없는 이유).
+- 엔진: `juhu_block_lock`(기본 True). **`allow_juhu_relax`(주휴 무시)로 재배치할
+  때만** 걸린다 — strict 로 풀리면 사전입력 주휴는 손대지 않는다(제1원칙 8).
+  `_c_juhu_block_dow`(HiGHS) / `_cs_juhu_block_dow`(CP-SAT) 패리티.
+  UI 토글 '주휴 이동 제한 풀기' = `juhu_block_lock=False`.
+- 블록 번호 기준 `_CYCLE_REF = 2026-03-01` 은 프론트 `view-helpers.js` 와
+  **같아야 한다** — 어긋나면 화면의 '3주기'와 엔진의 블록이 다른 걸 가리킨다.
 
 ---
 
@@ -527,10 +558,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.10.3.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.11.1.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.10.3.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.11.1.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -618,7 +649,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.10.3 기준)
+## 알려진 주의사항 (v4.11.1 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)

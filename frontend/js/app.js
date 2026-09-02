@@ -33,7 +33,7 @@ function app() {
     generating:false, generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,
     generateTimer:null, sseSource:null, solverLogs:[], showLogPanel:false,
     solveProgress:{gap_percent:null,nodes:0,has_solution:false,is_running:false},
-    stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, unlimitedV:false, relaxedCells:{},
+    stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, juhuBlockLock:true, unlimitedV:false, relaxedCells:{},
     generationReport:null, showGenReport:false, wishReport:null, showWishReport:false,
     offTeukgeun:[], showOffTeukgeun:false,   // 오프특근(휴무 부족으로 OF 반납) 발생 목록
     staffingAlerts:null, fairnessLedger3m:null,

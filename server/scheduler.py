@@ -43,6 +43,33 @@ _DEFAULT_SHIFTS = [
 
 
 class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBase):
+
+    def _c_juhu_block_dow(self, prob, x):
+        """주휴를 재배치할 때도 **한 블록(4주기) 안에서는 같은 요일**을 지킨다.
+
+        병동 관행: 1~4주기 동안 주휴 요일이 같고, 4주기→1주기로 넘어갈 때만 바뀐다.
+        allow_juhu_relax 만 켜면 주당 ≤1 만 걸려서 주마다 요일이 흩어질 수 있었다.
+        juhu_block_lock=False('주휴 이동 제한 풀기')면 걸지 않는다.
+        """
+        if not (self.allow_juhu_relax and self.juhu_block_lock):
+            return
+        if "주" not in self.ALL_SHIFTS:
+            return
+        for nurse in self.nurses:
+            if nurse.get("is_night_shift"):
+                continue
+            nid = nurse["id"]
+            blocks = self._juhu_block_items(
+                nurse, x, lambda t: isinstance(t, pulp.LpVariable))
+            for blk, items in blocks.items():
+                dows = sorted({wd for _, wd, _ in items})
+                if len(dows) <= 1:
+                    continue
+                y = {wd: pulp.LpVariable(f"juhudow_{nid}_{blk}_{wd}", cat="Binary")
+                     for wd in dows}
+                prob += (pulp.lpSum(y.values()) <= 1, f"juhu_blk_one_{nid}_{blk}")
+                for d, wd, t in items:
+                    prob += (t <= y[wd], f"juhu_blk_{nid}_{blk}_{d}")
     def solve(self) -> Dict:
         if not self.nurses:
             return {"success": False, "message": "간호사가 등록되지 않았습니다.", "schedule": {}}
@@ -377,6 +404,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         if self.rules.weeklyOff:
             self._c_weekly_off(prob, x)
         self._c_pregnancy_p1_weekly(prob, x)           # 임산부 P1 주1회 (모성보호)
+        self._c_juhu_block_dow(prob, x)
         # 주휴 재배치: 주당 주휴 최대 1개 하드 제약
         if self.allow_juhu_relax and "주" in self.ALL_SHIFTS:
             for nurse in self.nurses:

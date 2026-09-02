@@ -196,17 +196,18 @@
     background:var(--paper-2);font-size:13px;color:var(--ink-2)}
   #pvMap b{color:var(--ink)}
   #pvMap select,#pvMap input{font-size:14px;font-weight:700;padding:8px 11px}
-  #pvUnknownBox{display:flex;flex-direction:column;gap:8px;padding:14px 18px;border-radius:14px;
+  #pvUnknownBox,#pvNameBox{display:flex;flex-direction:column;gap:8px;padding:14px 18px;border-radius:14px;
     background:var(--warn-bg)}
-  #pvUnknownBox .uh{font-size:13px;font-weight:800;color:var(--warn)}
-  #pvUnknownBox .us{font-size:12px;color:var(--warn-sub)}
-  #pvUnknownBox .ur{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  #pvUnknownBox .uc{display:inline-flex;align-items:center;gap:6px;min-width:6.5em;padding:5px 10px;
+  #pvUnknownBox .uh,#pvNameBox .uh{font-size:13px;font-weight:800;color:var(--warn)}
+  #pvUnknownBox .us,#pvNameBox .us{font-size:12px;color:var(--warn-sub)}
+  #pvUnknownBox .ur,#pvNameBox .ur{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  #pvUnknownBox .uc,#pvNameBox .uc{display:inline-flex;align-items:center;gap:6px;min-width:6.5em;padding:5px 10px;
     border-radius:8px;background:var(--card);font-weight:800;font-size:13px}
   #pvUnknownBox .uc i{font-style:normal;font-weight:600;font-size:11px;color:var(--ink-3)}
   #pvUnknownBox button{font-size:13px;padding:6px 12px}
   #pvUnknownBox button.on{background:var(--accent);color:var(--on-accent);box-shadow:none}
-  #pvUnknownBox select{font-size:13px;padding:6px 10px}
+  #pvUnknownBox select,#pvNameBox select{font-size:13px;padding:6px 10px}
+  #pvNameBox .ok{font-size:12px;font-weight:700;color:var(--ink-3)}
   #pvWrap{overflow:auto;max-height:46vh;border-radius:12px;box-shadow:0 0 0 1px var(--rule)}
   #pvWrap table{border-collapse:collapse;font-size:11px;width:100%}
   #pvWrap th,#pvWrap td{height:28px;padding:0 6px;text-align:center;white-space:nowrap;border:none;
@@ -465,7 +466,7 @@
         <b>이 파일과 같은 폴더</b>에 놓으세요 — 다음부터는 켜자마자 배정표가 바로 뜹니다.
         병동이 여럿이면 <b>assign-data-2.js</b>, <b>-3.js</b> … 로 두면 켤 때 목록에서 고릅니다.</span></div>
     </div>
-    <div class="startBand"><span style="font-weight:800">＋</span><span>데이터 파일(.json)을 이 창에 끌어다 놓아도 열립니다.</span></div>
+    <div class="startBand"><span style="font-weight:800">＋</span><span>데이터 파일(.js/.json)을 이 창에 끌어다 놓아도 열립니다.</span></div>
     <div id="startWarn" class="startBand warnBand" style="display:none"></div>
     <div id="startSign" class="dim" style="text-align:center;font-size:12px;line-height:1.8"></div>
   </div>
@@ -538,6 +539,7 @@
     </div>
     <div id="pvStats"></div>
     <div id="pvMap" style="display:none"></div>
+    <div id="pvNameBox" style="display:none"></div>
     <div id="pvUnknownBox" style="display:none"></div>
     <div id="pvYM">
       <div style="display:flex;flex-direction:column;gap:2px;flex:1">
@@ -609,7 +611,7 @@
 </div>
 <div id="intro"><div id="introBox"></div></div>
 <div id="printArea"></div>
-<div id="drop">파일을 놓으세요 (.xlsx 근무표 / .json 데이터)</div>
+<div id="drop">파일을 놓으세요 (.xlsx 근무표 / .js·.json 데이터)</div>
 <div id="toast"></div>
 <div id="pick"></div>
 <div id="rpick"></div>
@@ -998,7 +1000,7 @@ function toast(msg,ms=2800,undoable=false){ const t=$('#toast');
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260812c'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260820b'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1009,7 +1011,7 @@ const ALL_CAPS=['DC','D','EC','E','NC','N'];
 const DEFAULT_REQ={mon:{D:4,E:5,N:3},tue:{D:5,E:5,N:3},wed:{D:5,E:5,N:3},thu:{D:5,E:5,N:3},
   fri:{D:5,E:4,N:3},sat:{D:3,E:3,N:2},sun:{D:3,E:4,N:3}};
 function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{},roomOv:{},events:{},
-  seedManual:{},caps:{},alias:{},custom:{},req:JSON.parse(JSON.stringify(DEFAULT_REQ)),
+  seedManual:{},caps:{},alias:{},custom:{},nameAlias:{},req:JSON.parse(JSON.stringify(DEFAULT_REQ)),
   rooms:DEFAULT_ROOMS.map(r=>r.slice()),banRooms:{},form:null,
   schemes:JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
   rules:{keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false}}; }
@@ -1025,6 +1027,7 @@ function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무
   if(!store.banRooms) store.banRooms={};
   if(!store.alias) store.alias={};
   if(!store.custom) store.custom={};
+  if(!store.nameAlias) store.nameAlias={};
 }
 let store=emptyStore();
 let fileHandle=null, dirty=false, saveT=null;
@@ -1211,7 +1214,7 @@ window.addEventListener('pagehide',flushSave);
 window.addEventListener('beforeunload',e=>{
   if(dirty&&(fileHandle||nativeInfo)){ flushSave(); e.preventDefault(); e.returnValue=''; }});
 
-/* 시작 화면 배선 — 폴더 연결 시 폴더 안 데이터 파일(.json) 자동 감지 */
+/* 시작 화면 배선 — 폴더 연결 시 폴더 안 데이터 파일(.js/.json) 자동 감지 */
 function startWarnMsg(t){ const el=$('#startWarn'); el.textContent=t; el.style.display=t?'flex':'none'; }
 function fmtWhen(ms){
   if(!ms) return '';
@@ -1221,7 +1224,7 @@ function fmtWhen(ms){
   const hm=d.toLocaleTimeString('ko-KR',{hour:'numeric',minute:'2-digit'});
   return (days<=0?'오늘':days===1?'어제':fmtMD(d))+' '+hm;
 }
-// 폴더 안 어싸인 데이터 파일 스캔 (app:'assign'인 .json만, 최근 수정 순)
+// 폴더 안 어싸인 데이터 파일 스캔 (app:'assign'인 .js/.json만, 최근 수정 순)
 async function scanDirJsons(dir){
   const out=[];
   for await (const e of dir.values()){
@@ -1254,7 +1257,7 @@ async function openFromDir(dir,{preferLast=false}={}){
     throw new Error('폴더 접근이 허용되지 않았습니다');
   const files=await scanDirJsons(dir);
   if(!files.length){
-    startWarnMsg('이 폴더에 어싸인 데이터 파일(.json)이 없습니다 — [처음 시작]으로 만들거나 다른 폴더를 고르세요.');
+    startWarnMsg('이 폴더에 어싸인 데이터 파일(.js/.json)이 없습니다 — [처음 시작]으로 만들거나 다른 폴더를 고르세요.');
     return;
   }
   try{ await idbSet('dir',dir); }catch(e){}
@@ -1442,7 +1445,7 @@ async function initStart(){
         const dir=await window.showDirectoryPicker();
         await openFromDir(dir);
       }else{
-        const [h]=await window.showOpenFilePicker({types:[{description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
+        const [h]=await window.showOpenFilePicker({types:[{description:'어싸인 데이터',accept:{'text/javascript':['.js'],'application/json':['.json']}}]});
         await useHandle(h);
       }
     }catch(e){ if(e.name!=='AbortError') startWarnMsg('열기 실패: '+e.message); } };
@@ -1941,8 +1944,23 @@ function guessYearMonth(md){
  *  ① 전체 표(이름 열 + 날짜 줄)   — 처음 넣을 때
  *  ② 근무만 / 반쪽 표             — 이미 표가 있을 때. 어디서부터 넣을지만 고르면 된다.
  *  모르는 근무(경가·조가 등)는 미리보기에서 바로 매핑하면 다음부터 자동 인식된다. */
-let pasteCtx=null;   // {mode,g,hasNameCol,hasDateHdr,startRow,startIso,y,m}
+let pasteCtx=null;   // {mode,g,hasNameCol,hasDateHdr,startRow,startIso,y,m,nameMap,rowMap,adoptOrder}
 const looksNameCell=v=>v&&parseCellRaw(v)===undefined&&!parseDateCell(v);
+/* 이름 정규화 — 공백과 괄호·대괄호 꼬리표("김지현(책)")만 걷어낸다.
+ * 숫자는 남긴다: 동명이인을 '김지현2'처럼 구분하는 병동이 있다. */
+const normName=s=>String(s||'').replace(/\([^)]*\)|（[^）]*）|\[[^\]]*\]/g,'').replace(/\s+/g,'');
+/* 표의 이름 → 명부의 '같은 사람'. 정확 일치 → 기억해 둔 연결(nameAlias) → 정규화 일치.
+ * 정규화 일치는 후보가 정확히 하나일 때만 — 둘 이상이면 사람이 정해야 한다(이름 매칭 카드). */
+function matchRosterName(v){
+  if(store.order.includes(v)) return v;
+  const al=store.nameAlias&&store.nameAlias[v];
+  if(al&&store.order.includes(al)) return al;
+  const n=normName(v); if(!n) return null;
+  const c=store.order.filter(o=>normName(o)===n);
+  return c.length===1?c[0]:null;
+}
+const simName=(a,b)=>{const A=normName(a),B=normName(b);let s=A&&B&&A[0]===B[0]?2:0;
+  for(const ch of new Set(A)) if(B.includes(ch)) s++; return s;};
 
 function ingestGrid(g){
   if(!connected()){
@@ -1951,14 +1969,27 @@ function ingestGrid(g){
   let w=Math.max(...g.map(r=>r.length));
   while(w>1&&g.every(r=>!String(r[w-1]??'').trim())) w--;   // 딸려온 빈 열 버리기
   g=g.map(r=>r.slice(0,w));
-  const col0=g.map(r=>(r[0]||'').trim());
-  // 첫 열이 이름인지 판정 — 모르는 근무(경가·조가)로만 된 열을 이름으로 오인하면
-  // 근무가 통째로 사라진다. 이름은 다른 칸에 다시 나오지 않는다는 점을 기준으로.
-  const elsewhere=new Set();
-  g.forEach(r=>{ for(let j=1;j<r.length;j++){ const v=String(r[j]??'').trim(); if(v) elsewhere.add(v); } });
-  const hitOrder=col0.filter(v=>store.order.includes(v)).length;
-  const nameish=col0.filter(v=>v&&!elsewhere.has(v)&&looksNameCell(v)).length;
-  const hasNameCol=w>1&&(hitOrder>=2||nameish>=2);
+  // 이름 열 찾기 — 첫 열 고정이 아니라 앞쪽 몇 열을 훑는다. 병동 양식은 이름 앞에
+  // 번호·직급 열이 붙는 일이 많고, 그걸 놓치면 위치(순서) 기반으로 읽어 전원이 어긋난다.
+  // 이름 판정: 명부 일치(연결 기억·정규화 포함)가 가장 세고, 다음이 '이름다움' —
+  // 근무·날짜·숫자가 아니고 오른쪽 칸들에 다시 나오지 않는 값(모르는 근무는 다시 나온다).
+  const colVals=j=>g.map(r=>String(r[j]??'').trim());
+  const rightOf=[];                                  // rightOf[j] = j보다 오른쪽 전체 값 집합
+  { let acc=new Set();
+    for(let j=w-1;j>=0;j--){ rightOf[j]=acc; acc=new Set(acc); colVals(j).forEach(v=>v&&acc.add(v)); } }
+  let nameCol=-1,nameColScore=0;
+  for(let j=0;j<Math.min(4,w-1);j++){
+    const seen=new Set(); let hit=0,nameish=0;
+    for(const v of colVals(j)){
+      if(!v||seen.has(v)) continue; seen.add(v);
+      if(matchRosterName(v)) hit++;
+      else if(looksNameCell(v)&&!/^[\d\s.\-/·]+$/.test(v)&&!rightOf[j].has(v)) nameish++;
+    }
+    const score=hit*4+nameish;
+    if((hit>=2||nameish>=2)&&score>nameColScore){ nameColScore=score; nameCol=j; }
+  }
+  if(nameCol>0) g=g.map(r=>r.slice(nameCol));        // 이름 앞 잡열(번호·직급 등)은 버림
+  const hasNameCol=nameCol>=0;
   const hdr=(g[0]||[]).slice(hasNameCol?1:0);
   const hasDateHdr=hdr.filter(v=>parseDateCell(v)).length>=3;
   if(curScr!=='paste') show('paste');   // 화면 전환이 미리보기를 지우지 않도록 파싱 전에 이동
@@ -1968,7 +1999,7 @@ function ingestGrid(g){
     const gu=guessYearMonth(first); y=gu.y; m=gu.m;
   }
   if(hasNameCol&&hasDateHdr){
-    pasteCtx={mode:'full',g,hasNameCol:true,hasDateHdr:true,y,m};
+    pasteCtx={mode:'full',g,hasNameCol:true,hasDateHdr:true,y,m,nameMap:{},adoptOrder:true};
     return buildPending();
   }
   // 부분 붙여넣기 — 기준이 될 표가 있어야 어디에 넣을지 정할 수 있다
@@ -1980,15 +2011,34 @@ function ingestGrid(g){
   let startIso=isoOfD(wkSunday);
   if(width>=28&&rng){ const d=new Date(rng.max+'T00:00:00');
     startIso=isoOfD(new Date(d.getFullYear(),d.getMonth()+1,1)); }
-  pasteCtx={mode:'partial',g,hasNameCol,hasDateHdr,startRow:0,startIso,y,m};
+  pasteCtx={mode:'partial',g,hasNameCol,hasDateHdr,startRow:0,startIso,y,m,
+    nameMap:{},rowMap:{},adoptOrder:hasNameCol};
   buildPending();
 }
 function setPasteStart(k,v){
   if(!pasteCtx) return;
-  if(k==='row') pasteCtx.startRow=Math.max(0,+v||0);
+  if(k==='row'){ pasteCtx.startRow=Math.max(0,+v||0); pasteCtx.rowMap={}; } // 기준이 바뀌면 줄별 수정도 초기화
   else pasteCtx.startIso=v;
   buildPending();
 }
+/* 이름 매칭 카드에서 고른 결과 — 명부 이름으로 연결하면 파일에 기억해 다음부터 자동 */
+function setNameMapAt(i,v){
+  const cx=pasteCtx; if(!cx||!pending||!pending.nameCards||!pending.nameCards[i]) return;
+  const raw=pending.nameCards[i].raw;
+  const to=(v==='+'||v==='-')?v:store.order[+v];
+  if(to===undefined) return;
+  cx.nameMap[raw]=to;
+  if(to!=='+'&&to!=='-'){ snapshot(); store.nameAlias[raw]=to; touch(); }
+  else if(store.nameAlias[raw]!==undefined){ snapshot(); delete store.nameAlias[raw]; touch(); }
+  buildPending();
+}
+/* 근무만 붙여넣기 미리보기에서 줄의 간호사를 바꾼다 (v: 명부 index 또는 '-'=빼기) */
+function setPasteRow(ri,v){
+  const cx=pasteCtx; if(!cx) return;
+  (cx.rowMap=cx.rowMap||{})[ri]=(v==='-')?null:store.order[+v];
+  buildPending();
+}
+function setAdoptOrder(on){ if(pasteCtx){ pasteCtx.adoptOrder=!!on; buildPending(); } }
 /* 모르는 근무 처리 — 휴무/휴가로 등록하거나 기존 근무로 바꾼다 (파일에 저장돼 다음에도 적용) */
 function mapUnknown(code,kind,to){
   snapshot();
@@ -2037,26 +2087,39 @@ function buildPending(){
     for(let j=0;j<width;j++) isoCols[j]= j<c0?null:isoOfD(addDays(st,j-c0));
   }
   // ── 행 → 간호사 ────────────────────────────────────────────────────────
+  // 이름 열이 있으면 순서가 아니라 '이름'으로 명부의 같은 사람에 잇는다.
+  // 표기가 조금 달라도(공백·괄호 꼬리표) 자동으로 잇고, 애매하면 이름 매칭 카드에서 정한다.
   const body=cx.hasDateHdr?g.slice(1):g;
-  const byName={},namesIn=[],unknown={};
-  let cnt=0,minIso=null,maxIso=null,overflow=0;
+  const byName={},namesIn=[],unknown={},rows=[],nameCards=[],carded=new Set();
+  const nameMap=cx.nameMap=cx.nameMap||{};
+  let cnt=0,minIso=null,maxIso=null,overflow=0,linked=0;
   body.forEach((row,ri)=>{
     let nm;
     if(cx.hasNameCol){
-      nm=String(row[0]??'').trim();
-      if(!nm||(!looksNameCell(nm)&&!store.order.includes(nm))) return;
+      const raw=String(row[0]??'').trim();
+      if(!raw||(!looksNameCell(raw)&&!matchRosterName(raw))) return;
+      if(!(raw in nameMap)) nameMap[raw]=matchRosterName(raw)||'+';
+      const to=nameMap[raw];
+      if(!store.order.includes(raw)&&!carded.has(raw)){ carded.add(raw); nameCards.push({raw,to}); }
+      if(to==='-') return;                              // 이 줄 넣지 않기
+      nm=to==='+'?raw:to;
+      if(to!=='+'&&to!==raw) linked++;
     }else{
-      nm=store.order[(cx.startRow||0)+ri];
+      nm=(cx.rowMap&&ri in cx.rowMap)?cx.rowMap[ri]:store.order[(cx.startRow||0)+ri];
+      if(nm===null) return;                             // 이 줄 빼기
       if(!nm){ if(row.some(c=>String(c||'').trim())) overflow++; return; }
     }
     if(!byName[nm]){ namesIn.push(nm); byName[nm]={}; }
+    const cells={};
     for(let j=c0;j<width;j++){
       const iso=isoCols[j]; if(!iso) continue;
       const pc=parseCellRaw(row[j]);
       if(pc===undefined){ const t=String(row[j]||'').trim(); if(t) unknown[t]=(unknown[t]||0)+1; continue; }
-      byName[nm][iso]=pc?cellText(pc):'';
+      const tx=pc?cellText(pc):'';
+      byName[nm][iso]=tx; cells[iso]=tx;
       if(pc){ cnt++; if(!minIso||iso<minIso)minIso=iso; if(!maxIso||iso>maxIso)maxIso=iso; }
     }
+    rows.push({ri,nm,cells});
   });
   const unkKeys=Object.keys(unknown);
   if(!namesIn.length||(!cnt&&!unkKeys.length)){
@@ -2064,7 +2127,8 @@ function buildPending(){
   if(!minIso){ const v=isoCols.filter(Boolean); minIso=v[0]; maxIso=v[v.length-1]; }
   if(!minIso){ resetPaste(); return toast('넣을 날짜를 정하지 못했습니다',4000); }
   const added=namesIn.filter(n=>!store.order.includes(n)).length;
-  pending={g,y:cx.y,m:cx.m,names:namesIn,byName,minIso,maxIso,added,unknown:unkKeys};
+  pending={g,y:cx.y,m:cx.m,names:namesIn,byName,minIso,maxIso,added,unknown:unkKeys,
+    nameCards,rows,adoptOrder:!!(cx.hasNameCol&&cx.adoptOrder)};
 
   // ── 통계 ──────────────────────────────────────────────────────────────
   const fmtI=iso=>iso.slice(5,7)+'/'+iso.slice(8,10);
@@ -2072,15 +2136,16 @@ function buildPending(){
     `<div class="st"><span class="k">간호사</span><span class="v">${namesIn.length}명</span></div>`+
     `<div class="st"><span class="k">기간</span><span class="v">${fmtI(minIso)} – ${fmtI(maxIso)}</span></div>`+
     (cx.hasNameCol
-      ? `<div class="st"><span class="k">새 이름</span><span class="v" style="color:${added?'var(--ink)':'var(--ink-3)'}">${added?added+'명':'없음'}</span></div>`
+      ? `<div class="st"><span class="k">새 이름</span><span class="v" style="color:${added?'var(--ink)':'var(--ink-3)'}">${added?added+'명':'없음'}</span></div>`+
+        (linked?`<div class="st"><span class="k">이름 연결</span><span class="v">${linked}명</span></div>`:'')
       : `<div class="st"><span class="k">채울 칸</span><span class="v">${cnt}칸</span></div>`);
   $('#pvUnknown').textContent='';
 
-  // ── 어디에 넣을지 (부분 붙여넣기) ───────────────────────────────────────
+  // ── 어디에 넣을지 (부분 붙여넣기) / 명부 순서 ───────────────────────────
   const mp=$('#pvMap');
+  const mpParts=[];
   if(cx.mode==='partial'){
-    mp.style.display='flex';
-    mp.innerHTML=
+    mpParts.push(
       `<b>${cx.hasNameCol?'날짜가 없는 표':(cx.hasDateHdr?'이름이 없는 표':'근무만 있는 표')}입니다 — 어디에 넣을까요?</b>`+
       (!cx.hasNameCol?`<span>맨 윗줄 =
         <select onchange="setPasteStart('row',this.value)">${store.order.map((n,i)=>
@@ -2088,8 +2153,41 @@ function buildPending(){
       (!cx.hasDateHdr?`<span>첫 칸 날짜 =
         <input type="date" value="${cx.startIso}" onchange="setPasteStart('iso',this.value)"></span>`:'')+
       `<span class="dim">${namesIn.length}명 × ${fmtI(minIso)}~${fmtI(maxIso)} 자리에 들어갑니다`+
-      (overflow?` · ⚠ 아래 ${overflow}줄은 간호사가 모자라 빠집니다`:'')+`</span>`;
-  } else mp.style.display='none';
+      (overflow?` · ⚠ 아래 ${overflow}줄은 간호사가 모자라 빠집니다`:'')+`</span>`);
+    if(!cx.hasNameCol){
+      const dup=[...new Set(rows.filter((r,i)=>rows.findIndex(x=>x.nm===r.nm)!==i).map(r=>r.nm))];
+      if(dup.length) mpParts.push(`<span style="color:var(--warn);font-weight:700">⚠ 같은 간호사가 두 줄에: ${esc(dup.join(', '))}</span>`);
+      mpParts.push(`<span class="dim">줄이 어긋나면 아래 미리보기 왼쪽에서 간호사를 바꿀 수 있습니다.
+        이름 열까지 같이 복사하면 순서가 명부와 달라도 이름으로 맞춰 들어갑니다.</span>`);
+    }
+  }
+  if(cx.hasNameCol) mpParts.push(
+    `<label style="display:inline-flex;align-items:center;gap:8px;font-weight:700;cursor:pointer">`+
+    `<input type="checkbox" ${cx.adoptOrder?'checked':''} onchange="setAdoptOrder(this.checked)">명부 순서도 이 표의 순서로</label>`+
+    `<span class="dim">표에 있는 사람이 표 순서대로 위로, 없는 사람은 그대로 아래로 — 고치기 화면·근무만 붙여넣기도 같은 순서가 됩니다</span>`);
+  if(mpParts.length){ mp.style.display='flex'; mp.innerHTML=mpParts.join(''); }
+  else mp.style.display='none';
+
+  // ── 이름 매칭 (명부에 없는 이름 — 순서가 아니라 이름으로 잇는다) ────────
+  // 명부가 비어 있으면(첫 붙여넣기) 이을 대상이 없으니 카드를 띄우지 않는다.
+  const nb=$('#pvNameBox');
+  if(cx.hasNameCol&&nameCards.length&&store.order.length){
+    const rosterOpts=cd=>store.order.map((o,i)=>({o,i}))
+      .sort((a,b)=>simName(b.o,cd.raw)-simName(a.o,cd.raw))
+      .map(({o,i})=>`<option value="${i}" ${cd.to===o?'selected':''}>${esc(o)}</option>`).join('');
+    nb.style.display='flex';
+    nb.innerHTML=`<div class="uh">이 표의 이름 ${nameCards.length}개가 명부에 없습니다 — 같은 사람이면 연결해주세요</div>`+
+      `<div class="us">순서는 상관없습니다 — 이름으로 맞춰 들어갑니다. 한 번 연결하면 파일에 저장돼 다음 붙여넣기부터 자동입니다.</div>`+
+      nameCards.slice(0,14).map((cd,i)=>
+        `<div class="ur"><span class="uc">${esc(cd.raw)}</span><span>→</span>`+
+        `<select onchange="setNameMapAt(${i},this.value)">`+
+        `<option value="+" ${cd.to==='+'?'selected':''}>＋ 새 간호사로 추가</option>`+
+        `<option value="-" ${cd.to==='-'?'selected':''}>이 줄 넣지 않기</option>`+
+        rosterOpts(cd)+`</select>`+
+        (cd.to!=='+'&&cd.to!=='-'?`<span class="ok">연결됨</span>`:'')+
+        `</div>`).join('')+
+      (nameCards.length>14?`<div class="us">… 외 ${nameCards.length-14}명</div>`:'');
+  } else nb.style.display='none';
 
   // ── 모르는 근무 매핑 ───────────────────────────────────────────────────
   const ub=$('#pvUnknownBox');
@@ -2132,13 +2230,20 @@ function buildPending(){
   for(let d=new Date(minIso+'T00:00:00');isoOfD(d)<=maxIso;d.setDate(d.getDate()+1)) isoList.push(isoOfD(d));
   const wdCl=i=>{const w=new Date(i+'T00:00:00').getDay();return w===0?' class="pvsun"':w===6?' class="pvsat"':''};
   let h='<table><tr><th>이름</th>'+isoList.map(i=>`<th${wdCl(i)}>${+i.slice(8,10)}</th>`).join('')+'</tr>';
-  for(const nm of namesIn){
-    h+=`<tr><th>${esc(nm)}</th>`+isoList.map(i=>{
-      const v=byName[nm][i]||''; const pc=v?parseCellRaw(v):null;
-      const d0=pc&&pc.code?SH(pc.code):null;
-      const st=d0?`style="background:${d0.bg};color:${d0.fg}"`:'';
-      return `<td ${st}>${esc(v)}</td>`;}).join('')+'</tr>';
-  }
+  const cellTd=(src,i)=>{
+    const v=src[i]||''; const pc=v?parseCellRaw(v):null;
+    const d0=pc&&pc.code?SH(pc.code):null;
+    const st=d0?`style="background:${d0.bg};color:${d0.fg}"`:'';
+    return `<td ${st}>${esc(v)}</td>`;};
+  if(cx.hasNameCol)
+    for(const nm of namesIn)
+      h+=`<tr><th>${esc(nm)}</th>`+isoList.map(i=>cellTd(byName[nm],i)).join('')+'</tr>';
+  else  // 이름 없는 표 — 줄마다 어느 간호사로 들어가는지 보여주고 그 자리에서 바꿀 수 있게
+    for(const rw of rows)
+      h+=`<tr><th style="padding:3px 5px"><select onchange="setPasteRow(${rw.ri},this.value)" style="font-size:12px;font-weight:700;padding:5px 7px;max-width:8.5em">`+
+        store.order.map((o,i)=>`<option value="${i}" ${o===rw.nm?'selected':''}>${esc(o)}</option>`).join('')+
+        `<option value="-">— 이 줄 빼기</option></select></th>`+
+        isoList.map(i=>cellTd(rw.cells,i)).join('')+'</tr>';
   $('#pvWrap').innerHTML=h+'</table>';
   $('#pvCard').style.display='flex';
   $('#pvCard').scrollIntoView({block:'nearest'});
@@ -2161,6 +2266,8 @@ function confirmPaste(){
       if(v) store.cells[nm][iso]=v; else delete store.cells[nm][iso];
     }
   }
+  if(pending.adoptOrder)                               // 명부 순서를 이 표의 순서로 (없는 사람은 뒤에 그대로)
+    store.order=[...pending.names,...store.order.filter(n=>!pending.names.includes(n))];
   touch(); recompute();
   // 넣은 기간의 첫 주로 이동
   const d=new Date(pending.minIso+'T00:00:00'); wkSunday=addDays(d,-d.getDay());
@@ -2177,7 +2284,7 @@ document.addEventListener('paste',e=>{
   ingestGrid(g);
 });
 
-/* ── 파일 드롭: xlsx 근무표 / json 데이터 / csv ── */
+/* ── 파일 드롭: xlsx 근무표 / js·json 데이터 / csv ── */
 const drop=$('#drop');
 window.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('on')});
 window.addEventListener('dragleave',e=>{if(e.relatedTarget===null)drop.classList.remove('on')});
@@ -2185,10 +2292,10 @@ window.addEventListener('drop',async e=>{
   e.preventDefault(); drop.classList.remove('on');
   const it=e.dataTransfer.items&&e.dataTransfer.items[0];
   const f=e.dataTransfer.files[0]; if(!f) return;
-  if(/\.json$/i.test(f.name)){
+  if(/\.(json|js)$/i.test(f.name)){
     try{
       if(it&&it.getAsFileSystemHandle){ const h=await it.getAsFileSystemHandle(); await useHandle(h); }
-      else{ const j=JSON.parse(await f.text()); if(j.app!=='assign') throw new Error('형식 불일치');
+      else{ const j=parseStoreText(await f.text()); if(!j||j.app!=='assign') throw new Error('형식 불일치');
         store={...emptyStore(),...j}; migrateStore(); window.__memoryMode=true;
         $('#fileInfo').textContent='⚠ 읽기 전용으로 열림 — 수정해도 저장되지 않습니다 (Edge/Chrome에서 여세요)';
         afterLoad(); }
@@ -2209,7 +2316,7 @@ window.addEventListener('drop',async e=>{
     ingestGrid(txt.replace(/^﻿/,'').replace(/\r\n?/g,'\n').split('\n').filter(l=>l.trim()).map(l=>l.split(sep)));
     return;
   }
-  toast('✗ '+f.name+' — .xlsx/.csv/.json 만 가능합니다',4000);
+  toast('✗ '+f.name+' — .xlsx/.csv/.js/.json 만 가능합니다',4000);
 });
 
 /* ════════════════════════════════════════════════════════════════
@@ -2228,13 +2335,14 @@ function edSet(r,c,v){
 function snapshot(){ // 이름 변경/삭제가 ovr·caps·금지방·시드까지 건드리므로 함께 보존
   undoStack.push(JSON.stringify({o:store.order,c:store.cells,v:store.ovr,rv:store.roomOv,
     ch:store.caps,br:store.banRooms,sd:store.seedManual,al:store.alias,cu:store.custom,fm:store.form,
-    ev:store.events}));
+    ev:store.events,na:store.nameAlias}));
   if(undoStack.length>40) undoStack.shift(); }
 function restoreSnapshot(s){
   store.order=s.o; store.cells=s.c;
   if(s.v) store.ovr=s.v; if(s.rv) store.roomOv=s.rv;
   if(s.ch) store.caps=s.ch; if(s.br) store.banRooms=s.br; if(s.sd) store.seedManual=s.sd;
   if(s.al) store.alias=s.al; if(s.cu) store.custom=s.cu; if(s.ev) store.events=s.ev;
+  if(s.na) store.nameAlias=s.na;
   if(s.fm!==undefined){ store.form=s.fm; TPL=null; }
 }
 function moveEditMonth(n){ edM+=n; if(edM<1){edM=12;edY--} if(edM>12){edM=1;edY++} renderEditGrid(); }
@@ -2720,8 +2828,9 @@ function setReq(k,P,v){ store.req[k][P]=Math.max(0,+v||0); touch();
   if(curScr==='edit') paintEdit(); }
 async function pickNewLocation(){
   try{
-    const h=await window.showSaveFilePicker({suggestedName:fileHandle?fileHandle.name:'어싸인 데이터.json',
-      types:[{description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
+    const h=await window.showSaveFilePicker({suggestedName:fileHandle?fileHandle.name:SIDE_NAME,
+      types:[{description:'어싸인 데이터 (자동 열림)',accept:{'text/javascript':['.js']}},
+             {description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
     fileHandle=h; await idbSet('handle',h); await writeStore();
     $('#fileInfo').textContent=h.name; renderAdmin(); toast('저장 위치를 바꿨습니다');
   }catch(e){ if(e.name!=='AbortError') toast('실패: '+e.message,4000); }
@@ -3625,19 +3734,23 @@ const HELP=[
 
 {cat:'근무표 넣기·고치기',id:'paste',title:'새 근무표 넣기 (표 전체)',
  lead:'엑셀에 있는 근무표를 그대로 가져옵니다. 처음 넣을 때는 이름 열과 날짜 줄까지 함께 복사하세요.',
- steps:['엑셀에서 <b>이름 열 + 날짜 줄 + 근무</b>를 통째로 긁어 <kbd>Ctrl+C</kbd>.',
+ steps:['엑셀에서 <b>이름 열 + 날짜 줄 + 근무</b>를 통째로 긁어 <kbd>Ctrl+C</kbd>. 이름 앞에 번호·직급 열이 섞여 있어도 됩니다 — 이름 열을 알아서 찾습니다.',
         '이 창에서 <kbd>Ctrl+V</kbd>. 엑셀 파일(.xlsx)을 창에 끌어다 놓아도 됩니다.',
         '<b>이렇게 읽었어요</b> 에서 간호사 수·기간·새 이름을 확인합니다.',
+        '명부에 없는 이름이 있으면 <b>이름 매칭 카드</b>가 뜹니다 — 표기만 다른 같은 사람이면 연결하세요. 한 번 연결하면 다음 붙여넣기부터 자동입니다.',
         '날짜 줄에 연·월이 없으면 <b>노란 칸</b>에서 시작 연·월을 꼭 확인하세요.',
         '[맞아요, 저장]을 누르면 들어갑니다. <kbd>Ctrl+Z</kbd>로 되돌릴 수 있습니다.'],
- tips:['<b>노란 칸이 회색</b>이면 날짜 줄에 연·월이 있어 그대로 읽은 것이라 확인이 필요 없다는 뜻입니다.']},
+ tips:['<b>엑셀과 명부의 순서가 달라도 됩니다</b> — 줄 위치가 아니라 이름으로 사람을 맞춰 넣습니다. <b>명부 순서도 이 표의 순서로</b>를 켜 두면 명부가 병동 표와 같은 순서로 정렬됩니다.',
+       '<b>노란 칸이 회색</b>이면 날짜 줄에 연·월이 있어 그대로 읽은 것이라 확인이 필요 없다는 뜻입니다.']},
 {cat:'근무표 넣기·고치기',id:'paste2',title:'근무 칸만 붙여넣기',
  lead:'이미 표가 들어 있으면 이름·날짜 없이 <b>근무 칸만</b> 긁어 넣어도 됩니다.',
  steps:['엑셀에서 근무 칸만 긁어 복사한 뒤 이 창에서 <kbd>Ctrl+V</kbd>.',
-        '<b>맨 윗줄 = 어느 간호사</b>인지 고릅니다.',
+        '<b>맨 윗줄 = 어느 간호사</b>인지 고릅니다. 아랫줄들은 명부 순서를 따라갑니다.',
         '<b>첫 칸 날짜</b>를 고릅니다. 한 달치쯤 되면 기록 다음 달 1일을 알아서 제안합니다.',
-        '아래 미리보기에서 들어갈 자리를 확인하고 [맞아요, 저장].'],
- tips:['이름만 있고 날짜가 없거나, 날짜만 있고 이름이 없는 표도 됩니다 — 있는 쪽에 맞추고 없는 쪽만 물어봅니다.'],media:'paste2'},
+        '미리보기 <b>왼쪽의 이름</b>이 줄마다 맞는지 확인하고, 어긋난 줄은 그 자리에서 바꿉니다.',
+        '확인했으면 [맞아요, 저장].'],
+ tips:['이름만 있고 날짜가 없거나, 날짜만 있고 이름이 없는 표도 됩니다 — 있는 쪽에 맞추고 없는 쪽만 물어봅니다.',
+       '엑셀 줄 순서가 명부와 다르면 이 방식은 줄이 어긋나기 쉽습니다 — <b>이름 열까지 같이 복사</b>하면 순서와 상관없이 이름으로 맞춰 들어갑니다.'],media:'paste2'},
 {cat:'근무표 넣기·고치기',id:'codes',title:'모르는 표기 정하기 (경가·조가 등)',
  lead:'병동마다 쓰는 표기가 달라 기본 목록에 없는 근무가 들어올 수 있습니다. 그 자리에서 정하면 됩니다.',
  steps:['붙여넣기 미리보기에 <b>이 병동 표기 n가지를 모릅니다</b> 카드가 뜹니다.',

@@ -114,6 +114,9 @@ class GenerateRequest(BaseModel):
     time_limit: int = 1200  # 솔버 타임리밋 (초, 기본 20분)
     allow_pre_relax: bool = False  # infeasible 시 사전입력 완화 허용
     allow_juhu_relax: bool = False  # 주휴 재배치 허용
+    # 재배치하더라도 한 블록(4주기) 안에서는 같은 요일을 지킨다 — 병동 관행.
+    # False = '주휴 이동 제한 풀기' (주마다 요일이 흩어질 수 있음).
+    juhu_block_lock: bool = True
     unlimited_v: bool = False  # V 무제한 모드 (해를 못 찾을 때 사용)
     solver: Literal["highs", "cpsat", "race"] = "highs"  # 생성 엔진 (race=두 엔진 경쟁, 먼저 성공한 쪽 채택)
     # 위시 공정성 보정 — 서버가 직전 달 위시 거절 이력에서 자동 산출해 채움
