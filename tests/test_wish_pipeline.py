@@ -144,3 +144,27 @@ def test_fairness_offsets_shift_nights_to_low_cumulative(build_request, solver):
                         if v in night_codes) for n in nurses}
     assert counts["a0"] == min(counts.values()), counts
     assert counts["a0"] < max(counts.values()), counts
+
+
+def test_build_wish_report_marks_off_wish_filled_by_leave():
+    """OFF 위시를 OF가 아니라 V(연차)로 채우면 '반영'이지만 연차가 소진된다 —
+    리포트는 이를 구분해 보여줘야 한다 (M6 F5). 반영 집계 자체는 종전과 같다."""
+    from server.api import _build_wish_report
+    from server.models import Nurse, Requirements
+
+    nurses = [Nurse(id="a0", name="*간호0", group="A", gender="female",
+                    capable_shifts=["D", "E", "N"], seniority=0,
+                    wishes={"2026-03-02": "OFF", "2026-03-03": "OFF", "2026-03-04": "D"})]
+    req = GenerateRequest(year=2026, month=3, nurses=nurses,
+                          requirements=Requirements(), rules=Rules())
+    result = {"success": True, "schedule": {"a0": {
+        "2026-03-02": "V",      # OFF 위시 → 연차로 충족 (반영이지만 소진)
+        "2026-03-03": "OF",     # OFF 위시 → OF
+        "2026-03-04": "E",      # D 위시 → 미반영
+    }}}
+    wr = _build_wish_report(req, result)
+    row = wr["per_nurse"][0]
+    assert (row["requested"], row["granted"]) == (3, 2)
+    assert row["leave_filled"] == 1 and row["leave_filled_dates"] == ["2026-03-02"]
+    assert wr["total_leave_filled"] == 1
+    assert [u["date"] for u in row["unmet"]] == ["2026-03-04"]
