@@ -87,10 +87,14 @@ class Rules(BaseModel):
     maxNightPerMonthCount: int = 6   # 월 최대 야간 횟수 (7회부터 수면OFF 발생)
     maxNightTwoMonth: bool = False
     maxNightTwoMonthCount: int = 11  # 홀짝월 합산 최대 야간 (12개이상 수면OFF 발생)
-    # 사전입력 완화 차등 보너스
-    preBonusLeave: int = 5000  # V/생/특/공/법/병 (휴가) 유지 보너스 — 간호사 요청 사항
-    preBonusWork: int = 500    # D/E/N/DC/EC/NC/중/D1 (근무) 유지 보너스 — 교체 가능
-    preBonusRest: int = 300    # OF/주 (쉬는 날) 유지 보너스 — 교체 가능
+    # 사전입력 완화 차등 보너스 — 높을수록 늦게 뒤집힌다 (사전순 최소 침습, 결정 1-9)
+    #   휴가 5000 > 쉬는 날(OF·P1) 3000 > 근무 500 > 주휴 300(주휴 무시를 켰을 때만 변수)
+    # 원티드(사전입력)에는 사연이 있다(제1원칙 8) — 쉬는 날은 근무보다 강하게 보호한다.
+    # '절대 못 건드리는' 셀은 잠금(🔒, locked_cells)으로 — 그건 완화에서도 하드다.
+    preBonusLeave: int = 5000  # V/생/특/공/법/병 (휴가) — 간호사 요청 사항
+    preBonusOff: int = 3000    # OF/P1 (쉬는 날·임부휴무) — 개인의 시간, 강하게 보호
+    preBonusWork: int = 500    # D/E/N/DC/EC/NC/중/D1 (근무) — 가장 먼저 교체
+    preBonusRest: int = 300    # 주(주휴) — allow_juhu_relax 를 켰을 때만 변수가 된다
 
 
 class GenerateRequest(BaseModel):
