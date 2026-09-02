@@ -40,22 +40,34 @@ window.SolverModule = function() {
           if(result.stopped)this.statusMessage+='\n⏹ 중지 요청으로 탐색 종료 — 현재까지 찾은 최선의 해를 표시합니다.';
           // 완화된 셀 상세 메시지
           if(Object.keys(this.relaxedCells).length>0){
-            const details=[];
+            // 원티드(사전입력)에는 사연이 있다 — 뒤집힌 셀은 메모(사유)와 함께, 메모 있는 셀을 먼저
+            const details=[];let noted=0;
             for(const[nid,cells]of Object.entries(this.relaxedCells)){
               const nurse=this.nurses.find(n=>n.id===nid);
               const name=nurse?nurse.name:nid;
               for(const[dk,info]of Object.entries(cells)){
                 const dateStr=dk.slice(5).replace('-','/');
-                details.push(`  ${name} ${dateStr}: ${info.original} → ${info.assigned}`);
+                const note=this.cellNotes?.[nid]?.[dk]||'';
+                if(note)noted++;
+                details.push({note,line:`  ${name} ${dateStr}: ${info.original} → ${info.assigned}${note?'  📝 '+note:''}`});
               }
             }
-            this.statusMessage+='\n\n📋 변경 상세:\n'+details.join('\n');
+            details.sort((a,b)=>(b.note?1:0)-(a.note?1:0));
+            this.statusMessage+=`\n\n📌 원티드 미반영 ${details.length}건${noted?` — 그중 메모(사유) 있는 셀 ${noted}건`:''}. 절대 못 바꾸는 날은 사전입력에서 🔒 잠금하세요.\n`+details.map(d=>d.line).join('\n');
           }
           this.trackEdits();
           if(!_readjust){this.readjustPins={};this.readjustChanged={};this.readjustSummary=''}
           if(result.warning){this.statusMessage=result.warning+'\n\n'+this.statusMessage;this.statusOk=false}}
       }catch(e){this.statusOk=false;this.statusMessage='서버 오류: '+e.message}
       finally{this.generating=false;this.stopRequested=false;if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generateFinalElapsed=this.generateElapsed}
+    },
+    // 완화 카드 제목 — "원티드 미반영 N건 (메모 있는 셀 M건)"
+    relaxedSummaryLabel(){
+      let n=0,m=0;
+      for(const[nid,cells]of Object.entries(this.relaxedCells||{})){
+        for(const dk of Object.keys(cells)){n++;if(this.cellNotes?.[nid]?.[dk])m++}
+      }
+      return `📌 원티드 미반영 ${n}건`+(m?` (메모 있는 셀 ${m}건)`:'');
     },
     async stopGenerate(){
       if(this.stopRequested)return;this.stopRequested=true;

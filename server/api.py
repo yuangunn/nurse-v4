@@ -1209,6 +1209,7 @@ def _build_wish_report(request: GenerateRequest, result: dict) -> Optional[dict]
         ns = sched.get(n.id) or {}
         requested = granted = 0
         unmet = []
+        leave_filled = []   # OFF 위시를 OF가 아니라 연차·휴가(V/생/…)로 채운 날 — 반영은 맞지만 연차가 소진된다
         for day_str, wish in wishes.items():
             ds = str(day_str)
             if "-" in ds:
@@ -1226,6 +1227,8 @@ def _build_wish_report(request: GenerateRequest, result: dict) -> Optional[dict]
             requested += 1
             if wish == "OFF":
                 ok = assigned in db.WISH_REST_LIKE or assigned in db.WISH_LEAVE_LIKE
+                if ok and assigned in db.WISH_LEAVE_LIKE:
+                    leave_filled.append(dk)
             else:
                 ok = (assigned == wish)
             if ok:
@@ -1238,12 +1241,14 @@ def _build_wish_report(request: GenerateRequest, result: dict) -> Optional[dict]
             per_nurse.append({
                 "nurse_id": n.id, "name": n.name,
                 "requested": requested, "granted": granted, "unmet": unmet,
+                "leave_filled": len(leave_filled), "leave_filled_dates": leave_filled,
                 "boost": (request.wish_boosts or {}).get(n.id),
             })
     if not per_nurse:
         return None
     per_nurse.sort(key=lambda r: (r["granted"] / r["requested"], -len(r["unmet"])))
     return {"total_requested": total_req, "total_granted": total_ok,
+            "total_leave_filled": sum(r["leave_filled"] for r in per_nurse),
             "per_nurse": per_nurse}
 
 
