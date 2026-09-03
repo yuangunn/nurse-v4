@@ -38,7 +38,7 @@ window.SolverModule = function() {
         this.loadFairnessLedger&&this.loadFairnessLedger();
         // 13단계 진단이 짚은 셀 좌표 → 정밀분석과 동일한 '충돌 위치로 이동' 칩 표시
         if(!result.success&&Array.isArray(result.anchored)&&result.anchored.length){this.diagResult={anchored:result.anchored}}
-        if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.activeTab='schedule';
+        if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length);this.activeTab='schedule';
           if(result.stopped)this.statusMessage+='\n⏹ 중지 요청으로 탐색 종료 — 현재까지 찾은 최선의 해를 표시합니다.';
           // 완화된 셀 상세 메시지
           if(Object.keys(this.relaxedCells).length>0){

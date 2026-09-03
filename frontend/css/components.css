@@ -794,3 +794,14 @@ input[type="number"]::-webkit-outer-spin-button {
   .hospital-logo { display: none !important; }
 }
 
+
+/* ── 드롭다운 메뉴 (툴바 묶음: 내보내기·가져오기·자동 채움·⋯) — M7 ─────────── */
+.menu-pop { position: absolute; top: 100%; left: 0; z-index: 60; min-width: 190px; padding: 4px; margin-top: 4px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  display: flex; flex-direction: column; gap: 2px; }
+.menu-pop.menu-right { left: auto; right: 0; }
+.menu-item { display: block; width: 100%; text-align: left; padding: 6px 10px; font-size: 0.75rem; border-radius: 6px;
+  background: none; border: none; color: inherit; cursor: pointer; white-space: nowrap; }
+.menu-item:hover { background: var(--accent-bg, rgba(59,130,246,0.08)); }
+.menu-item:disabled { opacity: .35; cursor: default; }
+.menu-sep { height: 1px; margin: 3px 4px; background: var(--border); }
