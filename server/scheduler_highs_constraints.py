@@ -788,6 +788,34 @@ class _HighsConstraintsMixin:
                     prob += range_var >= max_n - min_n, f"night_range_def_{rid}"
                     terms.append(sc * range_var)
 
+            elif rt == "weekend_fairness":
+                # 주말·공휴일 근무 공정 배분 (M6 P3②): 부담일(토·일·법정공휴일) 근무일 수의
+                # (직전 달 누적 + 당월) range 최소화 — night_fairness와 같은 선형 패턴.
+                # 풀에서 야간전담(14일 고정)·당월 부분 재적은 제외 (공용 헬퍼, CP-SAT 패리티).
+                fairness_pool = self._weekend_fairness_pool()
+                burden_days = [d for d in month_days
+                               if self._is_weekend_or_holiday(self.all_dates[d])]
+                if len(fairness_pool) >= 2 and burden_days:
+                    wh_counts = {
+                        nurse["id"]: pulp.lpSum(
+                            x[nurse["id"]][d][s]
+                            for d in burden_days
+                            for s in self.WORK_SHIFTS
+                        )
+                        for nurse in fairness_pool
+                    }
+                    max_w = pulp.LpVariable(f"max_wh_{rid}", lowBound=0, cat="Integer")
+                    min_w = pulp.LpVariable(f"min_wh_{rid}", lowBound=0, cat="Integer")
+                    for nurse in fairness_pool:
+                        nid = nurse["id"]
+                        # 공정성 원장: 지난달 주말·공휴일을 많이 뛴 사람은 이번 달 적게 받는다
+                        off = int(self.weekend_offsets.get(nid, 0))
+                        prob += max_w >= wh_counts[nid] + off, f"max_wh_{rid}_{nid}"
+                        prob += min_w <= wh_counts[nid] + off, f"min_wh_{rid}_{nid}"
+                    range_w = pulp.LpVariable(f"wh_range_{rid}", lowBound=0, cat="Integer")
+                    prob += range_w >= max_w - min_w, f"wh_range_def_{rid}"
+                    terms.append(sc * range_w)
+
             elif rt == "holiday_work":
                 # 법정공휴일 근무 보상: 공휴일에 근무(WORK_SHIFTS)하면 가점
                 for nurse in self.nurses:

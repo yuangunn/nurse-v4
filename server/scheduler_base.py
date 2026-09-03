@@ -159,6 +159,8 @@ class _SchedulerBase:
         self.relax_boosts = getattr(request, "relax_boosts", None) or {}
         # 야간 공정성 원장 오프셋 (직전 달 누적 야간) — {nid: n}
         self.fairness_offsets = getattr(request, "fairness_offsets", None) or {}
+        # 주말·공휴일 근무 공정성 원장 오프셋 (직전 달 누적 주말·공휴일 근무일) — {nid: n} (M6 P3②)
+        self.weekend_offsets = getattr(request, "weekend_offsets", None) or {}
 
         # ── 근무 정의 → 카테고리 리스트 동적 구성 ─────────────────────────────
         shifts = [s.model_dump() for s in request.shifts] if request.shifts else []
@@ -470,6 +472,23 @@ class _SchedulerBase:
             and not (nurse.get("is_pregnant") and self._preg_active_in_month(nurse))
         ]
 
+    def _is_weekend_or_holiday(self, dt: date) -> bool:
+        """주말(토·일) 또는 법정공휴일 — 주말·공휴일 근무 공정성의 '부담일' (M6 P3②)."""
+        return dt.weekday() >= 5 or dt.strftime("%Y-%m-%d") in self.holidays
+
+    def _weekend_fairness_pool(self):
+        """주말·공휴일 근무 공정 배분 대상 풀 — 근무일 수가 구조적으로 다른 간호사
+        (야간전담 14일 고정, 당월 전입·전출로 부분 재적)는 제외해야 range가 유효하다.
+        임산부는 주말 D/E를 볼 수 있으므로 포함한다 (야간 풀과 다른 점). 양 엔진 공용."""
+        first = date(self.year, self.month, 1)
+        last = (first.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        return [
+            nurse for nurse in self.nurses
+            if not nurse.get("is_night_shift")
+            and self._nurse_active_on(nurse, first)
+            and self._nurse_active_on(nurse, last)
+        ]
+
     # ── 예상 소요시간 추정 ────────────────────────────────────────────────────
 
     def estimate_seconds(self) -> int:
@@ -491,7 +510,7 @@ class _SchedulerBase:
                 n_steps = len(rule.params.get("pattern", []))
                 if n_steps >= 2:
                     soft_vars += N * max(0, T - n_steps + 1)
-            elif rt == "night_fairness":
+            elif rt in ("night_fairness", "weekend_fairness"):
                 soft_vars += N + 2
 
         total_vars = base_vars + soft_vars
@@ -678,7 +697,7 @@ class _SchedulerBase:
                             scores[nid] += sc
                             counts[nid] += 1
 
-            # night_fairness는 개인 점수에 미포함 (전체 지표)
+            # night_fairness·weekend_fairness는 개인 점수에 미포함 (전체 지표 — ⚖ 공정성 카드)
             else:
                 continue
 

@@ -168,6 +168,24 @@
   keep_terms, `scheduler_base.relax_boosts`, 프론트 완화 카드 "(보정 ×n)".
   테스트 `test_wish_pipeline.py` 원장 1건 + 보정 행동 양 엔진.
 
+### 1-21. 주말·공휴일 근무 공정성 — 야간과 같은 range + 누적 오프셋 (2026-09-03, M6 P3②)
+- **결정**: 배점 규칙 `weekend_fairness`(기본 −30) — 부담일(토·일 ∪ 법정공휴일) 근무일 수의
+  간호사 간 range를 페널티. `night_fairness`와 같은 선형 패턴(max/min/range 정수 보조변수)이며
+  공정성 원장의 새 키 `weekend_holiday`(합집합)를 `weekend_offsets`로 주입해 (직전 3개월 누적 +
+  당월) 편차를 줄인다. 주입은 `api._attach_fairness_offsets`로 야간과 한 경로(켜진 규칙별).
+- **풀**: 야간전담(14일 고정)·당월 부분 재적(전입/전출)은 제외 — 근무일 수가 구조적으로 달라
+  포함하면 range가 상수화된다(야간 풀과 같은 논리). 임산부는 주말 D/E를 볼 수 있으므로 **포함**
+  (야간 풀과 다른 점). `scheduler_base._weekend_fairness_pool`·`_is_weekend_or_holiday`.
+- **합집합인 이유**: 토요일 공휴일을 주말 1 + 공휴일 1로 세면 그 날이 이중 부담이 된다. 원장의
+  `weekends`·`holiday_work`는 기존 표시용으로 남기고 오프셋에는 `weekend_holiday`만 쓴다.
+- **하지 않은 것**: 차지 횟수 공정성(P3①)은 사용자 기각 — 제1원칙 9, 다시 제안하지 말 것.
+  개인 점수 상세에는 night_fairness처럼 넣지 않는다(전체 지표) — 대신 스케줄 탭 ⚖ 공정성 카드가
+  당월·누적·합·편차를 보여준다.
+- **파일**: `models.GenerateRequest.weekend_offsets`, `scheduler_highs_constraints`/`scheduler_cpsat`
+  `weekend_fairness` 분기, `database.compute_fairness_ledger`(weekend_holiday)·시드·마이그레이션,
+  `api._attach_fairness_offsets`, 프론트 `app.js fairnessCard`·`index.html` 카드·규칙 설명·
+  `misc-features.js` 슬라이더 매핑. 테스트 `test_wish_pipeline.py` 5건.
+
 ### 1-17. 공휴일 인정 범위 = 생성 주기 (2026-08-20)
 - **결정**: `self.holidays`를 **당월 프리픽스**가 아니라 **생성 주기 범위
   (`all_dates` = 전월 말·익월 초 패딩 포함)**로 거른다. 프론트 `autoFillHolidays`도

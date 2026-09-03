@@ -178,6 +178,8 @@ window.MiscFeaturesModule = function() {
         '순방향 E→N':{slider:s.forward, base:20, field:'score'},
         'D→N 전환 페널티':{slider:s.forward, base:-30, field:'score'},
         '야간 공평성':{slider:s.nightFairness, base:-10, field:'score'},
+        '야간 근무 공평성':{slider:s.nightFairness, base:-50, field:'score'},          // 시드 이름
+        '주말·공휴일 근무 공평성':{slider:s.weekendFairness, base:-30, field:'score'}, // M6 P3②
         '희망 근무 반영':{slider:s.wishWeight, base:50, field:'score'},
         '연속 휴일 보상':{slider:s.continuity, base:30, field:'score'},
       };
@@ -189,7 +191,6 @@ window.MiscFeaturesModule = function() {
           if(rule.score!==newScore){rule.score=newScore;updated++}
         }
       }
-      // 주말 공평성 규칙이 없으면 생성은 안 하고 안내만
       this._saveScoringSliders();
       if(updated>0)this.toast(`배점 ${updated}건 조정됨`,'info');
       // 서버에 저장

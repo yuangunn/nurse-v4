@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.11.3 (2026-08-24, M6 P2① — 완화 이력 원장: 지난달 뒤집힌 원티드는 이번 달 더 지킨다)
+**최신**: v4.11.4 (2026-09-03, M6 P3② — 주말·공휴일 근무 공평성: 누적 원장 오프셋 + ⚖ 공정성 카드)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -113,7 +113,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 153건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록)
+├── tests/                   # pytest 회귀 163건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -156,7 +156,7 @@ npm start
 ### 테스트
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 153건
+python3 -m pytest -q                  # 163건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs
@@ -168,7 +168,7 @@ node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.11.3.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.11.4.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -255,7 +255,8 @@ node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
 - 순방향 D→E, E→N 보상 (+20)
 - 동일 근무 연속 보상 (+15)
 - 연속 휴일 보상 (+30)
-- 야간 공정 배분 (range 최소화, -가중치)
+- 야간 공정 배분 (range 최소화, -가중치, 직전 3개월 누적 오프셋)
+- **주말·공휴일 근무 공정 배분** (토·일 ∪ 공휴일 근무일 range 최소화 + 직전 3개월 누적 오프셋, 기본 -30; 야간전담·당월 전입/전출 제외, 임산부 포함) — 결정 1-21
 - 희망 근무 반영 (+50)
 - V 사용 페널티 (-500) — 마지막 수단
 - 생 사용 (여성) 보상 (+80)
@@ -403,7 +404,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 | GET/POST | `/api/prev_schedules` | 사전입력 저장 (유령 자동 제거) |
 | GET/DELETE | `/api/prev_schedules/{id}` | 개별 조회/삭제 |
 | GET | `/api/relax_ledger` | 완화 이력 원장 — 직전 N개월 저장본의 간호사별 뒤집힌 원티드 수 (결정 1-20) |
-| GET | `/api/fairness_ledger` · `/api/prev_month_nights` | 공정성 원장(야간·주말·공휴일·위시) · 전월 야간 자동 인수인계(나이트킵 달 제외) |
+| GET | `/api/fairness_ledger` · `/api/prev_month_nights` | 공정성 원장(야간·주말·공휴일·주말∪공휴일 `weekend_holiday`·위시 — night/weekend_fairness 오프셋 원천) · 전월 야간 자동 인수인계(나이트킵 달 제외) |
 
 ### 개발자 API
 | Method | Path | 설명 |
@@ -432,6 +433,8 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
      (📌 이 표대로 인원 → ✅ 이대로 근무표로 순으로 쓰면 인원 기준까지 그 표에 맞춰진다)
 3. **분석**: 일자별 과부족 히트맵 + 주휴 추천 배분 → "사전입력에 적용"
 4. **스케줄**: 생성 결과 표시, 셀 직접 편집, 인원 카운트, 배점 상세
+   - **⚖ 공정성 카드**: 야간 · 주말/공휴일 근무의 당월·누적(3M)·합과 편차(최대−최소).
+     ※ = 공정성 대상 아님(야간전담·당월 전입/전출·트레이니). "이번 생성에 누적 반영" 표시 = 원장 주입됨
    - **📋 어싸인용 복사** (`copyScheduleTsv`): 이름 + 날짜 + 근무 표를 클립보드로 →
      어싸인 배정표(standalone)에 그대로 붙여넣는다
 5. **저장**: 생성 스케줄 저장/불러오기
@@ -545,7 +548,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 ### 기본 시드
 - 간호사 18명: A/B/C 그룹, 각 여4+남2
 - 근무 17종: DC, D, D1, EC, E, 중, NC, N, OF, 주, P1, V, 생, 특, 공, 법, 병
-- 배점 규칙: 14종 (법정공휴일/주말 마이그레이션 포함)
+- 배점 규칙: 18종 (법정공휴일/주말/주말·공휴일 공평성 마이그레이션 포함)
 
 ---
 
@@ -560,10 +563,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.11.3.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.11.4.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.11.3.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.11.4.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -651,7 +654,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.11.3 기준)
+## 알려진 주의사항 (v4.11.4 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)

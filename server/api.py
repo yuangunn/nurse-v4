@@ -1223,6 +1223,37 @@ def _attach_relax_boosts(request: GenerateRequest) -> Optional[dict]:
         return None
 
 
+def _attach_fairness_offsets(request: GenerateRequest) -> Optional[dict]:
+    """공정성 원장(직전 3개월 저장본 누적)을 켜진 규칙별 오프셋으로 request에 주입.
+    night_fairness → fairness_offsets(누적 야간), weekend_fairness → weekend_offsets
+    (누적 주말·공휴일 근무일, 합집합). 규칙이 없으면 그 오프셋은 건드리지 않는다.
+    저장본 파생이라 별도 기록이 필요 없다 (M6 P3②, 결정 1-21)."""
+    try:
+        rts = {getattr(r, "rule_type", "") for r in request.scoring_rules
+               if getattr(r, "enabled", True)}
+        want_n = "night_fairness" in rts
+        want_w = "weekend_fairness" in rts
+        if not (want_n or want_w):
+            return None
+        fl = db.compute_fairness_ledger(request.year, request.month)
+        out = {"ledger": fl}
+        if want_n:
+            offsets = {nid: int(ent.get("nights") or 0)
+                       for nid, ent in fl.items() if ent.get("nights")}
+            if offsets:
+                request.fairness_offsets = offsets
+                out["fairness_offsets"] = offsets
+        if want_w:
+            offsets = {nid: int(ent.get("weekend_holiday") or 0)
+                       for nid, ent in fl.items() if ent.get("weekend_holiday")}
+            if offsets:
+                request.weekend_offsets = offsets
+                out["weekend_offsets"] = offsets
+        return out
+    except Exception:
+        return None
+
+
 def _build_wish_report(request: GenerateRequest, result: dict) -> Optional[dict]:
     """생성 결과 대비 위시 반영 리포트 — 간호사별 신청/반영/미반영 목록."""
     if not result.get("success"):
@@ -1517,18 +1548,9 @@ def generate(request: GenerateRequest):
             warning = (warning + "\n\n" + lock_warn) if warning else lock_warn
         wish_ctx = _attach_wish_boosts(request)
         relax_ctx = _attach_relax_boosts(request)
-        # 공정성 원장 — night_fairness가 (직전 3개월 누적 + 당월) 편차를 줄이도록
-        # 누적 야간 오프셋을 자동 주입 (저장본 파생 — 별도 기록 불필요)
-        try:
-            if any(getattr(r, "rule_type", "") == "night_fairness"
-                   for r in request.scoring_rules):
-                fl = db.compute_fairness_ledger(request.year, request.month)
-                offsets = {nid: int(ent.get("nights") or 0)
-                           for nid, ent in fl.items() if ent.get("nights")}
-                if offsets:
-                    request.fairness_offsets = offsets
-        except Exception:
-            pass
+        # 공정성 원장 — night_fairness·weekend_fairness가 (직전 3개월 누적 + 당월)
+        # 편차를 줄이도록 누적 오프셋을 자동 주입 (저장본 파생 — 별도 기록 불필요)
+        fair_ctx = _attach_fairness_offsets(request)
         if request.solver == "race":
             result = _run_race(request)
         elif request.solver == "cpsat":
@@ -1560,6 +1582,11 @@ def generate(request: GenerateRequest):
                 result["wish_report"] = wr
         except Exception:
             pass
+        # 공정성 원장 오프셋 — ⚖ 공정성 카드가 '누적이 이번 생성에 반영됐다'를 보여주도록 노출
+        if fair_ctx and result.get("success"):
+            for _k in ("fairness_offsets", "weekend_offsets"):
+                if fair_ctx.get(_k):
+                    result[_k] = fair_ctx[_k]
         # 생성 리포트 — run 레코더 집계 (end() 호출 전에 만들어야 함)
         try:
             report = solver_progress.build_report(result)

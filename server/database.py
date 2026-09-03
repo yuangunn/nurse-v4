@@ -457,7 +457,10 @@ def compute_prev_month_nights(year: int, month: int) -> Dict[str, int]:
 
 def compute_fairness_ledger(year: int, month: int, months_back: int = 3) -> Dict:
     """공정성 원장 — 직전 months_back개월 저장본에서 간호사별 누적 부담 집계.
-    Returns {nid: {"nights": n, "weekends": n, "holiday_work": n, "months": k}}"""
+    Returns {nid: {"nights": n, "weekends": n, "holiday_work": n,
+                   "weekend_holiday": n, "months": k}}
+    weekend_holiday = 토·일 ∪ 법정공휴일 근무일 수(합집합 — 토요일 공휴일은 1회).
+    weekend_fairness 오프셋의 원천 (M6 P3②)."""
     import datetime as _dt
     targets = []
     y, m = year, month
@@ -477,20 +480,25 @@ def compute_fairness_ledger(year: int, month: int, months_back: int = 3) -> Dict
             for nid, days in (data.get("schedule") or {}).items():
                 touched = False
                 ent = ledger.setdefault(
-                    nid, {"nights": 0, "weekends": 0, "holiday_work": 0, "months": 0})
+                    nid, {"nights": 0, "weekends": 0, "holiday_work": 0,
+                          "weekend_holiday": 0, "months": 0})
                 for dk, s in (days or {}).items():
                     if not dk.startswith(prefix) or s not in _WORK_CODES:
                         continue
                     touched = True
                     if s in _NIGHT_CODES:
                         ent["nights"] += 1
+                    is_weekend = False
                     try:
-                        if _dt.date.fromisoformat(dk).weekday() >= 5:
-                            ent["weekends"] += 1
+                        is_weekend = _dt.date.fromisoformat(dk).weekday() >= 5
                     except ValueError:
                         pass
+                    if is_weekend:
+                        ent["weekends"] += 1
                     if dk in holidays:
                         ent["holiday_work"] += 1
+                    if is_weekend or dk in holidays:
+                        ent["weekend_holiday"] += 1
                 if touched:
                     ent["months"] += 1
     return ledger
@@ -830,6 +838,7 @@ def _seed_scoring_rules(conn: sqlite3.Connection):
         ("공휴일 근무 보상",         "holiday_work",     json.dumps({}),                                                     +20, 1, 14),
         ("주말 경감근무 보상",       "weekend_work",     json.dumps({"slots": [{"weekday": 5, "periods": ["evening", "night"]}, {"weekday": 6, "periods": ["day"]}]}), +20, 1, 15),
         ("공휴일 OFF 페널티",        "holiday_off",      json.dumps({}),                                                    -500, 1, 16),
+        ("주말·공휴일 근무 공평성",  "weekend_fairness", json.dumps({}),                                                     -30, 1, 17),
     ]
     conn.executemany(
         "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
@@ -838,7 +847,7 @@ def _seed_scoring_rules(conn: sqlite3.Connection):
 
 
 def _migrate_holiday_weekend_rules(conn: sqlite3.Connection):
-    """법정공휴일/주말 배점 규칙 3종 마이그레이션 (기존 DB에 없을 경우 추가)"""
+    """법정공휴일/주말 배점 규칙 마이그레이션 (기존 DB에 없을 경우 추가) — 5종"""
     # 법정공휴일 휴가 보상
     has_holiday_leave = conn.execute(
         "SELECT COUNT(*) FROM scoring_rules WHERE name LIKE '%법정공휴일 휴가%'"
@@ -879,6 +888,16 @@ def _migrate_holiday_weekend_rules(conn: sqlite3.Connection):
         conn.execute(
             "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
             ("공휴일 OFF 페널티", "holiday_off", json.dumps({}), -500, 1, 16)
+        )
+
+    # 주말·공휴일 근무 공평성 (M6 P3②) — 부담일(토·일·공휴일) 근무일 수의 (누적+당월) range 페널티
+    has_weekend_fairness = conn.execute(
+        "SELECT COUNT(*) FROM scoring_rules WHERE rule_type='weekend_fairness'"
+    ).fetchone()[0]
+    if not has_weekend_fairness:
+        conn.execute(
+            "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
+            ("주말·공휴일 근무 공평성", "weekend_fairness", json.dumps({}), -30, 1, 17)
         )
 
 
