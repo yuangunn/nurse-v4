@@ -316,7 +316,7 @@ window.MiscFeaturesModule = function() {
         const d=JSON.parse(raw);
         if(Date.now()-d.t>172800000)return false; // 48시간 초과 무시
         if(Object.keys(this.prevSchedule).some(k=>Object.keys(this.prevSchedule[k]).length>0))return false;
-        this.year=d.y;this.month=d.m;this.activeTab=d.tab||'settings';
+        this.year=d.y;this.month=d.m;this.activeTab=d.tab||'preinput';
         this.prevSchedule=d.ps||{};this.prevDayReqs=d.dr||{};this.holidays=d.hd||[];
         this.lockedCells=d.lk||{};this.cellNotes=d.nt||{};this.prevMonthNights=d.mn||{};
         return true;

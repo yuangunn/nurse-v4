@@ -293,6 +293,10 @@ html.is-electron .titlebar {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
 }
+/* M7-D: ⚙ 설정 + 3단계 */
+.stepper.stepper-3 { grid-template-columns: auto repeat(3, 1fr); }
+.step.step-gear { padding-right: 18px; }
+.step.step-gear .step-num { font-size: 1rem; }
 .step {
   display: grid; grid-template-columns: auto 1fr;
   gap: 10px; align-items: center;

@@ -342,10 +342,11 @@
       </div>
     </div>
   </div>
-  <nav class="stepper">
-    <div class="step" :class="{active: activeTab==='settings', done: stepperDone.settings}"
-         @click="activeTab='settings'">
-      <span class="step-num">01</span>
+  <!-- 스텝 바 — 매달 밟는 3단계만 번호를 준다. 설정은 첫 1회라 ⚙ 로, 저장은 근무표 탭 안의 서랍으로 (M7-D) -->
+  <nav class="stepper stepper-3">
+    <div class="step step-gear" :class="{active: activeTab==='settings', done: stepperDone.settings}"
+         @click="activeTab='settings'" title="설정 — 간호사 명부 · 요일별 인원 · 규칙 · 배점 (첫 1회, 인원이 바뀔 때)">
+      <span class="step-num">⚙</span>
       <div class="step-body">
         <span class="step-name">설정</span>
         <span class="step-desc" x-text="stepperSummary.settings"></span>
@@ -353,7 +354,7 @@
     </div>
     <div class="step" :class="{active: activeTab==='preinput', done: stepperDone.preinput}"
          @click="activeTab='preinput'">
-      <span class="step-num">02</span>
+      <span class="step-num">01</span>
       <div class="step-body">
         <span class="step-name">사전입력</span>
         <span class="step-desc" x-text="stepperSummary.preinput"></span>
@@ -361,7 +362,7 @@
     </div>
     <div class="step" :class="{active: activeTab==='analysis', done: stepperDone.analysis}"
          @click="activeTab='analysis'">
-      <span class="step-num">03</span>
+      <span class="step-num">02</span>
       <div class="step-body">
         <span class="step-name">분석</span>
         <span class="step-desc" x-text="stepperSummary.analysis"></span>
@@ -369,18 +370,10 @@
     </div>
     <div class="step" :class="{active: activeTab==='schedule', done: stepperDone.schedule}"
          @click="activeTab='schedule'">
-      <span class="step-num">04</span>
+      <span class="step-num">03</span>
       <div class="step-body">
-        <span class="step-name">생성</span>
+        <span class="step-name">근무표</span>
         <span class="step-desc" x-text="stepperSummary.schedule"></span>
-      </div>
-    </div>
-    <div class="step" :class="{active: activeTab==='saved', done: stepperDone.saved}"
-         @click="activeTab='saved'">
-      <span class="step-num">05</span>
-      <div class="step-body">
-        <span class="step-name">저장</span>
-        <span class="step-desc" x-text="stepperSummary.saved"></span>
       </div>
     </div>
   </nav>
@@ -412,9 +405,10 @@
     </div>
 
     <!-- 근무 관리 -->
-    <div class="card" x-data="{expanded:false}">
-      <div class="flex items-center justify-between mb-2"><div class="section-title" style="margin:0">근무 관리 <span class="text-dim text-xs font-normal" x-text="`${shifts.length}종`"></span></div><div class="flex gap-2"><button @click="openShiftModal(null)" class="btn btn-sm btn-primary">+ 새 근무</button></div></div>
-      <div class="overflow-x-auto" :style="expanded?'':'max-height:220px;overflow-y:hidden'">
+    <div class="card" x-data="{expanded:false,openDefs:false}">
+      <div class="flex items-center justify-between mb-2"><div class="section-title" style="margin:0">근무 정의 <span class="text-dim text-xs font-normal" x-text="`${shifts.length}종 · 고급`"></span></div><div class="flex gap-2"><button @click="openDefs=!openDefs" class="btn btn-xs btn-ghost" x-text="openDefs?'▾ 접기':'▸ 펼치기'"></button><button x-show="openDefs" @click="openShiftModal(null)" class="btn btn-sm btn-primary">+ 새 근무</button></div></div>
+      <p x-show="!openDefs" class="text-xs text-dim">D·E·N·차지·휴무·휴가 코드 17종은 병동 표준이라 보통 손댈 일이 없습니다. 코드·색·시간을 바꾸려면 펼치세요.</p>
+      <div x-show="openDefs" class="overflow-x-auto" :style="expanded?'':'max-height:220px;overflow-y:hidden'">
         <table class="tbl"><thead><tr><th></th><th>코드</th><th>이름</th><th>유형</th><th>시간</th><th>차지</th><th>배정</th><th></th></tr></thead>
         <tbody><template x-for="s in shifts" :key="s.code"><tr>
           <td><span :style="getShiftStyle(s.code)" class="px-1.5 py-0.5 rounded text-xs font-bold" x-text="s.code"></span></td>
@@ -426,7 +420,7 @@
           <td class="flex gap-2 justify-end"><button @click="openShiftModal(s)" class="text-xs text-blue">수정</button><button @click="deleteShift(s.code)" class="text-xs text-red">삭제</button></td>
         </tr></template></tbody></table>
       </div>
-      <button x-show="shifts.length>6" @click="expanded=!expanded" class="btn btn-xs btn-ghost w-full mt-2" x-text="expanded?'접기':'전체 보기 ('+shifts.length+'종)'"></button>
+      <button x-show="openDefs&&shifts.length>6" @click="expanded=!expanded" class="btn btn-xs btn-ghost w-full mt-2" x-text="expanded?'접기':'전체 보기 ('+shifts.length+'종)'"></button>
     </div>
 
     <!-- 규칙 관리 -->
@@ -435,9 +429,7 @@
       <p class="text-xs font-semibold uppercase tracking-widest mb-2 text-dim">하드 제약</p>
       <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-sm mb-3 text-sub">
         <label class="flex items-center gap-2"><input type="checkbox" x-model="rules.weeklyOff"/>주 2회 휴무</label>
-        <label class="flex items-center gap-2 text-dim"><input type="checkbox" checked disabled/>E→D 금지</label>
-        <label class="flex items-center gap-2 text-dim"><input type="checkbox" checked disabled/>N→E 금지</label>
-        <label class="flex items-center gap-2 text-dim"><input type="checkbox" checked disabled/>N→D 금지</label>
+        <div class="flex items-center text-xs text-dim" title="E→D · N→E · N→D 같은 역순 전환은 물리적 간격이 8시간 미만이라 항상 금지됩니다 (끌 수 없음)">고정: 역순 전환 금지 (E→D · N→E · N→D)</div>
         <label class="flex items-center gap-2"><input type="checkbox" x-model="rules.noNOD"/>N→휴무→D 금지</label>
         <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxConsecutiveWork"/>최대 연속 근무 <input type="number" x-model.number="rules.maxConsecutiveWorkDays" min="1" max="10" class="text-center" style="width:3.5em"/>일</label>
         <label class="flex items-center gap-2 col-span-2"><input type="checkbox" x-model="rules.maxConsecutiveNight"/>최대 연속 야간 <input type="number" x-model.number="rules.maxConsecutiveNightDays" min="1" max="7" class="text-center" style="width:3.5em"/>일</label>
@@ -495,13 +487,19 @@
       <div class="flex items-center justify-between mb-2">
         <div class="section-title" style="margin:0">간호사 <span class="text-blue" x-text="`${nurses.length}명`"></span></div>
         <div class="flex gap-2">
-          <button @click="saveTemplate()" class="btn btn-xs btn-ghost">💾 템플릿 저장</button>
-          <template x-for="(t,i) in templates" :key="'tpl'+i">
-            <button @click="loadTemplate(i)" class="btn btn-xs btn-ghost" :title="t.name" x-text="'📂 '+t.name"></button>
-          </template>
-          <button @click="downloadNurseTemplate()" class="btn btn-xs btn-ghost" title="엑셀 템플릿 다운로드 — 드롭다운·안내 시트 포함, 채워서 그대로 가져오기">📥 템플릿</button>
-          <button @click="exportNursesToCSV()" class="btn btn-xs btn-ghost" title="현재 간호사 목록을 엑셀(xlsx)로 내보내기 — 수정 후 다시 가져오면 반영">💾 내보내기</button>
-          <button @click="$refs.nurseCsvInput.click()" class="btn btn-xs btn-ghost" title="엑셀(xlsx) 또는 CSV 파일로 일괄 등록/수정 (또는 카드에 끌어다 놓기)">📤 가져오기</button>
+          <div x-data="{open:false}" class="relative" style="display:inline-block">
+            <button @click="open=!open" class="btn btn-xs btn-ghost" title="엑셀 템플릿 · 내보내기 · 가져오기 · 명부 템플릿 저장/불러오기">📗 명부 파일 ▾</button>
+            <div x-show="open" x-cloak @click.outside="open=false" class="menu-pop menu-right">
+              <button @click="downloadNurseTemplate();open=false" class="menu-item" title="엑셀 템플릿 다운로드 — 드롭다운·안내 시트 포함, 채워서 그대로 가져오기">📥 엑셀 템플릿 다운로드</button>
+              <button @click="exportNursesToCSV();open=false" class="menu-item" title="현재 간호사 목록을 엑셀(xlsx)로 내보내기 — 수정 후 다시 가져오면 반영">💾 엑셀로 내보내기</button>
+              <button @click="$refs.nurseCsvInput.click();open=false" class="menu-item" title="엑셀(xlsx) 또는 CSV 파일로 일괄 등록/수정 (또는 카드에 끌어다 놓기)">📤 엑셀/CSV 가져오기</button>
+              <div class="menu-sep"></div>
+              <button @click="saveTemplate();open=false" class="menu-item">💾 현재 명부를 템플릿으로 저장</button>
+              <template x-for="(t,i) in templates" :key="'tpl'+i">
+                <button @click="loadTemplate(i);open=false" class="menu-item" :title="t.name" x-text="'📂 '+t.name"></button>
+              </template>
+            </div>
+          </div>
           <input type="file" x-ref="nurseCsvInput" accept=".xlsx,.xlsm,.csv,.txt" style="display:none" @change="importNursesFromCSV($event)"/>
           <button @click="openNurseModal(null)" class="btn btn-sm btn-primary">+ 추가</button>
         </div>
@@ -667,7 +665,7 @@
     <div class="today-section-title">
       <h3>오늘 근무자</h3>
       <span class="count" x-text="(()=>{
-        if(!schedule||!Object.keys(schedule).length) return '스케줄 없음';
+        if(!schedule||!Object.keys(schedule).length) return '근무표 없음';
         const todayKey = (()=>{const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0')})();
         const c = Object.values(schedule).reduce((n,days)=>n+(days[todayKey]&&['D','DC','D1','E','EC','중','N','NC'].includes(days[todayKey])?1:0),0);
         return c+'명';
@@ -957,8 +955,9 @@
   </div>
   <div x-show="nurses.length===0" class="empty-state">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-    <p>설정 탭에서 간호사를 먼저 등록해주세요</p>
+    <p>⚙ 설정에서 간호사를 먼저 등록해주세요</p>
     <span class="empty-hint">간호사 정보를 등록한 후 사전입력을 진행할 수 있습니다</span>
+    <button @click="activeTab='settings'" class="btn btn-sm btn-primary mt-3">⚙ 설정 열기</button>
   </div>
 </div>
 
@@ -1004,7 +1003,7 @@
     <button @click="showGenAdvanced=!showGenAdvanced" :class="showGenAdvanced?'btn-primary':'btn-ghost'" class="btn btn-xs" title="오차 · 시간 · 솔버 · 주휴 무시 · 완화 설정 · 배점 조절">⚙ 고급 <span x-text="showGenAdvanced?'▾':'▸'"></span></button>
     <span class="flex-1"></span>
     <button @click="saveSchedule()" x-show="schedule&&Object.keys(schedule).length>0" class="btn btn-xs btn-success">저장</button>
-    <button @click="activeTab='saved'" class="btn btn-xs btn-ghost">📂 불러오기</button>
+    <button @click="openSavedDrawer()" :class="showSavedDrawer?'btn-primary':'btn-ghost'" class="btn btn-xs" title="저장된 근무표 목록 · 근무표 파일 업로드">📂 불러오기 <span class="text-sub" x-text="savedSchedules.length?savedSchedules.length+'건':''"></span></button>
     <button @click="carryOverToNextMonth()" x-show="hasNextMonthData()" x-cloak class="btn btn-xs btn-ghost text-blue">↪ 다음달 이월</button>
     <div x-show="schedule&&Object.keys(schedule).length>0" x-data="{open:false}" class="relative" style="display:inline-block">
       <button @click="open=!open" class="btn btn-xs btn-ghost" title="CSV · 인쇄 · 어싸인용 복사">📤 내보내기 ▾</button>
@@ -1132,6 +1131,29 @@
     </div>
   </div>
   </div><!-- /gen-options -->
+  <!-- 📂 저장된 근무표 서랍 — 옛 저장 탭. 불러오기 버튼이 연다 (M7-D). 핸들러 그대로 -->
+  <div x-show="showSavedDrawer" x-cloak class="card-sm mb-2 fs-hide" style="max-width:40rem">
+    <div class="flex items-center justify-between mb-2">
+      <div class="section-title" style="margin:0">저장된 근무표</div>
+      <div class="flex items-center gap-2">
+        <button @click="openPastePrev('saved')" class="btn btn-xs btn-ghost text-green"
+                title="이미 완성된 근무표를 엑셀 파일 업로드 또는 붙여넣기로 저장 목록에 추가합니다 (솔버 안 돌림)">📥 근무표 업로드</button>
+        <button @click="loadSavedList()" class="text-xs text-blue">새로고침</button>
+        <button @click="showSavedDrawer=false" class="text-xs text-dim">닫기</button>
+      </div>
+    </div>
+    <div class="space-y-2" style="max-height:280px;overflow-y:auto"><template x-for="item in savedSchedules" :key="item.id">
+      <div class="card-sm flex items-center justify-between">
+        <div><span class="text-body font-medium" x-text="item.name||`${item.year}년 ${item.month}월`"></span><span class="ml-2 text-xs text-dim" x-text="item.created_at"></span></div>
+        <div class="flex gap-2"><button @click="loadSaved(item.id)" class="btn btn-xs btn-primary">불러오기</button><button @click="deleteSaved(item.id)" class="text-xs text-red">삭제</button></div>
+      </div>
+    </template>
+    <div x-show="savedSchedules.length===0" class="empty-state" style="padding:14px">
+      <p>저장된 근무표가 없습니다</p>
+      <span class="empty-hint">생성 후 [저장]하거나, [📥 근무표 업로드]로 기존 근무표를 올릴 수 있습니다</span>
+    </div>
+    </div>
+  </div>
   <!-- #7 분석 경고 요약 (스케줄 탭) -->
   <div x-show="analysisWarnings.length>0&&!generating" x-cloak class="card-sm mb-2" style="padding:6px 12px;border-left:3px solid var(--amber)">
     <div class="text-xs font-semibold text-amber mb-1">분석 경고</div>
@@ -1416,32 +1438,6 @@
       </table>
     </div>
   </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ TAB 4: 저장 ═══════════════════════════════════════ -->
-<div x-show="activeTab==='saved'" x-cloak class="content">
-  <div style="max-width:36rem">
-    <div class="flex items-center justify-between mb-3">
-      <div class="section-title" style="margin:0">저장된 근무표</div>
-      <div class="flex items-center gap-2">
-        <button @click="openPastePrev('saved')" class="btn btn-xs btn-ghost text-green"
-                title="이미 완성된 근무표를 엑셀 파일 업로드 또는 붙여넣기로 저장 목록에 추가합니다 (솔버 안 돌림)">📥 근무표 업로드</button>
-        <button @click="loadSavedList()" class="text-xs text-blue">새로고침</button>
-      </div>
-    </div>
-    <div class="space-y-2"><template x-for="item in savedSchedules" :key="item.id">
-      <div class="card-sm flex items-center justify-between">
-        <div><span class="text-body font-medium" x-text="item.name||`${item.year}년 ${item.month}월`"></span><span class="ml-2 text-xs text-dim" x-text="item.created_at"></span></div>
-        <div class="flex gap-2"><button @click="loadSaved(item.id)" class="btn btn-xs btn-primary">불러오기</button><button @click="deleteSaved(item.id)" class="text-xs text-red">삭제</button></div>
-      </div>
-    </template>
-    <div x-show="savedSchedules.length===0" class="empty-state">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-      <p>저장된 근무표가 없습니다</p>
-      <span class="empty-hint">근무표 탭에서 생성 후 저장하거나, [📥 근무표 업로드]로 기존 근무표를 올릴 수 있습니다</span>
-    </div>
     </div>
   </div>
 </div>
@@ -2434,43 +2430,43 @@
       <template x-if="onboardingStep===1">
         <div>
           <div style="font-size:2rem;margin-bottom:12px">⚙️</div>
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">1단계: 설정</h3>
-          <p class="text-sub" style="font-size:0.85rem">간호사 등록 (CSV로 일괄 등록 가능), 요일별 필요 인원,<br/>규칙 관리(하드 제약 + 소프트 배점)를 설정합니다.</p>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">설정 — 첫 1회만</h3>
+          <p class="text-sub" style="font-size:0.85rem">헤더의 <strong>⚙ 설정</strong>에서 간호사 등록(엑셀 일괄 가능), 요일별 필요 인원,<br/>규칙을 맞춥니다. 한 번 맞춰 두면 매달 다시 볼 일이 거의 없습니다.</p>
         </div>
       </template>
       <template x-if="onboardingStep===2">
         <div>
           <div style="font-size:2rem;margin-bottom:12px">✏️</div>
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">2단계: 사전입력</h3>
-          <p class="text-sub" style="font-size:0.85rem">주휴, 연차, 희망 근무 등을 미리 입력합니다.<br/>셀 클릭 또는 키보드(D/E/N/V/O/W)로 직접 입력할 수 있습니다.<br/><strong>빈 셀은 솔버가 자동으로 채웁니다.</strong></p>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">1단계: 사전입력</h3>
+          <p class="text-sub" style="font-size:0.85rem">주휴, 연차, 희망 근무 등을 미리 입력합니다.<br/>셀 클릭 또는 키보드(D/E/N/V/O/W)로 직접 입력할 수 있습니다.<br/><strong>빈 셀은 솔버가 자동으로 채웁니다.</strong> 절대 못 바꾸는 날은 🔒 잠금.</p>
         </div>
       </template>
       <template x-if="onboardingStep===3">
         <div>
           <div style="font-size:2rem;margin-bottom:12px">📊</div>
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">3단계: 분석</h3>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">2단계: 분석</h3>
           <p class="text-sub" style="font-size:0.85rem">일자별 인원 과부족을 확인하고<br/><strong>주휴 추천 배분</strong>을 자동으로 계산합니다.<br/>"사전입력에 적용" 버튼으로 한 번에 반영 가능합니다.</p>
         </div>
       </template>
       <template x-if="onboardingStep===4">
         <div>
           <div style="font-size:2rem;margin-bottom:12px">📅</div>
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">4단계: 근무표 생성</h3>
-          <p class="text-sub" style="font-size:0.85rem"><strong>"생성" 버튼</strong>을 클릭하면 솔버가 근무표를 자동 생성합니다.<br/>생성이 안 될 경우 "사전입력 완화"를 체크해 보세요.<br/>완성된 근무표는 셀 클릭으로 수동 수정도 가능합니다.</p>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">3단계: 근무표</h3>
+          <p class="text-sub" style="font-size:0.85rem"><strong>생성</strong>을 누르면 근무표가 만들어져 표가 바로 보입니다.<br/>안 나오면 <strong>사전입력 완화</strong>를 켜고 다시 누르세요. 세부 옵션은 ⚙ 고급에 있습니다.<br/>완성된 근무표는 셀 클릭으로 수정할 수 있고, 표 아래 📋 리포트에 원티드 미반영·오프특근이 정리됩니다.</p>
         </div>
       </template>
       <template x-if="onboardingStep===5">
         <div>
           <div style="font-size:2rem;margin-bottom:12px">💾</div>
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">5단계: 저장 & 내보내기</h3>
-          <p class="text-sub" style="font-size:0.85rem">생성된 근무표를 저장하고 CSV/인쇄로 내보낼 수 있습니다.<br/>저장 탭에서 이전 스케줄을 불러올 수도 있습니다.</p>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">저장 · 내보내기</h3>
+          <p class="text-sub" style="font-size:0.85rem">근무표 탭의 <strong>저장</strong>으로 보관하고, <strong>내보내기</strong>(CSV · 인쇄 · 어싸인용 복사)로 내보냅니다.<br/><strong>불러오기</strong>를 누르면 저장된 근무표 목록과 근무표 파일 업로드가 열립니다.</p>
         </div>
       </template>
       <template x-if="onboardingStep===6">
         <div>
           <div style="font-size:2rem;margin-bottom:12px">✅</div>
           <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">준비 완료!</h3>
-          <p class="text-sub" style="font-size:0.85rem">언제든 사이드바의 <strong>"도움말"</strong> 버튼으로<br/>상세 사용법을 확인할 수 있습니다.<br/><br/>키보드 <kbd>?</kbd>를 누르면 단축키 목록도 볼 수 있어요.</p>
+          <p class="text-sub" style="font-size:0.85rem">언제든 헤더의 <strong>?</strong> 버튼으로<br/>상세 사용법을 확인할 수 있습니다.<br/><br/>키보드 <kbd>?</kbd>를 누르면 단축키 목록도 볼 수 있어요.</p>
         </div>
       </template>
     </div>
@@ -2517,24 +2513,24 @@
         <h3 class="text-bright font-semibold mb-2">근무표 작성 순서</h3>
         <div class="space-y-3">
           <div class="card-sm" style="padding:10px 14px;border-left:3px solid var(--accent)">
-            <div class="font-semibold text-bright">① 설정</div>
-            <p class="text-xs mt-1">간호사 등록 → 요일별 필요인원 설정 → 규칙 관리</p>
+            <div class="font-semibold text-bright">⚙ 설정 (첫 1회)</div>
+            <p class="text-xs mt-1">헤더 톱니바퀴 → 간호사 등록 → 요일별 필요인원 설정 → 규칙 관리</p>
           </div>
           <div class="card-sm" style="padding:10px 14px;border-left:3px solid #22c55e">
-            <div class="font-semibold text-bright">② 사전입력</div>
+            <div class="font-semibold text-bright">① 사전입력</div>
             <p class="text-xs mt-1">주휴(주) → 연차(V) → 생리휴가(생) → 희망 근무 순으로 입력. 빈 셀은 솔버가 자동 배정합니다.</p>
           </div>
           <div class="card-sm" style="padding:10px 14px;border-left:3px solid #a855f7">
-            <div class="font-semibold text-bright">③ 분석</div>
+            <div class="font-semibold text-bright">② 분석</div>
             <p class="text-xs mt-1">인원 과부족 확인 → 주휴 추천 배분 → "사전입력에 적용" 클릭</p>
           </div>
           <div class="card-sm" style="padding:10px 14px;border-left:3px solid #f59e0b">
-            <div class="font-semibold text-bright">④ 근무표 생성</div>
-            <p class="text-xs mt-1">"생성" 버튼 클릭 → 솔버가 최적 근무표 자동 생성 (5~20분 소요)</p>
+            <div class="font-semibold text-bright">③ 근무표 생성</div>
+            <p class="text-xs mt-1">"생성" 버튼 클릭 → 솔버가 최적 근무표 자동 생성 (5~20분 소요). 안 나오면 "사전입력 완화" 체크 후 재시도</p>
           </div>
           <div class="card-sm" style="padding:10px 14px;border-left:3px solid #ef4444">
-            <div class="font-semibold text-bright">⑤ 확인 & 수정</div>
-            <p class="text-xs mt-1">생성 결과 확인 → 셀 클릭으로 수동 수정 → CSV/인쇄로 내보내기</p>
+            <div class="font-semibold text-bright">④ 확인 · 저장 · 내보내기</div>
+            <p class="text-xs mt-1">표 확인 → 셀 클릭으로 수동 수정 → 저장 → 내보내기(CSV · 인쇄 · 어싸인용 복사). 표 아래 📋 리포트에 원티드 미반영·오프특근·위시 반영이 정리됩니다</p>
           </div>
         </div>
       </div>
@@ -2542,7 +2538,7 @@
       <!-- 탭별 기능 -->
       <div x-show="helpTab==='tabs'" class="space-y-3">
         <div>
-          <h4 class="font-semibold text-bright">⚙️ 설정 탭</h4>
+          <h4 class="font-semibold text-bright">⚙️ 설정 (헤더 톱니바퀴)</h4>
           <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
             <li>간호사 추가/수정/삭제 (드래그로 순서 변경)</li>
             <li>CSV 템플릿 다운로드 → 엑셀에서 편집 → 일괄 가져오기</li>
@@ -2572,17 +2568,17 @@
         <div>
           <h4 class="font-semibold text-bright">📅 근무표 탭</h4>
           <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
-            <li>오차(MIP Gap) 조절 — 정밀(0%)~10%</li>
-            <li>사전입력 완화 / 주휴 무시 / V 무제한 옵션</li>
-            <li>완화 설정: 휴가/근무/쉬는날 유지 보너스 조절</li>
+            <li>기본 행: 생성 · 사전입력 완화 · V 무제한. 나머지는 ⚙ 고급(오차·시간·솔버·주휴 무시·완화 설정·배점 조절)</li>
+            <li>저장 / 불러오기(저장 목록 서랍 + 근무표 파일 업로드) / 내보내기(CSV·인쇄·어싸인용 복사)</li>
+            <li>표 아래 📋 리포트: 원티드 미반영 · 오프특근 · 주의 · 위시 반영 · 생성 리포트 · 솔버 로그</li>
             <li>생성 후 셀 클릭으로 수동 수정 (빨간 테두리 표시)</li>
             <li>Charge 숨기기 / 근무별 색상 토글</li>
           </ul>
         </div>
         <div>
-          <h4 class="font-semibold text-bright">💾 저장 탭</h4>
+          <h4 class="font-semibold text-bright">💾 저장 · 불러오기 (근무표 탭 안)</h4>
           <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
-            <li>생성된 근무표 저장/불러오기/삭제</li>
+            <li>[저장]으로 보관, [불러오기]가 저장된 근무표 목록 서랍을 엽니다 (삭제 · 근무표 파일 업로드 포함)</li>
             <li>생성 완료 시 자동 저장</li>
           </ul>
         </div>
@@ -2616,7 +2612,7 @@
         </div>
         <div>
           <h4 class="font-semibold text-bright">❓ 다크 모드는 어디서?</h4>
-          <p class="text-xs mt-1">사이드바 하단 "다크 모드" 버튼을 클릭하세요.</p>
+          <p class="text-xs mt-1">헤더 오른쪽의 ☾ 버튼을 클릭하세요.</p>
         </div>
         <div>
           <h4 class="font-semibold text-bright">❓ 데이터는 어디에 저장되나요?</h4>

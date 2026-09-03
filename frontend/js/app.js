@@ -40,6 +40,7 @@ function app() {
     fairnessOffsets:null, weekendOffsets:null, showFairness:false,   // ⚖ 공정성 — 이번 생성에 주입된 원장 오프셋(서버 산출, M6 P3②). 요약 표에 흡수됨
     showGenAdvanced:false,   // ⚙ 고급 생성 옵션 패널 (오차·시간·솔버·주휴 무시·완화 설정·배점 조절) — M7-B
     showReports:false,       // 📋 리포트 서랍 (표 아래) — 원티드 미반영·오프특근이 있으면 생성 직후 자동으로 열림 — M7-A
+    showSavedDrawer:false,   // 📂 저장된 근무표 서랍 (옛 저장 탭) — M7-D
     staffingAlerts:null, fairnessLedger3m:null,
     solver:'highs', diagnosing:false, fixing:false, diagResult:null, fixResult:null,
     tableFullscreen:false,
@@ -108,8 +109,8 @@ function app() {
         analysis: this.analysisResult ? (warns ? `경고 ${warns}건` : '인원 분석 완료') : '인원 과부족',
         schedule: this.generating ? 'solving…' :
                   (sched ? (this.mipGapPercent!=null ? `gap ${this.mipGapPercent.toFixed(1)}%` : '생성 완료')
-                         : 'MIP 솔버'),
-        saved: savedN ? `${savedN}건 저장됨` : 'CSV · 인쇄',
+                         : '생성 전'),
+        saved: savedN ? `${savedN}건 저장됨` : 'CSV · 인쇄',   // 저장 탭은 근무표 탭 서랍이 됐지만 요약은 남긴다
       };
     },
 
@@ -440,6 +441,19 @@ function app() {
       },true);
       // 탭 전환 시 새 탭은 스크롤 top=0이므로 압축 해제
       this.$watch('activeTab',()=>appbar.classList.remove('condensed'));
+      // 옛 '저장' 탭 별칭 — 어디서든 activeTab='saved' 를 넣으면 근무표 탭 + 저장 서랍으로 (M7-D)
+      this.$watch('activeTab',v=>{if(v==='saved')this.openSavedDrawer()});
+    },
+    // 첫 화면: 명부가 있으면 사전입력(매달의 시작점), 없으면 ⚙ 설정(첫 1회). 폰은 오늘. — M7-D
+    _pickLandingTab(){
+      if(window.innerWidth<768){this.activeTab='today';return}
+      if(this.activeTab==='saved'){this.openSavedDrawer();return}
+      if(this.activeTab==='settings'&&(this.nurses||[]).length>0)this.activeTab='preinput';
+    },
+    // 📂 저장된 근무표 서랍 — 옛 저장 탭. 목록을 새로 읽고 근무표 탭에서 연다
+    openSavedDrawer(){
+      this.activeTab='schedule';this.showSavedDrawer=true;
+      this.loadSavedList&&this.loadSavedList();
     },
 
 
@@ -448,6 +462,7 @@ function app() {
       await Promise.all([this.loadNurses(),this.loadRules(),this.loadRequirements(),this.loadShifts(),this.loadScoringRules(),this.loadSavedList(),this.loadPrevSavesList()]);
       this._checkPendingGenerate();
       this._restoreFullState()||this._restoreAutoSave();
+      this._pickLandingTab();
       this._checkViolations(); // 복원된 사전입력 기준 라인트 + 신호등 초기 판정
       this._startAutoSave();
       this.initAutoDark();
