@@ -943,6 +943,109 @@ class _SchedulerBase:
                 })
         return out
 
+    def _v_report(self, schedule: dict):
+        """연차(V) 자동 배정 설명 — '왜 V가 나왔는가'를 주 단위 산술로 (제1원칙 8, M6 P4).
+
+        일별 인원은 '정확히 일치'라 남는 사람은 반드시 쉬어야 하는데, 솔버가 놓을 수 있는
+        휴무는 OF(주 1)·생(월 1)·V뿐이다. 그래서 V = 쉬어야 할 칸 − (주휴 + OF + 확정 휴가 + 생).
+        결과 표 자체에서 센다(요구 인원 재계산 없음) — 사전입력(원티드) V는 사람이 정한 것이라
+        세지 않고, 야간전담은 OF 규칙 밖이라 제외한다.
+        주 안에서 주휴 요일을 옮기는 것은 주간 총량을 바꾸지 못한다. 줄이는 길은
+        ① 주휴가 없는 사람에게 주휴를 넣기 ② 남는 날에 연차·휴가 원티드를 먼저 받기
+        ③ 요일별 필요 인원 조정 — 이 셋을 힌트로 낸다.
+        반환: {"total", "weeks": [{"week","start","end","cells","work","rest_need","juhu","off",
+                "leave_pinned","saeng","v","missing_juhu","days","cells_v","summary","hints"}]}
+        """
+        if "V" not in self.ALL_SHIFTS or not self.weeks:
+            return None
+        first_of_month = date(self.year, self.month, 1)
+        work_codes = set(self.WORK_SHIFTS)
+        leave_codes = set(self.LEAVE_SHIFTS) | {"P1"}
+        name_of = {n["id"]: n.get("name", n["id"]) for n in self.nurses}
+        dow_kr = "월화수목금토일"
+        regular = [n for n in self.nurses if not n.get("is_night_shift")]
+        weeks_out, total = [], 0
+        for wi, (ws, we) in enumerate(self.weeks):
+            idxs = [d for d in range(ws, we + 1) if self.all_dates[d] >= first_of_month]
+            if not idxs:
+                continue
+            cells = work = juhu = off = leave_pinned = saeng = other_auto = 0
+            cells_v, days_out = [], []
+            active_all = {n["id"]: 0 for n in regular}
+            juhu_of = {n["id"]: 0 for n in regular}
+            for d in idxs:
+                dt = self.all_dates[d]
+                dk = dt.strftime("%Y-%m-%d")
+                day = {"date": dk, "dow": dow_kr[dt.weekday()], "active": 0, "work": 0, "rest": 0, "v": 0}
+                for n in regular:
+                    if not self._nurse_active_idx(n, d):
+                        continue
+                    nid = n["id"]
+                    code = schedule.get(nid, {}).get(dk)
+                    if not code:
+                        continue
+                    active_all[nid] += 1
+                    day["active"] += 1
+                    pinned = self._pin.get((nid, d)) == code
+                    if code in work_codes:
+                        day["work"] += 1
+                        continue
+                    day["rest"] += 1
+                    if code == "주":
+                        juhu += 1; juhu_of[nid] += 1
+                    elif code == "OF":
+                        off += 1
+                    elif code == "V" and not pinned:
+                        day["v"] += 1
+                        cells_v.append({"nurse_id": nid, "name": name_of[nid], "date": dk})
+                    elif code == "생" and not pinned:
+                        saeng += 1
+                    elif code in leave_codes and pinned:
+                        leave_pinned += 1      # 사전입력 휴가(확정 V 포함)
+                    elif code in leave_codes:
+                        other_auto += 1        # 병동이 자동으로 열어 둔 다른 휴가·P1
+                cells += day["active"]; work += day["work"]
+                days_out.append(day)
+            v = len(cells_v)
+            if not v:
+                continue
+            total += v
+            rest_need = cells - work
+            n_days = len(idxs)
+            missing = [name_of[nid] for nid in active_all
+                       if active_all[nid] == n_days and n_days == 7 and juhu_of[nid] == 0]
+            start, end = days_out[0]["date"], days_out[-1]["date"]
+            parts = [f"주휴 {juhu}", f"OF {off}"]
+            if leave_pinned:
+                parts.append(f"사전입력 휴가 {leave_pinned}")
+            if saeng:
+                parts.append(f"생 {saeng}")
+            if other_auto:
+                parts.append(f"기타 자동 휴가 {other_auto}")
+            summary = (f"{wi + 1}주차({start[5:]}~{end[5:]}) V {v}건 — 재적 {cells}칸 중 근무 {work}칸, "
+                       f"쉬어야 할 칸 {rest_need}개. {' · '.join(parts)}로 채우고 남은 {v}칸이 V입니다.")
+            v_days = ", ".join(f"{dd['date'][5:].replace('-', '/')}({dd['dow']}) {dd['v']}명"
+                               for dd in days_out if dd["v"])
+            hints = []
+            if missing:
+                hints.append(f"주휴가 없는 {', '.join(missing)} — 이 주에 주휴를 넣으면 그만큼 V가 줄어듭니다 "
+                             f"(분석 탭 주휴 추천 → 사전입력에 적용).")
+            hints.append(f"남는 날 {v_days}에 연차·휴가 원티드를 먼저 받으면 V가 사람이 원한 날로 갑니다.")
+            if not missing:
+                hints.append("주휴 요일을 주 안에서 옮기는 것은 주간 총량을 바꾸지 못합니다 — 요일별 필요 인원을 "
+                             "이 주에 맞게 올리거나(⚙ 설정) 남는 날의 휴가로 소진하는 것이 방법입니다.")
+            weeks_out.append({
+                "week": wi + 1, "start": start, "end": end,
+                "cells": cells, "work": work, "rest_need": rest_need,
+                "juhu": juhu, "off": off, "leave_pinned": leave_pinned, "saeng": saeng,
+                "other_auto": other_auto, "v": v,
+                "missing_juhu": missing, "days": days_out, "cells_v": cells_v,
+                "summary": summary, "hints": hints,
+            })
+        if not total:
+            return None
+        return {"total": total, "weeks": weeks_out}
+
     def _day_all_pinned(self, d, dt) -> bool:
         """그 날 재적 간호사 셀이 전부 확정인가 (= 그 날은 사실)."""
         active = [n for n in self.nurses if self._nurse_active_on(n, dt)]
@@ -971,6 +1074,12 @@ class _SchedulerBase:
             result["message"] += (
                 f"\n\n⚠ 오프특근 {len(rows)}건 — 휴무 공급이 모자라 OF를 반납한 주가 "
                 f"있습니다 (주휴는 유지): {shown}{more}")
+        # 연차(V) 자동 배정 설명 — 제1원칙 8: V 자동 대량 사용은 이유와 줄이는 길을 같이 보여야 한다
+        vr = self._v_report(result.get("schedule") or {})
+        if vr:
+            result["v_report"] = vr
+            result["message"] += (
+                f"\n\n🧾 연차(V) 자동 배정 {vr['total']}건 — 이유와 줄이는 방법은 표 아래 📋 리포트에 있습니다.")
         return result
 
     def _attach_pin_notes(self, result: Dict) -> Dict:

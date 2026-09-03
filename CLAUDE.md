@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.12.0 (2026-09-03, M7 — 프론트엔드·UX 단순화: 근무표 우선 배치 · 옵션 고급화 · ⚙ 설정 + 3단계 바 · 저장 서랍 · 폰 보기 전용)
+**최신**: v4.12.1 (2026-09-03, M6 P4 — 연차(V) 자동 배정 설명 리포트 + 로드 시 콘솔 오류 정리)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -113,7 +113,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 163건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록)
+├── tests/                   # pytest 회귀 167건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -156,7 +156,7 @@ npm start
 ### 테스트
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 163건
+python3 -m pytest -q                  # 167건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs
@@ -170,7 +170,7 @@ python3 scripts/handler_inventory.py <(git show origin/main:frontend/index.html)
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.12.0.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.12.1.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -449,8 +449,11 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
      주휴 이동 제한 풀기·완화 설정 슬라이더 4개·배점 조절 슬라이더 5개
    - 표가 상태 메시지 바로 아래. 표 아래 **📊 요약**(간호사별 월간 요약 — 옛 ⚖ 공정성 카드를 흡수:
      주말∪공휴일 열, 야간·주말·공휴일의 누적(3M)+당월 합과 편차 색, ※ = 공정성 대상 아님,
-     "이번 생성에 누적 반영" = 원장 주입됨) → **📋 리포트 서랍**(원티드 미반영·오프특근·주의·위시 반영·
-     생성 리포트·솔버 로그; 사연 항목이 있으면 생성 직후 자동으로 열림)
+     "이번 생성에 누적 반영" = 원장 주입됨) → **📋 리포트 서랍**(원티드 미반영·**🧾 연차(V) 설명**·오프특근·
+     주의·위시 반영·생성 리포트·솔버 로그; 사연 항목이 있으면 생성 직후 자동으로 열림)
+   - **🧾 연차(V) 설명** (`_v_report`, 결과 `v_report`): 솔버가 놓은 V를 주 단위로 "재적 칸 − 근무 = 쉬어야 할 칸,
+     주휴·OF·확정 휴가·생으로 채우고 남은 칸이 V" 산술로 설명 + 힌트(주휴 없는 사람·남는 날 원티드·필요 인원).
+     사전입력 V는 세지 않는다. 주 안에서 주휴 요일을 옮기는 것은 주간 총량을 못 바꾼다 (결정 1-23)
    - **📂 불러오기 서랍** (옛 저장 탭): 저장된 근무표 목록·삭제·새로고침 + **📥 근무표 업로드**
      (완성 번표를 xlsx/csv 업로드 또는 붙여넣기로 저장 목록에 추가, 솔버 안 돌림, 표 역산 일별 인원 함께 저장;
      연간 번표처럼 시트가 여러 개면 년월을 감지해 매핑 표 → 월별 저장본 일괄 생성).
@@ -580,10 +583,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.12.0.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.12.1.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.12.0.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.12.1.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -671,7 +674,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.12.0 기준)
+## 알려진 주의사항 (v4.12.1 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)

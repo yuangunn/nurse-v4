@@ -305,7 +305,7 @@
         <span class="brand-name">NurseScheduler</span>
         <span class="brand-hospital">용인세브란스병원 · Yongin Severance Hospital</span>
       </div>
-      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.12.0</span>
+      <span class="brand-ver" @click="trackVersionClick()" title="버전 (5회 클릭 시 개발자 모드)">v4.12.1</span>
     </div>
     <div></div>
     <div class="appbar-meta">
@@ -815,7 +815,8 @@
     </template></div>
   </div>
   <!-- 실시간 생성 가능성 신호등 + 예상 생성 시간 (/api/feasibility 프로브) -->
-  <div x-show="feas" x-cloak class="card-sm mb-2 text-xs" style="flex-shrink:0;padding:6px 12px">
+  <template x-if="feas">
+  <div class="card-sm mb-2 text-xs" style="flex-shrink:0;padding:6px 12px">
     <div class="flex flex-wrap items-center gap-2">
       <span x-show="feas&&feas.checking" class="text-dim">⏳ 생성 가능성 확인 중…</span>
       <template x-if="feas&&!feas.checking&&feas.status==='feasible'">
@@ -838,9 +839,11 @@
       <button @click="diagnoseConflicts();activeTab='schedule'" :disabled="diagnosing" class="btn btn-xs btn-ghost" x-text="diagnosing?'정밀 분석 중…':'🔍 정밀 분석'" title="독립 충돌(MUS)까지 최소화해 정확한 원인을 짚습니다 — 결과는 스케줄 탭에 표시"></button>
     </div>
   </div>
+  </template>
   <!-- 제약 위반 경고 -->
   <!-- 실시간 인원 슬랙 경고 — 입력하는 순간 부족/빡빡을 알림 -->
-  <div x-show="staffingAlerts&&(staffingAlerts.short.length||staffingAlerts.tight.length)" x-cloak class="card-sm mb-2 text-xs" style="flex-shrink:0;border-left:3px solid var(--amber,#e6a23c);padding:8px 12px">
+  <template x-if="staffingAlerts&&(staffingAlerts.short.length||staffingAlerts.tight.length)">
+  <div class="card-sm mb-2 text-xs" style="flex-shrink:0;border-left:3px solid var(--amber,#e6a23c);padding:8px 12px">
     <template x-if="staffingAlerts.short.length">
       <div class="mb-1 flex flex-wrap items-center gap-1">
         <span class="font-semibold text-red">⚠ 인원 부족 — 이대로면 생성 실패:</span>
@@ -860,6 +863,7 @@
       </div>
     </template>
   </div>
+  </template>
   <div x-show="prevViolations.length>0" x-cloak class="card-sm mb-2" style="flex-shrink:0;border-left:3px solid var(--red);padding:8px 12px">
     <div class="flex items-center justify-between">
       <span class="text-xs font-semibold text-red" x-text="`⚠ 생성 불가 ${prevViolations.length}건`"></span>
@@ -1324,6 +1328,27 @@
       </template>
     </div>
   </div>
+  <!-- 🧾 연차(V) 설명 — 왜 V가 나왔는가, 줄이는 길 (제1원칙 8 · M6 P4) -->
+  <template x-if="vReport&&vReport.total">
+  <div class="card-sm mb-3" style="border-left:3px solid var(--warn)">
+    <div class="flex items-center justify-between mb-2 gap-2 flex-wrap">
+      <span class="text-xs font-semibold" style="color:var(--warn)" x-text="'🧾 연차(V) 자동 배정 '+vReport.total+'건 — 왜 나왔나'"></span>
+      <button @click="activeTab='analysis'" class="btn btn-xs btn-ghost text-blue">📊 분석 탭 → 주휴 추천</button>
+    </div>
+    <div class="text-xs text-dim mb-2">일별 인원은 '정확히 일치'라 남는 사람은 반드시 쉬어야 하는데, 솔버가 놓을 수 있는 휴무는 OF(주 1)·생(월 1)·V뿐입니다. 사전입력으로 넣은 V는 세지 않았습니다.</div>
+    <template x-for="w in vReport.weeks" :key="'vw'+w.week">
+      <div class="mb-2">
+        <div class="text-xs text-body" x-text="w.summary"></div>
+        <div class="flex flex-wrap gap-1 mt-1">
+          <template x-for="(c,ci) in w.cells_v" :key="'vc'+w.week+ci">
+            <button @click="jumpToPreCell(c.nurse_id,c.date)" class="btn btn-xs btn-ghost" style="border:1px solid rgba(230,162,60,0.3)" x-text="'➤ '+c.name+' '+c.date.slice(5).replace('-','/')"></button>
+          </template>
+        </div>
+        <template x-for="(h,hi) in w.hints" :key="'vh'+w.week+hi"><div class="text-xs text-sub mt-1" x-text="'• '+h"></div></template>
+      </div>
+    </template>
+  </div>
+  </template>
   <!-- 오프특근 리포트 — 휴무 공급이 모자라 OF를 반납한 주 (제1원칙 3) -->
   <div x-show="offTeukgeun.length" x-cloak class="mb-3">
     <button @click="showOffTeukgeun=!showOffTeukgeun" class="btn btn-xs btn-ghost" style="border:1px solid var(--warn)">
@@ -1352,7 +1377,8 @@
     </div>
   </div>
   <!-- 위시 반영 리포트 -->
-  <div x-show="wishReport" x-cloak class="mb-3">
+  <template x-if="wishReport">
+  <div class="mb-3">
     <button @click="showWishReport=!showWishReport" class="btn btn-xs btn-ghost">⭐ 위시 반영 <span class="text-sub" x-text="wishReport?wishReport.total_granted+'/'+wishReport.total_requested:''"></span> <span x-text="showWishReport?'▾':'▸'"></span></button>
     <div x-show="showWishReport" x-cloak class="card-sm mt-1.5 text-xs">
       <div class="text-sub mb-2">전체 반영률 <strong class="text-bright" x-text="Math.round((wishReport?.total_granted||0)/Math.max(1,wishReport?.total_requested||1)*100)+'%'"></strong> — 미반영 위시는 <strong>다음 달 생성에서 자동 가중</strong>됩니다 (위시 공정성 보정 ×1.5/건, 최대 ×3).</div>
@@ -1369,8 +1395,10 @@
       </template>
     </div>
   </div>
+  </template>
   <!-- 생성 리포트 -->
-  <div x-show="generationReport" x-cloak class="mb-3">
+  <template x-if="generationReport">
+  <div class="mb-3">
     <button @click="showGenReport=!showGenReport" class="btn btn-xs btn-ghost">📈 생성 리포트 <span x-text="showGenReport?'▾':'▸'"></span></button>
     <div x-show="showGenReport" x-cloak class="card-sm mt-1.5 text-xs">
       <div class="flex flex-wrap gap-x-4 gap-y-1 mb-2">
@@ -1418,6 +1446,7 @@
       </template>
     </div>
   </div>
+  </template>
   <!-- 로그 -->
   <div x-show="solverLogs.length>0" x-cloak class="mb-3">
     <button @click="showLogPanel=!showLogPanel" class="btn btn-xs btn-ghost">솔버 로그 <span x-text="showLogPanel?'▾':'▸'"></span> <span class="text-sub" x-text="solverLogs.length+'줄'"></span></button>
@@ -2649,7 +2678,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.12.0 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.12.1 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">HiGHS · CP-SAT 듀얼 솔버 · 완전 오프라인</p>
         <p class="text-dim text-xs mt-1">모성보호(임산부 P1) · 최소 침습 완화 · 정밀 충돌 진단</p>

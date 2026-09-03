@@ -59,25 +59,25 @@
 
 ### 🛠 설치 · 품질
 - **완전 오프라인 데스크톱 앱** — 인터넷 연결이나 Python·Node.js 설치 없이 독립 실행됩니다. 인터넷이 차단된 병원 인트라넷에서도 그대로 동작합니다.
-- **자동 회귀 테스트 163건** — 핵심 제약·두 솔버의 결과 동등성·완화·임산부 모성보호·공휴일 자동계산을 자동 검증해, 기능을 추가해도 기존 동작이 깨지지 않도록 유지합니다. push/PR 마다 CI 가 돌립니다.
+- **자동 회귀 테스트 167건** — 핵심 제약·두 솔버의 결과 동등성·완화·임산부 모성보호·공휴일 자동계산을 자동 검증해, 기능을 추가해도 기존 동작이 깨지지 않도록 유지합니다. push/PR 마다 CI 가 돌립니다.
 
 ---
 
 ## 다운로드
 
-> **최신 버전: v4.12.0** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
+> **최신 버전: v4.12.1** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
 
 #### 🪟 Windows
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_Setup_v4.12.0.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.12.0/NurseScheduler_Setup_v4.12.0.exe) | 설치 마법사 (권장) | ~166 MB |
-| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.12.0/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~244 MB |
+| [**NurseScheduler_Setup_v4.12.1.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.12.1/NurseScheduler_Setup_v4.12.1.exe) | 설치 마법사 (권장) | ~166 MB |
+| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.12.1/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~244 MB |
 
 #### 🍎 macOS (Apple Silicon)
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_v4_mac_arm64.dmg**](https://github.com/yuangunn/nurse-v4/releases/download/v4.12.0/NurseScheduler_v4_mac_arm64.dmg) | 디스크 이미지 (권장) | ~226 MB |
-| [**NurseScheduler_v4_mac_arm64.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.12.0/NurseScheduler_v4_mac_arm64.zip) | 포터블 (.app) | ~200 MB |
+| [**NurseScheduler_v4_mac_arm64.dmg**](https://github.com/yuangunn/nurse-v4/releases/download/v4.12.1/NurseScheduler_v4_mac_arm64.dmg) | 디스크 이미지 (권장) | ~226 MB |
+| [**NurseScheduler_v4_mac_arm64.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.12.1/NurseScheduler_v4_mac_arm64.zip) | 포터블 (.app) | ~200 MB |
 
 > 🍎 macOS 빌드는 미서명(ad-hoc)이라 첫 실행 시 **우클릭 → 열기**로 한 번 허용해야 합니다 (또는 터미널에서 `xattr -dr com.apple.quarantine /Applications/NurseScheduler.app`). 현재 **Apple Silicon(arm64) 전용**입니다.
 
@@ -125,7 +125,7 @@
 ```cmd
 build.bat
 ```
-결과물: `dist/installer/NurseScheduler_Setup_v4.12.0.exe`, `dist/NurseScheduler_v4_portable.zip`
+결과물: `dist/installer/NurseScheduler_Setup_v4.12.1.exe`, `dist/NurseScheduler_v4_portable.zip`
 
 **macOS** (사전: Python 3.11, Node.js 20 — Node 24는 패키징 단계 크래시)
 ```bash
@@ -167,7 +167,7 @@ nurse-v4/
 │   ├── lib/                 # tailwindcss, alpine, lucide (오프라인 번들)
 │   ├── fonts/               # Pretendard(주) + 번들 폰트
 │   └── assets/              # 아이콘·이미지
-├── tests/                   # pytest 회귀 163건 (제약·진단·CP-SAT 동등성·충돌·야간전담·레이스·완화·모성보호·공휴일·오프특근·쉴코드수급·주휴블록)
+├── tests/                   # pytest 회귀 167건 (제약·진단·CP-SAT 동등성·충돌·야간전담·레이스·완화·모성보호·공휴일·오프특근·쉴코드수급·주휴블록)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 기준 2025~2050 공휴일 골든셋)
 ├── pytest.ini
 ├── electron/                # Electron main.js / preload.js / package.json
