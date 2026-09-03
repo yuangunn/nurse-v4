@@ -673,7 +673,7 @@ window.PasteImportModule = function() {
         this.toast(`저장 ${ok}건 · 실패 ${fails.length}건 — ${fails[0]}`,'error',8000);
       }else{
         this.closePastePrev();
-        this.activeTab='saved';
+        this.openSavedDrawer();
         this.toast(`${ok}개 월 근무표 저장 완료 — 목록에서 확인하세요`,'success',4500);
       }
     },
@@ -703,7 +703,7 @@ window.PasteImportModule = function() {
         await this.loadSavedList();
         this.dismissToast(loading);
         this.closePastePrev();
-        this.activeTab='saved';
+        this.openSavedDrawer();
         this.toast(`'${name}' 저장 완료 — 목록에서 불러오기로 열 수 있습니다`,'success',4500);
       }catch(e){
         this.dismissToast(loading);

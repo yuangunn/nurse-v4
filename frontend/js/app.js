@@ -5,7 +5,7 @@ function app() {
       {id:'settings', label:'설정'},
       {id:'preinput', label:'사전입력'},
       {id:'analysis', label:'분석'},
-      {id:'schedule', label:'스케줄'},
+      {id:'schedule', label:'근무표'},
       {id:'saved',    label:'저장'},
     ],
     activeTab: 'settings',
@@ -37,7 +37,11 @@ function app() {
     generationReport:null, showGenReport:false, wishReport:null, showWishReport:false,
     offTeukgeun:[], showOffTeukgeun:false,   // 오프특근(휴무 부족으로 OF 반납) 발생 목록
     relaxBoosts:{},   // 완화 이력 보정 배수 {nid: ×} — 지난달 원티드가 뒤집힌 사람 (서버 산출)
-    fairnessOffsets:null, weekendOffsets:null, showFairness:false,   // ⚖ 공정성 카드 — 이번 생성에 주입된 원장 오프셋(서버 산출, M6 P3②)
+    fairnessOffsets:null, weekendOffsets:null, showFairness:false,   // ⚖ 공정성 — 이번 생성에 주입된 원장 오프셋(서버 산출, M6 P3②). 요약 표에 흡수됨
+    showGenAdvanced:false,   // ⚙ 고급 생성 옵션 패널 (오차·시간·솔버·주휴 무시·완화 설정·배점 조절) — M7-B
+    showReports:false,       // 📋 리포트 서랍 (표 아래) — 원티드 미반영·오프특근이 있으면 생성 직후 자동으로 열림 — M7-A
+    showSavedDrawer:false,   // 📂 저장된 근무표 서랍 (옛 저장 탭) — M7-D
+    mobileToolsOpen:false,   // 📱 폰에서 사전입력 편집 도구(툴바·범례) 펼침 — 기본은 보기 전용 (M7-E)
     staffingAlerts:null, fairnessLedger3m:null,
     solver:'highs', diagnosing:false, fixing:false, diagResult:null, fixResult:null,
     tableFullscreen:false,
@@ -106,8 +110,8 @@ function app() {
         analysis: this.analysisResult ? (warns ? `경고 ${warns}건` : '인원 분석 완료') : '인원 과부족',
         schedule: this.generating ? 'solving…' :
                   (sched ? (this.mipGapPercent!=null ? `gap ${this.mipGapPercent.toFixed(1)}%` : '생성 완료')
-                         : 'MIP 솔버'),
-        saved: savedN ? `${savedN}건 저장됨` : 'CSV · 인쇄',
+                         : '생성 전'),
+        saved: savedN ? `${savedN}건 저장됨` : 'CSV · 인쇄',   // 저장 탭은 근무표 탭 서랍이 됐지만 요약은 남긴다
       };
     },
 
@@ -188,10 +192,12 @@ function app() {
       const leaveCodes=this.shifts.filter(s=>s.period==='leave').map(s=>s.code);
       const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
       const offCodes=[...restCodes,...leaveCodes];
+      const fc=this.fairnessCard;const fmap={};if(fc)for(const r of fc.rows)fmap[r.id]=r;
+      const fair=fc?{maxN:fc.maxN,minN:fc.minN,rangeN:fc.rangeN,maxW:fc.maxW,minW:fc.minW,rangeW:fc.rangeW}:null;
       return this.nurses.map(nurse=>{
         const nid=nurse.id;
         const sc=this.schedule[nid]||{};
-        let d=0,e=0,n=0,rest=0,leave=0,weekendWork=0;
+        let d=0,e=0,n=0,rest=0,leave=0,weekendWork=0,wh=0;
         // 휴무의 질 — 고립 휴무(양옆이 근무인 하루짜리)와 최장 연속 휴무.
         // OF 개수가 같아도 쪼개진 휴무와 이틀 연속은 체감이 다르다.
         let isolatedOff=0,maxOffRun=0,offRun=0;
@@ -203,7 +209,9 @@ function app() {
           else if(nightCodes.includes(val))n++;
           else if(restCodes.includes(val))rest++;
           else if(leaveCodes.includes(val))leave++;
-          if((day.getDay()===0||day.getDay()===6)&&[...dayCodes,...eveCodes,...nightCodes].includes(val))weekendWork++;
+          const isWk=(day.getDay()===0||day.getDay()===6),isHol=this.holidays.includes(this.dayKey(day)),work=[...dayCodes,...eveCodes,...nightCodes].includes(val);
+          if(isWk&&work)weekendWork++;
+          if((isWk||isHol)&&work)wh++;   // 주말 ∪ 공휴일 (원장 weekend_holiday 와 같은 정의)
           if(offCodes.includes(val)){
             offRun++;maxOffRun=Math.max(maxOffRun,offRun);
             const prevOff=i>0&&offCodes.includes(seq[i-1]);
@@ -212,11 +220,25 @@ function app() {
           }else offRun=0;
         }
         const cum=this.fairnessLedger3m?.[nid];
-        return{name:nurse.name,group:nurse.group,d,e,n,rest,leave,weekendWork,total:d+e+n,
+        const fr=fmap[nid];   // ⚖ 공정성(누적 3M + 당월, 대상 외 ※) — 옛 공정성 카드를 요약 표에 흡수 (M7-A)
+        return{id:nid,name:nurse.name,group:nurse.group,d,e,n,rest,leave,weekendWork,wh,total:d+e+n,
                isolatedOff,maxOffRun,
-               cumNights:cum?cum.nights:null,cumWeekends:cum?cum.weekends:null,
+               cumNights:fr?fr.cumNights:(cum?cum.nights:0),cumWeekends:cum?cum.weekends:null,cumWh:fr?fr.cumWh:0,
+               totalNights:fr?fr.totalNights:n,totalWh:fr?fr.totalWh:wh,exclN:fr?fr.exclN:false,exclW:fr?fr.exclW:false,fair,
                score:this.nurseScores[nid]??0};
       });
+    },
+    // 📋 리포트 서랍 요약 — 표 아래 서랍에 무엇이 몇 건 있는지 한 줄 (M7-A)
+    get reportsSummary(){
+      const p=[];
+      const rx=Object.keys(this.relaxedCells||{}).reduce((a,k)=>a+Object.keys(this.relaxedCells[k]||{}).length,0);
+      if(rx)p.push(`원티드 미반영 ${rx}`);
+      if((this.offTeukgeun||[]).length)p.push(`오프특근 ${this.offTeukgeun.length}`);
+      const w=(this.scheduleWarnings||[]).length;if(w)p.push(`주의 ${w}`);
+      if(this.wishReport)p.push(`위시 ${this.wishReport.total_granted}/${this.wishReport.total_requested}`);
+      if(this.generationReport)p.push('생성 리포트');
+      if((this.solverLogs||[]).length)p.push('로그');
+      return p.join(' · ');
     },
     get filteredNurses(){
       if(this.groupFilter==='all')return this.nurses;
@@ -249,20 +271,19 @@ function app() {
           if(val&&workCodes.includes(val)){consec++;maxConsec=Math.max(maxConsec,consec)}
           else consec=0;
         }
-        if(maxConsec>=6)warns.push({type:'warn',nurse:nurse.name,msg:`연속 ${maxConsec}일 근무`});
+        // 연속 근무 — 규칙 한도를 넘긴 것만 (엔진 결과엔 없고, 손으로 고친 뒤에 생긴다) M7-C
+        const consecLimit=(this.rules.maxConsecutiveWork&&this.rules.maxConsecutiveWorkDays)||5;
+        if(maxConsec>consecLimit)warns.push({type:'warn',nurse:nurse.name,msg:`연속 ${maxConsec}일 근무 (한도 ${consecLimit}일)`});
 
-        // 야간 편중
+        // 야간 — 월 한도를 넘긴 것만. 야간전담(나이트킵) 달은 14회가 정상이라 제외
+        const mk=`${this.year}-${String(this.month).padStart(2,'0')}`;
+        const nm=nurse.night_months||{};
+        const nightKeep=Object.keys(nm).length?!!nm[mk]:!!nurse.is_night_shift;
         const nCount=Object.values(this.schedule[nid]||{}).filter(v=>nightCodes.includes(v)).length;
-        if(nCount>=8)warns.push({type:'warn',nurse:nurse.name,msg:`야간 ${nCount}회 (편중)`});
-
-        // 주말 근무 편중
-        let weekendWork=0;
-        for(const day of days){
-          if(day.getDay()!==0&&day.getDay()!==6)continue;
-          const val=this.schedule[nid]?.[this.dayKey(day)];
-          if(val&&workCodes.includes(val))weekendWork++;
-        }
-        if(weekendWork>=6)warns.push({type:'info',nurse:nurse.name,msg:`주말 근무 ${weekendWork}회`});
+        const nightLimit=(this.rules.maxNightPerMonth&&this.rules.maxNightPerMonthCount)||7;
+        if(!nightKeep&&nCount>nightLimit)warns.push({type:'warn',nurse:nurse.name,msg:`야간 ${nCount}회 (월 한도 ${nightLimit}회)`});
+        // 주말 근무 횟수 경고는 뺐다 — 정상 근무표에서도 병동 절반에게 매달 뜨던 통계라
+        // 요약 표의 '주말·공휴일' 열과 누적 합(편차 색)으로 옮겼다 (M7-C)
       }
       return warns;
     },
@@ -421,6 +442,19 @@ function app() {
       },true);
       // 탭 전환 시 새 탭은 스크롤 top=0이므로 압축 해제
       this.$watch('activeTab',()=>appbar.classList.remove('condensed'));
+      // 옛 '저장' 탭 별칭 — 어디서든 activeTab='saved' 를 넣으면 근무표 탭 + 저장 서랍으로 (M7-D)
+      this.$watch('activeTab',v=>{if(v==='saved')this.openSavedDrawer()});
+    },
+    // 첫 화면: 명부가 있으면 사전입력(매달의 시작점), 없으면 ⚙ 설정(첫 1회). 폰은 오늘. — M7-D
+    _pickLandingTab(){
+      if(window.innerWidth<768){this.activeTab='today';return}
+      if(this.activeTab==='saved'){this.openSavedDrawer();return}
+      if(this.activeTab==='settings'&&(this.nurses||[]).length>0)this.activeTab='preinput';
+    },
+    // 📂 저장된 근무표 서랍 — 옛 저장 탭. 목록을 새로 읽고 근무표 탭에서 연다
+    openSavedDrawer(){
+      this.activeTab='schedule';this.showSavedDrawer=true;
+      this.loadSavedList&&this.loadSavedList();
     },
 
 
@@ -429,6 +463,7 @@ function app() {
       await Promise.all([this.loadNurses(),this.loadRules(),this.loadRequirements(),this.loadShifts(),this.loadScoringRules(),this.loadSavedList(),this.loadPrevSavesList()]);
       this._checkPendingGenerate();
       this._restoreFullState()||this._restoreAutoSave();
+      this._pickLandingTab();
       this._checkViolations(); // 복원된 사전입력 기준 라인트 + 신호등 초기 판정
       this._startAutoSave();
       this.initAutoDark();
@@ -497,7 +532,7 @@ function app() {
         // 수동 저장(saveSchedule)과 동일한 스키마 — 이전 payload는 ScheduleSave
         // 필수 필드가 없어 항상 422로 무음 실패했다.
         await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights,relaxed_cells:this.relaxedCells});
-        this.toast('스케줄 자동 저장됨','info');
+        this.toast('근무표 자동 저장됨','info');
         this.loadSavedList();
       }catch(e){console.warn('자동저장 실패:',e)}
     },
@@ -542,7 +577,7 @@ function app() {
           this._recoverPoll=setInterval(async()=>{
             const pollRef=this._recoverPoll;
             try{const r=await this.api('GET','/api/generate/result');
-              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
+              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length);this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
             }catch(e){}
           },2000);
         }else if(res.status==='done'&&res.result){
@@ -551,7 +586,7 @@ function app() {
           this.wishReport=result.wish_report||null;
           this.offTeukgeun=result.off_teukgeun||[];
           this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;
-          if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.trackEdits();this.activeTab='schedule'}
+          if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length);this.trackEdits();this.activeTab='schedule'}
         }
       }catch(e){}
     },
