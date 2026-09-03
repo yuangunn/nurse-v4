@@ -41,6 +41,7 @@ function app() {
     showGenAdvanced:false,   // ⚙ 고급 생성 옵션 패널 (오차·시간·솔버·주휴 무시·완화 설정·배점 조절) — M7-B
     showReports:false,       // 📋 리포트 서랍 (표 아래) — 원티드 미반영·오프특근이 있으면 생성 직후 자동으로 열림 — M7-A
     showSavedDrawer:false,   // 📂 저장된 근무표 서랍 (옛 저장 탭) — M7-D
+    mobileToolsOpen:false,   // 📱 폰에서 사전입력 편집 도구(툴바·범례) 펼침 — 기본은 보기 전용 (M7-E)
     staffingAlerts:null, fairnessLedger3m:null,
     solver:'highs', diagnosing:false, fixing:false, diagResult:null, fixResult:null,
     tableFullscreen:false,
