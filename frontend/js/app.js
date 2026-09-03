@@ -41,6 +41,7 @@ function app() {
     showGenAdvanced:false,   // ⚙ 고급 생성 옵션 패널 (오차·시간·솔버·주휴 무시·완화 설정·배점 조절) — M7-B
     showReports:false,       // 📋 리포트 서랍 (표 아래) — 원티드 미반영·오프특근이 있으면 생성 직후 자동으로 열림 — M7-A
     showSavedDrawer:false,   // 📂 저장된 근무표 서랍 (옛 저장 탭) — M7-D
+    vReport:null,            // 🧾 연차(V) 자동 배정 설명 (서버 _v_report, 제1원칙 8 · M6 P4)
     mobileToolsOpen:false,   // 📱 폰에서 사전입력 편집 도구(툴바·범례) 펼침 — 기본은 보기 전용 (M7-E)
     staffingAlerts:null, fairnessLedger3m:null,
     solver:'highs', diagnosing:false, fixing:false, diagResult:null, fixResult:null,
@@ -59,7 +60,7 @@ function app() {
     scoreDetailModal:{open:false,nurseName:'',rows:[],total:0},
     holidays:[],
     prevSaves:[], prevSavePanel:false, prevSaveName:'',
-    nurseModal:{open:false,isNew:true,data:{}},
+    nurseModal:{open:false,isNew:true,data:{pregnancy:{early:{},late:{}}}},   // pregnancy 골격은 x-model 바인딩이 로드 시 null 참조하지 않게
     shiftEdit:{open:false,nurse:null,day:null,dateLabel:'',mode:'schedule'},
     _logSeq:0,
     analysisResult:null, juhuRecommendation:null, analysisRunning:false,
@@ -138,7 +139,6 @@ function app() {
 
     // ── UX 개선 ──
     showPreBonusSettings:false,     // 사전입력 완화 차등 보너스 설정 패널
-    scheduleGenOptions:true,        // #5 모바일 옵션 접기
     showPrevHint:false,             // #3 이전달 이월 힌트
     generatePhase:'',               // #12 진행단계 ('building'|'solving'|'extracting'|'done')
     showAnalysisPanel:false,         // 사전입력 내 분석 패널
@@ -234,6 +234,7 @@ function app() {
       const rx=Object.keys(this.relaxedCells||{}).reduce((a,k)=>a+Object.keys(this.relaxedCells[k]||{}).length,0);
       if(rx)p.push(`원티드 미반영 ${rx}`);
       if((this.offTeukgeun||[]).length)p.push(`오프특근 ${this.offTeukgeun.length}`);
+      if(this.vReport&&this.vReport.total)p.push(`V 설명 ${this.vReport.total}`);
       const w=(this.scheduleWarnings||[]).length;if(w)p.push(`주의 ${w}`);
       if(this.wishReport)p.push(`위시 ${this.wishReport.total_granted}/${this.wishReport.total_requested}`);
       if(this.generationReport)p.push('생성 리포트');
@@ -577,16 +578,16 @@ function app() {
           this._recoverPoll=setInterval(async()=>{
             const pollRef=this._recoverPoll;
             try{const r=await this.api('GET','/api/generate/result');
-              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length);this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
+              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];this.vReport=result.v_report||null;this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.vReport&&this.vReport.total));this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
             }catch(e){}
           },2000);
         }else if(res.status==='done'&&res.result){
           const result=res.result;this.statusOk=result.success;this.statusMessage=result.message+'\n(이전 생성 결과 복원됨)';
           this.generationReport=result.generation_report||null;
           this.wishReport=result.wish_report||null;
-          this.offTeukgeun=result.off_teukgeun||[];
+          this.offTeukgeun=result.off_teukgeun||[];this.vReport=result.v_report||null;
           this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;
-          if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length);this.trackEdits();this.activeTab='schedule'}
+          if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.vReport&&this.vReport.total));this.trackEdits();this.activeTab='schedule'}
         }
       }catch(e){}
     },
