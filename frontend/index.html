@@ -319,9 +319,16 @@
         <span class="appbar-meta-label">Nurses</span>
         <span class="appbar-meta-value" x-text="nurses.length"></span>
       </div>
-      <div class="appbar-meta-cell">
+      <div class="appbar-meta-cell" title="대상 년월 — 사전입력·분석·근무표 모든 탭에 공통">
         <span class="appbar-meta-label">Year/Mo</span>
-        <span class="appbar-meta-value" x-text="year + '.' + month"></span>
+        <div class="ym ym-header">
+          <button @click="prevMonth()" class="ym-nav">‹</button>
+          <input type="number" x-model.number="year" min="2020" max="2099" style="width:3.6em"/>
+          <span class="ym-lbl">년</span>
+          <input type="number" x-model.number="month" min="1" max="12" style="width:2.2em"/>
+          <span class="ym-lbl">월</span>
+          <button @click="nextMonth()" class="ym-nav">›</button>
+        </div>
       </div>
       <div class="appbar-actions">
         <button @click="toggleDark()" class="btn btn-xs btn-ghost" :title="darkMode?'라이트 모드':'다크 모드'" aria-label="다크/라이트 모드 전환" x-text="darkMode?'☀':'☾'"></button>
@@ -391,21 +398,6 @@
     <button @click="show=false;localStorage.setItem('ns_settings_guide_hid','1')" class="btn btn-xs btn-ghost ml-auto" title="다시 보지 않기" aria-label="안내 닫기">✕</button>
   </div>
   <div class="settings-2col">
-    <!-- 년월 -->
-    <div class="card" style="display:flex;flex-direction:column;justify-content:center">
-      <div class="section-title" style="margin-bottom:8px">대상 년월</div>
-      <div class="flex items-center gap-2">
-        <button @click="prevMonth()" class="ym-arrow">‹</button>
-        <div class="flex items-baseline gap-1">
-          <input type="number" x-model.number="year" min="2020" max="2099" class="ym-big-input text-bright" style="width:4.5em"/>
-          <span class="text-dim" style="font-size:0.9rem">년</span>
-          <input type="number" x-model.number="month" min="1" max="12" class="ym-big-input ym-big-accent" style="width:3em"/>
-          <span class="text-dim" style="font-size:0.9rem">월</span>
-        </div>
-        <button @click="nextMonth()" class="ym-arrow">›</button>
-      </div>
-    </div>
-
     <!-- 요일별 필요 인원 -->
     <div class="card">
       <div class="section-title">요일별 필요 인원</div>
@@ -746,7 +738,7 @@
       </div>
       <span class="month-banner-meta" x-text="`${['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][month-1]} · ${new Date(year, month, 0).getDate()}일 · 공휴일 ${(holidays||[]).length}`"></span>
     </div>
-    <div class="ym" style="margin:0">
+    <div class="ym" style="margin:0" x-show="tableFullscreen" x-cloak>
       <button @click="prevMonth()" class="ym-nav">‹</button>
       <input type="number" x-model.number="year" min="2020" max="2099" style="width:4em"/>
       <span class="ym-lbl">년</span>
@@ -773,22 +765,40 @@
     </button>
   </div>
 
+  <!-- 툴바 — 14개 버튼을 가져오기·자동 채움 메뉴 + 핵심 5개 + ⋯ 로 (M7-C). 핸들러는 전부 그대로 -->
   <div class="flex flex-wrap items-center gap-2 mb-1 fs-hide" style="flex-shrink:0;padding:6px 28px 0">
-    <div class="ml-auto flex gap-2 flex-wrap">
-      <button @click="openPastePrev()" class="btn btn-xs btn-ghost text-green" title="엑셀에서 복사한 사전입력 표를 붙여넣기">📋 엑셀 붙여넣기</button>
-      <button @click="openPastePrev('wish')" class="btn btn-xs btn-ghost text-amber" title="팀즈 위시 시트를 붙여넣어 희망근무(소프트)로 일괄 등록">⭐ 위시 붙여넣기</button>
-      <button @click="loadPrevMonthSchedule()" class="btn btn-xs btn-ghost text-blue" title="이전달 스케줄 이월">📅 전달이월</button>
-      <button @click="autoFillHolidays()" class="btn btn-xs btn-ghost" title="이 달의 법정공휴일 자동 입력 (내장 달력 — 임시공휴일은 직접 확인)">🇰🇷 공휴일</button>
-      <button @click="applyReqFromPrev()" class="btn btn-xs btn-ghost text-blue" title="이미 완성된 근무표를 붙여넣었을 때: 일별 D/E/N 필요 인원을 설정 기본값 대신 이 표의 실제 인원수로 고정">📌 이 표대로 인원</button>
+    <div class="ml-auto flex gap-2 flex-wrap items-center">
+      <div x-data="{open:false}" class="relative" style="display:inline-block">
+        <button @click="open=!open" class="btn btn-xs btn-ghost text-green" title="엑셀 붙여넣기 · 위시 붙여넣기 · 전달이월">📥 가져오기 ▾</button>
+        <div x-show="open" x-cloak @click.outside="open=false" class="menu-pop">
+          <button @click="openPastePrev();open=false" class="menu-item" title="엑셀에서 복사한 사전입력 표를 붙여넣기">📋 엑셀 붙여넣기</button>
+          <button @click="openPastePrev('wish');open=false" class="menu-item" title="팀즈 위시 시트를 붙여넣어 희망근무(소프트)로 일괄 등록">⭐ 위시 붙여넣기</button>
+          <button @click="loadPrevMonthSchedule();open=false" class="menu-item" title="이전달 근무표 이월">📅 전달이월</button>
+        </div>
+      </div>
+      <div x-data="{open:false}" class="relative" style="display:inline-block">
+        <button @click="open=!open" class="btn btn-xs btn-ghost" title="공휴일 · 전월N · 이 표대로 인원">⚡ 자동 채움 ▾</button>
+        <div x-show="open" x-cloak @click.outside="open=false" class="menu-pop">
+          <button @click="autoFillHolidays();open=false" class="menu-item" title="이 달의 법정공휴일 자동 입력 (내장 달력 — 임시공휴일은 직접 확인)">🇰🇷 공휴일 자동 입력</button>
+          <button @click="autoFillPrevMonthNights();open=false" class="menu-item" title="직전 달 저장 근무표에서 간호사별 야간 수를 자동 계산해 '전월N'에 채움">🌙 전월N 자동</button>
+          <button @click="applyReqFromPrev();open=false" class="menu-item" title="이미 완성된 근무표를 붙여넣었을 때: 일별 D/E/N 필요 인원을 설정 기본값 대신 이 표의 실제 인원수로 고정">📌 이 표대로 인원</button>
+        </div>
+      </div>
       <button @click="usePrevAsSchedule()" class="btn btn-xs btn-ghost text-green" title="사람이 이미 짜 놓은 근무표를 넣었을 때: 솔버를 돌리지 않고 이 표를 그대로 근무표로 확정합니다">✅ 이대로 근무표로</button>
-      <button @click="autoFillPrevMonthNights()" class="btn btn-xs btn-ghost" title="직전 달 저장 근무표에서 간호사별 야간 수를 자동 계산해 '전월N'에 채움">🌙 전월N 자동</button>
       <button @click="undo()" class="btn btn-xs btn-ghost" :title="`Ctrl+Z (${_undoStack.length}회 가능)`" :style="_undoStack.length?'':'opacity:0.3'">↩ 되돌리기 <span x-show="_undoStack.length>0" class="text-xs" style="margin-left:2px;font-size:0.6rem;opacity:0.6" x-text="'('+_undoStack.length+')'"></span></button>
       <button @click="redo()" class="btn btn-xs btn-ghost" :title="`Ctrl+Shift+Z (${_redoStack.length}회 가능)`" :style="_redoStack.length?'':'opacity:0.3'">↪ 다시 <span x-show="_redoStack.length>0" class="text-xs" style="margin-left:2px;font-size:0.6rem;opacity:0.6" x-text="'('+_redoStack.length+')'"></span></button>
-      <button @click="clearPrevSchedule()" class="btn btn-xs btn-ghost text-red">초기화</button>
-      <button @click="clearPrevOtherMonths()" class="btn btn-xs btn-ghost text-dim">다른달 정리</button>
       <span class="pill text-dim" style="background:rgba(255,255,255,0.03)" x-text="`${countPrevEntries()}건 (${prevInputProgress}%)`"></span>
       <button @click="showNotes=!showNotes" :class="showNotes?'btn-primary':'btn-ghost'" class="btn btn-xs">메모</button>
       <button @click="prevSavePanel=!prevSavePanel" :class="prevSavePanel?'btn-primary':'btn-ghost'" class="btn btn-xs">저장/불러오기</button>
+      <div x-data="{open:false}" class="relative" style="display:inline-block">
+        <button @click="open=!open" class="btn btn-xs btn-ghost" title="단축키 · 다른달 정리 · 초기화">⋯</button>
+        <div x-show="open" x-cloak @click.outside="open=false" class="menu-pop menu-right">
+          <button @click="showShortcutHelp=true;open=false" class="menu-item">⌨ 단축키 · 마우스 도움말</button>
+          <div class="menu-sep"></div>
+          <button @click="clearPrevOtherMonths();open=false" class="menu-item text-dim">다른달 정리</button>
+          <button @click="clearPrevSchedule();open=false" class="menu-item text-red">초기화</button>
+        </div>
+      </div>
     </div>
   </div>
   <div x-show="prevSavePanel" x-cloak class="card-sm mb-3 fs-hide" style="flex-shrink:0">
@@ -873,12 +883,11 @@
   <div class="flex flex-wrap gap-1 text-xs mb-2 items-center fs-hide" style="flex-shrink:0">
     <template x-for="s in prevShifts" :key="s"><span :style="getShiftStyle(s)" class="px-1.5 py-0.5 rounded font-bold" x-text="s"></span></template>
     <span class="text-dim ml-1">빈칸=자동</span>
-    <span class="text-dim ml-2">| ← ↑ ↓ → <kbd>D</kbd><kbd>E</kbd><kbd>N</kbd><kbd>V</kbd><kbd>O</kbd>=OF <kbd>W</kbd>=주 입력 · <kbd>Del</kbd> 삭제 · <kbd>Ctrl+Z</kbd> 되돌리기 · <kbd>?</kbd> 전체 단축키</span>
-    <span class="text-dim ml-2">🖱 더블클릭=편집 · 우클릭=메모 · 드래그=여러 셀 일괄</span>
+    <span class="text-dim ml-2">· <kbd>D</kbd><kbd>E</kbd><kbd>N</kbd><kbd>V</kbd><kbd>O</kbd><kbd>W</kbd> 키 입력 · 더블클릭 편집 · 우클릭 메모 · 드래그 일괄 · <button @click="showShortcutHelp=true" class="btn btn-xs btn-ghost" style="padding:0 5px;font-size:0.65rem">⌨ 전체 단축키</button></span>
   </div>
   <!-- #3 이전달 이월 힌트 -->
   <div x-show="showPrevHint" class="card-sm mb-2" style="flex-shrink:0;padding:8px 14px;display:flex;align-items:center;gap:10px;border-left:3px solid var(--accent)">
-    <span class="text-xs">이전달 스케줄이 있습니다. 이월하시겠습니까?</span>
+    <span class="text-xs">이전달 근무표가 있습니다. 이월하시겠습니까?</span>
     <button @click="loadPrevMonthSchedule();showPrevHint=false" class="btn btn-xs btn-primary">이월하기</button>
     <button @click="showPrevHint=false" class="btn btn-xs btn-ghost">닫기</button>
   </div>
@@ -1415,7 +1424,7 @@
 <div x-show="activeTab==='saved'" x-cloak class="content">
   <div style="max-width:36rem">
     <div class="flex items-center justify-between mb-3">
-      <div class="section-title" style="margin:0">저장된 스케줄</div>
+      <div class="section-title" style="margin:0">저장된 근무표</div>
       <div class="flex items-center gap-2">
         <button @click="openPastePrev('saved')" class="btn btn-xs btn-ghost text-green"
                 title="이미 완성된 근무표를 엑셀 파일 업로드 또는 붙여넣기로 저장 목록에 추가합니다 (솔버 안 돌림)">📥 근무표 업로드</button>
@@ -1430,8 +1439,8 @@
     </template>
     <div x-show="savedSchedules.length===0" class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-      <p>저장된 스케줄이 없습니다</p>
-      <span class="empty-hint">스케줄 탭에서 생성 후 저장하거나, [📥 근무표 업로드]로 기존 근무표를 올릴 수 있습니다</span>
+      <p>저장된 근무표가 없습니다</p>
+      <span class="empty-hint">근무표 탭에서 생성 후 저장하거나, [📥 근무표 업로드]로 기존 근무표를 올릴 수 있습니다</span>
     </div>
     </div>
   </div>
@@ -1441,14 +1450,6 @@
 <div x-show="activeTab==='analysis'" x-cloak class="content" x-effect="if(activeTab==='analysis')autoRunAnalysis()">
   <div class="flex flex-wrap items-center gap-3 mb-4">
     <div class="section-title" style="margin:0">인원 분석</div>
-    <div class="ym">
-      <button @click="prevMonth()" class="ym-nav">‹</button>
-      <input type="number" x-model.number="year" min="2020" max="2099" style="width:4.5em"/>
-      <span class="ym-lbl">년</span>
-      <input type="number" x-model.number="month" min="1" max="12" style="width:3em"/>
-      <span class="ym-lbl">월</span>
-      <button @click="nextMonth()" class="ym-nav">›</button>
-    </div>
     <button @click="runAnalysis()" class="btn btn-primary btn-sm">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
       분석 실행
@@ -1677,7 +1678,7 @@
   </div>
   <div @click="activeTab='schedule'" :class="activeTab==='schedule'?'active':''" class="bottom-nav-item">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-    <span>스케줄</span>
+    <span>근무표</span>
   </div>
   <div @click="activeTab='analysis'" :class="activeTab==='analysis'?'active':''" class="bottom-nav-item">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
@@ -1750,7 +1751,7 @@
             <input type="date" x-model="nurseModal.data.end_date" class="w-full mt-1"/>
           </div>
         </div>
-        <p class="text-xs text-dim mt-2">전입일 이전 / 전출일 이후는 스케줄에 배정되지 않고 회색으로 표시됩니다. 빈칸 = 상시 근무.</p>
+        <p class="text-xs text-dim mt-2">전입일 이전 / 전출일 이후는 근무표에 배정되지 않고 회색으로 표시됩니다. 빈칸 = 상시 근무.</p>
       </div>
 
       <!-- 임산부 (모성보호) -->
@@ -1822,7 +1823,7 @@
       <template x-if="scoringModal.data.rule_type==='holiday_off'"><div class="card-sm"><p class="text-xs text-dim">법정공휴일에 OF(휴무)가 배정되면 페널티를 부여합니다. 공휴일에는 법(법정공휴일 휴가)을 받는 것이 유리합니다.</p></div></template>
       <template x-if="scoringModal.data.rule_type==='weekend_work'"><div class="card-sm"><p class="text-xs text-dim mb-2">업무 강도가 낮은 주말 시간대 근무에 가점을 부여합니다.</p><p class="text-xs text-dim">기본: 토요일 E/N, 일요일 D (입퇴원/수술/검사 없는 시간대)</p></div></template>
       <template x-if="scoringModal.data.rule_type==='night_fairness'"><div class="card-sm"><p class="text-xs text-dim">간호사 간 <strong>야간 횟수</strong>의 편차(최대−최소)에 페널티를 부여합니다. 직전 3개월 저장본의 누적 야간이 자동으로 더해져 <strong>누적 편차</strong>가 줄어듭니다. 야간전담·야간 불가·임산부는 대상에서 제외됩니다. 점수는 음수(페널티)로 두세요.</p></div></template>
-      <template x-if="scoringModal.data.rule_type==='weekend_fairness'"><div class="card-sm"><p class="text-xs text-dim mb-1">간호사 간 <strong>주말(토·일)·법정공휴일 근무일 수</strong>의 편차(최대−최소)에 페널티를 부여합니다. 직전 3개월 저장본의 누적이 자동으로 더해져, 지난달 주말·공휴일을 많이 뛴 사람은 이번 달 적게 받습니다.</p><p class="text-xs text-dim">야간전담(14일 고정)과 당월 전입·전출자는 대상에서 제외됩니다. 점수는 음수(페널티)로 두세요. 결과는 스케줄 탭 ⚖ 공정성 카드에서 확인합니다.</p></div></template>
+      <template x-if="scoringModal.data.rule_type==='weekend_fairness'"><div class="card-sm"><p class="text-xs text-dim mb-1">간호사 간 <strong>주말(토·일)·법정공휴일 근무일 수</strong>의 편차(최대−최소)에 페널티를 부여합니다. 직전 3개월 저장본의 누적이 자동으로 더해져, 지난달 주말·공휴일을 많이 뛴 사람은 이번 달 적게 받습니다.</p><p class="text-xs text-dim">야간전담(14일 고정)과 당월 전입·전출자는 대상에서 제외됩니다. 점수는 음수(페널티)로 두세요. 결과는 근무표 탭의 간호사별 월간 요약 표에서 확인합니다.</p></div></template>
     </div>
     <div class="flex gap-2 mt-5"><button @click="scoringModal.open=false" class="btn btn-ghost flex-1">취소</button><button @click="saveScoringRule()" class="btn btn-primary flex-1">저장</button></div>
   </div>
@@ -1929,10 +1930,10 @@
 <div x-show="compareResult" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="compareResult=null">
   <div class="modal" style="max-width:36rem;max-height:70vh;display:flex;flex-direction:column">
     <div class="flex items-center justify-between mb-3">
-      <div class="font-bold text-lg text-bright">스케줄 비교</div>
+      <div class="font-bold text-lg text-bright">근무표 비교</div>
       <button @click="compareResult=null" style="background:none;border:none;font-size:1.2rem;color:var(--text-sub);cursor:pointer">&times;</button>
     </div>
-    <p class="text-xs text-sub mb-3">현재 스케줄 vs <strong x-text="compareResult?.savedName"></strong> — <strong class="text-blue" x-text="compareResult?.totalDiffs+'건'"></strong> 차이</p>
+    <p class="text-xs text-sub mb-3">현재 근무표 vs <strong x-text="compareResult?.savedName"></strong> — <strong class="text-blue" x-text="compareResult?.totalDiffs+'건'"></strong> 차이</p>
     <div style="flex:1;overflow-y:auto">
       <table class="tbl" style="font-size:0.75rem">
         <thead><tr><th>간호사</th><th>날짜</th><th>현재</th><th></th><th>비교대상</th></tr></thead>
@@ -2454,7 +2455,7 @@
       <template x-if="onboardingStep===4">
         <div>
           <div style="font-size:2rem;margin-bottom:12px">📅</div>
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">4단계: 스케줄 생성</h3>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">4단계: 근무표 생성</h3>
           <p class="text-sub" style="font-size:0.85rem"><strong>"생성" 버튼</strong>을 클릭하면 솔버가 근무표를 자동 생성합니다.<br/>생성이 안 될 경우 "사전입력 완화"를 체크해 보세요.<br/>완성된 근무표는 셀 클릭으로 수동 수정도 가능합니다.</p>
         </div>
       </template>
@@ -2528,7 +2529,7 @@
             <p class="text-xs mt-1">인원 과부족 확인 → 주휴 추천 배분 → "사전입력에 적용" 클릭</p>
           </div>
           <div class="card-sm" style="padding:10px 14px;border-left:3px solid #f59e0b">
-            <div class="font-semibold text-bright">④ 스케줄 생성</div>
+            <div class="font-semibold text-bright">④ 근무표 생성</div>
             <p class="text-xs mt-1">"생성" 버튼 클릭 → 솔버가 최적 근무표 자동 생성 (5~20분 소요)</p>
           </div>
           <div class="card-sm" style="padding:10px 14px;border-left:3px solid #ef4444">
@@ -2569,7 +2570,7 @@
           </ul>
         </div>
         <div>
-          <h4 class="font-semibold text-bright">📅 스케줄 탭</h4>
+          <h4 class="font-semibold text-bright">📅 근무표 탭</h4>
           <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
             <li>오차(MIP Gap) 조절 — 정밀(0%)~10%</li>
             <li>사전입력 완화 / 주휴 무시 / V 무제한 옵션</li>
@@ -2581,7 +2582,7 @@
         <div>
           <h4 class="font-semibold text-bright">💾 저장 탭</h4>
           <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
-            <li>생성된 스케줄 저장/불러오기/삭제</li>
+            <li>생성된 근무표 저장/불러오기/삭제</li>
             <li>생성 완료 시 자동 저장</li>
           </ul>
         </div>

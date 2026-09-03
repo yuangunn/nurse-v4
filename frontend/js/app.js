@@ -5,7 +5,7 @@ function app() {
       {id:'settings', label:'설정'},
       {id:'preinput', label:'사전입력'},
       {id:'analysis', label:'분석'},
-      {id:'schedule', label:'스케줄'},
+      {id:'schedule', label:'근무표'},
       {id:'saved',    label:'저장'},
     ],
     activeTab: 'settings',
@@ -269,20 +269,19 @@ function app() {
           if(val&&workCodes.includes(val)){consec++;maxConsec=Math.max(maxConsec,consec)}
           else consec=0;
         }
-        if(maxConsec>=6)warns.push({type:'warn',nurse:nurse.name,msg:`연속 ${maxConsec}일 근무`});
+        // 연속 근무 — 규칙 한도를 넘긴 것만 (엔진 결과엔 없고, 손으로 고친 뒤에 생긴다) M7-C
+        const consecLimit=(this.rules.maxConsecutiveWork&&this.rules.maxConsecutiveWorkDays)||5;
+        if(maxConsec>consecLimit)warns.push({type:'warn',nurse:nurse.name,msg:`연속 ${maxConsec}일 근무 (한도 ${consecLimit}일)`});
 
-        // 야간 편중
+        // 야간 — 월 한도를 넘긴 것만. 야간전담(나이트킵) 달은 14회가 정상이라 제외
+        const mk=`${this.year}-${String(this.month).padStart(2,'0')}`;
+        const nm=nurse.night_months||{};
+        const nightKeep=Object.keys(nm).length?!!nm[mk]:!!nurse.is_night_shift;
         const nCount=Object.values(this.schedule[nid]||{}).filter(v=>nightCodes.includes(v)).length;
-        if(nCount>=8)warns.push({type:'warn',nurse:nurse.name,msg:`야간 ${nCount}회 (편중)`});
-
-        // 주말 근무 편중
-        let weekendWork=0;
-        for(const day of days){
-          if(day.getDay()!==0&&day.getDay()!==6)continue;
-          const val=this.schedule[nid]?.[this.dayKey(day)];
-          if(val&&workCodes.includes(val))weekendWork++;
-        }
-        if(weekendWork>=6)warns.push({type:'info',nurse:nurse.name,msg:`주말 근무 ${weekendWork}회`});
+        const nightLimit=(this.rules.maxNightPerMonth&&this.rules.maxNightPerMonthCount)||7;
+        if(!nightKeep&&nCount>nightLimit)warns.push({type:'warn',nurse:nurse.name,msg:`야간 ${nCount}회 (월 한도 ${nightLimit}회)`});
+        // 주말 근무 횟수 경고는 뺐다 — 정상 근무표에서도 병동 절반에게 매달 뜨던 통계라
+        // 요약 표의 '주말·공휴일' 열과 누적 합(편차 색)으로 옮겼다 (M7-C)
       }
       return warns;
     },
@@ -517,7 +516,7 @@ function app() {
         // 수동 저장(saveSchedule)과 동일한 스키마 — 이전 payload는 ScheduleSave
         // 필수 필드가 없어 항상 422로 무음 실패했다.
         await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights,relaxed_cells:this.relaxedCells});
-        this.toast('스케줄 자동 저장됨','info');
+        this.toast('근무표 자동 저장됨','info');
         this.loadSavedList();
       }catch(e){console.warn('자동저장 실패:',e)}
     },

@@ -805,3 +805,7 @@ input[type="number"]::-webkit-outer-spin-button {
 .menu-item:hover { background: var(--accent-bg, rgba(59,130,246,0.08)); }
 .menu-item:disabled { opacity: .35; cursor: default; }
 .menu-sep { height: 1px; margin: 3px 4px; background: var(--border); }
+
+/* 헤더 공통 년월 컨트롤 (탭별 선택기 4곳을 하나로) — M7-C */
+.ym-header { padding: 1px 4px; margin-top: 1px; }
+.ym-header input { font-size: 0.78rem; }

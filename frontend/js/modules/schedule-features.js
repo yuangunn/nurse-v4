@@ -148,7 +148,7 @@ window.ScheduleFeaturesModule = function() {
       if(this.generating)return;
       const pins=this.getEditedCells();
       const nPin=Object.values(pins).reduce((a,m)=>a+Object.keys(m).length,0);
-      if(!nPin){this.toast('수정한 칸이 없습니다 — 스케줄 셀을 먼저 고쳐주세요','info');return}
+      if(!nPin){this.toast('수정한 칸이 없습니다 — 근무표 셀을 먼저 고쳐주세요','info');return}
       // 수정 전 표의 인원수 유지가 기준. 지운 칸은 잠그면 '하루 1근무'와 충돌 — 솔버가 채우게 둔다
       const dayReq=this._reqFromSchedule(this._originalSchedule);
       const locked=JSON.parse(JSON.stringify(this.lockedCells||{}));
@@ -201,7 +201,7 @@ window.ScheduleFeaturesModule = function() {
       const pm=this.month===1?12:this.month-1;
       const list=await this.api('GET','/api/schedules');
       const prev=list.find(s=>s.year===py&&s.month===pm);
-      if(!prev){this.toast(`${py}년 ${pm}월 저장된 스케줄이 없습니다`,'error');return}
+      if(!prev){this.toast(`${py}년 ${pm}월 저장된 근무표가 없습니다`,'error');return}
       const data=await this.api('GET',`/api/schedules/${prev.id}`);
       const schedule=data.data.schedule||{};
       // 마지막 주기의 데이터를 현재 달 사전입력에 이월
