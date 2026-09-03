@@ -188,7 +188,7 @@ window.SettingsDefsModule = function() {
 
     // ── 배점 관리 ─────────────────────────────────────────────
     async loadScoringRules(){this.scoringRules=await this.api('GET','/api/scoring_rules')},
-    scoringRuleTypeLabel(rt){return{transition:'전환 패턴',pattern:'N일 패턴',consecutive_same:'연속 동일',specific_shift:'특정 근무',wish:'희망 근무',night_fairness:'야간 공평성',holiday_work:'공휴일 근무',weekend_work:'주말 근무',holiday_off:'공휴일 OFF'}[rt]||rt},
+    scoringRuleTypeLabel(rt){return{transition:'전환 패턴',pattern:'N일 패턴',consecutive_same:'연속 동일',specific_shift:'특정 근무',wish:'희망 근무',night_fairness:'야간 공평성',weekend_fairness:'주말·공휴일 공평성',holiday_work:'공휴일 근무',weekend_work:'주말 근무',holiday_off:'공휴일 OFF'}[rt]||rt},
     scoringRuleCondSummary(r){
       const p=r.params||{};const gl=v=>({work:'모든근무',day:'낮',evening:'저녁',night:'야간',rest:'휴무',leave:'휴가',rest_leave:'휴무/휴가',any:'전체'})[v]||v;
       if(r.rule_type==='transition')return`${gl(p.from)} → ${gl(p.to)}`;
@@ -196,7 +196,8 @@ window.SettingsDefsModule = function() {
       if(r.rule_type==='consecutive_same')return`연속 ${gl(p.period)} 쌍`;
       if(r.rule_type==='specific_shift')return`${p.shift_code||'-'}${p.condition==='female_only'?' (여성)':''}`;
       if(r.rule_type==='wish')return'희망 근무 매칭';
-      if(r.rule_type==='night_fairness')return'야간 range 최소화';
+      if(r.rule_type==='night_fairness')return'야간 range 최소화 (+누적 3M)';
+      if(r.rule_type==='weekend_fairness')return'주말·공휴일 근무 range 최소화 (+누적 3M)';
       if(r.rule_type==='holiday_work')return'공휴일 근무 시 가점';
       if(r.rule_type==='holiday_off')return'공휴일 OFF 시 감점';
       if(r.rule_type==='weekend_work'){const s=p.slots||[];const dnames=['월','화','수','목','금','토','일'];const pnames={day:'D',evening:'E',night:'N'};return s.map(sl=>`${dnames[sl.weekday]} ${(sl.periods||[]).map(pp=>pnames[pp]||pp).join('/')}`).join(', ')||'-'}

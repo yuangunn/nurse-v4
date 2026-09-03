@@ -97,6 +97,8 @@ def test_fairness_ledger_and_prev_month_nights(tmp_path, monkeypatch):
     assert ledger["a1"]["nights"] == 2
     assert ledger["a1"]["weekends"] == 1
     assert ledger["a1"]["holiday_work"] == 1
+    # 주말 ∪ 공휴일 근무일(합집합) — 5/2(토 N) + 5/5(공휴일 D) = 2, 5/3(일 OF)은 근무가 아니다
+    assert ledger["a1"]["weekend_holiday"] == 2
     nights = db.compute_prev_month_nights(2026, 6)
     assert nights == {"a1": 2}
 
@@ -221,3 +223,100 @@ def test_relax_boost_protects_previously_overridden_nurse(solver):
     assert r["success"], r["message"]
     rc = r.get("relaxed_cells") or {}
     assert "a1" in rc and "a0" not in rc, rc
+
+
+# ── 주말·공휴일 근무 공정성 (M6 P3②) ──────────────────────────────────────────
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_weekend_offsets_shift_burden_days_to_low_cumulative(build_request, solver):
+    """주말·공휴일 근무 공정성 원장 오프셋: 누적 부담이 큰 간호사는 당월 부담일(토·일·공휴일)
+    근무를 가장 적게 받아야 한다 — night_fairness 오프셋과 같은 패턴, 양 엔진 패리티."""
+    nurses = _mini_nurses(6)
+    # 2026-03-01(일)~03-07(토): 주말 2일 + 03-03(화)을 공휴일로 지정 → 부담일 3일
+    req = build_request(nurses=nurses, year=2026, month=3, days=7,
+                        requirements=_mini_requirements(1, 1, 1))
+    req.holidays = ["2026-03-03"]
+    req.scoring_rules = [ScoringRule(name="주말·공휴일 공정", rule_type="weekend_fairness",
+                                     score=-100)]
+    req.weekend_offsets = {"a0": 10}   # a0는 직전 달들 누적 주말·공휴일 근무 10일
+    result = make_limited(req, days=7, solver=solver).solve()
+    assert result["success"], result.get("message")
+    work = {"D", "DC", "E", "EC", "N", "NC"}
+    burden = {"2026-03-01", "2026-03-03", "2026-03-07"}
+    counts = {n.id: sum(1 for dk, v in result["schedule"][n.id].items()
+                        if dk in burden and v in work) for n in nurses}
+    assert counts["a0"] == min(counts.values()), counts
+    assert counts["a0"] < max(counts.values()), counts
+
+
+def test_weekend_fairness_pool_excludes_night_keep_and_partial_tenure(build_request):
+    """공정성 풀: 야간전담(14일 고정)·당월 부분 재적은 제외, 임산부는 포함(주말 D/E 가능)."""
+    nurses = _mini_nurses(6)
+    nurses[1].night_months = {"2026-03": True}
+    nurses[2].start_date = "2026-03-10"
+    nurses[3].end_date = "2026-03-20"
+    nurses[4].is_pregnant = True
+    nurses[4].pregnancy = {"early": {"start": "2026-02-01", "end": "2026-04-30"}}
+    req = build_request(nurses=nurses, year=2026, month=3, days=7)
+    sch = make_limited(req, days=7)
+    pool = {n["id"] for n in sch._weekend_fairness_pool()}
+    assert pool == {"a0", "a4", "a5"}, pool
+    from datetime import date
+    sch.holidays = {"2026-03-03"}
+    assert sch._is_weekend_or_holiday(date(2026, 3, 1))       # 일
+    assert sch._is_weekend_or_holiday(date(2026, 3, 7))       # 토
+    assert sch._is_weekend_or_holiday(date(2026, 3, 3))       # 공휴일(화)
+    assert not sch._is_weekend_or_holiday(date(2026, 3, 4))   # 평일
+
+
+def test_attach_fairness_offsets_injects_per_enabled_rule(tmp_path, monkeypatch):
+    """원장 오프셋 주입은 켜진 규칙별: night_fairness → fairness_offsets(누적 야간),
+    weekend_fairness → weekend_offsets(주말∪공휴일). 규칙이 꺼져 있으면 그 오프셋은 비어 있다."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from server import database as db
+    from server.api import _attach_fairness_offsets
+    db.init_db()
+    db.save_schedule(
+        year=2026, month=5,
+        data={"holidays": ["2026-05-05"],
+              "schedule": {"a1": {"2026-05-01": "N", "2026-05-02": "N", "2026-05-05": "D"}}},
+        name="5월 확정",
+    )
+
+    def _req(rules):
+        r = GenerateRequest(year=2026, month=6, nurses=_mini_nurses(2),
+                            requirements=_mini_requirements(), rules=Rules())
+        r.scoring_rules = rules
+        return r
+
+    only_w = _req([ScoringRule(name="주말", rule_type="weekend_fairness", score=-30)])
+    ctx = _attach_fairness_offsets(only_w)
+    assert only_w.weekend_offsets == {"a1": 2} and only_w.fairness_offsets is None
+    assert ctx["weekend_offsets"] == {"a1": 2} and "fairness_offsets" not in ctx
+
+    both = _req([ScoringRule(name="야간", rule_type="night_fairness", score=-50),
+                 ScoringRule(name="주말", rule_type="weekend_fairness", score=-30)])
+    _attach_fairness_offsets(both)
+    assert both.fairness_offsets == {"a1": 2} and both.weekend_offsets == {"a1": 2}
+
+    disabled = _req([ScoringRule(name="주말", rule_type="weekend_fairness", score=-30,
+                                 enabled=False)])
+    assert _attach_fairness_offsets(disabled) is None
+    assert disabled.weekend_offsets is None
+
+
+def test_weekend_fairness_rule_seeded_and_migrated_once(tmp_path, monkeypatch):
+    """새 DB 시드와 구버전 DB 마이그레이션 모두 weekend_fairness 규칙을 정확히 1개 만든다."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from server import database as db
+    db.init_db()
+
+    def _rules():
+        return [r for r in db.list_scoring_rules() if r["rule_type"] == "weekend_fairness"]
+
+    assert len(_rules()) == 1 and _rules()[0]["score"] == -30 and _rules()[0]["enabled"]
+    db.delete_scoring_rule(_rules()[0]["id"])     # 구버전 DB 흉내
+    db.init_db()                                  # 마이그레이션이 다시 넣는다
+    assert len(_rules()) == 1
+    db.init_db()                                  # 재실행해도 중복 없음
+    assert len(_rules()) == 1

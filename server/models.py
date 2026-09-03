@@ -127,6 +127,9 @@ class GenerateRequest(BaseModel):
     # 야간 공정성 원장 오프셋 — 직전 달들의 누적 야간 수 {nurse_id: n}.
     # night_fairness가 (누적+당월)의 편차를 최소화해 누적 불공평을 당월에 보정.
     fairness_offsets: Optional[Dict[str, int]] = None
+    # 주말·공휴일 근무 공정성 원장 오프셋 — 직전 달들의 누적 주말·공휴일 근무일 수 {nurse_id: n}
+    # (토·일 ∪ 법정공휴일, 합집합). weekend_fairness가 (누적+당월)의 편차를 최소화 (M6 P3②).
+    weekend_offsets: Optional[Dict[str, int]] = None
 
 
 class ScheduleSave(BaseModel):

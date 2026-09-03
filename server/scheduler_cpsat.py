@@ -1138,6 +1138,32 @@ class CpSatScheduler(_SchedulerBase):
                     model.Add(range_var >= max_n - min_n)
                     terms.append(sc * range_var)
 
+            elif rt == "weekend_fairness":
+                # 주말·공휴일 근무 공정 배분 — 부담일 근무일 수의 (누적+당월) range 최소화
+                # (HiGHS 패리티, M6 P3②). 풀은 공용 헬퍼(야간전담·부분 재적 제외).
+                fairness_pool = self._weekend_fairness_pool()
+                burden_days = [d for d in month_days
+                               if self._is_weekend_or_holiday(self.all_dates[d])]
+                if len(fairness_pool) >= 2 and burden_days:
+                    wh_counts = {
+                        nurse["id"]: lin([x[nurse["id"]][d][s]
+                                          for d in burden_days for s in self.WORK_SHIFTS])
+                        for nurse in fairness_pool
+                    }
+                    max_off = max((int(self.weekend_offsets.get(n["id"], 0))
+                                   for n in fairness_pool), default=0)
+                    ub_wh = len(burden_days) + max_off
+                    max_w = model.NewIntVar(0, ub_wh, f"max_wh_{rid}")
+                    min_w = model.NewIntVar(0, ub_wh, f"min_wh_{rid}")
+                    for nurse in fairness_pool:
+                        nid = nurse["id"]
+                        off = int(self.weekend_offsets.get(nid, 0))
+                        model.Add(max_w >= wh_counts[nid] + off)
+                        model.Add(min_w <= wh_counts[nid] + off)
+                    range_w = model.NewIntVar(0, ub_wh, f"wh_range_{rid}")
+                    model.Add(range_w >= max_w - min_w)
+                    terms.append(sc * range_w)
+
             elif rt == "holiday_work":
                 for nurse in self.nurses:
                     nid = nurse["id"]

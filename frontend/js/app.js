@@ -37,6 +37,7 @@ function app() {
     generationReport:null, showGenReport:false, wishReport:null, showWishReport:false,
     offTeukgeun:[], showOffTeukgeun:false,   // 오프특근(휴무 부족으로 OF 반납) 발생 목록
     relaxBoosts:{},   // 완화 이력 보정 배수 {nid: ×} — 지난달 원티드가 뒤집힌 사람 (서버 산출)
+    fairnessOffsets:null, weekendOffsets:null, showFairness:false,   // ⚖ 공정성 카드 — 이번 생성에 주입된 원장 오프셋(서버 산출, M6 P3②)
     staffingAlerts:null, fairnessLedger3m:null,
     solver:'highs', diagnosing:false, fixing:false, diagResult:null, fixResult:null,
     tableFullscreen:false,
@@ -272,19 +273,45 @@ function app() {
       const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
       const stats=this.nurses.map(nurse=>{
         const nid=nurse.id;
-        let nights=0,weekends=0,holidays=0;
+        let nights=0,weekends=0,holidays=0,wh=0;
         for(const day of days){
           const dk=this.dayKey(day);
           const val=this.schedule[nid]?.[dk];if(!val)continue;
           if(nightCodes.includes(val))nights++;
-          if((day.getDay()===0||day.getDay()===6)&&workCodes.includes(val))weekends++;
-          if(this.holidays.includes(dk)&&workCodes.includes(val))holidays++;
+          const isWk=(day.getDay()===0||day.getDay()===6),isHol=this.holidays.includes(dk),work=workCodes.includes(val);
+          if(isWk&&work)weekends++;
+          if(isHol&&work)holidays++;
+          if((isWk||isHol)&&work)wh++;   // 합집합 — 토요일 공휴일은 1회 (원장 weekend_holiday 와 같은 정의)
         }
-        return{name:nurse.name,group:nurse.group,nights,weekends,holidays,score:this.nurseScores[nid]??0};
+        return{id:nid,name:nurse.name,group:nurse.group,nights,weekends,holidays,wh,score:this.nurseScores[nid]??0};
       });
       const avgNights=stats.reduce((s,n)=>s+n.nights,0)/stats.length;
       const avgWeekends=stats.reduce((s,n)=>s+n.weekends,0)/stats.length;
       return{stats,avgNights:avgNights.toFixed(1),avgWeekends:avgWeekends.toFixed(1)};
+    },
+    // ⚖ 공정성 카드 — 당월(야간·주말/공휴일 근무) + 직전 3개월 누적. 편차는 엔진의 공정성 풀 기준
+    // (야간전담·당월 전입/전출·트레이니 제외, 야간은 야간 불가·임산부도 제외) — M6 P3②
+    get fairnessCard(){
+      const fd=this.fairnessData;if(!fd)return null;
+      const mk=`${this.year}-${String(this.month).padStart(2,'0')}`;
+      const firstK=`${mk}-01`,lastK=this.dayKey(new Date(this.year,this.month,0));
+      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
+      const rows=fd.stats.map(s=>{
+        const n=this.nurses.find(x=>x.id===s.id)||{};
+        const nm=n.night_months||{};
+        const nightKeep=Object.keys(nm).length?!!nm[mk]:!!n.is_night_shift;
+        const partial=!!((n.start_date&&n.start_date>firstK)||(n.end_date&&n.end_date<lastK));
+        const trainee=!!n.is_trainee&&(!n.training_end_date||n.training_end_date>=firstK);
+        const preg=!!n.is_pregnant&&['early','late'].some(k=>{const w=(n.pregnancy||{})[k]||{};return w.start&&w.end&&w.start<=lastK&&w.end>=firstK});
+        const canNight=(n.capable_shifts||nightCodes).some(c=>nightCodes.includes(c));
+        const cum=this.fairnessLedger3m?.[s.id]||{};
+        const cumN=cum.nights||0,cumW=cum.weekend_holiday??((cum.weekends||0)+(cum.holiday_work||0));
+        return{id:s.id,name:s.name,exclN:nightKeep||partial||trainee||preg||!canNight,exclW:nightKeep||partial||trainee,
+               nights:s.nights,cumNights:cumN,totalNights:s.nights+cumN,wh:s.wh,cumWh:cumW,totalWh:s.wh+cumW};
+      });
+      const ext=(arr,k)=>arr.length?{max:Math.max(...arr.map(r=>r[k])),min:Math.min(...arr.map(r=>r[k]))}:{max:0,min:0};
+      const n=ext(rows.filter(r=>!r.exclN),'totalNights'),w=ext(rows.filter(r=>!r.exclW),'totalWh');
+      return{rows,maxN:n.max,minN:n.min,rangeN:n.max-n.min,maxW:w.max,minW:w.min,rangeW:w.max-w.min};
     },
     selectedNurseMap:{},
     get selectedNurseIds(){return Object.keys(this.selectedNurseMap)},
@@ -515,7 +542,7 @@ function app() {
           this._recoverPoll=setInterval(async()=>{
             const pollRef=this._recoverPoll;
             try{const r=await this.api('GET','/api/generate/result');
-              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
+              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
             }catch(e){}
           },2000);
         }else if(res.status==='done'&&res.result){
@@ -523,6 +550,7 @@ function app() {
           this.generationReport=result.generation_report||null;
           this.wishReport=result.wish_report||null;
           this.offTeukgeun=result.off_teukgeun||[];
+          this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;
           if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.trackEdits();this.activeTab='schedule'}
         }
       }catch(e){}
