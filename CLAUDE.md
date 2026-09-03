@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.11.4 (2026-09-03, M6 P3② — 주말·공휴일 근무 공평성: 누적 원장 오프셋 + ⚖ 공정성 카드)
+**최신**: v4.12.0 (2026-09-03, M7 — 프론트엔드·UX 단순화: 근무표 우선 배치 · 옵션 고급화 · ⚙ 설정 + 3단계 바 · 저장 서랍 · 폰 보기 전용)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -92,7 +92,7 @@ nurse-v4/
 │   ├── models.py            # Pydantic 데이터 모델 (GenerateRequest 등)
 │   └── profiles.py          # 프로필 관리 + Fernet 암호화 (PBKDF2 100k)
 ├── frontend/
-│   ├── index.html           # SPA (설정·사전입력·분석·스케줄·저장 + 모바일 '오늘' 홈)
+│   ├── index.html           # SPA (⚙ 설정 + 사전입력·분석·근무표 3단계, 저장은 근무표 서랍 + 모바일 '오늘' 홈)
 │   ├── css/                 # tokens·base·components·yginvest-skin (cascade 순서로 link)
 │   ├── js/
 │   │   ├── app.js           # Alpine.js 코어 (~530줄: 상태·computed·init·API·모듈 합성)
@@ -160,6 +160,8 @@ python3 -m pytest -q                  # 163건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs
+# 화면(index.html)을 재배치했다면 — 핸들러 손실 0 확인 (REMOVED 는 전부 의도한 것이어야 한다)
+python3 scripts/handler_inventory.py <(git show origin/main:frontend/index.html) frontend/index.html
 ```
 
 > `httpx` 는 앱이 쓰지 않지만 `starlette.testclient` 가 요구한다 — 없으면
@@ -168,7 +170,7 @@ node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.11.4.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.12.0.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -415,33 +417,48 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 
 ---
 
-## 프론트엔드 탭 구성 (5탭)
+## 프론트엔드 화면 구성 (⚙ 설정 + 3단계) — v4.12.0 M7
 
-1. **설정**: 간호사 관리 + 요일별 인원 + 규칙 + 근무 정의 + 배점 규칙 + CSV 일괄 + 개발자 설정
+**원칙 (결정 1-22)**: 근무표가 주인공. 매달 밟는 단계만 번호를 주고(사전입력 → 분석 → 근무표),
+첫 1회만 만지는 설정은 ⚙ 아이콘, 진단·리포트는 표 아래 서랍, 개발자 언어의 옵션은 ⚙ 고급.
+**년월은 헤더 컨트롤 하나**로 모든 탭 공통. 첫 화면은 명부가 있으면 사전입력, 없으면 설정, 폰은 오늘.
+화면을 옮길 때는 `scripts/handler_inventory.py` 로 재배치 전후 핸들러 집합을 비교해 기능 손실 0을 확인한다.
+
+0. **⚙ 설정** (헤더 왼쪽 톱니 스텝): 간호사 명부 + 요일별 인원 + 규칙 + 배점 규칙 + 개발자 설정
+   - 명부 파일 5개 버튼(템플릿 저장/불러오기·엑셀 템플릿·내보내기·가져오기)은 **📗 명부 파일** 메뉴
+   - 근무 정의 17종은 **고급(접힘)** — 병동 표준이라 보통 손댈 일이 없다. 역순 전환 금지 3종은 문장 한 줄(끌 수 없음)
    - 명부의 **야간전담 뱃지**: `3월 야간전담`·`3,5월 야간전담`처럼 **지정된 달**을 보여준다
      (당월 포함이면 진한 강조, 다른 달만이면 옅게). 클릭 = 보고 있는 달 토글.
      구현 `nurse-manage.js:nightMonthsBadge`, 검증 `node scripts/test_night_badge.mjs`
-2. **사전입력**: 년월 선택 + 근무표 선입력 (또는 **이미 완성된 근무표 입력**)
+1. **사전입력**: 근무표 선입력 (또는 **이미 완성된 근무표 입력**). 툴바는 한 줄 —
+   **📥 가져오기**(엑셀 붙여넣기·위시 붙여넣기·전달이월) · **⚡ 자동 채움**(공휴일·전월N·이 표대로 인원) ·
+   ✅ 이대로 근무표로 · ↩↪ · 메모 · 저장/불러오기 · **⋯**(단축키·다른달 정리·초기화)
    - 💾 패널: 서버 저장/불러오기/삭제 (잠금·메모 포함)
    - 셀 우클릭 → **메모 + 🔒 완화 시 고정** 토글
    - 셀 드래그 → 다중 선택 + 근무 일괄 지정
    - Ctrl+Z/Shift+Ctrl+Z undo/redo (40단계)
-   - 키보드: D/E/N/V/O 직접 입력, ←↑↓→ 이동, Delete 삭제
+   - 키보드: D/E/N/V/O/W 직접 입력, ←↑↓→ 이동, Delete 삭제 (전체 목록은 ⌨ 전체 단축키)
    - tfoot: 일별 D/E/N 배정 수 + 필요 수 (편집 가능)
    - **✅ 이대로 근무표로** (`usePrevAsSchedule`): 사람이 손으로 짠 근무표를 붙여넣었을 때
-     솔버를 돌리지 않고 사전입력을 그대로 스케줄로 확정. 점수·완화 정보는 비어 있음
+     솔버를 돌리지 않고 사전입력을 그대로 근무표로 확정. 점수·완화 정보는 비어 있음
      (📌 이 표대로 인원 → ✅ 이대로 근무표로 순으로 쓰면 인원 기준까지 그 표에 맞춰진다)
-3. **분석**: 일자별 과부족 히트맵 + 주휴 추천 배분 → "사전입력에 적용"
-4. **스케줄**: 생성 결과 표시, 셀 직접 편집, 인원 카운트, 배점 상세
-   - **⚖ 공정성 카드**: 야간 · 주말/공휴일 근무의 당월·누적(3M)·합과 편차(최대−최소).
-     ※ = 공정성 대상 아님(야간전담·당월 전입/전출·트레이니). "이번 생성에 누적 반영" 표시 = 원장 주입됨
-   - **📋 어싸인용 복사** (`copyScheduleTsv`): 이름 + 날짜 + 근무 표를 클립보드로 →
-     어싸인 배정표(standalone)에 그대로 붙여넣는다
-5. **저장**: 생성 스케줄 저장/불러오기
-   - **📥 근무표 업로드**: 이미 완성된 번표를 엑셀 파일(xlsx/csv) 업로드 또는 붙여넣기로
-     저장 목록에 바로 추가 (솔버 안 돌림, 표 역산 일별 인원을 함께 저장)
-   - **멀티시트 일괄 업로드**: 연간 번표처럼 시트가 여러 개면 시트 이름·내용·파일명에서
-     각 시트의 년월을 감지해 매핑 표를 띄우고, 확인 후 월별 저장본을 한 번에 생성
+   - 폰(<768px)에서는 편집 도구가 **⋯ 도구**로 접혀 있고 표가 먼저 보인다 (보기 전용 우선)
+2. **분석**: 일자별 과부족 히트맵 + 주휴 추천 배분 → "사전입력에 적용" (자동 실행)
+3. **근무표** (옛 '스케줄/생성' 탭): 기본 행은 **생성 · 사전입력 완화 · V 무제한**뿐.
+   - **⚙ 고급**(접힘): 오차(MIP gap)·시간·솔버(HiGHS/CP-SAT/레이스 — 셋 다 완화 지원)·주휴 무시·
+     주휴 이동 제한 풀기·완화 설정 슬라이더 4개·배점 조절 슬라이더 5개
+   - 표가 상태 메시지 바로 아래. 표 아래 **📊 요약**(간호사별 월간 요약 — 옛 ⚖ 공정성 카드를 흡수:
+     주말∪공휴일 열, 야간·주말·공휴일의 누적(3M)+당월 합과 편차 색, ※ = 공정성 대상 아님,
+     "이번 생성에 누적 반영" = 원장 주입됨) → **📋 리포트 서랍**(원티드 미반영·오프특근·주의·위시 반영·
+     생성 리포트·솔버 로그; 사연 항목이 있으면 생성 직후 자동으로 열림)
+   - **📂 불러오기 서랍** (옛 저장 탭): 저장된 근무표 목록·삭제·새로고침 + **📥 근무표 업로드**
+     (완성 번표를 xlsx/csv 업로드 또는 붙여넣기로 저장 목록에 추가, 솔버 안 돌림, 표 역산 일별 인원 함께 저장;
+     연간 번표처럼 시트가 여러 개면 년월을 감지해 매핑 표 → 월별 저장본 일괄 생성).
+     코드 어디서든 `activeTab='saved'` 를 넣으면 별칭 워처가 이 서랍을 연다.
+   - **📤 내보내기** 메뉴: CSV · 인쇄 · **📋 어싸인용 복사**(`copyScheduleTsv`: 이름 + 날짜 + 근무 표를
+     클립보드로 → 어싸인 배정표(standalone)에 그대로 붙여넣는다)
+   - 주의(⚡) 목록은 **규칙 한도를 넘긴 것만** (연속 근무·월 야간, 나이트킵 제외) — 주말 근무 횟수 같은
+     통계는 요약 표 열로 옮겼다 (정상 표에서도 병동 절반에게 매달 뜨던 노이즈)
 
 > 엑셀 붙여넣기/파일 읽기의 날짜 해석은 **멀티월**: 날짜에 월이 있으면(5/26 등) 그대로,
 > 일자만 있으면 감소 지점을 월 경계로 해석해 당월 밖 날짜에도 모두 적용된다
@@ -449,11 +466,11 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 
 > 어싸인(병실 배정)은 **본 앱에서 뺐다** — 병동에서 실제로 쓰는 건 `standalone/assign.html`
 > 하나뿐이고(본 앱엔 배정표 출력이 없었다) 같은 로직을 두 곳에서 관리할 이유가 없다.
-> 근무표는 스케줄 탭 [📋 어싸인용 복사] → standalone 붙여넣기로 넘긴다.
+> 근무표는 근무표 탭 [📤 내보내기 → 📋 어싸인용 복사] → standalone 붙여넣기로 넘긴다.
 > 공유 코어 `frontend/js/modules/assign-core.js` 는 standalone 빌드가 쓰므로 **남겨 둔다**
 > (본 앱 HTML 에서는 더 이상 로드하지 않음).
 
-> 사전입력·스케줄 탭은 년월 연동. 주기 경계(7일 단위) 컬러 헤더.
+> 년월은 헤더 컨트롤 하나로 모든 탭 공통. 주기 경계(7일 단위) 컬러 헤더.
 > 토요일 이후 컬럼 구분선.
 
 ---
@@ -563,10 +580,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.11.4.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.12.0.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.11.4.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.12.0.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -654,7 +671,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.11.4 기준)
+## 알려진 주의사항 (v4.12.0 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)

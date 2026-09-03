@@ -186,6 +186,26 @@
   `api._attach_fairness_offsets`, 프론트 `app.js fairnessCard`·`index.html` 카드·규칙 설명·
   `misc-features.js` 슬라이더 매핑. 테스트 `test_wish_pipeline.py` 5건.
 
+### 1-22. 화면 구조 — 근무표가 주인공, 진단은 서랍, 옵션은 고급 (2026-09-03, M7)
+- **결정**: 단계 바는 매달 밟는 3단계(사전입력 → 분석 → 근무표)만 번호를 주고 설정은 ⚙, 저장은 근무표
+  탭의 서랍. 근무표 탭은 표가 상태 메시지 바로 아래, 리포트 7종은 표 아래 📋 서랍 하나(사연 항목이 있으면
+  자동 열림), 개발자 언어의 옵션(오차·시간·솔버·완화 슬라이더·배점 슬라이더)은 ⚙ 고급. 년월 컨트롤은 헤더
+  하나. 폰은 보기 전용 우선(오늘·근무표·사전입력·더보기, 편집 도구는 ⋯ 도구).
+- **이유**: 결과 화면에서 표가 3000px 아래 있었고(진단이 표를 덮음), 툴바 14개·년월 선택기 4곳·집계 표
+  3개·MIP 오차 같은 용어가 매달 쓰는 사람의 손을 막았다. 기능이 아니라 배치가 문제였다.
+- **불변 조건**: **기능(핸들러) 손실 0**. 재배치 전후 `index.html` 의 `@click`/`x-model` 표현식 집합을
+  `scripts/handler_inventory.py` 로 비교하고, REMOVED 는 전부 의도한 것이어야 한다(M7 에서는 공정성 카드
+  토글 → 요약 표 흡수, 모바일 옵션 접기 → 고급 패널, `activeTab='saved'` → `openSavedDrawer()` 3건).
+  옛 탭 값 `saved` 는 별칭 워처로 계속 동작한다 — 외부 코드·저장된 상태가 깨지지 않게.
+- **하지 않은 것**: 서버 솔버 폴백(`solver=auto`). CP-SAT·레이스도 이미 `_solve_relaxed` 로 완화를 지원해
+  화면의 "완화 미지원" 문구만 낡은 것이었다. 통계성 경고(주말 근무 N회)는 삭제가 아니라 요약 표 열로 이동.
+- **다시 늘리지 말 것**: 표 위에 카드를 쌓지 않는다 — 새 리포트는 📋 서랍에, 새 옵션은 ⚙ 고급에 넣는다.
+  집계 표는 하나(📊 요약)다.
+- **파일**: `frontend/index.html`(스텝 바·근무표 탭·사전입력 툴바·설정·하단 내비·온보딩·도움말),
+  `app.js`(`fairnessCard`→요약 표 병합, `reportsSummary`, `_pickLandingTab`, `openSavedDrawer`, 별칭 워처,
+  경고 임계 규칙화), `solver.js`(리포트 자동 열림), `misc-features.js`(복원 기본 탭), `paste-import.js`,
+  CSS(`.menu-pop`·`.stepper-3`·`.ym-header`). 검증 `scripts/handler_inventory.py` + Playwright 스모크 28건.
+
 ### 1-17. 공휴일 인정 범위 = 생성 주기 (2026-08-20)
 - **결정**: `self.holidays`를 **당월 프리픽스**가 아니라 **생성 주기 범위
   (`all_dates` = 전월 말·익월 초 패딩 포함)**로 거른다. 프론트 `autoFillHolidays`도
