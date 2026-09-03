@@ -281,15 +281,13 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         PRE_BONUS_WORK  = getattr(self.rules, 'preBonusWork', 500)     # 근무 (먼저 완화)
         PRE_BONUS_REST  = getattr(self.rules, 'preBonusRest', 300)     # 주휴 — allow_juhu_relax 시
 
-        def _pre_bonus_for(code: str) -> int:
+        def _pre_bonus_for(code: str, nid: str = "") -> int:
             cls = timeoff_class(code)
-            if cls == "leave":
-                return PRE_BONUS_LEAVE
-            if cls == "off":
-                return PRE_BONUS_OFF
             if cls == "juhu":
-                return PRE_BONUS_REST
-            return PRE_BONUS_WORK
+                return PRE_BONUS_REST      # 주휴는 개인 요청이 아니라 법정 요일 — 보정 없음
+            base = PRE_BONUS_LEAVE if cls == "leave" else PRE_BONUS_OFF if cls == "off" else PRE_BONUS_WORK
+            # 완화 이력 보정: 지난달들에 원티드가 뒤집힌 사람은 이번 달 더 강하게 지킨다
+            return int(round(base * float(self.relax_boosts.get(nid, 1.0))))
 
         x: Dict[str, Dict[int, Dict[str, object]]] = {}
         _free_vars_r: list = []
@@ -386,7 +384,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 # 사전입력 보너스 (소프트: 유지하면 +종류별 차등 보너스)
                 if pre:
                     pre_flex = self._PRE_FLEX.get(pre, {pre})
-                    bonus_amount = _pre_bonus_for(pre)
+                    bonus_amount = _pre_bonus_for(pre, nid)
                     for s in pre_flex:
                         v = x[nid][d].get(s)
                         if isinstance(v, pulp.LpVariable):

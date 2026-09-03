@@ -350,6 +350,8 @@ class CpSatScheduler(_SchedulerBase):
         keep_terms = []
         for nid, d, pre, flex_vars in pre_keeps:
             b = _BONUS[timeoff_class(pre)]
+            if timeoff_class(pre) != "juhu":      # 완화 이력 보정 (HiGHS 패리티)
+                b = int(round(b * float(self.relax_boosts.get(nid, 1.0))))
             for v in flex_vars:
                 keep_terms.append(b * v)
         # ── 2단계 사전순 솔브 (HiGHS 완화 경로와 동일 정책) ───────────────────

@@ -168,3 +168,56 @@ def test_build_wish_report_marks_off_wish_filled_by_leave():
     assert row["leave_filled"] == 1 and row["leave_filled_dates"] == ["2026-03-02"]
     assert wr["total_leave_filled"] == 1
     assert [u["date"] for u in row["unmet"]] == ["2026-03-04"]
+
+
+def test_relax_ledger_counts_overridden_wanted_not_flex(tmp_path, monkeypatch):
+    """완화 이력 원장: 저장본의 prev_schedule 대 schedule 차이에서 '뒤집힌 원티드'만 센다 —
+    차지 승격(D→DC)과 주휴는 제외, relaxed_cells 가 있으면 그것을 우선 (M6 P2①)."""
+    from server import database as db
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "t.db"), raising=False)
+    db.init_db()
+    with db.get_conn() as conn:
+        conn.execute("DELETE FROM schedules")
+        # 2026-02 저장본 (구버전: relaxed_cells 없음) — a0 OF→D 1건(뒤집힘), a1 D→DC(승격, 제외), a2 주→D(주휴, 제외)
+        old = {"prev_schedule": {"a0": {"2026-02-03": "OF"}, "a1": {"2026-02-03": "D"}, "a2": {"2026-02-03": "주"}},
+               "schedule": {"a0": {"2026-02-03": "D"}, "a1": {"2026-02-03": "DC"}, "a2": {"2026-02-03": "D"}}}
+        conn.execute("INSERT INTO schedules (year, month, name, data, created_at) VALUES (?,?,?,?,?)",
+                     (2026, 2, "t", json.dumps(old), "x"))
+        # 2026-01 저장본 (신버전: relaxed_cells 우선) — a0 2건, 그중 1건은 주휴라 제외
+        new = {"prev_schedule": {}, "schedule": {},
+               "relaxed_cells": {"a0": {"2026-01-05": {"original": "V", "assigned": "D"},
+                                        "2026-01-12": {"original": "주", "assigned": "D"}}}}
+        conn.execute("INSERT INTO schedules (year, month, name, data, created_at) VALUES (?,?,?,?,?)",
+                     (2026, 1, "t", json.dumps(new), "x"))
+    led = db.compute_relax_ledger(2026, 3)
+    assert led["a0"]["overridden"] == 2          # 2월 OF→D 1 + 1월 V→D 1
+    assert "a1" not in led and "a2" not in led  # 승격·주휴는 뒤집힘이 아니다
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_relax_boost_protects_previously_overridden_nurse(solver):
+    """지난달들에 원티드가 뒤집힌 사람(relax_boosts)은 이번 달 완화에서 나중에 뒤집힌다.
+
+    3명·D=2(하루 휴무 1칸): 주휴는 요일제로 깔고, a0·a1 이 같은 날(3/5) OF 를 원티드 →
+    그날 쉴 자리는 1칸이라 한 명은 뒤집혀야 한다. a0 에 ×3 보정을 주면 a1 이 뒤집힌다
+    (보정 없으면 배점 임의). 양 엔진."""
+    from server.models import Nurse, Requirements, DayRequirement
+    from tests.conftest import make_limited
+    from tests.test_exact_fit_characterization import PROD_SHIFTS
+
+    nurses = [Nurse(id=f"a{i}", name=f"*간호{i}", group="A", gender="male",
+                    capable_shifts=["DC", "D", "EC", "E", "NC", "N"], seniority=i) for i in range(3)]
+    req = Requirements()
+    for day in ("mon", "tue", "wed", "thu", "fri", "sat", "sun"):
+        setattr(req, day, DayRequirement(D=2, E=0, N=0))
+    prev = _juhu_prev(nurses, 2026, 3, 7)          # 쉴 코드 공급: 주휴 3 + OF ≤3 + V ≤3 ≥ 7칸
+    prev["a0"]["2026-03-05"] = "OF"
+    prev["a1"]["2026-03-05"] = "OF"
+    r = make_limited(GenerateRequest(
+        year=2026, month=3, nurses=nurses, requirements=req, rules=Rules(maxConsecutiveWorkDays=7),
+        prev_schedule=prev, shifts=PROD_SHIFTS, allow_pre_relax=True, time_limit=60,
+        relax_boosts={"a0": 3.0},
+    ), days=7, solver=solver).solve()
+    assert r["success"], r["message"]
+    rc = r.get("relaxed_cells") or {}
+    assert "a1" in rc and "a0" not in rc, rc

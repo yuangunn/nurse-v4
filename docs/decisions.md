@@ -155,6 +155,19 @@
   테스트 `test_constraints.py` 3종×양엔진(부족 시 최소한만 반납+리포트·여유 있으면
   전원 1회·공휴일 OF 금지 불변) + `test_diagnostics.py` 갱신.
 
+### 1-20. 완화 이력 원장 — 지난달 뒤집힌 원티드는 이번 달 더 지킨다 (2026-08-24, M6 P2①)
+- **결정**: 위시 거절 원장과 같은 **파생 뷰**(`compute_relax_ledger`, 별도 테이블 없음)로 직전
+  3개월 저장본의 뒤집힌 원티드 수를 세고, 생성 시 `relax_boosts = 1 + 0.5×n (≤3)` 을 완화
+  유지 보너스(휴가·쉬는 날·근무)에 곱한다. 주휴는 보정 대상이 아니다(개인 요청이 아니라 법정 요일).
+- **이유**: 완화는 뒤집는 셀 *수*만 최소화하지 *누구*를 뒤집는지는 배점 임의였다 — 같은 사람이
+  매달 당해도 보호가 안 올랐다(M6 F3). 제1원칙 8(원티드에는 사연이 있다)의 시간축 반영.
+- **원장 산출**: 저장본 `relaxed_cells` 우선, 없으면 `prev_schedule` 대 `schedule` 차이. 차지
+  승격(`_RELAX_FLEX`)·주휴는 뒤집힘이 아니다. 저장 페이로드에 `relaxed_cells` 추가, 유령 정리 포함.
+- **파일**: `database.compute_relax_ledger`, `api._attach_relax_boosts`/`GET /api/relax_ledger`,
+  `models.GenerateRequest.relax_boosts`, `scheduler._pre_bonus_for(code, nid)`, `scheduler_cpsat`
+  keep_terms, `scheduler_base.relax_boosts`, 프론트 완화 카드 "(보정 ×n)".
+  테스트 `test_wish_pipeline.py` 원장 1건 + 보정 행동 양 엔진.
+
 ### 1-17. 공휴일 인정 범위 = 생성 주기 (2026-08-20)
 - **결정**: `self.holidays`를 **당월 프리픽스**가 아니라 **생성 주기 범위
   (`all_dates` = 전월 말·익월 초 패딩 포함)**로 거른다. 프론트 `autoFillHolidays`도

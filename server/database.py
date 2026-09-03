@@ -341,7 +341,7 @@ def delete_nurse(nurse_id: str) -> None:
     NURSE_KEYED_KEYS = (
         "schedule", "extended_schedule", "prev_schedule",
         "nurse_scores", "nurse_score_details", "prev_month_nights",
-        "locked_cells", "cell_notes",
+        "locked_cells", "cell_notes", "relaxed_cells",
     )
     with get_conn() as conn:
         conn.execute("DELETE FROM nurses WHERE id=?", (nurse_id,))
@@ -369,7 +369,7 @@ def cleanup_orphan_nurse_refs() -> int:
     NURSE_KEYED_KEYS = (
         "schedule", "extended_schedule", "prev_schedule",
         "nurse_scores", "nurse_score_details", "prev_month_nights",
-        "locked_cells", "cell_notes",
+        "locked_cells", "cell_notes", "relaxed_cells",
     )
     removed = 0
     with get_conn() as conn:
@@ -494,6 +494,68 @@ def compute_fairness_ledger(year: int, month: int, months_back: int = 3) -> Dict
                 if touched:
                     ent["months"] += 1
     return ledger
+
+
+# 사전입력 플렉스(D↔DC 등 차지 승격)는 '뒤집힘'이 아니다 — 원장 집계에서 제외
+_RELAX_FLEX = {"D": {"D", "DC"}, "DC": {"D", "DC"}, "E": {"E", "EC"}, "EC": {"E", "EC"},
+               "N": {"N", "NC"}, "NC": {"N", "NC"}}
+
+
+def compute_relax_ledger(year: int, month: int, months_back: int = 3) -> Dict:
+    """완화 이력 원장 — 직전 months_back개월 저장본에서 간호사별 '뒤집힌 원티드' 수.
+
+    원티드(사전입력)에는 사연이 있다(제1원칙 8). 같은 사람의 원티드가 매달 완화로
+    뒤집히면 다음 달엔 더 강하게 지켜야 한다 — 위시 거절 원장과 같은 파생 뷰 방식.
+    저장본에 `relaxed_cells`가 있으면 그것을, 없으면(구버전 저장본) `prev_schedule` 대
+    `schedule` 차이를 센다. 차지 승격(D→DC 등)과 주휴('주')는 뒤집힘으로 안 센다.
+    Returns: {nurse_id: {"overridden": n, "months": k}}"""
+    targets = []
+    y, m = year, month
+    for _ in range(months_back):
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+        targets.append((y, m))
+    ledger: Dict = {}
+    with get_conn() as conn:
+        for ty, tm in targets:
+            row = conn.execute(
+                "SELECT data FROM schedules WHERE year=? AND month=? "
+                "ORDER BY id DESC LIMIT 1", (ty, tm)).fetchone()
+            if not row:
+                continue
+            try:
+                data = json.loads(row["data"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+            prefix = f"{ty:04d}-{tm:02d}-"
+            rc = data.get("relaxed_cells")
+            if isinstance(rc, dict) and rc:
+                for nid, cells in rc.items():
+                    ent = ledger.setdefault(nid, {"overridden": 0, "months": 0})
+                    ent["months"] += 1
+                    for dk, info in (cells or {}).items():
+                        if not str(dk).startswith(prefix):
+                            continue
+                        orig = (info or {}).get("original") if isinstance(info, dict) else None
+                        if orig == "주":
+                            continue
+                        ent["overridden"] += 1
+                continue
+            prev = data.get("prev_schedule") or {}
+            sched = data.get("schedule") or {}
+            for nid, pcells in prev.items():
+                ns = sched.get(nid) or {}
+                ent = ledger.setdefault(nid, {"overridden": 0, "months": 0})
+                ent["months"] += 1
+                for dk, pre in (pcells or {}).items():
+                    if not pre or not str(dk).startswith(prefix) or pre == "주":
+                        continue
+                    got = ns.get(dk)
+                    if not got or got == pre or got in _RELAX_FLEX.get(pre, set()):
+                        continue
+                    ent["overridden"] += 1
+    return {k: v for k, v in ledger.items() if v["overridden"]}
 
 
 def compute_wish_ledger(year: int, month: int, months_back: int = 3) -> Dict:
