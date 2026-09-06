@@ -530,6 +530,8 @@ function app() {
       if(!this.schedule||!Object.keys(this.schedule).length)return;
       try{
         const name=`자동저장 ${this.year}-${String(this.month).padStart(2,'0')}`;
+        // 같은 달 자동저장본은 하나만 — 이전 것을 지우고 새로 넣는다 (사용자 결정 2026-09-06 "자동저장 붙이자")
+        try{ const list=await this.api('GET','/api/schedules'); for(const s of (list||[])){ if(s.name===name&&+s.year===+this.year&&+s.month===+this.month) await this.api('DELETE',`/api/schedules/${s.id}`); } }catch(e){}
         // 수동 저장(saveSchedule)과 동일한 스키마 — 이전 payload는 ScheduleSave
         // 필수 필드가 없어 항상 422로 무음 실패했다.
         await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights,relaxed_cells:this.relaxedCells});
