@@ -84,6 +84,7 @@ window.MiscFeaturesModule = function() {
       const label=target.map(h=>+h.slice(5,7)+'/'+ +h.slice(8)).join(', ');
       const warn=missing?' (일부 연도는 음력 데이터 범위 밖 — 직접 확인하세요)':'';
       this.toast(`🇰🇷 공휴일 ${target.length}일 입력: ${label} — 임시공휴일·변경은 직접 확인하세요${warn}`,'info',5000);
+      this.rdUndoToast&&this.rdUndoToast(`공휴일 ${target.length}일을 채웠습니다.`);
     },
 
     // ═══ 전월N 자동 인수인계 ═════════════════════════════

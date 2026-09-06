@@ -1,0 +1,137 @@
+/* redesign-tokens.css — NurseScheduler v4 리디자인 토큰
+ * 로드 순서: tokens.css → base.css → components.css → yginvest-skin.css → **redesign-tokens.css → redesign-components.css**
+ * (마지막에 로드해 기존 값을 덮어쓴다. 기존 변수 이름은 그대로 두고 값만 바꾼다.)
+ * 기준 해상도 1920×1080. 모든 수치는 design_handoff/design/*.dc.html 의 인라인 스타일과 1:1.
+ */
+:root {
+  /* ── 서체 (선택형) ── 설정 → 그 외 에서 html[data-font] 로 전환 */
+  --font-sans: 'Pretendard Variable','Pretendard',system-ui,sans-serif;
+
+  /* ── 글자 크기 스케일 (1920×1080) ── 이 넷만 쓴다 */
+  --fs-title:   24px;   /* 화면 제목 (설정 섹션 제목 등) */
+  --fs-h2:      20px;   /* 카드/서랍 제목, 앱 이름, 년월 */
+  --fs-body:    18px;   /* 본문 · 버튼 라벨 · 단계 이름 · 상태 줄 */
+  --fs-sub:     16px;   /* 부제 · 안내 · 툴팁 · 조용 버튼 · 표 이름 열 */
+  --fs-cell:    15px;   /* 표 셀 코드 · 집계 · 날짜 숫자 */
+  --fs-min:     14px;   /* 요일 · 주기 라벨 · 작은 배지 — 이보다 작은 글자 금지 */
+  --lh:         1.5;
+
+  /* ── 굵기 (볼드 남용 금지) ── */
+  --fw-title:   800;    /* 22px 이상 제목만 */
+  --fw-strong:  700;    /* 앱 이름 · 현재 단계 · 셀 코드 · 주 버튼 */
+  --fw-label:   600;    /* 버튼 라벨 · 이름 열 · 표 헤더 */
+  --fw-body:    500;    /* 본문 · 부제 · 안내 */
+
+  /* ── 클릭 타겟 ── */
+  --target:     48px;   /* 버튼 · 체크박스 라벨 · 숫자 ± */
+  --target-sm:  40px;   /* 헤더 보조 버튼 · 서랍 탭 · 팝업 내부 버튼 */
+  --row-h:      36px;   /* 표 행 높이 */
+  --col-w:      44px;   /* 날짜 열 너비 */
+  --hdr-h:      64px;   /* 헤더 */
+  --stepbar-h:  68px;   /* 단계 바 */
+  --toolbar-h:  64px;   /* 툴바 */
+
+  /* ── 간격 5단계 ── */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px;
+
+  /* ── 모서리 ── */
+  --r-btn:   10px;
+  --r-card:  16px;
+  --r-input: 10px;
+  --r-pop:   14px;
+  --r-modal: 18px;
+  --r-chip:  9999px;
+
+  /* ── 선 ── 보이는 선을 쓴다 */
+  --rule:      #DCE0E6;   /* 표 굵은 선 · 카드 ring · 구분선 (기존 --rule-2 값) */
+  --rule-soft: #EBEDF0;   /* 표 옅은 가로선 */
+  --rule-strong: #B8BFC9; /* 표 헤더 밑줄 2px · 주기 세로선 2px · 보조 버튼 ring 1.5px */
+
+  /* ── 글자 색 규칙 ── */
+  /* --ink   #0F1115  본문·라벨                        (18:1)  */
+  /* --ink-2 #4A5160  보조 글자의 **최소 밝기**         (7.4:1) */
+  /* --ink-3 #8A93A1  **비활성 전용** — 안내문에 쓰지 않는다 (3.2:1 AA 미달) */
+  --text-sub: var(--ink-2);   /* 기존 .text-sub 가 ink-3 이었음 → ink-2 로 */
+  --text-dim: var(--ink-2);   /* 기존 .text-dim 이 ink-4 이었음 → ink-2 로 */
+  --disabled-fg: #8A93A1;
+  --disabled-bg: #D4D9E0;
+
+  /* ── 포커스 ── 잉크와 구분되는 유일한 파랑 */
+  --focus: #2563EB;
+  --focus-ring: 0 0 0 3px var(--focus);
+
+  /* ── 그림자 ── */
+  --shadow-card: 0 0 0 1px var(--rule);
+  --shadow-pop:  0 10px 30px rgba(15,17,21,0.14), 0 0 0 1px rgba(15,17,21,0.06);
+  --shadow-modal: 0 20px 60px rgba(15,17,21,0.25);
+  --shadow-drawer: 0 -8px 24px rgba(15,17,21,0.08);
+  --shadow-toast: 0 10px 30px rgba(15,17,21,0.30);
+
+  /* ── 모션 ── */
+  --motion: 150ms;
+
+  /* ── 근무 코드 17종 (배경 / 글자) — 브리프 표 그대로 ── */
+  --sh-DC-bg:#E2ECFD; --sh-DC-fg:#1B4FC3;
+  --sh-D-bg: #EEF3FE; --sh-D-fg: #1B4FC3;
+  --sh-D1-bg:#F0F6FF; --sh-D1-fg:#2563EB;
+  --sh-EC-bg:#FCE3E5; --sh-EC-fg:#C7384A;
+  --sh-E-bg: #FEEFEF; --sh-E-fg: #C7384A;
+  --sh-중-bg: #FBF3E2; --sh-중-fg: #B7791F;
+  --sh-NC-bg:#E7E0F8; --sh-NC-fg:#5B3FB0;
+  --sh-N-bg: #EFEBFB; --sh-N-fg: #5B3FB0;
+  --sh-OF-bg:#F2F3F5; --sh-OF-fg:#6B7280;   /* 브리프 #8A93A1 → 대비 4.6:1 로 살짝 진하게 */
+  --sh-주-bg: #EDEFF3; --sh-주-fg: #4A5160;
+  --sh-P1-bg:#E3F4F4; --sh-P1-fg:#2C7A7B;
+  --sh-V-bg: #ECF7F0; --sh-V-fg: #1F8A5B;
+  --sh-생-bg: #FCEAF1; --sh-생-fg: #B83280;
+  --sh-특-bg: #F1ECFB; --sh-특-fg: #6D4AC0;
+  --sh-공-bg: #E8F5EE; --sh-공-fg: #1F8A5B;
+  --sh-법-bg: #FDEEE5; --sh-법-fg: #C2410C;
+  --sh-병-bg: #FEEAEA; --sh-병-fg: #C7384A;
+
+  /* ── 주기 헤더 4색 ── */
+  --cy1-bg:#EEF3FE; --cy1-fg:#1B4FC3;
+  --cy2-bg:#ECF7F0; --cy2-fg:#1F8A5B;
+  --cy3-bg:#EFEBFB; --cy3-fg:#5B3FB0;
+  --cy4-bg:#FBF3E2; --cy4-fg:#B7791F;
+
+  /* ── 날짜 헤더 ── */
+  --sat-fg:#1B4FC3; --sat-bg:#EEF3FE;
+  --sun-fg:#C7384A; --sun-bg:#FEEFEF;
+  --hol-fg:#C7384A; --hol-bg:#FDEEE5;
+  --overflow-opacity: 0.45;   /* 전월 말·익월 초 열 */
+}
+
+
+/* ── 선택 서체 오프라인 번들 (설정 → 그 외 → 글꼴). CDN 없음 — frontend/fonts/ 에 동봉 ── */
+@font-face { font-family: 'Noto Sans KR'; font-weight: 400; font-style: normal; font-display: swap; src: url('/fonts/NotoSansKR-400.ttf') format('truetype'); }
+@font-face { font-family: 'Noto Sans KR'; font-weight: 500; font-style: normal; font-display: swap; src: url('/fonts/NotoSansKR-500.ttf') format('truetype'); }
+@font-face { font-family: 'Noto Sans KR'; font-weight: 600; font-style: normal; font-display: swap; src: url('/fonts/NotoSansKR-600.ttf') format('truetype'); }
+@font-face { font-family: 'Noto Sans KR'; font-weight: 700; font-style: normal; font-display: swap; src: url('/fonts/NotoSansKR-700.ttf') format('truetype'); }
+@font-face { font-family: 'Nanum Gothic'; font-weight: 400; font-style: normal; font-display: swap; src: url('/fonts/nanum-gothic-korean-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Nanum Gothic'; font-weight: 700; font-style: normal; font-display: swap; src: url('/fonts/nanum-gothic-korean-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans KR'; font-weight: 400; font-style: normal; font-display: swap; src: url('/fonts/ibm-plex-sans-kr-korean-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans KR'; font-weight: 600; font-style: normal; font-display: swap; src: url('/fonts/ibm-plex-sans-kr-korean-600-normal.woff2') format('woff2'); }
+
+/* 서체 선택 — 설정 → 그 외. 번들 가능한 오프라인 서체만 */
+html[data-font="noto"]   { --font-sans: 'Noto Sans KR','Pretendard Variable',sans-serif; }
+html[data-font="nanum"]  { --font-sans: 'Nanum Gothic','Pretendard Variable',sans-serif; }
+html[data-font="plex"]   { --font-sans: 'IBM Plex Sans KR','Pretendard Variable',sans-serif; }
+html[data-font="malgun"] { --font-sans: 'Malgun Gothic','Apple SD Gothic Neo',sans-serif; }
+
+/* 다크 — 근무 색은 어두운 변형(redesign-schedule.dc.html 의 Dk 표와 동일) */
+html.dark {
+  --rule:#303744; --rule-soft:#242A35; --rule-strong:#5C6573;
+  --text-sub:#B4BCC9; --text-dim:#B4BCC9; --disabled-fg:#5C6573; --disabled-bg:#303744;
+  --shadow-card: 0 0 0 1px #303744;
+  --sh-DC-bg:#16203A; --sh-DC-fg:#8AA8FF; --sh-D-bg:#16203A; --sh-D-fg:#8AA8FF; --sh-D1-bg:#16203A; --sh-D1-fg:#8AA8FF;
+  --sh-EC-bg:#2C141A; --sh-EC-fg:#FF8A92; --sh-E-bg:#2C141A; --sh-E-fg:#FF8A92; --sh-병-bg:#2C141A; --sh-병-fg:#FF8A92;
+  --sh-중-bg:#2C2310; --sh-중-fg:#E0A93B;
+  --sh-NC-bg:#1E1838; --sh-NC-fg:#B79CFF; --sh-N-bg:#1E1838; --sh-N-fg:#B79CFF; --sh-특-bg:#1E1838; --sh-특-fg:#B79CFF;
+  --sh-OF-bg:#1F2430; --sh-OF-fg:#9AA3B2; --sh-주-bg:#1F2430; --sh-주-fg:#B4BCC9;
+  --sh-V-bg:#10261C; --sh-V-fg:#4FD08A; --sh-공-bg:#10261C; --sh-공-fg:#4FD08A; --sh-P1-bg:#10261C; --sh-P1-fg:#4FD08A;
+  --sh-생-bg:#2C1520; --sh-생-fg:#F5A3CF;
+  --sh-법-bg:#2C1D10; --sh-법-fg:#F0A070;
+  --cy1-bg:#16203A; --cy1-fg:#8AA8FF; --cy2-bg:#10261C; --cy2-fg:#4FD08A; --cy3-bg:#1E1838; --cy3-fg:#B79CFF; --cy4-bg:#2C2310; --cy4-fg:#E0A93B;
+  --sat-fg:#8AA8FF; --sat-bg:#16203A; --sun-fg:#FF8A92; --sun-bg:#2C141A; --hol-fg:#F0A070; --hol-bg:#2C1D10;
+}

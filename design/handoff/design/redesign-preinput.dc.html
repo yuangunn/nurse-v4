@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&family=Nanum+Gothic:wght@400;700;800&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+  <style>
+    @font-face{font-family:'Pretendard Variable';font-weight:45 920;font-style:normal;font-display:swap;src:url('frontend/fonts/PretendardVariable.woff2') format('woff2-variations')}
+    body{margin:0;background:#E4E7EC;font-family:'Pretendard Variable',Pretendard,system-ui,sans-serif;color:#0F1115;line-height:1.5;-webkit-font-smoothing:antialiased}
+    a{color:#1B4FC3}a:hover{color:#0F1115}
+    button{font:inherit;color:inherit;cursor:pointer}
+    *{box-sizing:border-box}
+  </style>
+</helmet>
+<div data-screen-label="사전입력 리디자인" style="font-family:{{ fontFamily }};width:1920px;height:1080px;overflow:hidden;position:relative;background:#F4F5F7;display:flex;flex-direction:column;font-size:18px">
+
+  <!-- 헤더 56 -->
+  <header style="height:64px;flex-shrink:0;background:#FFFFFF;border-bottom:1px solid #DCE0E6;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 24px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="width:36px;height:36px;border-radius:9px;background:#0F1115;position:relative;flex-shrink:0"><span style="position:absolute;left:50%;top:7px;bottom:7px;width:3px;background:#fff;transform:translateX(-50%);border-radius:2px"></span><span style="position:absolute;top:50%;left:7px;right:7px;height:3px;background:#fff;transform:translateY(-50%);border-radius:2px"></span></span>
+      <span style="font-size:20px;font-weight:700;letter-spacing:-0.02em">NurseScheduler</span>
+      <span style="font-size:16px;font-weight:500;color:#4A5160;padding-left:12px;border-left:1px solid #DCE0E6">게스트 병동 · 간호사 18명</span>
+    </div>
+    <div title="대상 년월 — 사전입력·분석·근무표 모든 화면에 함께 적용됩니다" style="display:flex;align-items:center;gap:4px;background:#F4F5F7;border-radius:12px;padding:4px">
+      <button style="width:40px;height:40px;border:0;background:transparent;border-radius:9px;display:flex;align-items:center;justify-content:center" style-hover="background:#E4E7EC"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg></button>
+      <span style="font-size:20px;font-weight:700;padding:0 10px;letter-spacing:-0.01em;font-variant-numeric:tabular-nums">2026년 10월</span>
+      <button style="width:40px;height:40px;border:0;background:transparent;border-radius:9px;display:flex;align-items:center;justify-content:center" style-hover="background:#E4E7EC"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></button>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:4px">
+      <button title="화면을 어둡게 바꿉니다. 인쇄에는 영향이 없습니다." style="height:44px;padding:0 12px;border:0;background:transparent;border-radius:10px;display:flex;align-items:center;gap:6px;font-size:16px;font-weight:500;color:#4A5160" style-hover="background:#F4F5F7;color:#0F1115"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>다크</button>
+      <button title="사용법과 자주 묻는 질문을 엽니다." style="height:44px;padding:0 12px;border:0;background:transparent;border-radius:10px;display:flex;align-items:center;gap:6px;font-size:16px;font-weight:500;color:#4A5160" style-hover="background:#F4F5F7;color:#0F1115"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20z M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3 M12 17h.01"></path></svg>도움말</button>
+      <button title="다른 병동 프로필로 바꿉니다. 지금 작업은 자동 저장됩니다." style="height:44px;padding:0 12px;border:0;background:transparent;border-radius:10px;display:flex;align-items:center;gap:6px;font-size:16px;font-weight:500;color:#4A5160" style-hover="background:#F4F5F7;color:#0F1115"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75"></path></svg>프로필 전환</button>
+    </div>
+  </header>
+
+  <!-- 단계 바 60 -->
+  <nav style="height:68px;flex-shrink:0;background:#FFFFFF;border-bottom:1px solid #DCE0E6;display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:8px;padding:8px 24px">
+    <button title="간호사 명부 · 요일별 인원 · 규칙. 처음 한 번, 인원이 바뀔 때만 들어옵니다." style="height:48px;padding:0 16px;border:0;border-radius:10px;background:#F4F5F7;display:flex;align-items:center;gap:10px;font-size:18px;font-weight:600;color:#0F1115" style-hover="background:#E4E7EC"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4h-7 M10 4H3 M21 12h-9 M8 12H3 M21 20h-5 M12 20H3 M14 2v4 M8 10v4 M16 18v4"></path></svg>설정<span style="display:inline-flex;align-items:center;gap:4px;font-size:15px;font-weight:500;color:#1F8A5B"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>완료</span></button>
+    <button title="지금 단계입니다. 주휴·연차·희망 근무를 표에 넣습니다." style="height:48px;padding:0 16px;border:0;border-radius:10px;background:#0F1115;color:#fff;display:flex;align-items:center;gap:12px;text-align:left"><span style="width:26px;height:26px;border-radius:50%;background:#fff;color:#0F1115;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</span><span style="font-size:18px;font-weight:700">사전입력</span><span style="font-size:16px;font-weight:500;color:#D4D9E0">{{ stepSub }}</span></button>
+    <button title="날짜별로 사람이 모자라는지 보고 주휴 추천을 받습니다." style="height:48px;padding:0 16px;border:0;border-radius:10px;background:#F4F5F7;display:flex;align-items:center;gap:12px;text-align:left;color:#0F1115" style-hover="background:#E4E7EC"><span style="width:26px;height:26px;border-radius:50%;border:2px solid #0F1115;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</span><span style="font-size:18px;font-weight:600">분석</span><span style="font-size:16px;font-weight:500;color:#4A5160">부족한 날 확인</span></button>
+    <button title="자동 배정으로 근무표를 만들고 저장·인쇄합니다." style="height:48px;padding:0 16px;border:0;border-radius:10px;background:#F4F5F7;display:flex;align-items:center;gap:12px;text-align:left;color:#0F1115" style-hover="background:#E4E7EC"><span style="width:26px;height:26px;border-radius:50%;border:2px solid #0F1115;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</span><span style="font-size:18px;font-weight:600">근무표</span><span style="font-size:16px;font-weight:500;color:#4A5160">만들고 인쇄</span></button>
+  </nav>
+
+  <!-- 툴바 56: 왼쪽 신호등 한 줄 / 오른쪽 버튼 -->
+  <div style="height:56px;flex-shrink:0;display:flex;align-items:center;gap:16px;padding:0 24px">
+    <div style="display:flex;align-items:center;gap:10px;font-size:16px;font-weight:500;color:#0F1115;min-width:0">
+      <span style="width:12px;height:12px;border-radius:50%;flex-shrink:0;background:{{ signalColor }}"></span>
+      <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ signalText }}</span>
+      <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ true }}"><button title="분석 화면으로 가서 주휴를 자동으로 나눠 넣습니다. 결과는 여기 표에 바로 채워집니다." style="height:40px;padding:0 10px;border:0;background:transparent;border-radius:8px;font-size:16px;font-weight:600;color:#1B4FC3;text-decoration:underline;text-underline-offset:3px;white-space:nowrap" style-hover="background:#EEF3FE">분석에서 주휴 추천 받기</button></sc-if>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <div style="position:relative">
+        <button title="엑셀·팀즈 위시 시트에서 복사한 표를 붙여 넣거나, 지난달 표를 이어옵니다." style="height:48px;padding:0 16px 0 14px;border:0;border-radius:10px;background:#0F1115;color:#fff;display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600" style-hover="background:#2A2E36"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"></path></svg>가져오기<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+        <sc-if value="{{ showMenu }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:50px;left:0;z-index:40;min-width:300px;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(15,17,21,0.14),0 0 0 1px rgba(15,17,21,0.06);padding:6px">
+            <button style="width:100%;text-align:left;border:0;background:transparent;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:2px" style-hover="background:#F4F5F7"><span style="font-size:18px;font-weight:600">엑셀 표 붙여넣기</span><span style="font-size:15px;color:#4A5160">복사한 사전입력 표를 그대로 넣습니다</span></button>
+            <button style="width:100%;text-align:left;border:0;background:#EEF3FE;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:2px"><span style="font-size:18px;font-weight:600">위시 시트 붙여넣기</span><span style="font-size:15px;color:#4A5160">팀즈 희망 근무를 ‘가능하면’ 조건으로 넣습니다</span></button>
+            <button style="width:100%;text-align:left;border:0;background:transparent;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:2px" style-hover="background:#F4F5F7"><span style="font-size:18px;font-weight:600">지난달 표 이어오기</span><span style="font-size:15px;color:#4A5160">9월 말 근무를 앞 4칸에 채웁니다</span></button>
+          </div>
+        </sc-if>
+      </div>
+      <button title="공휴일 채우기 · 전월 야간 수 계산 · 이 표대로 인원 고정. 채운 뒤 되돌릴 수 있습니다." style="height:48px;padding:0 14px;border:0;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1.5px #B8BFC9;color:#0F1115;display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600" style-hover="background:#F4F5F7"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"></path></svg>자동 채움<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+      <button title="손으로 다 짠 표를 넣었을 때: 자동 배정 없이 이 표를 그대로 근무표로 확정합니다." style="height:48px;padding:0 14px;border:0;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1.5px #B8BFC9;color:#0F1115;display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600" style-hover="background:#F4F5F7"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>이대로 근무표로</button>
+      <span style="width:1px;height:28px;background:#DCE0E6;margin:0 4px"></span>
+      <button title="마지막 입력을 취소합니다 (Ctrl+Z). 40번까지 되돌릴 수 있습니다." style="height:48px;padding:0 12px;border:0;border-radius:10px;background:transparent;color:{{ undoColor }};display:flex;align-items:center;gap:6px;font-size:16px;font-weight:600" style-hover="background:#E4E7EC"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5 M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg>되돌리기</button>
+      <button title="되돌린 것을 다시 적용합니다 (Ctrl+Shift+Z)." style="height:48px;padding:0 12px;border:0;border-radius:10px;background:transparent;color:#8A93A1;display:flex;align-items:center;gap:6px;font-size:16px;font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5 M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13"></path></svg>다시</button>
+      <span style="width:1px;height:28px;background:#DCE0E6;margin:0 4px"></span>
+      <button title="이 표를 이름 붙여 저장하거나 저장해 둔 표를 불러옵니다." style="height:48px;padding:0 14px;border:0;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1.5px #B8BFC9;color:#0F1115;display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600" style-hover="background:#F4F5F7"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-8H7v8 M7 3v5h8"></path></svg>저장<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+      <button title="메모 표시 · 단축키 안내 · 다른 달 정리 · 표 초기화" style="height:48px;padding:0 14px;border:0;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1.5px #B8BFC9;color:#0F1115;display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600" style-hover="background:#F4F5F7"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12h.01 M19 12h.01 M5 12h.01"></path></svg>더보기</button>
+    </div>
+  </div>
+
+  <!-- 표 -->
+  <div style="flex:1;min-height:0;margin:0 24px 0;background:#fff;border-radius:12px 12px 0 0;box-shadow:0 0 0 1px #DCE0E6;overflow:auto;position:relative">
+    <table style="border-collapse:separate;border-spacing:0;font-size:15px;font-variant-numeric:tabular-nums;width:100%">
+      <thead>
+        <tr>
+          <th style="position:sticky;left:0;top:0;z-index:30;background:#fff;height:26px;padding:0 12px;text-align:left;font-size:15px;font-weight:500;color:#4A5160;border-bottom:1px solid #DCE0E6;border-right:1px solid #DCE0E6;min-width:140px">주기</th>
+          <sc-for list="{{ cycles }}" as="c" hint-placeholder-count="5"><th colspan="{{ c.count }}" style="position:sticky;top:0;z-index:20;height:26px;text-align:center;font-size:15px;font-weight:700;border-bottom:1px solid #DCE0E6;border-left:2px solid #B8BFC9;background:{{ c.bg }};color:{{ c.fg }}">{{ c.label }}</th></sc-for>
+          <th colspan="2" style="position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid #DCE0E6;border-left:2px solid #B8BFC9"></th>
+        </tr>
+        <tr>
+          <th style="position:sticky;left:0;top:26px;z-index:30;background:#fff;height:46px;padding:0 12px;text-align:left;font-size:16px;font-weight:600;border-bottom:2px solid #B8BFC9;border-right:1px solid #DCE0E6">이름</th>
+          <sc-for list="{{ days }}" as="d" hint-placeholder-count="35"><th style="position:sticky;top:26px;z-index:20;min-width:44px;width:44px;height:46px;padding:0;text-align:center;border-bottom:2px solid #B8BFC9;border-left:{{ d.bl }};background:{{ d.hbg }};color:{{ d.fg }};opacity:{{ d.op }}"><div style="font-size:16px;font-weight:700;line-height:1.2">{{ d.date }}</div><div style="font-size:14px;font-weight:500;line-height:1.2">{{ d.wd }}</div></th></sc-for>
+          <th title="이 사람에게 입력된 칸 수" style="position:sticky;top:26px;z-index:20;background:#fff;min-width:48px;height:46px;font-size:15px;font-weight:600;color:#4A5160;border-bottom:2px solid #B8BFC9;border-left:2px solid #B8BFC9;line-height:1.2">입력<br>수</th>
+          <th title="이달 야간(N) 입력 수" style="position:sticky;top:26px;z-index:20;background:#fff;min-width:48px;height:46px;font-size:15px;font-weight:600;color:#5B3FB0;border-bottom:2px solid #B8BFC9;line-height:1.2">야간<br>N</th>
+        </tr>
+      </thead>
+      <tbody>
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="18"><tr style-hover="background:#F8F9FB">
+          <td style="position:sticky;left:0;z-index:10;background:#fff;height:36px;padding:0 12px;border-bottom:1px solid #EBEDF0;border-right:1px solid #DCE0E6;white-space:nowrap"><span style="font-size:16px;font-weight:600">{{ r.name }}</span><span style="font-size:14px;font-weight:500;color:#4A5160;margin-left:6px">{{ r.group }}</span></td>
+          <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="35"><td title="{{ c.tip }}" style="height:36px;padding:0;text-align:center;border-bottom:1px solid #EBEDF0;border-left:{{ c.bl }};background:{{ c.bg }};color:{{ c.fg }};font-weight:600;font-size:15px;cursor:pointer;position:relative;opacity:{{ c.op }};outline:{{ c.outline }};outline-offset:-2px">{{ c.code }}<sc-if value="{{ c.lock }}" hint-placeholder-val="{{ false }}"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="position:absolute;top:2px;right:2px"><path d="M5 11h14v10H5z M7 11V7a5 5 0 0 1 10 0v4"></path></svg></sc-if><sc-if value="{{ c.memo }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:3px;bottom:3px;width:6px;height:6px;border-radius:50%;background:#0F1115"></span></sc-if></td></sc-for>
+          <td style="height:36px;text-align:center;font-size:15px;font-weight:500;color:#4A5160;border-bottom:1px solid #EBEDF0;border-left:2px solid #B8BFC9">{{ r.count }}</td>
+          <td style="height:36px;text-align:center;font-size:15px;font-weight:600;color:#5B3FB0;border-bottom:1px solid #EBEDF0">{{ r.nights }}</td>
+        </tr></sc-for>
+      </tbody>
+      <tfoot>
+        <sc-for list="{{ reqRows }}" as="q" hint-placeholder-count="3"><tr>
+          <td style="position:sticky;left:0;z-index:10;height:36px;padding:0 12px;font-size:15px;font-weight:600;border-top:1px solid #DCE0E6;border-right:1px solid #DCE0E6;background:{{ q.bg }};color:{{ q.fg }}">{{ q.label }}</td>
+          <sc-for list="{{ q.vals }}" as="v" hint-placeholder-count="35"><td style="height:36px;text-align:center;font-size:15px;font-weight:600;border-top:1px solid #DCE0E6;background:{{ q.bg }};color:{{ q.fg }}">{{ v }}</td></sc-for>
+          <td colspan="2" style="border-top:1px solid #DCE0E6;border-left:2px solid #B8BFC9;background:{{ q.bg }}"></td>
+        </tr></sc-for>
+      </tfoot>
+    </table>
+
+    <!-- 셀 팝업 (state=popup) -->
+    <sc-if value="{{ showPopup }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;left:470px;top:150px;z-index:50;width:372px;background:#fff;border-radius:14px;box-shadow:0 14px 40px rgba(15,17,21,0.18),0 0 0 1px rgba(15,17,21,0.06);padding:16px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px">
+          <div><span style="font-size:19px;font-weight:700">김지현</span><span style="font-size:16px;font-weight:500;color:#4A5160;margin-left:8px">10월 7일 (수)</span></div>
+          <button title="닫기 (Esc)" style="width:32px;height:32px;border:0;background:transparent;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#4A5160" style-hover="background:#F4F5F7"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18 M6 6l12 12"></path></svg></button>
+        </div>
+        <div style="font-size:15px;font-weight:500;color:#4A5160;margin-bottom:6px">근무</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">
+          <sc-for list="{{ popWork }}" as="p" hint-placeholder-count="8"><button title="{{ p.tip }}" style="height:48px;border:0;border-radius:9px;background:{{ p.bg }};color:{{ p.fg }};display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;box-shadow:{{ p.ring }}"><span style="font-size:16px;font-weight:700">{{ p.code }}</span><span style="font-size:13px;font-weight:500;opacity:0.9">{{ p.name }}</span></button></sc-for>
+        </div>
+        <div style="font-size:15px;font-weight:500;color:#4A5160;margin-bottom:6px">휴무 · 휴가</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px">
+          <sc-for list="{{ popRest }}" as="p" hint-placeholder-count="9"><button title="{{ p.tip }}" style="height:48px;border:0;border-radius:9px;background:{{ p.bg }};color:{{ p.fg }};display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;box-shadow:{{ p.ring }}"><span style="font-size:16px;font-weight:700">{{ p.code }}</span><span style="font-size:13px;font-weight:500;opacity:0.9">{{ p.name }}</span></button></sc-for>
+        </div>
+        <div style="display:flex;gap:6px;border-top:1px solid #DCE0E6;padding-top:12px">
+          <button title="이 칸을 잠급니다. 완화를 켜도 절대 바뀌지 않습니다." style="flex:1;height:44px;border:0;border-radius:9px;background:#F4F5F7;display:flex;align-items:center;justify-content:center;gap:6px;font-size:16px;font-weight:600" style-hover="background:#E4E7EC"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 11h14v10H5z M7 11V7a5 5 0 0 1 10 0v4"></path></svg>잠금</button>
+          <button title="이 칸에 사연을 적어 둡니다. 근무표에도 함께 보입니다." style="flex:1;height:44px;border:0;border-radius:9px;background:#F4F5F7;display:flex;align-items:center;justify-content:center;gap:6px;font-size:16px;font-weight:600" style-hover="background:#E4E7EC"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9Z M15 3v4a2 2 0 0 0 2 2h4"></path></svg>메모</button>
+          <button title="이 칸을 비웁니다. 빈칸은 자동 배정이 채웁니다." style="flex:1;height:44px;border:0;border-radius:9px;background:transparent;color:#C7384A;display:flex;align-items:center;justify-content:center;gap:6px;font-size:16px;font-weight:600" style-hover="background:#FEEFEF">지우기</button>
+        </div>
+        <div style="margin-top:10px;font-size:14px;color:#4A5160">키보드: <b>D E N V O</b> 로 바로 입력 · <b>Del</b> 지우기</div>
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- 붙여넣기 모달 (state=paste) -->
+  <sc-if value="{{ showPaste }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:100;background:rgba(15,17,21,0.42);display:flex;align-items:center;justify-content:center">
+      <div role="dialog" style="width:760px;max-height:700px;background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(15,17,21,0.25);padding:28px;display:flex;flex-direction:column;gap:18px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+          <div><div style="font-size:24px;font-weight:800;letter-spacing:-0.01em">엑셀 표 붙여넣기</div><div style="font-size:18px;color:#4A5160;margin-top:4px">엑셀이나 팀즈에서 표를 복사(Ctrl+C)한 뒤 아래 칸을 누르고 붙이기(Ctrl+V) 하세요. 이름과 날짜는 자동으로 알아봅니다.</div></div>
+          <button title="닫기 (Esc). 붙여 넣은 내용은 사라집니다." style="width:40px;height:44px;border:0;background:#F4F5F7;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18 M6 6l12 12"></path></svg></button>
+        </div>
+        <div style="display:flex;gap:8px;font-size:16px;font-weight:500">
+          <span style="padding:6px 12px;border-radius:999px;background:#0F1115;color:#fff">사전입력 표</span>
+          <span title="팀즈 희망 근무 시트. ‘가능하면’ 조건으로 들어갑니다." style="padding:6px 12px;border-radius:999px;background:#F4F5F7;color:#4A5160">위시 시트</span>
+          <span title="이미 완성된 근무표. 자동 배정 없이 그대로 씁니다." style="padding:6px 12px;border-radius:999px;background:#F4F5F7;color:#4A5160">완성 근무표</span>
+          <button title="컴퓨터에 저장된 엑셀 파일(xlsx·csv)에서 바로 읽습니다." style="margin-left:auto;height:40px;padding:0 12px;border:0;border-radius:9px;background:#fff;box-shadow:inset 0 0 0 1.5px #B8BFC9;font-size:16px;font-weight:600;display:flex;align-items:center;gap:6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z M14 2v4a2 2 0 0 0 2 2h4"></path></svg>파일에서 읽기</button>
+        </div>
+        <div style="border-radius:12px;background:#F8F9FB;box-shadow:inset 0 0 0 1.5px #B8BFC9;padding:14px 16px;min-height:150px;font-size:15px;font-family:ui-monospace,Menlo,monospace;color:#0F1115;line-height:1.7;overflow:hidden">이름&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1&nbsp;&nbsp;&nbsp;2&nbsp;&nbsp;&nbsp;3&nbsp;&nbsp;&nbsp;4&nbsp;&nbsp;&nbsp;5&nbsp;&nbsp;&nbsp;6&nbsp;&nbsp;&nbsp;7&nbsp;&nbsp;&nbsp;8 …<br>김지현&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;주&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;V&nbsp;&nbsp;&nbsp;V …<br>이수진&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;주&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;생 …<br>박지영&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;주 …<br><span style="color:#4A5160">… 18줄</span></div>
+        <div style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:12px;background:#FBF3E2;color:#0F1115;font-size:16px;line-height:1.5">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#B7791F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z M12 9v4 M12 17h.01"></path></svg>
+          <div><b>17명 · 31일</b>을 알아봤습니다. <b>‘박지영’</b>은 명부에 없어 건너뜁니다. 이름이 바뀌었다면 설정 → 명부에서 고친 뒤 다시 붙이세요.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end;border-top:1px solid #DCE0E6;padding-top:18px">
+          <span style="margin-right:auto;font-size:16px;color:#4A5160">넣은 뒤에도 <b>되돌리기</b>로 취소할 수 있어요.</span>
+          <button style="height:48px;padding:0 18px;border:0;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1.5px #B8BFC9;font-size:18px;font-weight:600">취소</button>
+          <button title="알아본 17명 × 31일을 표에 넣습니다. 이미 있던 칸은 덮어씁니다." style="height:48px;padding:0 20px;border:0;border-radius:10px;background:#0F1115;color:#fff;font-size:18px;font-weight:600;display:flex;align-items:center;gap:8px">표에 넣기<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14 m12 5 7 7-7 7"></path></svg></button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 되돌리기 토스트 (state=filled) -->
+  <sc-if value="{{ showToast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:90;background:#0F1115;color:#fff;border-radius:12px;padding:12px 12px 12px 18px;display:flex;align-items:center;gap:16px;box-shadow:0 10px 30px rgba(15,17,21,0.3);font-size:18px;font-weight:500">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4FD08A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+      <span>위시 시트 17명 · 42칸을 넣었습니다.</span>
+      <button style="height:40px;padding:0 14px;border:0;border-radius:8px;background:#2A2E36;color:#fff;font-size:16px;font-weight:600;display:flex;align-items:center;gap:6px" style-hover="background:#3A404A"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5 M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg>되돌리기</button>
+    </div>
+  </sc-if>
+
+  <!-- 툴팁 데모 -->
+  <sc-if value="{{ showTip }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;right:24px;top:172px;z-index:95;display:flex;flex-direction:column;align-items:flex-end;pointer-events:none">
+      <span style="width:12px;height:12px;background:#0F1115;transform:rotate(45deg);margin-right:36px;margin-bottom:-6px"></span>
+      <div style="max-width:360px;background:#0F1115;color:#fff;border-radius:10px;padding:10px 14px;font-size:16px;line-height:1.5;font-weight:500">메모 표시 · 단축키 안내 · 다른 달 정리 · 표 초기화를 엽니다. <span style="color:#B8BFC9">초기화는 한 번 더 확인합니다.</span></div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1366,&quot;height&quot;:768},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;filled&quot;,&quot;options&quot;:[&quot;empty&quot;,&quot;filled&quot;,&quot;menu&quot;,&quot;popup&quot;,&quot;paste&quot;],&quot;tsType&quot;:&quot;'empty'|'filled'|'menu'|'popup'|'paste'&quot;,&quot;section&quot;:&quot;화면 상태&quot;},&quot;showTooltip&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;화면 상태&quot;},&quot;font&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Pretendard&quot;,&quot;options&quot;:[&quot;Pretendard&quot;,&quot;Noto Sans KR&quot;,&quot;Nanum Gothic&quot;,&quot;IBM Plex Sans KR&quot;,&quot;맑은 고딕&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;글꼴&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const FONTS={"Pretendard":"'Pretendard Variable',Pretendard,system-ui,sans-serif","Noto Sans KR":"'Noto Sans KR','Pretendard Variable',sans-serif","Nanum Gothic":"'Nanum Gothic','Pretendard Variable',sans-serif","IBM Plex Sans KR":"'IBM Plex Sans KR','Pretendard Variable',sans-serif","맑은 고딕":"'Malgun Gothic','Apple SD Gothic Neo',sans-serif"};const fontFamily=FONTS[this.props.font ?? 'Pretendard']||FONTS['Pretendard'];
+    const state=this.props.state ?? 'filled';
+    const showTip=this.props.showTooltip ?? false;
+    const names=[['김지현','A'],['이수진','A'],['박민지','A'],['정수아','A'],['김준혁','A'],['이민준','A'],['최은혜','B'],['강혜진','B'],['조나연','B'],['윤예진','B'],['박정호','B'],['최현우','B'],['장소연','C'],['임유진','C'],['한지원','C'],['서민재','C'],['오하늘','C'],['신유나','C']];
+    const wd=['일','월','화','수','목','금','토'];
+    const CODES={DC:['#E2ECFD','#1B4FC3','Day Charge','06~14'],D:['#EEF3FE','#1B4FC3','Day','06~14'],D1:['#F0F6FF','#2563EB','상근·교육','08:30~17:30'],EC:['#FCE3E5','#C7384A','Evening Charge','14~22'],E:['#FEEFEF','#C7384A','Evening','14~22'],'중':['#FBF3E2','#B7791F','중간번','11~19'],NC:['#E7E0F8','#5B3FB0','Night Charge','22~06'],N:['#EFEBFB','#5B3FB0','Night','22~06'],OF:['#F2F3F5','#8A93A1','오프','주 1회'],'주':['#EDEFF3','#4A5160','주휴','사람이 정함'],P1:['#E3F4F4','#2C7A7B','임부휴무','임산부 전용'],V:['#ECF7F0','#1F8A5B','연차',''],'생':['#FCEAF1','#B83280','생리휴가','여성'],'특':['#F1ECFB','#6D4AC0','특별휴가',''],'공':['#E8F5EE','#1F8A5B','공적업무',''],'법':['#FDEEE5','#C2410C','법정공휴일','공휴일만'],'병':['#FEEAEA','#C7384A','병가','']};
+    const CY={1:['#EEF3FE','#1B4FC3'],2:['#ECF7F0','#1F8A5B'],3:['#EFEBFB','#5B3FB0'],4:['#FBF3E2','#B7791F']};
+    const days=[];
+    for(let i=0;i<35;i++){const d=new Date(2026,8,27+i),dow=d.getDay(),date=d.getDate(),ov=d.getMonth()===8;
+      const holiday=date===3||date===9;
+      days.push({date,wd:wd[dow],dow,ov,holiday,
+        fg:holiday||dow===0?'#C7384A':dow===6?'#1B4FC3':'#0F1115',
+        hbg:holiday?'#FDEEE5':dow===0?'#FEEFEF':dow===6?'#EEF3FE':'#fff',
+        bl:dow===0&&i>0?'2px solid #B8BFC9':'1px solid #EBEDF0',
+        op:ov?0.45:1});}
+    const cycles=[[3,'3주기'],[4,'4주기'],[1,'1주기'],[2,'2주기'],[3,'3주기']].map(([n,label])=>({label,count:7,bg:CY[n][0],fg:CY[n][1]}));
+    const filled=state!=='empty';
+    const pre={};
+    if(filled){
+      names.forEach((n,i)=>{pre[i]={};
+        for(let w=0;w<5;w++){const idx=w*7+((i*3)%7);if(idx<35)pre[i][idx]='주';}
+        if(i%4===1)pre[i][8+i%5]='V';
+        if(i%5===2)pre[i][16+i%4]='생';
+        if(i%6===3){pre[i][22]='N';pre[i][23]='N';}
+        if(i===0){pre[i][10]='V';pre[i][11]='V';}
+        if(i===2)pre[i][13]='특';
+        if(i===7)pre[i][19]='공';
+      });
+      days.forEach((d,k)=>{if(d.holiday)names.forEach((n,i)=>{if(!pre[i][k])pre[i][k]='법';});});
+    }
+    const locks={'0-10':1,'0-11':1,'7-19':1};const memos={'2-13':1};
+    const rows=names.map(([name,group],i)=>{
+      const cells=days.map((d,k)=>{const code=(pre[i]&&pre[i][k])||'';const c=CODES[code];
+        const focused=state==='popup'&&i===0&&k===14;
+        return{code,td:'',bl:d.bl,bg:c?c[0]:(d.dow===0?'#FFF8F8':d.dow===6?'#F7FAFF':'#fff'),fg:c?c[1]:'#0F1115',op:d.ov?0.45:1,lock:!!locks[i+'-'+k],memo:!!memos[i+'-'+k],outline:focused?'3px solid #0F1115':'none',
+          tip:code?`${name} · 10월 ${d.date}일 ${code}(${c?c[2]:''}) — 클릭해 바꾸거나 잠금·메모`:`${name} · ${d.ov?'9':'10'}월 ${d.date}일 — 클릭해 근무 선택 · 빈칸은 자동 배정`};});
+      const count=cells.filter(c=>c.code).length;const nights=cells.filter(c=>c.code==='N'||c.code==='NC').length;
+      return{name,group,cells,count:count||'',nights:nights||''};});
+    const reqDef={D:[3,4,5,5,5,5,4],E:[4,5,5,5,5,4,3],N:[3,3,3,3,3,3,2]};
+    const reqRows=['D','E','N'].map(t=>({label:t+' 필요 인원',bg:CODES[t][0],fg:CODES[t][1],vals:days.map(d=>reqDef[t][d.dow])}));
+    const total=rows.reduce((a,r)=>a+(r.count||0),0);
+    const isEmpty=!filled;
+    const signalColor=isEmpty?'#B8BFC9':'#1F8A5B';
+    const signalText=isEmpty?'아직 비어 있어요 — 먼저 주휴를 넣거나':`지금 입력으로 만들 수 있어요 · 예상 약 3분 · ${total} / 558칸 입력`;
+    const stepSub=isEmpty?'주휴·연차·희망 근무 넣기':`${total}칸 입력됨`;
+    const mk=codes=>codes.map(code=>{const c=CODES[code];return{code,name:c[2],bg:c[0],fg:c[1],ring:code==='V'?'inset 0 0 0 2.5px #0F1115':'none',tip:`${c[2]}${c[3]?' · '+c[3]:''}`};});
+    return{fontFamily,stepSub,isEmpty,signalColor,signalText,undoColor:filled?'#0F1115':'#8A93A1',showMenu:state==='menu',showPopup:state==='popup',showPaste:state==='paste',showToast:state==='filled',showTip,
+      cycles,days,rows,reqRows,popWork:mk(['D','DC','D1','E','EC','중','N','NC']),popRest:mk(['주','OF','V','생','특','공','법','병','P1'])};
+  }
+}
+</script>
+</body>
+</html>

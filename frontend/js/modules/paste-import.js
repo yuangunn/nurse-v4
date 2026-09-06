@@ -622,7 +622,7 @@ window.PasteImportModule = function() {
           updated.add(it.nid);
         }
         Promise.all([...updated].map(nid=>this.api('POST','/api/nurses',this.nurses.find(n=>n.id===nid))))
-          .then(()=>this.toast(`★ 희망근무 ${cells.length}건 등록 (소프트 — 가능하면 반영, 서버 저장됨)`,'info',4500))
+          .then(()=>{this.toast(`★ 희망근무 ${cells.length}건 등록 (소프트 — 가능하면 반영, 서버 저장됨)`,'info',4500);this.rdUndoToast&&this.rdUndoToast(`위시 시트 ${updated.size}명 · ${cells.length}칸을 넣었습니다.`,false)})
           .catch(()=>this.toast('희망은 화면에 반영됐지만 일부 서버 저장에 실패했습니다','error'));
         this.closePastePrev();return;
       }
@@ -641,6 +641,7 @@ window.PasteImportModule = function() {
         ?` (${diff.months.map(x=>`${+x.ym.slice(5,7)}월 ${x.count}`).join(' · ')})`
         :'';
       this.toast(`사전입력 ${diff.will_set.length}건 설정${diff.will_clear.length?', '+diff.will_clear.length+'건 비움':''}${monthsNote}`,'info',monthsNote?4500:3000);
+      this.rdUndoToast&&this.rdUndoToast(`사전입력 ${new Set(diff.will_set.map(x=>x.nid)).size}명 · ${diff.will_set.length}칸을 넣었습니다.${diff.will_clear.length?' '+diff.will_clear.length+'칸은 비웠어요.':''}`);
       this.closePastePrev();
     },
 

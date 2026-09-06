@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.12.1 (2026-09-03, M6 P4 — 연차(V) 자동 배정 설명 리포트 + 로드 시 콘솔 오류 정리)
+**최신**: v4.13.0 (2026-09-06, M8 — 클로드 디자인 핸드오프 적용: 시니어 친화 리디자인, 기능·핸들러 손실 0)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -65,7 +65,7 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
 | 백엔드 | Python 3.11 + FastAPI + uvicorn |
 | 스케줄링 엔진 | PuLP 2.9 + HiGHS (`highspy 1.8.1+`) · **OR-Tools CP-SAT** 듀얼 엔진 |
 | 데이터 저장 | SQLite (프로필별 분리) + Fernet 암호화 (`cryptography`) |
-| 프론트엔드 | HTML + Tailwind CSS + Alpine.js (CDN → `frontend/lib/*.js` 번들) |
+| 프론트엔드 | HTML + Tailwind CSS + Alpine.js (CDN → `frontend/lib/*.js` 번들) + 리디자인 토큰/컴포넌트 CSS (`design/handoff` 계약, v4.13) |
 | 데스크톱 래퍼 | Electron 38 |
 | 패키징 | PyInstaller (Python) + @electron/packager (Electron) + Inno Setup 6 (설치마법사) |
 
@@ -93,10 +93,10 @@ nurse-v4/
 │   └── profiles.py          # 프로필 관리 + Fernet 암호화 (PBKDF2 100k)
 ├── frontend/
 │   ├── index.html           # SPA (⚙ 설정 + 사전입력·분석·근무표 3단계, 저장은 근무표 서랍 + 모바일 '오늘' 홈)
-│   ├── css/                 # tokens·base·components·yginvest-skin (cascade 순서로 link)
+│   ├── css/                 # tokens·base·components·yginvest-skin → redesign-tokens·redesign-components(핸드오프 원본)·redesign-bridge(접착, 마지막)
 │   ├── js/
 │   │   ├── app.js           # Alpine.js 코어 (~530줄: 상태·computed·init·API·모듈 합성)
-│   │   └── modules/         # 14개 도메인 모듈 (analysis·solver·profiles·nurse-manage·
+│   │   └── modules/         # 15개 도메인 모듈 (analysis·solver·profiles·nurse-manage·redesign·
 │   │                        #   preinput-io·grid-interactions·schedule-features·misc-features·
 │   │                        #   settings-defs·view-helpers·paste-import·dev-tools·undo-redo·drag-select)
 │   │                        # + assign-core.js — standalone 배정표 전용 공유 코어 (앱은 로드 안 함)
@@ -119,6 +119,7 @@ nurse-v4/
 ├── docs/
 │   ├── decisions.md         # 아키텍처 결정 + 네거티브 지식 (세션 간 공유)
 │   └── session_notes/       # 세션별 작업 일지
+├── design/handoff/          # 클로드 디자인 핸드오프 (계약): README·copy.json(문구)·check/spec.json+check_redesign.mjs(검사기)·reference/*.png·design/*.dc.html
 ├── NurseScheduler.spec      # PyInstaller 스펙
 ├── build.bat                # Windows 원클릭 빌드 (Python → Electron → ZIP → 설치파일)
 ├── build-mac.sh             # macOS 빌드 (PyInstaller → electron-packager → ad-hoc 서명 → zip/dmg)
@@ -162,6 +163,9 @@ node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs
 # 화면(index.html)을 재배치했다면 — 핸들러 손실 0 확인 (REMOVED 는 전부 의도한 것이어야 한다)
 python3 scripts/handler_inventory.py <(git show origin/main:frontend/index.html) frontend/index.html
+# 리디자인 계약 검사 (design/handoff) — 1920×1080 으로 실제 앱을 열어 200+ 항목 getComputedStyle 검사, 불일치 0 이어야 한다
+# (서버가 떠 있어야 한다. check 디렉터리에 playwright 가 resolve 돼야 하고, PW_CHROMIUM 으로 크로미움 경로를 줄 수 있다)
+node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots out/rd
 ```
 
 > `httpx` 는 앱이 쓰지 않지만 `starlette.testclient` 가 요구한다 — 없으면
@@ -170,7 +174,7 @@ python3 scripts/handler_inventory.py <(git show origin/main:frontend/index.html)
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.12.1.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.13.0.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -417,7 +421,24 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 
 ---
 
-## 프론트엔드 화면 구성 (⚙ 설정 + 3단계) — v4.12.0 M7
+## 프론트엔드 화면 구성 (⚙ 설정 + 3단계) — v4.12.0 M7 · v4.13.0 M8 리디자인
+
+### v4.13.0 리디자인 계약 (design/handoff) — 결정 1-24
+- **계약 3종**: `design/handoff/copy.json`(모든 라벨·툴팁·용어 — 그대로 쓴다) · `check/spec.json`(화면·상태별 computed-style 단언 + 전역 규칙:
+  최소 글자 14px, 22px 미만 굵기 ≤700, 회색 글자(#8A93A1·#B8BFC9·#D4D9E0) 금지, 클릭 대상 ≥40px, 아이콘만 버튼 금지, 모든 버튼 title,
+  화면당 `.rbtn-primary` 정확히 1개, 영어 라벨 금지) · `reference/*.png`(1920×1080 원본). 검사기 `check_redesign.mjs` 실행법은 [테스트](#테스트) 참조.
+- **CSS 순서**: 기존 4장 → `redesign-tokens.css` → `redesign-components.css`(둘 다 핸드오프 원본, 손대지 않는다) → `redesign-bridge.css`(접착·재매핑·특이성 보정, 우리 것).
+  근무 코드 색은 `[data-shift="D"]` 속성으로 칠한다(인라인 getShiftStyle 대신). 셀은 `data-cell="nid|iso"` 로 점프·팝업 위치에 쓴다.
+- **JS**: `modules/redesign.js`(`RedesignModule`) 가 문구·배치·상태 문장(`rdStep`·`rdSignal`·`rdStatus`·`rdFail`·서랍 탭·요약 행)·되돌리기 토스트·
+  툴팁 엔진·2단 확인·± 버튼·셀 팝업 위치(뷰포트 좌표, `position:fixed`)·인쇄 미리보기·폰 내 근무·서체 선택·검증 훅 `window.__rdState(screen,state)` 를 맡는다.
+  기존 핸들러 표현식은 그대로 두고(핸들러 인벤토리 REMOVED 10건은 전부 의도된 이름 바꿈 — 세션노트 2026-09-06) 문구와 배치만 바꿨다.
+- **화면**: 헤더(앱 이름·병동·인원·버전 / 년월 컨트롤 / 다크·도움말·프로필) + 단계 바(설정 ✓ · ① 사전입력 · ② 분석 · ③ 근무표, 현재 단계만 검정, 부제는 상태 문장).
+  사전입력: 신호등 문장 + 툴바(가져오기 ▾ · 자동 채움 ▾ · 이대로 근무표로 · 되돌리기/다시 · 저장 · 더보기 ▾) + 표. 근무표: 만들기(검정) · 완화 · V 무제한 · 고급 ▾ /
+  인쇄 · 내보내기 ▾ · 요약·리포트 · 불러오기 ▾ · 저장 · 더보기 ▾ + 상태 줄 · 실패 배너(원인 + 고칠 수 있는 셋 + 완화 켜고 다시) + 표 + 서랍. 설정: 왼쪽 메뉴(`settingsSection`).
+  폰(≤767px): 헤더·단계 바·툴바 숨김(`rdesk-only`), 오늘(내 근무 카드 = 이름 고르기 주 버튼) · 근무표(월 이동 + 전체/내 근무만/그룹 칩) · 사전입력 · 더보기 시트, 하단 내비 78px.
+- **금지**: 검사기를 통과시키려고 화면을 속이지 않는다 — 검사기 버그는 검사기를 고치고(축약 속성 색 변환·outline 순서), 정적 HTML 가정(`nth-child`)은 같은 셀을 가리키는
+  `nth-of-type`/`first-of-type` 으로 spec 을 고치며, 자기모순(13px 라벨·어두운 바탕의 #D4D9E0)은 규칙 쪽을 따른다. 전부 `$comment`/CSS 주석으로 남긴다.
+
 
 **원칙 (결정 1-22)**: 근무표가 주인공. 매달 밟는 단계만 번호를 주고(사전입력 → 분석 → 근무표),
 첫 1회만 만지는 설정은 ⚙ 아이콘, 진단·리포트는 표 아래 서랍, 개발자 언어의 옵션은 ⚙ 고급.
@@ -444,7 +465,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
      (📌 이 표대로 인원 → ✅ 이대로 근무표로 순으로 쓰면 인원 기준까지 그 표에 맞춰진다)
    - 폰(<768px)에서는 편집 도구가 **⋯ 도구**로 접혀 있고 표가 먼저 보인다 (보기 전용 우선)
 2. **분석**: 일자별 과부족 히트맵 + 주휴 추천 배분 → "사전입력에 적용" (자동 실행)
-3. **근무표** (옛 '스케줄/생성' 탭): 기본 행은 **생성 · 사전입력 완화 · V 무제한**뿐.
+3. **근무표** (옛 '스케줄/생성' 탭): 기본 행은 **근무표 만들기 · 사전입력 완화 · 연차(V) 무제한 · 고급 ▾**뿐 (v4.13 문구).
    - **⚙ 고급**(접힘): 오차(MIP gap)·시간·솔버(HiGHS/CP-SAT/레이스 — 셋 다 완화 지원)·주휴 무시·
      주휴 이동 제한 풀기·완화 설정 슬라이더 4개·배점 조절 슬라이더 5개
    - 표가 상태 메시지 바로 아래. 표 아래 **📊 요약**(간호사별 월간 요약 — 옛 ⚖ 공정성 카드를 흡수:
@@ -583,10 +604,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.12.1.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.13.0.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.12.1.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.13.0.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -674,7 +695,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.12.1 기준)
+## 알려진 주의사항 (v4.13.0 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)
@@ -691,6 +712,12 @@ self.cbLogging.subscribe(_on_log)
   설날·삼일절을 못 봐서 그 날에 OF/V/생이 배정되고 오프특근 판정도 어긋난다.
   프론트 `autoFillHolidays`도 주기 범위를 채운다 — 한쪽만 고치면 다시 어긋난다
 - 간호사 삭제는 API 경유 — 저장본 캐스케이드 정리 자동 실행
+- **모듈 합성은 디스크립터** — `app()` 끝의 `Object.defineProperties(_app, getOwnPropertyDescriptors(mod()))`. `...spread` 로 되돌리면
+  getter(`rd*` 계산 속성, `ruleScoreSummary`)가 값으로 굳어 화면이 안 바뀐다 (결정 2-20)
+- **`data-rd` 표식은 검사기 전용** — 사전입력·근무표에 같은 이름(table·table-wrap·toolbar·btn-more)이 있어 보이는 탭에서만 붙인다
+  (`:data-rd="activeTab==='schedule'?'table':null"`). 새 표식을 둘 화면에 넣을 때도 같은 방식
+- **`x-for` 키는 문자열** — `:key="day"`(Date 객체)는 Alpine 경고가 행마다 찍힌다 → `:key="dayKey(day)"`
+- **문구는 `design/handoff/copy.json` 그대로** — 라벨·툴팁을 의역하지 말 것. 새 버튼에도 `title` 한 문장(끝 문장은 툴팁에서 옅게 표시)
 
 ---
 

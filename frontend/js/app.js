@@ -1,5 +1,5 @@
 function app() {
-  return {
+  const _app = {
     // ── 상태 ──────────────────────────────────────────────────
     tabs: [
       {id:'settings', label:'설정'},
@@ -426,7 +426,7 @@ function app() {
       window.addEventListener('beforeunload',()=>{this._saveFullState();this._closeCurrentProfile()});
       document.addEventListener('mouseup',()=>{if(this._isDragging)this.onCellMouseUp()});
       this._setupHeaderCondense();
-      this.$nextTick(()=>{if(window.lucide)lucide.createIcons()});
+      window.__rdState=(screen,state)=>this.rdApplyState(screen,state);   // design/handoff/check 검증용 상태 진입
     },
 
     // ── 적응형 헤더 축소 (활성 탭 스크롤 시 앱바 압축) ──────────
@@ -473,7 +473,7 @@ function app() {
       this._checkPrevMonthCarryover();
       this.checkFirstRun();
       this.loadFairnessLedger();
-      this.$nextTick(()=>{if(window.lucide)lucide.createIcons()});
+      this.rdInit();
     },
 
     setFontSize(size){this.fontSize=size;localStorage.setItem('fontSize',size);document.documentElement.style.fontSize=size+'px'},
@@ -533,6 +533,7 @@ function app() {
         // 수동 저장(saveSchedule)과 동일한 스키마 — 이전 payload는 ScheduleSave
         // 필수 필드가 없어 항상 422로 무음 실패했다.
         await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights,relaxed_cells:this.relaxedCells});
+        this.rdSaved=true;
         this.toast('근무표 자동 저장됨','info');
         this.loadSavedList();
       }catch(e){console.warn('자동저장 실패:',e)}
@@ -578,7 +579,7 @@ function app() {
           this._recoverPoll=setInterval(async()=>{
             const pollRef=this._recoverPoll;
             try{const r=await this.api('GET','/api/generate/result');
-              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];this.vReport=result.v_report||null;this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.vReport&&this.vReport.total));this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
+              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];this.vReport=result.v_report||null;this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':(this.vReport&&this.vReport.total?'v':'summary');this.rdDoneAt=new Date();this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
             }catch(e){}
           },2000);
         }else if(res.status==='done'&&res.result){
@@ -587,7 +588,7 @@ function app() {
           this.wishReport=result.wish_report||null;
           this.offTeukgeun=result.off_teukgeun||[];this.vReport=result.v_report||null;
           this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;
-          if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.vReport&&this.vReport.total));this.trackEdits();this.activeTab='schedule'}
+          if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':(this.vReport&&this.vReport.total?'v':'summary');this.rdDoneAt=new Date();this.rdSaved=true;this.trackEdits();this.activeTab='schedule'}
         }
       }catch(e){}
     },
@@ -602,22 +603,32 @@ function app() {
     // ── Undo/Redo ────────────────────────────────────────────
     // _pushUndo / undo / redo 는 modules/undo-redo.js 로 이동.
 
-    // ── 외부 모듈 합성 (modules/*.js — index.html에서 app.js 앞에 로드) ──
-    ...(window.MiscFeaturesModule ? window.MiscFeaturesModule() : {}),
-    ...(window.ScheduleFeaturesModule ? window.ScheduleFeaturesModule() : {}),
-    ...(window.GridInteractionsModule ? window.GridInteractionsModule() : {}),
-    ...(window.PreinputIoModule ? window.PreinputIoModule() : {}),
-    ...(window.ViewHelpersModule ? window.ViewHelpersModule() : {}),
-    ...(window.SolverModule ? window.SolverModule() : {}),
-    ...(window.SettingsDefsModule ? window.SettingsDefsModule() : {}),
-    ...(window.NurseManageModule ? window.NurseManageModule() : {}),
-    ...(window.DevToolsModule ? window.DevToolsModule() : {}),
-    ...(window.ProfilesModule ? window.ProfilesModule() : {}),
-    ...(window.PasteImportModule ? window.PasteImportModule() : {}),
-    // 동일 키가 위에 있으면 이쪽으로 덮어쓰여지므로, 모듈로 옮긴 메서드는
-    // 반드시 위쪽 정의에서 제거되어야 함 (drag-select, undo-redo 모듈 참고).
-    ...(window.UndoRedoModule ? window.UndoRedoModule() : {}),
-    ...(window.DragSelectModule ? window.DragSelectModule() : {}),
-    ...(window.AnalysisModule ? window.AnalysisModule() : {}),
   };
+  // ── 외부 모듈 합성 (modules/*.js — index.html에서 app.js 앞에 로드) ──
+  // 스프레드(`...mod()`)는 getter 를 그 자리에서 값으로 굳혀 버려 계산 속성이 죽는다
+  // (view-helpers 의 ruleScoreSummary 가 늘 빈 배열이던 원인). 디스크립터로 붙여 getter 를 살린다.
+  // 순서 = 우선순위: 동일 키는 뒤쪽 모듈이 덮어쓴다 — 모듈로 옮긴 메서드는 반드시 위쪽
+  // 정의에서 제거되어야 함 (drag-select, undo-redo 모듈 참고).
+  for (const name of [
+    'MiscFeaturesModule',
+    'RedesignModule',   // design/handoff 접착 — 문구·배치·툴팁·토스트·검증 상태
+    'ScheduleFeaturesModule',
+    'GridInteractionsModule',
+    'PreinputIoModule',
+    'ViewHelpersModule',
+    'SolverModule',
+    'SettingsDefsModule',
+    'NurseManageModule',
+    'DevToolsModule',
+    'ProfilesModule',
+    'PasteImportModule',
+    'UndoRedoModule',
+    'DragSelectModule',
+    'AnalysisModule',
+  ]) {
+    const mod = window[name];
+    if (typeof mod !== 'function') continue;
+    Object.defineProperties(_app, Object.getOwnPropertyDescriptors(mod()));
+  }
+  return _app;
 }

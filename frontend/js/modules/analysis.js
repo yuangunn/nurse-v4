@@ -376,6 +376,7 @@ window.AnalysisModule = function() {
       // 적용 후 자동 재분석 + 사전입력 탭으로 이동
       this.runAnalysis();
       this.toast(`${count}건의 주휴가 사전입력에 적용되었습니다. 분석이 자동으로 갱신됩니다.`,'info',5000);
+      this.rdUndoToast&&this.rdUndoToast(`주휴 ${count}칸을 넣었습니다.`);
     },
 
     getSlackClass(slack){
