@@ -1,0 +1,686 @@
+{
+  "$comment": "check_redesign.mjs 가 실제 앱(http://localhost:5757)을 1920×1080 으로 열고 이 값들을 getComputedStyle 로 검사한다. 값은 design/*.dc.html 인라인 스타일에서 그대로 뽑았다. 셀렉터는 구현 시 data-rd 속성으로 맞춘다.",
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "global": {
+    "minFontSizePx": 14,
+    "maxFontWeightBelow22px": 700,
+    "forbiddenTextColors": [
+      "#8A93A1",
+      "#B8BFC9",
+      "#D4D9E0"
+    ],
+    "forbiddenTextColorsNote": "ink-3/4/5 는 글자에 쓰지 않는다 (disabled 버튼 제외). 검사: 모든 텍스트 노드의 color.",
+    "minClickTargetPx": 40,
+    "minClickTargetNote": "button, [role=button], label>input 의 getBoundingClientRect 높이. 표 셀(td)은 36.",
+    "iconOnlyButtonsForbidden": true,
+    "iconOnlyButtonsNote": "innerText.trim()==='' 인 button 은 실패. 예외: [data-rd=ym-prev], [data-rd=ym-next], [data-rd=modal-close], [data-rd=popup-close], [data-rd=drawer-close], .rnum button",
+    "everyButtonHasTitle": true,
+    "everyButtonHasTitleNote": "button:not([title]) 개수 0. 현재 204개 중 63개만 title 있음.",
+    "primaryPerScreen": 1,
+    "primaryPerScreenNote": ".rbtn-primary 가 화면(탭)당 정확히 1개 (모달 열린 상태에서는 모달 내부 1개만 셈).",
+    "englishLabelsForbidden": [
+      "Ward",
+      "Nurses",
+      "Year/Mo",
+      "OCT",
+      "WARD",
+      "NURSES",
+      "Charge 숨기기",
+      "V 무제한",
+      "솔버",
+      "MIP",
+      "HiGHS",
+      "CP-SAT",
+      "infeasible",
+      "slack",
+      "penalty"
+    ]
+  },
+  "screens": {
+    "preinput": {
+      "route": "activeTab='preinput'",
+      "reference": "reference/preinput-2-filled-toast.png",
+      "asserts": [
+        {
+          "sel": "[data-rd=header]",
+          "height": 64,
+          "background": "#FFFFFF",
+          "borderBottom": "1px solid #DCE0E6"
+        },
+        {
+          "sel": "[data-rd=brand-name]",
+          "fontSize": 20,
+          "fontWeight": 700,
+          "color": "#0F1115"
+        },
+        {
+          "sel": "[data-rd=ym-label]",
+          "fontSize": 20,
+          "fontWeight": 700,
+          "text": "2026년 10월"
+        },
+        {
+          "sel": "[data-rd=ym-prev]",
+          "width": 44,
+          "height": 40
+        },
+        {
+          "sel": "[data-rd=stepbar]",
+          "height": 68
+        },
+        {
+          "sel": "[data-rd=step-1]",
+          "height": 48,
+          "background": "#0F1115",
+          "color": "#FFFFFF",
+          "borderRadius": 10
+        },
+        {
+          "sel": "[data-rd=step-1] .rstep-name",
+          "fontSize": 18,
+          "fontWeight": 700
+        },
+        {
+          "sel": "[data-rd=step-2] .rstep-sub",
+          "fontSize": 16,
+          "color": "#4A5160",
+          "text": "부족한 날 확인"
+        },
+        {
+          "sel": "[data-rd=step-3] .rstep-sub",
+          "text": "만들고 인쇄"
+        },
+        {
+          "sel": "[data-rd=toolbar]",
+          "height": 64
+        },
+        {
+          "sel": "[data-rd=btn-import]",
+          "height": 48,
+          "background": "#0F1115",
+          "color": "#FFFFFF",
+          "fontSize": 18,
+          "fontWeight": 700,
+          "textIncludes": "가져오기",
+          "hasTitle": true
+        },
+        {
+          "sel": "[data-rd=btn-autofill]",
+          "height": 48,
+          "background": "#FFFFFF",
+          "boxShadowIncludes": "1.5px",
+          "textIncludes": "자동 채움"
+        },
+        {
+          "sel": "[data-rd=btn-as-schedule]",
+          "textIncludes": "이대로 근무표로"
+        },
+        {
+          "sel": "[data-rd=btn-undo]",
+          "height": 48,
+          "textIncludes": "되돌리기"
+        },
+        {
+          "sel": "[data-rd=btn-more]",
+          "textIncludes": "더보기"
+        },
+        {
+          "sel": "[data-rd=signal-text]",
+          "fontSize": 16,
+          "color": "#0F1115"
+        },
+        {
+          "sel": "[data-rd=table-wrap]",
+          "borderRadius": "12px 12px 0px 0px",
+          "marginLeft": 24,
+          "marginRight": 24
+        },
+        {
+          "sel": "[data-rd=table] thead tr:nth-child(1) th:nth-of-type(2)",
+          "height": 26,
+          "fontSize": 14,
+          "fontWeight": 700,
+          "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
+        },
+        {
+          "sel": "[data-rd=table] thead tr:nth-child(2) th:nth-of-type(2)",
+          "height": 46,
+          "width": 44,
+          "borderBottom": "2px solid #B8BFC9",
+          "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
+        },
+        {
+          "sel": "[data-rd=table] tbody tr:first-of-type td:first-of-type",
+          "height": 36,
+          "positionSticky": true,
+          "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
+        },
+        {
+          "sel": "[data-rd=table] tbody tr:first-of-type td:first-of-type b",
+          "fontSize": 16,
+          "fontWeight": 600,
+          "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
+        },
+        {
+          "sel": "[data-rd=table] tbody td[data-shift=주]",
+          "background": "#EDEFF3",
+          "color": "#4A5160",
+          "fontSize": 15,
+          "fontWeight": 600
+        },
+        {
+          "sel": "[data-rd=table] tbody td[data-shift=V]",
+          "background": "#ECF7F0",
+          "color": "#1F8A5B"
+        },
+        {
+          "sel": "[data-rd=table] tbody td[data-shift=법]",
+          "background": "#FDEEE5",
+          "color": "#C2410C"
+        },
+        {
+          "sel": "[data-rd=table] tfoot tr:first-of-type td:first-of-type",
+          "textIncludes": "D 필요 인원",
+          "background": "#EEF3FE",
+          "color": "#1B4FC3",
+          "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
+        },
+        {
+          "$comment": "표 위에 카드 없음: header, stepbar, toolbar 다음 형제가 곧 table-wrap",
+          "sel": "[data-rd=toolbar] + [data-rd=table-wrap]",
+          "exists": true
+        },
+        {
+          "$comment": "18행 중 최소 17행이 첫 화면에 보임",
+          "sel": "[data-rd=table] tbody tr",
+          "visibleRowsAtLeast": 17
+        }
+      ],
+      "states": {
+        "empty": {
+          "reference": "reference/preinput-1-empty.png",
+          "asserts": [
+            {
+              "sel": "[data-rd=signal-text]",
+              "textIncludes": "아직 비어 있어요"
+            },
+            {
+              "sel": "[data-rd=signal-link]",
+              "text": "분석에서 주휴 추천 받기",
+              "color": "#1B4FC3"
+            }
+          ]
+        },
+        "menu": {
+          "reference": "reference/preinput-3-import-menu.png",
+          "asserts": [
+            {
+              "sel": "[data-rd=menu-import]",
+              "minWidth": 300,
+              "borderRadius": 12
+            },
+            {
+              "sel": "[data-rd=menu-import] .rmenu-item",
+              "count": 3
+            },
+            {
+              "sel": "[data-rd=menu-import] .rmenu-item:nth-child(1) b",
+              "text": "엑셀 표 붙여넣기"
+            }
+          ]
+        },
+        "popup": {
+          "reference": "reference/preinput-4-cell-popup.png",
+          "asserts": [
+            {
+              "sel": "[data-rd=cell-popup]",
+              "width": 372,
+              "borderRadius": 14
+            },
+            {
+              "sel": "[data-rd=cell-popup] .rpop-code",
+              "count": 17,
+              "height": 44
+            },
+            {
+              "sel": "[data-rd=cell-popup] [data-rd=pop-lock]",
+              "textIncludes": "잠금"
+            },
+            {
+              "sel": "[data-rd=cell-popup] [data-rd=pop-memo]",
+              "textIncludes": "메모"
+            },
+            {
+              "sel": "[data-rd=cell-popup] [data-rd=pop-clear]",
+              "textIncludes": "지우기",
+              "color": "#C7384A"
+            }
+          ]
+        },
+        "paste": {
+          "reference": "reference/preinput-5-paste-modal.png",
+          "asserts": [
+            {
+              "sel": "[data-rd=paste-modal]",
+              "width": 760,
+              "borderRadius": 18
+            },
+            {
+              "sel": "[data-rd=paste-modal] .rmodal-title",
+              "text": "엑셀 표 붙여넣기",
+              "fontSize": 24
+            },
+            {
+              "sel": "[data-rd=paste-modal] .rbtn-primary",
+              "text": "표에 넣기",
+              "count": 1
+            }
+          ]
+        },
+        "toast": {
+          "reference": "reference/preinput-2-filled-toast.png",
+          "asserts": [
+            {
+              "sel": "[data-rd=toast]",
+              "background": "#0F1115",
+              "borderRadius": 12
+            },
+            {
+              "sel": "[data-rd=toast] .rbtn",
+              "textIncludes": "되돌리기"
+            }
+          ]
+        }
+      }
+    },
+    "schedule": {
+      "route": "activeTab='schedule'",
+      "reference": "reference/schedule-3-success.png",
+      "asserts": [
+        {
+          "sel": "[data-rd=btn-make]",
+          "height": 48,
+          "textIncludes": "만들기"
+        },
+        {
+          "sel": "[data-rd=chk-relax]",
+          "height": 48,
+          "textIncludes": "사전입력 완화"
+        },
+        {
+          "sel": "[data-rd=chk-relax] .box",
+          "width": 24,
+          "height": 24
+        },
+        {
+          "sel": "[data-rd=chk-vfree]",
+          "textIncludes": "연차(V) 무제한"
+        },
+        {
+          "sel": "[data-rd=btn-advanced]",
+          "textIncludes": "고급"
+        },
+        {
+          "sel": "[data-rd=btn-print]",
+          "textIncludes": "인쇄"
+        },
+        {
+          "sel": "[data-rd=btn-export]",
+          "textIncludes": "내보내기"
+        },
+        {
+          "sel": "[data-rd=btn-drawer]",
+          "textIncludes": "요약·리포트"
+        },
+        {
+          "sel": "[data-rd=btn-load]",
+          "textIncludes": "불러오기"
+        },
+        {
+          "sel": "[data-rd=btn-save]",
+          "textIncludes": "저장"
+        },
+        {
+          "sel": "[data-rd=btn-more]",
+          "textIncludes": "더보기"
+        },
+        {
+          "sel": "[data-rd=status]",
+          "minHeight": 48,
+          "borderRadius": 12,
+          "fontSize": 18
+        },
+        {
+          "sel": "[data-rd=table] tbody td[data-shift=N]",
+          "background": "#EFEBFB",
+          "color": "#5B3FB0"
+        },
+        {
+          "sel": "[data-rd=table] tbody td.is-edited",
+          "outline": "2px solid #C7384A"
+        },
+        {
+          "sel": "[data-rd=table] tfoot tr:first-of-type td:first-of-type",
+          "textIncludes": "D 배정 / 필요",
+          "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
+        }
+      ],
+      "states": {
+        "before": {
+          "reference": "reference/schedule-1-before.png",
+          "asserts": [
+            {
+              "sel": "[data-rd=btn-make]",
+              "background": "#0F1115",
+              "color": "#FFFFFF",
+              "text": "근무표 만들기"
+            },
+            {
+              "sel": "[data-rd=btn-print]",
+              "background": "#FFFFFF"
+            },
+            {
+              "sel": "[data-rd=empty] .rempty-title",
+              "text": "10월 근무표가 아직 없어요",
+              "fontSize": 24
+            }
+          ]
+        },
+        "running": {
+          "reference": "reference/schedule-2-running.png",
+          "asserts": [
+            {
+              "sel": "[data-rd=status]",
+              "background": "#FBF3E2",
+              "textIncludes": "만드는 중"
+            },
+            {
+              "sel": "[data-rd=status] .rprogress",
+              "height": 10
+            },
+            {
+              "sel": "[data-rd=btn-stop]",
+              "textIncludes": "멈추기"
+            }
+          ]
+        },
+        "success": {
+          "reference": "reference/schedule-3-success.png",
+          "asserts": [
+            {
+              "sel": "[data-rd=status]",
+              "background": "#ECF7F0",
+              "textIncludes": "만들어졌고 저장됐습니다"
+            },
+            {
+              "sel": "[data-rd=btn-print]",
+              "background": "#0F1115",
+              "color": "#FFFFFF"
+            },
+            {
+              "sel": "[data-rd=btn-make]",
+              "background": "#FFFFFF",
+              "text": "다시 만들기"
+            },
+            {
+              "sel": "[data-rd=btn-save]",
+              "text": "저장됨"
+            }
+          ]
+        },
+        "failed": {
+          "reference": "reference/schedule-4-failed.png",
+          "asserts": [
+            {
+              "sel": "[data-rd=fail]",
+              "background": "#FEEFEF",
+              "borderRadius": 14
+            },
+            {
+              "sel": "[data-rd=fail] .rfail-title",
+              "fontSize": 22,
+              "fontWeight": 700,
+              "textIncludes": "만들 수 없어요"
+            },
+            {
+              "sel": "[data-rd=fail] .rfail-fix",
+              "count": 3,
+              "height": 40
+            },
+            {
+              "sel": "[data-rd=fail] .rbtn-primary",
+              "text": "사전입력 완화 켜고 다시 만들기",
+              "height": 52
+            },
+            {
+              "sel": "[data-rd=status]",
+              "exists": false
+            }
+          ]
+        },
+        "relaxed": {
+          "reference": "reference/schedule-5-relaxed-drawer.png",
+          "asserts": [
+            {
+              "sel": "[data-rd=table] tbody td.is-relaxed",
+              "outline": "2px dashed #0F1115",
+              "countAtLeast": 1
+            },
+            {
+              "sel": "[data-rd=drawer]",
+              "height": 236,
+              "borderTop": "2px solid #0F1115"
+            },
+            {
+              "sel": "[data-rd=drawer] .rtab",
+              "count": 7,
+              "height": 44
+            },
+            {
+              "sel": "[data-rd=drawer] .rtab.is-active",
+              "textIncludes": "원티드 미반영"
+            },
+            {
+              "sel": "[data-rd=drawer] .rbadge.err",
+              "text": "3"
+            },
+            {
+              "sel": "[data-rd=drawer] [data-rd=relock]",
+              "textIncludes": "되돌려서 잠금",
+              "count": 3
+            }
+          ]
+        },
+        "print": {
+          "reference": "reference/schedule-6-print-preview.png",
+          "asserts": [
+            {
+              "sel": "[data-rd=print-preview] h1",
+              "textIncludes": "2026년 10월"
+            },
+            {
+              "sel": "[data-rd=print-preview] table",
+              "fontSize": 16
+            }
+          ]
+        },
+        "dark": {
+          "reference": "reference/schedule-7-dark.png",
+          "asserts": [
+            {
+              "sel": "html.dark [data-rd=header]",
+              "background": "#14181F"
+            },
+            {
+              "sel": "html.dark [data-rd=table] tbody td[data-shift=N]",
+              "background": "#1E1838",
+              "color": "#B79CFF"
+            }
+          ]
+        }
+      }
+    },
+    "settings": {
+      "route": "activeTab='settings'",
+      "reference": "reference/settings-1-roster.png",
+      "asserts": [
+        {
+          "sel": "[data-rd=side]",
+          "width": 240
+        },
+        {
+          "sel": "[data-rd=side] .rside-item",
+          "count": 6
+        },
+        {
+          "sel": "[data-rd=side] .rside-item.is-active",
+          "text": "간호사 명부",
+          "boxShadowIncludes": "1.5px"
+        },
+        {
+          "sel": "[data-rd=side] .rside-h:nth-of-type(1)",
+          "text": "처음 한 번 · 인원이 바뀔 때"
+        },
+        {
+          "sel": "[data-rd=roster-title]",
+          "fontSize": 24,
+          "fontWeight": 800,
+          "textIncludes": "간호사 명부"
+        },
+        {
+          "sel": "[data-rd=btn-add-nurse]",
+          "background": "#0F1115",
+          "text": "간호사 추가"
+        },
+        {
+          "sel": "[data-rd=btn-roster-excel]",
+          "textIncludes": "엑셀로 명부 관리"
+        },
+        {
+          "sel": "[data-rd=roster] thead th",
+          "height": 48,
+          "fontSize": 14,
+          "color": "#4A5160"
+        },
+        {
+          "sel": "[data-rd=roster] tbody tr:first-of-type td",
+          "height": 50,
+          "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
+        },
+        {
+          "sel": "[data-rd=roster] tbody tr:first-of-type td:nth-of-type(3)",
+          "fontSize": 18,
+          "fontWeight": 600,
+          "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
+        },
+        {
+          "sel": "[data-rd=roster] tbody tr:first-of-type .shift-chip",
+          "height": 32,
+          "fontSize": 15,
+          "fontWeight": 700,
+          "count": 7,
+          "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
+        },
+        {
+          "sel": "[data-rd=roster] tbody tr:first-of-type [data-rd=btn-edit]",
+          "text": "편집",
+          "height": 36,
+          "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
+        },
+        {
+          "$comment": "줄마다 ⋯ / × 아이콘 버튼 없음",
+          "sel": "[data-rd=roster] tbody button",
+          "iconOnlyCount": 0
+        }
+      ],
+      "states": {
+        "modal": {
+          "reference": "reference/settings-2-nurse-modal.png",
+          "asserts": [
+            {
+              "sel": "[data-rd=nurse-modal]",
+              "width": 720,
+              "borderRadius": 18
+            },
+            {
+              "sel": "[data-rd=nurse-modal] .rmodal-title",
+              "textIncludes": "간호사 편집"
+            },
+            {
+              "sel": "[data-rd=nurse-modal] .rinput",
+              "height": 48,
+              "fontSize": 19
+            },
+            {
+              "sel": "[data-rd=nurse-modal] [data-rd=months] button",
+              "count": 12,
+              "height": 44
+            },
+            {
+              "sel": "[data-rd=nurse-modal] [data-rd=wdays] button",
+              "count": 7,
+              "height": 44
+            },
+            {
+              "sel": "[data-rd=nurse-modal] [data-rd=special]",
+              "textIncludes": "특수 사항"
+            },
+            {
+              "sel": "[data-rd=nurse-modal] .rbtn-primary",
+              "text": "저장",
+              "count": 1
+            },
+            {
+              "sel": "[data-rd=nurse-modal] .rbtn-danger",
+              "text": "명부에서 삭제"
+            }
+          ]
+        }
+      }
+    },
+    "phone": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "reference": "reference/phone-today-schedule-more.png",
+      "asserts": [
+        {
+          "sel": "[data-rd=today-date]",
+          "fontSize": 44,
+          "fontWeight": 700
+        },
+        {
+          "sel": "[data-rd=my-shift]",
+          "background": "#0F1115",
+          "borderRadius": 16
+        },
+        {
+          "sel": "[data-rd=my-shift] .code",
+          "fontSize": 40
+        },
+        {
+          "sel": "[data-rd=bottom-nav]",
+          "height": 78
+        },
+        {
+          "sel": "[data-rd=bottom-nav] button",
+          "count": 4
+        },
+        {
+          "sel": "[data-rd=bottom-nav] button span",
+          "fontSize": 14,
+          "$comment": "핸드오프 13px → 전역 최소 글자 14px 규칙과 충돌해 14 로 통일"
+        },
+        {
+          "$comment": "폰은 보기 전용",
+          "sel": "[data-rd=phone-edit-tools]",
+          "exists": false
+        }
+      ]
+    }
+  }
+}

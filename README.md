@@ -30,6 +30,7 @@
 ## 주요 기능
 
 ### 🎨 화면 · 사용 편의
+- **시니어 친화 화면 (v4.13)** — 글자 최소 14px·본문 18px, 버튼 40px 이상, 화면당 검정 주 버튼 하나, 모든 버튼에 마우스를 올리면 설명 한 문장. 상태 줄과 실패 안내가 "왜·무엇을 하면 되는지" 문장으로 나오고, 셀 팝업·인쇄 미리보기·되돌리기 토스트를 갖췄습니다. 글꼴 5종(Pretendard·Noto Sans KR·나눔고딕·IBM Plex Sans KR·맑은 고딕) 오프라인 선택.
 - **정돈된 라이트 테마 + 단일 서체** — 흰 카드·부드러운 그림자·둥근 모서리에 Pretendard 단일 서체. 표를 오래 봐도 눈이 편하고 정보 위계가 분명합니다.
 - **스크롤 적응형 헤더** — 표를 아래로 내리면 상단 바가 자동으로 축소돼 근무표를 더 넓게 볼 수 있습니다.
 - **표 전체화면 보기** — ⛶ 버튼 하나로 헤더·툴바·옵션 패널을 모두 숨기고 표만 화면 가득. `Esc`로 복귀합니다.
@@ -65,19 +66,19 @@
 
 ## 다운로드
 
-> **최신 버전: v4.12.1** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
+> **최신 버전: v4.13.0** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
 
 #### 🪟 Windows
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_Setup_v4.12.1.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.12.1/NurseScheduler_Setup_v4.12.1.exe) | 설치 마법사 (권장) | ~166 MB |
-| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.12.1/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~244 MB |
+| [**NurseScheduler_Setup_v4.13.0.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.13.0/NurseScheduler_Setup_v4.13.0.exe) | 설치 마법사 (권장) | ~166 MB |
+| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.13.0/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~244 MB |
 
 #### 🍎 macOS (Apple Silicon)
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_v4_mac_arm64.dmg**](https://github.com/yuangunn/nurse-v4/releases/download/v4.12.1/NurseScheduler_v4_mac_arm64.dmg) | 디스크 이미지 (권장) | ~226 MB |
-| [**NurseScheduler_v4_mac_arm64.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.12.1/NurseScheduler_v4_mac_arm64.zip) | 포터블 (.app) | ~200 MB |
+| [**NurseScheduler_v4_mac_arm64.dmg**](https://github.com/yuangunn/nurse-v4/releases/download/v4.13.0/NurseScheduler_v4_mac_arm64.dmg) | 디스크 이미지 (권장) | ~226 MB |
+| [**NurseScheduler_v4_mac_arm64.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.13.0/NurseScheduler_v4_mac_arm64.zip) | 포터블 (.app) | ~200 MB |
 
 > 🍎 macOS 빌드는 미서명(ad-hoc)이라 첫 실행 시 **우클릭 → 열기**로 한 번 허용해야 합니다 (또는 터미널에서 `xattr -dr com.apple.quarantine /Applications/NurseScheduler.app`). 현재 **Apple Silicon(arm64) 전용**입니다.
 
@@ -125,7 +126,7 @@
 ```cmd
 build.bat
 ```
-결과물: `dist/installer/NurseScheduler_Setup_v4.12.1.exe`, `dist/NurseScheduler_v4_portable.zip`
+결과물: `dist/installer/NurseScheduler_Setup_v4.13.0.exe`, `dist/NurseScheduler_v4_portable.zip`
 
 **macOS** (사전: Python 3.11, Node.js 20 — Node 24는 패키징 단계 크래시)
 ```bash

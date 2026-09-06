@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&family=Nanum+Gothic:wght@400;700;800&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+  <meta name="design_doc_mode" content="canvas">
+  <style>
+    @font-face{font-family:'Pretendard Variable';font-weight:45 920;font-style:normal;font-display:swap;src:url('frontend/fonts/PretendardVariable.woff2') format('woff2-variations')}
+    body{margin:0;background:#E4E7EC;font-family:'Pretendard Variable',Pretendard,system-ui,sans-serif;color:#0F1115;line-height:1.5;-webkit-font-smoothing:antialiased}
+    a{color:#1B4FC3}a:hover{color:#0F1115}
+    button,input{font:inherit;color:inherit}button{cursor:pointer}
+    *{box-sizing:border-box}
+  </style>
+</helmet>
+<section data-screen-label="컴포넌트 시트" style="font-family:{{ fontFamily }};width:1920px;padding:40px;display:flex;flex-direction:column;gap:36px;font-size:18px">
+  <div><div style="font-size:28px;font-weight:800;letter-spacing:-0.02em">컴포넌트 시트</div><div style="font-size:18px;color:#4A5160">NurseScheduler v4 리디자인 · 본문 16px · 표 14px · 클릭 타겟 44px · 대비 AA</div></div>
+
+  <!-- 버튼 -->
+  <div style="background:#fff;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:18px">
+    <div style="font-size:20px;font-weight:700">버튼 3등급 <span style="font-size:16px;font-weight:500;color:#4A5160;margin-left:8px">한 화면에 주 버튼은 하나 · 라벨은 항상 아이콘+글자 · 동사로 끝나는 2~5자</span></div>
+    <div style="display:grid;grid-template-columns:160px repeat(4,1fr);gap:14px;align-items:center;font-size:16px;color:#4A5160;font-weight:500">
+      <span></span><span>기본</span><span>호버</span><span>포커스(키보드)</span><span>비활성</span>
+      <span><b style="color:#0F1115">주 (Primary)</b><br>지금 할 일 하나</span>
+      <button style="height:48px;padding:0 18px;border:0;border-radius:10px;background:#0F1115;color:#fff;display:inline-flex;align-items:center;gap:8px;font-size:18px;font-weight:600;justify-self:start"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"></path></svg>근무표 만들기</button>
+      <button style="height:48px;padding:0 18px;border:0;border-radius:10px;background:#2A2E36;color:#fff;display:inline-flex;align-items:center;gap:8px;font-size:18px;font-weight:600;justify-self:start"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"></path></svg>근무표 만들기</button>
+      <button style="height:48px;padding:0 18px;border:0;border-radius:10px;background:#0F1115;color:#fff;display:inline-flex;align-items:center;gap:8px;font-size:18px;font-weight:600;justify-self:start;outline:3px solid #2563EB;outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"></path></svg>근무표 만들기</button>
+      <button style="height:48px;padding:0 18px;border:0;border-radius:10px;background:#D4D9E0;color:#4A5160;display:inline-flex;align-items:center;gap:8px;font-size:18px;font-weight:600;justify-self:start;cursor:default"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"></path></svg>만드는 중…</button>
+      <span><b style="color:#0F1115">보조 (Secondary)</b><br>그다음 할 일들</span>
+      <button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1.5px #B8BFC9;display:inline-flex;align-items:center;gap:8px;font-size:18px;font-weight:600;justify-self:start"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-8H7v8 M7 3v5h8"></path></svg>저장</button>
+      <button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:#F4F5F7;box-shadow:inset 0 0 0 1.5px #8A93A1;display:inline-flex;align-items:center;gap:8px;font-size:18px;font-weight:600;justify-self:start"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-8H7v8 M7 3v5h8"></path></svg>저장</button>
+      <button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1.5px #B8BFC9;display:inline-flex;align-items:center;gap:8px;font-size:18px;font-weight:600;justify-self:start;outline:3px solid #2563EB;outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-8H7v8 M7 3v5h8"></path></svg>저장</button>
+      <button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1.5px #DCE0E6;color:#8A93A1;display:inline-flex;align-items:center;gap:8px;font-size:18px;font-weight:600;justify-self:start;cursor:default"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-8H7v8 M7 3v5h8"></path></svg>저장됨</button>
+      <span><b style="color:#0F1115">조용 (Quiet)</b><br>가끔 · 되돌리기 · 링크</span>
+      <button style="height:48px;padding:0 12px;border:0;border-radius:10px;background:transparent;color:#0F1115;display:inline-flex;align-items:center;gap:6px;font-size:16px;font-weight:600;justify-self:start"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5 M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg>되돌리기</button>
+      <button style="height:48px;padding:0 12px;border:0;border-radius:10px;background:#E4E7EC;color:#0F1115;display:inline-flex;align-items:center;gap:6px;font-size:16px;font-weight:600;justify-self:start"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5 M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg>되돌리기</button>
+      <button style="height:48px;padding:0 12px;border:0;border-radius:10px;background:transparent;color:#0F1115;display:inline-flex;align-items:center;gap:6px;font-size:16px;font-weight:600;justify-self:start;outline:3px solid #2563EB;outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5 M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg>되돌리기</button>
+      <button style="height:48px;padding:0 12px;border:0;border-radius:10px;background:transparent;color:#8A93A1;display:inline-flex;align-items:center;gap:6px;font-size:16px;font-weight:600;justify-self:start;cursor:default"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5 M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg>되돌리기</button>
+    </div>
+    <div style="display:flex;gap:24px;align-items:flex-start;padding-top:8px;border-top:1px solid #DCE0E6">
+      <div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:16px;font-weight:600;color:#4A5160">파괴적 동작 (확인 2단계)</span><div style="display:flex;gap:8px"><button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:transparent;color:#C7384A;font-size:18px;font-weight:600">표 초기화</button><button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:#C7384A;color:#fff;font-size:18px;font-weight:600">한 번 더 누르면 지웁니다 · 되돌릴 수 없어요</button></div></div>
+      <div style="display:flex;flex-direction:column;gap:8px"><span style="font-size:16px;font-weight:600;color:#4A5160">메뉴 버튼 (▾ 표시 = 눌러도 바로 실행되지 않음)</span><button style="height:48px;padding:0 14px;border:0;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1.5px #B8BFC9;display:inline-flex;align-items:center;gap:8px;font-size:18px;font-weight:600;align-self:flex-start"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12"></path></svg>내보내기<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button></div>
+    </div>
+  </div>
+
+  <!-- 툴팁 + 단계 바 -->
+  <div style="display:grid;grid-template-columns:1fr;gap:24px">
+    <div style="background:#fff;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:20px;font-weight:700">툴팁 <span style="font-size:16px;font-weight:500;color:#4A5160;margin-left:8px">0.3초 지연 · 포커스에도 표시 · 최대 2줄</span></div>
+      <div style="font-size:16px;color:#4A5160">형식: <b style="color:#0F1115">[무엇을] [어떻게 됩니다]. [주의 한 마디]</b></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:0;padding-top:8px">
+        <div style="max-width:380px;background:#0F1115;color:#fff;border-radius:10px;padding:10px 14px;font-size:16px;line-height:1.5;font-weight:500">엑셀에서 복사한 표를 붙여 넣습니다. <span style="color:#B8BFC9">두 달치 표도 그대로 들어갑니다.</span></div>
+        <span style="width:12px;height:12px;background:#0F1115;transform:rotate(45deg);margin-left:40px;margin-top:-6px"></span>
+        <button style="margin-top:6px;height:48px;padding:0 16px;border:0;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1.5px #8A93A1;display:inline-flex;align-items:center;gap:8px;font-size:18px;font-weight:600;outline:3px solid #2563EB;outline-offset:2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"></path></svg>엑셀 표 붙여넣기</button>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:20px;font-weight:700">단계 바 <span style="font-size:16px;font-weight:500;color:#4A5160;margin-left:8px">부제 = 다음에 할 일 · 완료는 초록 체크</span></div>
+      <div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:8px">
+        <button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:#F4F5F7;display:flex;align-items:center;gap:10px;font-size:18px;font-weight:600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4h-7 M10 4H3 M21 12h-9 M8 12H3 M21 20h-5 M12 20H3 M14 2v4 M8 10v4 M16 18v4"></path></svg>설정<span style="display:inline-flex;align-items:center;gap:4px;font-size:15px;font-weight:500;color:#1F8A5B"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>완료</span></button>
+        <button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:#F4F5F7;display:flex;align-items:center;gap:12px;text-align:left"><span style="width:26px;height:26px;border-radius:50%;background:#ECF7F0;color:#1F8A5B;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span><span style="font-size:18px;font-weight:600">사전입력</span><span style="font-size:16px;color:#4A5160">134칸 입력됨</span></button>
+        <button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:#0F1115;color:#fff;display:flex;align-items:center;gap:12px;text-align:left"><span style="width:26px;height:26px;border-radius:50%;background:#fff;color:#0F1115;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center">2</span><span style="font-size:18px;font-weight:700">분석</span><span style="font-size:16px;color:#D4D9E0">부족한 날 확인</span></button>
+        <button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:#F4F5F7;display:flex;align-items:center;gap:12px;text-align:left"><span style="width:26px;height:26px;border-radius:50%;border:2px solid #0F1115;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center">3</span><span style="font-size:18px;font-weight:600">근무표</span><span style="font-size:16px;color:#4A5160">만들고 인쇄</span></button>
+      </div>
+      <div style="display:flex;gap:24px;font-size:16px;color:#4A5160;font-weight:500"><span>완료 = 초록 체크 원</span><span>현재 = 잉크 채움 + 흰 숫자</span><span>예정 = 테두리 숫자</span></div>
+    </div>
+  </div>
+
+  <!-- 근무 셀 17 + 장식 -->
+  <div style="background:#fff;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:18px">
+    <div style="font-size:20px;font-weight:700">근무 셀 17코드 <span style="font-size:16px;font-weight:500;color:#4A5160;margin-left:8px">글자는 항상 표시 · 14px 굵게 · 가족색 D=파랑 E=빨강 N=보라 휴가=초록 휴무=회색 중간번=노랑 법=주황 생=분홍</span></div>
+    <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:10px">
+      <sc-for list="{{ codes }}" as="c" hint-placeholder-count="17"><div style="display:flex;flex-direction:column;gap:6px;align-items:center"><span style="width:100%;height:48px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;background:{{ c.bg }};color:{{ c.fg }}">{{ c.code }}</span><span style="font-size:15px;font-weight:500;color:#0F1115;text-align:center;line-height:1.3">{{ c.name }}<br><span style="color:#4A5160;font-weight:500">{{ c.hours }}</span></span></div></sc-for>
+    </div>
+    <div style="display:flex;gap:28px;padding-top:12px;border-top:1px solid #DCE0E6;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><span style="width:60px;height:40px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;background:#ECF7F0;color:#1F8A5B;position:relative">V<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="position:absolute;top:3px;right:3px"><path d="M5 11h14v10H5z M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span><span style="font-size:15px;font-weight:500">잠금<br><span style="color:#4A5160;font-weight:500">완화해도 안 바뀜</span></span></div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><span style="width:60px;height:40px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;background:#EDEFF3;color:#4A5160;position:relative">주<span style="position:absolute;left:4px;bottom:4px;width:7px;height:7px;border-radius:50%;background:#0F1115"></span></span><span style="font-size:15px;font-weight:500">메모 있음<br><span style="color:#4A5160;font-weight:500">호버로 내용</span></span></div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><span style="width:60px;height:40px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;background:#EEF3FE;color:#1B4FC3;outline:2px dashed #0F1115;outline-offset:-2px">D</span><span style="font-size:15px;font-weight:500">완화로 뒤집힘<br><span style="color:#4A5160;font-weight:500">점선 = 원티드와 다름</span></span></div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><span style="width:60px;height:40px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;background:#FEEFEF;color:#C7384A;outline:2px solid #C7384A;outline-offset:-2px">E</span><span style="font-size:15px;font-weight:500">손으로 고침<br><span style="color:#4A5160;font-weight:500">빨간 실선</span></span></div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><span style="width:60px;height:40px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;background:#EEF3FE;color:#1B4FC3;font-style:italic;opacity:0.7">/D</span><span style="font-size:15px;font-weight:500">트레이니<br><span style="color:#4A5160;font-weight:500">/ 접두어 · 흐리게</span></span></div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><span style="width:60px;height:40px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;background:repeating-linear-gradient(45deg,#fff 0 3px,#E4E7EC 3px 6px);color:#8A93A1">—</span><span style="font-size:15px;font-weight:500">전입 전 · 전출 후<br><span style="color:#4A5160;font-weight:500">빗금 · 배정 안 함</span></span></div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><span style="width:60px;height:40px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;background:#fff;color:#0F1115;outline:3px solid #0F1115;outline-offset:-3px">D</span><span style="font-size:15px;font-weight:500">선택된 칸<br><span style="color:#4A5160;font-weight:500">굵은 잉크 테두리</span></span></div>
+    </div>
+  </div>
+
+  <!-- 표 헤더 -->
+  <div style="background:#fff;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:20px;font-weight:700">표 헤더 <span style="font-size:16px;font-weight:500;color:#4A5160;margin-left:8px">주기 색 4종 · 오늘 · 공휴일 · 토/일 · 익월은 45% 흐림</span></div>
+    <table style="border-collapse:separate;border-spacing:0;font-size:15px">
+      <thead>
+        <tr><th style="min-width:140px;height:26px;text-align:left;padding:0 12px;font-weight:500;color:#4A5160;border-bottom:1px solid #DCE0E6;border-right:1px solid #DCE0E6">주기</th>
+          <th colspan="4" style="height:26px;font-weight:700;background:#EEF3FE;color:#1B4FC3;border-bottom:1px solid #DCE0E6;border-left:2px solid #B8BFC9">1주기</th><th colspan="4" style="height:26px;font-weight:700;background:#ECF7F0;color:#1F8A5B;border-bottom:1px solid #DCE0E6;border-left:2px solid #B8BFC9">2주기</th><th colspan="3" style="height:26px;font-weight:700;background:#EFEBFB;color:#5B3FB0;border-bottom:1px solid #DCE0E6;border-left:2px solid #B8BFC9">3주기</th><th colspan="3" style="height:26px;font-weight:700;background:#FBF3E2;color:#B7791F;border-bottom:1px solid #DCE0E6;border-left:2px solid #B8BFC9">4주기</th></tr>
+        <tr><th style="height:46px;text-align:left;padding:0 12px;font-size:16px;font-weight:600;border-bottom:2px solid #B8BFC9;border-right:1px solid #DCE0E6">이름</th>
+          <sc-for list="{{ hdr }}" as="d" hint-placeholder-count="14"><th style="min-width:44px;height:46px;text-align:center;border-bottom:2px solid #B8BFC9;border-left:{{ d.bl }};background:{{ d.bg }};color:{{ d.fg }};opacity:{{ d.op }};box-shadow:{{ d.today }}"><div style="font-size:16px;font-weight:700;line-height:1.2">{{ d.date }}</div><div style="font-size:14px;font-weight:500;line-height:1.2">{{ d.wd }}</div></th></sc-for>
+        </tr>
+      </thead>
+    </table>
+    <div style="display:flex;gap:24px;font-size:16px;color:#4A5160;font-weight:500;flex-wrap:wrap"><span><b style="color:#C7384A">빨강</b> 일요일·공휴일(주황 바탕)</span><span><b style="color:#1B4FC3">파랑</b> 토요일</span><span><b style="color:#0F1115">위 굵은 선</b> 오늘</span><span>주기 시작 = 2px 세로선</span></div>
+  </div>
+
+  <!-- 메뉴·서랍·모달 + 토스트/배너/빈상태 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+    <div style="background:#fff;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:16px">
+      <div style="font-size:20px;font-weight:700">메뉴 · 서랍 · 모달 <span style="font-size:16px;font-weight:500;color:#4A5160;margin-left:8px">깊이 1단 · 모달 위 모달 없음</span></div>
+      <div style="display:flex;gap:16px;align-items:flex-start">
+        <div style="min-width:300px;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(15,17,21,0.14),0 0 0 1px rgba(15,17,21,0.06);padding:6px">
+          <button style="width:100%;text-align:left;border:0;background:transparent;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:2px"><span style="font-size:18px;font-weight:600">엑셀(CSV) 파일로 저장</span><span style="font-size:15px;color:#4A5160">다른 프로그램에서 열 수 있어요</span></button>
+          <button style="width:100%;text-align:left;border:0;background:#F4F5F7;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:2px"><span style="font-size:18px;font-weight:600">어싸인용으로 복사</span><span style="font-size:15px;color:#4A5160">배정표 프로그램에 붙일 표</span></button>
+          <div style="height:1px;background:#DCE0E6;margin:4px 8px"></div>
+          <button style="width:100%;text-align:left;border:0;background:transparent;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:2px"><span style="font-size:18px;font-weight:600;color:#C7384A">표 초기화</span><span style="font-size:15px;color:#4A5160">한 번 더 확인합니다</span></button>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:12px">
+          <div style="border-top:2px solid #0F1115;background:#fff;box-shadow:0 -8px 24px rgba(15,17,21,0.08);padding:8px 12px 12px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;gap:4px;border-bottom:1px solid #DCE0E6"><span style="height:44px;padding:0 14px;display:flex;align-items:center;font-size:16px;font-weight:600;box-shadow:inset 0 -3px 0 #0F1115">요약</span><span style="height:44px;padding:0 14px;display:flex;align-items:center;gap:8px;font-size:16px;font-weight:600;color:#4A5160">원티드 미반영<span style="min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#C7384A;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center">3</span></span><span style="height:44px;padding:0 14px;display:flex;align-items:center;font-size:16px;font-weight:600;color:#4A5160">주의</span></div><span style="font-size:15px;color:#4A5160">서랍: 표 아래에서 올라옴 · 탭으로 리포트 7종 · 사연 있으면 자동 열림</span></div>
+          <div style="background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(15,17,21,0.2);padding:18px;display:flex;flex-direction:column;gap:12px"><div style="font-size:20px;font-weight:700">모달 제목</div><div style="font-size:16px;color:#4A5160">한 문장 설명. 닫기는 오른쪽 위 ✕ 또는 Esc.</div><div style="display:flex;justify-content:flex-end;gap:8px"><button style="height:44px;padding:0 16px;border:0;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1.5px #B8BFC9;font-size:16px;font-weight:600">취소</button><button style="height:44px;padding:0 18px;border:0;border-radius:10px;background:#0F1115;color:#fff;font-size:16px;font-weight:600">저장</button></div></div>
+        </div>
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:20px;font-weight:700">토스트 · 배너 · 빈 상태</div>
+      <div style="align-self:flex-start;background:#0F1115;color:#fff;border-radius:12px;padding:12px 12px 12px 18px;display:flex;align-items:center;gap:16px;font-size:18px;font-weight:500"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4FD08A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>공휴일 2일을 채웠습니다.<button style="height:40px;padding:0 14px;border:0;border-radius:8px;background:#2A2E36;color:#fff;font-size:16px;font-weight:600">되돌리기</button></div>
+      <div style="border-radius:12px;background:#FEEFEF;padding:12px 16px;display:flex;align-items:center;gap:12px;font-size:18px;font-weight:500"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C7384A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z M12 9v4 M12 17h.01"></path></svg><span style="flex:1">10월 3일(토) 낮 인원이 1명 모자라 만들 수 없어요.</span><button style="height:38px;padding:0 14px;border:0;border-radius:9px;background:#0F1115;color:#fff;font-size:16px;font-weight:600">완화 켜고 다시 만들기</button></div>
+      <div style="border-radius:12px;background:#FBF3E2;padding:12px 16px;display:flex;align-items:center;gap:12px;font-size:18px;font-weight:500"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#B7791F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20z M12 16v-4 M12 8h.01"></path></svg><span style="flex:1">10월 17일(토)은 여유가 0명이에요. 휴가를 더 넣으면 부족해집니다.</span></div>
+      <div style="border-radius:12px;background:#ECF7F0;padding:12px 16px;display:flex;align-items:center;gap:12px;font-size:18px;font-weight:500"><span style="width:12px;height:12px;border-radius:50%;background:#1F8A5B"></span><span style="flex:1">근무표가 만들어졌고 저장됐습니다.</span></div>
+      <div style="border-radius:12px;box-shadow:0 0 0 1px #DCE0E6;padding:22px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center"><div style="font-size:20px;font-weight:700">10월 근무표가 아직 없어요</div><div style="font-size:16px;color:#4A5160">빈 상태마다 다음 행동 하나만 말합니다. 버튼은 화면의 주 버튼을 가리킵니다.</div></div>
+    </div>
+  </div>
+
+  <!-- 입력 컨트롤 -->
+  <div style="background:#fff;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:16px">
+    <div style="font-size:20px;font-weight:700">체크박스 · 토글 · 숫자 입력 <span style="font-size:16px;font-weight:500;color:#4A5160;margin-left:8px">클릭 타겟 44px · 라벨 전체가 클릭 영역 · 값 변경은 ± 버튼</span></div>
+    <div style="display:flex;gap:32px;align-items:center;flex-wrap:wrap">
+      <label style="height:48px;padding:0 12px;border-radius:10px;display:flex;align-items:center;gap:10px;font-size:18px;font-weight:500;cursor:pointer;background:#F4F5F7"><span style="width:24px;height:24px;border-radius:6px;background:#0F1115;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span>주 2회 휴무</label>
+      <label style="height:48px;padding:0 12px;border-radius:10px;display:flex;align-items:center;gap:10px;font-size:18px;font-weight:500;cursor:pointer"><span style="width:24px;height:24px;border-radius:6px;background:#fff;box-shadow:inset 0 0 0 2px #8A93A1"></span>연차(V) 무제한</label>
+      <div style="display:flex;align-items:center;gap:12px;font-size:18px;font-weight:500"><span style="width:56px;height:32px;border-radius:999px;background:#0F1115;position:relative;display:inline-block"><span style="position:absolute;top:3px;right:3px;width:26px;height:26px;border-radius:50%;background:#fff"></span></span>여성 생휴 자동 <span style="color:#1F8A5B;font-weight:600">켜짐</span></div>
+      <div style="display:flex;align-items:center;gap:12px;font-size:18px;font-weight:500"><span style="width:56px;height:32px;border-radius:999px;background:#B8BFC9;position:relative;display:inline-block"><span style="position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff"></span></span>주휴 이동 허용 <span style="color:#4A5160;font-weight:600">꺼짐</span></div>
+      <div style="display:flex;align-items:center;gap:10px;font-size:18px;font-weight:500">최대 연속 근무<div style="display:flex;align-items:center;background:#F8F9FB;border-radius:10px;box-shadow:inset 0 0 0 1.5px #B8BFC9"><button style="width:44px;height:48px;border:0;background:transparent;font-size:24px;font-weight:600;border-radius:10px 0 0 10px">−</button><span style="min-width:44px;text-align:center;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums">5</span><button style="width:44px;height:48px;border:0;background:transparent;font-size:24px;font-weight:600;border-radius:0 10px 10px 0">+</button></div>일</div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;font&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Pretendard&quot;,&quot;options&quot;:[&quot;Pretendard&quot;,&quot;Noto Sans KR&quot;,&quot;Nanum Gothic&quot;,&quot;IBM Plex Sans KR&quot;,&quot;맑은 고딕&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;글꼴&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const FONTS={"Pretendard":"'Pretendard Variable',Pretendard,system-ui,sans-serif","Noto Sans KR":"'Noto Sans KR','Pretendard Variable',sans-serif","Nanum Gothic":"'Nanum Gothic','Pretendard Variable',sans-serif","IBM Plex Sans KR":"'IBM Plex Sans KR','Pretendard Variable',sans-serif","맑은 고딕":"'Malgun Gothic','Apple SD Gothic Neo',sans-serif"};const fontFamily=FONTS[this.props.font ?? 'Pretendard']||FONTS['Pretendard'];
+    const codes=[['DC','Day Charge','06~14','#E2ECFD','#1B4FC3'],['D','Day','06~14','#EEF3FE','#1B4FC3'],['D1','상근·교육','08:30~17:30','#F0F6FF','#2563EB'],['EC','Evening Charge','14~22','#FCE3E5','#C7384A'],['E','Evening','14~22','#FEEFEF','#C7384A'],['중','중간번','11~19','#FBF3E2','#B7791F'],['NC','Night Charge','22~06','#E7E0F8','#5B3FB0'],['N','Night','22~06','#EFEBFB','#5B3FB0'],['OF','오프','주 1회','#F2F3F5','#6B7280'],['주','주휴','사람이 정함','#EDEFF3','#4A5160'],['P1','임부휴무','임산부 전용','#E3F4F4','#2C7A7B'],['V','연차','—','#ECF7F0','#1F8A5B'],['생','생리휴가','여성','#FCEAF1','#B83280'],['특','특별휴가','—','#F1ECFB','#6D4AC0'],['공','공적업무','—','#E8F5EE','#1F8A5B'],['법','법정공휴일','공휴일만','#FDEEE5','#C2410C'],['병','병가','—','#FEEAEA','#C7384A']].map(([code,name,hours,bg,fg])=>({code,name,hours,bg,fg}));
+    const wd=['일','월','화','수','목','금','토'];
+    const hdr=[];for(let k=0;k<14;k++){const d=new Date(2026,8,29+k),dow=d.getDay(),ov=d.getMonth()===8,date=d.getDate();const hol=date===3&&!ov;const today=date===7&&!ov;
+      hdr.push({date,wd:wd[dow],bl:dow===0?'2px solid #B8BFC9':'1px solid #EBEDF0',bg:hol?'#FDEEE5':dow===0?'#FEEFEF':dow===6?'#EEF3FE':'#fff',fg:hol||dow===0?'#C7384A':dow===6?'#1B4FC3':'#0F1115',op:ov?0.45:1,today:today?'inset 0 3px 0 #0F1115':'none'});}
+    return{fontFamily,codes,hdr};
+  }
+}
+</script>
+</body>
+</html>

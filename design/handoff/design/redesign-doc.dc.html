@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <script src="./doc-page.js"></script>
+  <style>
+    @font-face{font-family:'Pretendard Variable';font-weight:45 920;font-style:normal;font-display:swap;src:url('frontend/fonts/PretendardVariable.woff2') format('woff2-variations')}
+    doc-page:not(:defined){visibility:hidden}
+    body{margin:0;font-family:'Pretendard Variable',Pretendard,system-ui,sans-serif;color:#0F1115;line-height:1.55;-webkit-font-smoothing:antialiased}
+    a{color:#1B4FC3}a:hover{color:#0F1115}
+    h1,h2,h3,p,ul,ol{margin:0}
+    table{border-collapse:collapse;width:100%}
+    th,td{text-align:left;vertical-align:top;padding:7px 10px;border-bottom:1px solid #DCE0E6;font-size:12pt}
+    th{font-weight:700;background:#F4F5F7;border-bottom:2px solid #B8BFC9}
+    tr{break-inside:avoid}
+    li{margin:0 0 4px 0}
+    .kt{break-inside:avoid}
+  </style>
+</helmet>
+<doc-page margin="0.7in">
+  <div slot="header" style="display:flex;justify-content:space-between;font-size:10pt;color:#4A5160;padding-bottom:6px;border-bottom:1px solid #DCE0E6">
+    <span>NurseScheduler v4 리디자인 — 문서 산출물</span><span>2026-09-05 · 초안 1</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:32px;font-size:12pt">
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <h1 style="font-size:26pt;font-weight:800;letter-spacing:-0.02em;line-height:1.2">NurseScheduler v4 리디자인<br><span style="color:#4A5160;font-weight:700">디자인 토큰 · 문구 · 변경 근거 · 제거 제안 · 구현 우선순위</span></h1>
+      <p style="font-size:12pt;color:#4A5160">대상: 1920×1080 Electron 창 · 서체 선택형(Pretendard 기본 · Noto Sans KR · 나눔고딕 · IBM Plex Sans KR · 맑은 고딕) · lucide 아이콘 · 기능 삭제 없음(재배치·표현·문구만). 화면 파일: redesign-preinput / redesign-schedule / redesign-settings / redesign-phone / redesign-components.</p>
+    </div>
+
+    <section style="display:flex;flex-direction:column;gap:12px">
+      <h2 style="font-size:18pt;font-weight:800">1. 디자인 토큰 → 기존 CSS 변수 매핑</h2>
+      <p>값은 tokens.css의 변수 이름을 그대로 쓰되 <b>연한 회색 글자를 없애고, 글자·타겟·선을 굵게</b> 조정합니다. 다크 값은 기존 html.dark 블록을 유지합니다.</p>
+      <table>
+        <thead><tr><th style="width:26%">변수</th><th style="width:18%">현재</th><th style="width:18%">리디자인</th><th>용도 · 근거</th></tr></thead>
+        <tbody>
+          <tr><td>--paper</td><td>#F4F5F7</td><td>#F4F5F7 (유지)</td><td>앱 바탕. 표 카드와 구분되는 최소 대비</td></tr>
+          <tr><td>--card</td><td>#FFFFFF</td><td>#FFFFFF (유지)</td><td>표·카드·헤더</td></tr>
+          <tr><td>--ink</td><td>#0F1115</td><td>#0F1115 (유지)</td><td>본문·주 버튼. 흰 배경 대비 18:1</td></tr>
+          <tr><td>--ink-2</td><td>#4A5160</td><td>#4A5160 → <b>보조 글자의 최소값</b></td><td>안내문·부제는 이 색보다 연해질 수 없음 (7.4:1)</td></tr>
+          <tr><td>--ink-3</td><td>#8A93A1 (안내문에 사용)</td><td>#8A93A1 → <b>비활성 전용</b></td><td>3.2:1로 AA 미달. 글자엔 쓰지 않고 disabled 버튼 글자·OF 코드에만</td></tr>
+          <tr><td>--ink-4 / --ink-5</td><td>#B8BFC9 / #D4D9E0</td><td>테두리·트랙 전용</td><td>보조 버튼 ring 1.5px, 체크박스 2px, 표 굵은 선</td></tr>
+          <tr><td>--rule</td><td>#EBEDF0</td><td><b>#DCE0E6</b> (기존 --rule-2)</td><td>노안에 보이는 선. 표 옅은 선은 --rule-soft(#EBEDF0)로 내림</td></tr>
+          <tr><td>--accent</td><td>#0F1115</td><td>유지</td><td>주 버튼 · 현재 단계 · 포커스 아님</td></tr>
+          <tr><td>--focus (신설)</td><td>—</td><td>#2563EB 3px, offset 2px</td><td>키보드 포커스 링. 잉크와 구분되는 유일한 파랑</td></tr>
+          <tr><td>--ok / --ok-bg</td><td>#1F8A5B / #ECF7F0</td><td>유지</td><td>완료 체크·성공 상태 줄·연차 가족색</td></tr>
+          <tr><td>--warn / --warn-bg</td><td>#B7791F / #FBF3E2</td><td>유지</td><td>빡빡·진행 중·중간번</td></tr>
+          <tr><td>--err / --err-bg</td><td>#C7384A / #FEEFEF</td><td>유지</td><td>실패 배너·손으로 고친 칸 테두리·E 가족색</td></tr>
+          <tr><td>--d-bg/--d-ink … --off-bg/--off-ink</td><td>근무 코드표</td><td>유지 (17종 그대로)</td><td>OF 글자만 #6B7280로 진하게 (4.6:1)</td></tr>
+          <tr><td>--font (신설)</td><td>Pretendard 고정</td><td>선택형 5종</td><td>설정 → 그 외에서 글꼴 선택. 오프라인 번들 가능한 서체만(Pretendard·Noto Sans KR·나눔고딕·IBM Plex Sans KR·시스템 맑은 고딕)</td></tr>
+          <tr><td>--fs-body (신설)</td><td>16px(1rem) · 실사용 12~13px</td><td><b>18px</b> (1920×1080 기준)</td><td>본문·버튼 라벨</td></tr>
+          <tr><td>--fs-sub (신설)</td><td>0.62~0.72rem</td><td><b>16px</b></td><td>부제·안내·툴팁·조용 버튼</td></tr>
+          <tr><td>--fs-cell (신설)</td><td>0.72rem(11.5px)</td><td><b>15px 700</b></td><td>표 셀·집계·표 헤더 보조(요일 14px은 예외 최소)</td></tr>
+          <tr><td>--fs-title (신설)</td><td>0.92rem</td><td>22px / 18px</td><td>화면 제목 / 카드 제목</td></tr>
+          <tr><td>--lh</td><td>1.2~1.5 혼용</td><td>1.5</td><td>본문 줄 간격. 표 헤더만 1.2</td></tr>
+          <tr><td>--target (신설)</td><td>btn-xs 26px</td><td><b>48px</b> (표 안 36px)</td><td>버튼·체크·토글·숫자 ±. 간격 8px</td></tr>
+          <tr><td>--sp-1…4</td><td>Tailwind 임의</td><td>4 · 8 · 12 · 16 · 24</td><td>간격 5단계만</td></tr>
+          <tr><td>--r-btn</td><td>12px</td><td>10px</td><td>버튼·입력. --r-card 16px, --r-chip 999px, 셀 0</td></tr>
+          <tr><td>--shadow-card</td><td>매우 옅음</td><td>ring 1px #DCE0E6</td><td>그림자 대신 보이는 선</td></tr>
+          <tr><td>--shadow-pop</td><td>0 10px 30px 10%</td><td>0 10px 30px 14% + ring</td><td>메뉴·팝업·모달</td></tr>
+          <tr><td>--motion</td><td>0.12~0.3s</td><td>≤150ms, 진행바만 1s 반복</td><td>장식 애니메이션 없음</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section style="display:flex;flex-direction:column;gap:12px;break-before:page">
+      <h2 style="font-size:18pt;font-weight:800">2. 문구 표 — 버튼 라벨 · 툴팁</h2>
+      <p>규칙: 라벨은 동사로 끝나는 한국어 2~5자, 아이콘+글자. 툴팁은 <b>[무엇을] [어떻게 됩니다]. [주의 한 마디]</b>, 0.3초 지연, 포커스에도 표시, 2줄 이내.</p>
+      <table>
+        <thead><tr><th style="width:11%">화면</th><th style="width:17%">현재 라벨</th><th style="width:17%">새 라벨</th><th>툴팁</th></tr></thead>
+        <tbody>
+          <tr><td>헤더</td><td>☾ / ? / 전환 (아이콘만)</td><td>다크 · 도움말 · 프로필 전환</td><td>화면을 어둡게 바꿉니다. 인쇄에는 영향이 없습니다. / 사용법과 자주 묻는 질문을 엽니다. / 다른 병동 프로필로 바꿉니다. 지금 작업은 자동 저장됩니다.</td></tr>
+          <tr><td>단계 바</td><td>0 / 558 셀 · 인원 과부족 · 생성 전</td><td>주휴·연차·희망 근무 넣기 · 부족한 날 확인 · 만들고 인쇄</td><td>(각 단계) 지금 단계입니다. 주휴·연차·희망 근무를 표에 넣습니다.</td></tr>
+          <tr><td>사전입력</td><td>📥 가져오기 ▾</td><td>가져오기 ▾ (주 버튼)</td><td>엑셀·팀즈 위시 시트에서 복사한 표를 붙여 넣거나, 지난달 표를 이어옵니다.</td></tr>
+          <tr><td>사전입력</td><td>⚡ 자동 채움 ▾</td><td>자동 채움 ▾</td><td>공휴일 채우기 · 전월 야간 수 계산 · 이 표대로 인원 고정. 채운 뒤 되돌릴 수 있습니다.</td></tr>
+          <tr><td>사전입력</td><td>✅ 이대로 근무표로</td><td>이대로 근무표로 (유지)</td><td>손으로 다 짠 표를 넣었을 때: 자동 배정 없이 이 표를 그대로 근무표로 확정합니다.</td></tr>
+          <tr><td>사전입력</td><td>↩ 되돌리기 / ↪ 다시</td><td>되돌리기 / 다시</td><td>마지막 입력을 취소합니다 (Ctrl+Z). 40번까지 되돌릴 수 있습니다.</td></tr>
+          <tr><td>사전입력</td><td>메모 · 저장/불러오기 · ⋯</td><td>저장 ▾ · 더보기 (메모 표시는 더보기로)</td><td>이 표를 이름 붙여 저장하거나 저장해 둔 표를 불러옵니다. / 메모 표시 · 단축키 안내 · 다른 달 정리 · 표 초기화를 엽니다. 초기화는 한 번 더 확인합니다.</td></tr>
+          <tr><td>셀 팝업</td><td>🔒 잠금 · 메모</td><td>잠금 · 메모 · 지우기</td><td>이 칸을 잠급니다. 완화를 켜도 절대 바뀌지 않습니다. / 이 칸에 사연을 적어 둡니다. 근무표에도 함께 보입니다. / 이 칸을 비웁니다. 빈칸은 자동 배정이 채웁니다.</td></tr>
+          <tr><td>붙여넣기</td><td>적용</td><td>표에 넣기</td><td>알아본 17명 × 31일을 표에 넣습니다. 이미 있던 칸은 덮어씁니다.</td></tr>
+          <tr><td>근무표</td><td>생성</td><td>근무표 만들기 / (결과 후) 다시 만들기</td><td>사전입력을 지키면서 자동으로 채웁니다. 약 3분 걸리고 중간에 멈출 수 있어요.</td></tr>
+          <tr><td>근무표</td><td>☐ 사전입력 완화</td><td>☐ 사전입력 완화 (유지)</td><td>만들기가 안 될 때만 켜세요. 사전입력을 꼭 필요한 만큼만 바꿔서 만듭니다. 잠근 칸은 절대 바뀌지 않습니다.</td></tr>
+          <tr><td>근무표</td><td>☐ V 무제한</td><td>☐ 연차(V) 무제한</td><td>연차(V)를 더 써도 되게 허용합니다. 꼭 필요한 만큼만 쓰도록 큰 감점이 붙습니다.</td></tr>
+          <tr><td>근무표</td><td>⚙ 고급 ▸</td><td>고급 ▾</td><td>정확도 · 시간 제한 · 계산 방식 · 주휴 이동 · 우선순위. 기본값이면 열 일이 없습니다.</td></tr>
+          <tr><td>근무표</td><td>📤 내보내기 ▾ (CSV·인쇄·복사)</td><td>인쇄 (주 버튼, 결과 후) · 내보내기 ▾ (CSV·어싸인용 복사)</td><td>A4 가로 · 흑백에서도 읽히는 표로 인쇄합니다. 먼저 미리보기가 열립니다.</td></tr>
+          <tr><td>근무표</td><td>📊 요약 + 📋 리포트 (두 패널)</td><td>요약·리포트 (서랍 하나, 탭 7개)</td><td>간호사별 야간·주말 수와 원티드 미반영·오프특근·주의 사항을 표 아래 서랍으로 엽니다.</td></tr>
+          <tr><td>근무표</td><td>📂 불러오기 / 저장</td><td>불러오기 ▾ / 저장 → 저장됨</td><td>저장해 둔 근무표 목록을 열거나, 엑셀 근무표 파일을 올립니다. / 자동으로 저장됐습니다. 이름을 바꿔 따로 저장하려면 누르세요.</td></tr>
+          <tr><td>근무표</td><td>Charge 숨기기 · 근무별 색상 · 전체 그룹 · 전체화면 · 비교</td><td>더보기 ▾ 안으로</td><td>전체화면 · 저장본과 비교 · 다음달 이월 · 차지 표시 · 그룹만 보기</td></tr>
+          <tr><td>서랍</td><td>(없음)</td><td>되돌려서 잠금 · 칸으로 가기</td><td>이 칸을 원래 사전입력으로 되돌리고 잠급니다. 다음 만들기에서 절대 안 바뀝니다.</td></tr>
+          <tr><td>설정</td><td>+ 추가 · 📗 명부 파일 ▾</td><td>간호사 추가 (주 버튼) · 엑셀로 명부 관리 ▾</td><td>엑셀 템플릿 내려받기 · 엑셀/CSV 가져오기 · 엑셀로 내보내기 · 명부 템플릿 저장</td></tr>
+          <tr><td>설정</td><td>⋯ / ×</td><td>편집 (삭제는 모달 안 ‘명부에서 삭제’)</td><td>이름·자격·야간전담·주휴 요일·임산부·전입/전출·프리셉터를 고칩니다.</td></tr>
+          <tr><td>설정</td><td>인원 설정 저장 / 저장</td><td>저장 (화면당 하나, 오른쪽 위)</td><td>변경을 저장합니다. 이미 만든 근무표에는 영향이 없고, 다음 만들기부터 적용됩니다.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section style="display:flex;flex-direction:column;gap:12px">
+      <h2 style="font-size:18pt;font-weight:800">3. 오류 · 빈 상태 · 진행 문구</h2>
+      <table>
+        <thead><tr><th style="width:18%">상황</th><th>문구</th><th style="width:26%">다음 행동 버튼 (하나)</th></tr></thead>
+        <tbody>
+          <tr><td>사전입력 빈 표</td><td>아직 비어 있어요 — 먼저 주휴를 넣거나</td><td>분석에서 주휴 추천 받기</td></tr>
+          <tr><td>사전입력 가능</td><td>지금 입력으로 만들 수 있어요 · 예상 약 3분 · 134 / 558칸 입력</td><td>—</td></tr>
+          <tr><td>사전입력 불가</td><td>이대로는 만들 수 없어요 — 10월 3일(토) 낮 인원 1명 부족</td><td>3일 칸으로 가기</td></tr>
+          <tr><td>인원 빡빡</td><td>10월 17일(토)은 여유가 0명이에요. 휴가를 더 넣으면 부족해집니다.</td><td>—</td></tr>
+          <tr><td>붙여넣기 인식</td><td>17명 · 31일을 알아봤습니다. ‘박지영’은 명부에 없어 건너뜁니다.</td><td>표에 넣기</td></tr>
+          <tr><td>근무표 없음</td><td>10월 근무표가 아직 없어요. 왼쪽 위 근무표 만들기를 누르면 약 3분 걸리고, 마음에 안 들면 다시 만들 수 있어요.</td><td>(툴바 주 버튼을 가리킴)</td></tr>
+          <tr><td>만드는 중</td><td>근무표를 만드는 중… 약 2분 30초 남음</td><td>멈추기</td></tr>
+          <tr><td>완료</td><td>근무표가 만들어졌고 저장됐습니다 (9월 28일 14:02) · 사전입력 134칸 모두 지켰어요</td><td>—</td></tr>
+          <tr><td>실패 (infeasible)</td><td>10월 3일(토) 낮 근무 인원이 1명 모자라 이 조건으로는 만들 수 없어요. 그날 낮에 나올 수 있는 사람은 3명인데 필요 인원은 4명입니다.</td><td>사전입력 완화 켜고 다시 만들기</td></tr>
+          <tr><td>완화로 완료</td><td>근무표가 만들어졌고 저장됐습니다 · 사전입력 3칸을 바꿔서 만들었어요 (점선 칸)</td><td>서랍 자동 열림 → 되돌려서 잠금</td></tr>
+          <tr><td>파괴적 동작</td><td>한 번 더 누르면 지웁니다 · 되돌릴 수 없어요 / 지운 뒤 60일 안에는 되돌릴 수 있어요</td><td>(같은 버튼 2회)</td></tr>
+          <tr><td>변경 직후 토스트</td><td>위시 시트 17명 · 42칸을 넣었습니다.</td><td>되돌리기</td></tr>
+          <tr><td>폰</td><td>폰에서는 보기만 할 수 있어요. 만들기·고치기는 병동 컴퓨터에서.</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section style="display:flex;flex-direction:column;gap:12px">
+      <h2 style="font-size:18pt;font-weight:800">4. 개발 용어 → 사람 말 번역</h2>
+      <table>
+        <thead><tr><th style="width:30%">화면의 개발 용어</th><th style="width:30%">사람 말</th><th>비고</th></tr></thead>
+        <tbody>
+          <tr><td>솔버 / HiGHS (MILP) / CP-SAT / ⚡ 레이스</td><td>자동 배정 / 계산 방식: 기본 · 다른 방식 · 둘 다 돌려 빠른 쪽</td><td>고급 안에서만 노출</td></tr>
+          <tr><td>MIP 오차 · Gap 2% · 최적해</td><td>정확도: 정밀 · 보통(2%) · 빠르게(5%) · 아주 빠르게(10%) / 상태 배지 ‘가장 좋은 답’</td><td>기본 ‘보통’</td></tr>
+          <tr><td>시간 (분) · 타임아웃</td><td>최대 기다릴 시간</td><td>5 · 10 · 20 · 60분</td></tr>
+          <tr><td>infeasible · 생성 불가</td><td>이 조건으로는 만들 수 없어요</td><td>이유 한 줄 + 버튼 하나</td></tr>
+          <tr><td>슬랙 · 여유(4+)/양호/적정/빡빡/부족</td><td>여유 인원: 넉넉 · 보통 · 빡빡 · 부족</td><td>분석 히트맵 4단계</td></tr>
+          <tr><td>페널티 · 배점 · 배점 규칙 · 소프트 제약</td><td>우선순위 (우선순위 규칙)</td><td>설정 → 거의 안 바꾸는 것</td></tr>
+          <tr><td>하드 제약</td><td>꼭 지킬 규칙</td><td></td></tr>
+          <tr><td>완화 · 사전입력 완화 · 유지 보너스</td><td>사전입력 완화 (유지) · 바꾸는 순서: 근무 → 쉬는 날 → 휴가</td><td>병동 용어</td></tr>
+          <tr><td>relaxed cell · 원티드 미반영</td><td>원티드 미반영 (유지) · 점선 칸</td><td></td></tr>
+          <tr><td>재조정 · readjust · 핀</td><td>고친 대로 다시 맞추기 · 고친 칸(빨간 테두리)</td><td></td></tr>
+          <tr><td>MUS · 정밀 충돌 진단 · 진단</td><td>왜 안 되는지 자세히 보기</td><td>실패 배너 안 조용 버튼</td></tr>
+          <tr><td>프로브 · 생성 가능성 신호등</td><td>지금 입력으로 만들 수 있어요 / 없어요</td><td>색 점 + 글자</td></tr>
+          <tr><td>WARD · NURSES · YEAR/MO · OCT</td><td>병동 · 간호사 18명 · 2026년 10월</td><td>영어 라벨 제거</td></tr>
+          <tr><td>CSV · TSV · 어싸인용 복사</td><td>엑셀(CSV) 파일로 저장 · 어싸인용으로 복사</td><td></td></tr>
+          <tr><td>Charge 숨기기 · 근무별 색상</td><td>차지 표시 · 색 켜기/끄기</td><td>더보기 안</td></tr>
+          <tr><td>솔버 로그</td><td>계산 기록</td><td>서랍 마지막 탭</td></tr>
+          <tr><td>DEV · 개발자 설정</td><td>그 외 (개발자 설정)</td><td>설정 왼쪽 메뉴 맨 아래</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section style="display:flex;flex-direction:column;gap:14px;break-before:page">
+      <h2 style="font-size:18pt;font-weight:800">5. 변경 근거 (화면별 3줄)</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="kt" style="padding:14px 16px;border-radius:10px;background:#F4F5F7"><b>헤더·단계 바</b><ol style="padding-left:18px;margin-top:6px"><li>영어 메타(WARD/NURSES/YEAR/MO) → 한 줄 한국어. 년월은 18px 굵게 가운데, ‹ › 40px.</li><li>단계 부제를 ‘남은 셀 수’ 대신 <b>다음에 할 일</b>로. 완료는 초록 체크 원.</li><li>헤더 보조 버튼도 글자를 붙임(다크·도움말·프로필 전환).</li></ol></div>
+        <div class="kt" style="padding:14px 16px;border-radius:10px;background:#F4F5F7"><b>사전입력</b><ol style="padding-left:18px;margin-top:6px"><li>표 위 카드 3~4장(월 배너·범례·안내·신호등) → 툴바 한 줄의 신호등 문장 하나. 범례는 셀 팝업이 대신함.</li><li>표 18행 중 17행이 스크롤 없이 보임(셀 30px, 14px 굵게). 이름 열·날짜 헤더 고정.</li><li>버튼 11개 → 7개(메모 표시는 더보기로). 되돌리기는 항상 같은 자리, 변경 직후 토스트.</li></ol></div>
+        <div class="kt" style="padding:14px 16px;border-radius:10px;background:#F4F5F7"><b>셀 팝업 · 붙여넣기</b><ol style="padding-left:18px;margin-top:6px"><li>17코드를 ‘근무 / 휴무·휴가’ 두 묶음, 코드+이름 44px 버튼. 키보드 힌트 한 줄.</li><li>잠금·메모·지우기를 팝업 하단에 고정 — 우클릭을 못 찾아도 됨.</li><li>붙여넣기 모달은 종류 3택(사전입력·위시·완성표) + 인식 결과 한 문장 + 버튼 ‘표에 넣기’.</li></ol></div>
+        <div class="kt" style="padding:14px 16px;border-radius:10px;background:#F4F5F7"><b>근무표</b><ol style="padding-left:18px;margin-top:6px"><li>주 버튼이 상태에 따라 하나만: 만들기 → (완료 후) 인쇄. ‘생성’은 ‘다시 만들기’ 보조로.</li><li>상태 줄이 표 바로 위 한 줄. 실패는 배너 하나(이유 + 후보 3개 + 버튼 하나).</li><li>요약·리포트 두 패널 → 표 아래 서랍 하나(탭 7). 표시 옵션 4개는 더보기로.</li></ol></div>
+        <div class="kt" style="padding:14px 16px;border-radius:10px;background:#F4F5F7"><b>설정</b><ol style="padding-left:18px;margin-top:6px"><li>카드 4장 그리드 → 왼쪽 메뉴(자주 3 / 거의 안 바꾸는 3) + 한 화면 한 목적.</li><li>명부가 첫 화면. 처음이라면 안내 한 줄 + 엑셀 템플릿 버튼(T1 5분).</li><li>줄마다 ⋯/× 아이콘 → ‘편집’ 글자 버튼. 삭제는 모달 안에서 두 번 확인.</li></ol></div>
+        <div class="kt" style="padding:14px 16px;border-radius:10px;background:#F4F5F7"><b>간호사 모달 · 폰</b><ol style="padding-left:18px;margin-top:6px"><li>모달은 기본(이름·그룹·성별·가능 근무·야간전담·주휴 요일)만 보이고 특수 사항 3종은 접힘.</li><li>폰 오늘: ‘내 근무’ 카드가 맨 위, 근무자 이름을 근무별 칩으로. 편집 도구 없음.</li><li>폰 근무표: 내 줄 강조 + 필터 칩(전체·내 근무만·그룹). 더보기는 목록 6개.</li></ol></div>
+      </div>
+    </section>
+
+    <section style="display:flex;flex-direction:column;gap:12px">
+      <h2 style="font-size:18pt;font-weight:800">6. 제거 제안 목록 (삭제 아님 · 디자인에는 남겨둠)</h2>
+      <table>
+        <thead><tr><th style="width:28%">기능 · 위치</th><th>근거</th><th style="width:22%">제안</th></tr></thead>
+        <tbody>
+          <tr><td>사전입력 ‘저장/불러오기’ 패널 (표 위 카드)</td><td>사전입력은 자동 저장되고 근무표 저장이 최종 산출물. 이름 붙인 사전입력 저장은 월 1회 사용자에게 개념 부담.</td><td>더보기 → ‘사전입력 따로 저장’ 1단 메뉴로 강등</td></tr>
+          <tr><td>‘메모’ 토글 버튼</td><td>메모 점은 항상 보여도 무해함. 토글 하나가 줄어들면 툴바가 한 줄에 들어감.</td><td>항상 표시, 토글은 더보기</td></tr>
+          <tr><td>‘V 무제한’ 체크박스 (기본 행)</td><td>실패 시에만 의미. 평상시엔 ‘연차를 마음대로 쓴다’로 오해.</td><td>실패 배너의 후보 버튼으로 이동</td></tr>
+          <tr><td>배점 슬라이더 5 · 완화 보너스 슬라이더 4</td><td>수치의 의미를 사용자가 알 수 없음(0~10000). 기본값 변경 사례 없음.</td><td>고급 안 ‘우선순위 프리셋 3택’으로 대체 검토</td></tr>
+          <tr><td>‘🔀 비교’ 메뉴</td><td>저장본 비교는 개발·검증용에 가까움.</td><td>더보기 하위 유지, 문구 ‘저장본과 비교’</td></tr>
+          <tr><td>규칙 프리셋 저장/불러오기</td><td>18명 단일 병동에서 규칙 세트를 바꿀 일이 드묾.</td><td>‘그 외(개발자 설정)’로</td></tr>
+          <tr><td>테이블 전체화면</td><td>표가 이미 스크롤 없이 보이면 필요가 줄어듦.</td><td>더보기 유지, 우선순위 낮음</td></tr>
+          <tr><td>버전 칩 5회 클릭 개발자 모드</td><td>발견 불가한 제스처. 설정 메뉴에 자리가 생김.</td><td>‘그 외’ 메뉴로 노출</td></tr>
+          <tr><td>토스트 히스토리 버튼</td><td>토스트에 되돌리기가 붙으면 히스토리 필요성 감소.</td><td>더보기 하위</td></tr>
+          <tr><td>폰의 사전입력 편집 도구(⋯ 도구)</td><td>폰은 보기 전용. 오입력 위험.</td><td>보기만 유지, 편집은 숨김</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section style="display:flex;flex-direction:column;gap:12px">
+      <h2 style="font-size:18pt;font-weight:800">7. 구현 우선순위</h2>
+      <table>
+        <thead><tr><th style="width:18%">단계</th><th>내용</th><th style="width:22%">파일</th></tr></thead>
+        <tbody>
+          <tr><td><b>1단계</b> 토큰·문구·툴팁만</td><td>글자 크기 스케일(16/15/14) · --rule 진하게 · ink-3 글자 금지 · 버튼 높이 44 · 포커스 링 · 영어 라벨 제거 · 단계 부제 문구 · 모든 버튼 title 채우기(204개 중 141개 누락) · 이모지 아이콘 → lucide · 근무 코드 색 그대로</td><td>tokens.css · components.css · index.html 문자열</td></tr>
+          <tr><td><b>2단계</b> 레이아웃 재배치</td><td>사전입력 표 위 카드 제거 → 신호등 한 줄 · 툴바 7개로 묶기 · 근무표 상태 줄 + 주 버튼 전환(만들기↔인쇄) · 요약+리포트 → 서랍 하나 · 설정 좌측 메뉴 · 명부 ‘편집’ 버튼 · 표시 옵션 → 더보기</td><td>index.html 구조 · app.js activeTab 하위 상태</td></tr>
+          <tr><td><b>3단계</b> 새 컴포넌트</td><td>셀 팝업(17코드 2묶음 + 잠금·메모·지우기) · 실패 배너(이유·후보 3·버튼 1) · 되돌리기 토스트 · 인쇄 미리보기(A4 가로 흑백) · 숫자 ± 입력 · 토글 · 폰 ‘내 근무’ 카드와 필터 칩</td><td>components.css 신규 · js/modules/grid-interactions · schedule-features</td></tr>
+        </tbody>
+      </table>
+      <p style="color:#4A5160">검증 과업 T1~T6은 화면 파일의 상태 전환(Tweaks: state)으로 재현할 수 있습니다: T1 settings(roster→modal) · T2 preinput(empty→menu→paste→filled) → schedule(before→running→success→print) · T3 schedule(failed→relaxed) · T4 schedule(success: 빨간 테두리·잠금) · T5 preinput ‘이대로 근무표로’ · T6 phone.</p>
+    </section>
+  </div>
+</doc-page>
+</x-dc>
+</body>
+</html>

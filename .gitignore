@@ -33,3 +33,4 @@ standalone/exe/build/
 standalone/exe/dist/
 standalone/assign-data*.js
 standalone/assign-data*.json
+design/handoff/check/node_modules

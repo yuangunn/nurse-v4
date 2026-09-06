@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&family=Nanum+Gothic:wght@400;700;800&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+  <style>
+    @font-face{font-family:'Pretendard Variable';font-weight:45 920;font-style:normal;font-display:swap;src:url('frontend/fonts/PretendardVariable.woff2') format('woff2-variations')}
+    body{margin:0;background:#E4E7EC;font-family:'Pretendard Variable',Pretendard,system-ui,sans-serif;color:#0F1115;line-height:1.5;-webkit-font-smoothing:antialiased}
+    a{color:#1B4FC3}a:hover{color:#0F1115}
+    button{font:inherit;color:inherit;cursor:pointer}
+    *{box-sizing:border-box}
+    @keyframes ns-bar{from{background-position:0 0}to{background-position:40px 0}}
+  </style>
+</helmet>
+<div data-screen-label="근무표 리디자인" style="font-family:{{ fontFamily }};{{ themeVars }};width:1920px;height:1080px;overflow:hidden;position:relative;background:var(--paper);color:var(--ink);display:flex;flex-direction:column;font-size:18px">
+
+  <header style="height:64px;flex-shrink:0;background:var(--card);border-bottom:1px solid var(--rule);display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 24px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="width:36px;height:36px;border-radius:9px;background:var(--ink);position:relative;flex-shrink:0"><span style="position:absolute;left:50%;top:7px;bottom:7px;width:3px;background:var(--card);transform:translateX(-50%);border-radius:2px"></span><span style="position:absolute;top:50%;left:7px;right:7px;height:3px;background:var(--card);transform:translateY(-50%);border-radius:2px"></span></span>
+      <span style="font-size:20px;font-weight:700;letter-spacing:-0.02em">NurseScheduler</span>
+      <span style="font-size:16px;font-weight:500;color:var(--ink2);padding-left:12px;border-left:1px solid var(--rule)">게스트 병동 · 간호사 18명</span>
+    </div>
+    <div title="대상 년월 — 사전입력·분석·근무표 모든 화면에 함께 적용됩니다" style="display:flex;align-items:center;gap:4px;background:var(--paper);border-radius:12px;padding:4px">
+      <button style="width:40px;height:40px;border:0;background:transparent;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--ink)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg></button>
+      <span style="font-size:20px;font-weight:700;padding:0 10px;font-variant-numeric:tabular-nums">2026년 10월</span>
+      <button style="width:40px;height:40px;border:0;background:transparent;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--ink)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></button>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:4px">
+      <button title="화면을 밝게/어둡게 바꿉니다. 인쇄에는 영향이 없습니다." style="height:44px;padding:0 12px;border:0;background:transparent;border-radius:10px;display:flex;align-items:center;gap:6px;font-size:16px;font-weight:500;color:var(--ink2)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>{{ darkLabel }}</button>
+      <button title="사용법과 자주 묻는 질문을 엽니다." style="height:44px;padding:0 12px;border:0;background:transparent;border-radius:10px;display:flex;align-items:center;gap:6px;font-size:16px;font-weight:500;color:var(--ink2)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20z M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3 M12 17h.01"></path></svg>도움말</button>
+      <button title="다른 병동 프로필로 바꿉니다. 지금 작업은 자동 저장됩니다." style="height:44px;padding:0 12px;border:0;background:transparent;border-radius:10px;display:flex;align-items:center;gap:6px;font-size:16px;font-weight:500;color:var(--ink2)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75"></path></svg>프로필 전환</button>
+    </div>
+  </header>
+
+  <nav style="height:68px;flex-shrink:0;background:var(--card);border-bottom:1px solid var(--rule);display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:8px;padding:8px 24px">
+    <button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:var(--paper);display:flex;align-items:center;gap:10px;font-size:18px;font-weight:600;color:var(--ink)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4h-7 M10 4H3 M21 12h-9 M8 12H3 M21 20h-5 M12 20H3 M14 2v4 M8 10v4 M16 18v4"></path></svg>설정<span style="display:inline-flex;align-items:center;gap:4px;font-size:15px;font-weight:500;color:var(--ok)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>완료</span></button>
+    <button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:var(--paper);display:flex;align-items:center;gap:12px;text-align:left;color:var(--ink)"><span style="width:26px;height:26px;border-radius:50%;background:var(--okbg);color:var(--ok);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span><span style="font-size:18px;font-weight:600">사전입력</span><span style="font-size:16px;font-weight:500;color:var(--ink2)">134칸 입력됨</span></button>
+    <button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:var(--paper);display:flex;align-items:center;gap:12px;text-align:left;color:var(--ink)"><span style="width:26px;height:26px;border-radius:50%;background:var(--okbg);color:var(--ok);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span><span style="font-size:18px;font-weight:600">분석</span><span style="font-size:16px;font-weight:500;color:var(--ink2)">부족한 날 없음</span></button>
+    <button style="height:48px;padding:0 16px;border:0;border-radius:10px;background:var(--ink);color:var(--card);display:flex;align-items:center;gap:12px;text-align:left"><span style="width:26px;height:26px;border-radius:50%;background:var(--card);color:var(--ink);font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</span><span style="font-size:18px;font-weight:700">근무표</span><span style="font-size:16px;font-weight:500;opacity:0.75">{{ stepSub }}</span></button>
+  </nav>
+
+  <!-- 툴바 -->
+  <div style="height:56px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 24px">
+    <button title="{{ makeTip }}" style="height:48px;padding:0 16px 0 14px;border:0;border-radius:10px;display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600;background:{{ makeBg }};color:{{ makeFg }};box-shadow:{{ makeRing }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"></path></svg>{{ makeLabel }}</button>
+    <label title="만들기가 안 될 때만 켜세요. 사전입력을 꼭 필요한 만큼만 바꿔서 만듭니다. 잠근 칸은 절대 바뀌지 않습니다." style="height:48px;padding:0 12px;border-radius:10px;display:flex;align-items:center;gap:8px;font-size:16px;font-weight:500;cursor:pointer;color:var(--ink)"><span style="width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:{{ relaxBg }};box-shadow:{{ relaxRing }}"><sc-if value="{{ relaxOn }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></sc-if></span>사전입력 완화</label>
+    <label title="연차(V)를 더 써도 되게 허용합니다. 꼭 필요한 만큼만 쓰도록 큰 감점이 붙습니다." style="height:48px;padding:0 12px;border-radius:10px;display:flex;align-items:center;gap:8px;font-size:16px;font-weight:500;cursor:pointer;color:var(--ink)"><span style="width:22px;height:22px;border-radius:6px;background:var(--card);box-shadow:inset 0 0 0 2px var(--ink3)"></span>연차(V) 무제한</label>
+    <button title="정확도 · 시간 제한 · 계산 방식 · 주휴 이동 · 우선순위. 기본값이면 열 일이 없습니다." style="height:48px;padding:0 10px;border:0;border-radius:10px;background:transparent;color:var(--ink2);display:flex;align-items:center;gap:6px;font-size:16px;font-weight:600">고급<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+      <button title="A4 가로 · 흑백에서도 읽히는 표로 인쇄합니다. 먼저 미리보기가 열립니다." style="height:48px;padding:0 16px 0 14px;border:0;border-radius:10px;display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600;background:{{ printBg }};color:{{ printFg }};box-shadow:{{ printRing }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2 M6 9V3h12v6 M6 14h12v8H6z"></path></svg>인쇄</button>
+      <button title="엑셀(CSV) 파일로 저장 · 어싸인 배정표에 붙일 표 복사" style="height:48px;padding:0 14px;border:0;border-radius:10px;background:var(--card);box-shadow:inset 0 0 0 1.5px var(--ink3);color:{{ hasFg }};display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12"></path></svg>내보내기<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+      <button title="간호사별 야간·주말 수와 원티드 미반영·오프특근·주의 사항을 표 아래 서랍으로 엽니다." style="height:48px;padding:0 14px;border:0;border-radius:10px;display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600;background:{{ drawerBtnBg }};color:{{ drawerBtnFg }};box-shadow:{{ drawerBtnRing }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18 M18 17V9 M13 17V5 M8 17v-3"></path></svg>요약·리포트<sc-if value="{{ drawerBadge }}" hint-placeholder-val="{{ false }}"><span style="min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--err);color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ drawerCount }}</span></sc-if></button>
+      <button title="저장해 둔 근무표 목록을 열거나, 엑셀 근무표 파일을 올립니다." style="height:48px;padding:0 14px;border:0;border-radius:10px;background:var(--card);box-shadow:inset 0 0 0 1.5px var(--ink3);color:var(--ink);display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"></path></svg>불러오기<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+      <button title="{{ saveTip }}" style="height:48px;padding:0 14px;border:0;border-radius:10px;background:var(--card);box-shadow:inset 0 0 0 1.5px var(--ink3);color:{{ saveFg }};display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-8H7v8 M7 3v5h8"></path></svg>{{ saveLabel }}</button>
+      <button title="전체화면 · 저장본과 비교 · 다음달 이월 · 차지 표시 · 그룹만 보기" style="height:48px;padding:0 14px;border:0;border-radius:10px;background:var(--card);box-shadow:inset 0 0 0 1.5px var(--ink3);color:var(--ink);display:flex;align-items:center;gap:8px;font-size:18px;font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12h.01 M19 12h.01 M5 12h.01"></path></svg>더보기</button>
+    </div>
+  </div>
+
+  <!-- 상태 줄 -->
+  <sc-if value="{{ showStatus }}" hint-placeholder-val="{{ true }}">
+    <div style="flex-shrink:0;margin:0 24px 8px;min-height:48px;border-radius:12px;display:flex;align-items:center;gap:12px;padding:8px 16px;background:{{ statusBg }};color:var(--ink);font-size:18px;font-weight:500">
+      <span style="width:12px;height:12px;border-radius:50%;flex-shrink:0;background:{{ statusDot }}"></span>
+      <span>{{ statusText }}</span>
+      <sc-if value="{{ running }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;height:10px;border-radius:999px;background:rgba(15,17,21,0.08);overflow:hidden;max-width:420px"><div style="width:38%;height:100%;border-radius:999px;background:repeating-linear-gradient(90deg,var(--ink) 0 20px,var(--ink2) 20px 40px);background-size:40px 100%;animation:ns-bar 1s linear infinite"></div></div>
+        <button title="지금까지 찾은 답이 있으면 그것을 보여 주고 멈춥니다." style="margin-left:auto;height:40px;padding:0 14px;border:0;border-radius:9px;background:var(--card);box-shadow:inset 0 0 0 1.5px var(--ink3);font-size:16px;font-weight:600;display:flex;align-items:center;gap:6px;color:var(--ink)"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"></path></svg>멈추기</button>
+      </sc-if>
+      <sc-if value="{{ relaxedNote }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;font-size:16px;font-weight:500;color:var(--ink2);display:flex;align-items:center;gap:8px"><span style="width:26px;height:20px;border-radius:4px;outline:2px dashed var(--ink);outline-offset:-2px;background:var(--card)"></span>점선 칸 = 사전입력과 다르게 배정된 칸</span></sc-if>
+    </div>
+  </sc-if>
+
+  <!-- 실패 배너 -->
+  <sc-if value="{{ failed }}" hint-placeholder-val="{{ false }}">
+    <div style="flex-shrink:0;margin:0 24px 8px;border-radius:14px;background:var(--errbg);padding:18px 20px;display:flex;gap:16px;align-items:flex-start">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--err)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z M12 9v4 M12 17h.01"></path></svg>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:22px;font-weight:800;letter-spacing:-0.01em;margin-bottom:6px">10월 3일(토) 낮 근무 인원이 1명 모자라 이 조건으로는 만들 수 없어요.</div>
+        <div style="font-size:18px;color:var(--ink2);line-height:1.5">그날 낮에 나올 수 있는 사람은 3명인데 필요 인원은 4명입니다. 아래 셋 중 하나를 바꾸면 풀립니다.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
+          <button title="사전입력 화면의 이 칸으로 바로 갑니다." style="height:38px;padding:0 12px;border:0;border-radius:9px;background:var(--card);box-shadow:inset 0 0 0 1.5px var(--ink3);font-size:16px;font-weight:500;display:flex;align-items:center;gap:8px;color:var(--ink)"><span style="padding:1px 6px;border-radius:5px;background:#ECF7F0;color:#1F8A5B;font-weight:700">V</span>김지현 · 10/3 연차<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14 m12 5 7 7-7 7"></path></svg></button>
+          <button style="height:38px;padding:0 12px;border:0;border-radius:9px;background:var(--card);box-shadow:inset 0 0 0 1.5px var(--ink3);font-size:16px;font-weight:500;display:flex;align-items:center;gap:8px;color:var(--ink)"><span style="padding:1px 6px;border-radius:5px;background:#EDEFF3;color:#4A5160;font-weight:700">주</span>정수아 · 10/3 주휴<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14 m12 5 7 7-7 7"></path></svg></button>
+          <button style="height:38px;padding:0 12px;border:0;border-radius:9px;background:var(--card);box-shadow:inset 0 0 0 1.5px var(--ink3);font-size:16px;font-weight:500;display:flex;align-items:center;gap:8px;color:var(--ink)">10/3 낮 필요 인원 4 → 3<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14 m12 5 7 7-7 7"></path></svg></button>
+        </div>
+      </div>
+      <button title="완화를 켜고 다시 만듭니다. 바꾼 사전입력은 결과 표에 점선으로 표시되고, 잠근 칸은 건드리지 않습니다." style="height:48px;padding:0 20px;border:0;border-radius:10px;background:var(--ink);color:var(--card);font-size:18px;font-weight:600;display:flex;align-items:center;gap:8px;flex-shrink:0;align-self:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5"></path></svg>사전입력 완화 켜고 다시 만들기</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ failed }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;margin:0 24px;background:var(--card);border-radius:12px 12px 0 0;box-shadow:0 0 0 1px var(--rule);display:flex;align-items:center;justify-content:center;text-align:center;padding:40px;font-size:18px;color:var(--ink2);line-height:1.6">표는 만들어지지 않았습니다. 위의 셋 중 하나를 고치거나 <b style="color:var(--ink)">사전입력 완화</b>를 켜고 다시 만들어 보세요.<br>지난달 표와 저장해 둔 표는 <b style="color:var(--ink)">불러오기</b>에 그대로 있어요.</div>
+  </sc-if>
+  <!-- 표 -->
+  <sc-if value="{{ hasTable }}" hint-placeholder-val="{{ true }}">
+  <div style="flex:1;min-height:0;margin:0 24px 0;background:var(--card);border-radius:12px 12px 0 0;box-shadow:0 0 0 1px var(--rule);overflow:auto;position:relative">
+    <table style="border-collapse:separate;border-spacing:0;font-size:15px;font-variant-numeric:tabular-nums;width:100%">
+      <thead>
+        <tr>
+          <th style="position:sticky;left:0;top:0;z-index:30;background:var(--card);height:26px;padding:0 12px;text-align:left;font-size:15px;font-weight:500;color:var(--ink2);border-bottom:1px solid var(--rule);border-right:1px solid var(--rule);min-width:140px">주기</th>
+          <sc-for list="{{ cycles }}" as="c" hint-placeholder-count="5"><th colspan="{{ c.count }}" style="position:sticky;top:0;z-index:20;height:26px;text-align:center;font-size:15px;font-weight:700;border-bottom:1px solid var(--rule);border-left:2px solid var(--ink3);background:{{ c.bg }};color:{{ c.fg }}">{{ c.label }}</th></sc-for>
+          <th colspan="5" style="position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--rule);border-left:2px solid var(--ink3)"></th>
+        </tr>
+        <tr>
+          <th style="position:sticky;left:0;top:26px;z-index:30;background:var(--card);height:46px;padding:0 12px;text-align:left;font-size:16px;font-weight:600;border-bottom:2px solid var(--ink3);border-right:1px solid var(--rule)">이름</th>
+          <sc-for list="{{ days }}" as="d" hint-placeholder-count="35"><th style="position:sticky;top:26px;z-index:20;min-width:44px;width:44px;height:46px;padding:0;text-align:center;border-bottom:2px solid var(--ink3);border-left:{{ d.bl }};background:{{ d.hbg }};color:{{ d.fg }};opacity:{{ d.op }}"><div style="font-size:16px;font-weight:700;line-height:1.2">{{ d.date }}</div><div style="font-size:14px;font-weight:500;line-height:1.2">{{ d.wd }}</div></th></sc-for>
+          <th style="position:sticky;top:26px;z-index:20;background:var(--card);min-width:40px;height:46px;font-size:15px;font-weight:700;color:#1B4FC3;border-bottom:2px solid var(--ink3);border-left:2px solid var(--ink3)">D</th>
+          <th style="position:sticky;top:26px;z-index:20;background:var(--card);min-width:40px;height:46px;font-size:15px;font-weight:700;color:#C7384A;border-bottom:2px solid var(--ink3)">E</th>
+          <th style="position:sticky;top:26px;z-index:20;background:var(--card);min-width:40px;height:46px;font-size:15px;font-weight:700;color:#5B3FB0;border-bottom:2px solid var(--ink3)">N</th>
+          <th style="position:sticky;top:26px;z-index:20;background:var(--card);min-width:40px;height:46px;font-size:15px;font-weight:600;color:var(--ink2);border-bottom:2px solid var(--ink3)">휴</th>
+          <th title="토·일·공휴일 근무 수" style="position:sticky;top:26px;z-index:20;background:var(--card);min-width:48px;height:46px;font-size:15px;font-weight:600;color:var(--ink2);border-bottom:2px solid var(--ink3);line-height:1.2">주말<br>공휴</th>
+        </tr>
+      </thead>
+      <tbody>
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="18"><tr>
+          <td style="position:sticky;left:0;z-index:10;background:var(--card);height:36px;padding:0 12px;border-bottom:1px solid var(--rulesoft);border-right:1px solid var(--rule);white-space:nowrap"><span style="font-size:16px;font-weight:600">{{ r.name }}</span><span style="font-size:14px;font-weight:500;color:var(--ink2);margin-left:6px">{{ r.group }}</span></td>
+          <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="35"><td title="{{ c.tip }}" style="height:36px;padding:0;text-align:center;border-bottom:1px solid var(--rulesoft);border-left:{{ c.bl }};background:{{ c.bg }};color:{{ c.fg }};font-weight:600;font-size:15px;cursor:pointer;position:relative;opacity:{{ c.op }};outline:{{ c.outline }};outline-offset:-2px">{{ c.code }}<sc-if value="{{ c.lock }}" hint-placeholder-val="{{ false }}"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="position:absolute;top:2px;right:2px"><path d="M5 11h14v10H5z M7 11V7a5 5 0 0 1 10 0v4"></path></svg></sc-if></td></sc-for>
+          <td style="height:36px;text-align:center;font-size:15px;font-weight:600;color:#1B4FC3;border-bottom:1px solid var(--rulesoft);border-left:2px solid var(--ink3)">{{ r.d }}</td>
+          <td style="height:36px;text-align:center;font-size:15px;font-weight:600;color:#C7384A;border-bottom:1px solid var(--rulesoft)">{{ r.e }}</td>
+          <td style="height:36px;text-align:center;font-size:15px;font-weight:600;color:#5B3FB0;border-bottom:1px solid var(--rulesoft)">{{ r.n }}</td>
+          <td style="height:36px;text-align:center;font-size:15px;font-weight:500;color:var(--ink2);border-bottom:1px solid var(--rulesoft)">{{ r.off }}</td>
+          <td style="height:36px;text-align:center;font-size:15px;font-weight:500;color:var(--ink2);border-bottom:1px solid var(--rulesoft)">{{ r.wk }}</td>
+        </tr></sc-for>
+      </tbody>
+      <tfoot>
+        <sc-for list="{{ footRows }}" as="q" hint-placeholder-count="3"><tr>
+          <td style="position:sticky;left:0;z-index:10;height:36px;padding:0 12px;font-size:15px;font-weight:600;border-top:1px solid var(--rule);border-right:1px solid var(--rule);background:{{ q.bg }};color:{{ q.fg }}">{{ q.label }}</td>
+          <sc-for list="{{ q.vals }}" as="v" hint-placeholder-count="35"><td style="height:36px;text-align:center;font-size:15px;font-weight:600;border-top:1px solid var(--rule);background:{{ q.bg }};color:{{ q.fg }}">{{ v }}</td></sc-for>
+          <td colspan="5" style="border-top:1px solid var(--rule);border-left:2px solid var(--ink3);background:{{ q.bg }}"></td>
+        </tr></sc-for>
+      </tfoot>
+    </table>
+  </div>
+  </sc-if>
+
+  <!-- 빈 상태 -->
+  <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;margin:0 24px;background:var(--card);border-radius:12px 12px 0 0;box-shadow:0 0 0 1px var(--rule);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:40px">
+      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M16 2v4 M8 2v4 M3 10h18"></path></svg>
+      <div style="font-size:24px;font-weight:800;letter-spacing:-0.01em">10월 근무표가 아직 없어요</div>
+      <div style="font-size:18px;color:var(--ink2);max-width:520px;line-height:1.6">왼쪽 위 <b style="color:var(--ink)">근무표 만들기</b>를 누르면 사전입력을 지키면서 자동으로 채웁니다. 약 3분 걸리고, 마음에 안 들면 다시 만들 수 있어요.</div>
+    </div>
+  </sc-if>
+
+  <!-- 요약·리포트 서랍 -->
+  <sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="flex-shrink:0;height:236px;margin:0 24px;background:var(--card);border-top:2px solid var(--ink);box-shadow:0 -8px 24px rgba(15,17,21,0.08);display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:4px;padding:8px 12px 0;border-bottom:1px solid var(--rule)">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="7"><button title="{{ t.tip }}" style="height:44px;padding:0 14px;border:0;background:transparent;border-radius:8px 8px 0 0;display:flex;align-items:center;gap:8px;font-size:16px;font-weight:600;color:{{ t.fg }};box-shadow:{{ t.underline }}">{{ t.label }}<sc-if value="{{ t.n }}" hint-placeholder-val="{{ false }}"><span style="min-width:20px;height:20px;padding:0 6px;border-radius:999px;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;background:{{ t.badgeBg }};color:{{ t.badgeFg }}">{{ t.n }}</span></sc-if></button></sc-for>
+        <button title="서랍을 닫습니다. 요약·리포트 버튼으로 다시 엽니다." style="margin-left:auto;width:36px;height:40px;border:0;background:transparent;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--ink2)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18 M6 6l12 12"></path></svg></button>
+      </div>
+      <sc-if value="{{ tabRelax }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1;overflow:auto;padding:12px 16px">
+          <div style="font-size:16px;color:var(--ink2);margin-bottom:10px">이 조건으로 만들려면 아래 <b style="color:var(--ink)">3칸</b>을 바꿔야 했습니다. 바꾸면 안 되는 칸은 <b style="color:var(--ink)">되돌려서 잠금</b>을 누른 뒤 다시 만들어 보세요.</div>
+          <sc-for list="{{ relaxList }}" as="x" hint-placeholder-count="3">
+            <div style="display:grid;grid-template-columns:120px 140px 1fr auto auto;align-items:center;gap:16px;height:48px;border-top:1px solid var(--rulesoft);font-size:16px">
+              <span style="font-weight:600">{{ x.name }}</span><span style="color:var(--ink2);font-weight:500">{{ x.date }}</span>
+              <span style="display:flex;align-items:center;gap:8px;font-weight:600"><span style="padding:2px 8px;border-radius:6px;background:{{ x.fromBg }};color:{{ x.fromFg }}">{{ x.from }}</span><span style="color:var(--ink2)">→</span><span style="padding:2px 8px;border-radius:6px;background:{{ x.toBg }};color:{{ x.toFg }}">{{ x.to }}</span><span style="color:var(--ink2);font-weight:500;margin-left:6px">{{ x.why }}</span></span>
+              <button title="이 칸을 원래 사전입력으로 되돌리고 잠급니다. 다음 만들기에서 절대 안 바뀝니다." style="height:40px;padding:0 12px;border:0;border-radius:8px;background:var(--card);box-shadow:inset 0 0 0 1.5px var(--ink3);font-size:16px;font-weight:600;display:flex;align-items:center;gap:6px;color:var(--ink)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 11h14v10H5z M7 11V7a5 5 0 0 1 10 0v4"></path></svg>되돌려서 잠금</button>
+              <button style="height:40px;padding:0 10px;border:0;border-radius:8px;background:transparent;font-size:16px;font-weight:600;color:var(--ink2)">칸으로 가기</button>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ tabSummary }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;overflow:auto;padding:0 16px">
+          <table style="width:100%;border-collapse:collapse;font-size:16px;font-variant-numeric:tabular-nums">
+            <thead><tr>
+              <th style="text-align:left;height:44px;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--rule);position:sticky;top:0;background:var(--card)">이름</th>
+              <th style="text-align:center;height:44px;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--rule);position:sticky;top:0;background:var(--card)">야간 (이달)</th>
+              <th style="text-align:center;height:44px;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--rule);position:sticky;top:0;background:var(--card)">야간 (3달 누적)</th>
+              <th style="text-align:center;height:44px;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--rule);position:sticky;top:0;background:var(--card)">주말·공휴 (이달)</th>
+              <th style="text-align:center;height:44px;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--rule);position:sticky;top:0;background:var(--card)">주말·공휴 (누적)</th>
+              <th style="text-align:center;height:44px;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--rule);position:sticky;top:0;background:var(--card)">평균과 차이</th>
+            </tr></thead>
+            <tbody><sc-for list="{{ summary }}" as="s" hint-placeholder-count="6"><tr>
+              <td style="height:38px;font-weight:600;border-bottom:1px solid var(--rulesoft)">{{ s.name }}</td>
+              <td style="text-align:center;border-bottom:1px solid var(--rulesoft);font-weight:500">{{ s.n }}</td>
+              <td style="text-align:center;border-bottom:1px solid var(--rulesoft);font-weight:500">{{ s.n3 }}</td>
+              <td style="text-align:center;border-bottom:1px solid var(--rulesoft);font-weight:500">{{ s.w }}</td>
+              <td style="text-align:center;border-bottom:1px solid var(--rulesoft);font-weight:500">{{ s.w3 }}</td>
+              <td style="text-align:center;border-bottom:1px solid var(--rulesoft);font-weight:700;color:{{ s.dfg }}">{{ s.dev }}</td>
+            </tr></sc-for></tbody>
+          </table>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- 인쇄 미리보기 -->
+  <sc-if value="{{ printing }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:100;background:rgba(15,17,21,0.55);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
+      <div style="width:898px;display:flex;align-items:center;gap:12px;color:#fff;font-size:18px;font-weight:500">
+        <span style="font-size:22px;font-weight:800">인쇄 미리보기</span>
+        <span style="padding:4px 10px;border-radius:999px;background:rgba(255,255,255,0.14)">A4 가로</span><span style="padding:4px 10px;border-radius:999px;background:rgba(255,255,255,0.14)">흑백 안전</span><span style="padding:4px 10px;border-radius:999px;background:rgba(255,255,255,0.14)">1쪽</span>
+        <button style="margin-left:auto;height:48px;padding:0 18px;border:0;border-radius:10px;background:rgba(255,255,255,0.14);color:#fff;font-size:18px;font-weight:600">닫기</button>
+        <button title="프린터 대화상자를 엽니다. 용지 A4, 가로 방향으로 맞춰져 있습니다." style="height:48px;padding:0 20px;border:0;border-radius:10px;background:#fff;color:#0F1115;font-size:18px;font-weight:600;display:flex;align-items:center;gap:8px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2 M6 9V3h12v6 M6 14h12v8H6z"></path></svg>인쇄</button>
+      </div>
+      <div style="width:898px;height:635px;flex-shrink:0"><div style="width:1123px;height:794px;transform:scale(0.8);transform-origin:top left;background:#fff;color:#000;padding:30px 34px;box-shadow:0 20px 60px rgba(0,0,0,0.4);font-family:'Pretendard Variable',sans-serif;overflow:hidden">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:28px;font-weight:800">2026년 10월 외과병동 근무표</div>
+          <div style="font-size:18px;color:#222">간호사 18명 · 작성 2026-09-28 · D 06~14 · E 14~22 · N 22~06 · 주=주휴 · OF=오프 · V=연차</div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:18px;font-variant-numeric:tabular-nums">
+          <thead><tr><th style="border:1px solid #000;padding:2px 6px;text-align:left;font-weight:700;background:#eee">이름</th><sc-for list="{{ pdays }}" as="d" hint-placeholder-count="31"><th style="border:1px solid #000;padding:1px 0;text-align:center;font-weight:700;background:{{ d.bg }};line-height:1.15">{{ d.date }}<br><span style="font-weight:500">{{ d.wd }}</span></th></sc-for><th style="border:1px solid #000;padding:2px 4px;background:#eee">D</th><th style="border:1px solid #000;padding:2px 4px;background:#eee">E</th><th style="border:1px solid #000;padding:2px 4px;background:#eee">N</th></tr></thead>
+          <tbody><sc-for list="{{ prows }}" as="r" hint-placeholder-count="18"><tr><td style="border:1px solid #000;padding:1px 6px;font-weight:600;white-space:nowrap">{{ r.name }}</td><sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="31"><td style="border:1px solid #000;text-align:center;height:29px;font-weight:{{ c.w }};background:{{ c.bg }}">{{ c.code }}</td></sc-for><td style="border:1px solid #000;text-align:center">{{ r.d }}</td><td style="border:1px solid #000;text-align:center">{{ r.e }}</td><td style="border:1px solid #000;text-align:center">{{ r.n }}</td></tr></sc-for></tbody>
+        </table>
+        <div style="display:flex;gap:16px;margin-top:10px;font-size:15px;color:#000"><span>■ 진한 칸 = 야간(N)</span><span>▨ 빗금 칸 = 주휴·오프</span><span>굵은 글자 = 차지(DC/EC/NC)</span><span style="margin-left:auto">NurseScheduler v4</span></div>
+      </div></div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1920,&quot;height&quot;:1080},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;success&quot;,&quot;options&quot;:[&quot;before&quot;,&quot;running&quot;,&quot;success&quot;,&quot;failed&quot;,&quot;relaxed&quot;,&quot;print&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;화면 상태&quot;},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;화면 상태&quot;},&quot;font&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Pretendard&quot;,&quot;options&quot;:[&quot;Pretendard&quot;,&quot;Noto Sans KR&quot;,&quot;Nanum Gothic&quot;,&quot;IBM Plex Sans KR&quot;,&quot;맑은 고딕&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;글꼴&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const FONTS={"Pretendard":"'Pretendard Variable',Pretendard,system-ui,sans-serif","Noto Sans KR":"'Noto Sans KR','Pretendard Variable',sans-serif","Nanum Gothic":"'Nanum Gothic','Pretendard Variable',sans-serif","IBM Plex Sans KR":"'IBM Plex Sans KR','Pretendard Variable',sans-serif","맑은 고딕":"'Malgun Gothic','Apple SD Gothic Neo',sans-serif"};const fontFamily=FONTS[this.props.font ?? 'Pretendard']||FONTS['Pretendard'];
+    const state=this.props.state ?? 'success';
+    const dark=this.props.dark ?? false;
+    const T=dark?{paper:'#0A0C10',card:'#14181F',ink:'#F1F4F8',ink2:'#B4BCC9',ink3:'#5C6573',rule:'#303744',rulesoft:'#242A35',ok:'#4FD08A',okbg:'#10261C',err:'#FF8A92',errbg:'#2C141A',warnbg:'#2C2310'}
+                :{paper:'#F4F5F7',card:'#FFFFFF',ink:'#0F1115',ink2:'#4A5160',ink3:'#B8BFC9',rule:'#DCE0E6',rulesoft:'#EBEDF0',ok:'#1F8A5B',okbg:'#ECF7F0',err:'#C7384A',errbg:'#FEEFEF',warnbg:'#FBF3E2'};
+    const themeVars=Object.entries(T).map(([k,v])=>`--${k}:${v}`).join(';');
+    const L={D:['#EEF3FE','#1B4FC3'],DC:['#E2ECFD','#1B4FC3'],E:['#FEEFEF','#C7384A'],EC:['#FCE3E5','#C7384A'],N:['#EFEBFB','#5B3FB0'],NC:['#E7E0F8','#5B3FB0'],OF:['#F2F3F5','#6B7280'],'주':['#EDEFF3','#4A5160'],V:['#ECF7F0','#1F8A5B'],'생':['#FCEAF1','#B83280'],'법':['#FDEEE5','#C2410C']};
+    const Dk={D:['#16203A','#8AA8FF'],DC:['#16203A','#8AA8FF'],E:['#2C141A','#FF8A92'],EC:['#2C141A','#FF8A92'],N:['#1E1838','#B79CFF'],NC:['#1E1838','#B79CFF'],OF:['#1F2430','#9AA3B2'],'주':['#1F2430','#B4BCC9'],V:['#10261C','#4FD08A'],'생':['#2C1520','#F5A3CF'],'법':['#2C1D10','#F0A070']};
+    const C=dark?Dk:L;
+    const CY=dark?{1:['#16203A','#8AA8FF'],2:['#10261C','#4FD08A'],3:['#1E1838','#B79CFF'],4:['#2C2310','#E0A93B']}:{1:['#EEF3FE','#1B4FC3'],2:['#ECF7F0','#1F8A5B'],3:['#EFEBFB','#5B3FB0'],4:['#FBF3E2','#B7791F']};
+    const names=[['김지현','A'],['이수진','A'],['박민지','A'],['정수아','A'],['김준혁','A'],['이민준','A'],['최은혜','B'],['강혜진','B'],['조나연','B'],['윤예진','B'],['박정호','B'],['최현우','B'],['장소연','C'],['임유진','C'],['한지원','C'],['서민재','C'],['오하늘','C'],['신유나','C']];
+    const wd=['일','월','화','수','목','금','토'];
+    const days=[];
+    for(let i=0;i<35;i++){const d=new Date(2026,8,27+i),dow=d.getDay(),date=d.getDate(),ov=d.getMonth()===8;const holiday=date===3||date===9;
+      days.push({date,wd:wd[dow],dow,ov,holiday,fg:holiday||dow===0?(dark?'#FF8A92':'#C7384A'):dow===6?(dark?'#8AA8FF':'#1B4FC3'):T.ink,
+        hbg:holiday?(dark?'#2C1D10':'#FDEEE5'):dow===0?(dark?'#2C141A':'#FEEFEF'):dow===6?(dark?'#16203A':'#EEF3FE'):T.card,
+        bl:dow===0&&i>0?`2px solid ${T.ink3}`:`1px solid ${T.rulesoft}`,op:ov?0.45:1});}
+    const cycles=[[3,'3주기'],[4,'4주기'],[1,'1주기'],[2,'2주기'],[3,'3주기']].map(([n,label])=>({label,count:7,bg:CY[n][0],fg:CY[n][1]}));
+    const base=['주','N','OF','D','E','N','D','E','N','OF','D','E','N','D','E','N','OF','D','E','N','D','E','N','OF','D','E','N','D','E','N','OF','D'];
+    const relaxed=state==='relaxed';
+    const relaxCells={'1-15':['주','D'],'4-9':['OF','E'],'10-22':['V','N']};
+    const edited={'0-20':1,'3-21':1};const locks={'0-13':1,'0-14':1,'7-22':1};
+    const rows=names.map(([name,group],i)=>{
+      const cells=days.map((d,k)=>{let code=k<3?(base[(30+k-i+32)%32]):base[((k-3-i)%32+32)%32];
+        if(d.holiday&&k>=3&&i%3===0)code='법';
+        if(i===0&&(k===13||k===14))code='V';
+        const key=i+'-'+k;let outline='none';
+        if(relaxed&&relaxCells[key]){code=relaxCells[key][1];outline=`2px dashed ${T.ink}`;}
+        if(state!=='before'&&edited[key])outline='2px solid #C7384A';
+        const c=C[code];
+        return{code,bl:d.bl,bg:c?c[0]:T.card,fg:c?c[1]:T.ink,op:d.ov?0.45:1,outline,lock:!!locks[key],
+          tip:`${name} · ${d.ov?9:10}월 ${d.date}일 ${code} — 클릭해 고치기${locks[key]?' · 잠긴 칸':''}${relaxed&&relaxCells[key]?' · 사전입력 '+relaxCells[key][0]+'에서 바뀜':''}`};});
+      const cnt=a=>cells.slice(3).filter(x=>a.includes(x.code)).length;
+      const wk=cells.slice(3).filter((x,k)=>['D','E','N','DC','EC','NC'].includes(x.code)&&(days[k+3].dow===0||days[k+3].dow===6||days[k+3].holiday)).length;
+      return{name,group,cells,d:cnt(['D','DC']),e:cnt(['E','EC']),n:cnt(['N','NC']),off:cnt(['OF','주']),wk};});
+    const reqDef={D:[3,4,5,5,5,5,4],E:[4,5,5,5,5,4,3],N:[3,3,3,3,3,3,2]};
+    const footRows=['D','E','N'].map(t=>({label:t+' 배정 / 필요',bg:C[t][0],fg:C[t][1],vals:days.map((d,k)=>{const n=rows.filter(r=>r.cells[k].code===t).length;return d.ov?'':`${n}/${reqDef[t][d.dow]}`;})}));
+    const S={before:{sub:'만들고 인쇄',status:null},running:{sub:'만드는 중…',status:['#B7791F',T.warnbg,'근무표를 만드는 중… 약 2분 30초 남음']},success:{sub:'생성 완료 · 저장됨',status:[T.ok,T.okbg,'근무표가 만들어졌고 저장됐습니다 (9월 28일 14:02) · 사전입력 134칸 모두 지켰어요']},failed:{sub:'만들 수 없음',status:null},relaxed:{sub:'완화로 생성 · 저장됨',status:[T.ok,T.okbg,'근무표가 만들어졌고 저장됐습니다 · 사전입력 3칸을 바꿔서 만들었어요']},print:{sub:'생성 완료 · 저장됨',status:[T.ok,T.okbg,'근무표가 만들어졌고 저장됐습니다 (9월 28일 14:02)']}}[state];
+    const has=['success','relaxed','print'].includes(state);
+    const primaryMake=state==='before'||state==='running';
+    const tabsDef=[['요약',0,'간호사별 야간·주말 수와 누적 편차'],['원티드 미반영',relaxed?3:0,'사전입력과 다르게 배정된 칸'],['연차(V) 설명',0,'연차가 왜 어디에 들어갔는지'],['오프특근',2,'오프인데 근무로 잡힌 날'],['주의',1,'확인이 필요한 배정'],['위시 반영',0,'희망 근무가 얼마나 들어갔는지'],['생성 기록',0,'계산 방식·시간·정확도']];
+    const activeTab=relaxed?1:0;
+    const tabs=tabsDef.map(([label,n,tip],i)=>({label,n,tip,fg:i===activeTab?T.ink:T.ink2,underline:i===activeTab?`inset 0 -3px 0 ${T.ink}`:'none',badgeBg:i===1&&n?T.err:T.paper,badgeFg:i===1&&n?'#fff':T.ink}));
+    const relaxList=[['이수진','10월 12일 (월)','주','D','이날 낮 인원이 1명 모자람'],['김준혁','10월 6일 (화)','OF','E','저녁 인원 부족'],['박정호','10월 19일 (월)','V','N','야간 자격자 부족']].map(([name,date,from,to,why])=>({name,date,from,to,why,fromBg:C[from][0],fromFg:C[from][1],toBg:C[to][0],toFg:C[to][1]}));
+    const summary=rows.slice(0,8).map((r,i)=>{const n3=r.n+18+(i%3);const dev=[0,1,-1,2,0,-2,1,0][i];return{name:r.name,n:r.n,n3,w:r.wk,w3:r.wk+9+(i%2),dev:dev>0?'+'+dev:dev===0?'0':String(dev),dfg:dev>=2?T.err:dev<=-2?T.ok:T.ink};});
+    const pdays=days.slice(4).map(d=>({date:d.date,wd:d.wd,bg:d.dow===0||d.dow===6||d.holiday?'#ddd':'#fff'}));
+    const prows=rows.map(r=>({name:r.name,d:r.d,e:r.e,n:r.n,cells:r.cells.slice(4).map(c=>({code:c.code,w:['DC','EC','NC'].includes(c.code)?800:600,bg:c.code==='N'||c.code==='NC'?'#cfcfcf':(c.code==='주'||c.code==='OF')?'repeating-linear-gradient(45deg,#fff 0 2px,#e6e6e6 2px 4px)':'#fff'}))}));
+    return{fontFamily,themeVars,darkLabel:dark?'라이트':'다크',stepSub:S.sub,
+      makeLabel:has?'다시 만들기':state==='running'?'만드는 중…':'근무표 만들기',makeTip:has?'지금 표를 버리고 새로 만듭니다. 저장한 표는 불러오기에 남아 있어요.':'사전입력을 지키면서 자동으로 채웁니다. 약 3분 걸리고 중간에 멈출 수 있어요.',
+      makeBg:primaryMake?T.ink:T.card,makeFg:primaryMake?T.card:T.ink,makeRing:primaryMake?'none':`inset 0 0 0 1.5px ${T.ink3}`,
+      relaxOn:relaxed||state==='failed'&&false,relaxBg:relaxed?T.ink:T.card,relaxRing:relaxed?'none':`inset 0 0 0 2px ${T.ink3}`,
+      printBg:has?T.ink:T.card,printFg:has?T.card:T.ink3,printRing:has?'none':`inset 0 0 0 1.5px ${T.ink3}`,hasFg:has?T.ink:T.ink3,
+      drawerOpen:relaxed,drawerBtnBg:relaxed?T.paper:T.card,drawerBtnFg:has?T.ink:T.ink3,drawerBtnRing:`inset 0 0 0 1.5px ${T.ink3}`,drawerBadge:relaxed,drawerCount:3,
+      saveLabel:has?'저장됨':'저장',saveFg:has?T.ink2:T.ink3,saveTip:has?'자동으로 저장됐습니다. 이름을 바꿔 따로 저장하려면 누르세요.':'만든 뒤에 저장할 수 있어요.',
+      showStatus:!!S.status,statusDot:S.status?S.status[0]:'',statusBg:S.status?S.status[1]:'',statusText:S.status?S.status[2]:'',running:state==='running',relaxedNote:relaxed,
+      failed:state==='failed',hasTable:has,empty:state==='before'||state==='running',
+      cycles,days,rows,footRows,tabs,tabRelax:relaxed,tabSummary:!relaxed,relaxList,summary,printing:state==='print',pdays,prows};
+  }
+}
+</script>
+</body>
+</html>

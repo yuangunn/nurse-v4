@@ -11,7 +11,7 @@ window.SolverModule = function() {
       if(this.nurses.length===0){this.toast('간호사를 먼저 등록해주세요','error');return}
       const {_readjust,...payloadPatch}=patch||{};
       if(this._recoverPoll){clearInterval(this._recoverPoll);this._recoverPoll=null}
-      this.generating=true;this.stopRequested=false;this.mipGapPercent=null;this.scheduleStopped=false;
+      this.generating=true;this.stopRequested=false;this.mipGapPercent=null;this.scheduleStopped=false;this.rdSaved=false;
       this.diagResult=null;this.fixResult=null;
       this.statusMessage='';this.estimatedSeconds=0;this.generateStartTime=Date.now();this.generateElapsed=0;
       this.generateTimer=setInterval(()=>{this.generateElapsed=Math.floor((Date.now()-this.generateStartTime)/1000)},1000);
@@ -38,7 +38,7 @@ window.SolverModule = function() {
         this.loadFairnessLedger&&this.loadFairnessLedger();
         // 13단계 진단이 짚은 셀 좌표 → 정밀분석과 동일한 '충돌 위치로 이동' 칩 표시
         if(!result.success&&Array.isArray(result.anchored)&&result.anchored.length){this.diagResult={anchored:result.anchored}}
-        if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.vReport&&this.vReport.total));this.activeTab='schedule';
+        if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':(this.vReport&&this.vReport.total?'v':'summary');this.rdDoneAt=new Date();this.activeTab='schedule';
           if(result.stopped)this.statusMessage+='\n⏹ 중지 요청으로 탐색 종료 — 현재까지 찾은 최선의 해를 표시합니다.';
           // 완화된 셀 상세 메시지
           if(Object.keys(this.relaxedCells).length>0){
@@ -165,6 +165,7 @@ window.SolverModule = function() {
       if(this._checkViolations)this._checkViolations();
       const _lv=timeoffRms.length?`⚠ 휴무 ${timeoffRms.length}건 포함 · `:'';
       this.toast(`처방 적용 — ${_lv}사전입력 ${rn}건 제거, 수요 ${sn}건 감축 (Ctrl+Z 취소)`,'success',4500);
+      this.rdUndoToast&&this.rdUndoToast(`수정안을 적용했습니다 — 사전입력 ${rn}칸을 빼고 필요 인원 ${sn}건을 줄였어요.`);
       this.fixResult=null; this.activeTab='preinput';
     },
 

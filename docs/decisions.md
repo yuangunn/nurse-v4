@@ -221,6 +221,24 @@
 - **파일**: `scheduler_base._v_report`/`_attach_reports`(결과 `v_report` + 메시지 한 줄), 프론트 `app.js`
   (`vReport`, 리포트 요약·자동 열림), `solver.js`, `index.html`(🧾 카드), MANUAL 5.5. 테스트 `test_v_report.py` 3건.
 
+### 1-24. 리디자인은 핸드오프 계약(문구·검사기·레퍼런스)을 따르고, 검사기를 통과시키려고 화면을 속이지 않는다 (2026-09-06, M8)
+- **결정**: 클로드 디자인 핸드오프(`design/handoff/`)의 세 계약 — `copy.json`(라벨·툴팁 원문), `check/spec.json`+`check_redesign.mjs`
+  (computed-style 검사기), `reference/*.png` — 을 저장소에 넣고 그대로 따른다. 핸드오프 CSS 두 장(`redesign-tokens`·`redesign-components`)은
+  손대지 않고, 우리 쪽 재매핑·특이성 보정은 `redesign-bridge.css` 한 장에 모은다. 기존 Alpine 핸들러 표현식은 그대로 두고 문구·배치만 바꾼다
+  (`scripts/handler_inventory.py` REMOVED 는 전부 의도된 이름 바꿈으로 세션노트에 기록). 문구는 의역하지 않는다.
+- **검사기와 화면의 관계**: 검사기 버그는 검사기를 고친다 — 축약 속성(`1px solid rgb()`)의 색 변환이 `1px` 을 `#01` 로 읽던 것, Chromium 의
+  `outline` 직렬화(`rgb() solid 2px`)와 spec 표기(`2px solid #hex`) 순서 차이. 정적 HTML 가정(`tr:nth-child(1)`, `th:nth-child(2)`)은 Alpine 이
+  `<template x-for>` 를 첫 요소 자식으로 남기므로 **같은 셀을 가리키는** `first-of-type`/`nth-of-type` 으로 spec 을 고친다(10곳, `$comment`).
+  spec 자기모순(13px 라벨 vs 최소 14px, 어두운 바탕 위 금지색 #D4D9E0)은 규칙 쪽을 따른다. 화면 DOM 을 검사기에 맞춰 비트는 것(사람마다 `<tbody>`,
+  헤더 행 `x-html`)은 시도했다가 되돌렸다 — 검사기는 통과해도 첫 행 셀 수 같은 다른 단언이 깨지고 구조가 낯설어진다.
+- **한 화면에 표식 하나**: `data-rd` 는 검사기 전용 표식이라 사전입력·근무표에 같은 이름이 있으면 보이는 탭에서만 붙인다(`:data-rd="activeTab==='schedule'?'table':null"`).
+  `page.$` 가 숨은 탭의 첫 요소를 잡아 근무표 검사가 사전입력 표를 보던 문제.
+- **검증 훅**: `window.__rdState(screen, state)`(`rdApplyState`) 가 디자인 예시 데이터를 재현해 상태에 진입한다 — 검사기·스크린샷 비교·걸음 테스트가 전부 이 훅을 쓴다.
+  게스트 프로필 자동 오픈, 2026-10, 공휴일 10/3·10/9, 35일 주기(`_CYCLE_REF=2026-03-01`).
+- **이유**: "기능이 사라지거나 매핑이 꼬이면 안 된다"(사용자)와 "검사기 0·핸들러 손실 0·눈 비교"(핸드오프 DoD)를 동시에 만족하는 유일한 길이 계약을
+  그대로 두고 어긋난 곳을 각각 제 자리에서 고치는 것이다. 한쪽을 다른 쪽에 맞춰 뭉개면 다음 디자인 라운드에서 무엇이 진짜인지 알 수 없다.
+- **파일**: `design/handoff/**`, `frontend/css/redesign-*.css`, `frontend/js/modules/redesign.js`, `frontend/index.html`, `scripts/handler_inventory.py`.
+
 ### 1-17. 공휴일 인정 범위 = 생성 주기 (2026-08-20)
 - **결정**: `self.holidays`를 **당월 프리픽스**가 아니라 **생성 주기 범위
   (`all_dates` = 전월 말·익월 초 패딩 포함)**로 거른다. 프론트 `autoFillHolidays`도
@@ -377,6 +395,24 @@
 - 이 함정으로 2026-09 시뮬 1개월차가 원인 불명 infeasible로 보였음 (PROD_SHIFTS
   함정 2-17과 같은 계열 — 테스트/시뮬 기본값 ≠ 실서비스 기본값).
 
+### 2-20. 객체 스프레드는 getter 를 값으로 굳힌다 — 모듈 합성은 디스크립터로 (2026-09-06)
+- **증상**: `app()` 이 `...(window.XModule())` 로 모듈을 붙이면 모듈의 `get foo(){…}` 가 스프레드 시점에 **한 번 평가된 값**으로 복사된다
+  (`CopyDataProperties` 는 [[Get]] 을 호출한다). 리디자인 모듈의 계산 속성(`rdStep`·`rdStatus`·`rdSaveLabel` …)이 전부 첫 값에서 멈췄고,
+  `this.countPrevEntries` 가 아직 없는 시점에 평가돼 `app()` 자체가 터졌다. 같은 이유로 `view-helpers.ruleScoreSummary` 는 v4.x 내내 빈 배열이었다
+  (생성 리포트의 규칙별 점수 분해가 늘 비어 있던 원인).
+- **해결**: `const _app = {…}; for (name of MODULES) Object.defineProperties(_app, Object.getOwnPropertyDescriptors(window[name]()))` — 접근자 서술자가
+  그대로 붙어 Alpine 의 reactive proxy 가 getter 를 살아 있는 계산 속성으로 다룬다. 우선순위(뒤쪽 모듈이 덮어씀)는 스프레드와 같다.
+- **교훈**: 모듈 객체에 getter 를 쓰려면 합성 방식을 먼저 확인한다. 스프레드로 되돌리지 말 것.
+
+### 2-21. 목록(x-for)을 품은 블록에 x-if 를 쓰면 내려가는 찰나 안쪽 x-for 가 한 번 더 돈다 (2026-09-06)
+- **증상**: 실제 생성 결과가 있는 상태에서 성공→실패→전(前) 상태로 바뀔 때 콘솔에 `Cannot read properties of undefined (reading 'length')`
+  (Alpine 내부, x-for 의 `_x_prevKeys`). x-if 조건과 안쪽 x-for 의 의존성이 **같은 틱에** 바뀌면, x-if 가 블록을 떼어 낸 뒤에도 이미 큐에 들어간
+  x-for 효과가 한 번 더 실행된다 — @vue/reactivity 의 `ReactiveEffect.run()` 은 stop 된 효과도 fn 을 실행한다. 식을 `?.`·`||[]` 로 감싸도 못 막는다
+  (오류는 우리 식이 아니라 Alpine 의 prevKeys 접근).
+- **해결**: 부재를 단언하는 상태 줄(`[data-rd=status]`, spec `exists:false`)만 x-if 로 두고, 실패 배너·서랍·리포트 탭·생성 기록처럼 목록을 품은
+  블록 15곳은 x-show 로. 늘 그려지므로 안쪽 식은 널 안전(`rdFail?.title`, `(vReport?.weeks||[])`, `fixResult?.message` …)해야 한다.
+- **교훈**: "존재/부재" 가 필요한 곳만 x-if. 목록이 있고 조건과 목록 의존성이 같이 바뀌는 블록은 x-show + 널 안전 식.
+
 ## 3. 사용자 정립 규칙 (명시 지시)
 
 | 규칙 | 출처 |
@@ -409,3 +445,4 @@
 | v4.0.2 | 중간번 포함 9개 금지 전환 |
 | v4.0.3 | UX 개선 (토스트 히스토리, Undo 카운터, 프린트 등) |
 | v4.0.4 | PyInstaller `--windowed` stdout=None 수정 + em 기반 입력 폭 + 다크모드 카드 수정 (진행 중) |
+| v4.13.0 | **M8** 클로드 디자인 핸드오프 적용 — 시니어 친화 리디자인, 검사기 0 불일치·핸들러 손실 0 (결정 1-24·2-20) |
