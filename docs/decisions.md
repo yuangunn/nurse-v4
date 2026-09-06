@@ -404,6 +404,15 @@
   그대로 붙어 Alpine 의 reactive proxy 가 getter 를 살아 있는 계산 속성으로 다룬다. 우선순위(뒤쪽 모듈이 덮어씀)는 스프레드와 같다.
 - **교훈**: 모듈 객체에 getter 를 쓰려면 합성 방식을 먼저 확인한다. 스프레드로 되돌리지 말 것.
 
+### 2-21. 목록(x-for)을 품은 블록에 x-if 를 쓰면 내려가는 찰나 안쪽 x-for 가 한 번 더 돈다 (2026-09-06)
+- **증상**: 실제 생성 결과가 있는 상태에서 성공→실패→전(前) 상태로 바뀔 때 콘솔에 `Cannot read properties of undefined (reading 'length')`
+  (Alpine 내부, x-for 의 `_x_prevKeys`). x-if 조건과 안쪽 x-for 의 의존성이 **같은 틱에** 바뀌면, x-if 가 블록을 떼어 낸 뒤에도 이미 큐에 들어간
+  x-for 효과가 한 번 더 실행된다 — @vue/reactivity 의 `ReactiveEffect.run()` 은 stop 된 효과도 fn 을 실행한다. 식을 `?.`·`||[]` 로 감싸도 못 막는다
+  (오류는 우리 식이 아니라 Alpine 의 prevKeys 접근).
+- **해결**: 부재를 단언하는 상태 줄(`[data-rd=status]`, spec `exists:false`)만 x-if 로 두고, 실패 배너·서랍·리포트 탭·생성 기록처럼 목록을 품은
+  블록 15곳은 x-show 로. 늘 그려지므로 안쪽 식은 널 안전(`rdFail?.title`, `(vReport?.weeks||[])`, `fixResult?.message` …)해야 한다.
+- **교훈**: "존재/부재" 가 필요한 곳만 x-if. 목록이 있고 조건과 목록 의존성이 같이 바뀌는 블록은 x-show + 널 안전 식.
+
 ## 3. 사용자 정립 규칙 (명시 지시)
 
 | 규칙 | 출처 |

@@ -718,6 +718,8 @@ self.cbLogging.subscribe(_on_log)
   (`:data-rd="activeTab==='schedule'?'table':null"`). 새 표식을 둘 화면에 넣을 때도 같은 방식
 - **`x-for` 키는 문자열** — `:key="day"`(Date 객체)는 Alpine 경고가 행마다 찍힌다 → `:key="dayKey(day)"`
 - **문구는 `design/handoff/copy.json` 그대로** — 라벨·툴팁을 의역하지 말 것. 새 버튼에도 `title` 한 문장(끝 문장은 툴팁에서 옅게 표시)
+- **목록(x-for)을 품은 블록은 x-show** — x-if 는 내려가는 찰나 안쪽 x-for 가 한 번 더 돌아 콘솔 오류(결정 2-21). 부재를 단언하는 상태 줄만 x-if.
+  늘 그려지므로 리포트 식은 널 안전(`vReport?.total`, `(wishReport?.per_nurse||[])`)으로 쓴다
 
 ---
 
