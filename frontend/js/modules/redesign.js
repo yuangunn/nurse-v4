@@ -94,7 +94,7 @@ window.RedesignModule = function() {
       const sched=this.rdSched;
       let s3='만들고 인쇄';
       if(this.generating) s3='만드는 중…';
-      else if(sched) s3=this.rdRelaxedCount ? '완화로 생성 · 저장됨' : '생성 완료 · 저장됨';
+      else if(sched) s3=(this.rdRelaxedCount ? '완화로 생성' : '생성 완료')+(this.rdSaved ? ' · 저장됨' : '');   // 저장됨은 실제로 저장됐을 때만
       else if(!this.statusOk && this.statusMessage) s3='만들 수 없음';
       let s2='부족한 날 확인';
       if(this.analysisResult){ const danger=(this.analysisResult.warnings||[]).some(w=>w.type==='danger'); s2 = danger ? '부족한 날 있음' : '부족한 날 없음'; }
@@ -146,7 +146,9 @@ window.RedesignModule = function() {
       if(!this.rdSched) return null;
       const rx=this.rdRelaxedCount;
       const pre=this.countPrevEntries();
-      const q = this.scheduleStopped ? ' · 중간에 멈춰 지금까지 찾은 답' : (this.mipGapPercent!=null ? (this.mipGapPercent<=0.1 ? ' · 가장 좋은 답' : ` · 정확도 ${this.mipGapPercent}%`) : '');
+      // gap(최적해와의 거리) 문장 — CP-SAT 가능해는 gap 이 수천 % 도 나오므로 숫자는 10% 안쪽일 때만 보여 준다
+      const g=this.mipGapPercent;
+      const q = this.scheduleStopped ? ' · 중간에 멈춰 지금까지 찾은 답' : (g==null ? '' : (g<=0.1 ? ' · 가장 좋은 답' : (g<=10 ? ` · 가장 좋은 답과 ${Math.round(g*10)/10}% 안쪽 차이` : ' · 시간 안에 찾은 답 (더 좋은 표가 있을 수 있어요)')));
       const at=this.rdDoneAt instanceof Date ? ` (${this.rdDoneAt.getMonth()+1}월 ${this.rdDoneAt.getDate()}일 ${String(this.rdDoneAt.getHours()).padStart(2,'0')}:${String(this.rdDoneAt.getMinutes()).padStart(2,'0')})` : '';
       const saved = this.rdSaved ? '만들어졌고 저장됐습니다' : '만들어졌습니다';
       if(rx) return {kind:'ok', relaxed:true, text:`근무표가 ${saved}${at} · 사전입력 ${rx}칸을 바꿔서 만들었어요${q}`};
