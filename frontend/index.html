@@ -642,13 +642,13 @@
             <span x-show="feas.message" x-text="feas.message"></span>
             <button @click="diagnoseConflicts();activeTab='schedule'" :disabled="diagnosing" class="rbtn rbtn-sm rbtn-secondary" x-text="diagnosing?'자세히 보는 중…':'왜 안 되는지 자세히 보기'" title="충돌을 하나하나 짚어 정확한 원인을 찾습니다. 결과는 근무표 화면의 생성 기록에 표시됩니다."></button></div>
         </template>
-        <template x-if="staffingAlerts&&staffingAlerts.short.length">
+        <template x-if="staffingAlerts&&staffingAlerts?.short.length">
           <div class="row"><b style="color:var(--err)">인원이 모자라는 날</b>
-            <template x-for="a in staffingAlerts.short.slice(0,8)" :key="'ss'+a.dk"><button @click="jumpToPreCell(null,a.dk)" class="rbtn rbtn-sm rbtn-secondary" x-text="rdFmtMD(a.dk)+' 필요 '+a.needed+' · 나올 수 있는 사람 '+a.avail" title="이 날짜의 칸으로 갑니다."></button></template></div>
+            <template x-for="a in staffingAlerts?.short.slice(0,8)" :key="'ss'+a.dk"><button @click="jumpToPreCell(null,a.dk)" class="rbtn rbtn-sm rbtn-secondary" x-text="rdFmtMD(a.dk)+' 필요 '+a.needed+' · 나올 수 있는 사람 '+a.avail" title="이 날짜의 칸으로 갑니다."></button></template></div>
         </template>
-        <template x-if="staffingAlerts&&staffingAlerts.tight.length&&!staffingAlerts.short.length">
+        <template x-if="staffingAlerts&&staffingAlerts?.tight.length&&!staffingAlerts?.short.length">
           <div class="row"><b style="color:var(--warn)">여유가 0명인 날</b>
-            <template x-for="a in staffingAlerts.tight.slice(0,8)" :key="'st'+a.dk"><button @click="jumpToPreCell(null,a.dk)" class="rbtn rbtn-sm rbtn-secondary" x-text="rdFmtMD(a.dk)" title="이 날짜의 칸으로 갑니다."></button></template>
+            <template x-for="a in staffingAlerts?.tight.slice(0,8)" :key="'st'+a.dk"><button @click="jumpToPreCell(null,a.dk)" class="rbtn rbtn-sm rbtn-secondary" x-text="rdFmtMD(a.dk)" title="이 날짜의 칸으로 갑니다."></button></template>
             <span>— 휴가를 더 넣으면 부족해집니다</span></div>
         </template>
         <template x-if="prevPinNotes.length>0">
@@ -763,7 +763,7 @@
 <div x-show="activeTab==='schedule'" x-cloak class="content-flex rd-screen">
   <div class="fs-only" x-show="tableFullscreen" x-cloak style="display:flex;align-items:center;gap:12px;padding:8px 24px;flex-shrink:0">
     <span style="font-size:var(--fs-h2);font-weight:var(--fw-strong)" x-text="`${year}년 ${month}월 근무표`"></span>
-    <span x-show="rdStatus&&!rdStatus.running" x-text="rdStatus?rdStatus.text:''" style="font-size:var(--fs-sub);color:var(--ink-2)"></span>
+    <span x-show="rdStatus&&!rdStatus?.running" x-text="rdStatus?rdStatus.text:''" style="font-size:var(--fs-sub);color:var(--ink-2)"></span>
     <button @click="tableFullscreen=false" class="rbtn rbtn-sm rbtn-secondary" style="margin-left:auto" title="전체화면을 끝냅니다 (Esc)."><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18 M6 6l12 12"/></svg>전체화면 끝내기</button>
   </div>
   <div class="rtoolbar fs-hide rdesk-only" :data-rd="activeTab==='schedule'?'toolbar':null">
@@ -854,24 +854,23 @@
 
   <!-- 상태 줄 — 표 바로 위 한 줄 (만드는 중 / 완료 / 완화 완료) -->
   <template x-if="rdStatus">
-    <div class="rstatus fs-hide rdesk-only" data-rd="status" :class="rdStatus.kind" aria-live="polite">
-      <span class="dot"></span><span x-text="rdStatus.text"></span>
-      <template x-if="rdStatus.running"><div class="rprogress"><i :style="`width:${estimatedSeconds?Math.min(100,Math.round(generateElapsed/estimatedSeconds*100)):35}%`"></i></div></template>
-      <template x-if="rdStatus.running"><button @click="stopGenerate()" :disabled="stopRequested" class="rbtn rbtn-sm rbtn-secondary" data-rd="btn-stop" style="margin-left:auto" title="지금까지 찾은 답이 있으면 그것을 보여 주고 멈춥니다."><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg><span x-text="stopRequested?'멈추는 중':'멈추기'"></span></button></template>
-      <template x-if="rdStatus.relaxed"><span class="relaxed-note"><i></i>점선 칸 = 사전입력과 다르게 배정된 칸</span></template>
+    <div class="rstatus fs-hide rdesk-only" data-rd="status" :class="rdStatus?.kind" aria-live="polite">
+      <span class="dot"></span><span x-text="rdStatus?.text"></span>
+      <template x-if="rdStatus?.running"><div class="rprogress"><i :style="`width:${estimatedSeconds?Math.min(100,Math.round(generateElapsed/estimatedSeconds*100)):35}%`"></i></div></template>
+      <template x-if="rdStatus?.running"><button @click="stopGenerate()" :disabled="stopRequested" class="rbtn rbtn-sm rbtn-secondary" data-rd="btn-stop" style="margin-left:auto" title="지금까지 찾은 답이 있으면 그것을 보여 주고 멈춥니다."><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg><span x-text="stopRequested?'멈추는 중':'멈추기'"></span></button></template>
+      <template x-if="rdStatus?.relaxed"><span class="relaxed-note"><i></i>점선 칸 = 사전입력과 다르게 배정된 칸</span></template>
       <template x-if="rdEdited>0&&!generating"><span class="relaxed-note"><span x-text="`손으로 고친 칸 ${rdEdited}개`"></span><button @click="readjustSchedule()" class="rbtn rbtn-sm rbtn-secondary" title="고친 칸은 그대로 잠그고, 인원·규칙이 다시 맞도록 나머지를 최소한으로 다시 맞춥니다.">고친 대로 다시 맞추기</button><span x-show="readjustSummary" x-text="readjustSummary"></span></span></template>
     </div>
   </template>
 
   <!-- 실패 배너 — 이유 한 줄 + 후보 3 + 주 버튼 1 -->
-  <template x-if="rdFail">
-    <div class="rfail fs-hide rdesk-only" data-rd="fail">
+      <div class="rfail fs-hide rdesk-only" data-rd="fail" x-show="rdFail" x-cloak>
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z M12 9v4 M12 17h.01"/></svg>
       <div style="flex:1;min-width:0">
-        <div class="rfail-title" x-text="rdFail.title"></div>
-        <div class="rfail-body" x-text="rdFail.body"></div>
+        <div class="rfail-title" x-text="rdFail?.title"></div>
+        <div class="rfail-body" x-text="rdFail?.body"></div>
         <div class="rfail-fixes">
-          <template x-for="(f,i) in rdFail.fixes" :key="'ff'+i">
+          <template x-for="(f,i) in (rdFail?.fixes||[])" :key="'ff'+i">
             <button class="rfail-fix" @click="rdApplyFix(f)" :title="f.kind==='cell'?'사전입력 화면의 이 칸으로 바로 갑니다.':'그날 필요 인원을 1명 줄입니다. 되돌리기로 취소할 수 있어요.'"><span x-show="f.code" class="code" :data-shift="f.code" x-text="f.code"></span><span x-text="f.label"></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14 m12 5 7 7-7 7"/></svg></button>
           </template>
         </div>
@@ -879,7 +878,7 @@
       </div>
       <button @click="rdRelaxAndRemake()" class="rbtn rbtn-primary" title="완화를 켜고 다시 만듭니다. 바꾼 사전입력은 결과 표에 점선으로 표시되고, 잠근 칸은 건드리지 않습니다."><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5"/></svg>사전입력 완화 켜고 다시 만들기</button>
     </div>
-  </template>
+  
 
   <!-- 폰(보기 전용): 툴바 대신 월 이동 + 필터 칩. 화살표는 헤더의 ym-prev/next 와 같은 아이콘 버튼이라 같은 표식을 쓴다 (헤더는 폰에서 숨김) -->
   <div class="rphone-only">
@@ -957,16 +956,14 @@
   </template>
 
   <!-- 요약·리포트 서랍 — 표 아래 236px, 탭 7 -->
-  <template x-if="showReports&&(rdSched||statusMessage)">
-    <div class="rdrawer fs-hide rdesk-only" data-rd="drawer">
+      <div class="rdrawer fs-hide rdesk-only" data-rd="drawer" x-show="showReports&&(rdSched||statusMessage)" x-cloak>
       <div class="rdrawer-tabs">
         <template x-for="t in rdDrawerTabs" :key="'tab'+t.id"><button class="rtab" :class="{'is-active':reportTab===t.id}" @click="reportTab=t.id" :title="t.tip"><span x-text="t.label"></span><span x-show="t.n" class="rbadge" :class="t.err?'err':''" x-text="t.n"></span></button></template>
         <button @click="showReports=false" class="rbtn rbtn-sm rbtn-quiet" style="margin-left:auto" data-rd="drawer-close" title="서랍을 닫습니다. 요약·리포트 버튼으로 다시 엽니다."><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18 M6 6l12 12"/></svg>닫기</button>
       </div>
       <div class="rdrawer-body">
         <!-- 요약 -->
-        <template x-if="reportTab==='summary'">
-          <div>
+                  <div x-show="reportTab==='summary'" x-cloak>
             <div class="intro" x-show="fairnessData" x-text="`평균 야간 ${fairnessData?.avgNights}회 · 주말 ${fairnessData?.avgWeekends}회`+(fairnessCard?` · 편차 야간 ${fairnessCard.rangeN} · 주말·공휴일 ${fairnessCard.rangeW}`:'')+((fairnessOffsets||weekendOffsets)?' · 이번 만들기에 지난 3달 누적을 반영했어요':'')+' · ※ = 공평 대상 아님(야간전담·전입/전출·신규·야간 불가·임산부)'"></div>
             <table class="rsum">
               <thead><tr><th>이름</th><th>야간 (이달)</th><th>야간 (3달 누적)</th><th>주말·공휴 (이달)</th><th>주말·공휴 (누적)</th><th>평균과 차이</th><th>낮</th><th>저녁</th><th>휴무</th><th>휴가</th><th title="양옆이 근무인 하루짜리 휴무 — 많을수록 회복이 어려움">고립휴무</th><th title="가장 긴 연속 휴무 일수">연속휴무</th><th>점수</th></tr></thead>
@@ -977,13 +974,12 @@
               </tr></template></tbody>
             </table>
           </div>
-        </template>
+        
         <!-- 원티드 미반영 -->
-        <template x-if="reportTab==='relaxed'">
-          <div>
+                  <div x-show="reportTab==='relaxed'" x-cloak>
             <div class="intro" x-show="rdRelaxedCount" x-html="`이 조건으로 만들려면 아래 <b>${rdRelaxedCount}칸</b>을 바꿔야 했습니다. 바꾸면 안 되는 칸은 <b>되돌려서 잠금</b>을 누른 뒤 다시 만들어 보세요. 메모(사연)가 있는 칸이 먼저 옵니다.`"></div>
             <div class="intro" x-show="!rdRelaxedCount">사전입력을 모두 지켰어요. 바뀐 칸이 없습니다.</div>
-            <template x-for="x in rdRelaxedList" :key="'rx'+x.nid+x.dk">
+            <template x-for="x in (rdRelaxedList||[])" :key="'rx'+x.nid+x.dk">
               <div class="rrow">
                 <span style="font-weight:var(--fw-label)" x-text="x.name"></span><span style="color:var(--ink-2)" x-text="x.date"></span>
                 <span style="display:flex;align-items:center;gap:8px;font-weight:var(--fw-label)"><span class="chip" :data-shift="x.from" x-text="x.from"></span><span style="color:var(--ink-2)">→</span><span class="chip" :data-shift="x.to" x-text="x.to"></span><span style="color:var(--ink-2);font-weight:var(--fw-body);margin-left:6px" x-text="x.note?'메모: '+x.note:(x.boost?'(지난달에도 바뀐 사람 — 이번엔 더 지키려 했어요)':'')"></span></span>
@@ -992,14 +988,12 @@
               </div>
             </template>
           </div>
-        </template>
+        
         <!-- 연차(V) 설명 -->
-        <template x-if="reportTab==='v'">
-          <div>
-            <template x-if="vReport&&vReport.total">
-              <div>
-                <div class="intro" x-text="`연차(V)를 ${vReport.total}건 자동으로 넣었습니다. 일별 인원은 ‘정확히 일치’라 남는 사람은 반드시 쉬어야 하는데, 자동으로 놓을 수 있는 휴무는 OF(주 1)·생(월 1)·V뿐입니다. 사전입력으로 넣은 V는 세지 않았습니다.`"></div>
-                <template x-for="w in vReport.weeks" :key="'vw'+w.week">
+                  <div x-show="reportTab==='v'" x-cloak>
+                          <div x-show="vReport&&vReport?.total" x-cloak>
+                <div class="intro" x-text="`연차(V)를 ${vReport?.total}건 자동으로 넣었습니다. 일별 인원은 ‘정확히 일치’라 남는 사람은 반드시 쉬어야 하는데, 자동으로 놓을 수 있는 휴무는 OF(주 1)·생(월 1)·V뿐입니다. 사전입력으로 넣은 V는 세지 않았습니다.`"></div>
+                <template x-for="w in (vReport?.weeks||[])" :key="'vw'+w.week">
                   <div style="margin-bottom:10px">
                     <div x-text="w.summary"></div>
                     <div class="chips"><template x-for="(c,ci) in w.cells_v" :key="'vc'+w.week+ci"><button @click="jumpToPreCell(c.nurse_id,c.date)" class="rbtn rbtn-sm rbtn-secondary" x-text="c.name+' '+c.date.slice(5).replace('-','/')" title="사전입력 화면의 이 칸으로 갑니다."></button></template></div>
@@ -1008,44 +1002,39 @@
                 </template>
                 <button @click="activeTab='analysis'" class="rbtn rbtn-sm rbtn-secondary" title="분석 화면으로 가서 주휴 추천을 받습니다.">분석 화면으로</button>
               </div>
-            </template>
-            <div class="intro" x-show="!(vReport&&vReport.total)">자동으로 넣은 연차(V)가 없습니다.</div>
+            
+            <div class="intro" x-show="!(vReport&&vReport?.total)">자동으로 넣은 연차(V)가 없습니다.</div>
           </div>
-        </template>
+        
         <!-- 오프특근 -->
-        <template x-if="reportTab==='teukgeun'">
-          <div>
+                  <div x-show="reportTab==='teukgeun'" x-cloak>
             <div class="intro" x-show="offTeukgeun.length">휴무 자리가 모자라 <b>주 1회 OFF를 반납</b>한 주입니다 (주휴는 유지). 결원·휴가가 몰린 주에 불가피하게 생깁니다 — 수당·보상은 별도로 챙기세요.</div>
             <div class="intro" x-show="!offTeukgeun.length">오프특근이 없습니다.</div>
-            <div class="chips"><template x-for="(t,ti) in offTeukgeun" :key="'ot'+ti"><span class="rbadge" style="height:auto;padding:6px 10px;font-weight:var(--fw-label)" x-text="t.name+' '+t.week+'주차 ('+t.start.slice(5)+'~'+t.end.slice(5)+')'"></span></template></div>
+            <div class="chips"><template x-for="(t,ti) in (offTeukgeun||[])" :key="'ot'+ti"><span class="rbadge" style="height:auto;padding:6px 10px;font-weight:var(--fw-label)" x-text="t.name+' '+t.week+'주차 ('+t.start.slice(5)+'~'+t.end.slice(5)+')'"></span></template></div>
           </div>
-        </template>
+        
         <!-- 주의 -->
-        <template x-if="reportTab==='warn'">
-          <div>
+                  <div x-show="reportTab==='warn'" x-cloak>
             <div class="intro" x-show="!scheduleWarnings.length&&!analysisWarnings.length">규칙 한도를 넘긴 배정이 없습니다.</div>
-            <template x-for="(w,i) in scheduleWarnings" :key="'sw'+i"><div><b x-text="w.nurse"></b>: <span x-text="w.msg"></span></div></template>
+            <template x-for="(w,i) in (scheduleWarnings||[])" :key="'sw'+i"><div><b x-text="w.nurse"></b>: <span x-text="w.msg"></span></div></template>
             <template x-for="w in analysisWarnings" :key="'aw'+w"><div style="color:var(--ink-2)" x-text="w"></div></template>
           </div>
-        </template>
+        
         <!-- 위시 반영 -->
-        <template x-if="reportTab==='wish'">
-          <div>
-            <template x-if="wishReport">
-              <div>
-                <div class="intro" x-html="`희망 근무 <b>${wishReport.total_granted}/${wishReport.total_requested}</b> 반영 (${Math.round((wishReport.total_granted||0)/Math.max(1,wishReport.total_requested||1)*100)}%). 못 들어간 희망은 <b>다음 달 만들기에서 먼저</b> 반영됩니다.`"></div>
-                <template x-for="r in wishReport.per_nurse" :key="'wr'+r.nurse_id">
+                  <div x-show="reportTab==='wish'" x-cloak>
+                          <div x-show="wishReport" x-cloak>
+                <div class="intro" x-html="`희망 근무 <b>${wishReport?.total_granted}/${wishReport?.total_requested}</b> 반영 (${Math.round((wishReport?.total_granted||0)/Math.max(1,wishReport?.total_requested||1)*100)}%). 못 들어간 희망은 <b>다음 달 만들기에서 먼저</b> 반영됩니다.`"></div>
+                <template x-for="r in (wishReport?.per_nurse||[])" :key="'wr'+r.nurse_id">
                   <div class="chips" style="align-items:center"><b x-text="r.name"></b><span :style="r.granted===r.requested?'color:var(--ok)':'color:var(--warn)'" x-text="r.granted+'/'+r.requested+' 반영'"></span><span x-show="r.boost" style="color:var(--warn)" x-text="'(지난달 미반영 보정 ×'+r.boost+')'"></span><span x-show="r.leave_filled" style="color:var(--ink-2)" x-text="'(그중 연차·휴가로 충족 '+r.leave_filled+'건)'"></span>
                     <template x-for="(u,ui) in r.unmet" :key="'wu'+r.nurse_id+ui"><button @click="jumpToPreCell(r.nurse_id,u.date)" class="rbtn rbtn-sm rbtn-secondary" x-text="u.date.slice(5).replace('-','/')+' 희망 '+u.wish+' → '+u.assigned" title="사전입력 화면의 이 칸으로 갑니다."></button></template></div>
                 </template>
               </div>
-            </template>
+            
             <div class="intro" x-show="!wishReport">이번 만들기에는 희망 근무가 없었습니다.</div>
           </div>
-        </template>
+        
         <!-- 생성 기록 -->
-        <template x-if="reportTab==='log'">
-          <div style="display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;flex-direction:column;gap:10px" x-show="reportTab==='log'" x-cloak>
             <div x-show="statusMessage" class="rmsg"><template x-for="(line, i) in (statusMessage||'').split('\n')" :key="i"><div :class="line.includes('★')?'star':''" x-text="line||' '"></div></template></div>
             <div x-show="!statusOk&&statusMessage" class="chips">
               <button @click="diagnoseConflicts()" :disabled="diagnosing" class="rbtn rbtn-sm rbtn-secondary" x-text="diagnosing?'자세히 보는 중…':'왜 안 되는지 자세히 보기'" title="충돌을 하나하나 짚어 정확한 원인을 찾습니다 (다른 계산 방식으로 다시 검사)."></button>
@@ -1057,34 +1046,30 @@
             <template x-if="diagResult&&diagResult.anchored&&diagResult.anchored.some(a=>a.nurse_id||a.date)">
               <div><div class="intro">문제가 된 칸으로 가기:</div><div class="chips"><template x-for="(a,ai) in diagResult.anchored" :key="'anc'+ai"><button x-show="a.nurse_id||a.date" @click="jumpToPreCell(a.nurse_id,a.date)" class="rbtn rbtn-sm rbtn-secondary" x-text="a.label" title="사전입력 화면의 이 칸으로 갑니다."></button></template></div></div>
             </template>
-            <template x-if="fixResult">
-              <div><div class="rmsg" x-text="fixResult.message"></div>
-                <div class="chips"><button x-show="(fixResult.removals&&fixResult.removals.length)||(fixResult.shortfalls&&fixResult.shortfalls.some(s=>s.kind==='staff'))" @click="applyFix()" class="rbtn rbtn-sm rbtn-secondary" title="위 수정안을 사전입력에 적용합니다. 휴무를 빼는 안은 한 번 더 확인합니다.">수정안 모두 적용</button>
-                  <template x-for="(rm,ri) in fixResult.removals" :key="'rm'+ri"><button @click="jumpToPreCell(rm.nurse_id,rm.date_iso)" class="rbtn rbtn-sm rbtn-secondary" :style="rm.is_timeoff?'color:var(--err)':''" :title="rm.is_timeoff?'휴무를 빼는 안입니다 — 신중히 검토하세요. 누르면 그 칸으로 갑니다.':'누르면 그 칸으로 갑니다.'" x-text="(rm.is_timeoff?'휴무 · ':'')+rm.nurse+' '+rm.date+' '+rm.pre"></button></template></div></div>
-            </template>
-            <template x-if="generationReport">
-              <div>
-                <div class="chips" style="gap:16px"><span x-text="'소요 '+Math.round(generationReport.duration_seconds||0)+'초'"></span><span x-show="generationReport.final_gap_percent!=null" x-text="'정확도 '+(generationReport.final_gap_percent??'-')+'%'"></span><span x-show="generationReport.num_vars" x-text="'변수 '+(generationReport.num_vars||0).toLocaleString('ko-KR')+' · 제약 '+(generationReport.num_constraints||0).toLocaleString('ko-KR')"></span><span x-show="generationReport.relax_attempted" style="color:var(--warn)">완화 발동</span><span x-show="generationReport.stopped" style="color:var(--warn)">중간에 멈춤</span>
+                          <div x-show="fixResult" x-cloak><div class="rmsg" x-text="fixResult?.message"></div>
+                <div class="chips"><button x-show="(fixResult?.removals&&fixResult?.removals.length)||(fixResult?.shortfalls&&fixResult?.shortfalls.some(s=>s.kind==='staff'))" @click="applyFix()" class="rbtn rbtn-sm rbtn-secondary" title="위 수정안을 사전입력에 적용합니다. 휴무를 빼는 안은 한 번 더 확인합니다.">수정안 모두 적용</button>
+                  <template x-for="(rm,ri) in (fixResult?.removals||[])" :key="'rm'+ri"><button @click="jumpToPreCell(rm.nurse_id,rm.date_iso)" class="rbtn rbtn-sm rbtn-secondary" :style="rm.is_timeoff?'color:var(--err)':''" :title="rm.is_timeoff?'휴무를 빼는 안입니다 — 신중히 검토하세요. 누르면 그 칸으로 갑니다.':'누르면 그 칸으로 갑니다.'" x-text="(rm.is_timeoff?'휴무 · ':'')+rm.nurse+' '+rm.date+' '+rm.pre"></button></template></div></div>
+            
+                          <div x-show="generationReport" x-cloak>
+                <div class="chips" style="gap:16px"><span x-text="'소요 '+Math.round(generationReport?.duration_seconds||0)+'초'"></span><span x-show="generationReport?.final_gap_percent!=null" x-text="'정확도 '+(generationReport?.final_gap_percent??'-')+'%'"></span><span x-show="generationReport?.num_vars" x-text="'변수 '+(generationReport?.num_vars||0).toLocaleString('ko-KR')+' · 제약 '+(generationReport?.num_constraints||0).toLocaleString('ko-KR')"></span><span x-show="generationReport?.relax_attempted" style="color:var(--warn)">완화 발동</span><span x-show="generationReport?.stopped" style="color:var(--warn)">중간에 멈춤</span>
                   <button @click="showGenReport=!showGenReport" class="rbtn rbtn-sm rbtn-quiet" x-text="showGenReport?'자세한 기록 접기':'자세한 기록 펼치기'" title="시간-정확도 곡선, 개선 없던 구간, 규칙별 점수, 최근 기록을 봅니다."></button></div>
                 <div x-show="showGenReport" x-cloak>
-                  <template x-if="generationReport.curve&&generationReport.curve.length>1">
+                  <template x-if="generationReport?.curve&&generationReport?.curve.length>1">
                     <div style="margin:8px 0"><div class="intro">시간–정확도 곡선 (낮을수록 가장 좋은 답에 가까움)</div>
-                      <svg width="100%" height="56" viewBox="0 0 300 56" preserveAspectRatio="none" style="background:var(--paper);border-radius:6px"><polyline fill="none" stroke="#2563EB" stroke-width="1.5" :points="(()=>{const c=generationReport.curve;const tMax=Math.max(...c.map(p=>p[0]),1);const gMax=Math.max(...c.map(p=>p[1]),0.1);return c.map(p=>`${(p[0]/tMax*296+2).toFixed(1)},${(52-p[1]/gMax*48+2).toFixed(1)}`).join(' ')})()"/></svg></div>
+                      <svg width="100%" height="56" viewBox="0 0 300 56" preserveAspectRatio="none" style="background:var(--paper);border-radius:6px"><polyline fill="none" stroke="#2563EB" stroke-width="1.5" :points="(()=>{const c=generationReport?.curve;const tMax=Math.max(...c.map(p=>p[0]),1);const gMax=Math.max(...c.map(p=>p[1]),0.1);return c.map(p=>`${(p[0]/tMax*296+2).toFixed(1)},${(52-p[1]/gMax*48+2).toFixed(1)}`).join(' ')})()"/></svg></div>
                   </template>
-                  <template x-if="generationReport.stalls&&generationReport.stalls.length">
-                    <div style="color:var(--warn)"><template x-for="(st,si) in generationReport.stalls" :key="'st'+si"><div x-text="Math.round(st.from)+'초~'+Math.round(st.to)+'초 구간 개선 없음 (정확도 '+st.gap+'%) — 이때 멈춰도 무방했습니다'"></div></template></div>
-                  </template>
-                  <div x-show="generationReport.history_note" style="color:var(--warn)" x-text="generationReport?.history_note"></div>
-                  <template x-if="ruleScoreSummary.length">
-                    <div style="margin-top:8px"><div class="intro">우선순위 규칙별 점수 (전체 간호사 합산)</div>
+                                      <div style="color:var(--warn)" x-show="generationReport?.stalls&&generationReport?.stalls.length" x-cloak><template x-for="(st,si) in (generationReport?.stalls||[])" :key="'st'+si"><div x-text="Math.round(st.from)+'초~'+Math.round(st.to)+'초 구간 개선 없음 (정확도 '+st.gap+'%) — 이때 멈춰도 무방했습니다'"></div></template></div>
+                  
+                  <div x-show="generationReport?.history_note" style="color:var(--warn)" x-text="generationReport?.history_note"></div>
+                                      <div style="margin-top:8px" x-show="ruleScoreSummary.length" x-cloak><div class="intro">우선순위 규칙별 점수 (전체 간호사 합산)</div>
                       <table class="rsum" style="width:auto;min-width:420px"><thead><tr><th>규칙</th><th>발생</th><th>합계</th></tr></thead><tbody><template x-for="rs in ruleScoreSummary.slice(0,12)" :key="'rs'+rs.name"><tr><td x-text="rs.name"></td><td x-text="rs.count"></td><td :class="rs.total>=0?'lo':'hi'" x-text="(rs.total>=0?'+':'')+rs.total"></td></tr></template></tbody></table></div>
-                  </template>
-                  <template x-if="generationReport.recent_runs&&generationReport.recent_runs.length>1">
-                    <div style="margin-top:8px"><div class="intro">최근 만들기 기록</div><template x-for="(r,ri) in generationReport.recent_runs" :key="'gr'+ri"><div style="color:var(--ink-2)" x-text="(r.created_at||'').slice(5,16)+' · '+(r.solver==='cpsat'?'다른 방식':r.solver==='race'?'둘 다':'기본')+' · '+(r.success?'성공':'실패')+(r.relaxed?' · 완화':'')+' · '+Math.round(r.duration_s||0)+'초'+(r.final_gap!=null?' · 정확도 '+r.final_gap+'%':'')"></div></template></div>
+                  
+                  <template x-if="generationReport?.recent_runs&&generationReport?.recent_runs.length>1">
+                    <div style="margin-top:8px"><div class="intro">최근 만들기 기록</div><template x-for="(r,ri) in (generationReport?.recent_runs||[])" :key="'gr'+ri"><div style="color:var(--ink-2)" x-text="(r.created_at||'').slice(5,16)+' · '+(r.solver==='cpsat'?'다른 방식':r.solver==='race'?'둘 다':'기본')+' · '+(r.success?'성공':'실패')+(r.relaxed?' · 완화':'')+' · '+Math.round(r.duration_s||0)+'초'+(r.final_gap!=null?' · 정확도 '+r.final_gap+'%':'')"></div></template></div>
                   </template>
                 </div>
               </div>
-            </template>
+            
             <div x-show="solverLogs.length>0">
               <div class="chips"><button @click="showLogPanel=!showLogPanel" class="rbtn rbtn-sm rbtn-quiet" title="자동 배정이 계산하며 남긴 기록입니다. 문의할 때 복사해 보내면 도움이 됩니다."><span x-text="showLogPanel?'계산 기록 접기':'계산 기록 펼치기'"></span><span x-text="' ('+solverLogs.length+'줄)'"></span></button>
                 <button x-show="showLogPanel" @click="navigator.clipboard.writeText(solverLogs.map(l=>l.msg).join('\n')).then(()=>$el.textContent='복사됨').catch(()=>{})" class="rbtn rbtn-sm rbtn-quiet" title="계산 기록 전체를 복사합니다.">기록 복사</button></div>
@@ -1092,10 +1077,10 @@
             </div>
             <div class="intro" x-show="!statusMessage&&!generationReport&&!solverLogs.length">아직 만들기 기록이 없습니다.</div>
           </div>
-        </template>
+        
       </div>
     </div>
-  </template>
+  
 </div>
 
 <!-- ═══ TAB 5: 분석 ═══════════════════════════════════════ -->
