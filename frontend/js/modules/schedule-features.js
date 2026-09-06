@@ -28,6 +28,7 @@ window.ScheduleFeaturesModule = function() {
       this.relaxedCells={}; this.scheduleStopped=false; this.mipGapPercent=null;
       this.solverLog=[]; this.generateResult=null;
       this.activeTab='schedule';
+      this.rdDoneAt=new Date(); this._autoSaveSchedule();   // 확정도 생성과 같이 자동 저장
       this.toast(`근무표로 확정했습니다 (${filled}건) — 점수는 솔버를 돌려야 나옵니다`,'info');
     },
 

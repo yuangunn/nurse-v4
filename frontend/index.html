@@ -310,7 +310,7 @@
       <span class="rhdr-mark" aria-hidden="true"></span>
       <span class="rhdr-name" data-rd="brand-name">NurseScheduler</span>
       <span class="rhdr-meta" x-text="`${rdWard} 병동 · 간호사 ${nurses.length}명`"></span>
-      <span class="rhdr-ver" @click="trackVersionClick()" title="버전 정보. 다섯 번 누르면 개발자 설정이 켜집니다.">v4.13.0</span>
+      <span class="rhdr-ver" @click="trackVersionClick()" title="버전 정보. 다섯 번 누르면 개발자 설정이 켜집니다.">v4.13.1</span>
     </div>
     <div class="rym" title="대상 년월 — 사전입력·분석·근무표 모든 화면에 함께 적용됩니다">
       <button @click="prevMonth()" data-rd="ym-prev" title="한 달 앞으로 갑니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
@@ -2291,7 +2291,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.13.0 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.13.1 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">기본 계산 방식 · 다른 계산 방식 듀얼 자동 배정 · 완전 오프라인</p>
         <p class="text-dim text-xs mt-1">모성보호(임산부 P1) · 최소 침습 완화 · 왜 안 되는지 자세히 보기</p>

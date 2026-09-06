@@ -380,6 +380,7 @@ window.GridInteractionsModule = function() {
         this.applyMultiShiftEdit(shift);return;
       }
       this.applyShiftEdit(shift);
+      if(this.shiftEdit.mode==='schedule') this.rdSaved=false;   // 고친 칸은 아직 저장 전 — 저장 버튼이 '저장'으로 돌아온다
       this._checkViolations();
     },
 
