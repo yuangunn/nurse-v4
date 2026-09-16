@@ -142,6 +142,7 @@
   #wkTable td.nm{cursor:pointer;font-size:14px;font-weight:700;letter-spacing:-0.01em;color:var(--ink)}
   #wkTable td.nm:hover{background:var(--today-bg)}
   #wkTable td.nm.ovd{box-shadow:inset 0 -2px 0 var(--err)}
+  #wkTable td.nm .trn{font-size:11px;font-weight:600;color:var(--sh-tr-fg);line-height:1.15;letter-spacing:0}
   #wkTable td.rm{cursor:pointer;font-size:12px;font-weight:600;color:var(--ink-3);font-variant-numeric:tabular-nums}
   #wkTable td.rm:hover{background:var(--rule-soft)}
   #wkTable td.rm.rov{box-shadow:inset 0 -2px 0 var(--down-deep);font-weight:700}
@@ -318,6 +319,13 @@
   #pick button,#rpick button{margin:3px;min-width:3em;font-size:16px;padding:8px 14px}
   #rpick{max-width:420px}
   #pick{min-width:280px}
+  #capsTable tr.nrow{cursor:grab}
+  #capsTable tr.nrow.dragging{opacity:.4}
+  #capsTable tr.nrow.dropAbove td{box-shadow:inset 0 2px 0 var(--accent)}
+  #capsTable tr.nrow.dropBelow td{box-shadow:inset 0 -2px 0 var(--accent)}
+  #capsTable td.grip{white-space:nowrap;font-variant-numeric:tabular-nums}
+  #capsTable .gripIco{color:var(--ink-4);margin-right:6px;letter-spacing:-2px}
+  .trChip{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:6px;background:var(--sh-tr-bg);color:var(--sh-tr-fg);font-size:11px;font-weight:700;vertical-align:middle}
   #pick button.swapBtn{display:flex;align-items:center;gap:10px;width:100%;margin:0;padding:9px 12px;text-align:left}
   #pick button.swapBtn .lb{flex:0 0 3.2em;font-weight:800}
   #pick button.swapBtn .who{flex:1;font-weight:700}
@@ -413,6 +421,7 @@
   .sheet .railE{background:#FEEFEF;color:#C7384A;font-size:11pt;font-weight:800}
   .sheet .railN{background:#EFEBFB;color:#5B3FB0;font-size:11pt;font-weight:800}
   .sheet .prm{font-size:7.5pt;font-weight:600;color:#4A5160;font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
+  .sheet .ptr{font-size:6.5pt;font-weight:600;color:#4A5160}
   .sheet .pnm{font-size:9pt;font-weight:700;letter-spacing:-0.02em;color:#0F1115}
   .sheet .txt{padding:0 2mm;font-size:7.5pt;font-weight:600;line-height:1.35;color:#0F1115;text-align:left}
   .sheet .vlab{writing-mode:vertical-rl;text-orientation:upright;display:inline-block;letter-spacing:.02em}
@@ -642,11 +651,13 @@
     return c && typeof c === 'object' ? !!c[P] : !!c;
   }
 
-  // 방 토큰 교집합 크기 — 방 기준 연속성의 점수
-  function overlap(a, b) {
+  // 방 토큰 교집합 — 방 기준 연속성의 점수. bedsOf(token→병상수)가 있으면 겹친 병상수 합
+  // (같이 보던 환자 수 기준), 없으면 겹친 방 개수. 병상수를 모르는 방은 1로 센다.
+  function overlap(a, b, bedsOf) {
     if (!a || !b || !a.length || !b.length) return 0;
     let n = 0;
-    for (let i = 0; i < a.length; i++) if (b.indexOf(a[i]) >= 0) n++;
+    for (let i = 0; i < a.length; i++)
+      if (b.indexOf(a[i]) >= 0) n += bedsOf ? Math.max(1, +bedsOf(a[i]) || 1) : 1;
     return n;
   }
 
@@ -688,6 +699,7 @@
    * @param schedule {nurseId: {dateKey: code}}
    * @param dateKeys 시간순 날짜키 배열 (연속성 위해 전월 이월일 포함 가능)
    * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff,bounceAfterOff},
+   *                  bedsOf:(token)=>병상수  ← 주면 겹침을 방 개수가 아니라 병상수 합으로 잰다
    *                  overrides:{dateKey:{P:{nurseId:label}}},
    *                  seed:{nurseId:{label,period,idx,rooms?}},  idx<0 = 전월 (말일=-1)
    *                  avoid:{dateKey:{P:{nurseId:[label]}}},  금지 방 등 회피 라벨 (소프트 —
@@ -707,6 +719,7 @@
     const overrides = opts.overrides || {};
     const avoid = opts.avoid || {};
     const roomsFor = opts.roomsFor || null;
+    const bedsOf = opts.bedsOf || null;
     const byDay = {}, byNurse = {};
     const lastSeen = {}; // nurseId -> {label, idx, period, rooms}
     // 전월 연속성 시드 — 전월에 마지막으로 본 방을 상대 idx로 주입하면 원칙1~4가 월 경계를 넘어 작동.
@@ -783,18 +796,23 @@
         //     한 번에 푸는 이유: 원칙1인 사람이 두 자리에 무차별할 때(양쪽 겹침 동일)
         //     오프 복귀자가 원래 보던 방을 되찾도록 자리를 비켜 줄 수 있다.
         if (roomsFor && cand.length) {
-          const TIER_W = [10000000000, 1000000000, 0];
+          // 점수는 사전식 — 앉는 사람 수(등급별) > 원칙1 겹침 합 > 원칙2 겹침 합 > 원칙3 겹침 합
+          // > 최근에 본 사람 > 선임. 등급이 자리뿐 아니라 **방 선택**에서도 앞선다: 예전엔 겹침을
+          // 등급 없이 합쳐서, 오프 복귀자가 4칸 겹치는 방을 잡으려고 전일 근무자를 2칸짜리 방으로
+          // 밀어내는(5~10 보던 사람이 6~9 대신 5,10,11) 일이 있었다. 자릿수는 2^53 안에 들도록
+          // 잡았다: 후보 ≤5, 겹침 ≤99 → 등급별 합 ≤495.
+          const SEAT_W = [1e15, 1e14, 1e13], OV_W = [2e10, 4e7, 8e4];
           const free = freeLabels().filter(function (l) { return roomsByLabel[l].length; });
           if (free.length) {
             const W = cand.map(function (n) {
-              const info = lastSeen[n.id];
-              const tw = TIER_W[tierOf(info)];
-              const recency = Math.max(-400, Math.min(400, info.idx)) + 400;   // 0~800
+              const info = lastSeen[n.id], t = tierOf(info);
+              const recency = Math.round((Math.max(-400, Math.min(400, info.idx)) + 400) / 8);   // 0~100
+              const tie = recency * 100 + Math.max(0, 99 - n.seniority);                          // ≤ 10099
               return free.map(function (l) {
                 if (!avOk(n.id, l)) return 0;
-                const o = Math.min(30, overlap(info.rooms, roomsByLabel[l]));
+                const o = Math.min(99, overlap(info.rooms, roomsByLabel[l], bedsOf));
                 if (!o) return 0;
-                return tw + o * 1000000 + recency * 1000 + Math.max(0, 999 - n.seniority);
+                return SEAT_W[t] + o * OV_W[t] + tie;
               });
             });
             const pairs = maxMatch(W, free.length);
@@ -1028,7 +1046,7 @@ function toast(msg,ms=2800,undoable=false){ const t=$('#toast');
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260916a'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260916d'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1039,7 +1057,7 @@ const ALL_CAPS=['DC','D','EC','E','NC','N'];
 const DEFAULT_REQ={mon:{D:4,E:5,N:3},tue:{D:5,E:5,N:3},wed:{D:5,E:5,N:3},thu:{D:5,E:5,N:3},
   fri:{D:5,E:4,N:3},sat:{D:3,E:3,N:2},sun:{D:3,E:4,N:3}};
 function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{},roomOv:{},events:{},
-  seedManual:{},caps:{},alias:{},custom:{},nameAlias:{},req:JSON.parse(JSON.stringify(DEFAULT_REQ)),
+  seedManual:{},caps:{},alias:{},custom:{},nameAlias:{},trainee:{},trOv:{},req:JSON.parse(JSON.stringify(DEFAULT_REQ)),
   rooms:DEFAULT_ROOMS.map(r=>r.slice()),ward:'101',banRooms:{},form:null,
   schemes:JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
   rules:{keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false}}; }
@@ -1056,6 +1074,8 @@ function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무
   if(!store.alias) store.alias={};
   if(!store.custom) store.custom={};
   if(!store.nameAlias) store.nameAlias={};
+  if(!store.trainee) store.trainee={};
+  if(!store.trOv) store.trOv={};
   if(store.ward==null) store.ward=wardOfRooms(store.rooms)||'';   // 구형 파일 — 병실 목록에서 병동 추정
 }
 let store=emptyStore();
@@ -1724,7 +1744,9 @@ function recompute(){
   }
   result=AssignCore.compute(nurses,schedule,tlKeys,
     {rules:store.rules,overrides:merged,seed:Object.keys(seed).length?seed:null,avoid,
-     roomsFor:roomsForCore});
+     roomsFor:roomsForCore,
+     // 겹침은 병실 개수가 아니라 병상수 합(같이 보던 환자 수) — 병상수를 모르는 방은 1
+     bedsOf:t=>{ const r=(store.rooms||[]).find(x=>String(x[0])===roomFull(t)); return r?(+r[1]||1):1; }});
 }
 function dayInfo(iso){
   if(!result) return null;
@@ -1811,6 +1833,36 @@ function dupRooms(iso,P,day){ // 같은 날·시간대에서 두 어싸인이 �
   }
   return dup;
 }
+/* ── 신규 간호사(트레이닝) 붙이기 ──────────────────────────────────────
+ * 근무표에 /D·/E·/N 으로 적힌 사람은 인원·어싸인에서 빠지고, 배정표에서는 함께 다니는
+ * 간호사(프리셉터) 이름 아래에 '/ 이름'으로 붙는다. 붙일 사람은 배정표에서 간호사 이름을
+ * 눌러 정한다 — '계속'은 store.trainee[신규]={pre}(기본 프리셉터), '오늘만'은 store.trOv[날짜].
+ * 프리셉터가 그날 그 시간대 근무가 아니면 붙지 않고 '확인 필요'에 뜬다. */
+const traineeCode=(n,iso)=>{ const v=String((store.cells[n]||{})[iso]||'').trim(); return v.startsWith('/')?v.slice(1).toUpperCase():''; };
+const isTrainee=n=>Object.values(store.cells[n]||{}).some(v=>String(v).trim().startsWith('/'));
+function traineesOn(iso,P){ return store.order.filter(n=>traineeCode(n,iso)===P); }
+function preceptorOf(T,iso){
+  const ov=store.trOv[iso]&&store.trOv[iso][T];
+  if(ov!==undefined) return ov||'';
+  const d=store.trainee[T]; return (d&&d.pre)||'';
+}
+function traineesUnder(iso,P,nm){ return traineesOn(iso,P).filter(T=>preceptorOf(T,iso)===nm); }
+function unattachedTrainees(iso,P,day){
+  const on=new Set([...Object.values(day[P].labels),...day[P].extra]);
+  return traineesOn(iso,P).filter(T=>!on.has(preceptorOf(T,iso)));
+}
+const nameWithTrainees=(nm,iso,P)=>nm+traineesUnder(iso,P,nm).map(T=>'\n/ '+T).join('');
+const jsq=v=>String(v).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+function attachTrainee(T,iso,pre,always){
+  snapshot();
+  if(always){
+    if(pre) store.trainee[T]={pre}; else delete store.trainee[T];
+    if(store.trOv[iso]){ delete store.trOv[iso][T]; if(!Object.keys(store.trOv[iso]).length) delete store.trOv[iso]; }
+  } else (store.trOv[iso]=store.trOv[iso]||{})[T]=pre;
+  closePick(); touch();
+  if(curScr==='week') renderWeek();
+  toast(`${T} — ${pre?pre+' 뒤에 붙임':'뗌'} (${always?'계속':(+iso.slice(8,10))+'일만'})`,2800,true);
+}
 function renderWeek(){
   $('#wkTitle').textContent=weekTitle(wkSunday);
   const todayIso=isoOfD(new Date());
@@ -1855,7 +1907,8 @@ function renderWeek(){
         const hasDup=dups[di]&&roomTokens(rmStr).some(t=>dups[di][P].has(t));
         h+=`<td class="rm${isRov?' rov':''}${hasDup?' rdup':''}${tdCls(d)}" data-iso="${iso}" data-p="${P}" data-l="${label}"`+
            ` title="클릭 = 이 날 방 수정${hasDup?' · ⚠ 다른 어싸인과 방 겹침':''}">${esc(rmStr)}</td>`+
-           `<td class="nm${ov?' ovd':''}${tdCls(d)}" data-n="${esc(nm)}" data-iso="${iso}">${esc(nm)}</td>`;
+           `<td class="nm${ov?' ovd':''}${tdCls(d)}" data-n="${esc(nm)}" data-iso="${iso}">${esc(nm)}${
+             traineesUnder(iso,P,nm).map(T=>`<div class="trn">/ ${esc(T)}</div>`).join('')}</td>`;
       });
       h+='</tr>';
       if(P==='D'&&li===sec.rows-1){
@@ -1881,6 +1934,8 @@ function renderWeek(){
     for(const P of ['D','E','N']){
       if(day[P].extra.length)
         w.push(`${mm}/${dd} ${P} ${day[P].extra.map(esc).join(', ')} — 어싸인 없이 근무합니다(6인 이상 헬퍼).`);
+      const un=unattachedTrainees(iso,P,day);
+      if(un.length) w.push(`${mm}/${dd} ${P} 신규 ${un.map(esc).join(', ')} — 붙일 간호사가 없습니다. 그 시간대 간호사 이름을 눌러 [신규 간호사 붙이기]로 정하세요.`);
       const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
       for(const l in day[P].labels){
         const nm=day[P].labels[l], bans=store.banRooms[nm];
@@ -1929,6 +1984,7 @@ function openPick(name,iso,x,y){
   // 누구와 맞바꾸는지 보이지 않으면 고를 수가 없다
   const labels=day?LBL_ORDER.filter(l=>day.labels[l]):[];
   const cnt=day?Object.keys(day.labels).length+day.extra.length:0;
+  const trs=traineesOn(iso,info.period);
   const pk=$('#pick');
   pk.innerHTML=`<div style="margin-bottom:8px;font-weight:700">${esc(name)} · ${+iso.slice(8,10)}일 ${info.period}
       <span class="dim">(지금: ${FORM_LBL(info.label)||'없음'})</span></div>`+
@@ -1943,6 +1999,12 @@ function openPick(name,iso,x,y){
         `<span class="rm">${esc(rm)}</span></button>`;
     }).join('')+'</div>'+
     `<button style="margin-top:4px" onclick="pickChoose(null)">자동으로 되돌리기</button>`+
+    (trs.length?`<div class="dim" style="margin:8px 0 2px;border-top:1px solid var(--rule);padding-top:6px">신규 간호사 붙이기 — 이 날 ${info.period} 에 /${info.period} 인 신규</div>`+
+      trs.map(T=>{ const cur=preceptorOf(T,iso), mine=cur===name, b='style="font-size:12px;padding:4px 8px;margin:0"';
+        return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:3px 0"><span style="font-weight:700;min-width:5.5em">/ ${esc(T)}</span>`+
+          (mine?`<span class="dim">지금 ${esc(name)} 뒤</span><button ${b} onclick="attachTrainee('${jsq(T)}','${iso}','',false)">오늘만 떼기</button><button ${b} onclick="attachTrainee('${jsq(T)}','${iso}','',true)">계속 떼기</button>`
+               :`${cur?`<span class="dim">지금 ${esc(cur)} 뒤</span>`:''}<button ${b} onclick="attachTrainee('${jsq(T)}','${iso}','${jsq(name)}',false)">오늘만 붙이기</button><button ${b} onclick="attachTrainee('${jsq(T)}','${iso}','${jsq(name)}',true)">계속 붙이기</button>`)+
+          `</div>`; }).join(''):'')+
     `<div class="dim" style="margin:8px 0 2px;border-top:1px solid var(--rule);padding-top:6px">근무 바꾸기 (이 날만)</div>`+
     ['D','DC','E','EC','N','NC','중','OF','주','V'].map(c=>
       `<button style="font-size:13px;padding:5px 9px" onclick="pickShift('${c}')">${c}</button>`).join('')+
@@ -2158,7 +2220,7 @@ function ingestGrid(g){
     const gu=guessYearMonth(first); y=gu.y; m=gu.m;
   }
   if(hasNameCol&&hasDateHdr){
-    pasteCtx={mode:'full',g,hasNameCol:true,hasDateHdr:true,y,m,nameMap:{},adoptOrder:true};
+    pasteCtx={mode:'full',g,hasNameCol:true,hasDateHdr:true,y,m,nameMap:{},adoptOrder:false};
     return buildPending();
   }
   // 부분 붙여넣기 — 기준이 될 표가 있어야 어디에 넣을지 정할 수 있다
@@ -2171,7 +2233,7 @@ function ingestGrid(g){
   if(width>=28&&rng){ const d=new Date(rng.max+'T00:00:00');
     startIso=isoOfD(new Date(d.getFullYear(),d.getMonth()+1,1)); }
   pasteCtx={mode:'partial',g,hasNameCol,hasDateHdr,startRow:0,startIso,y,m,
-    nameMap:{},rowMap:{},adoptOrder:hasNameCol};
+    nameMap:{},rowMap:{},adoptOrder:false};
   buildPending();
 }
 function setPasteStart(k,v){
@@ -2322,8 +2384,8 @@ function buildPending(){
   }
   if(cx.hasNameCol) mpParts.push(
     `<label style="display:inline-flex;align-items:center;gap:8px;font-weight:700;cursor:pointer">`+
-    `<input type="checkbox" ${cx.adoptOrder?'checked':''} onchange="setAdoptOrder(this.checked)">명부 순서도 이 표의 순서로</label>`+
-    `<span class="dim">표에 있는 사람이 표 순서대로 위로, 없는 사람은 그대로 아래로 — 고치기 화면·근무만 붙여넣기도 같은 순서가 됩니다</span>`);
+    `<input type="checkbox" ${cx.adoptOrder?'checked':''} onchange="setAdoptOrder(this.checked)">명부 순서(시니어리티)도 이 표의 순서로</label>`+
+    `<span class="dim">명부 순서는 시니어리티(차지 우선순위)라 기본으로는 건드리지 않습니다. 표가 선임 순이면 켜세요 — 표에 있는 사람이 표 순서대로 위로, 없는 사람은 그대로 아래로</span>`);
   if(mpParts.length){ mp.style.display='flex'; mp.innerHTML=mpParts.join(''); }
   else mp.style.display='none';
 
@@ -2503,7 +2565,7 @@ function edSet(r,c,v){
 function snapshot(){ // 이름 변경/삭제가 ovr·caps·금지방·시드까지 건드리므로 함께 보존
   undoStack.push(JSON.stringify({o:store.order,c:store.cells,v:store.ovr,rv:store.roomOv,
     ch:store.caps,br:store.banRooms,sd:store.seedManual,al:store.alias,cu:store.custom,fm:store.form,
-    ev:store.events,na:store.nameAlias}));
+    ev:store.events,na:store.nameAlias,tr:store.trainee,to:store.trOv}));
   if(undoStack.length>40) undoStack.shift(); }
 function restoreSnapshot(s){
   store.order=s.o; store.cells=s.c;
@@ -2511,6 +2573,7 @@ function restoreSnapshot(s){
   if(s.ch) store.caps=s.ch; if(s.br) store.banRooms=s.br; if(s.sd) store.seedManual=s.sd;
   if(s.al) store.alias=s.al; if(s.cu) store.custom=s.cu; if(s.ev) store.events=s.ev;
   if(s.na) store.nameAlias=s.na;
+  if(s.tr) store.trainee=s.tr; if(s.to) store.trOv=s.to;
   if(s.fm!==undefined){ store.form=s.fm; TPL=null; }
 }
 function moveEditMonth(n){ edM+=n; if(edM<1){edM=12;edY--} if(edM>12){edM=1;edY++} renderEditGrid(); }
@@ -2839,10 +2902,12 @@ const ADMIN_PANELS={
     body(){ return `<div id="formNow" class="dim" style="line-height:1.9"></div>
       ${store.form?`<div style="margin:2px 0 6px"><button onclick="resetForm()">기본 양식으로 되돌리기</button></div>`:''}
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px">
-        <button class="pri" onclick="$('#formFile').click()">양식 파일 검사 (xlsx 고르기)</button>
+        <button class="pri" onclick="openFormText()">양식 문구 고치기 (여기서 바로)</button>
+        <button onclick="$('#formFile').click()">양식 파일 검사 (xlsx 고르기)</button>
         <input type="file" id="formFile" accept=".xlsx" style="display:none" onchange="checkFormFile(this)">
-        <span class="dim">파일은 검사만 하고 저장하지 않습니다</span>
+        <span class="dim">문구는 여기서, 칸 구조는 엑셀에서 고쳐 올리세요</span>
       </div>
+      <div id="formText"></div>
       <div id="formReport"></div>`; },
     after(){ describeCurrentForm(); }},
   codes:{title:'근무 표기',
@@ -2890,18 +2955,23 @@ const ADMIN_PANELS={
             onchange="setReq('${k}','${P}',this.value)"></td>`).join('')+'</tr>').join('');
     }},
   caps:{title:'간호사 관리',
-    desc:'가능한 근무를 켜고 끕니다. <b>DC · EC · NC</b> 를 켜면 그 시간대에 차지로 뽑힐 수 있습니다.',
+    desc:'<b>위가 선임</b>입니다 — 같은 날 차지 가능한 사람 중 가장 위에 있는 사람이 차지(A(CN))를 맡습니다. 줄을 끌어서(또는 ▲▼) 순서를 바꾸세요. 가능한 근무에서 <b>DC · EC · NC</b> 를 켜면 그 시간대에 차지로 뽑힐 수 있습니다.',
     body(){ return `<table id="capsTable"></table>`; },
     after(){
-      $('#capsTable').innerHTML=`<tr class="hd"><th style="width:92px">간호사</th><th style="width:300px">가능 근무</th><th>주지 않을 방</th></tr>`+
-        (store.order.map(n=>{
+      const last=store.order.length-1;
+      $('#capsTable').innerHTML=`<tr class="hd"><th style="width:64px">순위</th><th style="width:120px">간호사</th><th style="width:300px">가능 근무</th><th>주지 않을 방</th><th style="width:76px"></th></tr>`+
+        (store.order.map((n,i)=>{
           const cp=capsOf(n), bans=store.banRooms[n]||[];
-          return `<tr><td class="nm2">${esc(n)}</td>
+          return `<tr class="nrow" draggable="true" ondragstart="nurseDragStart(event,${i})" ondragover="nurseDragOver(event,${i})" ondragleave="nurseDragLeave(event)" ondrop="nurseDrop(event,${i})" ondragend="nurseDragEnd(event)">
+            <td class="grip" title="끌어서 순서 바꾸기 — 위가 선임"><span class="gripIco">⋮⋮</span><b>${i+1}</b></td>
+            <td class="nm2">${esc(n)}${isTrainee(n)?' <span class="trChip" title="근무표에 /D·/E·/N 으로 적힌 신규 간호사 — 인원·어싸인에서 빠집니다">신규</span>':''}</td>
             <td><div style="display:flex;gap:4px;flex-wrap:wrap">${ALL_CAPS.map(c=>
               `<span class="capChip${cp.includes(c)?' on':''}" onclick="toggleCap('${esc(n)}','${c}')">${c}</span>`).join('')}</div></td>
             <td><div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">${
               bans.map(r=>`<span class="banChip">${esc(roomShort(r))}호<span class="x" onclick="delBan('${esc(n)}','${esc(r)}')">×</span></span>`).join('')}
-              <span class="addChip banBtn" title="주지 않을 방 고르기" onclick="openRoomPick({kind:'nurse',name:'${esc(n)}'},event.pageX,event.pageY)">＋</span></div></td></tr>`;
+              <span class="addChip banBtn" title="주지 않을 방 고르기" onclick="openRoomPick({kind:'nurse',name:'${esc(n)}'},event.pageX,event.pageY)">＋</span></div></td>
+            <td style="white-space:nowrap"><button class="segbtn" title="한 칸 위로 (선임 쪽)" ${i===0?'disabled':''} onclick="moveNurse(${i},${i-1})">▲</button>`+
+            `<button class="segbtn" title="한 칸 아래로" ${i===last?'disabled':''} onclick="moveNurse(${i},${i+1})">▼</button></td></tr>`;
         }).join('')||'<tr><td class="dim" style="padding:8px 0">근무표를 먼저 넣어주세요</td></tr>');
     }},
   rules:{title:'배정 원칙',
@@ -3028,6 +3098,27 @@ function addRoom(){
   if(!v||!v.trim()) return;
   store.rooms.push([v.trim(),4]); touch(); recompute(); renderAdmin();
 }
+/* 순서 = 시니어리티. 같은 날 차지 가능한 사람 중 가장 위(가장 선임)가 차지를 맡는다 (코어 seniority = 이 순서) */
+function moveNurse(from,to){
+  if(from===to||to<0||to>=store.order.length) return;
+  snapshot();
+  const [n]=store.order.splice(from,1); store.order.splice(to,0,n);
+  touch(); recompute(); renderAdmin();
+  toast(n+' → '+(to+1)+'번째 (위가 선임)',2400,true);
+}
+let _nDrag=null;
+function nurseDragStart(e,i){ _nDrag=i; e.dataTransfer.effectAllowed='move';
+  try{ e.dataTransfer.setData('text/plain',String(i)); }catch(x){} e.currentTarget.classList.add('dragging'); }
+function nurseDragOver(e,i){ if(_nDrag===null) return; e.preventDefault(); e.dataTransfer.dropEffect='move';
+  const tr=e.currentTarget, below=e.clientY>tr.getBoundingClientRect().top+tr.offsetHeight/2;
+  tr.classList.toggle('dropAbove',!below); tr.classList.toggle('dropBelow',below); }
+function nurseDragLeave(e){ e.currentTarget.classList.remove('dropAbove','dropBelow'); }
+function nurseDrop(e,i){ e.preventDefault(); const tr=e.currentTarget;
+  const below=tr.classList.contains('dropBelow'); tr.classList.remove('dropAbove','dropBelow');
+  const from=_nDrag; _nDrag=null; if(from===null) return;
+  let to=i+(below?1:0); if(from<to) to--;               // 자기 자신을 뺀 뒤의 자리
+  moveNurse(from,to); }
+function nurseDragEnd(e){ _nDrag=null; document.querySelectorAll('#capsTable tr').forEach(t=>t.classList.remove('dragging','dropAbove','dropBelow')); }
 function toggleCap(name,code){
   const cp=[...capsOf(name)];
   const i=cp.indexOf(code);
@@ -3071,6 +3162,55 @@ function formVerdict(a,b){
   if(a.midRow!==b.midRow) bad.push('중간번 줄');
   if(a.eventRow!==b.eventRow) bad.push('교육·행사 줄');
   return bad;
+}
+/* 양식의 글자 칸을 HTML 안에서 고친다 — 채우는 자리(날짜·이름·방 구역)와 자리표시자 칸은 제외.
+ * 고친 결과는 xlsx 로 다시 싸서 '우리 병동 양식'(store.form)으로 저장한다 — 데이터 파일에 함께 실려
+ * 다른 PC 에서도 같이 쓴다. 칸을 늘리거나 합치는 구조 변경은 여기서 못 한다(엑셀에서 고쳐 올린다). */
+async function openFormText(){
+  const box=$('#formText'); box.innerHTML='<div class="dim" style="margin-top:10px">양식 읽는 중…</div>';
+  try{
+    const tpl=await loadTemplate();
+    const cells=sheetCells(tpl);
+    let L={}; try{ L=findLayout(cells,sheetMerges(tpl))||{}; }catch(e){}
+    const dc=L.dateCols||[]; const stride=dc.length>1?dc[1]-dc[0]:2;
+    const fillCols=dc.length?[dc[0],dc[dc.length-1]+stride-1]:[4,17];
+    const lastRow=Math.max(L.dateRow||3,...(L.sections||[]).map(x=>x.row+(x.rows||0)-1),18);
+    const fillRows=[L.dateRow||3,lastRow];
+    const refs=Object.keys(cells).filter(ref=>{
+      const m=ref.match(/^([A-Z]+)(\d+)$/); if(!m) return false;
+      const c=colNum(m[1]), r=+m[2];
+      if(c>=fillCols[0]&&c<=fillCols[1]&&r>=fillRows[0]&&r<=fillRows[1]) return false;   // 날짜·이름·방 구역
+      PH_RE.lastIndex=0; if(PH_RE.test(cells[ref])) return false;                          // 자리표시자
+      return String(cells[ref]).trim()!=='';
+    }).sort((a,b)=>{ const A=a.match(/^([A-Z]+)(\d+)$/),B=b.match(/^([A-Z]+)(\d+)$/); return (+A[2]-+B[2])||(colNum(A[1])-colNum(B[1])); });
+    window.__formText={tpl,cells,refs};
+    box.innerHTML=`<div class="dim" style="margin:12px 0 6px">글자 칸 ${refs.length}개 — 고치고 [이대로 저장]을 누르세요. 날짜·이름·방 구역과 자리표시자 칸은 자동으로 채우는 자리라 여기 없습니다.</div>`+
+      `<table style="border-collapse:collapse;width:100%">`+refs.map(ref=>
+        `<tr><td style="width:52px;padding:4px 8px 4px 0;color:var(--ink-3);font-size:12px;font-variant-numeric:tabular-nums;vertical-align:top">${ref}</td>`+
+        `<td style="padding:3px 0"><textarea data-ref="${ref}" rows="${Math.min(4,String(cells[ref]).split('\n').length)}" style="width:100%;font-size:13px;padding:6px 8px;border-radius:8px;resize:vertical">${esc(cells[ref])}</textarea></td></tr>`).join('')+`</table>`+
+      `<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="pri" onclick="saveFormText()">이대로 저장 (우리 병동 양식으로)</button><button onclick="$('#formText').innerHTML=''">닫기</button></div>`;
+  }catch(e){ box.innerHTML=`<div class="tip" style="margin-top:12px"><b>읽기 실패</b><span>${esc(e.message)}</span></div>`; }
+}
+async function saveFormText(){
+  const ctx=window.__formText; if(!ctx) return;
+  const changed=[];
+  for(const ref of ctx.refs){
+    const ta=document.querySelector(`#formText textarea[data-ref="${ref}"]`); if(!ta) continue;
+    const v=ta.value.replace(/\r\n?/g,'\n'); if(v!==String(ctx.cells[ref])) changed.push([ref,v]);
+  }
+  if(!changed.length){ toast('바뀐 문구가 없습니다'); return; }
+  try{
+    let xml=ctx.tpl.sheetXml;
+    for(const [ref,v] of changed) xml=setCellStr(xml,ref,v);
+    const w=await applyWrapStyles(ctx.tpl,xml);
+    const parts={'xl/worksheets/sheet1.xml':w.xml}; if(w.styles) parts['xl/styles.xml']=w.styles;
+    const bytes=packXlsx(ctx.tpl,parts);
+    snapshot();
+    const base=(store.form&&store.form.name?store.form.name:'병실 배정표').replace(/ \(고침\)$/,'');
+    store.form={name:base+' (고침)',b64:bytesToB64(bytes),savedAt:Date.now(),ph:hasPlaceholders(ctx.cells)};
+    TPL=null; touch(); renderAdmin();
+    toast(`문구 ${changed.length}곳을 고쳐 우리 병동 양식으로 저장했습니다 — 인쇄·엑셀에 바로 적용됩니다`,4200);
+  }catch(e){ toast('저장 실패: '+e.message,4000); }
 }
 async function checkFormFile(input){
   const f=input.files&&input.files[0]; input.value='';
@@ -3694,7 +3834,7 @@ function phValue(kind,arg,slot,day){
   if(!P||!label) return '';
   const sec=day.secs&&day.secs[P]; if(!sec) return '';
   const nm=sec.byLabel[label]; if(!nm) return '';
-  if(kind==='이름') return nm;
+  if(kind==='이름') return nameWithTrainees(nm,isoOfD(day.date),P);
   if(kind==='방') return roomsFor(P,sec.cnt,label,isoOfD(day.date));
   if(kind==='차지') return label==='차지'?(arg||'/CN'):'';
   return '';
@@ -3745,23 +3885,57 @@ async function downloadWeekXlsx(sun){
         const row=sec.top+li;
         const rm=roomsFor(P,s.cnt,label,isoOfD(d));
         if(rm) xml=setCellStr(xml,colR+row,rm);
-        xml=setCellStr(xml,colN+row,nm);
+        xml=setCellStr(xml,colN+row,nameWithTrainees(nm,isoOfD(d),P));
       }
     }
     if(day.mids.length) xml=setCellStr(xml,colR+'10',day.mids.join(', '));
   });
   return saveWeekXlsx(tpl,xml,sun);
 }
-function saveWeekXlsx(tpl,xml,sun){
-  const span=fmtYmd(sun)+'~'+fmtYmd(addDays(sun,6));
-  const wb=tpl.wbXml.replace(/(<sheet[^>]*name=")[^"]*(")/,'$1'+span+'$2');
-  const nb=enc.encode(xml), wbB=enc.encode(wb);
+/* 양식 zip 을 다시 싼다 — parts 에 준 항목만 새 내용, 나머지는 원본 그대로 */
+function packXlsx(tpl,parts){
   const out=tpl.ents.map(e2=>{
-    if(e2.name==='xl/worksheets/sheet1.xml') return {name:e2.name,meth:0,crc:crc32(nb),usz:nb.length,data:nb};
-    if(e2.name==='xl/workbook.xml')          return {name:e2.name,meth:0,crc:crc32(wbB),usz:wbB.length,data:wbB};
+    if(parts[e2.name]!=null){ const b=enc.encode(parts[e2.name]); return {name:e2.name,meth:0,crc:crc32(b),usz:b.length,data:b}; }
     return {name:e2.name,meth:e2.meth,crc:e2.crc,usz:e2.usz,data:e2.raw};
   });
-  const blob=new Blob([writeZip(out)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  return writeZip(out);
+}
+/* 줄바꿈이 든 칸(신규 '/ 이름')은 엑셀에서 줄바꿈 서식(wrapText)이 있어야 두 줄로 보인다 —
+ * 그 칸의 서식을 복제해 wrapText 를 켠 서식으로 바꿔 단다 (양식 원본 서식은 그대로 둔다). */
+async function applyWrapStyles(tpl,xml){
+  const e=tpl.ents.find(x=>x.name==='xl/styles.xml'); if(!e) return {xml,styles:null};
+  let st=dec.decode(e.meth===8?await inflateRaw(e.raw):e.raw);
+  const cx=st.match(/<cellXfs count="(\d+)">([\s\S]*?)<\/cellXfs>/); if(!cx) return {xml,styles:null};
+  const xfs=cx[2].match(/<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g)||[];
+  const map={}; let added='';
+  xml=xml.replace(/<c r="([A-Z]+\d+)"([^>]*?)t="inlineStr"><is><t[^>]*>([\s\S]*?)<\/t><\/is><\/c>/g,(m,ref,attrs,txt)=>{
+    if(!/\n/.test(txt)) return m;
+    const sM=attrs.match(/s="(\d+)"/), si=sM?+sM[1]:0;
+    const xf=xfs[si]||'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>';
+    if(/wrapText="1"/.test(xf)) return m;
+    if(map[si]===undefined){
+      let nx=xf;
+      if(/<alignment\b/.test(nx)) nx=nx.replace(/<alignment\b([^>]*?)\s*\/>/,(a,at)=>'<alignment'+at.replace(/\s*wrapText="[^"]*"/,'')+' wrapText="1"/>');
+      else if(/\/>$/.test(nx)) nx=nx.replace(/\/>$/,'><alignment wrapText="1"/></xf>');
+      else if(/<protection\b/.test(nx)) nx=nx.replace(/<protection\b/,'<alignment wrapText="1"/><protection');
+      else nx=nx.replace(/<\/xf>$/,'<alignment wrapText="1"/></xf>');
+      if(!/applyAlignment="1"/.test(nx)) nx=nx.replace(/^<xf\b/,'<xf applyAlignment="1"');
+      map[si]=xfs.length+Object.keys(map).length; added+=nx;
+    }
+    const na=sM?attrs.replace(/s="\d+"/,'s="'+map[si]+'"'):attrs+' s="'+map[si]+'" ';
+    return '<c r="'+ref+'"'+na+'t="inlineStr"><is><t xml:space="preserve">'+txt+'</t></is></c>';
+  });
+  if(!added) return {xml,styles:null};
+  st=st.replace(cx[0],'<cellXfs count="'+(xfs.length+Object.keys(map).length)+'">'+cx[2]+added+'</cellXfs>');
+  return {xml,styles:st};
+}
+async function saveWeekXlsx(tpl,xml,sun){
+  const span=fmtYmd(sun)+'~'+fmtYmd(addDays(sun,6));
+  const wb=tpl.wbXml.replace(/(<sheet[^>]*name=")[^"]*(")/,'$1'+span+'$2');
+  const w=await applyWrapStyles(tpl,xml);
+  const parts={'xl/worksheets/sheet1.xml':w.xml,'xl/workbook.xml':wb};
+  if(w.styles) parts['xl/styles.xml']=w.styles;
+  const blob=new Blob([packXlsx(tpl,parts)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download='배정표_'+span+'.xlsx'; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);
@@ -3846,8 +4020,9 @@ async function buildPrintArea(wholeMonth){
         wk+=`<td class="lab">${FORM_LBL(label)}</td>`;
         for(const day of days){
           if(day.blank||!day.secs[P].byLabel[label]){ wk+='<td></td><td></td>'; continue; }
-          wk+=`<td class="prm">${roomsFor(P,day.secs[P].cnt,label,isoOfD(day.date))}</td>`+
-              `<td class="pnm">${esc(day.secs[P].byLabel[label])}</td>`;
+          const pn=day.secs[P].byLabel[label], piso=isoOfD(day.date);
+          wk+=`<td class="prm">${roomsFor(P,day.secs[P].cnt,label,piso)}</td>`+
+              `<td class="pnm">${esc(pn)}${traineesUnder(piso,P,pn).map(T=>`<br><span class="ptr">/ ${esc(T)}</span>`).join('')}</td>`;
         }
         wk+='</tr>';
         if(P==='D'&&li===sec.rows-1){
@@ -3987,16 +4162,17 @@ const HELP=[
        '이름을 클릭하면 이름 수정·삭제가 됩니다.'],media:'edit'},
 {cat:'근무표 넣기·고치기',id:'trainee',title:'트레이닝 근무 (/D /E /N)',
  lead:'교육 중이라 인력으로 세면 안 되는 근무입니다.',
- steps:['근무표에 <b>/D</b>, <b>/E</b>, <b>/N</b> 으로 적습니다.',
-        '표에는 회색으로 보이지만 <b>인원 수와 어싸인에서는 빠집니다</b>.'],
- tips:['엑셀 근무표에 이미 /D 로 적혀 있으면 그대로 붙여넣으면 됩니다.']},
+ steps:['근무표에 <b>/D</b>, <b>/E</b>, <b>/N</b> 으로 적습니다. 표에는 회색으로 보이지만 <b>인원 수와 어싸인에서는 빠집니다</b>.',
+        '배정표에서 함께 다닐 간호사(프리셉터) 이름을 누르면 <b>신규 간호사 붙이기</b>가 있습니다 — [계속 붙이기]는 그 사람을 프리셉터로 정하는 것, [오늘만 붙이기]는 그 날만.',
+        '붙은 신규는 그 간호사 이름 아래 <b>/ 이름</b>으로 화면·인쇄·엑셀(줄바꿈)에 나옵니다. 프리셉터가 그 시간대 근무가 아닌 날은 <b>확인 필요</b>에 떠서 다른 사람에게 붙일 수 있습니다.'],
+ tips:['엑셀 근무표에 이미 /D 로 적혀 있으면 그대로 붙여넣으면 됩니다. 관리 &gt; 간호사 관리에 <b>신규</b> 표시가 붙습니다.'],media:'trainee'},
 
 {cat:'우리 병동 설정',id:'roomlist',title:'병실 목록',
  lead:'우리 병동의 호실과 병상 수입니다. 다른 병동이면 여기서 통째로 바꿉니다.',
  steps:['⚙ 관리 &gt; 병실 목록에서 호실과 병상 수를 고칩니다.',
         '[＋ 방 추가]로 늘리고, ✕로 지웁니다.',
         '호실을 바꿨으면 아래 <b>방 구성</b>의 호실도 같이 맞춰 주세요.'],
- tips:['병상 수를 적어 두면 방 칸을 누를 때 <b>몇 명까지 보는지</b> 합계가 나옵니다.']},
+ tips:['병상 수를 적어 두면 방 칸을 누를 때 <b>몇 명까지 보는지</b> 합계가 나옵니다.'],media:'roomlist'},
 {cat:'우리 병동 설정',id:'scheme',title:'방 구성 (인원수별)',
  lead:'그날 근무 인원이 몇 명이냐에 따라 각 자리가 맡을 병실을 정합니다.',
  steps:['⚙ 관리 &gt; 방 구성에서 <b>5인·4인·3인·2인</b> 근무별로 자리마다 병실을 적습니다.',
@@ -4009,11 +4185,12 @@ const HELP=[
         '차지를 포함한 총 인원입니다 (D=4 면 차지 1 + 일반 3).']},
 {cat:'우리 병동 설정',id:'nurse',title:'간호사 관리 (가능 근무·차지·주지 않을 방)',
  lead:'사람마다 할 수 있는 근무와, 주면 안 되는 병실을 정합니다.',
- steps:['⚙ 관리 &gt; 간호사 관리에서 <b>DC · D · EC · E · NC · N</b> 을 눌러 켜고 끕니다.',
+ steps:['<b>위가 선임</b>입니다 — 같은 날 차지 가능한 사람 중 가장 위에 있는 사람이 차지를 맡습니다. 줄을 끌어서(또는 ▲▼) 순서를 바꾸세요.',
+        '⚙ 관리 &gt; 간호사 관리에서 <b>DC · D · EC · E · NC · N</b> 을 눌러 켜고 끕니다.',
         '<b>DC·EC·NC</b> 를 켜면 그 시간대에 <b>차지</b>로 뽑힐 수 있습니다.',
         '오른쪽 <b>주지 않을 방</b>의 ＋ 를 눌러 격리방·중증방 등을 고릅니다.'],
  tips:['주지 않을 방은 <b>되도록</b> 피하는 것입니다. 다른 방법이 없으면 배정하고 경고로 알려 줍니다.',
-       'DC만 켠 선임은 야간 차지로 뽑히지 않습니다 — 시간대별로 따로 봅니다.']},
+       'DC만 켠 선임은 야간 차지로 뽑히지 않습니다 — 시간대별로 따로 봅니다.'],media:'nurse'},
 {cat:'우리 병동 설정',id:'rules',title:'배정 원칙 — 왜 그 사람이 그 방인가',
  lead:'어싸인은 <b>보던 병실을 이어서 보게</b> 하는 것이 핵심입니다. A인 사람이 계속 A인 이유는 보는 환자가 같아서입니다.',
  steps:['<b>원칙1</b> 전일 같은 근무면 방 유지 — 가장 우선.',
@@ -4137,7 +4314,8 @@ window.__app={get store(){return store},set store(v){store=v},
   openPick,pickChoose,pickShift,setSeed,abbrevRooms,parseCellRaw,readXlsxGrid,loadTemplate,dayInfo,roomsFor,
   openRoomPick,toggleRoom,roomFull,roomShort,buildPrintArea,loadSidecar,tryAutoOpen,reloadFromFile,connectSave,
   reattachHandle,setWard,wardRooms,wardOfRooms,roomsBase,roomPos,startLocal,moveToLocal,moveToFile,readLocalStore,tryLocal,
-  writeStoreLocal,enterLocalMode,setScheme,resetSchemes,
+  writeStoreLocal,enterLocalMode,setScheme,resetSchemes,moveNurse,attachTrainee,traineesUnder,preceptorOf,unattachedTrainees,
+  nameWithTrainees,applyWrapStyles,packXlsx,openFormText,saveFormText,
   get wkSunday(){return wkSunday},set wkSunday(v){wkSunday=v},show,
   memoryMode(){window.__memoryMode=true;
     $('#fileInfo').textContent='⚠ 파일 미연결 — 저장되지 않는 임시 모드';afterLoad();}};

@@ -39,11 +39,13 @@
     return c && typeof c === 'object' ? !!c[P] : !!c;
   }
 
-  // 방 토큰 교집합 크기 — 방 기준 연속성의 점수
-  function overlap(a, b) {
+  // 방 토큰 교집합 — 방 기준 연속성의 점수. bedsOf(token→병상수)가 있으면 겹친 병상수 합
+  // (같이 보던 환자 수 기준), 없으면 겹친 방 개수. 병상수를 모르는 방은 1로 센다.
+  function overlap(a, b, bedsOf) {
     if (!a || !b || !a.length || !b.length) return 0;
     let n = 0;
-    for (let i = 0; i < a.length; i++) if (b.indexOf(a[i]) >= 0) n++;
+    for (let i = 0; i < a.length; i++)
+      if (b.indexOf(a[i]) >= 0) n += bedsOf ? Math.max(1, +bedsOf(a[i]) || 1) : 1;
     return n;
   }
 
@@ -85,6 +87,7 @@
    * @param schedule {nurseId: {dateKey: code}}
    * @param dateKeys 시간순 날짜키 배열 (연속성 위해 전월 이월일 포함 가능)
    * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff,bounceAfterOff},
+   *                  bedsOf:(token)=>병상수  ← 주면 겹침을 방 개수가 아니라 병상수 합으로 잰다
    *                  overrides:{dateKey:{P:{nurseId:label}}},
    *                  seed:{nurseId:{label,period,idx,rooms?}},  idx<0 = 전월 (말일=-1)
    *                  avoid:{dateKey:{P:{nurseId:[label]}}},  금지 방 등 회피 라벨 (소프트 —
@@ -104,6 +107,7 @@
     const overrides = opts.overrides || {};
     const avoid = opts.avoid || {};
     const roomsFor = opts.roomsFor || null;
+    const bedsOf = opts.bedsOf || null;
     const byDay = {}, byNurse = {};
     const lastSeen = {}; // nurseId -> {label, idx, period, rooms}
     // 전월 연속성 시드 — 전월에 마지막으로 본 방을 상대 idx로 주입하면 원칙1~4가 월 경계를 넘어 작동.
@@ -180,18 +184,23 @@
         //     한 번에 푸는 이유: 원칙1인 사람이 두 자리에 무차별할 때(양쪽 겹침 동일)
         //     오프 복귀자가 원래 보던 방을 되찾도록 자리를 비켜 줄 수 있다.
         if (roomsFor && cand.length) {
-          const TIER_W = [10000000000, 1000000000, 0];
+          // 점수는 사전식 — 앉는 사람 수(등급별) > 원칙1 겹침 합 > 원칙2 겹침 합 > 원칙3 겹침 합
+          // > 최근에 본 사람 > 선임. 등급이 자리뿐 아니라 **방 선택**에서도 앞선다: 예전엔 겹침을
+          // 등급 없이 합쳐서, 오프 복귀자가 4칸 겹치는 방을 잡으려고 전일 근무자를 2칸짜리 방으로
+          // 밀어내는(5~10 보던 사람이 6~9 대신 5,10,11) 일이 있었다. 자릿수는 2^53 안에 들도록
+          // 잡았다: 후보 ≤5, 겹침 ≤99 → 등급별 합 ≤495.
+          const SEAT_W = [1e15, 1e14, 1e13], OV_W = [2e10, 4e7, 8e4];
           const free = freeLabels().filter(function (l) { return roomsByLabel[l].length; });
           if (free.length) {
             const W = cand.map(function (n) {
-              const info = lastSeen[n.id];
-              const tw = TIER_W[tierOf(info)];
-              const recency = Math.max(-400, Math.min(400, info.idx)) + 400;   // 0~800
+              const info = lastSeen[n.id], t = tierOf(info);
+              const recency = Math.round((Math.max(-400, Math.min(400, info.idx)) + 400) / 8);   // 0~100
+              const tie = recency * 100 + Math.max(0, 99 - n.seniority);                          // ≤ 10099
               return free.map(function (l) {
                 if (!avOk(n.id, l)) return 0;
-                const o = Math.min(30, overlap(info.rooms, roomsByLabel[l]));
+                const o = Math.min(99, overlap(info.rooms, roomsByLabel[l], bedsOf));
                 if (!o) return 0;
-                return tw + o * 1000000 + recency * 1000 + Math.max(0, 999 - n.seniority);
+                return SEAT_W[t] + o * OV_W[t] + tie;
               });
             });
             const pairs = maxMatch(W, free.length);

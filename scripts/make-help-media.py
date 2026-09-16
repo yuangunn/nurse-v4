@@ -22,7 +22,15 @@ from PIL import Image
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HTML = os.path.join(ROOT, "standalone", "assign.html")
 OUT = os.path.join(ROOT, "standalone", "help")
-CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# 크롬 경로 — CHROME 환경변수 > macOS 기본 > 리눅스(플레이라이트 크로미움·chromium·google-chrome)
+_CANDIDATES = [os.environ.get("CHROME", ""),
+               "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+               "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
+               shutil.which("chromium") or "", shutil.which("chromium-browser") or "",
+               shutil.which("google-chrome") or ""]
+CHROME = next((c for c in _CANDIDATES if c and os.path.isfile(c)), _CANDIDATES[1])
+# 리눅스에서 root 로 돌면 샌드박스를 못 만든다 (CI·컨테이너)
+_EXTRA = ["--no-sandbox"] if (sys.platform.startswith("linux") and hasattr(os, "geteuid") and os.geteuid() == 0) else []
 
 # 모든 장면이 공유하는 샘플 병동 — 실제 사용 모습과 최대한 비슷하게
 SAMPLE = """
@@ -36,7 +44,8 @@ A.ingestGrid([['이름','8/2','8/3','8/4','8/5','8/6','8/7','8/8'],
   ['정하나','E','EC','E','E','N','N','OF'],
   ['한지민','N','N','NC','E','N','D','D'],
   ['송가연','N','N','OF','N','OF','N','N'],
-  ['오유진','OF','OF','D','N','D','D','E']]);
+  ['오유진','OF','OF','D','N','D','D','E'],
+  ['안소미','/D','/D','/D','/D','OF','/E','/E']]);
 A.confirmPaste();
 A.store.events['2026-08-05']='병동 감염관리 교육 14:00';
 A.recompute();
@@ -46,10 +55,10 @@ $('#fileInfo').textContent='assign-data.js';
 
 # 장면 정의: (창 크기, 자를 영역 선택자들, 프레임별 스크립트, 프레임 길이(ms))
 SCENES: dict[str, dict] = {
-    "week": dict(size=(1240, 1120), sel=[".wknav", "#wkBody"], hold=[3000], steps=[
+    "week": dict(size=(1920, 1080), sel=[".wknav", "#wkBody"], hold=[3000], steps=[
         "A.show('week');",
     ]),
-    "swap": dict(size=(1240, 1120), sel=[".wknav", "#wkBody", "#pick"], hold=[1500, 2600, 2600], steps=[
+    "swap": dict(size=(1920, 1080), sel=[".wknav", "#wkBody", "#pick"], hold=[1500, 2600, 2600], steps=[
         "A.show('week');",
         """A.show('week');
            const day=A.dayInfo('2026-08-05').D;
@@ -58,13 +67,13 @@ SCENES: dict[str, dict] = {
            const day=A.dayInfo('2026-08-05').D;
            A.openPick(day.labels['B'],'2026-08-05',430,250); pickChoose('C');""",
     ]),
-    "rooms": dict(size=(1240, 1120), sel=[".wknav", "#wkBody", "#rpick"], hold=[1500, 2800, 2400], steps=[
+    "rooms": dict(size=(1920, 1080), sel=[".wknav", "#wkBody", "#rpick"], hold=[1500, 2800, 2400], steps=[
         "A.show('week');",
         "A.show('week'); A.openRoomPick({kind:'day',iso:'2026-08-05',P:'D',l:'A'},430,250);",
         """A.show('week'); A.openRoomPick({kind:'day',iso:'2026-08-05',P:'D',l:'A'},430,250);
            toggleRoom('1012'); toggleRoom('1005');""",
     ]),
-    "paste2": dict(size=(1240, 1150), sel=["#scrPaste"], hold=[1800, 3200, 2600], steps=[
+    "paste2": dict(size=(1920, 1150), sel=["#scrPaste"], hold=[1800, 3200, 2600], steps=[
         "A.show('paste');",
         """A.show('paste');
            A.ingestGrid([['D','D','E'],['OF','D','E'],['E','E','OF'],['N','OF','D'],
@@ -74,7 +83,7 @@ SCENES: dict[str, dict] = {
                          ['D','E','E'],['N','N','OF'],['OF','N','N']]);
            setPasteStart('iso','2026-08-09'); A.confirmPaste();""",
     ]),
-    "codes": dict(size=(1240, 1150), sel=["#pvCard"], hold=[3000, 2600], steps=[
+    "codes": dict(size=(1920, 1150), sel=["#pvCard"], hold=[3000, 2600], steps=[
         """A.show('paste');
            A.ingestGrid([['경가','D','E'],['조가','D','E'],['D','경가','OF'],['N','OF','조가'],
                          ['D','E','E'],['N','N','OF'],['OF','N','N']]);
@@ -85,7 +94,18 @@ SCENES: dict[str, dict] = {
            setPasteStart('iso','2026-08-09');
            mapUnknown('경가','leave'); mapUnknown('조가','alias','OF');""",
     ]),
-    "edit": dict(size=(1480, 820), sel=["#scrEdit"], hold=[1600, 2200, 2600], steps=[
+    "trainee": dict(size=(1920, 1080), sel=[".wknav", "#wkBody", "#wkWarn", "#pick"], hold=[2200, 3000, 3000], steps=[
+        "A.show('week');",
+        "A.show('week'); A.openPick('이영희','2026-08-05',430,250);",
+        "A.show('week'); A.attachTrainee('안소미','2026-08-05','이영희',true); A.show('week');",
+    ]),
+    "nurse": dict(size=(1920, 1080), sel=["#adminNav", "#adminPanelBox"], hold=[3000], steps=[
+        "A.show('admin'); pickAdmin('caps');",
+    ]),
+    "roomlist": dict(size=(1920, 1080), sel=["#adminNav", "#adminPanelBox"], hold=[3000], steps=[
+        "A.show('admin'); setWard('92'); pickAdmin('rooms');",
+    ]),
+    "edit": dict(size=(1920, 900), sel=["#scrEdit"], hold=[1600, 2200, 2600], steps=[
         "A.show('edit');",
         "A.show('edit'); sel={r:1,c:9,r2:3,c2:12}; paintEdit();",
         """A.show('edit'); sel={r:1,c:9,r2:3,c2:12};
@@ -125,7 +145,7 @@ setTimeout(()=>{
 
 def run_chrome(args: list[str]) -> str:
     return subprocess.run([CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars",
-                           "--force-device-scale-factor=2", *args],
+                           "--force-device-scale-factor=2", *_EXTRA, *args],
                           capture_output=True, text=True, timeout=120).stdout
 
 
