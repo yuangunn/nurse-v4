@@ -767,6 +767,9 @@ self.cbLogging.subscribe(_on_log)
 ## 커밋/릴리즈 정책
 
 - 브랜치: `main` (릴리즈)
+- **원격(Claude) 세션의 PR 은 CI 가 green 이면 묻지 않고 바로 머지한다** (사용자 지시 2026-09-16 — "앞으로 모두 네가
+  알아서 머지해"). 드래프트면 ready 로 바꾼 뒤 merge commit 으로 머지하고, 머지 여부를 사용자에게 다시 묻지 말 것.
+  머지 후 후속 작업은 같은 브랜치 이름을 최신 main 에서 다시 만들어 이어간다.
 - 태그: `v4.0.X` 형식
 - 릴리즈 자산: 설치파일 + 포터블 ZIP 모두 GitHub Releases에 업로드
 - 버전 올릴 시 동기화 파일: `electron/package.json`, `electron/preload.js`, `installer/setup.iss`, `frontend/index.html` (버전 표시 라인 2곳), `README.md` 다운로드 섹션, `CLAUDE.md` 최신 라인, `CHANGELOG.md` (미출시 → 버전 확정), **`RELEASE_NOTES.md`** (릴리스 본문 — CI가 `body_path`로 사용)
