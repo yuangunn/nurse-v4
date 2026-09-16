@@ -340,4 +340,52 @@ assert.equal(periodOf('OF'), null);
   assert.ok(!prevRooms.some(x => nowRooms.includes(x)), '튕기기: 보던 병실을 피해야 함');
 }
 
+// ── 원칙 등급은 방 선택에서도 앞선다 (2026-09-16) ──
+// 예전엔 겹침을 등급 없이 합쳐서, 근무 변경자·오프 복귀자가 4칸 겹치는 방을 잡으려고
+// 전일 근무자(원칙1)를 2칸짜리 방으로 밀어냈다 — 5~10 보던 사람이 6~9 대신 5,10,11.
+{
+  const S = { 5: { 차지: ['12','14'], A: ['1','2'], B: ['3','4'], C: ['5','10','11'], D: ['6','7','8','9'] },
+              4: { 차지: ['1','14'], A: ['2','3','12'], B: ['4','5','11'], C: ['6','7','8','9','10'] },
+              3: { 차지: ['1','12','14'], A: ['2','3','4','11'], B: ['5','6','7','8','9','10'] },
+              2: { 차지: [], A: [] } };
+  const roomsFor = (P, cnt, l) => (S[Math.min(Math.max(cnt, 2), 5)] || {})[l] || [];
+  const NN = ['C1','A1','X','E1','E2','E3','W','Q'].map((id, i) =>
+    ({ id, seniority: i, chargeCapable: { D: i === 0, E: i === 3, N: false } }));
+  // W 어제 E(4인 C=6~10) → 오늘 D (원칙2 근무 변경). X 어제 D 3인 B(5~10) → 오늘 D (원칙1)
+  const r1 = compute(NN, {
+    C1: { d1: 'DC', d2: 'DC' }, A1: { d1: 'D', d2: 'D' }, X: { d1: 'D', d2: 'D' },
+    E1: { d1: 'EC', d2: 'E' }, E2: { d1: 'E', d2: 'E' }, E3: { d1: 'E', d2: 'E' },
+    W: { d1: 'E', d2: 'D' }, Q: { d1: 'OF', d2: 'D' },
+  }, ['d1', 'd2'], { roomsFor });
+  assert.equal(r1.byDay.d1.E.labels.C, 'W');
+  assert.equal(r1.byDay.d1.D.labels.B, 'X');
+  assert.equal(r1.byDay.d2.D.labels.D, 'X', '원칙1(X, 5~10)이 6~9를 이어봐야 한다');
+  assert.equal(r1.byDay.d2.D.labels.C, 'W', '근무 변경자(W)는 남은 5,10,11');
+  // W 이틀 전 D 4인 C(6~10), 어제 OF → 오늘 D (원칙3 오프 복귀)
+  const r2 = compute(NN, {
+    C1: { d0: 'DC', d1: 'DC', d2: 'DC' }, A1: { d0: 'D', d1: 'D', d2: 'D' },
+    E1: { d0: 'D', d1: 'E', d2: 'E' }, W: { d0: 'D', d1: 'OF', d2: 'D' },
+    X: { d0: 'OF', d1: 'D', d2: 'D' }, Q: { d0: 'OF', d1: 'OF', d2: 'D' },
+  }, ['d0', 'd1', 'd2'], { roomsFor });
+  assert.equal(r2.byDay.d0.D.labels.C, 'W');
+  assert.equal(r2.byDay.d1.D.labels.B, 'X');
+  assert.equal(r2.byDay.d2.D.labels.D, 'X', '오프 복귀자가 전일 근무자의 방을 빼앗으면 안 된다');
+  assert.equal(r2.byDay.d2.D.labels.C, 'W');
+  // 전일 근무자가 두 자리에 무차별하면 여전히 낮은 등급이 원래 방을 되찾는다 (등급 안에서만 합산)
+  const r4 = compute(NN, {
+    C1: { d0: 'DC', d1: 'DC', d2: 'DC' }, A1: { d0: 'D', d1: 'D', d2: 'D' },
+    E1: { d0: 'D', d1: 'OF', d2: 'D' }, X: { d0: 'OF', d1: 'D', d2: 'D' },
+  }, ['d0', 'd1', 'd2'], { roomsFor });
+  assert.equal(r4.byDay.d0.D.labels.B, 'E1');       // 이틀 전 4,5,11
+  assert.equal(r4.byDay.d2.D.labels.B, 'E1', '오프 복귀자가 보던 4,5(3인 A=2,3,4,11 겹침)을 되찾는다');
+
+  // 병상수 기준(opts.bedsOf): 5·10호가 5인실, 6~9호가 1인실이면 X에게는
+  // 5,10,11(겹침 10병상)이 6~9(4병상)보다 같이 보던 환자가 더 많다
+  const beds = { 5: 5, 10: 5, 11: 2, 6: 1, 7: 1, 8: 1, 9: 1 };
+  const solo = { C1: { d1: 'DC', d2: 'DC' }, A1: { d1: 'D', d2: 'D' }, X: { d1: 'D', d2: 'D' },
+                 Q: { d1: 'OF', d2: 'D' }, W: { d1: 'OF', d2: 'D' } };
+  assert.equal(compute(NN, solo, ['d1', 'd2'], { roomsFor }).byDay.d2.D.labels.D, 'X');           // 방 개수: 4 > 2
+  assert.equal(compute(NN, solo, ['d1', 'd2'], { roomsFor, bedsOf: t => beds[t] || 1 }).byDay.d2.D.labels.C, 'X'); // 병상수: 10 > 4
+}
+
 console.log('assign-core: 모든 검증 통과');
