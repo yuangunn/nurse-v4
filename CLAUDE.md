@@ -523,7 +523,19 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   **병동 양식 교체**: 관리 > 배정표 양식에서 xlsx 를 올려 구조를 검사하고 채택.
   구조가 다르면 자리표시자(`{{이름}} {{방}} {{차지:/CRN}} {{날짜}} {{요일}} {{중간번}} {{교육}}`)를
   자동으로 꽂아 받은 뒤 엑셀에서 위치만 손보면 된다.
+  **병동·병실 규칙** (2026-09-16): 병동 번호 = 층 + 라인(61 = 6층 1라인, 102 = 10층 2라인), 병실 =
+  층×100 + 호수 — **1라인 1~14호, 2라인 51~64호**(92병동 → 951~964). 관리 > 병실 목록에서 병동을
+  고르면 `setWard()`가 병실 14개를 채우고 병상수·방 구성·주지 않을 방을 **같은 자리**(`roomPos`, 1라인
+  3호 ↔ 2라인 53호)로 옮긴다. 화면·인쇄·xlsx 표기는 `roomsBase()`(층×100) 기준 축약으로 통일
+  (901→1, 951→51) — `abbrevRooms/roomShort/roomFull` 을 거치지 않는 방 표시를 새로 만들지 말 것.
+  **보관 방식 2종** (`localStorage assignMode`): 공유 파일(사이드카 + 파일 핸들) / **이 컴퓨터 안**
+  (IndexedDB `local` 키, 파일·권한창 없음, 공유 안 됨). 부팅 순서 native → local → silentReattach →
+  sidecar. 파일을 열면 모드가 `file`로 바뀐다. 브라우저는 자기 HTML을 고쳐 쓸 수 없어 'HTML 안 보관'은
+  브라우저 저장소로 구현한 것. **재연결**: 닫았다 켜면 쓰기 권한은 잊지만 핸들은 남으므로 `reattachHandle`
+  이 사용자 동작 안에서 `requestPermission`만 받아(파일 창 없음) rev 비교 후 잇는다 — [저장 연결]과 첫
+  편집(`touch`)에서 시도. 읽기 전용 중 고친 내용은 파일이 안 바뀌었을 때만 살린다.
   동기화 `node scripts/build-assign-standalone.mjs` (코어 + 양식 + 폰트 + 도움말 그림 + 버전 주입)
+  — CI(`test.yml`)가 재빌드해 버전 줄 외 diff가 있으면 실패시키므로 `assign.html` 수정 후 반드시 실행.
 - 인트라넷용 ②: `standalone/app/` — 같은 화면을 담은 Windows 단일 exe (WebView2, 127.0.0.1 안 씀).
   파일 저장 권한 확인 없이 바로 저장. 빌드 `standalone/app/build.cmd`
 - 인트라넷용 ③: `standalone/assign_vba.bas` (Excel VBA 매크로 4종)
