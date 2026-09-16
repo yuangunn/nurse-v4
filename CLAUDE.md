@@ -558,6 +558,16 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   양식 문구 편집기는 구조 인식 칸(요일·날짜·구역·어싸인 라벨 = `findLayout` 이 쓰는 칸)을 🔒 readonly 로 잠그고
   제목 / 표 안 라벨(접힘) / 하단 블록(A열 글자에서 나눔)으로 묶는다. 사이드카 목록에 병동 번호, 인쇄 이름 칸은
   신규 줄이 있어도 행 높이 유지(`.pnm.two`·`.ptr`).
+  **상단 파일 칩** (2026-09-16, 사용자 요청 "항상 현재 연결된 저장파일 경로+파일명"): `#fileInfo` 는 `fileLoc`
+  ({kind:native|sidecar|file|local|ro|none, name, dir}) 하나를 `renderFileInfo()` 가 그린다 — 다른 곳에서 textContent 를
+  직접 쓰지 말고 `setFileLoc()`. 경로를 아는 경우는 exe(`nativeInfo.path`)와 자동 열림 파일(`htmlDirPath()` = HTML 주소의
+  폴더: file:///D:/x/ → `D:\x\`, file://srv/share/ → `\\srv\share\`, http 는 origin+경로). **파일 핸들은 브라우저가
+  폴더를 알려주지 않는다** — `locateHandle(h)` 가 핸들 파일의 rev·saved 를 HTML 옆 같은 이름 파일(`probeSidecar`)과
+  대조해 일치하면 그 폴더로 표시(`verified`), 아니면 이름만 + 툴팁에 이유. 클릭 = 경로 복사. 관리 > 데이터 보관도
+  `fileLocPath()`. **저장 연결 검증은 진짜 핸들로**: OPFS(`navigator.storage.getDirectory()`) 핸들은 file:// 에서
+  SecurityError 라 스크래치 폴더를 `http://127.0.0.1` 로 띄워 검사한다(스크래치 `test-save-connect.mjs`: 새 파일→자동
+  저장→새로고침 0클릭 재연결→충돌 보류/덮어쓰기/내 rev 이어쓰기→파일 사라짐 보류·복구, 사이드카 읽기 전용→저장 연결→
+  폴더 확인, exe 경로. 가짜 `chrome.webview` 로 네이티브 분기까지).
   동기화 `node scripts/build-assign-standalone.mjs` (코어 + 양식 + 폰트 + 도움말 그림 + 버전 주입)
   — CI(`test.yml`)가 재빌드해 버전 줄 외 diff가 있으면 실패시키므로 `assign.html` 수정 후 반드시 실행.
 - 인트라넷용 ②: `standalone/app/` — 같은 화면을 담은 Windows 단일 exe (WebView2, 127.0.0.1 안 씀).
