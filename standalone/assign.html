@@ -76,6 +76,16 @@
   #saveDot{display:none;padding:3px 10px;border-radius:9999px;background:var(--ok-bg);color:var(--ok);font-size:12px;font-weight:700}
   #saveDot.show{display:inline-flex;align-items:center}
   #saveDot.warn{background:var(--err-bg);color:var(--err)}
+  /* 상단 '지금 저장되는 파일' 칩 — 폴더는 줄이되 파일 이름은 항상 보인다. 클릭 = 경로 복사 (2026-09-16) */
+  #fileInfo{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:46vw;padding:5px 12px;border-radius:9999px;background:var(--rule-soft);
+    color:var(--ink-2);font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
+  #fileInfo:empty{display:none}
+  #fileInfo .fiIco{flex:0 0 auto}
+  #fileInfo .fiDir{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ink-3);font-weight:500}
+  #fileInfo .fiName{flex:0 0 auto;color:var(--ink);font-weight:800}
+  #fileInfo .fiTail{flex:0 0 auto;color:var(--ink-3);font-weight:600}
+  #fileInfo.warn{background:var(--warn-bg)} #fileInfo.warn .fiName,#fileInfo.warn .fiTail,#fileInfo.warn .fiDir{color:var(--warn)}
+  #fileInfo.off{background:var(--err-bg)} #fileInfo.off .fiName,#fileInfo.off .fiTail{color:var(--err)}
   .screen{max-width:1480px;margin:0 auto;padding:18px 20px 20px}
   .card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:14px;
     box-shadow:var(--shadow-card)}
@@ -441,7 +451,7 @@
 <div class="topbar">
   <div class="mark"></div>
   <h1>어싸인 배정표</h1>
-  <span id="fileInfo" class="dim"></span><span id="saveDot"></span>
+  <span id="fileInfo" onclick="copyFilePath()"></span><span id="saveDot"></span>
   <span style="margin-left:auto;display:flex;gap:8px">
     <button id="btnConnect" class="tab" style="display:none;background:var(--warn-bg);color:var(--warn)"
       onclick="connectSave()" title="자동으로 읽기만 한 상태입니다 — 파일을 한 번 골라 주면 이후 수정이 자동 저장됩니다">저장 연결</button>
@@ -1055,7 +1065,7 @@ function toast(msg,ms=2800,undoable=false){ const t=$('#toast');
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260916f'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260916h'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1196,8 +1206,9 @@ async function useHandle(h,{create=false}={}){
   try{ localStorage.setItem('assignMode','file'); }catch(e){}
   try{ await idbSet('handle',h); }catch(e){}
   try{ localStorage.setItem('assignLastFile',h.name); localStorage.setItem('assignLastAt',Date.now()); }catch(e){}
-  $('#fileInfo').textContent=h.name;
+  setFileLoc({kind:'file',name:h.name});
   if(create) await writeStore();
+  await locateHandle(h);
   afterLoad();
 }
 /* 저장 — rev는 실제 쓰기 성공 후에만 올린다(실패 시 되감김 방지),
@@ -1205,6 +1216,69 @@ async function useHandle(h,{create=false}={}){
  * 파일을 읽을 수 없으면 절대 덮어쓰지 않고 보류한다(깨진/잠긴 파일 보호). */
 function saveMsg(t){ const el=$('#saveDot'); el.textContent=t;
   el.className=(t?'show':'')+(t&&t.startsWith('⚠')?' warn':''); }
+/* ── 상단 '지금 저장되는 파일' 표시 (사용자 요청 2026-09-16) ────────────────
+ * 어느 파일에 저장되는지 항상 보여 준다. 경로를 아는 경우는 둘 — exe(네이티브가 전체 경로를
+ * 준다)와 자동 열림 파일(이 HTML 옆에서 <script src> 로 읽었으니 HTML 주소의 폴더 + 이름).
+ * 파일 핸들은 브라우저 보안상 폴더를 알려주지 않는다 — 대신 핸들 파일의 내용이 HTML 옆
+ * 같은 이름 파일과 일치(rev·saved)하면 그 폴더로 보고, 아니면 이름만 보여 준다(툴팁에 이유). */
+let fileLoc={kind:'none'};   // {kind:'native'|'sidecar'|'file'|'local'|'ro'|'none', name, dir, writable, verified}
+function htmlDirPath(href){
+  try{
+    const u=new URL(href||location.href);
+    const dirPart=u.pathname.replace(/[^/]*$/,'');
+    if(u.protocol==='file:'){
+      const p=decodeURIComponent(dirPart);
+      if(u.hostname) return '\\\\'+u.hostname+p.replace(/\//g,'\\');        // UNC: file://server/share/
+      if(/^\/[A-Za-z]:\//.test(p)) return p.slice(1).replace(/\//g,'\\');   // 윈도 드라이브: /D:/x/ → D:\x\
+      return p;                                                            // POSIX
+    }
+    return u.origin+decodeURIComponent(dirPart);                           // http(s)://
+  }catch(e){ return ''; }
+}
+function dirOfPath(p){ return String(p||'').replace(/[^\\/]*$/,''); }
+function joinPath(dir,name){ if(!dir) return name||''; const sep=dir.includes('\\')?'\\':'/'; return dir.endsWith(sep)?dir+name:dir+sep+name; }
+function setFileLoc(l){ fileLoc=l||{kind:'none'}; renderFileInfo(); }
+function fileLocPath(){ const L=fileLoc||{}; return L.dir?joinPath(L.dir,L.name||''):(L.name||''); }
+function renderFileInfo(){
+  const el=$('#fileInfo'); if(!el) return;
+  const L=fileLoc||{kind:'none'};
+  let ico='💾', cls='', dir='', name='', tail='', title='';
+  if(L.kind==='local'){ ico='🖥'; name='이 컴퓨터 안에 보관'; tail='공유 안 됨';
+    title='브라우저 저장소에 보관합니다 — 파일이 없고 다른 컴퓨터와 공유되지 않습니다. 관리 > 데이터 보관에서 공유 파일로 옮길 수 있습니다'; }
+  else if(L.kind==='none'){ ico='⚠'; cls='off'; name='저장 파일 없음'; tail='저장되지 않음';
+    title='연결된 데이터 파일이 없습니다 — 시작 화면에서 데이터 파일을 열거나 만드세요'; }
+  else if(L.kind==='ro'){ ico='⚠'; cls='warn'; name=L.name||''; tail='읽기 전용 — 저장 안 됨';
+    title='이 브라우저는 파일 저장을 지원하지 않습니다 — Edge 또는 Chrome(103+)에서 여세요'; }
+  else{
+    name=L.name||''; dir=L.dir||'';
+    if(L.kind==='sidecar'){ ico='📄'; cls='warn'; tail='읽기 전용 — 저장 연결 필요';
+      title='이 HTML 옆의 '+name+' 를 자동으로 읽었습니다. 수정하려면 [저장 연결]을 눌러 같은 파일을 한 번 골라 주세요'; }
+    else if(L.kind==='native'){ tail=L.writable===false?'쓰기 불가 폴더':''; title='프로그램이 직접 읽고 쓰는 데이터 파일입니다 — 고친 내용이 여기에 자동 저장됩니다'; }
+    else title='저장 연결됨 — 고친 내용이 이 파일에 자동 저장됩니다'+(dir?'':'. 브라우저 보안 정책상 폴더 경로는 보여 주지 못합니다 (파일을 이 HTML 옆 폴더에 두면 경로가 표시됩니다)');
+    title+='\n클릭 = 경로 복사';
+  }
+  const path=(L.kind==='local'||L.kind==='none')?'':(dir?joinPath(dir,name):name);   // 라벨은 경로가 아니다 — 복사 대상 아님
+  el.className=cls; el.title=(path?path+'\n':'')+title; el.dataset.path=path||'';
+  el.innerHTML=`<span class="fiIco">${ico}</span>`+(dir?`<span class="fiDir">${esc(dir)}</span>`:'')+
+    `<span class="fiName">${esc(name)}</span>`+(tail?`<span class="fiTail">· ${esc(tail)}</span>`:'');
+}
+async function copyFilePath(){
+  const p=$('#fileInfo').dataset.path||'';
+  if(!p){ toast('복사할 경로가 없습니다'); return; }
+  try{ await navigator.clipboard.writeText(p); toast('경로를 복사했습니다: '+p,3200); }
+  catch(e){ toast('복사 실패 — 브라우저가 클립보드를 막았습니다',3200); }
+}
+/* 핸들이 가리키는 파일이 이 HTML 옆의 같은 이름 파일과 같은 내용(rev·saved)이면 그 폴더로 본다.
+ * 아니면 폴더 핸들로 열었을 때의 폴더 이름만(…\폴더\파일), 그것도 없으면 이름만. */
+async function locateHandle(h){
+  let dir='', verified=false;
+  try{
+    const pr=await probeSidecar(h.name);
+    if(pr.data&&pr.data.app==='assign'&&(pr.data.rev||0)===(store.rev||0)&&(pr.data.saved||'')===(store.saved||'')){ dir=htmlDirPath(); verified=!!dir; }
+  }catch(e){}
+  if(!dir&&window.__dirName){ const hd=htmlDirPath(); dir='…'+(hd.includes('\\')?'\\':'/')+window.__dirName; }
+  if(fileHandle===h) setFileLoc({kind:'file',name:h.name,dir,verified});
+}
 /* 이 창을 구별하는 표식 — 파일에 같이 적어 둔다.
  * 파일 rev가 내 것보다 커도 그걸 쓴 게 '나'라면 다른 컴퓨터가 아니다.
  * (쓰기가 중간에 끊겨 파일 rev만 올라간 경우 등) 새로고침하면 새 표식이 되므로
@@ -1336,6 +1410,7 @@ async function openFromDir(dir,{preferLast=false}={}){
     return;
   }
   try{ await idbSet('dir',dir); }catch(e){}
+  window.__dirName=dir.name;
   const last=localStorage.getItem('assignLastFile');
   const match=preferLast&&files.find(f=>f.name===last);
   if(files.length===1) await useHandle(files[0].h);
@@ -1381,7 +1456,7 @@ async function tryNative(){
     if(d.data&&d.data.app==='assign'){ store={...emptyStore(),...d.data}; migrateStore(); }
     else store=emptyStore();
     fileHandle=null; window.__memoryMode=false; window.__autoRead=false; window.__localMode=false;
-    $('#fileInfo').textContent=p.file+(p.writable?'':' (쓰기 불가 폴더)');
+    setFileLoc({kind:'native',name:p.file,dir:dirOfPath(p.path),writable:p.writable});
     saveMsg(''); afterLoad();
     return true;
   }catch(e){ startWarnMsg('데이터 파일을 열지 못했습니다: '+e.message); return false; }
@@ -1429,7 +1504,7 @@ async function nativePickData(){
     const d=await nativeCall('load');
     if(d.data&&d.data.app==='assign'){ store={...emptyStore(),...d.data}; migrateStore(); }
     else store=emptyStore();
-    $('#fileInfo').textContent=r.file;
+    setFileLoc({kind:'native',name:r.file,dir:dirOfPath(r.path),writable:r.writable});
     dirty=false; recompute(); show('week');
     toast('데이터 파일을 바꿨습니다: '+r.file,3600);
   }catch(e){ toast('바꾸기 실패: '+e.message,4000); }
@@ -1459,7 +1534,7 @@ function enterLocalMode(){
   fileHandle=null; window.__memoryMode=false; window.__autoRead=false; window.__localMode=true;
   overwriteOk=false;
   try{ localStorage.setItem('assignMode','local'); }catch(e){}
-  $('#fileInfo').textContent='이 컴퓨터 안에 보관 (공유 안 됨)';
+  setFileLoc({kind:'local'});
   $('#btnConnect').style.display='none'; saveMsg('');
 }
 async function tryLocal(){
@@ -1523,7 +1598,7 @@ function openSidecar(entry){
   fileHandle=null; window.__memoryMode=true; window.__autoRead=true; window.__autoReadName=entry.name;
   window.__localMode=false; window.__autoEdits=false;
   try{ localStorage.setItem('assignMode','file'); }catch(e){}
-  $('#fileInfo').textContent=entry.name+' (자동으로 읽음)';
+  setFileLoc({kind:'sidecar',name:entry.name,dir:htmlDirPath()});
   saveMsg('⚠ 저장 연결 안 됨 — 수정하려면 [저장 연결]');
   $('#btnConnect').style.display='';
   $('#filePickCard').style.display='none';
@@ -1567,10 +1642,11 @@ async function reattachHandle(h){
   try{ localStorage.setItem('assignMode','file'); }catch(e){}
   try{ await idbSet('handle',h); }catch(e){}
   try{ localStorage.setItem('assignLastFile',h.name); localStorage.setItem('assignLastAt',Date.now()); }catch(e){}
-  $('#fileInfo').textContent=h.name; $('#btnConnect').style.display='none'; saveMsg('');
+  setFileLoc({kind:'file',name:h.name}); $('#btnConnect').style.display='none'; saveMsg('');
   recompute();
   if(curScr==='week') renderWeek(); else if(curScr==='edit') renderEditGrid(); else if(curScr==='admin') renderAdmin();
   if(edited&&!reloaded){ dirty=true; await writeStore(); }        // 읽기 전용 중 고친 것을 이제 저장
+  await locateHandle(h);
   return true;
 }
 /* 첫 편집이 사용자 클릭 안에서 일어나면 그 자리에서 '허용' 창 하나로 저장 연결 — 파일 창 없이 */
@@ -1663,6 +1739,7 @@ const connected=()=>!!fileHandle||!!nativeInfo||!!window.__memoryMode||!!window.
 function show(name){
   if(name!=='start'&&!connected()){ name='start'; }
   curScr=name;
+  renderFileInfo();
   for(const k in SCREENS) $('#'+SCREENS[k]).style.display=(k===name)?'':'none';
   $('#tabWeek').classList.toggle('on',['week','paste','edit'].includes(name));
   $('#tabAdmin').classList.toggle('on',name==='admin');
@@ -2555,7 +2632,7 @@ window.addEventListener('drop',async e=>{
       if(it&&it.getAsFileSystemHandle){ const h=await it.getAsFileSystemHandle(); await useHandle(h); }
       else{ const j=parseStoreText(await f.text()); if(!j||j.app!=='assign') throw new Error('형식 불일치');
         store={...emptyStore(),...j}; migrateStore(); window.__memoryMode=true;
-        $('#fileInfo').textContent='⚠ 읽기 전용으로 열림 — 수정해도 저장되지 않습니다 (Edge/Chrome에서 여세요)';
+        setFileLoc({kind:'ro',name:f.name});
         afterLoad(); }
       toast(f.name+' 열림');
     }catch(err){ toast('열기 실패: '+err.message,4000); }
@@ -3102,7 +3179,7 @@ const ADMIN_PANELS={
       if(nativeInfo) $('#dataInfo').innerHTML=`프로그램으로 열렸습니다 — 권한 확인 없이 바로 저장됩니다.<br>`+
         `데이터 파일: <b>${esc(nativeInfo.path||nativeInfo.file)}</b>`+(nativeInfo.writable?'':' <b style="color:var(--err)">(쓰기 불가 폴더)</b>');
       else if(window.__localMode) $('#dataInfo').textContent='이 컴퓨터 안 · '+span+(store.saved?' · 마지막 저장 '+fmtWhen(Date.parse(store.saved)):'');
-      else $('#dataInfo').textContent=(fileHandle?'파일: '+fileHandle.name+' · ':window.__autoRead?'읽기만 (저장 연결 안 됨) · ':'')+span;
+      else $('#dataInfo').textContent=(fileHandle?'파일: '+fileLocPath()+' · ':window.__autoRead?'읽기만 (저장 연결 안 됨): '+fileLocPath()+' · ':'')+span;
     }},
 };
 function renderAdmin(){
@@ -3201,7 +3278,7 @@ async function pickNewLocation(){
       types:[{description:'어싸인 데이터 (자동 열림)',accept:{'text/javascript':['.js']}},
              {description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
     fileHandle=h; await idbSet('handle',h); await writeStore();
-    $('#fileInfo').textContent=h.name; renderAdmin(); toast('저장 위치를 바꿨습니다');
+    setFileLoc({kind:'file',name:h.name}); await locateHandle(h); renderAdmin(); toast('저장 위치를 바꿨습니다');
   }catch(e){ if(e.name!=='AbortError') toast('실패: '+e.message,4000); }
 }
 /* ── 배정표 양식 검사 ─────────────────────────────────────────────────── */
@@ -4400,9 +4477,10 @@ window.__app={get store(){return store},set store(v){store=v},
   reattachHandle,setWard,wardRooms,wardOfRooms,roomsBase,roomPos,startLocal,moveToLocal,moveToFile,readLocalStore,tryLocal,
   writeStoreLocal,enterLocalMode,setScheme,resetSchemes,moveNurse,attachTrainee,traineesUnder,preceptorOf,unattachedTrainees,
   nameWithTrainees,applyWrapStyles,packXlsx,openFormText,saveFormText,addNurse,renameNurseAdmin,removeNurse,applyNurseName,adminBadge,
+  htmlDirPath,joinPath,dirOfPath,fileLocPath,renderFileInfo,setFileLoc,locateHandle,copyFilePath,get fileLoc(){return fileLoc},
   get wkSunday(){return wkSunday},set wkSunday(v){wkSunday=v},show,
   memoryMode(){window.__memoryMode=true;
-    $('#fileInfo').textContent='⚠ 파일 미연결 — 저장되지 않는 임시 모드';afterLoad();}};
+    setFileLoc({kind:'none'});afterLoad();}};
 </script>
 </body>
 </html>
