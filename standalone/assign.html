@@ -139,6 +139,11 @@
   #wkWarn.soft{background:var(--warn-bg)}
   #wkWarn.soft .cnt{background:var(--warn)}
   #wkWarn.soft .ttl{color:var(--warn)}
+  #wkWarn .items.clip{max-height:150px;overflow:hidden}
+  #wkWarn .more{align-self:flex-start;min-height:30px;padding:5px 12px;font-size:13px;margin:0}
+  #wkWarn button.inl{min-height:26px;padding:3px 10px;font-size:12px;margin-left:4px}
+  #wkWarn select{font-size:12px;padding:3px 6px;min-height:26px}
+  #wkWarn .trs{white-space:nowrap}
   #wkTable{width:100%;border-collapse:collapse;table-layout:fixed;background:var(--card)}
   #wkTable td,#wkTable th{border:1px solid var(--rule);padding:0 4px;text-align:center;
     overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
@@ -163,7 +168,7 @@
   #wkTable td.rm:hover{background:var(--rule-soft)}
   #wkTable td.rm.rov{box-shadow:inset 0 -2px 0 var(--down-deep);font-weight:700}
   #wkTable td.rm.rdup{color:var(--err);font-weight:700}
-  #wkTable td.evt{cursor:pointer;font-size:12px;font-weight:600;color:var(--warn)}
+  #wkTable td.evt{cursor:pointer;font-size:12px;font-weight:600;color:var(--warn);white-space:pre-line;line-height:1.25}
   #wkTable td.evt:hover{background:var(--warn-bg)}
   #wkTable .midlab{background:var(--warn-bg);font-size:12px;font-weight:700;color:var(--warn)}
   #wkTable td.mid{font-size:13px;font-weight:700;color:var(--ink-2)}
@@ -263,6 +268,10 @@
   #wrap thead th .dw{font-size:10px;font-weight:600;color:var(--ink-2);line-height:1.15}
   #wrap thead th.sun .dd,#wrap thead th.sun .dw{color:var(--err)}
   #wrap thead th.sat .dd,#wrap thead th.sat .dw{color:var(--down-deep)}
+  /* 오늘 열 — 머리칸은 검정, 칸은 양옆 파란 줄 (근무 색은 그대로) (2026-09-17 사용자 요청) */
+  #wrap thead th.today{background:var(--accent)}
+  #wrap thead th.today .dd,#wrap thead th.today .dw{color:var(--on-accent)}
+  #wrap td.cell.tdy{box-shadow:inset 1.5px 0 0 var(--down),inset -1.5px 0 0 var(--down),inset 0 -1px 0 var(--rule-faint)}
   #wrap th.nm{position:sticky;left:0;z-index:4;background:var(--card-warm);min-width:92px;text-align:left;padding:0 14px;
     font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--ink-3);
     box-shadow:inset -1px 0 0 var(--rule),inset 0 -1px 0 var(--rule)}
@@ -309,6 +318,14 @@
   .psChip{min-height:32px;padding:6px 12px;border-radius:9px;background:var(--card-warm);color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--rule);font-weight:700}
   .psChip.on{background:var(--accent);color:var(--on-accent);box-shadow:none}
   .psWarn{font-size:11px;font-weight:800;color:var(--err)}
+  .psAudit{margin-top:10px;padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.6;font-weight:700}
+  .psAudit.ok{background:var(--ok-bg);color:var(--ok)}
+  .psAudit.bad{background:var(--err-bg);color:var(--err)}
+  .psAudit.bad .sub{font-weight:500;opacity:.85}
+  .wchip{padding:4px 11px;border-radius:9999px;background:var(--accent);color:var(--on-accent);font-size:12px;font-weight:800;letter-spacing:-0.01em}
+  #capsTable tr.gone td{opacity:.45}
+  .histRow{display:flex;align-items:center;gap:12px;padding:8px 0;box-shadow:inset 0 -1px 0 var(--rule-faint);flex-wrap:wrap}
+  .histRow .hl{font-weight:700;min-width:12em}
   #planTable td,#planTable th{padding:6px 8px}
   #planTable select{min-height:32px;font-size:14px}
   .rpPreset{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 8px;padding:8px 10px;border-radius:10px;background:var(--card-warm);font-size:13px}
@@ -348,7 +365,8 @@
         box-shadow:var(--shadow-pop);padding:12px;font-size:15px}
   #pick button,#rpick button{margin:3px;min-width:3em;min-height:32px;font-size:16px;padding:8px 14px}
   #rpick{max-width:420px}
-  #pick{min-width:280px}
+  #pick{min-width:300px;max-width:470px}
+  #pick .shl{display:flex;flex-wrap:wrap}
   #capsTable tr.nrow{cursor:grab}
   #capsTable tr.nrow.dragging{opacity:.4}
   #capsTable tr.nrow.dropAbove td{box-shadow:inset 0 2px 0 var(--accent)}
@@ -467,6 +485,24 @@
   #drop.on{display:flex}
   #saveDot{font-size:12px;color:var(--ok)}
 
+  /* ── 공용 모달 — 선택지 버튼 + (직접 입력). 근무 입력·시트 고르기·교육·행사 입력이 쓴다 (2026-09-17) */
+  #modal{display:none;position:fixed;inset:0;z-index:180;background:rgba(15,17,21,.45);align-items:center;justify-content:center;padding:24px}
+  #modal.on{display:flex}
+  #modalBox{width:600px;max-width:100%;max-height:calc(100vh - 48px);overflow:auto;background:var(--card);border-radius:18px;
+    padding:22px 24px 18px;box-shadow:var(--shadow-pop)}
+  #modalBox .mt{font-size:18px;font-weight:800;letter-spacing:-0.025em;margin-bottom:4px}
+  #modalBox .ms{font-size:13px;color:var(--ink-3);margin-bottom:12px;line-height:1.5}
+  #modalBox .mg{margin:12px 0 5px;font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--ink-3)}
+  #modalBox .mo{display:flex;flex-wrap:wrap;gap:6px}
+  #modalBox .mo button{min-width:3.2em;min-height:40px;font-size:15px;padding:8px 14px;margin:0}
+  #modalBox .mo button.cur{outline:2px solid var(--accent);outline-offset:-2px}
+  #modalBox .mo button.wide{width:100%;text-align:left;justify-content:flex-start}
+  #modalBox .mtx{display:none;margin-top:10px;gap:8px;align-items:center;flex-wrap:wrap}
+  #modalBox .mtx.on{display:flex}
+  #modalBox .mtx input[type=text],#modalBox .mtx textarea{flex:1;min-width:220px;font:inherit;font-size:15px;padding:9px 12px;border:none;border-radius:10px;
+    background:var(--card-warm);box-shadow:inset 0 0 0 1px var(--rule)}
+  #modalBox .mf{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+  #modalBox .mf button{min-height:38px}
   /* ── 인쇄 — A4 세로, 사방 여백 10mm, 내용 190×277mm 정확 배분 (핸드오프 02) ── */
   #printArea{display:none}
   @media print{
@@ -489,7 +525,8 @@
   .sheet .railD{background:#EEF3FE;color:#1B4FC3;font-size:11pt;font-weight:800}
   .sheet .railE{background:#FEEFEF;color:#C7384A;font-size:11pt;font-weight:800}
   .sheet .railN{background:#EFEBFB;color:#5B3FB0;font-size:11pt;font-weight:800}
-  .sheet .prm{font-size:7.5pt;font-weight:600;color:#4A5160;font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
+  .sheet .prm{font-size:7.5pt;font-weight:600;color:#4A5160;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;white-space:nowrap}
+  .sheet .prm.long{font-size:6.6pt;letter-spacing:-0.04em}
   .sheet .ptr{display:block;font-size:6pt;font-weight:600;color:#4A5160;line-height:1.05;margin-top:-0.3mm}
   .sheet .pnm{font-size:9pt;font-weight:700;letter-spacing:-0.02em;color:#0F1115;line-height:1.1;padding:0 0.6mm}
   .sheet .pnm.two{font-size:7.8pt}
@@ -501,7 +538,7 @@
 <div class="app">
 <div class="topbar">
   <div class="mark"></div>
-  <h1>어싸인 배정표</h1>
+  <h1>어싸인 배정표</h1><span id="wardChip" class="wchip" style="display:none" title="이 데이터 파일의 병동 — ⚙ 관리 > 병실 목록에서 고릅니다"></span>
   <span id="fileInfo" onclick="copyFilePath()"></span><span id="saveDot"></span>
   <span style="margin-left:auto;display:flex;gap:8px">
     <button id="btnConnect" class="tab" style="display:none;background:var(--warn-bg);color:var(--warn)"
@@ -697,6 +734,7 @@
 <div id="toast"></div>
 <div id="pick"></div>
 <div id="rpick"></div>
+<div id="modal"><div id="modalBox"></div></div>
 
 <script>
 /*ASSIGN_CORE_BEGIN*/
@@ -1053,10 +1091,10 @@ const DEFAULT_ROOMS = [['1001',5],['1002',5],['1003',5],['1004',5],['1005',5],['
  * 병실 번호 = 층×100 + 호수 — 1라인은 1~14호, 2라인은 51~64호 (92병동 → 951~964).
  * 화면·인쇄·엑셀에는 호수(1~14 / 51~64)만 짧게 적는다. */
 const WARDS=['61','71','81','82','91','92','101','102','111','112','121','122','131','132'];
-function wardRooms(code){
+function wardRooms(code,has13=true){   // has13=false 면 13번째 방(13호·63호)을 뺀다 — 병동마다 13호가 있기도 없기도 하다 (2026-09-17)
   const s=String(code||''); const floor=+s.slice(0,-1), line=+s.slice(-1);
   if(!floor||!(line===1||line===2)) return [];
-  return [...Array(14)].map((_,i)=>String(floor*100+(line===2?50:0)+i+1));
+  return [...Array(14)].map((_,i)=>String(floor*100+(line===2?50:0)+i+1)).filter((r,i)=>has13||i!==12);
 }
 // 방의 자리(몇 번째 방, 1~14) — 1라인 3호와 2라인 53호는 같은 자리. 규칙 밖 호실은 null
 function roomPos(r){ const n=+r; if(!Number.isInteger(n)||n<=0) return null;
@@ -1096,6 +1134,7 @@ function cycleTheme(){
 try{ matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme); }catch(e){}
 applyTheme();
 const esc=s=>String(s).replace(/[<>&]/g,m=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]));
+const escA=s=>esc(s).replace(/"/g,'&quot;');   // 속성값용
 const pad2=n=>String(n).padStart(2,'0');
 const isoOfD=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(d.getDate()+n);return x};
@@ -1110,10 +1149,44 @@ function toast(msg,ms=2800,undoable=false){ const t=$('#toast');
   t.onclick=undoable?()=>{ t.style.display='none'; undoAny(); }:null;
   t.style.display='block';
   clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',undoable?Math.max(ms,7000):ms); }
+/* ── 공용 모달 — 선택지 버튼 + (직접 입력) (2026-09-17 사용자 요청: 근무 수정을 텍스트 입력 대신 모달로) ──
+ * askModal({title,sub,groups:[{name,options:[{label,value,style,hint,wide}]}],current,
+ *           text:{label,placeholder,initial,multiline,only},okLabel,cancelLabel}) → Promise<값|null>
+ * 선택지를 누르면 바로 그 값으로 닫힌다. text 를 주면 [✏ 직접 입력] 버튼이 글자 칸을 열고 [확인]이 그 값을 돌려준다
+ * (text.only 면 글자 칸만). Esc·바깥 클릭·[취소] = null. 모달이 열린 동안 그리드 단축키는 멈춘다. */
+let _modal=null;
+function askModal(o){
+  return new Promise(res=>{
+    closeModal(null);
+    _modal={res};
+    const box=$('#modalBox');
+    const groups=(o.groups||[]).filter(g=>g&&g.options&&g.options.length);
+    const textOnly=!!(o.text&&(o.text.only||!groups.length));
+    box.innerHTML=`<div class="mt">${o.title||''}</div>`+(o.sub?`<div class="ms">${o.sub}</div>`:'')+
+      groups.map((g,gi)=>`${g.name?`<div class="mg">${esc(g.name)}</div>`:''}<div class="mo">${g.options.map((op,oi)=>
+        `<button data-g="${gi}" data-o="${oi}" class="${op.value===o.current?'cur':''}${op.wide?' wide':''}"${op.style?` style="${op.style}"`:''}${op.hint?` title="${escA(op.hint)}"`:''}>${op.html||esc(op.label)}</button>`).join('')}</div>`).join('')+
+      (o.text?`${textOnly?'':`<div class="mo" style="margin-top:12px"><button id="mdTextBtn" title="목록에 없는 값을 글자로 적습니다">✏ 직접 입력</button></div>`}
+        <div class="mtx${textOnly?' on':''}" id="mdText">${o.text.label?`<span style="font-weight:700">${esc(o.text.label)}</span>`:''}${o.text.multiline
+          ?`<textarea id="mdInput" rows="3" placeholder="${escA(o.text.placeholder||'')}">${esc(o.text.initial||'')}</textarea>`
+          :`<input type="text" id="mdInput" placeholder="${escA(o.text.placeholder||'')}" value="${escA(o.text.initial||'')}">`}
+          <button class="pri" id="mdOk">${esc(o.okLabel||'확인')}</button></div>`:'')+
+      `<div class="mf"><button id="mdCancel">${esc(o.cancelLabel||'취소')}</button></div>`;
+    box.querySelectorAll('button[data-g]').forEach(b=>b.onclick=()=>closeModal(groups[+b.dataset.g].options[+b.dataset.o].value));
+    const tb=box.querySelector('#mdTextBtn'); if(tb) tb.onclick=()=>{ $('#mdText').classList.add('on'); const i=$('#mdInput'); i.focus(); i.select&&i.select(); };
+    const ok=box.querySelector('#mdOk'); if(ok) ok.onclick=()=>closeModal($('#mdInput').value);
+    const inp=box.querySelector('#mdInput');
+    if(inp) inp.addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter'&&!o.text.multiline){ e.preventDefault(); closeModal(inp.value); } if(e.key==='Escape'){ e.preventDefault(); closeModal(null); } });
+    box.querySelector('#mdCancel').onclick=()=>closeModal(null);
+    $('#modal').classList.add('on');
+    if(textOnly&&inp) setTimeout(()=>{ inp.focus(); inp.select&&inp.select(); },30);
+  });
+}
+function closeModal(v){ const m=_modal; _modal=null; $('#modal').classList.remove('on'); if(m) m.res(v===undefined?null:v); }
+$('#modal').addEventListener('mousedown',e=>{ if(e.target.id==='modal') closeModal(null); });
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260917i'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260917j'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1122,12 +1195,13 @@ const ABOUT={
 const buildLabel=()=>ABOUT.name+' '+BUILD.ver;
 const ALL_CAPS=['DC','D','EC','E','NC','N'];
 const DEFAULT_REQ={mon:{D:4,E:5,N:3},tue:{D:5,E:5,N:3},wed:{D:5,E:5,N:3},thu:{D:5,E:5,N:3},
-  fri:{D:5,E:4,N:3},sat:{D:3,E:3,N:2},sun:{D:3,E:4,N:3}};
+  fri:{D:5,E:4,N:3},sat:{D:4,E:3,N:2},sun:{D:3,E:4,N:3}};   // 토 4/3/2 — 본 앱 제1원칙 4 와 같게 (2026-09-17)
 function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{},roomOv:{},events:{},
   seedManual:{},caps:{},alias:{},custom:{},nameAlias:{},trainee:{},trOv:{},req:JSON.parse(JSON.stringify(DEFAULT_REQ)),
   rooms:DEFAULT_ROOMS.map(r=>r.slice()),ward:'101',wardPicked:false,banRooms:{},form:null,
   schemes:JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
   presets:{5:[],4:[],3:[],2:[]},presetPlan:{},presetDay:{},
+  ovrPair:{},hidden:{},has13:false,history:[],
   rules:{keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false}}; }
 const capsOf=n=>store.caps[n]||ALL_CAPS;
 function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무 목록)
@@ -1153,6 +1227,10 @@ function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무
       store.schemes[c]=d;
     }
   }
+  // 병실 목록에 13호가 있는데 어느 프리셋도 13호를 모르면(옛 기본값의 빈틈) 12호 보는 자리에 붙인다 — 아무도 안 보는 방이 되지 않게 (2026-09-17)
+  { const r13=roomAtPos(13);
+    if(r13&&store.schemes&&!Object.values(store.schemes).some(sc=>Object.values(sc||{}).some(a=>(a||[]).includes(r13)))
+       &&!Object.values(store.presets||{}).some(arr=>(arr||[]).some(p=>Object.values(p.rooms||{}).some(a=>(a||[]).includes(r13))))) attach13(r13); }
   if(store.ward==null) store.ward=wardOfRooms(store.rooms)||'';   // 구형 파일 — 병실 목록에서 병동 추정
   if(store.wardPicked==null) store.wardPicked=!!store.ward&&(store.ward!=='101'||(store.rooms||[]).length!==DEFAULT_ROOMS.length);   // 기본값 그대로면 아직 안 고른 것
   // 방 구성 프리셋(2026-09-17): 인원수별 추가 프리셋 목록 + 요일 계획 + 그날 예외. 옛 파일은 빈 값으로 시작 — '기본' 프리셋 = store.schemes
@@ -1160,6 +1238,11 @@ function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무
   for(const c of [5,4,3,2]) if(!Array.isArray(store.presets[c])) store.presets[c]=[];
   if(!store.presetPlan||typeof store.presetPlan!=='object') store.presetPlan={};
   if(!store.presetDay||typeof store.presetDay!=='object') store.presetDay={};
+  // 2026-09-17 전수조사: 맞바꾼 상대 기록·전출(숨김)·13호 유무·파일 안 스냅샷
+  if(!store.ovrPair||typeof store.ovrPair!=='object') store.ovrPair={};
+  if(!store.hidden||typeof store.hidden!=='object') store.hidden={};
+  if(store.has13==null) store.has13=(store.rooms||[]).some(r=>roomPos(r[0])===13);
+  if(!Array.isArray(store.history)) store.history=[];
 }
 let store=emptyStore();
 let fileHandle=null, dirty=false, saveT=null;
@@ -1292,6 +1375,13 @@ function htmlDirPath(href){
 }
 function dirOfPath(p){ return String(p||'').replace(/[^\\/]*$/,''); }
 function joinPath(dir,name){ if(!dir) return name||''; const sep=dir.includes('\\')?'\\':'/'; return dir.endsWith(sep)?dir+name:dir+sep+name; }
+/* 상단 병동 칩 — 여러 병동으로 넓히면 어느 병동의 파일인지 한눈에 보여야 한다 (2026-09-17) */
+function renderWardChip(){
+  const el=$('#wardChip'); if(!el) return;
+  const w=String(store.ward||wardOfRooms(store.rooms||[])||'');
+  const on=connected()&&!!store.wardPicked&&WARDS.includes(w);
+  el.style.display=on?'':'none'; el.textContent=on?w+'병동':'';
+}
 function setFileLoc(l){ fileLoc=l||{kind:'none'}; renderFileInfo(); try{ renderOnboard(); }catch(e){} }
 function fileLocPath(){ const L=fileLoc||{}; return L.dir?joinPath(L.dir,L.name||''):(L.name||''); }
 function renderFileInfo(){
@@ -1744,7 +1834,7 @@ const connected=()=>!!fileHandle||!!nativeInfo||!!window.__memoryMode;
 function show(name){
   if(name!=='start'&&!connected()){ name='start'; }
   curScr=name;
-  renderFileInfo(); renderOnboard();
+  renderFileInfo(); renderOnboard(); renderWardChip();
   for(const k in SCREENS) $('#'+SCREENS[k]).style.display=(k===name)?'':'none';
   $('#tabWeek').classList.toggle('on',['week','paste','edit'].includes(name));
   $('#tabAdmin').classList.toggle('on',name==='admin');
@@ -1991,6 +2081,7 @@ function renderWeek(){
   if(infos.every(x=>!x)){
     $('#wkBody').innerHTML=`<div id="wkEmpty">이 주의 근무표가 없습니다.<br><br>
       <button class="pri big" onclick="show('paste')">＋ 새 근무표 넣기</button></div>`;
+    renderWeekWarnings(days,infos);        // 지난 주 카드가 남지 않게
     buildPrintArea(false).catch(()=>{});   // 빈 주도 양식 틀은 인쇄되게
     return;
   }
@@ -2040,55 +2131,89 @@ function renderWeek(){
   }
   h+='</table>';
   $('#wkBody').innerHTML=h;
-  // 이번 주 경고 — 빨강(규칙 위반·인쇄 누락·금지 방)과 노랑(안내: 헬퍼·신규 미배정)을 나눠 보여준다.
-  // 신규 미배정은 날마다 한 줄씩 늘어놓지 않고 사람별로 한 줄에 묶는다.
-  const w=[], trMiss={};
-  const push=(lv,html)=>w.push({lv,html});
-  for(const d of days){
-    const iso=isoOfD(d), dd=iso.slice(8,10), mm=iso.slice(5,7);
-    for(const n of store.order){
-      const pc=parseCellRaw((store.cells[n]||{})[iso]||'');
-      if(pc&&pc.code&&['DC','D','EC','E','NC','N'].includes(pc.code)&&!capsOf(n).includes(pc.code))
-        push('err',`${mm}/${dd} ${esc(n)} — ${pc.code}는 가능 근무가 아닙니다. 관리 > 간호사 관리에서 확인하세요.`);
+  renderWeekWarnings(days,infos);
+  // 브라우저 메뉴/Ctrl+P 인쇄도 양식대로 나오게 — 지금 주를 인쇄 영역에 미리 채워둔다
+  buildPrintArea(false).catch(()=>{});
+}
+/* 이번 주 확인 카드 — 빨강(규칙 위반·인쇄 누락·금지 방·방 누락/겹침·차지 자격)과 노랑(안내: 인원·헬퍼·신규·근무표 없는 날)을
+ * 나눠 보여준다. 같은 종류는 사람별·내용별로 한 줄에 묶고, 6줄이 넘으면 접는다 — 카드 15줄에 배정표가 화면 밖으로
+ * 밀리던 것 (2026-09-17 전수조사). 빈 주에도 불러 지난 주 카드가 남지 않게 한다. */
+let wkWarnOpen=false;
+function renderWeekWarnings(days,infos){
+  const wb=$('#wkWarn');
+  const w=[]; const push=(lv,html)=>w.push({lv,html});
+  const WK=['sun','mon','tue','wed','thu','fri','sat'];
+  const md=iso=>iso.slice(5,7)+'/'+iso.slice(8,10);
+  const capMiss={}, chgMiss=[], short=[], trMiss={}, roomIssue={}, noSched=[];
+  const allRooms=(store.rooms||[]).map(r=>String(r[0]));
+  const anyDay=infos.some(Boolean);
+  days.forEach((d,di)=>{
+    const iso=isoOfD(d), day=infos[di];
+    for(const nm of store.order){
+      const pc=parseCellRaw((store.cells[nm]||{})[iso]||'');
+      if(pc&&pc.code&&['DC','D','EC','E','NC','N'].includes(pc.code)&&!capsOf(nm).includes(pc.code))
+        (capMiss[nm]=capMiss[nm]||[]).push(`${md(iso)} ${pc.code}`);
     }
-    const day=dayInfo(iso); if(!day) continue;
+    if(!day){ if(anyDay) noSched.push(iso); return; }
     const nOver=['C','D'].filter(l=>day.N.labels[l]);
-    if(nOver.length) push('err',`${mm}/${dd} N ${nOver.map(l=>esc(day.N.labels[l])).join(', ')} — 양식의 N칸(3개)을 넘어 인쇄에 나오지 않습니다. 수기로 적어주세요.`);
+    if(nOver.length) push('err',`${md(iso)} N ${nOver.map(l=>esc(day.N.labels[l])).join(', ')} — 양식의 N칸(3개)을 넘어 인쇄에 나오지 않습니다. 수기로 적어주세요.`);
     for(const P of ['D','E','N']){
-      if(day[P].extra.length)
-        push('warn',`${mm}/${dd} ${P} ${day[P].extra.map(esc).join(', ')} — 어싸인 없이 근무합니다(6인 이상 헬퍼).`);
-      for(const T of unattachedTrainees(iso,P,day)) (trMiss[T]=trMiss[T]||[]).push(`${mm}/${dd} ${P}`);
       const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
+      if(day[P].extra.length)
+        push('warn',`${md(iso)} ${P} ${day[P].extra.map(esc).join(', ')} — 어싸인 없이 근무합니다(6인 이상 헬퍼).`);
+      // 차지 자격 — 차지 표기(DC 등) 없이 자동으로 뽑힌 사람이 차지 가능이 아니면 (표기가 있으면 위 '가능 근무' 경고가 맡는다)
+      const ch=day[P].labels['차지'];
+      if(ch){ const pc=parseCellRaw((store.cells[ch]||{})[iso]||''); if(pc&&pc.code&&!/C$/.test(pc.code)&&!capsOf(ch).includes(P+'C')) chgMiss.push(`${md(iso)} ${P} ${esc(ch)}`); }
+      // 인원 — 요일별 필요 인원과 다르면 (기준은 관리 > 요일별 필요 인원)
+      const need=(store.req[WK[d.getDay()]]||{})[P]; if(need!=null&&cnt!==need) short.push(`${md(iso)} ${P} ${cnt}명(필요 ${need})`);
+      for(const T of unattachedTrainees(iso,P,day)) (trMiss[T]=trMiss[T]||[]).push({iso,P,workers:[...Object.values(day[P].labels),...day[P].extra]});
+      // 방 — 아무도 안 보는 방·두 자리가 겹치는 방 (같은 내용은 날짜·시간대를 묶어 한 줄)
+      if(cnt){ const seen=new Set();
+        for(const l in day[P].labels) roomTokens(roomsFor(P,cnt,l,iso)).map(roomFull).forEach(t=>seen.add(t));
+        const miss=allRooms.filter(r=>!seen.has(r)).map(roomShort), dup=[...dupRooms(iso,P,day)].map(roomShort);
+        if(miss.length||dup.length){
+          const key=(miss.length?`아무도 안 보는 방 ${miss.join(', ')}호`:'')+(miss.length&&dup.length?' · ':'')+(dup.length?`두 자리가 겹치는 방 ${dup.join(', ')}호`:'');
+          (roomIssue[key]=roomIssue[key]||[]).push(`${md(iso)} ${P}`); } }
       for(const l in day[P].labels){
         const nm=day[P].labels[l], bans=store.banRooms[nm];
         if(!bans||!bans.length) continue;
         const hit=roomTokens(roomsFor(P,cnt,l,iso)).map(roomFull).filter(t=>bans.includes(t));
-        if(hit.length) push('err',`${mm}/${dd} ${P} ${esc(nm)} — ${hit.map(roomShort).join(', ')}호는 주지 않을 방인데 배정됐습니다. 대안이 없습니다.`);
+        if(hit.length) push('err',`${md(iso)} ${P} ${esc(nm)} — ${hit.map(roomShort).join(', ')}호는 주지 않을 방인데 배정됐습니다. 대안이 없습니다.`);
       }
     }
+  });
+  for(const nm in capMiss) push('err',`${esc(nm)} — ${capMiss[nm].join(', ')}: 가능 근무가 아닙니다. 관리 > 간호사 관리에서 확인하세요.`);
+  if(chgMiss.length) push('err',`차지 가능한 사람이 없어 자격 없이 차지가 됐습니다 — ${chgMiss.join(', ')}. 관리 > 간호사 관리에서 DC·EC·NC 를 확인하세요.`);
+  for(const key in roomIssue){ const L=roomIssue[key]; push('err',`${L.length>=15?'이번 주 대부분':L.join(', ')} — ${key}. 관리 > 방 구성(또는 그날 방 수정)을 확인하세요.`); }
+  if(short.length) push('warn',`인원이 필요 인원과 다릅니다 — ${short.join(' · ')}. 기준은 관리 > 요일별 필요 인원.`);
+  if(noSched.length){ const a=noSched[0], b=noSched[noSched.length-1];
+    push('warn',`${md(a)}${a!==b?'~'+md(b):''} 근무표가 없습니다 — 다음 달 근무표를 넣으면 채워집니다. <button class="inl" onclick="show('paste')">새 근무표 넣기</button>`); }
+  for(const T in trMiss){
+    const cand=store.order.filter(x=>x!==T&&!isTrainee(x)&&!(store.hidden&&store.hidden[x]));
+    push('warn',`신규 ${esc(T)} — 붙일 간호사가 없습니다: `+trMiss[T].map(x=>`<span class="trs">${md(x.iso)} ${x.P} <select title="이 날만 붙일 간호사" onchange="if(this.value)attachTrainee('${jsq(T)}','${x.iso}',this.value,false)"><option value="">붙일 사람…</option>${x.workers.map(y=>`<option value="${escA(y)}">${esc(y)}</option>`).join('')}</select></span>`).join(' ')+
+      ` <select title="앞으로 계속 함께 다닐 간호사(프리셉터)" onchange="if(this.value)attachTrainee('${jsq(T)}','${trMiss[T][0].iso}',this.value,true)"><option value="">계속 붙일 사람(프리셉터)…</option>${cand.map(y=>`<option value="${escA(y)}">${esc(y)}</option>`).join('')}</select>`);
   }
-  for(const T in trMiss)
-    push('warn',`신규 ${esc(T)} — ${trMiss[T].join(', ')}: 붙일 간호사가 없습니다. 그 시간대 간호사 이름을 눌러 [신규 간호사 붙이기]로 정하세요.`);
-  const wb=$('#wkWarn');
-  if(w.length){
-    const nErr=w.filter(x=>x.lv==='err').length;
-    wb.style.display='flex'; wb.classList.toggle('soft',!nErr);
-    wb.innerHTML=`<div style="flex:0 0 auto;display:flex;align-items:center;gap:8px">`+
-      `<span class="cnt">${w.length}</span><span class="ttl">${nErr?'확인 필요':'안내'}</span></div>`+
-      `<div class="items">${w.map(x=>`<div class="${x.lv}">${x.html}</div>`).join('')}</div>`;
-  }else{ wb.style.display='none'; wb.innerHTML=''; wb.classList.remove('soft'); }
-  // 브라우저 메뉴/Ctrl+P 인쇄도 양식대로 나오게 — 지금 주를 인쇄 영역에 미리 채워둔다
-  buildPrintArea(false).catch(()=>{});
+  w.sort((a,b)=>(a.lv==='err'?0:1)-(b.lv==='err'?0:1));
+  if(!w.length){ wb.style.display='none'; wb.innerHTML=''; wb.classList.remove('soft'); return; }
+  const nErr=w.filter(x=>x.lv==='err').length, LIM=6, clip=w.length>LIM&&!wkWarnOpen;
+  wb.style.display='flex'; wb.classList.toggle('soft',!nErr);
+  wb.innerHTML=`<div style="flex:0 0 auto;display:flex;align-items:center;gap:8px">`+
+    `<span class="cnt">${w.length}</span><span class="ttl">${nErr?'확인 필요':'안내'}</span></div>`+
+    `<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px"><div class="items${clip?' clip':''}">${w.map(x=>`<div class="${x.lv}">${x.html}</div>`).join('')}</div>`+
+    (w.length>LIM?`<button class="more" onclick="wkWarnOpen=!wkWarnOpen;renderWeek()">${clip?`더 보기 (${w.length-LIM}건 더)`:'접기'}</button>`:'')+`</div>`;
 }
 $('#wkBody').addEventListener('click',e=>{
   const ev=e.target.closest('td.evt');
   if(ev){ const iso=ev.dataset.iso;
-    const v=prompt(iso.slice(5,7)+'/'+iso.slice(8,10)+' 교육·행사 (비우면 삭제)',store.events[iso]||'');
-    if(v===null) return;
-    snapshot();
-    if(v.trim()) store.events[iso]=v.trim(); else delete store.events[iso];
-    touch(); renderWeek();
-    toast('교육·행사 '+(v.trim()?'적었습니다':'지웠습니다'),2800,true); return; }
+    askModal({title:`${iso.slice(5,7)}/${iso.slice(8,10)} 교육·행사`,sub:'인쇄물 맨 윗줄에 그대로 나옵니다. 여러 줄로 적어도 됩니다. 비우고 [확인]하면 지웁니다.',
+      text:{only:true,multiline:true,placeholder:'예: CPR 교육 14:00',initial:store.events[iso]||''}}).then(v=>{
+      if(v===null) return;
+      snapshot();
+      const t=v.trim();
+      if(t) store.events[iso]=t; else delete store.events[iso];
+      touch(); renderWeek();
+      toast('교육·행사 '+(t?'적었습니다':'지웠습니다'),2800,true); });
+    return; }
   const rm=e.target.closest('td.rm');
   if(rm&&rm.dataset.iso){
     openRoomPick({kind:'day',iso:rm.dataset.iso,P:rm.dataset.p,l:rm.dataset.l},e.pageX,e.pageY);
@@ -2124,6 +2249,7 @@ function openPick(name,iso,x,y){
         `<span class="rm">${esc(rm)}</span></button>`;
     }).join('')+'</div>'+
     `<button style="margin-top:4px" onclick="pickChoose(null)">자동으로 되돌리기</button>`+
+    (store.ovr[iso]&&store.ovr[iso][info.period]?`<button style="margin-top:4px" onclick="pickClearDay()" title="이 날 이 시간대의 수동 교체를 모두 풉니다">이 날 ${info.period} 교체 모두 풀기</button>`:'')+
     (trs.length?`<div class="dim" style="margin:8px 0 2px;border-top:1px solid var(--rule);padding-top:6px">신규 간호사 붙이기 — 이 날 ${info.period} 에 /${info.period} 인 신규</div>`+
       trs.map(T=>{ const cur=preceptorOf(T,iso), mine=cur===name, b='style="font-size:13px;padding:8px 12px;margin:0"';
         return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:3px 0"><span style="font-weight:700;min-width:5.5em">/ ${esc(T)}</span>`+
@@ -2131,12 +2257,22 @@ function openPick(name,iso,x,y){
                :`${cur?`<span class="dim">지금 ${esc(cur)} 뒤</span>`:''}<button ${b} onclick="attachTrainee('${jsq(T)}','${iso}','${jsq(name)}',false)">오늘만 붙이기</button><button ${b} onclick="attachTrainee('${jsq(T)}','${iso}','${jsq(name)}',true)">계속 붙이기</button>`)+
           `</div>`; }).join(''):'')+
     `<div class="dim" style="margin:8px 0 2px;border-top:1px solid var(--rule);padding-top:6px">근무 바꾸기 (이 날만)</div>`+
-    ['D','DC','E','EC','N','NC','중','OF','주','V'].map(c=>
-      `<button style="font-size:14px;padding:8px 12px" onclick="pickShift('${c}')">${c}</button>`).join('')+
-    `<button style="font-size:14px;padding:8px 12px" onclick="pickShift('')">지움</button>`+
+    `<div class="shl">`+[...['D','DC','D1','중','E','EC','N','NC','OF','주','P1','V','생','특','공','법','병'],...Object.keys(store.custom||{})].map(c=>{
+      const d=SH(c)||{bg:'var(--rule-soft)',fg:'var(--ink-3)'};
+      return `<button style="font-size:14px;padding:8px 12px;background:${d.bg};color:${d.fg};box-shadow:none" onclick="pickShift('${jsq(c)}')">${esc(c)}</button>`; }).join('')+
+    `<button style="font-size:14px;padding:8px 12px" onclick="pickShift('')">지움</button></div>`+
     `<div style="margin-top:8px;text-align:right"><button onclick="closePick()">✕ 닫기</button></div>`;
-  pk.style.display='block';
-  pk.style.left=Math.min(x,window.innerWidth-320)+'px'; pk.style.top=(y+10)+'px';
+  placePopup(pk,x,y);
+}
+/* 팝업을 클릭 지점 아래에 두되 화면 밖으로 나가면 위·안쪽으로 당긴다 — N 줄 픽커가 화면 아래에 걸리던 것 (2026-09-17) */
+function placePopup(el,x,y){
+  el.style.display='block'; el.style.left='0px'; el.style.top='0px';
+  const w=el.offsetWidth, h=el.offsetHeight, vw=innerWidth, vh=innerHeight;
+  const left=Math.max(4,Math.min(x,scrollX+vw-w-12));
+  let top=y+10;
+  if(top+h>scrollY+vh-8) top=(y-h-10>=scrollY+8)?y-h-10:Math.max(scrollY+8,scrollY+vh-h-8);
+  top=Math.max(scrollY+8,Math.min(top,scrollY+vh-h-8));           // 어떤 경우든 지금 보이는 화면 안으로
+  el.style.left=left+'px'; el.style.top=top+'px';
 }
 function closePick(){ $('#pick').style.display='none'; pickCtx=null; }
 function pickChoose(label){
@@ -2144,17 +2280,33 @@ function pickChoose(label){
   snapshot();
   const ov=(store.ovr[iso]=store.ovr[iso]||{});
   const pv=(ov[period]=ov[period]||{});
-  if(label===null){ delete pv[name]; }
-  else{
+  const pr=((store.ovrPair[iso]=store.ovrPair[iso]||{})[period]=store.ovrPair[iso][period]||{});   // 누구와 맞바꿨는지
+  if(label===null){
+    // 되돌리기 — 맞바꾼 상대의 고정도 함께 푼다 (반쪽만 풀려 상대가 고정된 채 남던 것, 2026-09-17)
+    const mate=pr[name]; delete pv[name]; delete pr[name];
+    if(mate&&pr[mate]===name){ delete pv[mate]; delete pr[mate]; }
+  }else{
     const holder=result.byDay[iso]&&result.byDay[iso][period]&&result.byDay[iso][period].labels[label];
-    if(holder&&holder!==name&&current) pv[holder]=current;
+    if(holder&&holder!==name&&current){ pv[holder]=current; pr[holder]=name; pr[name]=holder; }
+    else delete pr[name];
     pv[name]=label;
   }
+  if(!Object.keys(pr).length) delete store.ovrPair[iso][period];
+  if(!Object.keys(store.ovrPair[iso]).length) delete store.ovrPair[iso];
   if(!Object.keys(pv).length) delete ov[period];
   if(!Object.keys(ov).length) delete store.ovr[iso];
   touch(); recompute();
   if(curScr==='week') renderWeek();
   toast(name+' '+(+iso.slice(8,10))+'일 어싸인 '+(label===null?'자동으로':'→ '+FORM_LBL(label)),2800,true);
+}
+function pickClearDay(){ // 이 날 이 시간대의 수동 교체를 모두 푼다
+  const {iso,period}=pickCtx; closePick();
+  if(!(store.ovr[iso]&&store.ovr[iso][period])){ toast('이 날 이 시간대에는 수동 교체가 없습니다'); return; }
+  snapshot();
+  delete store.ovr[iso][period]; if(!Object.keys(store.ovr[iso]).length) delete store.ovr[iso];
+  if(store.ovrPair[iso]){ delete store.ovrPair[iso][period]; if(!Object.keys(store.ovrPair[iso]).length) delete store.ovrPair[iso]; }
+  touch(); recompute(); if(curScr==='week') renderWeek();
+  toast(`${+iso.slice(8,10)}일 ${period} 수동 교체를 모두 풀었습니다`,2800,true);
 }
 function pickShift(code){
   const {name,iso}=pickCtx; closePick();
@@ -2169,7 +2321,27 @@ function resetOv(){
   const n=Object.keys(store.ovr).length;
   if(!n){ toast('수동 교체 없음'); return; }
   if(!confirm('수동 교체 '+n+'일치를 모두 초기화할까요?')) return;
-  store.ovr={}; touch(); recompute(); renderAdmin(); toast('초기화됨');
+  store.ovr={}; store.ovrPair={}; touch(); recompute(); renderAdmin(); toast('초기화됨');
+}
+/* 수동 교체 중 근무표가 바뀌어 효력 없는 항목 — 그 사람이 그날 그 시간대 근무가 아님 (2026-09-17) */
+function ovrAudit(){
+  let ok=0; const bad=[];
+  for(const dk in store.ovr) for(const P in store.ovr[dk]) for(const nm in store.ovr[dk][P]){
+    const pc=parseCellRaw((store.cells[nm]||{})[dk]||'');
+    if(pc&&pc.code&&AssignCore.periodOf(pc.code)===P) ok++; else bad.push({dk,P,nm});
+  }
+  return {ok,bad};
+}
+function pruneOvr(){
+  const {bad}=ovrAudit(); if(!bad.length){ toast('효력 없는 교체가 없습니다'); return; }
+  snapshot();
+  for(const {dk,P,nm} of bad){
+    const pv=store.ovr[dk]&&store.ovr[dk][P]; if(pv){ delete pv[nm]; if(!Object.keys(pv).length) delete store.ovr[dk][P]; if(!Object.keys(store.ovr[dk]).length) delete store.ovr[dk]; }
+    const pp=store.ovrPair[dk]&&store.ovrPair[dk][P];
+    if(pp){ delete pp[nm]; for(const k in pp) if(pp[k]===nm) delete pp[k];
+      if(!Object.keys(pp).length) delete store.ovrPair[dk][P]; if(!Object.keys(store.ovrPair[dk]).length) delete store.ovrPair[dk]; }
+  }
+  touch(); recompute(); renderAdmin(); toast(`효력 없는 교체 ${bad.length}건을 지웠습니다`,2800,true);
 }
 function resetRoomOv(){
   const n=Object.keys(store.roomOv).length, m=Object.keys(store.presetDay||{}).length;
@@ -2195,10 +2367,7 @@ function rpSelected(){ // 현재 선택된 방 (실호실 번호 + 목록에 없
 function openRoomPick(ctx,x,y){
   rpCtx=ctx;
   renderRoomPick();
-  const el=$('#rpick');
-  el.style.display='block';
-  el.style.left=Math.max(4,Math.min(x,window.innerWidth-el.offsetWidth-20))+'px';
-  el.style.top=(y+10)+'px';
+  placePopup($('#rpick'),x,y);
 }
 function closeRoomPick(){ $('#rpick').style.display='none'; rpCtx=null; }
 function renderRoomPick(){
@@ -2288,15 +2457,30 @@ function banClear(){
  * ════════════════════════════════════════════════════════════════ */
 let pending=null;   // {g, y, m, names:[], byName:{name:{iso:raw}}, minIso, maxIso, added, unknown:Set}
 function resetPaste(){ pending=null; pasteCtx=null; $('#pvCard').style.display='none'; }
-function guessYearMonth(md){
-  // 날짜 헤더에 월 정보가 없으면(일자만) '이번 달' 기준, 월이 있으면 오늘에 가장 가까운 연도로
+function guessYearMonth(md,hint={}){
+  // 연·월이 다 있으면 그대로. 월만 있으면 오늘에 가장 가까운 연도.
+  // 일자만 있는 표(한 달치)는 ① 요일 줄이 있으면 1일 요일이 맞는 가장 가까운 달(같은 거리면 앞으로의 달)
+  // ② 기록이 있으면 기록의 다음 달 ③ 이번 달 — 매달 '다음 달 근무표'를 넣는 게 보통이라 이번 달로 추정하면 매번 틀렸다 (2026-09-17)
   const t=new Date();
-  if(md.y) return {y:md.y,m:md.m};
-  if(md.m==null) return {y:t.getFullYear(),m:t.getMonth()+1};
-  let y=t.getFullYear();
-  const cand=[y-1,y,y+1].map(yy=>({yy,diff:Math.abs(new Date(yy,md.m-1,1)-t)}));
-  cand.sort((a,b)=>a.diff-b.diff);
-  return {y:cand[0].yy,m:md.m};
+  if(md.y) return {y:md.y,m:md.m,how:'hdr'};
+  if(md.m!=null){
+    let y=t.getFullYear();
+    const cand=[y-1,y,y+1].map(yy=>({yy,diff:Math.abs(new Date(yy,md.m-1,1)-t)}));
+    cand.sort((a,b)=>a.diff-b.diff);
+    return {y:cand[0].yy,m:md.m,how:'month'};
+  }
+  const base=new Date(t.getFullYear(),t.getMonth(),1);
+  if(hint.wd1!=null){
+    const cands=[];
+    for(let k=-6;k<=6;k++){ const d=new Date(base.getFullYear(),base.getMonth()+k,1);
+      if(d.getDay()===hint.wd1&&(!hint.ndays||new Date(d.getFullYear(),d.getMonth()+1,0).getDate()>=hint.ndays)) cands.push({y:d.getFullYear(),m:d.getMonth()+1,k}); }
+    if(cands.length){ cands.sort((a,b)=>Math.abs(a.k)-Math.abs(b.k)||b.k-a.k); return {y:cands[0].y,m:cands[0].m,how:'wd'}; }
+  }
+  const rng=(hint.ndays||0)>=28?timelineRange():null;
+  if(rng){ const d=new Date(rng.max+'T00:00:00');
+    const nx=d.getDate()>=20?new Date(d.getFullYear(),d.getMonth()+1,1):d;
+    return {y:nx.getFullYear(),m:nx.getMonth()+1,how:'next'}; }
+  return {y:t.getFullYear(),m:t.getMonth()+1,how:'now'};
 }
 /* ── 붙여넣기 ────────────────────────────────────────────────────────────
  *  ① 전체 표(이름 열 + 날짜 줄)   — 처음 넣을 때
@@ -2327,6 +2511,27 @@ function ingestGrid(g){
   let w=Math.max(...g.map(r=>r.length));
   while(w>1&&g.every(r=>!String(r[w-1]??'').trim())) w--;   // 딸려온 빈 열 버리기
   g=g.map(r=>r.slice(0,w));
+  // 헤더 줄 찾기 — 첫 줄 고정이 아니라 앞 6줄 안에서 '날짜로 읽히는 칸이 3개 이상이고 글자 있는 칸의 절반 이상'인
+  // 첫 줄. 그 위의 줄(제목·병동명)은 버린다. 요일만 있는 줄(일·월·화…)은 헤더 위든 아래든 버리되, 1일의 요일은
+  // 기억해 연·월 추정에 쓴다 — 제목 줄까지 긁으면 표 전체를 오독하던 문제 (2026-09-17 전수조사 1·12)
+  const WDS=new Set(['일','월','화','수','목','금','토','요일']);
+  const cellsOf=r=>r.map(x=>String(x??'').trim()).filter(Boolean);
+  const isWdRow=r=>{ const v=cellsOf(r); return v.length>=3&&v.filter(x=>WDS.has(x)).length>=v.length*0.8; };
+  let hdrIdx=-1;
+  for(let i=0;i<Math.min(6,g.length);i++){
+    if(isWdRow(g[i])) continue;
+    const v=cellsOf(g[i]), nd=v.filter(x=>parseDateCell(x)).length;
+    if(nd>=3&&nd*2>=v.length){ hdrIdx=i; break; }
+  }
+  let wd1=null;                                       // 1일의 요일 (0=일) — 일자만 있는 표의 달을 알아내는 실마리
+  if(hdrIdx>=0){
+    const wdRow=[hdrIdx-1,hdrIdx+1].map(i=>g[i]).find(r=>r&&isWdRow(r));
+    if(wdRow){ const h=g[hdrIdx]; for(let j=0;j<h.length;j++){ const md=parseDateCell(h[j]);
+      if(md&&md.d===1&&!md.y&&md.m==null){ const k=WD.indexOf(String(wdRow[j]??'').trim()); if(k>=0) wd1=k; break; } } }
+    g=g.slice(hdrIdx);
+  }
+  g=g.filter(r=>!isWdRow(r));
+  if(!g.length) return toast('읽을 내용이 없습니다');
   // 이름 열 찾기 — 첫 열 고정이 아니라 앞쪽 몇 열을 훑는다. 병동 양식은 이름 앞에
   // 번호·직급 열이 붙는 일이 많고, 그걸 놓치면 위치(순서) 기반으로 읽어 전원이 어긋난다.
   // 이름 판정: 명부 일치(연결 기억·정규화 포함)가 가장 세고, 다음이 '이름다움' —
@@ -2344,20 +2549,22 @@ function ingestGrid(g){
       else if(looksNameCell(v)&&!/^[\d\s.\-/·]+$/.test(v)&&!rightOf[j].has(v)) nameish++;
     }
     const score=hit*4+nameish;
-    if((hit>=2||nameish>=2)&&score>nameColScore){ nameColScore=score; nameCol=j; }
+    const few=g.length-(hdrIdx>=0?1:0)<=2;            // 한두 줄만 붙여넣을 때는 명부 일치 1개로도 이름 열
+    if((hit>=2||nameish>=2||(few&&hit>=1))&&score>nameColScore){ nameColScore=score; nameCol=j; }
   }
   if(nameCol>0) g=g.map(r=>r.slice(nameCol));        // 이름 앞 잡열(번호·직급 등)은 버림
   const hasNameCol=nameCol>=0;
   const hdr=(g[0]||[]).slice(hasNameCol?1:0);
-  const hasDateHdr=hdr.filter(v=>parseDateCell(v)).length>=3;
+  const hasDateHdr=hdrIdx>=0;                       // 위에서 찾은 헤더 줄 — 합계 숫자 열이 든 근무 줄을 날짜 줄로 오인하지 않게
   if(curScr!=='paste') show('paste');   // 화면 전환이 미리보기를 지우지 않도록 파싱 전에 이동
   let y=null,m=null;
+  let ymHow='hdr';
   if(hasDateHdr){
-    const first=(g[0].slice(hasNameCol?1:0).map(v=>parseDateCell(v)).find(x=>x))||{d:1};
-    const gu=guessYearMonth(first); y=gu.y; m=gu.m;
+    const first=(hdr.map(v=>parseDateCell(v)).find(x=>x))||{d:1};
+    const gu=guessYearMonth(first,{wd1,ndays:hdr.filter(v=>parseDateCell(v)).length}); y=gu.y; m=gu.m; ymHow=gu.how;
   }
   if(hasNameCol&&hasDateHdr){
-    pasteCtx={mode:'full',g,hasNameCol:true,hasDateHdr:true,y,m,nameMap:{},adoptOrder:false};
+    pasteCtx={mode:'full',g,hasNameCol:true,hasDateHdr:true,y,m,ymHow,nameMap:{},adoptOrder:false};
     return buildPending();
   }
   // 부분 붙여넣기 — 기준이 될 표가 있어야 어디에 넣을지 정할 수 있다
@@ -2369,7 +2576,7 @@ function ingestGrid(g){
   let startIso=isoOfD(wkSunday);
   if(width>=28&&rng){ const d=new Date(rng.max+'T00:00:00');
     startIso=isoOfD(new Date(d.getFullYear(),d.getMonth()+1,1)); }
-  pasteCtx={mode:'partial',g,hasNameCol,hasDateHdr,startRow:0,startIso,y,m,
+  pasteCtx={mode:'partial',g,hasNameCol,hasDateHdr,startRow:0,startIso,y,m,ymHow,
     nameMap:{},rowMap:{},adoptOrder:false};
   buildPending();
 }
@@ -2510,7 +2717,7 @@ function buildPending(){
     mpParts.push(
       `<b>${cx.hasNameCol?'날짜가 없는 표':(cx.hasDateHdr?'이름이 없는 표':'근무만 있는 표')}입니다 — 어디에 넣을까요?</b>`+
       (!cx.hasNameCol?`<span>맨 윗줄 =
-        <select onchange="setPasteStart('row',this.value)">${store.order.map((n,i)=>
+        <select onchange="setPasteStart('row',this.value)">${store.order.map((n,i)=>store.hidden&&store.hidden[n]&&i!==(cx.startRow||0)?'':
           `<option value="${i}" ${i===(cx.startRow||0)?'selected':''}>${esc(n)}</option>`).join('')}</select></span>`:'')+
       (!cx.hasDateHdr?`<span>첫 칸 날짜 =
         <input type="date" value="${cx.startIso}" onchange="setPasteStart('iso',this.value)"></span>`:'')+
@@ -2534,7 +2741,7 @@ function buildPending(){
   // 명부가 비어 있으면(첫 붙여넣기) 이을 대상이 없으니 카드를 띄우지 않는다.
   const nb=$('#pvNameBox');
   if(cx.hasNameCol&&nameCards.length&&store.order.length){
-    const rosterOpts=cd=>store.order.map((o,i)=>({o,i}))
+    const rosterOpts=cd=>store.order.map((o,i)=>({o,i})).filter(x=>!(store.hidden&&store.hidden[x.o]))
       .sort((a,b)=>simName(b.o,cd.raw)-simName(a.o,cd.raw))
       .map(({o,i})=>`<option value="${i}" ${cd.to===o?'selected':''}>${esc(o)}</option>`).join('');
     nb.style.display='flex';
@@ -2583,7 +2790,10 @@ function buildPending(){
     ym.classList.toggle('calm',certain);
     $('#pvYMTitle').textContent=certain?'읽은 시작':'이 근무표의 시작을 확인해주세요';
     $('#pvYMSub').textContent=certain?'날짜 줄의 연·월을 그대로 읽었습니다.'
-      :'날짜 줄에 연·월이 없어 자동으로 추정했습니다. 틀리면 이번 달을 덮어씁니다.';
+      :cx.ymHow==='wd'?'날짜 줄에 연·월이 없어 요일 줄로 미루어 추정했습니다. 틀리면 고쳐 주세요.'
+      :cx.ymHow==='next'?'날짜 줄에 연·월이 없어 기록의 다음 달로 추정했습니다. 틀리면 고쳐 주세요.'
+      :cx.ymHow==='month'?'연도는 오늘에 가장 가까운 해로 추정했습니다.'
+      :'날짜 줄에 연·월이 없어 이번 달로 추정했습니다. 틀리면 고쳐 주세요.';
     $('#pvY').value=cx.y; $('#pvM').value=cx.m;
   } else ym.style.display='none';
 
@@ -2603,7 +2813,7 @@ function buildPending(){
   else  // 이름 없는 표 — 줄마다 어느 간호사로 들어가는지 보여주고 그 자리에서 바꿀 수 있게
     for(const rw of rows)
       h+=`<tr><th style="padding:3px 5px"><select onchange="setPasteRow(${rw.ri},this.value)" style="font-size:12px;font-weight:700;padding:5px 7px;max-width:8.5em">`+
-        store.order.map((o,i)=>`<option value="${i}" ${o===rw.nm?'selected':''}>${esc(o)}</option>`).join('')+
+        store.order.map((o,i)=>store.hidden&&store.hidden[o]&&o!==rw.nm?'':`<option value="${i}" ${o===rw.nm?'selected':''}>${esc(o)}</option>`).join('')+
         `<option value="-">— 이 줄 빼기</option></select></th>`+
         isoList.map(i=>cellTd(rw.cells,i)).join('')+'</tr>';
   $('#pvWrap').innerHTML=h+'</table>';
@@ -2620,9 +2830,11 @@ for(const id of ['pvY','pvM']) $('#'+id).addEventListener('change',()=>{
 function confirmPaste(){
   if(!pending) return;
   if(pending.overwrite&&!confirm(`기존 기록 ${pending.overwrite}칸을 이 표의 내용으로 덮어씁니다. 계속할까요?\n(저장한 뒤에도 Ctrl+Z 또는 파란 알림으로 되돌릴 수 있습니다)`)) return;
+  keepHistory('새 근무표 넣기 전');                     // 창을 닫아도 되돌릴 수 있게 파일 안에 남긴다
   snapshot();                                          // 붙여넣기도 Ctrl+Z 대상
   for(const nm of pending.names){
     if(!store.order.includes(nm)) store.order.push(nm);
+    if(store.hidden&&store.hidden[nm]&&Object.values(pending.byName[nm]).some(Boolean)) delete store.hidden[nm];   // 전출자의 근무가 들어오면 복귀
     store.cells[nm]=store.cells[nm]||{};
     for(const iso in pending.byName[nm]){
       const v=pending.byName[nm][iso];
@@ -2690,16 +2902,23 @@ let edY=new Date().getFullYear(), edM=new Date().getMonth()+1, edDays=31;
 let sel={r:0,c:0,r2:0,c2:0}, dragging=false, cellEls=[];
 const undoStack=[];
 const edIso=c=>edY+'-'+pad2(edM)+'-'+pad2(c+1);
-function edGet(r,c){ return (store.cells[store.order[r]]||{})[edIso(c)]||''; }
+let edRows=[], edToday=-1, edMisList=[];   // 화면 줄 → 명부 index (전출 간호사는 그 달에 근무가 없으면 줄을 뺀다) · 오늘 열 · 인원 안 맞는 날
+const edName=r=>store.order[edRows[r]];
+function edVisibleRows(){
+  const pre=edY+'-'+pad2(edM)+'-';
+  return store.order.map((n,i)=>i).filter(i=>{ const n=store.order[i]; if(!store.hidden||!store.hidden[n]) return true;
+    return Object.keys(store.cells[n]||{}).some(k=>k.startsWith(pre)); });
+}
+function edGet(r,c){ return (store.cells[edName(r)]||{})[edIso(c)]||''; }
 function edSet(r,c,v){
-  const n=store.order[r];
+  const n=edName(r);
   store.cells[n]=store.cells[n]||{};
   if(v) store.cells[n][edIso(c)]=v; else delete store.cells[n][edIso(c)];
 }
 function snapshot(){ // 이름 변경/삭제가 ovr·caps·금지방·시드까지 건드리므로 함께 보존
   undoStack.push(JSON.stringify({o:store.order,c:store.cells,v:store.ovr,rv:store.roomOv,
     ch:store.caps,br:store.banRooms,sd:store.seedManual,al:store.alias,cu:store.custom,fm:store.form,
-    ev:store.events,na:store.nameAlias,tr:store.trainee,to:store.trOv,pd:store.presetDay}));
+    ev:store.events,na:store.nameAlias,tr:store.trainee,to:store.trOv,pd:store.presetDay,op:store.ovrPair,hd:store.hidden}));
   if(undoStack.length>40) undoStack.shift(); }
 function restoreSnapshot(s){
   store.order=s.o; store.cells=s.c;
@@ -2708,19 +2927,22 @@ function restoreSnapshot(s){
   if(s.al) store.alias=s.al; if(s.cu) store.custom=s.cu; if(s.ev) store.events=s.ev;
   if(s.na) store.nameAlias=s.na;
   if(s.tr) store.trainee=s.tr; if(s.to) store.trOv=s.to; if(s.pd) store.presetDay=s.pd;
+  if(s.op) store.ovrPair=s.op; if(s.hd) store.hidden=s.hd;
   if(s.fm!==undefined){ store.form=s.fm; TPL=null; }
 }
 function moveEditMonth(n){ edM+=n; if(edM<1){edM=12;edY--} if(edM>12){edM=1;edY++} renderEditGrid(); }
 function renderEditGrid(){
   renderLegend();
   edDays=new Date(edY,edM,0).getDate();
+  const t=new Date(); edToday=(t.getFullYear()===edY&&t.getMonth()+1===edM)?t.getDate()-1:-1;   // 오늘 열 강조 (2026-09-17 사용자 요청)
+  edRows=edVisibleRows();
   $('#edTitle').textContent=`${edY}년 ${edM}월`;
   let h='<table><thead><tr><th class="nm">이름</th>';
-  for(let d=1;d<=edDays;d++){ const w=new Date(edY,edM-1,d).getDay();
-    h+=`<th class="${w===0?'sun wkend':w===6?'sat wkend':''}"><div class="dd">${d}</div><div class="dw">${WD[w]}</div></th>`; }
+  for(let d=1;d<=edDays;d++){ const w=new Date(edY,edM-1,d).getDay(), td=d-1===edToday;
+    h+=`<th class="${w===0?'sun wkend':w===6?'sat wkend':''}${td?' today':''}"${td?' title="오늘"':''}><div class="dd">${d}</div><div class="dw">${td?'오늘':WD[w]}</div></th>`; }
   h+='</tr></thead><tbody>';
-  store.order.forEach((n,r)=>{
-    h+=`<tr><th class="nm" data-nr="${r}" title="클릭 = 이름 수정/삭제">${esc(n)}</th>`;
+  edRows.forEach((oi,r)=>{ const n=store.order[oi];
+    h+=`<tr><th class="nm" data-nr="${r}" title="클릭 = 이름 수정/삭제">${esc(n)}${store.hidden&&store.hidden[n]?' <span class="trChip" title="전출 — 이 달에 근무가 있어 보입니다">전출</span>':''}</th>`;
     for(let c=0;c<edDays;c++) h+=`<td class="cell" data-r="${r}" data-c="${c}"></td>`;
     h+='</tr>';
   });
@@ -2732,15 +2954,17 @@ function renderEditGrid(){
   }
   h+='</tfoot></table>';
   $('#wrap').innerHTML=h;
-  cellEls=store.order.map((_,r)=>[...Array(edDays)].map((_,c)=>$(`td[data-r="${r}"][data-c="${c}"]`)));
-  sel={r:0,c:0,r2:0,c2:0};
+  cellEls=edRows.map((_,r)=>[...Array(edDays)].map((_,c)=>$(`#wrap td[data-r="${r}"][data-c="${c}"]`)));
+  const c0=edToday>=0?edToday:0;
+  sel={r:0,c:c0,r2:0,c2:c0};                     // 이 달이면 오늘 칸에서 시작
   paintEdit();
+  if(edToday>=0&&cellEls[0]&&cellEls[0][edToday]) try{ cellEls[0][edToday].scrollIntoView({block:'nearest',inline:'center'}); }catch(e){}
 }
 function paintEdit(){
   const R=rect();
   const cnt={D:Array(edDays).fill(0),E:Array(edDays).fill(0),N:Array(edDays).fill(0)};
   const bucket={day:'D',evening:'E',night:'N'};
-  for(let r=0;r<store.order.length;r++) for(let c=0;c<edDays;c++){
+  for(let r=0;r<edRows.length;r++) for(let c=0;c<edDays;c++){
     const td=cellEls[r][c]; if(!td) continue;
     const v=edGet(r,c);
     const pc=v?parseCellRaw(v):null;
@@ -2748,7 +2972,7 @@ function paintEdit(){
     if(td.textContent!==v) td.textContent=v;
     td.style.background=def?def.bg:''; td.style.color=def?def.fg:'';
     const inSel=r>=R.r1&&r<=R.r2&&c>=R.c1&&c<=R.c2;
-    td.className='cell'+(inSel?' sel':'')+(r===sel.r&&c===sel.c?' anchor':'')+(pc&&pc.label?' pre':'');
+    td.className='cell'+(inSel?' sel':'')+(r===sel.r&&c===sel.c?' anchor':'')+(pc&&pc.label?' pre':'')+(c===edToday?' tdy':'');
     const b=def&&bucket[def.p]; if(b) cnt[b][c]++;
   }
   const WKMAP=['sun','mon','tue','wed','thu','fri','sat'];
@@ -2764,24 +2988,27 @@ function paintEdit(){
       misDays.add(c);
     } else { el.style.color='var(--ink-2)'; el.style.fontWeight='600'; }
   }
-  // 툴바 상태 칩
-  $('#edStat').textContent=`${store.order.length}명 · ${store.order.length*edDays}칸`;
+  // 툴바 상태 칩 — 안 맞는 날 칩을 누르면 다음 안 맞는 날로 간다
+  $('#edStat').textContent=`${edRows.length}명 · ${edRows.length*edDays}칸`;
   const mis=$('#edMis');
-  if(misDays.size){ mis.textContent=`인원 안 맞는 날 ${misDays.size}일`; mis.style.color='var(--err)'; }
-  else{ mis.textContent='정원 맞음'; mis.style.color='var(--ok)'; }
+  edMisList=[...misDays].sort((a,b)=>a-b);
+  if(misDays.size){ mis.textContent=`인원 안 맞는 날 ${misDays.size}일 ›`; mis.style.color='var(--err)'; mis.style.cursor='pointer'; mis.title='누르면 다음 안 맞는 날로 갑니다'; }
+  else{ mis.textContent='정원 맞음'; mis.style.color='var(--ok)'; mis.style.cursor=''; mis.title=''; }
+  mis.onclick=()=>{ if(!edMisList.length) return; const c=edMisList.find(x=>x>sel.c)??edMisList[0];
+    sel={r:sel.r,c,r2:sel.r,c2:c}; paintEdit(); const td=cellEls[sel.r]&&cellEls[sel.r][c]; if(td) td.scrollIntoView({block:'nearest',inline:'center'}); };
 }
 const rect=()=>({r1:Math.min(sel.r,sel.r2),r2:Math.max(sel.r,sel.r2),
                  c1:Math.min(sel.c,sel.c2),c2:Math.max(sel.c,sel.c2)});
 function edTouched(){ touch(); recompute(); }
 function fillSel(raw){
-  if(!store.order.length) return;
+  if(!edRows.length) return;
   snapshot(); const R=rect();
   for(let r=R.r1;r<=R.r2;r++) for(let c=R.c1;c<=R.c2;c++) edSet(r,c,raw);
   paintEdit(); edTouched();
 }
 function moveSel(dr,dc){
-  if(!store.order.length) return;
-  sel.r2=sel.r=Math.max(0,Math.min(store.order.length-1,sel.r+dr));
+  if(!edRows.length) return;
+  sel.r2=sel.r=Math.max(0,Math.min(edRows.length-1,sel.r+dr));
   sel.c2=sel.c=Math.max(0,Math.min(edDays-1,sel.c+dc));
   const td=cellEls[sel.r]&&cellEls[sel.r][sel.c];
   if(td) td.scrollIntoView({block:'nearest',inline:'nearest'});
@@ -2790,10 +3017,11 @@ function moveSel(dr,dc){
 const KEY={D:'D',E:'E',N:'N',V:'V',O:'OF',W:'주',P:'P1'};
 const HAN={'ㅈ':'주','ㅂ':'병','ㅃ':'법','ㅅ':'생','ㅌ':'특','ㄱ':'공','ㅇ':'OF'};
 document.addEventListener('keydown',e=>{
-  if(curScr!=='edit') return;
+  if(curScr!=='edit'||_modal||tour) return;
   const t=e.target;
   if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
   const k=e.key;
+  if(k===' '||k==='F2'){ openShiftModal(sel.r,sel.c); e.preventDefault(); return; }   // 근무 고르기 모달
   if(k==='ArrowRight'){moveSel(0,1);e.preventDefault();return}
   if(k==='ArrowLeft') {moveSel(0,-1);e.preventDefault();return}
   if(k==='ArrowDown') {moveSel(1,0);e.preventDefault();return}
@@ -2802,8 +3030,8 @@ document.addEventListener('keydown',e=>{
   if(k==='Enter'){moveSel(e.shiftKey?-1:1,0);e.preventDefault();return}
   if(k==='Delete'||k==='Backspace'){fillSel('');e.preventDefault();return}
   if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='z'){ undoAny(); e.preventDefault();return; }
-  if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='a'&&store.order.length){
-    sel={r:0,c:0,r2:store.order.length-1,c2:edDays-1};paintEdit();e.preventDefault();return;
+  if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='a'&&edRows.length){
+    sel={r:0,c:0,r2:edRows.length-1,c2:edDays-1};paintEdit();e.preventDefault();return;
   }
   if(e.ctrlKey||e.metaKey||e.altKey) return;
   let code=KEY[k.toUpperCase()]||HAN[k];
@@ -2816,11 +3044,15 @@ document.addEventListener('keydown',e=>{
 });
 $('#wrap').addEventListener('mousedown',e=>{
   const nm=e.target.closest('th.nm[data-nr]');
-  if(nm){ renameNurse(+nm.dataset.nr); return; }
+  if(nm){ if(e.button===0) renameNurse(edRows[+nm.dataset.nr]); return; }
   const td=e.target.closest('td.cell'); if(!td) return;
-  sel={r:+td.dataset.r,c:+td.dataset.c,r2:+td.dataset.r,c2:+td.dataset.c};
+  const r=+td.dataset.r,c=+td.dataset.c;
+  if(e.button===2){ const R=rect(); if(r>=R.r1&&r<=R.r2&&c>=R.c1&&c<=R.c2) return;   // 우클릭: 선택 안이면 선택 유지
+    sel={r,c,r2:r,c2:c}; paintEdit(); return; }
+  sel={r,c,r2:r,c2:c};
   dragging=true; paintEdit(); e.preventDefault();
 });
+$('#wrap').addEventListener('contextmenu',e=>{ const td=e.target.closest('td.cell'); if(!td) return; e.preventDefault(); openShiftModal(+td.dataset.r,+td.dataset.c); });
 $('#wrap').addEventListener('mouseover',e=>{
   if(!dragging) return;
   const td=e.target.closest('td.cell'); if(!td) return;
@@ -2829,14 +3061,39 @@ $('#wrap').addEventListener('mouseover',e=>{
 window.addEventListener('mouseup',()=>{dragging=false});
 $('#wrap').addEventListener('dblclick',e=>{
   const td=e.target.closest('td.cell'); if(!td) return;
-  const r=+td.dataset.r,c=+td.dataset.c;
-  const v=prompt('근무 입력 (예: D · DC · D/A = 어싸인 A 고정 · 비우면 삭제)',edGet(r,c));
-  if(v===null) return;
-  const pc=v.trim()?parseCellRaw(v):null;
-  if(v.trim()&&pc===undefined){ toast('인식할 수 없는 코드: '+v); return; }
-  snapshot(); edSet(r,c,pc?cellText(pc):''); paintEdit(); edTouched();
+  openShiftModal(+td.dataset.r,+td.dataset.c);
 });
-function renameNurse(r){
+/* 근무 입력 모달 — 더블클릭·우클릭·Space·F2. 목록에서 고르거나 [✏ 직접 입력]으로 D/A·경가 같은 값을 글자로.
+ * 여러 칸을 골라 둔 상태면 고른 칸 전부에 들어간다 (2026-09-17 사용자 요청) */
+async function openShiftModal(r,c){
+  if(!edRows.length||!cellEls[r]||!cellEls[r][c]) return;
+  const R=rect(), nCells=(R.r2-R.r1+1)*(R.c2-R.c1+1);
+  const cur=edGet(r,c), n=edName(r), iso=edIso(c);
+  const opt=k=>{ const d=SH(k)||{bg:'var(--rule-soft)',fg:'var(--ink-3)'}; return {label:k,value:k,style:`background:${d.bg};color:${d.fg};box-shadow:none`}; };
+  const mine=Object.keys(store.custom||{});
+  const groups=[{name:'근무',options:['DC','D','D1','중','EC','E','NC','N'].map(opt)},
+    {name:'휴무·휴가',options:['OF','주','P1','V','생','특','공','법','병'].map(opt)},
+    {name:'트레이닝 — 인력 제외',options:['/D','/E','/N'].map(opt)}];
+  if(mine.length) groups.push({name:'우리 병동 표기',options:mine.map(opt)});
+  groups.push({name:'',options:[{label:'비우기',value:''}]});
+  const v=await askModal({title:`${esc(n)} · ${+iso.slice(5,7)}/${+iso.slice(8,10)}${nCells>1?` 외 ${nCells-1}칸`:''}`,
+    sub:'누르면 바로 들어갑니다. 어싸인까지 정하려면(예: D/A) 또는 목록에 없는 표기는 [✏ 직접 입력].',
+    groups,current:cur,text:{placeholder:'예: D/A · 경가',initial:cur}});
+  if(v===null) return;
+  const t=String(v).trim();
+  if(t&&parseCellRaw(t)===undefined){
+    // 모르는 표기 — 그 자리에서 휴무/휴가로 등록하면 다음부터 자동으로 인식한다
+    const k=await askModal({title:`'${esc(t)}' 는 모르는 표기입니다`,sub:'우리 병동 표기로 등록하면 다음부터 자동으로 인식합니다. (⚙ 관리 > 근무 표기에서 바꿀 수 있습니다)',
+      groups:[{options:[{label:'휴무로 등록',value:'rest'},{label:'휴가로 등록',value:'leave'}]}]});
+    if(!k) return;
+    mapUnknown(t,k);                                   // 그리드가 다시 그려져 선택이 초기화된다 — 아래서 복원
+    sel={r:R.r1,c:R.c1,r2:R.r2,c2:R.c2}; paintEdit();
+  }
+  const pc=t?parseCellRaw(t):null;
+  if(t&&!pc){ toast('인식할 수 없는 표기: '+t); return; }
+  fillSel(pc?cellText(pc):'');
+}
+function renameNurse(r){   // r = 명부 index
   const v=prompt('이름 수정 (비우면 이 간호사 삭제)',store.order[r]);
   if(v===null) return;
   if(!applyNurseName(r,v.trim())) return;
@@ -2857,6 +3114,14 @@ function applyNurseName(r,nu){
         if(!Object.keys(pv).length) delete day[P];
       }
       if(!Object.keys(day).length) delete store.ovr[dk];
+    }
+    for(const dk of Object.keys(store.ovrPair||{})){          // 맞바꾼 상대 기록도 함께
+      const day=store.ovrPair[dk];
+      for(const P of Object.keys(day)){ const pp=day[P];
+        if(from in pp){ if(to) pp[to]=pp[from]; delete pp[from]; }
+        for(const k of Object.keys(pp)) if(pp[k]===from){ if(to) pp[k]=to; else delete pp[k]; }
+        if(!Object.keys(pp).length) delete day[P]; }
+      if(!Object.keys(day).length) delete store.ovrPair[dk];
     }};
   const migTr=(from,to)=>{ // 신규 연결 — 본인이 신규였거나 누군가의 프리셉터였던 경우 둘 다
     if(from in store.trainee){ if(to) store.trainee[to]=store.trainee[from]; delete store.trainee[from]; }
@@ -2867,11 +3132,12 @@ function applyNurseName(r,nu){
       for(const T of Object.keys(o)) if(o[T]===from) o[T]=to||'';
       if(!Object.keys(o).length) delete store.trOv[dk];
     }};
-  if(!nu){ store.order.splice(r,1); delete store.cells[old];
+  if(!nu){ store.order.splice(r,1); delete store.cells[old]; delete store.hidden[old];
     delete store.caps[old]; delete store.banRooms[old]; delete store.seedManual[old]; migOv(old,null); migTr(old,null); }
   else{
     store.order[r]=nu;
     store.cells[nu]=store.cells[old]||{}; delete store.cells[old];
+    if(store.hidden[old]){ store.hidden[nu]=true; delete store.hidden[old]; }
     if(old in store.caps){ store.caps[nu]=store.caps[old]; delete store.caps[old]; }
     if(old in store.banRooms){ store.banRooms[nu]=store.banRooms[old]; delete store.banRooms[old]; }
     if(old in store.seedManual){ store.seedManual[nu]=store.seedManual[old]; delete store.seedManual[old]; }
@@ -2893,16 +3159,27 @@ function renameNurseAdmin(i){
   if(!applyNurseName(i,v.trim())) return;
   touch(); recompute(); renderAdmin();
 }
+/* 전출·퇴사 — 삭제하면 과거 근무표 기록까지 사라지고, 두면 명부·목록이 길어지므로 '접어 두기' (2026-09-17 전수조사 15).
+ * 어싸인 계산은 근무표 그대로(과거 주 배정표 유지), 고치기 화면은 그 달에 근무가 없으면 줄을 빼고, 각종 고르기 목록에서 빠진다.
+ * 새 근무표에 그 이름의 근무가 들어오면 자동으로 복귀한다. */
+function toggleHidden(i){
+  const n=store.order[i]; if(!n) return;
+  snapshot();
+  if(store.hidden[n]){ delete store.hidden[n]; toast(n+' 복귀 — 명부에 다시 올렸습니다',2800,true); }
+  else{ store.hidden[n]=true; toast(n+' 전출 — 명부에서 접어 두었습니다 (근무표 기록은 그대로, 삭제는 ✕)',3600,true); }
+  touch(); recompute(); renderAdmin();
+}
 function removeNurse(i){
   const n=store.order[i];
-  if(!confirm(n+' 을(를) 명부에서 삭제할까요?\n근무표 기록도 함께 지워집니다 (Ctrl+Z 로 되돌릴 수 있습니다).')) return;
+  if(!confirm(n+' 을(를) 명부에서 삭제할까요?\n근무표 기록도 함께 지워집니다 (Ctrl+Z 로 되돌릴 수 있습니다).\n\n기록을 남기려면 삭제 대신 [전출]을 쓰세요.')) return;
+  keepHistory('간호사 삭제 전 ('+n+')');
   if(!applyNurseName(i,'')) return;
   touch(); recompute(); renderAdmin(); toast(n+' 삭제',2800,true);
 }
 document.addEventListener('copy',e=>{
   if(curScr!=='edit') return;
   if(/^(INPUT|TEXTAREA)$/.test((e.target&&e.target.tagName)||'')) return;
-  if(!store.order.length) return;
+  if(!edRows.length) return;
   const R=rect(), out=[];
   for(let r=R.r1;r<=R.r2;r++){ const row=[];
     for(let c=R.c1;c<=R.c2;c++) row.push(edGet(r,c));
@@ -2929,7 +3206,7 @@ document.addEventListener('paste',e=>{
   const R=rect(); let set=0;
   for(let i=0;i<g.length;i++) for(let j=0;j<g[i].length;j++){
     const r=R.r1+i, c=R.c1+j;
-    if(r>=store.order.length||c>=edDays) continue;
+    if(r>=edRows.length||c>=edDays) continue;
     const pc=parseCellRaw(g[i][j]);
     if(pc===undefined) continue;
     edSet(r,c,pc?cellText(pc):''); set++;
@@ -2948,7 +3225,7 @@ function renderLegend(){
       const d=SH(k)||{bg:'var(--rule-soft)',fg:'var(--ink-3)'};
       return `<span style="background:${d.bg};color:${d.fg}">${esc(k)}</span>`;}).join('')}</span></div>`).join('')+
     `<div class="keys"><span>셀 클릭 후 <b>D E N O</b></span><span>드래그로 여러 칸</span>`+
-    `<span>더블클릭 직접 입력</span><span><b>Ctrl+Z</b> 되돌리기</span></div>`;
+    `<span>더블클릭·<b>Space</b> 근무 고르기(직접 입력 포함)</span><span><b>Ctrl+Z</b> 되돌리기</span></div>`;
 }
 renderLegend();
 /* 되돌리기는 화면과 무관하게 같은 스택을 쓴다 —
@@ -2977,9 +3254,11 @@ const ADMIN_NAV=[
   ['정보',[['about','이 프로그램']]]];
 function adminBadge(id){
   switch(id){
-    case 'seed': case 'caps': return store.order.length?store.order.length+'명':'';
+    case 'seed': case 'caps': { const g=store.order.filter(nm=>store.hidden&&store.hidden[nm]).length;
+      return store.order.length?(store.order.length-g)+'명'+(g?' · 전출 '+g:''):''; }
     case 'rooms': return (store.rooms||[]).length+'실';
-    case 'schemes': { const n=[5,4,3,2].reduce((a,c)=>a+presetsOf(c).filter(presetEmpty).length,0); return n?'빈 칸 '+n:''; }
+    case 'schemes': { const e=[5,4,3,2].reduce((a,c)=>a+presetsOf(c).filter(presetEmpty).length,0);
+      const b=[5,4,3,2].reduce((a,c)=>a+presetsOf(c).filter(presetBad).length,0); return e?'빈 칸 '+e:b?'확인 '+b:''; }
     case 'codes': { const n=Object.keys(store.custom||{}).length+Object.keys(store.alias||{}).length;
       return n?n+'개':''; }
     case 'about': return BUILD.ver;
@@ -3028,7 +3307,7 @@ const ADMIN_PANELS={
     desc:'근무표에 지난 기록이 없을 때의 시작점입니다. 기록이 있으면 기록이 우선합니다.',
     body(){ return `<table id="seedTable"></table>`; },
     after(){
-      const rows=store.order.map(n=>{
+      const rows=store.order.filter(n=>!(store.hidden&&store.hidden[n])).map(n=>{
         const sd=store.seedManual[n]||{};
         const seg=(vals,cur,attr)=>vals.map(v=>
           `<button class="segbtn${cur===v?' on':''}" onclick="setSeed('${esc(n)}','${attr}','${v}')">${v==='없음'?'없음':attr==='label'?FORM_LBL(v):v}</button>`).join('');
@@ -3041,7 +3320,7 @@ const ADMIN_PANELS={
         `<tr><td colspan="3" class="dim">차지(A(CN))였던 사람은 '없음'으로 두세요 — 차지는 매일 자동 결정됩니다</td></tr>`;
     }},
   rooms:{title:'병실 목록',
-    desc:'병동을 고르면 병실 14개가 자동으로 채워집니다 — <b>병상수만</b> 적으세요. 없는 방은 ✕로 빼면 됩니다. 배정표·엑셀에는 호수만 짧게(1라인 1~14, 2라인 51~64) 적힙니다.',
+    desc:'병동을 고르면 병실이 자동으로 채워집니다 — <b>병상수만</b> 적으세요. 13호는 병동마다 있기도 없기도 하니 <b>13호 있음</b>으로 정하고, 그 밖에 없는 방은 ✕로 빼면 됩니다. 배정표·엑셀에는 호수만 짧게(1라인 1~14, 2라인 51~64) 적힙니다.',
     body(){
       const w=store.ward||wardOfRooms(store.rooms);
       const known=WARDS.includes(w);
@@ -3050,8 +3329,11 @@ const ADMIN_PANELS={
         <select onchange="setWard(this.value)" style="font-size:14px;font-weight:700;padding:8px 11px">
           <option value="" ${known?'':'selected'}>직접 입력</option>
           ${WARDS.map(c=>{ const rs=wardRooms(c);
-            return `<option value="${c}" ${c===w?'selected':''}>${c}병동 (${rs[0]}~${rs[13]}호)</option>`; }).join('')}
+            return `<option value="${c}" ${c===w?'selected':''}>${c}병동 (${rs[0]}~${rs[rs.length-1]}호)</option>`; }).join('')}
         </select>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-weight:700;cursor:pointer;padding:6px 10px;border-radius:10px;box-shadow:0 0 0 1px var(--rule)"
+          title="병동마다 13호가 있기도, 없기도 합니다. 끄면 병실 목록·방 구성에서 13호를 뺍니다">
+          <input type="checkbox" ${store.has13?'checked':''} onchange="setHas13(this.checked)"> 13호 있음</label>
         <span class="dim">${known?`${w.slice(0,-1)}층 ${w.slice(-1)}라인 — 배정표에는 ${w.slice(-1)==='2'?'51~64':'1~14'}호로 표시`:'호실을 직접 고칩니다'}</span></div>
         <table id="roomTable"></table>
         <div style="display:flex;align-items:center;gap:8px"><button onclick="addRoom()">＋ 방 추가</button>
@@ -3125,10 +3407,10 @@ const ADMIN_PANELS={
       const last=store.order.length-1;
       $('#capsTable').innerHTML=`<tr class="hd"><th style="width:64px">순위</th><th style="width:170px">간호사</th><th style="width:300px">가능 근무</th><th>주지 않을 방</th><th style="width:120px"></th></tr>`+
         (store.order.map((n,i)=>{
-          const cp=capsOf(n), bans=store.banRooms[n]||[];
-          return `<tr class="nrow" draggable="true" ondragstart="nurseDragStart(event,${i})" ondragover="nurseDragOver(event,${i})" ondragleave="nurseDragLeave(event)" ondrop="nurseDrop(event,${i})" ondragend="nurseDragEnd(event)">
+          const cp=capsOf(n), bans=store.banRooms[n]||[], gone=!!(store.hidden&&store.hidden[n]);
+          return `<tr class="nrow${gone?' gone':''}" draggable="true" ondragstart="nurseDragStart(event,${i})" ondragover="nurseDragOver(event,${i})" ondragleave="nurseDragLeave(event)" ondrop="nurseDrop(event,${i})" ondragend="nurseDragEnd(event)">
             <td class="grip" title="끌어서 순서 바꾸기 — 위가 선임"><span class="gripIco">⋮⋮</span><b>${i+1}</b></td>
-            <td class="nm2">${esc(n)}${isTrainee(n)?' <span class="trChip" title="근무표에 /D·/E·/N 으로 적힌 신규 간호사 — 인원·어싸인에서 빠집니다">신규</span>':''} <button class="segbtn" style="min-width:0;padding:4px 8px" title="이름 수정" onclick="renameNurseAdmin(${i})">✎</button></td>
+            <td class="nm2">${esc(n)}${isTrainee(n)?' <span class="trChip" title="근무표에 /D·/E·/N 으로 적힌 신규 간호사 — 인원·어싸인에서 빠집니다">신규</span>':''}${gone?' <span class="trChip" title="전출·퇴사 — 명부에서 접어 두었습니다. 근무표 기록은 그대로입니다">전출</span>':''} <button class="segbtn" style="min-width:0;padding:4px 8px" title="이름 수정" onclick="renameNurseAdmin(${i})">✎</button></td>
             <td><div style="display:flex;gap:4px;flex-wrap:wrap">${ALL_CAPS.map(c=>
               `<span class="capChip${cp.includes(c)?' on':''}" onclick="toggleCap('${esc(n)}','${c}')">${c}</span>`).join('')}</div></td>
             <td><div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">${
@@ -3136,7 +3418,8 @@ const ADMIN_PANELS={
               <span class="addChip banBtn" title="주지 않을 방 고르기" onclick="openRoomPick({kind:'nurse',name:'${esc(n)}'},event.pageX,event.pageY)">＋</span></div></td>
             <td style="white-space:nowrap"><button class="segbtn" title="한 칸 위로 (선임 쪽)" ${i===0?'disabled':''} onclick="moveNurse(${i},${i-1})">▲</button>`+
             `<button class="segbtn" title="한 칸 아래로" ${i===last?'disabled':''} onclick="moveNurse(${i},${i+1})">▼</button>`+
-            `<button class="segbtn danger" title="명부에서 삭제" onclick="removeNurse(${i})">✕</button></td></tr>`;
+            `<button class="segbtn" title="${gone?'전출을 풀고 명부에 다시 올립니다':'전출·퇴사 — 명부에서 접어 둡니다. 근무표 기록은 그대로 남고 나중에 복귀할 수 있습니다'}" onclick="toggleHidden(${i})">${gone?'복귀':'전출'}</button>`+
+            `<button class="segbtn danger" title="명부에서 삭제 — 근무표 기록도 지워집니다" onclick="removeNurse(${i})">✕</button></td></tr>`;
         }).join('')||'<tr><td class="dim" style="padding:8px 0">근무표를 먼저 넣어주세요</td></tr>');
     }},
   rules:{title:'배정 원칙',
@@ -3156,9 +3439,11 @@ const ADMIN_PANELS={
     body(){ return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="danger" onclick="resetOv()">담당 교체 모두 초기화</button>
       <button class="danger" onclick="resetRoomOv()">일별 방 수정 모두 초기화</button>
+      <button onclick="pruneOvr()" title="근무표가 바뀌어 그 사람이 그날 그 시간대 근무가 아니게 된 교체만 지웁니다">효력 없는 교체 정리</button>
       <span class="dim" id="ovCount"></span></div>`; },
     after(){
-      $('#ovCount').textContent=`담당 교체 ${Object.keys(store.ovr).length}일 · 방 수정 ${Object.keys(store.roomOv).length}일 · 그날만 바꾼 프리셋 ${Object.keys(store.presetDay||{}).length}일`;
+      const oa=ovrAudit();
+      $('#ovCount').textContent=`담당 교체 ${Object.keys(store.ovr).length}일 (유효 ${oa.ok}건${oa.bad.length?` · 근무가 바뀌어 효력 없는 ${oa.bad.length}건`:''}) · 방 수정 ${Object.keys(store.roomOv).length}일 · 그날만 바꾼 프리셋 ${Object.keys(store.presetDay||{}).length}일`;
     }},
   about:{title:'이 프로그램',
     desc:'병동 어싸인(병실 배정)을 자동으로 짜고 병실 배정표 양식 그대로 인쇄하는 프로그램입니다.',
@@ -3184,6 +3469,7 @@ const ADMIN_PANELS={
         <button onclick="show('start')" title="다른 데이터 파일을 열거나 새로 만듭니다">다른 데이터 파일 열기</button>
         <button onclick="reloadFromFile()" title="파일 내용을 다시 불러옵니다 (다른 창에서 고친 경우)">파일 다시 읽기</button></div>
         <div class="dim" id="dataInfo"></div>
+        <div id="histBox"></div>
         <div class="dim" style="line-height:1.7">자동 열림: 데이터 파일 이름이 <b>${SIDE_NAME}</b> 이고
           이 프로그램(assign.html)과 같은 폴더에 있으면, 켤 때 파일을 고르지 않아도 바로 배정표가 뜹니다.<br>
           브라우저는 닫았다 켜면 쓰기 권한을 잊습니다 — 다음에 고칠 때 <b>[허용]</b> 한 번만 누르면 같은 파일에 다시 이어집니다 (파일 창은 뜨지 않습니다).</div>`; },
@@ -3193,6 +3479,10 @@ const ADMIN_PANELS={
       if(nativeInfo) $('#dataInfo').innerHTML=`프로그램으로 열렸습니다 — 권한 확인 없이 바로 저장됩니다.<br>`+
         `데이터 파일: <b>${esc(nativeInfo.path||nativeInfo.file)}</b>`+(nativeInfo.writable?'':' <b style="color:var(--err)">(쓰기 불가 폴더)</b>');
       else $('#dataInfo').textContent=(fileHandle?'파일: '+fileLocPath()+' · ':window.__autoRead?'읽기만 (저장 연결 안 됨): '+fileLocPath()+' · ':'')+span;
+      const hb=$('#histBox'); if(hb){ const H=store.history||[];
+        hb.innerHTML=`<div style="font-weight:800;margin-top:14px">이전 상태로 되돌리기 <span class="dim">— 큰 변경 직전의 상태를 파일 안에 최근 3개까지 남겨 둡니다 (창을 닫은 뒤에도)</span></div>`+
+          (H.length?H.map((h,i)=>`<div class="histRow"><span class="hl">${esc(h.label)}</span><span class="dim">${fmtWhen(Date.parse(h.at))} · 간호사 ${h.n}명 · ${Math.round((h.data||'').length/1024)}KB</span><button onclick="restoreHistory(${i})" title="이 상태로 되돌립니다 — 지금 내용은 '되돌리기 전'으로 남습니다">이 상태로</button></div>`).join('')
+                   :`<div class="dim" style="margin-top:6px">아직 없습니다 — 새 근무표 넣기·백업 불러오기·간호사 삭제·병동 바꾸기·기본 프리셋 복원 직전에 자동으로 남습니다.</div>`); }
     }},
 };
 function renderAdmin(){
@@ -3222,7 +3512,7 @@ function renderSchemes(){
   const selId=presetUI.sel[cnt], cur=presetById(cnt,selId);
   box.innerHTML=
     `<div class="psTabs">${[5,4,3,2].map(c=>`<button class="segbtn${c===cnt?' on':''}" onclick="presetUI.cnt=${c};renderSchemes()" title="${c}인 근무일 때의 프리셋">${c}인 근무</button>`).join('')}</div>
-     <div class="psList">${list.map(p=>`<button class="psChip${p.id===selId?' on':''}" onclick="presetUI.sel[${cnt}]='${p.id}';renderSchemes()" title="${esc(p.name)} 프리셋 보기·고치기">${esc(p.name)}${presetEmpty(p)?' <span class="psWarn">비어 있음</span>':''}</button>`).join('')}
+     <div class="psList">${list.map(p=>`<button class="psChip${p.id===selId?' on':''}" onclick="presetUI.sel[${cnt}]='${p.id}';renderSchemes()" title="${esc(p.name)} 프리셋 보기·고치기">${esc(p.name)}${presetEmpty(p)?' <span class="psWarn">비어 있음</span>':presetBad(p)?' <span class="psWarn">확인</span>':''}</button>`).join('')}
        <button onclick="addPreset(${cnt})" title="지금 보고 있는 프리셋을 복제해 새 프리셋을 만듭니다">＋ 새 프리셋</button>
        ${selId!=='default'?`<button onclick="renamePreset(${cnt},'${selId}')" title="이 프리셋의 이름을 바꿉니다">이름 바꾸기</button><button class="danger" onclick="deletePreset(${cnt},'${selId}')" title="이 프리셋을 지웁니다 — 계획표나 그날 적용에서 쓰던 곳은 기본으로 돌아갑니다">삭제</button>`:''}
      </div>
@@ -3230,7 +3520,13 @@ function renderSchemes(){
        `<div style="margin:3px 0"><span style="display:inline-block;width:3.4em"><b>${FORM_LBL(l)}</b></span>
         <input type="text" value="${esc(abbrevRooms(cur.rooms[l]))}" placeholder="예: ${roomHint()}"
          ${(cur.rooms[l]||[]).length?'':'style="box-shadow:0 0 0 2px var(--err)" title="비어 있음 — 이 프리셋을 쓰는 날엔 방이 안 나옵니다"'}
-         onchange="setPresetRooms(${cnt},'${selId}','${l}',this.value)"></div>`).join('')}</div>`;
+         onchange="setPresetRooms(${cnt},'${selId}','${l}',this.value)"></div>`).join('')}</div>`+presetAuditHtml(cur);
+}
+function presetAuditHtml(p){
+  const au=presetAudit(p);
+  if(!au.missing.length&&!au.dup.length) return `<div class="psAudit ok">✓ 병실 ${(store.rooms||[]).length}개가 모두 한 자리씩 들어 있습니다</div>`;
+  return `<div class="psAudit bad">${au.missing.length?`<div>! 아무도 안 보는 방: <b>${au.missing.map(roomShort).join(', ')}호</b></div>`:''}${
+    au.dup.length?`<div>! 두 자리가 겹치는 방: <b>${au.dup.map(roomShort).join(', ')}호</b></div>`:''}<div class="sub">병실 목록의 모든 방이 한 자리씩 들어가야 합니다. 없는 방이면 병실 목록에서 빼세요.</div></div>`;
 }
 function renderPlan(){
   const box=$('#planBox'); if(!box) return;
@@ -3305,27 +3601,72 @@ function setScheme(cnt,l,str){
   touch(); recompute();
 }
 function resetSchemes(){
-  // 기본값은 101병동 호실 — 지금 병동의 같은 자리 방으로 옮겨 넣는다
+  // 기본값은 101병동 호실(13호 없음) — 지금 병동의 같은 자리 방으로 옮겨 넣고, 13호가 있으면 12호 보는 자리에 붙인다
+  keepHistory('기본 프리셋 복원 전');
   const sc=JSON.parse(JSON.stringify(DEFAULT_SCHEMES));
   for(const c in sc) for(const l in sc[c]) sc[c][l]=sc[c][l].map(r=>roomAtPos(roomPos(r))||r);
-  store.schemes=sc; touch(); recompute(); renderAdmin(); }
+  store.schemes=sc; const r13=roomAtPos(13); if(r13) attach13(r13);
+  touch(); recompute(); renderAdmin(); }
 /* 병동 고르기 — 병실 14개를 규칙대로 채우고, 병상수·방 구성·주지 않을 방은 같은 자리(몇 번째 방)로 옮긴다 */
 function setWard(code){
-  const rooms=wardRooms(code);
+  const rooms=wardRooms(code,store.has13);
   if(!rooms.length){ store.ward=''; touch(); renderAdmin(); return; }      // 직접 입력
   const cur=store.rooms||[];
   const same=cur.length===rooms.length&&cur.every((r,i)=>String(r[0])===rooms[i]);
-  if(!same&&cur.length&&!confirm(`병실 목록을 ${code}병동(${rooms[0]}~${rooms[13]}호)으로 바꿀까요?\n`+
+  if(!same&&cur.length&&!confirm(`병실 목록을 ${code}병동(${rooms[0]}~${rooms[rooms.length-1]}호${store.has13?'':', 13호 없음'})으로 바꿀까요?\n`+
      `병상수와 방 구성·주지 않을 방의 호실은 같은 자리로 옮겨집니다.`)){ renderAdmin(); return; }
+  if(!same&&cur.length) keepHistory('병동 바꾸기 전');
   const beds={}; for(const r of cur){ const p=roomPos(r[0]); if(p) beds[p]=+r[1]||0; }
-  const mv=r=>{ const p=roomPos(roomFull(r)); return p?rooms[p-1]:r; };   // roomFull 은 옛 목록 기준 — 교체 전에
-  for(const c in store.schemes) for(const l in store.schemes[c]) store.schemes[c][l]=store.schemes[c][l].map(mv);
-  for(const c in store.presets) for(const p of store.presets[c]) for(const l in p.rooms) p.rooms[l]=p.rooms[l].map(mv);
-  for(const n in store.banRooms) store.banRooms[n]=store.banRooms[n].map(mv);
+  const byPos={}; for(const r of rooms) byPos[roomPos(r)]=r;
+  // roomFull 은 옛 목록 기준 — 교체 전에. 새 목록에 없는 자리(13호 없음)는 뺀다
+  const mv=list=>(list||[]).map(r=>{ const p=roomPos(roomFull(r)); return p?(byPos[p]||null):r; }).filter(Boolean);
+  for(const c in store.schemes) for(const l in store.schemes[c]) store.schemes[c][l]=mv(store.schemes[c][l]);
+  for(const c in store.presets) for(const p of store.presets[c]) for(const l in p.rooms) p.rooms[l]=mv(p.rooms[l]);
+  for(const n in store.banRooms) store.banRooms[n]=mv(store.banRooms[n]);
   store.ward=String(code); store.wardPicked=true;
   store.rooms=rooms.map(r=>[r,beds[roomPos(r)]||0]);
-  touch(); recompute(); renderAdmin();
+  touch(); recompute(); renderAdmin(); renderWardChip();
 }
+/* 13호 유무 — 병동마다 13호가 있기도 없기도 하다 (사용자 2026-09-17, 자율 선택). 켜면 병실 목록에 넣고 12호를 보는 자리에 붙이며, 끄면 어디서나 뺀다 */
+function setHas13(on){
+  store.has13=!!on;
+  const code=String(store.ward||'');
+  if(WARDS.includes(code)){
+    const r13=wardRooms(code,true)[12];
+    const cur=store.rooms||[];
+    const has=cur.some(r=>String(r[0])===r13);
+    if(on&&!has){
+      const i12=cur.findIndex(r=>roomPos(r[0])===12);
+      cur.splice(i12>=0?i12+1:cur.length,0,[r13,0]);
+      attach13(r13);
+    } else if(!on&&has){
+      store.rooms=cur.filter(r=>String(r[0])!==r13);
+      const rm=list=>(list||[]).filter(r=>String(r)!==r13);
+      for(const c in store.schemes) for(const l in store.schemes[c]) store.schemes[c][l]=rm(store.schemes[c][l]);
+      for(const c in store.presets) for(const p of store.presets[c]) for(const l in p.rooms) p.rooms[l]=rm(p.rooms[l]);
+      for(const nm in store.banRooms) store.banRooms[nm]=rm(store.banRooms[nm]);
+    }
+  }
+  touch(); recompute(); renderAdmin();
+  toast(on?'13호를 병실 목록과 방 구성(12호 보는 자리)에 넣었습니다':'13호를 병실 목록과 방 구성에서 뺐습니다',3200);
+}
+/* 13호를 프리셋에 넣는다 — 12호를 보는 자리(없으면 14호 보는 자리, 그것도 없으면 마지막 자리)에. 이미 있으면 그대로 */
+function attach13(r13){
+  const r12=roomAtPos(12), r14=roomAtPos(14);
+  const put=rooms=>{ const ls=Object.keys(rooms||{}); if(!ls.length) return;
+    if(ls.some(l=>(rooms[l]||[]).includes(r13))) return;
+    const l=ls.find(l=>(rooms[l]||[]).includes(r12))||ls.find(l=>(rooms[l]||[]).includes(r14))||ls[ls.length-1];
+    rooms[l]=[...(rooms[l]||[]),r13]; };
+  for(const c in store.schemes) put(store.schemes[c]);
+  for(const c in store.presets) for(const p of store.presets[c]) put(p.rooms);
+}
+/* 프리셋 검사 — 병실 목록 기준으로 아무도 안 보는 방·두 자리가 겹치는 방 (실호실). 관리 > 방 구성과 확인 카드가 쓴다 (2026-09-17) */
+function presetAudit(p){
+  const all=(store.rooms||[]).map(r=>String(r[0])); const seen={}, dup=new Set();
+  for(const l in (p.rooms||{})) for(const t of (p.rooms[l]||[]).map(roomFull)){ if(seen[t]&&seen[t]!==l) dup.add(t); seen[t]=seen[t]||l; }
+  return {missing:all.filter(r=>!seen[r]),dup:[...dup]};
+}
+const presetBad=p=>{ const a=presetAudit(p); return presetEmpty(p)||a.missing.length>0||a.dup.length>0; };
 function setRoom(i,f,v){
   v=String(v).trim();
   if(f===0&&!v){ renderAdmin(); return; }   // 호실을 비우면 무시 (삭제는 ✕)
@@ -3391,7 +3732,8 @@ async function describeCurrentForm(){
     const ph=hasPlaceholders(sheetCells(tpl));
     el.innerHTML=`<b>지금 쓰는 양식</b> — `+
       (store.form?`올린 파일 <b>${esc(store.form.name)}</b>`:`프로그램에 들어 있는 '병실 배정표'`)+
-      (ph?' · <b>자리표시자 방식</b>':'')+`<br>`+layoutSummary(L).map(esc).join(' · ');
+      (ph?' · <b>자리표시자 방식</b>':'')+`<br>`+layoutSummary(L).map(esc).join(' · ')+
+      (await customFormDiffers()?`<br><span style="color:var(--err);font-weight:700">칸 구조가 기본 양식과 달라 화면 [인쇄]가 어긋날 수 있습니다 — 인쇄는 [엑셀로 내보내기]로 받아 엑셀에서 하세요.</span>`:'');
   }catch(e){ el.textContent='양식을 읽지 못했습니다: '+e.message; }
 }
 function formVerdict(a,b){
@@ -3579,7 +3921,8 @@ async function restoreBackup(file){
     const n=(j.order||[]).length, when=j.saved?fmtWhen(Date.parse(j.saved)):'';
     if(!confirm(`${f.name} 의 내용으로 지금 데이터를 바꿀까요?\n(간호사 ${n}명${when?' · '+when+' 저장본':''})\n\n지금 내용은 사라집니다 — 필요하면 먼저 ⚙ 관리 > [백업 내려받기].`)) return false;
     const rev=Math.max(store.rev||0,j.rev||0);          // 파일 rev 보다 뒤로 가지 않게 — 자동 저장이 '다른 창이 먼저 저장' 으로 오해하지 않는다
-    store={...emptyStore(),...j,rev}; migrateStore();
+    keepHistory('백업 불러오기 전'); const hist=store.history;  // 되돌릴 수 있게 지금 상태를 남긴다
+    store={...emptyStore(),...j,rev,history:hist}; migrateStore();
     touch();                                             // 자동 저장 예약 (읽기 전용이면 저장 연결 안내)
     afterLoad();
     toast(f.name+' 의 내용을 불러왔습니다'+((fileHandle||nativeInfo)?' — 지금 데이터 파일에 저장됩니다':''),4200);
@@ -3602,6 +3945,26 @@ async function reloadFromFile(){
     if(curScr==='edit') renderEditGrid();
     toast('파일에서 다시 읽었습니다');
   }catch(e){ toast('다시 읽기 실패: '+e.message,4200); }
+}
+/* 파일 안 스냅샷 — 큰 변경(새 근무표 넣기·백업 불러오기·간호사 삭제·기본 프리셋 복원·병동 바꾸기) 직전 상태를
+ * 데이터 파일 안에 최근 3개까지 남긴다. 창을 닫으면 Ctrl+Z 가 사라지므로 그 뒤의 안전망 (2026-09-17 전수조사 16).
+ * 양식(form)·스냅샷 자신은 빼서 파일이 크게 불지 않게 한다. */
+function keepHistory(label){
+  try{
+    const snap={...store}; delete snap.history; delete snap.form; delete snap.by; delete snap.saved;
+    const data=JSON.stringify(snap);
+    store.history=[{at:new Date().toISOString(),label,n:store.order.length,data},...(store.history||[])].slice(0,3);
+  }catch(e){}
+}
+function restoreHistory(i){
+  const h=(store.history||[])[i]; if(!h) return;
+  if(!confirm(`'${h.label}' (${fmtWhen(Date.parse(h.at))}, 간호사 ${h.n}명) 상태로 되돌릴까요?\n지금 내용은 '되돌리기 전'으로 남겨 두어 다시 올 수 있습니다.`)) return;
+  let j; try{ j=JSON.parse(h.data); }catch(e){ toast('되돌리기 실패: 저장된 상태를 읽을 수 없습니다',4000); return; }
+  keepHistory('되돌리기 전');
+  const hist=store.history, form=store.form, rev=store.rev;
+  store={...emptyStore(),...j,history:hist,form,rev}; migrateStore();
+  undoStack.length=0;
+  touch(); recompute(); renderAdmin(); renderWardChip(); toast(`'${h.label}' 상태로 되돌렸습니다`,3600);
 }
 function downloadBackup(){
   const blob=new Blob([JSON.stringify(store,null,1)],{type:'application/json'});
@@ -3717,9 +4080,15 @@ async function readXlsxGrid(u8){
   if(!sheets.length) throw new Error('시트 없음');
   let si=0;
   if(sheets.length>1){
-    const pick=prompt('읽을 시트 번호:\n'+sheets.map((s,i)=>`${i+1}. ${s.name}`).join('\n'),'1');
-    if(pick===null) throw new Error('취소됨');
-    si=Math.min(Math.max((+pick||1)-1,0),sheets.length-1);
+    // 연간 근무표처럼 시트가 여럿이면 시트 이름의 월을 읽어 '넣을 달'의 시트를 먼저 제안한다 (2026-09-17)
+    const want=guessYearMonth({d:1},{ndays:28});
+    const monthOf=nm=>{ const a=nm.match(/(\d{4})\s*[.\-/년]\s*(\d{1,2})\s*월?/); if(a) return {y:+a[1],m:+a[2]};
+      const b=nm.match(/(\d{1,2})\s*월/); return b?{m:+b[1]}:null; };
+    const def=sheets.findIndex(x=>{ const mo=monthOf(x.name); return mo&&mo.m===want.m&&(mo.y==null||mo.y===want.y); });
+    const v=await askModal({title:'어느 시트를 읽을까요?',sub:`시트가 ${sheets.length}개입니다. 근무표가 든 시트를 고르세요.`,
+      groups:[{options:sheets.map((x,i)=>({label:x.name+(i===def?`  ← ${want.m}월 근무표로 보입니다`:''),value:i,wide:true}))}],current:def>=0?def:undefined});
+    if(v===null) throw new Error('취소됨');
+    si=Math.min(Math.max(+v||0,0),sheets.length-1);
   }
   const rels=await text('xl/_rels/workbook.xml.rels')||'';
   const relM=[...rels.matchAll(/<Relationship\b[^>]*>/g)].reduce((a,m)=>{
@@ -3987,6 +4356,19 @@ async function loadTemplate(){
   if(img){ const bytes=img.meth===8?await inflateRaw(img.raw):img.raw;
     imgUrl=URL.createObjectURL(new Blob([bytes],{type:'image/png'})); }
   return TPL={ents,sheetXml,wbXml,sst,imgUrl};
+}
+/* 프로그램 내장 양식 — 우리 병동 양식과 칸 구조를 비교하는 데 쓴다 */
+async function loadBaseTemplate(){
+  if(loadBaseTemplate._t) return loadBaseTemplate._t;
+  const b64=($('#tplB64').textContent||'').replace(/\/\*[^*]*\*\//g,'').trim();
+  return loadBaseTemplate._t=await parseXlsx(b64ToBytes(b64));
+}
+/* 우리 병동 양식이 기본 양식과 칸 구조가 다르면 true — HTML 인쇄는 기본 구조(A19·B26 …)를 전제로 조립하므로 어긋난다 (2026-09-17 전수조사 17) */
+async function customFormDiffers(){
+  if(!store.form||!store.form.b64) return false;
+  try{ const cur=await loadTemplate(), base=await loadBaseTemplate();
+    const a=findLayout(sheetCells(base),sheetMerges(base)), b=findLayout(sheetCells(cur),sheetMerges(cur));
+    return formVerdict(a,b).length>0||!!store.form.ph; }catch(e){ return false; }
 }
 const b64ToBytes=b64=>{const bin=atob(b64);const u8=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);return u8;};
@@ -4290,7 +4672,7 @@ async function buildPrintArea(wholeMonth){
             `<span style="font-size:8pt;font-weight:700;color:${wdC(w)}">${WD[w]}</span></div></th>`}).join('')}</tr>
       <tr style="height:${eventH}mm">${days.map(d=>{
         const evt=store.events[isoOfD(d.date)];
-        return `<td colspan="2" style="vertical-align:top;text-align:left;padding:1.2mm;font-size:7pt;font-weight:600;line-height:1.4;color:#B7791F;word-break:break-all">${evt?esc(evt):''}</td>`;
+        return `<td colspan="2" style="vertical-align:top;text-align:left;padding:1.2mm;font-size:7pt;font-weight:600;line-height:1.4;color:#B7791F;word-break:break-all">${evt?esc(evt).replace(/\n/g,'<br>'):''}</td>`;
       }).join('')}</tr>`;
     for(const P of ['D','E','N']){
       const sec=SEC[P];
@@ -4303,7 +4685,8 @@ async function buildPrintArea(wholeMonth){
           if(day.blank||!day.secs[P].byLabel[label]){ wk+='<td></td><td></td>'; continue; }
           const pn=day.secs[P].byLabel[label], piso=isoOfD(day.date);
           const ptr=traineesUnder(piso,P,pn);
-          wk+=`<td class="prm">${roomsFor(P,day.secs[P].cnt,label,piso)}</td>`+
+          const rmv=roomsFor(P,day.secs[P].cnt,label,piso).replace(/,\s+/g,',');   // 쉼표 뒤 공백 없이 — 11.9mm 칸에서 두 줄로 접히지 않게
+          wk+=`<td class="prm${rmv.length>8?' long':''}">${rmv}</td>`+
               `<td class="pnm${ptr.length?' two':''}">${esc(pn)}${ptr.map(T=>`<span class="ptr">/ ${esc(T)}</span>`).join('')}</td>`;
         }
         wk+='</tr>';
@@ -4342,6 +4725,7 @@ function exportWeekXlsx(){
   downloadWeekXlsx(wkSunday).catch(e=>toast('내보내기 실패: '+e.message,4200));
 }
 async function printWeek(wholeMonth){
+  if(await customFormDiffers()&&!confirm('우리 병동 양식은 칸 구조가 기본 양식과 달라 화면 인쇄가 어긋날 수 있습니다.\n정확한 출력은 [엑셀로 내보내기]로 받아 엑셀에서 인쇄하는 방법입니다.\n\n그래도 화면 인쇄를 할까요?')) return;
   try{ localStorage.setItem('assignPrinted','1'); }catch(e){}
   try{ await buildPrintArea(wholeMonth); }
   catch(e){ toast(e.message,4200); return; }
@@ -4387,16 +4771,17 @@ const HELP=[
  steps:['<b>◀ 지난주 / 다음주 ▶</b> 로 주를 넘기고, [오늘]로 이번 주로 돌아옵니다.',
         '세로로 <b>D(주간)·E(저녁)·N(야간)</b>, 그 안에 <b>A(CN)·B·C·D·E</b> 자리가 있습니다. A(CN)이 차지입니다.',
         '각 칸은 <b>왼쪽=담당 병실, 오른쪽=간호사 이름</b> 입니다.',
-        '오늘 날짜 칸은 파란 바탕과 <b>오늘</b> 표시로 구분됩니다.'],
- tips:['맨 위 <b>교육·행사</b> 줄은 눌러서 적으면 인쇄물에도 그대로 나옵니다.']},
+        '오늘 날짜 칸은 파란 바탕과 <b>오늘</b> 표시로 구분됩니다. 키보드 <kbd>←</kbd> <kbd>→</kbd> 로도 주를 넘깁니다.'],
+ tips:['맨 위 <b>교육·행사</b> 줄은 눌러서 적으면 인쇄물에도 그대로 나옵니다. 여러 줄로 적어도 됩니다.',
+       '상단 이름 옆의 <b>병동 칩</b>(예: 92병동)이 지금 열린 파일의 병동입니다.']},
 {cat:'이번 주 배정표',id:'swap',title:'담당 바꾸기 (이름 클릭)',
  lead:'두 사람의 자리를 맞바꿉니다. 근무표는 그대로 두고 어싸인만 바꾸는 것입니다.',
  steps:['바꾸고 싶은 사람의 <b>이름을 클릭</b>합니다.',
         '그 시간대의 자리들이 <b>A(CN) 김수진 · 1, 14</b> 처럼 이름·병실과 함께 나옵니다. 본인 자리는 회색으로 비활성입니다.',
         '바꿀 상대를 누르면 두 사람이 서로 자리를 맞바꿉니다.',
-        '되돌리려면 다시 눌러 [자동으로 되돌리기]를 고르면 됩니다.'],
+        '되돌리려면 다시 눌러 [자동으로 되돌리기]를 고르면 됩니다 — 맞바꾼 상대의 고정도 함께 풀립니다. [이 날 ○ 교체 모두 풀기]는 그 날 그 시간대의 수동 교체를 한 번에 풉니다.'],
  tips:['손으로 바꾼 칸은 이름 아래 <b>빨간 밑줄</b>이 생깁니다.',
-       '같은 창에서 [근무 바꾸기]로 그 날 근무 자체(D·E·N·OF·V 등)를 바꿀 수도 있습니다 — 그러면 인원이 달라져 뒤의 어싸인이 자동으로 다시 맞춰집니다.',
+       '같은 창에서 [근무 바꾸기]로 그 날 근무 자체(D·E·N·OF·V·병가·생리휴가 등, 우리 병동 표기 포함)를 바꿀 수도 있습니다 — 그러면 인원이 달라져 뒤의 어싸인이 자동으로 다시 맞춰집니다.',
        '<b>잘못 눌렀을 때</b>: 오른쪽 아래에 뜨는 <b>파란 알림을 누르면</b> 방금 한 것이 그대로 되돌아갑니다. <kbd>Ctrl+Z</kbd> 도 같습니다 — 근무 바꾸기·교육 입력·새 근무표 넣기 모두 됩니다.']},
 {cat:'이번 주 배정표',id:'rooms',title:'그날 병실 고치기 (방 칸 클릭)',
  lead:'환자가 줄거나 늘어 그날만 병실을 다르게 볼 때 씁니다. 그 날 하루에만 적용됩니다.',
@@ -4407,26 +4792,31 @@ const HELP=[
  tips:['손으로 고친 방 칸은 <b>파란 밑줄</b>로 표시됩니다.',
        '두 사람이 같은 병실을 보게 되면 <b>빨간 글씨</b>로 알려 줍니다 — 자동으로 고치지는 않으니 확인하고 정리하세요.']},
 {cat:'이번 주 배정표',id:'warn',title:'확인 필요 · 안내 카드 읽는 법',
- lead:'그 주에 확인이 필요한 것만 표 위에 모아 보여 줍니다. <b>빨강 = 규칙 위반</b>(고쳐야 함), <b>노랑 = 안내</b>. 없으면 카드가 아예 안 뜹니다.',
+ lead:'그 주에 확인이 필요한 것만 표 위에 모아 보여 줍니다. <b>빨강 = 규칙 위반</b>(고쳐야 함), <b>노랑 = 안내</b>. 없으면 카드가 아예 안 뜹니다. 같은 종류는 사람별·내용별로 한 줄에 묶이고, 길면 [더 보기]로 펼칩니다.',
  steps:['<b>가능 근무가 아닙니다</b> — 그 간호사가 못 하는 근무가 배정돼 있습니다. ⚙ 관리 &gt; 간호사 관리에서 확인하세요.',
+        '<b>차지 가능한 사람이 없어 자격 없이 차지가 됐습니다</b> — 그날 그 시간대 근무자 중 DC·EC·NC 가능자가 없어 최선임이 차지가 된 경우입니다.',
+        '<b>아무도 안 보는 방 · 두 자리가 겹치는 방</b> — 방 구성(또는 그날 방 수정)에 빠진 방·겹친 방이 있습니다. ⚙ 관리 &gt; 방 구성에서 고치세요.',
         '<b>양식의 N칸(3개)을 넘어</b> — 야간 인원이 인쇄 양식 칸보다 많습니다. 수기로 적어야 합니다.',
-        '<b>어싸인 없이 근무합니다(헬퍼)</b> — 6명 이상이라 자리가 모자란 경우입니다.',
         '<b>주지 않을 방인데 배정됐습니다</b> — 피하려 했지만 다른 방법이 없던 경우입니다.',
-        '<b>신규 ○○ — 09/13 D, 09/14 D …: 붙일 간호사가 없습니다</b>(노랑) — 그 날 그 시간대 간호사 이름을 눌러 [신규 간호사 붙이기]로 정하면 사라집니다.']},
+        '<b>인원이 필요 인원과 다릅니다</b>(노랑) — 근무표의 그날 D·E·N 인원이 ⚙ 관리 &gt; 요일별 필요 인원과 다릅니다.',
+        '<b>근무표가 없습니다</b>(노랑) — 월말 주처럼 다음 달 근무표가 아직 없는 날입니다. [새 근무표 넣기]로 넣으면 채워집니다.',
+        '<b>어싸인 없이 근무합니다(헬퍼)</b> — 6명 이상이라 자리가 모자란 경우입니다.',
+        '<b>신규 ○○ — 붙일 간호사가 없습니다</b>(노랑) — 날짜마다 [붙일 사람…]에서 그날만 붙이거나, [계속 붙일 사람]으로 프리셉터를 정하면 사라집니다.']},
 {cat:'이번 주 배정표',id:'print',title:'인쇄와 엑셀 내려받기',
  lead:'병실 배정표 양식 그대로 A4 한 장에 나옵니다.',
  steps:['[이번 주 인쇄] — 지금 보고 있는 주 한 장.',
         '⚙ 관리 &gt; 주간 배정표 내려받기 &gt; [이번 달 전체 인쇄] — 그 달 5~6장.',
         '같은 화면에서 주차별 버튼을 누르면 <b>엑셀 파일(xlsx)</b>로 받습니다. 양식 그대로라 엑셀에서 고칠 수 있습니다.'],
- tips:['인쇄가 흐리거나 색이 빠지면 인쇄 창에서 <b>배경 그래픽</b>을 켜 보세요(보통은 켜지 않아도 나옵니다).']},
+ tips:['인쇄가 흐리거나 색이 빠지면 인쇄 창에서 <b>배경 그래픽</b>을 켜 보세요(보통은 켜지 않아도 나옵니다).',
+       '⚙ 관리 &gt; 배정표 양식에서 <b>칸 구조가 다른 양식</b>으로 바꿨다면 화면 인쇄가 어긋날 수 있습니다 — 그때는 엑셀로 내보내 엑셀에서 인쇄하세요. 인쇄 전에 한 번 알려 줍니다.']},
 
 {cat:'근무표 넣기·고치기',id:'paste',title:'새 근무표 넣기 (표 전체)',mock:'all',
  lead:'엑셀에 있는 근무표를 그대로 가져옵니다. 처음 넣을 때는 이름 열과 날짜 줄까지 함께 복사하세요.',
  steps:['엑셀에서 <b>이름 열 + 날짜 줄 + 근무</b>를 통째로 긁어 <kbd>Ctrl+C</kbd>. 이름 앞에 번호·직급 열이 섞여 있어도 됩니다 — 이름 열을 알아서 찾습니다.',
         '이 창에서 <kbd>Ctrl+V</kbd>. 엑셀 파일(.xlsx)을 창에 끌어다 놓아도 됩니다.',
-        '<b>이렇게 읽었어요</b> 에서 간호사 수·기간·새 이름을 확인합니다.',
+        '<b>이렇게 읽었어요</b> 에서 간호사 수·기간·새 이름을 확인합니다. 제목 줄이나 요일 줄이 섞여 있어도 날짜 줄을 알아서 찾습니다.',
         '명부에 없는 이름이 있으면 <b>이름 매칭 카드</b>가 뜹니다 — 표기만 다른 같은 사람이면 연결하세요. 한 번 연결하면 다음 붙여넣기부터 자동입니다.',
-        '날짜 줄에 연·월이 없으면 <b>노란 칸</b>에서 시작 연·월을 꼭 확인하세요.',
+        '날짜 줄에 연·월이 없으면 요일 줄이나 기록의 다음 달로 추정해 <b>노란 칸</b>에 보여 줍니다 — 틀리면 거기서 고치세요.',
         '이미 있는 기록을 바꾸는 칸은 <b>덮어쓰는 칸 n칸</b> 타일에 세어 주고, 저장 전에 한 번 더 물어봅니다.',
         '[맞아요, 저장]을 누르면 들어갑니다. <kbd>Ctrl+Z</kbd>로 되돌릴 수 있습니다.'],
  tips:['<b>엑셀과 명부의 순서가 달라도 됩니다</b> — 줄 위치가 아니라 이름으로 사람을 맞춰 넣습니다. <b>명부 순서도 이 표의 순서로</b>를 켜 두면 명부가 병동 표와 같은 순서로 정렬됩니다.',
@@ -4452,22 +4842,23 @@ const HELP=[
  lead:'월별 표에서 근무를 직접 고칩니다. 엑셀과 비슷하게 씁니다.',
  steps:['칸을 클릭하고 <kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>O</kbd> 를 누르면 바로 입력됩니다.',
         '드래그하면 여러 칸을 한 번에 고를 수 있습니다.',
-        '더블클릭하면 직접 입력 — <b>D/A</b> 처럼 어싸인까지 정하거나 <b>/D</b> 로 트레이닝 근무를 적습니다.',
+        '더블클릭(또는 <kbd>Space</kbd>, 우클릭)하면 <b>근무 고르기</b> 창이 뜹니다 — 근무·휴무·트레이닝·우리 병동 표기 중에서 누르고, 목록에 없으면 [✏ 직접 입력]으로 <b>D/A</b>(어싸인 고정)나 새 표기를 적습니다. 여러 칸을 골라 두면 한꺼번에 들어갑니다.',
+        '이 달이면 <b>오늘 열</b>이 검정 머리칸과 파란 테두리로 표시되고, 처음 열 때 오늘 칸이 골라져 있습니다.',
         '<kbd>Ctrl+Z</kbd> 되돌리기, 맨 아래 줄에서 그날 <b>D·E·N 인원</b>을 확인합니다.'],
- tips:['인원이 안 맞는 날은 <b>4/5</b> 처럼 빨갛게 나옵니다(실제/필요). 기준은 ⚙ 관리 &gt; 요일별 필요 인원.',
-       '이름을 클릭하면 이름 수정·삭제가 됩니다.']},
+ tips:['인원이 안 맞는 날은 <b>4/5</b> 처럼 빨갛게 나옵니다(실제/필요). 기준은 ⚙ 관리 &gt; 요일별 필요 인원. 위의 <b>인원 안 맞는 날 n일 ›</b> 을 누르면 그날로 갑니다.',
+       '이름을 클릭하면 이름 수정·삭제가 됩니다. 전출한 사람은 그 달에 근무가 없으면 줄이 빠집니다.']},
 {cat:'근무표 넣기·고치기',id:'trainee',title:'트레이닝 근무 (/D /E /N)',
  lead:'교육 중이라 인력으로 세면 안 되는 근무입니다.',
  steps:['근무표에 <b>/D</b>, <b>/E</b>, <b>/N</b> 으로 적습니다. 표에는 회색으로 보이지만 <b>인원 수와 어싸인에서는 빠집니다</b>.',
         '배정표에서 함께 다닐 간호사(프리셉터) 이름을 누르면 <b>신규 간호사 붙이기</b>가 있습니다 — [계속 붙이기]는 그 사람을 프리셉터로 정하는 것, [오늘만 붙이기]는 그 날만.',
-        '붙은 신규는 그 간호사 이름 아래 <b>/ 이름</b>으로 화면·인쇄·엑셀(줄바꿈)에 나옵니다. 프리셉터가 그 시간대 근무가 아닌 날은 <b>확인 필요</b>에 떠서 다른 사람에게 붙일 수 있습니다.'],
+        '붙은 신규는 그 간호사 이름 아래 <b>/ 이름</b>으로 화면·인쇄·엑셀(줄바꿈)에 나옵니다. 프리셉터가 그 시간대 근무가 아닌 날은 <b>안내 카드</b>에 떠서, 날짜 옆 [붙일 사람…]에서 바로 그날만 붙일 수 있습니다.'],
  tips:['엑셀 근무표에 이미 /D 로 적혀 있으면 그대로 붙여넣으면 됩니다. 관리 &gt; 간호사 관리에 <b>신규</b> 표시가 붙습니다.']},
 
 {cat:'우리 병동 설정',id:'roomlist',title:'병실 목록 (병동 고르기)',
  lead:'병동 번호는 층 + 라인입니다(92 = 9층 2라인). 1라인은 1~14호, 2라인은 51~64호라서 <b>병동만 고르면 병실 14개가 저절로</b> 채워집니다.',
  steps:['⚙ 관리 &gt; 병실 목록에서 <b>병동</b>을 고릅니다 — 호실이 자동으로 채워지고 화면·인쇄·엑셀 표기(1~14 / 51~64)도 맞춰집니다.',
         '방마다 <b>병상 수</b>를 적습니다. 방 칸을 누를 때 몇 명까지 보는지 합계가 나오고, 어싸인 이어 주기도 병상 수로 셉니다.',
-        '없는 방은 ✕ 로 지웁니다.',
+        '<b>13호 있음</b>을 병동에 맞게 켜고 끕니다 — 켜면 병실 목록과 방 구성(12호 보는 자리)에 13호가 들어가고, 끄면 어디서나 빠집니다. 그 밖에 없는 방은 ✕ 로 지웁니다.',
         '병동을 바꾸면 방 구성·주지 않을 방의 호실도 <b>같은 자리</b>(1라인 3호 ↔ 2라인 53호)로 함께 옮겨집니다.']},
 {cat:'우리 병동 설정',id:'scheme',title:'방 구성 (인원수별 프리셋·주간 계획)',
  lead:'그날 근무 인원이 몇 명이냐에 따라 각 자리가 맡을 병실을 정합니다. 인원수마다 프리셋을 여러 개 두고, 요일·근무별로 어느 것을 쓸지 정할 수 있습니다.',
@@ -4476,6 +4867,7 @@ const HELP=[
         '아래 <b>주간 계획표</b>에서 요일·근무(D/E/N)마다 프리셋을 고릅니다. 월요일 Day 와 화요일 Day 가 다른 나눔이어도 됩니다.',
         '배정표에서 방 칸을 누르면 <b>이 날 방 구성</b> 줄이 있습니다 — 프리셋을 골라 [오늘만] 또는 [매주 이 요일]. 프리셋이 기본이 아닌 날은 A(CN) 방 칸 왼쪽에 초록 띠가 보입니다.'],
  tips:['이 표가 어싸인의 기준입니다. 그날 실제 인원이 계획표의 인원수와 다르면 그 인원수의 기본 프리셋이 쓰입니다.',
+       '프리셋 아래에 <b>아무도 안 보는 방 · 두 자리가 겹치는 방</b>이 바로 표시됩니다. 병실 목록의 모든 방이 한 자리씩 들어가야 하고, 문제가 있으면 관리 메뉴에 <b>확인 n</b>, 배정표 카드에도 뜹니다.',
        '비어 있는 자리가 있으면 관리 메뉴에 <b>빈 칸 n</b> 이 뜨고, 그 프리셋을 쓰는 날엔 방이 안 나옵니다.']},
 {cat:'우리 병동 설정',id:'req',title:'요일별 필요 인원',
  lead:'요일마다 D·E·N 이 몇 명 필요한지입니다. 근무표 고치기 화면에서 부족·초과를 빨갛게 표시하는 기준입니다.',
@@ -4485,6 +4877,7 @@ const HELP=[
  lead:'사람마다 할 수 있는 근무와, 주면 안 되는 병실을 정합니다.',
  steps:['<b>위가 선임</b>입니다 — 같은 날 차지 가능한 사람 중 가장 위에 있는 사람이 차지를 맡습니다. 줄을 끌어서(또는 ▲▼) 순서를 바꾸세요.',
         '[＋ 간호사 추가]로 명부에 넣고, 이름 옆 ✎ 로 이름을 고치고, ✕ 로 뺍니다 (근무표·설정이 같이 따라갑니다. Ctrl+Z 가능).',
+        '전출·퇴사한 사람은 ✕ 대신 <b>[전출]</b>로 접어 두세요 — 지난 배정표는 그대로 남고, 목록에서만 빠집니다. 새 근무표에 그 이름의 근무가 들어오면 저절로 복귀합니다.',
         '⚙ 관리 &gt; 간호사 관리에서 <b>DC · D · EC · E · NC · N</b> 을 눌러 켜고 끕니다.',
         '<b>DC·EC·NC</b> 를 켜면 그 시간대에 <b>차지</b>로 뽑힐 수 있습니다.',
         '오른쪽 <b>주지 않을 방</b>의 ＋ 를 눌러 격리방·중증방 등을 고릅니다.'],
@@ -4516,7 +4909,8 @@ const HELP=[
  steps:['<b>백업</b>: ⚙ 관리 &gt; 데이터 보관 &gt; [백업 내려받기]로 언제든 사본을 받아 둘 수 있습니다. 근무표를 새로 넣은 뒤처럼 한 주에 한 번이면 충분합니다.',
         '<b>되살리기</b>: [백업 불러오기]로 백업 파일을 고르거나, 백업 파일을 이 창에 끌어다 놓으세요. 지금 내용은 사라지므로 확인창이 한 번 뜹니다.',
         '<b>컴퓨터를 바꿀 때</b>: 옛 컴퓨터에서 백업을 내려받아 새 컴퓨터로 옮긴 뒤, 새 컴퓨터에서 [처음 시작]으로 파일을 만들고 [백업 불러오기]. 데이터 파일(assign-data.js)을 그대로 복사해 프로그램 옆에 두어도 됩니다.'],
- tips:['저장은 임시 파일에 쓴 뒤 바꿔치기 방식이라, 저장 도중 전원이 나가도 원본이 깨지지 않습니다.',
+ tips:['<b>이전 상태로 되돌리기</b>: 새 근무표 넣기·백업 불러오기·간호사 삭제·병동 바꾸기 직전의 상태를 파일 안에 최근 3개까지 남겨 둡니다. 창을 닫은 뒤라도 ⚙ 관리 &gt; 데이터 보관에서 [이 상태로]를 누르면 돌아갑니다.',
+       '저장은 임시 파일에 쓴 뒤 바꿔치기 방식이라, 저장 도중 전원이 나가도 원본이 깨지지 않습니다.',
        '같은 파일을 창 두 개에서 함께 고치면 나중 저장 때 <b>덮어쓸지 / 내 것을 백업으로 받을지</b> 물어봅니다.']},
 {cat:'그 밖에',id:'theme',title:'화면 밝기 (다크 모드)',
  lead:'오른쪽 위 ◐ 버튼으로 <b>자동 → 다크 → 라이트</b> 순서로 바뀝니다.',
@@ -4735,18 +5129,19 @@ function onboardItems(){
   const fileOk=['native','file'].includes(L.kind);
   const fileTxt=(L.kind==='native'||L.kind==='file')?fileLocPath():L.kind==='sidecar'?'읽기 전용 — 수정하려면 [저장 연결]':'아직 없음';
   const ward=store.ward||wardOfRooms(store.rooms||[]); const wardOk=!!store.wardPicked&&!!ward;
-  const schemeOk=[5,4,3,2].every(c=>{ const sc=(store.schemes||{})[c]||{}; const ls=Object.keys(sc); return ls.length>0&&ls.every(l=>(sc[l]||[]).length>0); });
-  const chg={D:0,E:0,N:0}; for(const n of store.order){ const c=capsOf(n); if(c.includes('DC')) chg.D++; if(c.includes('EC')) chg.E++; if(c.includes('NC')) chg.N++; }
-  const chgOk=store.order.length>0&&chg.D>0&&chg.E>0&&chg.N>0;
+  const schemeOk=[5,4,3,2].every(c=>!presetBad(presetsOf(c)[0]));
+  const chg={D:0,E:0,N:0}; for(const n of store.order){ if(store.hidden&&store.hidden[n]) continue; const c=capsOf(n); if(c.includes('DC')) chg.D++; if(c.includes('EC')) chg.E++; if(c.includes('NC')) chg.N++; }
+  const active=store.order.filter(n=>!(store.hidden&&store.hidden[n])).length;
+  const chgOk=active>0&&chg.D>0&&chg.E>0&&chg.N>0;
   let wkOk=false;
   for(let k=0;k<7&&!wkOk;k++){ const d=new Date(wkSunday); d.setDate(wkSunday.getDate()+k); const iso=isoOfD(d);
     for(const n of store.order){ if((store.cells[n]||{})[iso]){ wkOk=true; break; } } }
   let printed=false; try{ printed=!!localStorage.getItem('assignPrinted'); }catch(e){}
   return [
     {id:'file',ok:fileOk,lb:'데이터 파일',d:fileTxt,go:L.kind==='sidecar'?"connectSave()":"show('start')",goT:L.kind==='sidecar'?'저장 연결':'파일 열기',tour:'open'},
-    {id:'ward',ok:wardOk,lb:'우리 병동',d:wardOk?`${ward}병동 · 병실 ${(store.rooms||[]).length}개`:`병동을 고르면 병실 14개가 채워집니다${ward?` (지금은 기본값 ${ward}병동)`:''}`,go:"show('admin');pickAdmin('rooms')",goT:'병동 고르기',tour:'roomlist'},
-    {id:'scheme',ok:schemeOk,lb:'방 구성',d:schemeOk?'5·4·3·2인 근무 모두 채워짐':'비어 있는 인원수가 있습니다 — 그 인원인 날엔 방이 안 나옵니다',go:"show('admin');pickAdmin('schemes')",goT:'방 구성',tour:'scheme'},
-    {id:'charge',ok:chgOk,lb:'간호사·차지',d:store.order.length?`간호사 ${store.order.length}명 · 차지 가능 D ${chg.D}·E ${chg.E}·N ${chg.N}명`:'명부가 비어 있습니다 — 근무표를 넣으면 채워집니다',go:"show('admin');pickAdmin('caps')",goT:'간호사 관리',tour:'nurse'},
+    {id:'ward',ok:wardOk,lb:'우리 병동',d:wardOk?`${ward}병동 · 병실 ${(store.rooms||[]).length}개${store.has13?'':' (13호 없음)'}`:`병동을 고르면 병실 14개가 채워집니다${ward?` (지금은 기본값 ${ward}병동)`:''}`,go:"show('admin');pickAdmin('rooms')",goT:'병동 고르기',tour:'roomlist'},
+    {id:'scheme',ok:schemeOk,lb:'방 구성',d:schemeOk?'5·4·3·2인 근무 모두 채워짐':'비어 있거나 빠진·겹친 방이 있습니다 — 그 인원인 날엔 방이 어긋납니다',go:"show('admin');pickAdmin('schemes')",goT:'방 구성',tour:'scheme'},
+    {id:'charge',ok:chgOk,lb:'간호사·차지',d:active?`간호사 ${active}명 · 차지 가능 D ${chg.D}·E ${chg.E}·N ${chg.N}명`:'명부가 비어 있습니다 — 근무표를 넣으면 채워집니다',go:"show('admin');pickAdmin('caps')",goT:'간호사 관리',tour:'nurse'},
     {id:'week',ok:wkOk,lb:'이번 주 근무표',d:wkOk?'이번 주 근무가 들어 있습니다':'엑셀에서 긁어 붙여넣으세요',go:"show('paste')",goT:'새 근무표 넣기',tour:'paste'},
     {id:'print',ok:printed,lb:'인쇄',d:printed?'인쇄해 봤습니다':'배정표 화면 [인쇄] → A4 한 장',go:"printWeek(false)",goT:'인쇄',tour:'print'},
   ];
@@ -4836,12 +5231,17 @@ function hideIntro(){
 document.addEventListener('keydown',e=>{
   if(tour){ if(e.key==='Escape'){ e.preventDefault(); endTour(); } else if(e.key==='ArrowRight'||e.key==='Enter'){ e.preventDefault(); tourNext(); }
             else if(e.key==='ArrowLeft'){ e.preventDefault(); tourPrev(); } return; }
+  if(_modal){ if(e.key==='Escape'){ e.preventDefault(); closeModal(null); } return; }
   if(e.key==='F1'){ e.preventDefault(); $('#helpWrap').classList.contains('on')?closeHelp():openHelp(); return; }
   if(e.key==='Escape'){ if($('#helpWrap').classList.contains('on')) closeHelp();
     else if($('#intro').classList.contains('on')) hideIntro();
     else { closePick(); closeRoomPick(); } return; }
-  // 배정표 화면 되돌리기 (고치기 화면은 그리드 키 처리기가 맡는다)
-  if(curScr==='week'&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); undoAny(); }
+  // 배정표 화면 되돌리기 (고치기 화면은 그리드 키 처리기가 맡는다) · ←→ 로 주 이동
+  if(curScr==='week'&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); undoAny(); return; }
+  if(curScr==='week'&&!(e.ctrlKey||e.metaKey||e.altKey)&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
+    const t=e.target; if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if($('#pick').style.display==='block'||$('#rpick').style.display==='block') return;
+    e.preventDefault(); moveWeek(e.key==='ArrowLeft'?-1:1); }
 });
 $('#helpWrap').addEventListener('mousedown',e=>{ if(e.target.id==='helpWrap') closeHelp(); });
 
