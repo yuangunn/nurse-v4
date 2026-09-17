@@ -516,11 +516,11 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 - 인트라넷용 ①: `standalone/assign.html` — 단일 파일 통합본(외부 의존 0, Chrome/Edge 103+).
   엑셀식 편집 그리드(붙여넣기·근무만 붙여넣기·모르는 근무 매핑·범위선택·파일 DnD·CP949 폴백),
   옆 폴더 `assign-data.js/json` 자동 열림(여러 개면 선택), 전월 어싸인 자동 이월,
-  주간 배정표 xlsx 내보내기(순수 JS zip 패치) + HTML 인쇄, 다크 모드, 도움말(실제 화면 GIF).
+  주간 배정표 xlsx 내보내기(순수 JS zip 패치) + HTML 인쇄, 다크 모드, 도움말(그림 없이 **실제 화면 투어**).
   **되돌리기는 화면 공용** (`undoAny`) — 배정표 화면의 근무 바꾸기·어싸인 교체·교육 입력·
   붙여넣기 확정도 `Ctrl+Z` 또는 **파란 알림 클릭**으로 되돌아간다. 파괴적 동작에는 반드시
   `snapshot()` 을 먼저 찍을 것(찍지 않으면 영구 손실). **기준 해상도는 1920×1080**(사용자
-  지정, 2026-09-16) — 검증 스크린샷·도움말 그림·레이아웃 판단은 이 크기로 한다. 툴바 버튼을 늘릴 땐
+  지정, 2026-09-16) — 검증 스크린샷·레이아웃 판단은 이 크기로 한다. 툴바 버튼을 늘릴 땐
   1920 폭에서 한 줄인지 확인(좁은 화면에선 두 줄로 접혀 N 구역이 잘린다).
   **화면 날짜는 전부 두 자리** (`fmtMD` = `mm/dd`) — 양식 xlsx 의 날짜 서식이
   `mm"월" dd"일"` 이라 거기에 맞춘 것. 새 날짜 표시를 넣을 때도 `fmtMD` 를 쓸 것.
@@ -568,7 +568,19 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   SecurityError 라 스크래치 폴더를 `http://127.0.0.1` 로 띄워 검사한다(스크래치 `test-save-connect.mjs`: 새 파일→자동
   저장→새로고침 0클릭 재연결→충돌 보류/덮어쓰기/내 rev 이어쓰기→파일 사라짐 보류·복구, 사이드카 읽기 전용→저장 연결→
   폴더 확인, exe 경로. 가짜 `chrome.webview` 로 네이티브 분기까지).
-  동기화 `node scripts/build-assign-standalone.mjs` (코어 + 양식 + 폰트 + 도움말 그림 + 버전 주입)
+  **온보딩·도움말은 그림 없이 실제 화면으로** (2026-09-17, 결정: GIF 파이프라인 폐기): ① 투어 엔진 `startTour(steps)` —
+  가리개(`#tourShield`) + 구멍(`#tourHole`, box-shadow 스포트라이트) + 말풍선(`#tourBox`), 단계 `{sel|el(), title, text,
+  before(), after()}`, Esc/←→, 가리개가 클릭을 막아 '보여 주기'이지 '따라 하기'가 아니다(상태 안 흐트러짐). 도움말 주제별
+  투어는 `TOURS[id]`(`needData` 면 근무표 있어야 열림, `cleanup` 으로 픽커·미리보기 정리·배정표 복귀), 도움말 문서의
+  [▶ 화면에서 보여 주기]=`startTopicTour(id)`, 주제의 `tour:` 로 다른 투어를 빌릴 수 있다(배정표 보는 법 → `look`).
+  붙여넣기 투어는 예시 표를 `ingestGrid` 로 실제로 읽어 미리보기를 보여 주고 `resetPaste()` 로 치운다(저장 안 됨).
+  ② 시작 안내 체크리스트 `#onboard`(배정표 화면 위): `onboardItems()` 가 데이터 파일·병동(`store.wardPicked` — 기본값
+  101 은 안 고른 것)·방 구성·차지 가능자(D/E/N 각 1명 이상)·이번 주 근무·인쇄(`assignPrinted`)를 실제 상태로 ✓/○,
+  [하기]=이동·[보여 주기]=투어, 다 되면 사라지고 [숨기기]는 `assignOnboardHidden`(도움말 '시작 안내'에서 복귀).
+  `show()`·`touch()`·`setFileLoc()` 이 다시 그린다. ③ 엑셀 복사 범위는 그림 대신 HTML 모형 표 `xlMock('all'|'cells')`.
+  이유: GIF 는 화면이 바뀔 때마다 거짓말이 되고(이 세션에서만 헤더·간호사 관리·병실 패널이 바뀜) 0.9MB 를 먹었다 —
+  투어는 지금 화면의 진짜 버튼을 가리키고 자산 0바이트. `standalone/help/`·`scripts/make-help-media.py` 는 삭제.
+  동기화 `node scripts/build-assign-standalone.mjs` (코어 + 양식 + 폰트 + 버전 주입)
   — CI(`test.yml`)가 재빌드해 버전 줄 외 diff가 있으면 실패시키므로 `assign.html` 수정 후 반드시 실행.
 - 인트라넷용 ②: `standalone/app/` — 같은 화면을 담은 Windows 단일 exe (WebView2, 127.0.0.1 안 씀).
   파일 저장 권한 확인 없이 바로 저장. 빌드 `standalone/app/build.cmd`
