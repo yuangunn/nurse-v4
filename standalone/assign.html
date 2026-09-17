@@ -506,7 +506,7 @@
   <div class="startCol">
     <div>
       <div class="startTitle">어싸인 배정표</div>
-      <div class="startSub">이 컴퓨터의 데이터 파일을 열면 바로 이번 주 배정표가 나옵니다.</div>
+      <div class="startSub">이 화면이 나온 건 아직 우리 병동 파일을 만들지 않았거나, 파일이 이 프로그램 옆에 없기 때문입니다.</div>
     </div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <button id="btnResume" class="startBtn resume" style="display:none">
@@ -516,29 +516,23 @@
         </span>
         <span style="font-size:16px;color:var(--on-accent-faint)">→</span>
       </button>
-      <button id="btnOpenFile" class="startBtn open">
-        <span style="font-size:15px;font-weight:700;letter-spacing:-0.01em;flex:1">데이터 파일 열기</span>
-        <span class="sub2" style="font-size:12px;font-weight:600;color:var(--ink-3)">이 컴퓨터의 데이터 파일 고르기</span>
-      </button>
       <button id="btnNewFile" class="startBtn plain">
         <span style="font-size:15px;font-weight:700;letter-spacing:-0.01em;flex:1">처음 시작</span>
-        <span style="font-size:12px;font-weight:600;color:var(--ink-3)">이 병동의 데이터 파일 만들기 (한 번만)</span>
+        <span class="sub2" style="font-size:12px;font-weight:600;color:var(--ink-3)">우리 병동 파일을 만듭니다 (한 번만)</span>
       </button>
-      <button id="btnLocal" class="startBtn plain" onclick="startLocal()">
-        <span id="btnLocalT" style="font-size:15px;font-weight:700;letter-spacing:-0.01em;flex:1">파일 없이 시작</span>
-        <span id="btnLocalS" style="font-size:12px;font-weight:600;color:var(--ink-3)">브라우저 안에 보관 — 파일·권한창 없음</span>
+      <button id="btnOpenFile" class="startBtn plain">
+        <span style="font-size:15px;font-weight:700;letter-spacing:-0.01em;flex:1">데이터 파일 열기</span>
+        <span class="sub2" style="font-size:12px;font-weight:600;color:var(--ink-3)">이미 만든 파일이 다른 곳에 있으면 골라서 열기</span>
       </button>
     </div>
     <div id="filePickCard"></div>
     <div class="startSteps">
-      <div class="row"><span class="n">1</span><span>각 병동은 <b>컴퓨터 한 대에 데이터 파일 하나</b>입니다. 처음이라면 <b>처음 시작</b>으로 만드세요 —
-        이름은 <b>assign-data.js</b> 그대로, 위치는 <b>이 파일과 같은 폴더</b>.</span></div>
-      <div class="row"><span class="n">2</span><span>그렇게 두면 다음부터는 켜자마자 배정표가 바로 뜹니다. 고칠 때 브라우저가
-        "파일을 볼 수 있도록 허용하시겠습니까?" 라고 물으면 <b>허용</b>을 누르세요.</span></div>
-      <div class="row"><span class="n">3</span><span><b>백업</b>은 ⚙ 관리 &gt; 데이터 보관 &gt; [백업 내려받기]로 사본을 받아 두고,
-        되살릴 때는 [백업 불러오기] 또는 백업 파일을 이 창에 끌어다 놓으세요.</span></div>
-      <div class="row"><span class="n">＊</span><span>파일 없이 <b>브라우저 안</b>에만 보관할 수도 있습니다(권한창 없음). 브라우저 데이터를 지우면 함께 사라지니
-        백업을 가끔 받아 두세요. ⚙ 관리 &gt; 데이터 보관에서 언제든 데이터 파일로 옮길 수 있습니다.</span></div>
+      <div class="row"><span class="n">1</span><span>처음 한 번만 <b>[처음 시작]</b>을 눌러 파일을 만드세요. 이름은 <b>assign-data.js</b> 그대로 두고,
+        이 프로그램(assign.html)과 <b>같은 폴더</b>에 저장하면 됩니다.</span></div>
+      <div class="row"><span class="n">2</span><span>다음부터는 켜자마자 배정표가 뜹니다. 고칠 때 브라우저가 "파일을 볼 수 있도록 허용하시겠습니까?" 라고
+        물으면 <b>[허용]</b>을 누르세요. 그 뒤로는 고치는 즉시 저장됩니다.</span></div>
+      <div class="row"><span class="n">3</span><span>가끔 ⚙ 관리 &gt; 데이터 보관 &gt; <b>[백업 내려받기]</b>로 사본을 받아 두세요.
+        컴퓨터를 바꾸거나 파일에 문제가 생기면 <b>[백업 불러오기]</b>로 되살립니다.</span></div>
     </div>
     <div class="startBand"><span style="font-weight:800">＋</span><span>데이터 파일이나 백업 파일(.js/.json)을 이 창에 끌어다 놓아도 열립니다.</span></div>
     <div id="startWarn" class="startBand warnBand" style="display:none"></div>
@@ -1107,7 +1101,7 @@ function toast(msg,ms=2800,undoable=false){ const t=$('#toast');
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260917f'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260917g'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1244,7 +1238,7 @@ async function useHandle(h,{create=false}={}){
     if(!j||j.app!=='assign') throw new Error('어싸인 데이터 파일이 아닙니다');
     store={...emptyStore(),...j}; migrateStore();
   } else store=emptyStore();          // 새 파일 또는 진짜 빈(0바이트) 파일만
-  fileHandle=h; window.__memoryMode=false; window.__autoRead=false; window.__localMode=false;
+  fileHandle=h; window.__memoryMode=false; window.__autoRead=false;
   $('#btnConnect').style.display='none';
   try{ localStorage.setItem('assignMode','file'); }catch(e){}
   try{ await idbSet('handle',h); }catch(e){}
@@ -1264,7 +1258,7 @@ function saveMsg(t){ const el=$('#saveDot'); el.textContent=t;
  * 준다)와 자동 열림 파일(이 HTML 옆에서 <script src> 로 읽었으니 HTML 주소의 폴더 + 이름).
  * 파일 핸들은 브라우저 보안상 폴더를 알려주지 않는다 — 대신 핸들 파일의 내용이 HTML 옆
  * 같은 이름 파일과 일치(rev·saved)하면 그 폴더로 보고, 아니면 이름만 보여 준다(툴팁에 이유). */
-let fileLoc={kind:'none'};   // {kind:'native'|'sidecar'|'file'|'local'|'ro'|'none', name, dir, writable, verified}
+let fileLoc={kind:'none'};   // {kind:'native'|'sidecar'|'file'|'ro'|'none', name, dir, writable, verified}
 function htmlDirPath(href){
   try{
     const u=new URL(href||location.href);
@@ -1286,9 +1280,7 @@ function renderFileInfo(){
   const el=$('#fileInfo'); if(!el) return;
   const L=fileLoc||{kind:'none'};
   let ico='💾', cls='', dir='', name='', tail='', title='';
-  if(L.kind==='local'){ ico='🖥'; name='브라우저 안에 보관'; tail='파일 없음';
-    title='이 컴퓨터의 브라우저 저장소에 보관합니다 — 파일이 없습니다. 브라우저 데이터를 지우면 함께 사라지니 백업을 가끔 내려받으세요. 관리 > 데이터 보관에서 데이터 파일로 옮길 수 있습니다'; }
-  else if(L.kind==='none'){ ico='⚠'; cls='off'; name='저장 파일 없음'; tail='저장되지 않음';
+  if(L.kind==='none'){ ico='⚠'; cls='off'; name='저장 파일 없음'; tail='저장되지 않음';
     title='연결된 데이터 파일이 없습니다 — 시작 화면에서 데이터 파일을 열거나 만드세요'; }
   else if(L.kind==='ro'){ ico='⚠'; cls='warn'; name=L.name||''; tail='읽기 전용 — 저장 안 됨';
     title='이 브라우저는 파일 저장을 지원하지 않습니다 — Edge 또는 Chrome(103+)에서 여세요'; }
@@ -1300,7 +1292,7 @@ function renderFileInfo(){
     else title='저장 연결됨 — 고친 내용이 이 파일에 자동 저장됩니다'+(dir?'':'. 브라우저 보안 정책상 폴더 경로는 보여 주지 못합니다 (파일을 이 HTML 옆 폴더에 두면 경로가 표시됩니다)');
     title+='\n클릭 = 경로 복사';
   }
-  const path=(L.kind==='local'||L.kind==='none')?'':(dir?joinPath(dir,name):name);   // 라벨은 경로가 아니다 — 복사 대상 아님
+  const path=(L.kind==='none')?'':(dir?joinPath(dir,name):name);   // 라벨은 경로가 아니다 — 복사 대상 아님
   el.className=cls; el.title=(path?path+'\n':'')+title; el.dataset.path=path||'';
   el.innerHTML=`<span class="fiIco">${ico}</span>`+(dir?`<span class="fiDir">${esc(dir)}</span>`:'')+
     `<span class="fiName">${esc(name)}</span>`+(tail?`<span class="fiTail">· ${esc(tail)}</span>`:'');
@@ -1354,7 +1346,6 @@ function writeStore(opts={}){
 async function _writeStore({interactive=true}={}){
   store.by=CLIENT_ID;
   if(NATIVE&&nativeInfo) return writeStoreNative({interactive});
-  if(window.__localMode) return writeStoreLocal();
   if(!fileHandle){ dirty=false;
     saveMsg(window.__autoRead ? '⚠ 저장 연결 안 됨 — 수정하려면 [저장 연결]'
           : window.__memoryMode ? '⚠ 파일 미연결 — 저장되지 않음' : '');
@@ -1401,11 +1392,11 @@ function touch(){
   clearTimeout(saveT);
   saveT=setTimeout(()=>writeStore().catch(e=>{saveMsg('⚠ 저장 실패');toast('⚠ 저장 실패: '+e.message,4200)}),700); }
 // 창 닫기/전환 시 대기분 즉시 저장 시도 (자동 경로라 충돌 확인창 없이 보류만)
-function flushSave(){ if(dirty&&(fileHandle||nativeInfo||window.__localMode)){ clearTimeout(saveT); writeStore({interactive:false}).catch(()=>{}); } }
+function flushSave(){ if(dirty&&(fileHandle||nativeInfo)){ clearTimeout(saveT); writeStore({interactive:false}).catch(()=>{}); } }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushSave(); });
 window.addEventListener('pagehide',flushSave);
 window.addEventListener('beforeunload',e=>{
-  if(dirty&&(fileHandle||nativeInfo||window.__localMode)){ flushSave(); e.preventDefault(); e.returnValue=''; }});
+  if(dirty&&(fileHandle||nativeInfo)){ flushSave(); e.preventDefault(); e.returnValue=''; }});
 
 /* 시작 화면 배선 — 폴더 연결 시 폴더 안 데이터 파일(.js/.json) 자동 감지 */
 function startWarnMsg(t){ const el=$('#startWarn'); el.textContent=t; el.style.display=t?'flex':'none'; }
@@ -1499,7 +1490,7 @@ async function tryNative(){
     const d=await nativeCall('load');
     if(d.data&&d.data.app==='assign'){ store={...emptyStore(),...d.data}; migrateStore(); }
     else store=emptyStore();
-    fileHandle=null; window.__memoryMode=false; window.__autoRead=false; window.__localMode=false;
+    fileHandle=null; window.__memoryMode=false; window.__autoRead=false;
     setFileLoc({kind:'native',name:p.file,dir:dirOfPath(p.path),writable:p.writable});
     saveMsg(''); afterLoad();
     return true;
@@ -1553,78 +1544,35 @@ async function nativePickData(){
     toast('데이터 파일을 바꿨습니다: '+r.file,3600);
   }catch(e){ toast('바꾸기 실패: '+e.message,4000); }
 }
-/* ── 이 컴퓨터 안에 보관 (브라우저 저장소) ──────────────────────────────
- * 파일도 권한창도 없다 — 이 컴퓨터의 브라우저 안(IndexedDB)에만 저장되므로
- * 브라우저 데이터를 지우면 함께 사라진다(백업 내려받기로 대비).
- * 브라우저는 자기 HTML 파일을 고쳐 쓸 수 없어서 'HTML 안에 보관'은 이 방식으로 구현한다.
- * 어느 쪽을 쓰는지는 localStorage assignMode('local'|'file') — 파일을 열면 file 로 바뀌므로
- * 켤 때 이 컴퓨터 안 데이터가 파일보다 먼저 뜨는 일이 없다. */
-const LOCAL_KEY='local';
-async function readLocalStore(){
+/* ── 예전 방식(브라우저 안 보관)의 잔재 처리 ──────────────────────────────
+ * 브라우저 안(IndexedDB) 보관 방식은 뺐다 — 데이터 파일 하나로만 간다(사용자 결정 2026-09-17).
+ * 그 방식으로 저장해 둔 내용이 남아 있는 컴퓨터를 위해, [처음 시작]으로 파일을 만들 때
+ * 옮겨 넣을지 한 번 묻고 옮긴 뒤 지운다. 읽기·지우기 외의 브라우저 안 저장은 더 이상 없다. */
+async function readOldLocalStore(){
   let j=null;
-  try{ j=await idbGet(LOCAL_KEY); }catch(e){}
+  try{ j=await idbGet('local'); }catch(e){}
   if(!j){ try{ j=JSON.parse(localStorage.getItem('assignLocalStore')||'null'); }catch(e){} }
   return j&&j.app==='assign'?j:null;
 }
-async function writeStoreLocal(){
-  store.rev=(store.rev||0)+1; store.saved=new Date().toISOString();
-  const j=JSON.parse(JSON.stringify(store));
-  await idbSet(LOCAL_KEY,j);
-  try{ localStorage.setItem('assignLocalStore',JSON.stringify(j)); }catch(e){}   // 예비 사본
-  dirty=false; saveMsg('저장됨');
-  setTimeout(()=>{if(!dirty)saveMsg('')},2500);
+async function clearOldLocalStore(){
+  try{ await idbDel('local'); }catch(e){}
+  try{ localStorage.removeItem('assignLocalStore'); localStorage.removeItem('assignMode'); }catch(e){}
 }
-function enterLocalMode(){
-  fileHandle=null; window.__memoryMode=false; window.__autoRead=false; window.__localMode=true;
-  overwriteOk=false;
-  try{ localStorage.setItem('assignMode','local'); }catch(e){}
-  setFileLoc({kind:'local'});
-  $('#btnConnect').style.display='none'; saveMsg('');
-}
-async function tryLocal(){
-  let mode=''; try{ mode=localStorage.getItem('assignMode')||''; }catch(e){}
-  if(mode!=='local') return false;
-  const j=await readLocalStore(); if(!j) return false;
-  store={...emptyStore(),...j}; migrateStore();
-  enterLocalMode(); afterLoad(); return true;
-}
-/* 시작 화면 — 이 컴퓨터 안 데이터가 있으면 그걸 열고, 없으면 빈 데이터로 시작 */
-async function startLocal(){
-  const j=await readLocalStore();
-  if(j){ store={...emptyStore(),...j}; migrateStore(); enterLocalMode(); afterLoad();
-    toast('브라우저 안에 보관한 데이터를 열었습니다',3200); return; }
-  store=emptyStore(); enterLocalMode(); await writeStoreLocal(); afterLoad();
-  toast('파일 없이 브라우저 안에 보관합니다 — 권한창 없이 바로 저장됩니다',4200);
-}
-/* 파일(또는 자동 읽기) → 이 컴퓨터 안으로. 파일은 그대로 두고 연결만 끊는다 */
-async function moveToLocal(){
-  if(await readLocalStore()&&!confirm('브라우저 안에 보관 중인 데이터가 이미 있습니다. 지금 내용으로 덮어쓸까요?')) return;
-  clearTimeout(saveT);
-  if(dirty&&fileHandle){ try{ await writeStore({interactive:false}); }catch(e){} }
-  try{ await idbDel('handle'); await idbDel('dir'); }catch(e){}
-  enterLocalMode(); await writeStoreLocal(); recompute(); renderAdmin();
-  toast('이제 파일 없이 브라우저 안에 보관합니다 — 파일과는 더 이상 연결되지 않습니다',4200);
-}
-/* 브라우저 안 → 데이터 파일(새로 만들기). 옮긴 뒤 브라우저 안 사본은 지운다 */
-async function moveToFile(){
-  try{
-    const h=await window.showSaveFilePicker({suggestedName:SIDE_NAME,
-      types:[{description:'어싸인 데이터 (자동 열림)',accept:{'text/javascript':['.js']}},
-             {description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
-    const keep=JSON.parse(JSON.stringify(store));
-    window.__localMode=false;
-    await useHandle(h,{create:true});               // 빈 파일 만들기 + 핸들 연결
-    store={...emptyStore(),...keep}; dirty=true; await writeStore();
-    try{ await idbDel(LOCAL_KEY); }catch(e){} try{ localStorage.removeItem('assignLocalStore'); }catch(e){}
-    recompute(); if(curScr==='admin') renderAdmin(); else if(curScr==='week') renderWeek();
-    toast('데이터 파일로 옮겼습니다 — 이 파일 옆에 두었다면 다음부터 자동으로 열립니다',4600);
-  }catch(e){ if(e.name!=='AbortError') toast('옮기기 실패: '+e.message,4000); }
+/* 새 파일을 만든 직후 호출 — 옛 내용이 있으면 물어보고 새 파일에 넣는다 */
+async function migrateOldLocalData(){
+  const old=await readOldLocalStore(); if(!old) return false;
+  const n=(old.order||[]).length, when=old.saved?fmtWhen(Date.parse(old.saved)):'';
+  if(!confirm(`이 컴퓨터의 브라우저 안에 예전 방식으로 저장된 내용이 있습니다 (간호사 ${n}명${when?' · '+when:''}).\n새 파일에 옮겨 넣을까요?`)) return false;
+  store={...emptyStore(),...old,rev:store.rev||0}; migrateStore();
+  dirty=true; await writeStore(); await clearOldLocalStore();
+  recompute(); if(curScr==='week') renderWeek();
+  toast('예전에 저장한 내용을 새 파일에 옮겨 넣었습니다',3600);
+  return true;
 }
 /* 자동 열림: 같은 폴더의 assign-data.js 를 권한창 없이 읽어 바로 배정표를 띄운다.
  * 쓰기 핸들은 없으므로 '저장 연결'을 누르기 전까지는 읽기 전용. */
 async function tryAutoOpen(){
   if(await tryNative()) return true;               // 네이티브 창(exe) — 권한창·폴더 선택 없음
-  if(await tryLocal()) return true;                // 이 컴퓨터 안에 보관 중 — 파일·권한창 없음
   if(await silentReattach()) return true;
   const found=await scanSidecars();
   if(!found.length){
@@ -1640,7 +1588,7 @@ async function tryAutoOpen(){
 function openSidecar(entry){
   if(!adoptStore(entry.data)) return false;
   fileHandle=null; window.__memoryMode=true; window.__autoRead=true; window.__autoReadName=entry.name;
-  window.__localMode=false; window.__autoEdits=false;
+  window.__autoEdits=false;
   try{ localStorage.setItem('assignMode','file'); }catch(e){}
   setFileLoc({kind:'sidecar',name:entry.name,dir:htmlDirPath()});
   saveMsg('⚠ 저장 연결 안 됨 — 수정하려면 [저장 연결]');
@@ -1681,7 +1629,7 @@ async function reattachHandle(h){
     store={...emptyStore(),...j}; migrateStore(); reloaded=true;
     if(edited) toast('파일에 더 새로운 내용이 있어 그것을 불러왔습니다 — 방금 고친 것은 다시 해주세요',5200);
   }
-  fileHandle=h; window.__memoryMode=false; window.__autoRead=false; window.__autoEdits=false; window.__localMode=false;
+  fileHandle=h; window.__memoryMode=false; window.__autoRead=false; window.__autoEdits=false;
   overwriteOk=false;
   try{ localStorage.setItem('assignMode','file'); }catch(e){}
   try{ await idbSet('handle',h); }catch(e){}
@@ -1732,11 +1680,9 @@ function renderSign(){
 async function initStart(){
   renderSign();
   if(!window.showOpenFilePicker){
-    startWarnMsg('이 브라우저는 파일 저장을 지원하지 않습니다 — Edge 또는 Chrome(103+)으로 열거나, [파일 없이 시작]을 쓰세요.');
+    startWarnMsg('이 브라우저는 파일 저장을 지원하지 않습니다 — Edge 또는 Chrome(103+)으로 열어 주세요.');
   }
-  try{ const lj=await readLocalStore();               // 이 컴퓨터 안 데이터가 있으면 '이어서'로
-    if(lj){ $('#btnLocalT').textContent='브라우저 안 데이터 이어서';
-      $('#btnLocalS').textContent=`간호사 ${(lj.order||[]).length}명`+(lj.saved?' · '+fmtWhen(Date.parse(lj.saved)):'')+' — 파일·권한창 없음'; } }catch(e){}
+  try{ if(await readOldLocalStore()) startWarnMsg('예전 방식(브라우저 안 보관)으로 저장된 내용이 이 컴퓨터에 남아 있습니다 — [처음 시작]으로 파일을 만들면 옮겨 넣을지 물어봅니다.'); }catch(e){}
   let hasResume=false;
   try{
     const dir=await idbGet('dir'), h=await idbGet('handle');
@@ -1750,7 +1696,7 @@ async function initStart(){
         .catch(e=>startWarnMsg('열기 실패: '+e.message));
     }
   }catch(e){}
-  if(!hasResume) $('#btnOpenFile').classList.add('promoted');
+  if(!hasResume) $('#btnNewFile').classList.add('promoted');
   $('#btnOpenFile').onclick=async()=>{
     startWarnMsg('');
     try{
@@ -1765,7 +1711,8 @@ async function initStart(){
       await useHandle(h,{create:true});
       toast(h.name===SIDE_NAME
         ? '만들었습니다 — 이 폴더에서는 다음부터 켜자마자 배정표가 뜹니다'
-        : '새 데이터 파일을 만들었습니다 (이름을 '+SIDE_NAME+' 로 하면 다음부터 자동으로 열립니다)',5200); }
+        : '새 데이터 파일을 만들었습니다 (이름을 '+SIDE_NAME+' 로 하면 다음부터 자동으로 열립니다)',5200);
+      try{ await migrateOldLocalData(); }catch(e){} }
     catch(e){ if(e.name!=='AbortError') toast('만들기 실패: '+e.message,4000); } };
 }
 function afterLoad(){ recompute(); show('week'); }
@@ -1775,7 +1722,7 @@ function afterLoad(){ recompute(); show('week'); }
  * ════════════════════════════════════════════════════════════════ */
 const SCREENS={start:'scrStart',week:'scrWeek',paste:'scrPaste',edit:'scrEdit',admin:'scrAdmin'};
 let curScr='start';
-const connected=()=>!!fileHandle||!!nativeInfo||!!window.__memoryMode||!!window.__localMode;
+const connected=()=>!!fileHandle||!!nativeInfo||!!window.__memoryMode;
 function show(name){
   if(name!=='start'&&!connected()){ name='start'; }
   curScr=name;
@@ -2990,7 +2937,7 @@ function adminBadge(id){
     case 'rules': return ['keepSameShift','keepAcrossShift','keepAfterOff','bounceAfterOff']
       .filter(k=>store.rules[k]).length+'켬';
     case 'manual': { const n=Object.keys(store.ovr).length+Object.keys(store.roomOv).length; return n?n+'건':''; }
-    case 'data': return window.__localMode?'브라우저 안':nativeInfo?'exe':fileHandle?'파일':window.__autoRead?'읽기만':'';
+    case 'data': return nativeInfo?'exe':fileHandle?'파일':window.__autoRead?'읽기만':'';
     default: return '';
   }
 }
@@ -3185,34 +3132,23 @@ const ADMIN_PANELS={
           버전 번호가 곧 만든 날짜입니다 — 병동 PC마다 파일이 다를 수 있으니 이 번호로 최신본인지 확인하세요.</div>`;
     }},
   data:{title:'데이터 보관',
-    desc:'고치는 즉시 이 컴퓨터의 데이터 파일 하나에 저장됩니다. 여기서는 <b>백업을 내려받고</b>, <b>백업에서 되살리고</b>, 파일 위치를 바꿉니다. 파일 없이 <b>브라우저 안</b>에만 보관할 수도 있습니다(권한창 없음).',
+    desc:'고친 내용은 그때그때 데이터 파일에 저장됩니다. 여기서는 <b>백업을 내려받고</b>, <b>백업에서 되살리고</b>, 파일 위치를 바꿉니다.',
     body(){
-      if(window.__localMode) return `<div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="pri" onclick="downloadBackup()" title="지금 내용의 사본을 파일로 내려받습니다">백업 내려받기</button>
-        <button onclick="restoreBackup()" title="백업 파일을 골라 그 내용으로 되살립니다 — 지금 내용은 사라집니다">백업 불러오기</button>
-        <button onclick="moveToFile()" title="데이터 파일을 만들어 그 파일에 저장하도록 바꿉니다">데이터 파일로 옮기기 (새 파일 만들기)</button>
-        <button onclick="show('start')" title="시작 화면으로 돌아갑니다">시작 화면으로</button></div>
-        <div class="dim" id="dataInfo"></div>
-        <div class="dim" style="line-height:1.7">지금은 파일 없이 <b>이 컴퓨터의 브라우저 안</b>에 보관 중입니다.
-          브라우저의 사이트 데이터를 지우면 함께 사라지니 <b>백업 내려받기</b>를 가끔 해 두세요. 백업은 [백업 불러오기] 또는 이 창에 끌어다 놓으면 되살아납니다.</div>`;
       return `<div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="pri" onclick="downloadBackup()" title="지금 내용의 사본을 파일로 내려받습니다">백업 내려받기</button>
         <button onclick="restoreBackup()" title="백업 파일을 골라 그 내용으로 되살립니다 — 지금 데이터 파일에 저장됩니다">백업 불러오기</button>
         <button onclick="${NATIVE?'nativePickData()':'pickNewLocation()'}" title="지금 내용을 다른 이름·위치의 파일로 저장하고 그 파일에 이어서 저장합니다">${NATIVE?'다른 데이터 파일 고르기':'다른 파일로 저장 (위치 변경)'}</button>
         <button onclick="show('start')" title="다른 데이터 파일을 열거나 새로 만듭니다">다른 데이터 파일 열기</button>
-        <button onclick="reloadFromFile()" title="파일 내용을 다시 불러옵니다 (다른 창에서 고친 경우)">파일 다시 읽기</button>
-        ${NATIVE?'':'<button onclick="moveToLocal()" title="파일 없이 이 컴퓨터의 브라우저 안에 보관하도록 바꿉니다">파일 없이 브라우저 안에 보관하기</button>'}</div>
+        <button onclick="reloadFromFile()" title="파일 내용을 다시 불러옵니다 (다른 창에서 고친 경우)">파일 다시 읽기</button></div>
         <div class="dim" id="dataInfo"></div>
         <div class="dim" style="line-height:1.7">자동 열림: 데이터 파일 이름이 <b>${SIDE_NAME}</b> 이고
-          이 파일과 같은 폴더에 있으면, 켤 때 파일을 고르지 않아도 바로 배정표가 뜹니다 (읽기는 권한 없이 됩니다).<br>
-          브라우저는 닫았다 켜면 쓰기 권한을 잊습니다 — 다음에 고칠 때 <b>[허용]</b> 한 번만 누르면 같은 파일에 다시 이어집니다 (파일 창은 뜨지 않습니다).
-          매번 그것도 번거로우면 <b>파일 없이 브라우저 안에 보관하기</b>도 됩니다 — 대신 백업을 가끔 받아 두세요.</div>`; },
+          이 프로그램(assign.html)과 같은 폴더에 있으면, 켤 때 파일을 고르지 않아도 바로 배정표가 뜹니다.<br>
+          브라우저는 닫았다 켜면 쓰기 권한을 잊습니다 — 다음에 고칠 때 <b>[허용]</b> 한 번만 누르면 같은 파일에 다시 이어집니다 (파일 창은 뜨지 않습니다).</div>`; },
     after(){
       const dates=timelineRange();
       const span=(dates?`기록 범위 ${dates.min} ~ ${dates.max}`:'기록 없음')+` · 간호사 ${store.order.length}명`;
       if(nativeInfo) $('#dataInfo').innerHTML=`프로그램으로 열렸습니다 — 권한 확인 없이 바로 저장됩니다.<br>`+
         `데이터 파일: <b>${esc(nativeInfo.path||nativeInfo.file)}</b>`+(nativeInfo.writable?'':' <b style="color:var(--err)">(쓰기 불가 폴더)</b>');
-      else if(window.__localMode) $('#dataInfo').textContent='브라우저 안에 보관 (파일 없음) · '+span+(store.saved?' · 마지막 저장 '+fmtWhen(Date.parse(store.saved)):'');
       else $('#dataInfo').textContent=(fileHandle?'파일: '+fileLocPath()+' · ':window.__autoRead?'읽기만 (저장 연결 안 됨): '+fileLocPath()+' · ':'')+span;
     }},
 };
@@ -3513,15 +3449,14 @@ async function restoreBackup(file){
     if(!confirm(`${f.name} 의 내용으로 지금 데이터를 바꿀까요?\n(간호사 ${n}명${when?' · '+when+' 저장본':''})\n\n지금 내용은 사라집니다 — 필요하면 먼저 ⚙ 관리 > [백업 내려받기].`)) return false;
     const rev=Math.max(store.rev||0,j.rev||0);          // 파일 rev 보다 뒤로 가지 않게 — 자동 저장이 '다른 창이 먼저 저장' 으로 오해하지 않는다
     store={...emptyStore(),...j,rev}; migrateStore();
-    if(window.__localMode) await writeStoreLocal(); else touch();   // touch: 자동 저장 예약 (읽기 전용이면 저장 연결 안내)
+    touch();                                             // 자동 저장 예약 (읽기 전용이면 저장 연결 안내)
     afterLoad();
-    toast(f.name+' 의 내용을 불러왔습니다'+((fileHandle||window.__localMode||nativeInfo)?' — 지금 저장 위치에 저장됩니다':''),4200);
+    toast(f.name+' 의 내용을 불러왔습니다'+((fileHandle||nativeInfo)?' — 지금 데이터 파일에 저장됩니다':''),4200);
     return true;
   }catch(e){ if(e.name!=='AbortError') toast('불러오기 실패: '+e.message,4200); return false; }
 }
 /* 파일에서 다시 읽기 — 파일 내용을 다시 불러온다 (다른 창에서 고쳤을 때; 자동 열림 파일도 지원) */
 async function reloadFromFile(){
-  if(window.__localMode){ toast('파일 없이 브라우저 안에 보관 중이라 다시 읽을 파일이 없습니다'); return; }
   if(dirty&&!confirm('저장되지 않은 변경이 있습니다. 버리고 파일 내용을 다시 읽을까요?')) return;
   try{
     let j=null;
@@ -4289,18 +4224,16 @@ async function printWeek(wholeMonth){
  *   · 그림은 실제 화면을 녹화해 만든 것 — scripts/make-help-media.py
  * ════════════════════════════════════════════════════════════════ */
 const HELP=[
-{cat:'시작하기',id:'open',title:'켜기와 데이터 파일',
- lead:'각 병동은 <b>컴퓨터 한 대에 데이터 파일 하나</b>입니다. 데이터 파일이 이 파일(assign.html)과 <b>같은 폴더</b>에 <b>assign-data.js</b> 로 있으면 켜자마자 이번 주 배정표가 뜹니다.',
- steps:['처음이라면 시작 화면 [처음 시작]으로 데이터 파일을 만듭니다 — 이름은 assign-data.js 그대로, 위치는 이 파일 옆. 그 뒤로는 켤 때 아무것도 고르지 않아도 됩니다.',
-        '<b>수정</b>하려면 처음 한 번 [저장 연결]로 그 파일을 고르세요. 브라우저를 닫았다 켠 뒤에는 고칠 때 <b>[허용]</b> 한 번만 누르면 같은 파일에 다시 이어집니다 (파일 창은 안 뜹니다).',
-        '상단의 <b>파일 칩</b>이 지금 어느 파일에 저장되는지 항상 보여 줍니다 — 노랑이면 읽기 전용(저장 연결 필요), 빨강이면 미연결. 마우스를 올리면 전체 경로, 클릭하면 경로 복사.',
-        '파일 없이 <b>브라우저 안</b>에만 보관할 수도 있습니다: 시작 화면 [파일 없이 시작]. 권한창 없이 바로 저장되지만 브라우저 데이터를 지우면 함께 사라지니 백업을 가끔 받아 두세요.',
-        '두 방식은 ⚙ 관리 &gt; 데이터 보관에서 언제든 서로 옮길 수 있습니다.'],
+{cat:'시작하기',id:'open',title:'켜기와 저장',
+ lead:'배정표는 이 컴퓨터의 파일 하나(<b>assign-data.js</b>)에 저장됩니다. 이 파일이 프로그램(assign.html)과 <b>같은 폴더</b>에 있으면 켜자마자 이번 주 배정표가 뜹니다.',
+ steps:['처음 한 번만 시작 화면 [처음 시작]으로 파일을 만듭니다 — 이름은 assign-data.js 그대로, 위치는 프로그램과 같은 폴더. 그 뒤로는 켤 때 아무것도 고르지 않아도 됩니다.',
+        '<b>고치려면</b> 브라우저가 묻는 <b>[허용]</b>을 한 번 누르면 됩니다 (브라우저는 닫았다 켤 때마다 쓰기 권한을 잊습니다). 오른쪽 위에 [저장 연결]이 보이면 그걸 누르세요. 그 뒤로는 고치는 즉시 저장됩니다.',
+        '상단의 <b>파일 칩</b>이 지금 어느 파일에 저장되는지 항상 보여 줍니다 — 노랑이면 아직 읽기만 하는 상태, 빨강이면 파일이 없는 상태. 마우스를 올리면 전체 경로, 클릭하면 경로 복사.'],
  tips:['브라우저는 보안 규칙 때문에 파일에 쓰기 전에 사용자의 허락이 필요합니다 — 처음엔 파일 고르기, 그 뒤로는 [허용] 한 번입니다.',
-       '백업은 ⚙ 관리 &gt; 데이터 보관 &gt; [백업 내려받기]. 되살릴 때는 [백업 불러오기] 또는 백업 파일을 창에 끌어다 놓으세요.']},
+       '가끔 ⚙ 관리 &gt; 데이터 보관 &gt; [백업 내려받기]로 사본을 받아 두세요. 되살릴 때는 [백업 불러오기] 또는 백업 파일을 창에 끌어다 놓으면 됩니다.']},
 {cat:'시작하기',id:'first',title:'처음이라면 — 3단계',
  lead:'아무 것도 없는 상태에서 이번 주 배정표를 인쇄하기까지.',
- steps:['[처음 시작]으로 데이터 파일을 만듭니다. 이름은 <b>assign-data.js</b> 그대로 두고 이 파일과 같은 폴더에 저장하세요. (파일 없이 쓰려면 [파일 없이 시작]도 됩니다.)',
+ steps:['[처음 시작]으로 파일을 만듭니다. 이름은 <b>assign-data.js</b> 그대로 두고 이 프로그램과 같은 폴더에 저장하세요.',
         '[새 근무표 넣기] → 엑셀에서 근무표를 긁어 복사(<kbd>Ctrl+C</kbd>) → 이 창에서 <kbd>Ctrl+V</kbd> → 읽은 내용을 확인하고 [맞아요, 저장].',
         '[이번 주 인쇄]를 누르면 병실 배정표 양식 그대로 A4 한 장이 나옵니다.'],
  tips:['방 구성·필요 인원 같은 병동 설정은 ⚙ 관리에서 한 번만 맞춰 두면 됩니다.']},
@@ -4447,11 +4380,10 @@ const HELP=[
  tips:['구조가 다르면 {{이름}} {{방}} 같은 자리표시자를 꽂아 내려 주니, 엑셀에서 위치만 손봐 다시 올리면 됩니다.']},
 
 {cat:'그 밖에',id:'data',title:'저장과 백업',
- lead:'고치는 즉시 이 컴퓨터의 데이터 파일에 저장됩니다. 상단 파일 칩 옆에 <b>저장됨</b> 이 잠깐 떴다 사라지고, 칩에는 지금 저장되는 파일의 경로가 보입니다.',
+ lead:'고친 내용은 그때그때 데이터 파일에 저장됩니다. 상단 파일 칩 옆에 <b>저장됨</b> 이 잠깐 떴다 사라지고, 칩에는 지금 저장되는 파일의 경로가 보입니다.',
  steps:['<b>백업</b>: ⚙ 관리 &gt; 데이터 보관 &gt; [백업 내려받기]로 언제든 사본을 받아 둘 수 있습니다. 근무표를 새로 넣은 뒤처럼 한 주에 한 번이면 충분합니다.',
         '<b>되살리기</b>: [백업 불러오기]로 백업 파일을 고르거나, 백업 파일을 이 창에 끌어다 놓으세요. 지금 내용은 사라지므로 확인창이 한 번 뜹니다.',
-        '<b>컴퓨터를 바꿀 때</b>: 옛 컴퓨터에서 백업을 내려받아 새 컴퓨터로 옮긴 뒤, 새 컴퓨터에서 [처음 시작]으로 파일을 만들고 [백업 불러오기]. 데이터 파일(assign-data.js)을 그대로 복사해 이 파일 옆에 두어도 됩니다.',
-        '파일 없이 브라우저 안에 보관 중이라면 백업이 더 중요합니다 — 브라우저 데이터를 지우면 함께 사라집니다.'],
+        '<b>컴퓨터를 바꿀 때</b>: 옛 컴퓨터에서 백업을 내려받아 새 컴퓨터로 옮긴 뒤, 새 컴퓨터에서 [처음 시작]으로 파일을 만들고 [백업 불러오기]. 데이터 파일(assign-data.js)을 그대로 복사해 프로그램 옆에 두어도 됩니다.'],
  tips:['저장은 임시 파일에 쓴 뒤 바꿔치기 방식이라, 저장 도중 전원이 나가도 원본이 깨지지 않습니다.',
        '같은 파일을 창 두 개에서 함께 고치면 나중 저장 때 <b>덮어쓸지 / 내 것을 백업으로 받을지</b> 물어봅니다.']},
 {cat:'그 밖에',id:'theme',title:'화면 밝기 (다크 모드)',
@@ -4461,7 +4393,7 @@ const HELP=[
  tips:['인쇄물은 화면 밝기와 상관없이 항상 밝은 양식 그대로 나옵니다.']},
 {cat:'그 밖에',id:'trouble',title:'안 될 때',
  lead:'자주 나오는 상황과 해결법입니다.',
- steps:['<b>켰는데 시작 화면만 나온다</b> — 데이터 파일(assign-data.js)이 이 파일과 같은 폴더에 있는지, 이름이 맞는지 확인하세요.',
+ steps:['<b>켰는데 시작 화면만 나온다</b> — 데이터 파일(assign-data.js)이 이 프로그램과 같은 폴더에 있는지, 이름이 맞는지 확인하세요.',
         '<b>고쳤는데 저장이 안 된다</b> — 오른쪽 위 [저장 연결]을 한 번 누르세요.',
         '<b>인쇄가 백지로 나온다</b> — 배정표 화면에서 인쇄하세요(다른 화면에서는 그 주 내용이 준비되지 않습니다).',
         '<b>붙여넣었는데 칸이 비어 있다</b> — 모르는 표기일 수 있습니다. 미리보기의 노란 카드에서 정해 주세요.',
@@ -4565,9 +4497,8 @@ const TOURS={
     {before:()=>{ show('admin'); pickAdmin('data'); },sel:'#adminPanelBox',title:'데이터 보관',text:'백업 내려받기·백업 불러오기·파일 위치 변경을 여기서 합니다.',after:()=>show('week')},
   ]},
   first:{steps:()=>[
-    {before:()=>show('start'),sel:'#btnNewFile',title:'1. 처음 시작',text:'새 데이터 파일을 만듭니다. 이름은 <b>assign-data.js</b> 그대로 두고 <b>이 파일과 같은 폴더</b>에 저장하세요.'},
-    {sel:'#btnOpenFile',title:'이미 파일이 있으면',text:'이 컴퓨터의 데이터 파일을 고릅니다. 이 파일 옆에 assign-data.js 로 두었다면 보통 누를 일이 없습니다.'},
-    {sel:'#btnLocal',title:'파일 없이 쓰려면',text:'권한창 없이 이 컴퓨터의 브라우저 안에만 보관합니다. 나중에 ⚙ 관리 &gt; 데이터 보관에서 데이터 파일로 옮길 수 있습니다.',after:()=>{ if(connected()) show('week'); }},
+    {before:()=>show('start'),sel:'#btnNewFile',title:'1. 처음 시작',text:'우리 병동 파일을 만듭니다. 이름은 <b>assign-data.js</b> 그대로 두고 <b>이 프로그램과 같은 폴더</b>에 저장하세요. 한 번만 하면 됩니다.'},
+    {sel:'#btnOpenFile',title:'이미 파일이 있으면',text:'다른 곳에 있는 데이터 파일을 골라서 엽니다. 프로그램 옆에 assign-data.js 로 두었다면 누를 일이 없습니다.',after:()=>{ if(connected()) show('week'); }},
   ]},
   swap:{needData:true,steps:()=>{ const td=_firstNm(); if(!td) return []; const n=td.dataset.n, iso=td.dataset.iso; return [
     {before:()=>{ show('week'); closePick(); },el:_firstNm,title:'1. 이름을 클릭',text:'바꾸고 싶은 사람의 <b>이름</b>을 누릅니다.'},
@@ -4667,8 +4598,8 @@ function xlMock(kind){
 /* ── 시작 안내 체크리스트 — 실제 상태를 읽어 ✓/○ 로 보여 주고, [하기]는 그 화면으로, [보여 주기]는 투어로 */
 function onboardItems(){
   const L=fileLoc||{kind:'none'};
-  const fileOk=['native','file','local'].includes(L.kind);
-  const fileTxt=(L.kind==='native'||L.kind==='file')?fileLocPath():L.kind==='local'?'브라우저 안에 보관 (파일 없음)':L.kind==='sidecar'?'읽기 전용 — 수정하려면 [저장 연결]':'아직 없음';
+  const fileOk=['native','file'].includes(L.kind);
+  const fileTxt=(L.kind==='native'||L.kind==='file')?fileLocPath():L.kind==='sidecar'?'읽기 전용 — 수정하려면 [저장 연결]':'아직 없음';
   const ward=store.ward||wardOfRooms(store.rooms||[]); const wardOk=!!store.wardPicked&&!!ward;
   const schemeOk=[5,4,3,2].every(c=>{ const sc=(store.schemes||{})[c]||{}; const ls=Object.keys(sc); return ls.length>0&&ls.every(l=>(sc[l]||[]).length>0); });
   const chg={D:0,E:0,N:0}; for(const n of store.order){ const c=capsOf(n); if(c.includes('DC')) chg.D++; if(c.includes('EC')) chg.E++; if(c.includes('NC')) chg.N++; }
@@ -4752,7 +4683,7 @@ function showIntro(force){
   const conn=connected();
   $('#introBox').innerHTML=`<h2>어싸인 배정표에 오신 걸 환영합니다</h2>
     <div class="sub">처음이시라면 이 순서대로만 하시면 됩니다. 배정표 화면 위의 <b>시작 안내</b> 카드가 무엇이 남았는지 알려 줍니다.</div>
-    ${[['데이터 파일 만들기','[처음 시작]을 눌러 <b>assign-data.js</b> 라는 이름으로 이 파일과 같은 폴더에 저장하세요. 상단 칩에 지금 저장되는 파일이 항상 보입니다.'],
+    ${[['우리 병동 파일 만들기','[처음 시작]을 눌러 <b>assign-data.js</b> 라는 이름으로 이 프로그램과 같은 폴더에 저장하세요. 한 번만 하면 다음부터는 켜자마자 배정표가 뜹니다.'],
        ['근무표 넣기','[새 근무표 넣기] → 엑셀에서 긁어 복사한 뒤 <b>Ctrl+V</b>. 읽은 내용을 확인하고 저장합니다.'],
        ['배정표 확인·인쇄','이번 주 배정표가 바로 나옵니다. 이름을 누르면 담당을 바꾸고, [인쇄]로 A4 한 장이 나옵니다.'],
        ['막히면 ? 버튼','화면 <b>오른쪽 아래 ?</b> 를 누르면 기능별 사용법이 나오고, <b>▶ 화면에서 보여 주기</b>가 실제 화면에서 짚어 줍니다.']]
@@ -4796,8 +4727,8 @@ window.__app={get store(){return store},set store(v){store=v},
   ingestGrid,confirmPaste,recompute,renderWeek,weekData,downloadWeekXlsx,printWeek,
   openPick,pickChoose,pickShift,setSeed,abbrevRooms,parseCellRaw,readXlsxGrid,loadTemplate,dayInfo,roomsFor,
   openRoomPick,toggleRoom,roomFull,roomShort,buildPrintArea,loadSidecar,tryAutoOpen,reloadFromFile,connectSave,
-  reattachHandle,setWard,wardRooms,wardOfRooms,roomsBase,roomPos,startLocal,moveToLocal,moveToFile,readLocalStore,tryLocal,
-  writeStoreLocal,enterLocalMode,setScheme,resetSchemes,moveNurse,attachTrainee,traineesUnder,preceptorOf,unattachedTrainees,
+  reattachHandle,setWard,wardRooms,wardOfRooms,roomsBase,roomPos,readOldLocalStore,clearOldLocalStore,migrateOldLocalData,
+  setScheme,resetSchemes,moveNurse,attachTrainee,traineesUnder,preceptorOf,unattachedTrainees,
   nameWithTrainees,applyWrapStyles,packXlsx,openFormText,saveFormText,addNurse,renameNurseAdmin,removeNurse,applyNurseName,adminBadge,
   htmlDirPath,joinPath,dirOfPath,fileLocPath,renderFileInfo,setFileLoc,locateHandle,copyFilePath,get fileLoc(){return fileLoc},
   startTour,endTour,tourNext,tourPrev,startTopicTour,renderOnboard,onboardItems,hideOnboard,showOnboard,xlMock,renderHelpDoc,openHelp,closeHelp,showIntro,hideIntro,get tour(){return tour},TOURS,HELP,
