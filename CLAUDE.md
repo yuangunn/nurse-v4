@@ -580,6 +580,17 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   `show()`·`touch()`·`setFileLoc()` 이 다시 그린다. ③ 엑셀 복사 범위는 그림 대신 HTML 모형 표 `xlMock('all'|'cells')`.
   이유: GIF 는 화면이 바뀔 때마다 거짓말이 되고(이 세션에서만 헤더·간호사 관리·병실 패널이 바뀜) 0.9MB 를 먹었다 —
   투어는 지금 화면의 진짜 버튼을 가리키고 자산 0바이트. `standalone/help/`·`scripts/make-help-media.py` 는 삭제.
+  **HTML 안 기본 설정** (사용자 결정 2026-09-17: "json 은 공유용으로만, 초기·기본 설정은 HTML 내부 저장"): 데이터 파일은
+  살아 있는 표 + 지금 설정(공유·일관성용 — 모든 PC 가 같은 어싸인을 계산해야 하므로 설정을 파일에서 빼지 않는다), HTML 은
+  `/*DEFAULTS_BEGIN*/const ASSIGN_DEFAULTS=…;/*DEFAULTS_END*/` 블록에 **처음 시작할 때의 설정**(`SETTINGS_KEYS`: ward·wardPicked·
+  rooms·schemes·req·rules·form·caps·banRooms·order·alias·custom·nameAlias)을 품는다. 리포 원본은 `null`(빌드는 손대지 않음).
+  `withDefaults(j)` 가 모든 파일 열기 경로의 `{...emptyStore(),...j}` 를 대신한다 — 새 파일(`emptyStore()`)은 기본값 전부,
+  옛 파일은 **빠진 키만**, 병동·병실(`WARD_UNIT`)은 한 묶음(파일에 병실이 있으면 병동도 파일 기준). **브라우저는 자기 HTML 을
+  고쳐 쓸 수 없으므로** `bakeDefaultsHtml()` 은 본 스크립트 맨 앞에서 잡아 둔 원본 문서 `PRISTINE_HTML`(두 번째 `<script>`
+  시작 시점 — 첫 스크립트에서 잡으면 뒤가 비어 있다)의 블록만 바꿔 **같은 이름의 사본을 내려받게** 한다(공용 폴더에 덮어쓰기).
+  마커 문자열은 코드 안에서 `'/*DEFAULTS_'+'BEGIN*/'` 처럼 쪼개 쓴다(원본 검색이 자기 코드에 걸리지 않게). `applyHtmlDefaults()`
+  = 표는 두고 설정만 되돌리기(snapshot → Ctrl+Z), 관리 > 기본 설정 (HTML 안) 패널 + 배지 없음/같음/다름(`defaultsInfo`),
+  시작 화면 '처음 시작' 부제에 담긴 병동. 스크래치 `test-defaults.mjs` 가 굽기 → 구운 파일 부팅 → 새 파일·옛 파일·되돌리기를 돈다.
   동기화 `node scripts/build-assign-standalone.mjs` (코어 + 양식 + 폰트 + 버전 주입)
   — CI(`test.yml`)가 재빌드해 버전 줄 외 diff가 있으면 실패시키므로 `assign.html` 수정 후 반드시 실행.
 - 인트라넷용 ②: `standalone/app/` — 같은 화면을 담은 Windows 단일 exe (WebView2, 127.0.0.1 안 씀).
