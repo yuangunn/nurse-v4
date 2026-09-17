@@ -1,23 +1,12 @@
-// assign-core.js + 병실 배정표.xlsx(base64)를 standalone/assign.html 마커에 재주입 (단일 소스 동기화)
+// assign-core.js + 병실 배정표.xlsx(base64) + 폰트를 standalone/assign.html 마커에 재주입 (단일 소스 동기화)
+// 도움말 그림(GIF)은 2026-09-17 에 실제 화면 투어로 대체돼 더 이상 심지 않는다.
 // 사용: node scripts/build-assign-standalone.mjs
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const core = readFileSync('frontend/js/modules/assign-core.js', 'utf8')
   .replace(/^\/\*[\s\S]*?\*\/\s*/, ''); // 상단 주석 블록 제거
 const tplB64 = readFileSync('standalone/병실 배정표.xlsx').toString('base64');
 const fontB64 = readFileSync('frontend/fonts/PretendardVariable.woff2').toString('base64');
-
-// 도움말 그림 (standalone/help/*.gif|png) — 실제 화면을 찍은 것. 생성: scripts/make-help-media.py
-const helpDir = 'standalone/help';
-const media = {};
-if (existsSync(helpDir)) {
-  for (const f of readdirSync(helpDir).sort()) {
-    const m = f.match(/^(.+)\.(gif|png)$/i);
-    if (!m) continue;
-    const mime = m[2].toLowerCase() === 'gif' ? 'image/gif' : 'image/png';
-    media[m[1]] = `data:${mime};base64,` + readFileSync(`${helpDir}/${f}`).toString('base64');
-  }
-}
 
 const htmlPath = 'standalone/assign.html';
 const html = readFileSync(htmlPath, 'utf8');
@@ -58,10 +47,6 @@ out = out.replace(
   /\/\*BUILD_INFO_BEGIN\*\/[\s\S]*?\/\*BUILD_INFO_END\*\//,
   `/*BUILD_INFO_BEGIN*/const BUILD={ver:'${ASSIGN_VER}'};/*BUILD_INFO_END*/`
 );
-out = out.replace(
-  /\/\*HELP_MEDIA_BEGIN\*\/[\s\S]*?\/\*HELP_MEDIA_END\*\//,
-  '/*HELP_MEDIA_BEGIN*/const HELP_MEDIA=' + JSON.stringify(media) + ';/*HELP_MEDIA_END*/'
-);
 if (out === html) console.log('변경 없음');
 else { writeFileSync(htmlPath, out); console.log(`standalone/assign.html 동기화 완료 — ${ASSIGN_VER}`,
-    `· 코어 + 양식 + 폰트 + 도움말 그림 ${Object.keys(media).length}개`); }
+    '· 코어 + 양식 + 폰트 (도움말은 그림 없이 실제 화면 투어)'); }
