@@ -304,6 +304,17 @@
   .wkLab b{font-size:14px;font-weight:800;color:var(--ink-2)}
   .wkSet{display:flex;gap:6px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
   .schemeRow input{width:68%}
+  .psTabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+  .psList{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .psChip{min-height:32px;padding:6px 12px;border-radius:9px;background:var(--card-warm);color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--rule);font-weight:700}
+  .psChip.on{background:var(--accent);color:var(--on-accent);box-shadow:none}
+  .psWarn{font-size:11px;font-weight:800;color:var(--err)}
+  #planTable td,#planTable th{padding:6px 8px}
+  #planTable select{min-height:32px;font-size:14px}
+  .rpPreset{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 8px;padding:8px 10px;border-radius:10px;background:var(--card-warm);font-size:13px}
+  .rpPreset select{min-height:32px;font-size:14px}
+  #rpick .rpPreset button{min-width:0;padding:6px 10px;font-size:14px;margin:0}
+  td.rm.rpre{box-shadow:inset 3px 0 0 var(--ok)}
   .capChip{display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:32px;border-radius:8px;
     font-size:11.5px;font-weight:800;cursor:pointer;background:var(--card-warm);color:var(--ink-3);box-shadow:inset 0 0 0 1px var(--rule)}
   .capChip.on{background:var(--accent);color:var(--on-accent);box-shadow:none}
@@ -564,6 +575,7 @@
       <span>이름 클릭 = 담당 교체</span><span>방 칸 클릭 = 그날 병상 수정</span><span>맨 윗줄 클릭 = 교육·행사 입력</span>
       <span class="lg"><i style="background:var(--err)"></i>수동 교체</span>
       <span class="lg"><i style="background:var(--down-deep)"></i>방 수정</span>
+      <span class="lg"><i style="background:var(--ok)"></i>프리셋 적용</span>
       <span style="margin-left:auto">엑셀로 내보내면 병동 양식 그대로 열려 고칠 수 있습니다</span>
     </div>
   </div>
@@ -1101,7 +1113,7 @@ function toast(msg,ms=2800,undoable=false){ const t=$('#toast');
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260917g'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260917i'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1115,6 +1127,7 @@ function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{}
   seedManual:{},caps:{},alias:{},custom:{},nameAlias:{},trainee:{},trOv:{},req:JSON.parse(JSON.stringify(DEFAULT_REQ)),
   rooms:DEFAULT_ROOMS.map(r=>r.slice()),ward:'101',wardPicked:false,banRooms:{},form:null,
   schemes:JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
+  presets:{5:[],4:[],3:[],2:[]},presetPlan:{},presetDay:{},
   rules:{keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false}}; }
 const capsOf=n=>store.caps[n]||ALL_CAPS;
 function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무 목록)
@@ -1142,6 +1155,11 @@ function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무
   }
   if(store.ward==null) store.ward=wardOfRooms(store.rooms)||'';   // 구형 파일 — 병실 목록에서 병동 추정
   if(store.wardPicked==null) store.wardPicked=!!store.ward&&(store.ward!=='101'||(store.rooms||[]).length!==DEFAULT_ROOMS.length);   // 기본값 그대로면 아직 안 고른 것
+  // 방 구성 프리셋(2026-09-17): 인원수별 추가 프리셋 목록 + 요일 계획 + 그날 예외. 옛 파일은 빈 값으로 시작 — '기본' 프리셋 = store.schemes
+  if(!store.presets||typeof store.presets!=='object') store.presets={};
+  for(const c of [5,4,3,2]) if(!Array.isArray(store.presets[c])) store.presets[c]=[];
+  if(!store.presetPlan||typeof store.presetPlan!=='object') store.presetPlan={};
+  if(!store.presetDay||typeof store.presetDay!=='object') store.presetDay={};
 }
 let store=emptyStore();
 let fileHandle=null, dirty=false, saveT=null;
@@ -1799,7 +1817,7 @@ function recompute(){
   const rfCache={};
   const roomsForCore=(P,cnt,label,dk)=>{
     const ovd=store.roomOv[dk]&&store.roomOv[dk][P]&&(label in store.roomOv[dk][P]);
-    const key=P+'|'+cnt+'|'+label+(ovd?'|'+dk:'');
+    const key=P+'|'+cnt+'|'+label+'|'+presetFor(P,cnt,dk).id+(ovd?'|'+dk:'');
     if(!rfCache[key]) rfCache[key]=roomTokens(roomsFor(P,cnt,label,dk));
     return rfCache[key];
   };
@@ -1866,13 +1884,32 @@ function weekTitle(sun){
   return `${sun.getFullYear()}. ${pad2(sun.getMonth()+1)}. ${pad2(sun.getDate())} – `+
     (e.getMonth()===sun.getMonth()?'':`${pad2(e.getMonth()+1)}. `)+pad2(e.getDate());
 }
+/* ── 방 구성 프리셋 (2026-09-17, 사용자 요청) ─────────────────────────────
+ * 인원수(5·4·3·2)마다 프리셋을 여러 개 둔다. '기본' 프리셋은 store.schemes[cnt] 그대로이고,
+ * 추가 프리셋은 store.presets[cnt]=[{id,name,rooms}]. 어느 것을 쓰는지는
+ *   그날 예외 store.presetDay[iso][P][cnt]  →  요일 계획 store.presetPlan[요일][P][cnt]  →  기본
+ * 순서로 정한다. 인원수별로 따로 고르므로 "5인인 날은 5인 프리셋만" 보인다. */
+const WD_KEY=['sun','mon','tue','wed','thu','fri','sat'], WD_LBL={sun:'일',mon:'월',tue:'화',wed:'수',thu:'목',fri:'금',sat:'토'};
+const clampCnt=c=>Math.min(Math.max(+c||2,2),5);
+function presetsOf(cnt){ cnt=clampCnt(cnt); return [{id:'default',name:'기본',rooms:store.schemes[cnt]||{}},...(((store.presets||{})[cnt])||[])]; }
+function presetById(cnt,id){ return presetsOf(cnt).find(p=>p.id===id)||null; }
+function presetEmpty(p){ const ls=Object.keys(p.rooms||{}); return !ls.length||ls.some(l=>!(p.rooms[l]||[]).length); }
+function presetFor(P,cnt,iso){
+  cnt=clampCnt(cnt);
+  const pd=iso&&store.presetDay[iso]&&store.presetDay[iso][P]&&store.presetDay[iso][P][cnt];
+  if(pd){ const p=presetById(cnt,pd); if(p) return {...p,src:'day'}; }
+  const wd=iso?WD_KEY[new Date(iso+'T00:00:00').getDay()]:null;
+  const pl=wd&&store.presetPlan[wd]&&store.presetPlan[wd][P]&&store.presetPlan[wd][P][cnt];
+  if(pl){ const p=presetById(cnt,pl); if(p) return {...p,src:'plan'}; }
+  return {...presetsOf(cnt)[0],src:'default'};
+}
+const presetSrcLabel=pr=>pr.src==='day'?'오늘만 바꾼 상태':pr.src==='plan'?'요일 계획':'기본';
 function roomsFor(P,cnt,label,iso){
   // 그날 하루 방 수정(roomOv)이 있으면 그 값 그대로 (예: 환자 빠져 차지가 12호 추가)
   const ov=iso&&store.roomOv[iso]&&store.roomOv[iso][P]&&store.roomOv[iso][P][label];
   if(ov!=null) return ov;
   if(!cnt) return '';
-  const sc=store.schemes[Math.min(Math.max(cnt,2),5)]||{};
-  return abbrevRooms(sc[label]);
+  return abbrevRooms(presetFor(P,cnt,iso).rooms[label]);
 }
 function roomTokens(str){ // "1~3.11" → ['1','2','3','11'] (중복 검사용)
   if(!str) return [];
@@ -1988,8 +2025,9 @@ function renderWeek(){
         const rmStr=roomsFor(P,cnt,label,iso);
         const isRov=store.roomOv[iso]&&store.roomOv[iso][P]&&(label in store.roomOv[iso][P]);
         const hasDup=dups[di]&&roomTokens(rmStr).some(t=>dups[di][P].has(t));
-        h+=`<td class="rm${isRov?' rov':''}${hasDup?' rdup':''}${tdCls(d)}" data-iso="${iso}" data-p="${P}" data-l="${label}"`+
-           ` title="${esc(rmStr)}호 — 클릭 = 이 날 방 수정${hasDup?' · ⚠ 다른 어싸인과 방 겹침':''}">${esc(rmStr)}</td>`+
+        const pr=presetFor(P,cnt,iso), preOn=li===0&&pr.src!=='default';
+        h+=`<td class="rm${isRov?' rov':''}${hasDup?' rdup':''}${preOn?' rpre':''}${tdCls(d)}" data-iso="${iso}" data-p="${P}" data-l="${label}"`+
+           ` title="${esc(rmStr)}호 — 클릭 = 이 날 방 수정·프리셋${pr.src!=='default'?' · 방 구성: '+esc(pr.name)+(pr.src==='day'?' (오늘만)':' (요일 계획)'):''}${hasDup?' · ⚠ 다른 어싸인과 방 겹침':''}">${esc(rmStr)}</td>`+
            `<td class="nm${ov?' ovd':''}${tdCls(d)}" data-n="${esc(nm)}" data-iso="${iso}">${esc(nm)}${
              traineesUnder(iso,P,nm).map(T=>`<div class="trn">/ ${esc(T)}</div>`).join('')}</td>`;
       });
@@ -2134,10 +2172,10 @@ function resetOv(){
   store.ovr={}; touch(); recompute(); renderAdmin(); toast('초기화됨');
 }
 function resetRoomOv(){
-  const n=Object.keys(store.roomOv).length;
-  if(!n){ toast('방 수정 없음'); return; }
-  if(!confirm('일별 방 수정 '+n+'일치를 모두 초기화할까요?')) return;
-  store.roomOv={}; touch(); recompute(); renderAdmin(); if(curScr==='week') renderWeek(); toast('초기화됨');
+  const n=Object.keys(store.roomOv).length, m=Object.keys(store.presetDay||{}).length;
+  if(!n&&!m){ toast('방 수정 없음'); return; }
+  if(!confirm('일별 방 수정 '+n+'일치'+(m?' · 그날만 바꾼 프리셋 '+m+'일치':'')+'를 모두 초기화할까요?')) return;
+  store.roomOv={}; store.presetDay={}; touch(); recompute(); renderAdmin(); if(curScr==='week') renderWeek(); toast('초기화됨');
 }
 document.addEventListener('mousedown',e=>{
   if($('#pick').style.display==='block'&&!e.target.closest('#pick')&&!e.target.closest('td.nm')) closePick();
@@ -2173,10 +2211,22 @@ function renderRoomPick(){
   }
   const head=rpCtx.kind==='nurse'
     ? `${esc(rpCtx.name)} — 주지 않을 방 <span class="dim">(격리·중증·환자 거절 등)</span>`
-    : `${+rpCtx.iso.slice(8,10)}일 ${rpCtx.P} ${FORM_LBL(rpCtx.l)} 방 — 이 날 하루만`;
+    : `${+rpCtx.iso.slice(8,10)}일 ${rpCtx.P} ${FORM_LBL(rpCtx.l)} 방`;
   const extra=sel.filter(t=>!master.includes(t));
+  let presetRow='';
+  if(rpCtx.kind==='day'){
+    const {iso,P}=rpCtx; const day=dayInfo(iso);
+    const cnt=day?clampCnt(Object.keys(day[P].labels).length+day[P].extra.length):0;
+    if(cnt){ const pr=presetFor(P,cnt,iso), wd=WD_KEY[new Date(iso+'T00:00:00').getDay()];
+      presetRow=`<div class="rpPreset"><span>이 날 ${P} 방 구성 <span class="dim">(${cnt}인)</span></span>
+        <select id="rpPresetSel" title="이 날 ${P} 근무에 쓸 ${cnt}인 프리셋">${presetsOf(cnt).map(p=>`<option value="${p.id}"${p.id===pr.id?' selected':''}>${esc(p.name)}</option>`).join('')}</select>
+        <button onclick="applyPresetDay(false)" title="이 날 ${P} 근무에만 적용합니다">오늘만</button>
+        <button onclick="applyPresetDay(true)" title="매주 ${WD_LBL[wd]}요일 ${P} 근무가 ${cnt}인일 때 이 프리셋을 씁니다 (주간 계획표에 저장)">매주 ${WD_LBL[wd]}요일</button>
+        <span class="dim">지금: ${presetSrcLabel(pr)}</span></div>`; }
+  }
   $('#rpick').innerHTML=
-    `<div style="font-weight:700;margin-bottom:6px">${head}</div>`+
+    `<div style="font-weight:700;margin-bottom:6px">${head}</div>`+presetRow+
+    (rpCtx.kind==='day'?`<div class="dim" style="margin:2px 0 4px">이 자리 방만 손으로 고치기 — 이 날 하루만</div>`:'')+
     master.map(r=>`<button class="${sel.includes(r)?'on':''}" onclick="toggleRoom('${esc(r)}')">${esc(roomShort(r))}호</button>`).join('')+
     (extra.length?`<div class="dim" style="margin-top:4px">직접 쓴 값: ${extra.map(esc).join(', ')}</div>`:'')+
     `<div style="margin-top:6px">담당 ${sel.length}개 방 · <b>병상 ${beds}개</b>${unk?` <span class="dim">(+병상수 모름 ${unk})</span>`:''}</div>`+
@@ -2649,7 +2699,7 @@ function edSet(r,c,v){
 function snapshot(){ // 이름 변경/삭제가 ovr·caps·금지방·시드까지 건드리므로 함께 보존
   undoStack.push(JSON.stringify({o:store.order,c:store.cells,v:store.ovr,rv:store.roomOv,
     ch:store.caps,br:store.banRooms,sd:store.seedManual,al:store.alias,cu:store.custom,fm:store.form,
-    ev:store.events,na:store.nameAlias,tr:store.trainee,to:store.trOv}));
+    ev:store.events,na:store.nameAlias,tr:store.trainee,to:store.trOv,pd:store.presetDay}));
   if(undoStack.length>40) undoStack.shift(); }
 function restoreSnapshot(s){
   store.order=s.o; store.cells=s.c;
@@ -2657,7 +2707,7 @@ function restoreSnapshot(s){
   if(s.ch) store.caps=s.ch; if(s.br) store.banRooms=s.br; if(s.sd) store.seedManual=s.sd;
   if(s.al) store.alias=s.al; if(s.cu) store.custom=s.cu; if(s.ev) store.events=s.ev;
   if(s.na) store.nameAlias=s.na;
-  if(s.tr) store.trainee=s.tr; if(s.to) store.trOv=s.to;
+  if(s.tr) store.trainee=s.tr; if(s.to) store.trOv=s.to; if(s.pd) store.presetDay=s.pd;
   if(s.fm!==undefined){ store.form=s.fm; TPL=null; }
 }
 function moveEditMonth(n){ edM+=n; if(edM<1){edM=12;edY--} if(edM>12){edM=1;edY++} renderEditGrid(); }
@@ -2929,7 +2979,7 @@ function adminBadge(id){
   switch(id){
     case 'seed': case 'caps': return store.order.length?store.order.length+'명':'';
     case 'rooms': return (store.rooms||[]).length+'실';
-    case 'schemes': { const n=[5,4,3,2].filter(c=>{ const sc=store.schemes[c]||{}; return Object.keys(sc).some(l=>!(sc[l]||[]).length); }).length; return n?'빈 칸 '+n:''; }
+    case 'schemes': { const n=[5,4,3,2].reduce((a,c)=>a+presetsOf(c).filter(presetEmpty).length,0); return n?'빈 칸 '+n:''; }
     case 'codes': { const n=Object.keys(store.custom||{}).length+Object.keys(store.alias||{}).length;
       return n?n+'개':''; }
     case 'about': return BUILD.ver;
@@ -3053,17 +3103,10 @@ const ADMIN_PANELS={
         }).join('')||`<tr><td colspan="3" class="dim" style="padding:10px 0">정해 둔 표기가 없습니다. 근무표를 붙여넣을 때 모르는 표기가 나오면 여기에 쌓입니다.</td></tr>`);
     }},
   schemes:{title:'방 구성',
-    desc:'근무 인원수(2~5인)별로 어싸인마다 맡을 방을 정합니다. 호수만 짧게 적으세요 — 1라인 <b>1~14</b>, 2라인 <b>51~64</b> (예: <code>1~3, 12</code>). 배정표·엑셀에도 이 표기로 나옵니다. <b>비어 있는 칸이 있으면 그 인원수인 날엔 방이 안 나옵니다</b> — 2인 근무는 기본 나눔(차지 1,2,12,14 / A 3~11)이 들어 있으니 병동에 맞게 고치세요.',
-    aux:`<button onclick="resetSchemes()">기본값 복원</button>`,
-    body(){ return `<div id="schemes" style="display:flex;gap:16px;flex-wrap:wrap"></div>`; },
-    after(){
-      $('#schemes').innerHTML=[5,4,3,2].map(cnt=>
-        `<div class="schemeRow"><b>${cnt}인 근무</b>`+Object.keys(store.schemes[cnt]).map(l=>
-          `<div style="margin:3px 0"><span style="display:inline-block;width:3.4em"><b>${FORM_LBL(l)}</b></span>
-           <input type="text" value="${esc(abbrevRooms(store.schemes[cnt][l]))}" placeholder="예: ${roomHint()}"
-            ${(store.schemes[cnt][l]||[]).length?'':'style="box-shadow:0 0 0 2px var(--err)" title="비어 있음 — 이 인원수인 날엔 방이 안 나옵니다"'}
-            onchange="setScheme(${cnt},'${l}',this.value)"></div>`).join('')+'</div>').join('');
-    }},
+    desc:'근무 인원수(2~5인)별로 자리마다 맡을 방을 정합니다. 인원수마다 <b>프리셋</b>을 여러 개 만들어 두고, 아래 <b>주간 계획표</b>에서 요일·근무별로 어느 것을 쓸지 고르세요. 배정표에서 그날만 바꿀 수도 있습니다. 호수만 짧게 적으세요 — 1라인 <b>1~14</b>, 2라인 <b>51~64</b> (예: <code>1~3, 12</code>).',
+    aux:`<button onclick="resetSchemes()" title="'기본' 프리셋 4벌을 프로그램 기본 나눔으로 되돌립니다 — 다른 프리셋은 그대로">기본 프리셋 복원</button>`,
+    body(){ return `<div id="schemes"></div><div id="planBox" style="margin-top:20px"></div>`; },
+    after(){ renderSchemes(); renderPlan(); }},
   req:{title:'요일별 필요 인원',
     desc:'근무표 고치기 화면에서 미달·초과를 빨갛게 표시하는 기준입니다.',
     body(){ return `<table id="reqTable" style="width:auto"></table>`; },
@@ -3115,7 +3158,7 @@ const ADMIN_PANELS={
       <button class="danger" onclick="resetRoomOv()">일별 방 수정 모두 초기화</button>
       <span class="dim" id="ovCount"></span></div>`; },
     after(){
-      $('#ovCount').textContent=`담당 교체 ${Object.keys(store.ovr).length}일 · 방 수정 ${Object.keys(store.roomOv).length}일`;
+      $('#ovCount').textContent=`담당 교체 ${Object.keys(store.ovr).length}일 · 방 수정 ${Object.keys(store.roomOv).length}일 · 그날만 바꾼 프리셋 ${Object.keys(store.presetDay||{}).length}일`;
     }},
   about:{title:'이 프로그램',
     desc:'병동 어싸인(병실 배정)을 자동으로 짜고 병실 배정표 양식 그대로 인쇄하는 프로그램입니다.',
@@ -3170,6 +3213,93 @@ function setSeed(name,attr,val){
   else s[attr]=val;
   touch(); recompute(); renderAdmin();
 }
+/* 관리 > 방 구성 — 인원수 탭 → 프리셋 칩 → 자리별 입력칸 */
+let presetUI={cnt:5,sel:{5:'default',4:'default',3:'default',2:'default'}};
+function renderSchemes(){
+  const box=$('#schemes'); if(!box) return;
+  const cnt=presetUI.cnt, list=presetsOf(cnt);
+  if(!presetById(cnt,presetUI.sel[cnt])) presetUI.sel[cnt]='default';
+  const selId=presetUI.sel[cnt], cur=presetById(cnt,selId);
+  box.innerHTML=
+    `<div class="psTabs">${[5,4,3,2].map(c=>`<button class="segbtn${c===cnt?' on':''}" onclick="presetUI.cnt=${c};renderSchemes()" title="${c}인 근무일 때의 프리셋">${c}인 근무</button>`).join('')}</div>
+     <div class="psList">${list.map(p=>`<button class="psChip${p.id===selId?' on':''}" onclick="presetUI.sel[${cnt}]='${p.id}';renderSchemes()" title="${esc(p.name)} 프리셋 보기·고치기">${esc(p.name)}${presetEmpty(p)?' <span class="psWarn">비어 있음</span>':''}</button>`).join('')}
+       <button onclick="addPreset(${cnt})" title="지금 보고 있는 프리셋을 복제해 새 프리셋을 만듭니다">＋ 새 프리셋</button>
+       ${selId!=='default'?`<button onclick="renamePreset(${cnt},'${selId}')" title="이 프리셋의 이름을 바꿉니다">이름 바꾸기</button><button class="danger" onclick="deletePreset(${cnt},'${selId}')" title="이 프리셋을 지웁니다 — 계획표나 그날 적용에서 쓰던 곳은 기본으로 돌아갑니다">삭제</button>`:''}
+     </div>
+     <div class="schemeRow"><b>${cnt}인 근무 · ${esc(cur.name)}</b>${Object.keys(cur.rooms).map(l=>
+       `<div style="margin:3px 0"><span style="display:inline-block;width:3.4em"><b>${FORM_LBL(l)}</b></span>
+        <input type="text" value="${esc(abbrevRooms(cur.rooms[l]))}" placeholder="예: ${roomHint()}"
+         ${(cur.rooms[l]||[]).length?'':'style="box-shadow:0 0 0 2px var(--err)" title="비어 있음 — 이 프리셋을 쓰는 날엔 방이 안 나옵니다"'}
+         onchange="setPresetRooms(${cnt},'${selId}','${l}',this.value)"></div>`).join('')}</div>`;
+}
+function renderPlan(){
+  const box=$('#planBox'); if(!box) return;
+  box.innerHTML=`<div style="font-weight:800;margin-bottom:4px">주간 계획표 — 요일·근무별로 어느 프리셋을 쓸지</div>
+    <div class="dim" style="margin-bottom:8px;line-height:1.6">칸의 인원수는 요일별 필요 인원입니다. 그날 실제 인원이 다르면 그 인원수의 기본 프리셋을 씁니다 —
+      배정표에서 방 칸을 눌러 그날만 바꾸거나 '매주 이 요일'로 정할 수 있습니다.</div>
+    <table id="planTable" style="width:auto"><tr><th></th>${WD_KEY.map(k=>`<th style="min-width:7.5em">${WD_LBL[k]}</th>`).join('')}</tr>`+
+    ['D','E','N'].map(P=>`<tr><td style="font-weight:700;color:${SHIFTS[P].fg}">${P}</td>`+WD_KEY.map(k=>{
+      const need=clampCnt(store.req[k][P]); const plan=(store.presetPlan[k]||{})[P]||{};
+      const curId=presetById(need,plan[need])?plan[need]:'default';
+      const others=Object.keys(plan).filter(c=>+c!==need&&presetById(+c,plan[c])).map(c=>`${c}인: ${esc(presetById(+c,plan[c]).name)}`);
+      return `<td style="vertical-align:top"><select onchange="setPlan('${k}','${P}',${need},this.value)" title="${WD_LBL[k]}요일 ${P} 근무(${need}인)에 쓸 프리셋">${
+          presetsOf(need).map(p=>`<option value="${p.id}"${p.id===curId?' selected':''}>${esc(p.name)}</option>`).join('')}</select>
+        <div class="dim" style="font-size:12px;margin-top:2px">${need}인 기준${others.length?'<br>'+others.join('<br>'):''}</div></td>`;
+    }).join('')+'</tr>').join('')+'</table>';
+}
+function addPreset(cnt){
+  cnt=clampCnt(cnt);
+  const src=presetById(cnt,presetUI.sel[cnt])||presetsOf(cnt)[0];
+  const name=prompt(`${cnt}인 근무의 새 프리셋 이름 (예: 회진일, 수술 많은 날)`,'');
+  if(name===null||!name.trim()) return;
+  const id='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  store.presets[cnt].push({id,name:name.trim(),rooms:JSON.parse(JSON.stringify(src.rooms))});
+  presetUI.cnt=cnt; presetUI.sel[cnt]=id;
+  touch(); recompute(); renderAdmin(); toast(`${cnt}인 프리셋 '${name.trim()}' 을 만들었습니다 — 자리별 방을 고치세요`,3600);
+}
+function renamePreset(cnt,id){
+  const p=presetById(clampCnt(cnt),id); if(!p||id==='default') return;
+  const name=prompt('프리셋 이름',p.name); if(name===null||!name.trim()) return;
+  p.name=name.trim(); touch(); renderAdmin();
+}
+function deletePreset(cnt,id){
+  cnt=clampCnt(cnt); const p=presetById(cnt,id); if(!p||id==='default') return;
+  if(!confirm(`${cnt}인 프리셋 '${p.name}' 을 지울까요?\n계획표나 그날 적용에서 이 프리셋을 쓰던 곳은 기본으로 돌아갑니다.`)) return;
+  store.presets[cnt]=store.presets[cnt].filter(q=>q.id!==id);
+  const prune=map=>{ for(const k in map){ const m=map[k]; for(const P in m){ if(m[P][cnt]===id) delete m[P][cnt]; if(!Object.keys(m[P]).length) delete m[P]; } if(!Object.keys(m).length) delete map[k]; } };
+  prune(store.presetPlan); prune(store.presetDay);
+  presetUI.sel[cnt]='default';
+  touch(); recompute(); renderAdmin(); if(curScr==='week') renderWeek(); toast('지웠습니다',2600);
+}
+function setPresetRooms(cnt,id,l,str){
+  const p=presetById(clampCnt(cnt),id); if(!p) return;
+  p.rooms[l]=roomTokens(str).map(roomFull);      // '1~3, 12' 처럼 짧게 적어도 실제 호실로 저장 ('기본'은 store.schemes 를 직접 고친다)
+  touch(); recompute(); renderAdmin();
+}
+function setPlan(wd,P,cnt,id){
+  cnt=clampCnt(cnt);
+  const pl=(store.presetPlan[wd]=store.presetPlan[wd]||{}); const pp=(pl[P]=pl[P]||{});
+  if(!id||id==='default') delete pp[cnt]; else pp[cnt]=id;
+  if(!Object.keys(pp).length) delete pl[P]; if(!Object.keys(pl).length) delete store.presetPlan[wd];
+  touch(); recompute(); if(curScr==='admin') renderPlan(); if(curScr==='week') renderWeek();
+}
+/* 배정표 방 칸 픽커에서 — 이 날 이 근무의 프리셋을 바꾼다 (오늘만 / 매주 이 요일). 그 근무의 손 수정은 지운다(프리셋이 가려지므로) */
+function applyPresetDay(weekly){
+  const {iso,P}=rpCtx; const day=dayInfo(iso); if(!day) return;
+  const cnt=clampCnt(Object.keys(day[P].labels).length+day[P].extra.length);
+  const id=($('#rpPresetSel')||{}).value||'default'; const p=presetById(cnt,id); if(!p) return;
+  snapshot();
+  const pd=store.presetDay[iso];
+  if(weekly){
+    setPlan(WD_KEY[new Date(iso+'T00:00:00').getDay()],P,cnt,id);
+    if(pd&&pd[P]){ delete pd[P][cnt]; if(!Object.keys(pd[P]).length) delete pd[P]; if(!Object.keys(pd).length) delete store.presetDay[iso]; }
+  }else{
+    const d=(store.presetDay[iso]=store.presetDay[iso]||{}); (d[P]=d[P]||{})[cnt]=id;
+  }
+  if(store.roomOv[iso]&&store.roomOv[iso][P]){ delete store.roomOv[iso][P]; if(!Object.keys(store.roomOv[iso]).length) delete store.roomOv[iso]; }
+  closeRoomPick(); touch(); recompute(); renderWeek();
+  toast((weekly?`매주 ${WD_LBL[WD_KEY[new Date(iso+'T00:00:00').getDay()]]}요일 ${P} ${cnt}인은 `:`${+iso.slice(8,10)}일 ${P} 는 오늘만 `)+`'${p.name}' 프리셋으로`,3600,true);
+}
 function setScheme(cnt,l,str){
   store.schemes[cnt][l]=roomTokens(str).map(roomFull);   // '1~3, 12' 처럼 짧게 적어도 실제 호실로 저장
   touch(); recompute();
@@ -3190,6 +3320,7 @@ function setWard(code){
   const beds={}; for(const r of cur){ const p=roomPos(r[0]); if(p) beds[p]=+r[1]||0; }
   const mv=r=>{ const p=roomPos(roomFull(r)); return p?rooms[p-1]:r; };   // roomFull 은 옛 목록 기준 — 교체 전에
   for(const c in store.schemes) for(const l in store.schemes[c]) store.schemes[c][l]=store.schemes[c][l].map(mv);
+  for(const c in store.presets) for(const p of store.presets[c]) for(const l in p.rooms) p.rooms[l]=p.rooms[l].map(mv);
   for(const n in store.banRooms) store.banRooms[n]=store.banRooms[n].map(mv);
   store.ward=String(code); store.wardPicked=true;
   store.rooms=rooms.map(r=>[r,beds[roomPos(r)]||0]);
@@ -4338,13 +4469,14 @@ const HELP=[
         '방마다 <b>병상 수</b>를 적습니다. 방 칸을 누를 때 몇 명까지 보는지 합계가 나오고, 어싸인 이어 주기도 병상 수로 셉니다.',
         '없는 방은 ✕ 로 지웁니다.',
         '병동을 바꾸면 방 구성·주지 않을 방의 호실도 <b>같은 자리</b>(1라인 3호 ↔ 2라인 53호)로 함께 옮겨집니다.']},
-{cat:'우리 병동 설정',id:'scheme',title:'방 구성 (인원수별)',
- lead:'그날 근무 인원이 몇 명이냐에 따라 각 자리가 맡을 병실을 정합니다.',
- steps:['⚙ 관리 &gt; 방 구성에서 <b>5인·4인·3인·2인</b> 근무별로 자리마다 병실을 적습니다.',
-        '쉼표로 나열하면 됩니다 — 예: <b>1006, 1007, 1008, 1009</b>.',
-        '인쇄할 때는 <b>6~9</b> 처럼 짧게 줄여서 나옵니다.'],
- tips:['이 표가 어싸인의 기준입니다. 인원이 바뀌면 자동으로 그날 인원수의 구성이 쓰입니다.',
-       '2인 근무에는 기본 나눔(차지 1·2·12·14 / A 3~11)이 들어 있습니다. 비어 있는 인원수가 있으면 관리 메뉴에 <b>빈 칸 n</b> 이 뜨고, 그 인원인 날엔 방이 안 나옵니다.']},
+{cat:'우리 병동 설정',id:'scheme',title:'방 구성 (인원수별 프리셋·주간 계획)',
+ lead:'그날 근무 인원이 몇 명이냐에 따라 각 자리가 맡을 병실을 정합니다. 인원수마다 프리셋을 여러 개 두고, 요일·근무별로 어느 것을 쓸지 정할 수 있습니다.',
+ steps:['⚙ 관리 &gt; 방 구성에서 <b>5인·4인·3인·2인</b> 탭을 고르고 자리마다 병실을 적습니다 — 예: <b>6~9</b> 또는 <b>1, 12</b>.',
+        '[＋ 새 프리셋]으로 같은 인원수의 다른 나눔을 만듭니다(보고 있던 것을 복제해서 시작). 이름은 <b>회진일</b>·<b>수술 많은 날</b>처럼 알아볼 수 있게.',
+        '아래 <b>주간 계획표</b>에서 요일·근무(D/E/N)마다 프리셋을 고릅니다. 월요일 Day 와 화요일 Day 가 다른 나눔이어도 됩니다.',
+        '배정표에서 방 칸을 누르면 <b>이 날 방 구성</b> 줄이 있습니다 — 프리셋을 골라 [오늘만] 또는 [매주 이 요일]. 프리셋이 기본이 아닌 날은 A(CN) 방 칸 왼쪽에 초록 띠가 보입니다.'],
+ tips:['이 표가 어싸인의 기준입니다. 그날 실제 인원이 계획표의 인원수와 다르면 그 인원수의 기본 프리셋이 쓰입니다.',
+       '비어 있는 자리가 있으면 관리 메뉴에 <b>빈 칸 n</b> 이 뜨고, 그 프리셋을 쓰는 날엔 방이 안 나옵니다.']},
 {cat:'우리 병동 설정',id:'req',title:'요일별 필요 인원',
  lead:'요일마다 D·E·N 이 몇 명 필요한지입니다. 근무표 고치기 화면에서 부족·초과를 빨갛게 표시하는 기준입니다.',
  steps:['⚙ 관리 &gt; 요일별 필요 인원에서 숫자를 고칩니다.',
@@ -4550,8 +4682,10 @@ const TOURS={
     {el:()=>document.querySelector('#adminPanelBox table')||document.querySelector('#adminPanelBox'),title:'병상 수만 적으세요',text:'방마다 병상 수를 적어 두면 방 칸을 누를 때 몇 명까지 보는지 합계가 나옵니다. 없는 방은 ✕.',after:()=>{ if(connected()) show('week'); }},
   ],cleanup:()=>{ if(connected()) show('week'); }},
   scheme:{steps:()=>[
-    {before:()=>{ show('admin'); pickAdmin('schemes'); },el:()=>document.querySelector('#adminPanelBox input'),title:'인원수별로 자리마다 병실',text:'5·4·3·2인 근무별로 A(CN)·B·C… 자리가 맡을 병실을 적습니다. <b>51~53, 62</b> 처럼 짧게 써도 됩니다.'},
-    {sel:'#adminPanelBox button[onclick="resetSchemes()"]',title:'기본값 복원',text:'엉켰으면 기본 나눔으로 되돌립니다. 비어 있는 인원수가 있으면 관리 메뉴에 <b>빈 칸 n</b> 이 뜹니다.',after:()=>{ if(connected()) show('week'); }},
+    {before:()=>{ show('admin'); pickAdmin('schemes'); },sel:'#schemes .psTabs',title:'인원수 탭',text:'5·4·3·2인 근무별로 프리셋을 따로 둡니다. 5인인 날은 5인 프리셋 중에서만 고르게 됩니다.'},
+    {sel:'#schemes .psList',title:'프리셋 목록',text:'<b>기본</b> 외에 [＋ 새 프리셋]으로 다른 나눔을 만듭니다. 이름은 회진일·수술 많은 날처럼 알아볼 수 있게.'},
+    {el:()=>document.querySelector('#schemes .schemeRow input'),title:'자리마다 병실',text:'A(CN)·B·C… 자리가 맡을 병실을 적습니다. <b>51~53, 62</b> 처럼 짧게 써도 됩니다.'},
+    {sel:'#planTable',title:'주간 계획표',text:'요일·근무별로 어느 프리셋을 쓸지 고릅니다. 칸의 인원수는 요일별 필요 인원이고, 그날 인원이 다르면 그 인원수의 기본 프리셋이 쓰입니다.',after:()=>{ if(connected()) show('week'); }},
   ],cleanup:()=>{ if(connected()) show('week'); }},
   req:{steps:()=>[
     {before:()=>{ show('admin'); pickAdmin('req'); },el:()=>document.querySelector('#adminPanelBox table')||document.querySelector('#adminPanelBox'),title:'요일별 필요 인원',text:'요일마다 D·E·N 이 몇 명 필요한지입니다(차지 포함). 근무표 고치기 화면에서 부족·초과를 빨갛게 표시하는 기준입니다.',after:()=>{ if(connected()) show('week'); }},
@@ -4728,7 +4862,7 @@ window.__app={get store(){return store},set store(v){store=v},
   openPick,pickChoose,pickShift,setSeed,abbrevRooms,parseCellRaw,readXlsxGrid,loadTemplate,dayInfo,roomsFor,
   openRoomPick,toggleRoom,roomFull,roomShort,buildPrintArea,loadSidecar,tryAutoOpen,reloadFromFile,connectSave,
   reattachHandle,setWard,wardRooms,wardOfRooms,roomsBase,roomPos,readOldLocalStore,clearOldLocalStore,migrateOldLocalData,
-  setScheme,resetSchemes,moveNurse,attachTrainee,traineesUnder,preceptorOf,unattachedTrainees,
+  setScheme,resetSchemes,presetsOf,presetById,presetFor,addPreset,renamePreset,deletePreset,setPresetRooms,setPlan,applyPresetDay,renderSchemes,renderPlan,get presetUI(){return presetUI;},moveNurse,attachTrainee,traineesUnder,preceptorOf,unattachedTrainees,
   nameWithTrainees,applyWrapStyles,packXlsx,openFormText,saveFormText,addNurse,renameNurseAdmin,removeNurse,applyNurseName,adminBadge,
   htmlDirPath,joinPath,dirOfPath,fileLocPath,renderFileInfo,setFileLoc,locateHandle,copyFilePath,get fileLoc(){return fileLoc},
   startTour,endTour,tourNext,tourPrev,startTopicTour,renderOnboard,onboardItems,hideOnboard,showOnboard,xlMock,renderHelpDoc,openHelp,closeHelp,showIntro,hideIntro,get tour(){return tour},TOURS,HELP,
