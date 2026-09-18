@@ -1,4 +1,4 @@
-// assign-core.js + 병실 배정표.xlsx(base64) + 폰트를 standalone/assign.html 마커에 재주입 (단일 소스 동기화)
+// assign-core.js + 병실 배정표.xlsx·병실 배정표_122.xlsx(base64, 배정표 서식 두 벌) + 폰트를 standalone/assign.html 마커에 재주입 (단일 소스 동기화)
 // 도움말 그림(GIF)은 2026-09-17 에 실제 화면 투어로 대체돼 더 이상 심지 않는다.
 // 사용: node scripts/build-assign-standalone.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const core = readFileSync('frontend/js/modules/assign-core.js', 'utf8')
   .replace(/^\/\*[\s\S]*?\*\/\s*/, ''); // 상단 주석 블록 제거
 const tplB64 = readFileSync('standalone/병실 배정표.xlsx').toString('base64');
+const tpl122B64 = readFileSync('standalone/병실 배정표_122.xlsx').toString('base64');   // 122병동 서식 (2026-09-17)
 const fontB64 = readFileSync('frontend/fonts/PretendardVariable.woff2').toString('base64');
 
 const htmlPath = 'standalone/assign.html';
@@ -36,6 +37,10 @@ out = out.replace(
   /\/\*TEMPLATE_B64_BEGIN\*\/[\s\S]*?\/\*TEMPLATE_B64_END\*\//,
   '/*TEMPLATE_B64_BEGIN*/' + tplB64 + '/*TEMPLATE_B64_END*/'
 );
+out = out.replace(
+  /\/\*TEMPLATE122_B64_BEGIN\*\/[\s\S]*?\/\*TEMPLATE122_B64_END\*\//,
+  '/*TEMPLATE122_B64_BEGIN*/' + tpl122B64 + '/*TEMPLATE122_B64_END*/'
+);
 // Pretendard Variable 내장 (오프라인 단일 파일 — CDN 금지)
 out = out.replace(
   /\/\*FONT_B64_BEGIN\*\/[\s\S]*?\/\*FONT_B64_END\*\//,
@@ -49,4 +54,4 @@ out = out.replace(
 );
 if (out === html) console.log('변경 없음');
 else { writeFileSync(htmlPath, out); console.log(`standalone/assign.html 동기화 완료 — ${ASSIGN_VER}`,
-    '· 코어 + 양식 + 폰트 (도움말은 그림 없이 실제 화면 투어)'); }
+    '· 코어 + 양식 2벌(101·122) + 폰트 (도움말은 그림 없이 실제 화면 투어)'); }
