@@ -388,4 +388,46 @@ assert.equal(periodOf('OF'), null);
   assert.equal(compute(NN, solo, ['d1', 'd2'], { roomsFor, bedsOf: t => beds[t] || 1 }).byDay.d2.D.labels.C, 'X'); // 병상수: 10 > 4
 }
 
+/* ── 병상 단위 토큰 (2026-09-18) — 한 병실을 둘이 나눠 볼 때 ────────────────
+ * 코어는 방 토큰을 문자열로만 다루므로 '1001:1' 같은 병상 키를 그대로 넣을 수 있다.
+ * standalone 은 코어에 넘기기 전 늘 병상 키로 펼친다(방 표기와 섞이면 같은 환자인데
+ * 문자열이 달라 겹침이 0이 되기 때문). 여기서는 그 입력 형태로 이어짐을 확인한다. */
+{
+  const NN = ['C1','A1','B1','X','W'].map((id, i) => ({ id, seniority: i, chargeCapable: { D: i === 0 } }));
+  // 5인 근무: 1호(5병상)를 A(1~3)·B(4,5)가 나눠 본다. 4인이 되면 1호를 A 가 통째로 본다.
+  const rooms5 = { 차지: ['12:1','13:1','14:1'], A: ['1:1','1:2','1:3','2:1'], B: ['1:4','1:5','3:1'],
+                   C: ['5:1','10:1','11:1'], D: ['6:1','7:1','8:1','9:1'] };
+  const rooms4 = { 차지: ['12:1','13:1','14:1'], A: ['1:1','1:2','1:3','1:4','1:5','2:1'],
+                   B: ['3:1','5:1','11:1'], C: ['6:1','7:1','8:1','9:1','10:1'] };
+  const roomsFor = (P, cnt, label) => ((cnt >= 5 ? rooms5 : rooms4)[label] || []).slice();
+
+  // 이틀 연속 5인 — 나눠 본 사람이 같은 병상을 이어받는다
+  const r5 = compute(NN, {
+    C1: { d1: 'DC', d2: 'DC' }, A1: { d1: 'D', d2: 'D' }, B1: { d1: 'D', d2: 'D' },
+    X: { d1: 'D', d2: 'D' }, W: { d1: 'D', d2: 'D' },
+  }, ['d1', 'd2'], { roomsFor });
+  for (const n of ['A1','B1','X','W'])
+    assert.equal(r5.byDay.d2.D.labels[
+      Object.keys(r5.byDay.d2.D.labels).find(l => r5.byDay.d2.D.labels[l] === n)],
+      n, '5인 이틀 — 자리가 유지돼야 한다');
+  const seat1 = Object.keys(r5.byDay.d1.D.labels).find(l => r5.byDay.d1.D.labels[l] === 'X');
+  assert.equal(r5.byDay.d2.D.labels[seat1], 'X', '나눠 본 병상을 그대로 이어받는다');
+
+  // 5인 → 4인: 전날 1호 1~3번 병상(A)을 보던 사람이 1호 전체를 보는 A 를 가져간다
+  const r54 = compute(NN, {
+    C1: { d1: 'DC', d2: 'DC' }, A1: { d1: 'D', d2: 'D' }, B1: { d1: 'D', d2: 'D' },
+    X: { d1: 'D', d2: 'D' }, W: { d1: 'D', d2: 'OF' },
+  }, ['d1', 'd2'], { roomsFor });
+  const aDay1 = r54.byDay.d1.D.labels.A, bDay1 = r54.byDay.d1.D.labels.B;
+  assert.equal(r54.byDay.d2.D.labels.A, aDay1, '1:1~3 을 보던 사람이 1호 전체(A)를 이어받는다');
+  assert.notEqual(r54.byDay.d2.D.labels.A, bDay1, '1:4~5 만 보던 사람이 A 를 가져가면 안 된다');
+
+  // 병상 키는 하나가 환자 한 명 — bedsOf 없이도 겹침이 곧 환자 수
+  const r5b = compute(NN, {
+    C1: { d1: 'DC', d2: 'DC' }, A1: { d1: 'D', d2: 'D' }, B1: { d1: 'D', d2: 'D' },
+    X: { d1: 'D', d2: 'D' }, W: { d1: 'D', d2: 'D' },
+  }, ['d1', 'd2'], { roomsFor, bedsOf: () => 1 });
+  assert.deepEqual(r5b.byDay.d2.D.labels, r5.byDay.d2.D.labels, 'bedsOf=1 과 같은 결과여야 한다');
+}
+
 console.log('assign-core: 모든 검증 통과');

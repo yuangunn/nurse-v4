@@ -367,6 +367,13 @@
   #rpick{max-width:420px}
   #pick{min-width:300px;max-width:470px}
   #pick .shl{display:flex;flex-wrap:wrap}
+  /* 방 픽커 — 방 버튼 + 병상 나누기 (2026-09-18) */
+  #rpick .rpRoom{display:inline-flex;align-items:center;margin:0 4px 4px 0;vertical-align:top}
+  #rpick .rpRoom>button{margin:0}
+  #rpick button.part{background:var(--accent-soft);box-shadow:inset 0 0 0 2px var(--accent)}
+  #rpick button.rpSplit{min-width:0;padding:6px 7px;margin-left:2px;font-size:12px;letter-spacing:-2px}
+  #rpick .rpBeds{display:inline-flex;flex-wrap:wrap;margin-left:3px;padding-left:5px;box-shadow:inset 2px 0 0 var(--rule)}
+  #rpick .rpBeds button{min-width:2.6em;padding:5px 7px;margin:0 3px 3px 0;font-size:12px}
   #capsTable tr.nrow,#roomTable tr.rrow{cursor:grab}
   #capsTable tr.nrow.dragging,#roomTable tr.rrow.dragging{opacity:.4}
   #capsTable tr.nrow.dropAbove td,#roomTable tr.rrow.dropAbove td{box-shadow:inset 0 2px 0 var(--accent)}
@@ -525,8 +532,9 @@
   .sheet .railD{background:#EEF3FE;color:#1B4FC3;font-size:11pt;font-weight:800}
   .sheet .railE{background:#FEEFEF;color:#C7384A;font-size:11pt;font-weight:800}
   .sheet .railN{background:#EFEBFB;color:#5B3FB0;font-size:11pt;font-weight:800}
-  .sheet .prm{font-size:7.5pt;font-weight:600;color:#4A5160;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;white-space:nowrap}
-  .sheet .prm.long{font-size:6.6pt;letter-spacing:-0.04em}
+  .sheet .prm{font-size:7.5pt;font-weight:600;color:#4A5160;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;
+    white-space:normal;word-break:keep-all;line-height:1.1}
+  .sheet .prm.long{letter-spacing:-0.04em}
   .sheet .ptr{display:block;font-size:6pt;font-weight:600;color:#4A5160;line-height:1.05;margin-top:-0.3mm}
   .sheet .pnm{font-size:9pt;font-weight:700;letter-spacing:-0.02em;color:#0F1115;line-height:1.1;padding:0 0.6mm}
   .sheet .pnm.two{font-size:7.8pt}
@@ -1199,7 +1207,7 @@ $('#modal').addEventListener('mousedown',e=>{ if(e.target.id==='modal') closeMod
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260918e'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260918i'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1946,7 +1954,8 @@ function recompute(){
   const roomsForCore=(P,cnt,label,dk)=>{
     const ovd=store.roomOv[dk]&&store.roomOv[dk][P]&&(label in store.roomOv[dk][P]);
     const key=P+'|'+cnt+'|'+label+'|'+presetFor(P,cnt,dk).id+(ovd?'|'+dk:'');
-    if(!rfCache[key]) rfCache[key]=roomTokens(roomsFor(P,cnt,label,dk));
+    // 코어에는 늘 병상 키로 (방·병상 표기가 섞이면 같은 환자인데 겹침이 0이 된다)
+    if(!rfCache[key]) rfCache[key]=expandBeds(roomTokens(roomsFor(P,cnt,label,dk)));
     return rfCache[key];
   };
   // 주지 않을 방(banRooms) → 그 방이 포함된 라벨을 간호사별 회피 목록으로 (소프트)
@@ -1960,11 +1969,12 @@ function recompute(){
         const hit=banned.filter(n=>staff.includes(n));
         if(!hit.length) continue;
         const nLab=Math.min(staff.length,5);
+        const banKeys={}; for(const n of hit) banKeys[n]=expandBeds(store.banRooms[n]);   // 방으로 지정하면 그 방 전 병상
         for(let li=0;li<nLab;li++){
           const label=LBL_ORDER[li];
-          const toks=roomsForCore(P,staff.length,label,dk).map(roomFull);
+          const toks=roomsForCore(P,staff.length,label,dk);      // 이미 병상 키
           for(const n of hit){
-            if(toks.some(t=>store.banRooms[n].includes(t)))
+            if(toks.some(t=>banKeys[n].includes(t)))
               (((avoid[dk]=avoid[dk]||{})[P]=avoid[dk][P]||{})[n]=avoid[dk][P][n]||[]).push(label);
           }
         }
@@ -1975,7 +1985,8 @@ function recompute(){
     {rules:store.rules,overrides:merged,seed:Object.keys(seed).length?seed:null,avoid,
      roomsFor:roomsForCore,
      // 겹침은 병실 개수가 아니라 병상수 합(같이 보던 환자 수) — 병상수를 모르는 방은 1
-     bedsOf:t=>{ const r=(store.rooms||[]).find(x=>String(x[0])===roomFull(t)); return r?(+r[1]||1):1; }});
+     // 겹침은 병실 개수가 아니라 병상수 합(같이 보던 환자 수). 병상 키 하나는 환자 한 명 = 1
+     bedsOf:t=>{ const [room,no]=splitBed(roomFull(t)); return no!=null?1:(bedCount(room)||1); }});
 }
 function dayInfo(iso){
   if(!result) return null;
@@ -2040,13 +2051,53 @@ function roomsFor(P,cnt,label,iso){
   if(!cnt) return '';
   return abbrevRooms(presetFor(P,cnt,iso).rooms[label]);
 }
-function roomTokens(str){ // "1~3.11" → ['1','2','3','11'] (중복 검사용)
+/* ── 병상 단위 배정 (2026-09-18, 사용자 요청) ──────────────────────────────
+ * 환자가 많으면 한 병실을 둘이 나눠 본다. 토큰은 **방**(`1001`) 또는 **병상**(`1001:1`)이고
+ * 화면·인쇄는 축약해서 `1` / `1:1`. 병상 번호는 병실 목록의 **병상수로 1..n 자동**이라
+ * 따로 적을 게 없다(사용자 결정: 한 자리 표기, 자동 번호).
+ * **배정 코어에는 늘 병상 키로 펼쳐서 넘긴다** — 방 표기와 병상 표기가 섞이면 같은 환자를
+ * 가리키는 두 토큰이 문자열로 달라 '이어짐' 겹침이 0이 되기 때문. 펼쳐 넘기면 겹침이
+ * 곧 '같이 보던 환자 수'가 되어 지금보다 정확해진다 (코어 assign-core.js 는 손대지 않는다). */
+function splitBed(t){ const m=String(t??'').match(/^(.*[^:]):(\d+)$/); return m?[m[1],+m[2]]:[String(t??''),null]; }
+const bedTok=(room,no)=>room+':'+no;
+function bedCount(room){ const r=(store.rooms||[]).find(x=>String(x[0])===String(room)); return r?Math.max(0,+r[1]||0):0; }
+/* 토큰 → 병상 키 배열. 방이면 그 방의 모든 병상, 병상이면 자기 하나.
+ * 병상수를 모르는 방(0)은 나눌 수 없으므로 방 자체를 한 덩어리로 쓴다. */
+function bedKeys(t){
+  const [room,no]=splitBed(roomFull(t));
+  if(no!=null) return [bedTok(room,no)];
+  const n=bedCount(room);
+  if(n<=1) return [room];                     // 병상수를 모르거나 1인실 — 나눌 수 없으니 통째로 한 덩어리
+  const out=[]; for(let i=1;i<=n;i++) out.push(bedTok(room,i));
+  return out;
+}
+function expandBeds(list){ const out=[]; for(const t of list||[]) for(const k of bedKeys(t)) if(!out.includes(k)) out.push(k); return out; }
+/* 병상 키 → 다시 방/병상 토큰으로. 한 방의 병상이 다 모이면 방 하나로 접는다 */
+function collapseBeds(keys){
+  const order=[], byRoom={};
+  for(const k of keys||[]){ const [room,no]=splitBed(roomFull(k));
+    if(!byRoom[room]){ byRoom[room]=[]; order.push(room); }
+    if(no!=null) byRoom[room].push(no); }
+  const out=[];
+  for(const room of order){
+    const nos=[...new Set(byRoom[room])].sort((a,b)=>a-b), n=bedCount(room);
+    if(!nos.length||(n&&nos.length>=n)) out.push(room);
+    else for(const no of nos) out.push(bedTok(room,no));
+  }
+  return out;
+}
+const roomsLabel=list=>{ const t=abbrevRooms(list); return t?(/:/.test(t)?t:t+'호'):''; };
+function roomTokens(str){ // "1~3.11" → ['1','2','3','11'] · "1:1~3" → ['1:1','1:2','1:3'] (중복 검사용)
   if(!str) return [];
   const out=[];
   for(const part of String(str).split(/[.,\s]+/)){
-    const m=part.match(/^(\d+)~(\d+)$/);
-    if(m){ for(let v=+m[1];v<=+m[2]&&v-+m[1]<50;v++) out.push(String(v)); }
-    else if(part) out.push(part);
+    if(!part) continue;
+    // 병상 범위 — 1:1~3 또는 1:1~1:3 (같은 방 안에서만)
+    let m=part.match(/^(\d+):(\d+)~(?:(\d+):)?(\d+)$/);
+    if(m&&(!m[3]||m[3]===m[1])){ for(let v=+m[2];v<=+m[4]&&v-+m[2]<50;v++) out.push(m[1]+':'+v); continue; }
+    m=part.match(/^(\d+)~(\d+)$/);
+    if(m){ for(let v=+m[1];v<=+m[2]&&v-+m[1]<50;v++) out.push(String(v)); continue; }
+    out.push(part);
   }
   return out;
 }
@@ -2057,9 +2108,11 @@ function roomsBase(){
   const fl=Math.floor(ns[0]/100);
   return ns.every(n=>Math.floor(n/100)===fl)?fl*100:null;
 }
-const roomShort=r=>{ const b=roomsBase(), n=+r;
+const roomShortRoom=r=>{ const b=roomsBase(), n=+r;
   return b!=null&&Number.isInteger(n)&&Math.floor(n/100)*100===b?String(n-b):String(r); };
-function roomFull(t){ // 축약 토큰 '12' → '1012', '51' → '951' (마스터에 있을 때만)
+// 화면 표기 — 방은 '1', 병상은 '1:1' (병상 번호는 한 자리 그대로, 사용자 결정 2026-09-18)
+const roomShort=t=>{ const [room,no]=splitBed(t); const sh=roomShortRoom(room); return no!=null?bedTok(sh,no):sh; };
+function roomFullRoom(t){ // 축약 토큰 '12' → '1012', '51' → '951' (마스터에 있을 때만)
   t=String(t);
   const rs=(store.rooms||[]).map(r=>String(r[0]));
   if(rs.includes(t)) return t;
@@ -2067,6 +2120,7 @@ function roomFull(t){ // 축약 토큰 '12' → '1012', '51' → '951' (마스�
   if(b!=null&&/^\d{1,2}$/.test(t)){ const c=String(b+ +t); if(rs.includes(c)) return c; }
   return t;
 }
+function roomFull(t){ const [room,no]=splitBed(t); const f=roomFullRoom(room); return no!=null?bedTok(f,no):f; }
 // 직접 입력 안내용 예시 — 2라인 병동이면 51, 62, 64
 function roomHint(){ const b=roomsBase(); const two=b!=null&&(store.rooms||[]).every(r=>+r[0]-b>50);
   return [1,12,14].map(v=>v+(two?50:0)).join(', '); }
@@ -2075,7 +2129,7 @@ function dupRooms(iso,P,day){ // 같은 날·시간대에서 두 어싸인이 �
   const seen={},dup=new Set();
   for(const l of LBL_ORDER){
     if(!day[P].labels[l]) continue;
-    for(const t of roomTokens(roomsFor(P,cnt,l,iso))){
+    for(const t of expandBeds(roomTokens(roomsFor(P,cnt,l,iso)))){   // 같은 병상을 둘이 보면 겹침
       if(seen[t]&&seen[t]!==l) dup.add(t);
       seen[t]=seen[t]||l;
     }
@@ -2154,7 +2208,7 @@ function renderWeek(){
         const ov=store.ovr[iso]&&store.ovr[iso][P]&&(nm in store.ovr[iso][P]);
         const rmStr=roomsFor(P,cnt,label,iso);
         const isRov=store.roomOv[iso]&&store.roomOv[iso][P]&&(label in store.roomOv[iso][P]);
-        const hasDup=dups[di]&&roomTokens(rmStr).some(t=>dups[di][P].has(t));
+        const hasDup=dups[di]&&expandBeds(roomTokens(rmStr)).some(t=>dups[di][P].has(t));
         const pr=presetFor(P,cnt,iso), preOn=li===0&&pr.src!=='default';
         h+=`<td class="rm${isRov?' rov':''}${hasDup?' rdup':''}${preOn?' rpre':''}${tdCls(d)}" data-iso="${iso}" data-p="${P}" data-l="${label}"`+
            ` title="${esc(rmStr)}호 — 클릭 = 이 날 방 수정·프리셋${pr.src!=='default'?' · 방 구성: '+esc(pr.name)+(pr.src==='day'?' (오늘만)':' (요일 계획)'):''}${hasDup?' · ⚠ 다른 어싸인과 방 겹침':''}">${esc(rmStr)}</td>`+
@@ -2185,6 +2239,7 @@ function renderWeekWarnings(days,infos){
   const md=iso=>iso.slice(5,7)+'/'+iso.slice(8,10);
   const capMiss={}, chgMiss=[], short=[], trMiss={}, roomIssue={}, noSched=[];
   const allRooms=(store.rooms||[]).map(r=>String(r[0]));
+  const allBeds=expandBeds(allRooms);              // 병상 단위 — 나눠 본 방도 빠짐없이 센다
   const anyDay=infos.some(Boolean);
   days.forEach((d,di)=>{
     const iso=isoOfD(d), day=infos[di];
@@ -2208,16 +2263,18 @@ function renderWeekWarnings(days,infos){
       for(const T of unattachedTrainees(iso,P,day)) (trMiss[T]=trMiss[T]||[]).push({iso,P,workers:[...Object.values(day[P].labels),...day[P].extra]});
       // 방 — 아무도 안 보는 방·두 자리가 겹치는 방 (같은 내용은 날짜·시간대를 묶어 한 줄)
       if(cnt){ const seen=new Set();
-        for(const l in day[P].labels) roomTokens(roomsFor(P,cnt,l,iso)).map(roomFull).forEach(t=>seen.add(t));
-        const miss=allRooms.filter(r=>!seen.has(r)).map(roomShort), dup=[...dupRooms(iso,P,day)].map(roomShort);
-        if(miss.length||dup.length){
-          const key=(miss.length?`아무도 안 보는 방 ${miss.join(', ')}호`:'')+(miss.length&&dup.length?' · ':'')+(dup.length?`두 자리가 겹치는 방 ${dup.join(', ')}호`:'');
+        for(const l in day[P].labels) expandBeds(roomTokens(roomsFor(P,cnt,l,iso))).forEach(t=>seen.add(t));
+        const miss=roomsLabel(collapseBeds(allBeds.filter(r=>!seen.has(r))));
+        const dup=roomsLabel(collapseBeds([...dupRooms(iso,P,day)]));
+        if(miss||dup){
+          const key=(miss?`아무도 안 보는 방 ${miss}`:'')+(miss&&dup?' · ':'')+(dup?`두 자리가 겹치는 방 ${dup}`:'');
           (roomIssue[key]=roomIssue[key]||[]).push(`${md(iso)} ${P}`); } }
       for(const l in day[P].labels){
         const nm=day[P].labels[l], bans=store.banRooms[nm];
         if(!bans||!bans.length) continue;
-        const hit=roomTokens(roomsFor(P,cnt,l,iso)).map(roomFull).filter(t=>bans.includes(t));
-        if(hit.length) push('err',`${md(iso)} ${P} ${esc(nm)} — ${hit.map(roomShort).join(', ')}호는 주지 않을 방인데 배정됐습니다. 대안이 없습니다.`);
+        const banKeys=expandBeds(bans);
+        const hit=expandBeds(roomTokens(roomsFor(P,cnt,l,iso))).filter(t=>banKeys.includes(t));
+        if(hit.length) push('err',`${md(iso)} ${P} ${esc(nm)} — ${roomsLabel(collapseBeds(hit))}는 주지 않을 방인데 배정됐습니다. 대안이 없습니다.`);
       }
     }
   });
@@ -2405,22 +2462,22 @@ function rpSelected(){ // 현재 선택된 방 (실호실 번호 + 목록에 없
 }
 function openRoomPick(ctx,x,y){
   rpCtx=ctx;
+  rpBedOpen={};
+  for(const t of rpSelected()){ const [room,no]=splitBed(roomFull(t)); if(no!=null) rpBedOpen[room]=true; }
   renderRoomPick();
   placePopup($('#rpick'),x,y);
 }
 function closeRoomPick(){ $('#rpick').style.display='none'; rpCtx=null; }
 function renderRoomPick(){
-  const sel=rpSelected();
-  let beds=0,unk=0;
+  const sel=rpSelected(), selKeys=expandBeds(sel);
   const master=(store.rooms||[]).map(r=>String(r[0]));
-  for(const t of sel){
-    const r=(store.rooms||[]).find(r2=>String(r2[0])===t);
-    if(r&&+r[1]>0) beds+=+r[1]; else unk++;
-  }
+  // 담당 병상 수 = 병상 키 개수. 병상수를 모르는 방은 세지 못하고 따로 알린다
+  let beds=0,unk=0;
+  for(const k of selKeys){ if(splitBed(k)[1]!=null) beds++; else unk++; }
   const head=rpCtx.kind==='nurse'
     ? `${esc(rpCtx.name)} — 주지 않을 방 <span class="dim">(격리·중증·환자 거절 등)</span>`
     : `${+rpCtx.iso.slice(8,10)}일 ${rpCtx.P} ${FORM_LBL(rpCtx.l,rpCtx.P)} 방`;
-  const extra=sel.filter(t=>!master.includes(t));
+  const extra=sel.filter(t=>!master.includes(String(t))&&splitBed(String(t))[1]==null);
   let presetRow='';
   if(rpCtx.kind==='day'){
     const {iso,P}=rpCtx; const day=dayInfo(iso);
@@ -2435,22 +2492,33 @@ function renderRoomPick(){
   $('#rpick').innerHTML=
     `<div style="font-weight:700;margin-bottom:6px">${head}</div>`+presetRow+
     (rpCtx.kind==='day'?`<div class="dim" style="margin:2px 0 4px">이 자리 방만 손으로 고치기 — 이 날 하루만</div>`:'')+
-    master.map(r=>`<button class="${sel.includes(r)?'on':''}" onclick="toggleRoom('${esc(r)}')">${esc(roomShort(r))}호</button>`).join('')+
-    (extra.length?`<div class="dim" style="margin-top:4px">직접 쓴 값: ${extra.map(esc).join(', ')}</div>`:'')+
-    `<div style="margin-top:6px">담당 ${sel.length}개 방 · <b>병상 ${beds}개</b>${unk?` <span class="dim">(+병상수 모름 ${unk})</span>`:''}</div>`+
+    master.map(r=>{
+      const keys=bedKeys(r), n=bedCount(r);
+      const on=keys.every(k=>selKeys.includes(k)), some=!on&&keys.some(k=>selKeys.includes(k));
+      const open=!!rpBedOpen[r];
+      return `<span class="rpRoom"><button class="${on?'on':some?'part':''}" onclick="toggleRoom('${esc(r)}')" title="${esc(roomShortRoom(r))}호 전체 — 누르면 방째로 넣고 뺍니다">${esc(roomShortRoom(r))}호</button>`+
+        (n>1?`<button class="rpSplit${open?' on':''}" onclick="toggleBedOpen('${esc(r)}')" title="${esc(roomShortRoom(r))}호를 병상으로 나눠서 고릅니다 (${n}병상)">⋮</button>`:'')+
+        (open&&n>1?`<span class="rpBeds">${keys.map((k,i)=>
+          `<button class="${selKeys.includes(k)?'on':''}" onclick="toggleBed('${esc(r)}',${i+1})" title="${esc(roomShort(k))} 병상">${esc(roomShort(k))}</button>`).join('')}</span>`:'')+
+        `</span>`;
+    }).join('')+
+    (extra.length?`<div class="dim" style="margin-top:4px">직접 쓴 값: ${extra.map(t=>esc(roomShort(t))).join(', ')}</div>`:'')+
+    `<div style="margin-top:6px">담당 <b>병상 ${beds}개</b>${unk?` <span class="dim">(+병상수 모름 ${unk})</span>`:''}`+
+    `<span class="dim"> · ⋮ 를 누르면 그 방을 병상으로 나눠 고를 수 있습니다</span></div>`+
     `<div style="margin-top:8px;display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap">`+
     (rpCtx.kind==='day'
       ? `<button onclick="roomPickAuto()">↩ 자동으로</button><button onclick="roomPickManual()">✏ 직접 입력</button>`
       : `<button onclick="banClear()">모두 해제</button>`)+
     `<button onclick="closeRoomPick()">✕ 닫기</button></div>`;
 }
-function toggleRoom(rm){
-  const sel=rpSelected();
-  const i=sel.indexOf(rm);
-  if(i>=0) sel.splice(i,1); else sel.push(rm);
+/* 방/병상 고르기 — 안에서는 병상 키로 다루고, 저장할 때 다 찬 방은 방 하나로 접는다 (2026-09-18) */
+let rpBedOpen={};
+function toggleBedOpen(rm){ rpBedOpen[rm]=!rpBedOpen[rm]; renderRoomPick(); }
+function applyRoomSel(keys){
+  const sel=collapseBeds(keys);
   const master=(store.rooms||[]).map(r=>String(r[0]));
-  sel.sort((a,b)=>{const ia=master.indexOf(a),ib=master.indexOf(b);
-    return (ia<0?999:ia)-(ib<0?999:ib)||String(a).localeCompare(b);});
+  const pos=t=>{ const i=master.indexOf(splitBed(String(t))[0]); return i<0?999:i; };
+  sel.sort((a,b)=>pos(a)-pos(b)||(splitBed(String(a))[1]||0)-(splitBed(String(b))[1]||0)||String(a).localeCompare(b));
   if(rpCtx.kind==='nurse'){
     if(sel.length) store.banRooms[rpCtx.name]=sel; else delete store.banRooms[rpCtx.name];
     touch(); recompute(); renderRoomPick();
@@ -2461,6 +2529,15 @@ function toggleRoom(rm){
     (ro[P]=ro[P]||{})[l]=abbrevRooms(sel);
     touch(); recompute(); renderWeek(); renderRoomPick();
   }
+}
+function toggleRoom(rm){
+  const keys=expandBeds(rpSelected()), mine=bedKeys(rm);
+  const on=mine.every(k=>keys.includes(k));
+  applyRoomSel(on?keys.filter(k=>!mine.includes(k)):[...keys,...mine.filter(k=>!keys.includes(k))]);
+}
+function toggleBed(rm,no){
+  const keys=expandBeds(rpSelected()), k=bedTok(roomFullRoom(rm),no);
+  applyRoomSel(keys.includes(k)?keys.filter(x=>x!==k):[...keys,k]);
 }
 function roomPickAuto(){
   const {iso,P,l}=rpCtx; closeRoomPick();
@@ -3453,7 +3530,7 @@ const ADMIN_PANELS={
         }).join('')||`<tr><td colspan="3" class="dim" style="padding:10px 0">정해 둔 표기가 없습니다. 근무표를 붙여넣을 때 모르는 표기가 나오면 여기에 쌓입니다.</td></tr>`);
     }},
   schemes:{title:'방 구성',
-    desc:'근무 인원수(2~5인)별로 자리마다 맡을 방을 정합니다. 인원수마다 <b>프리셋</b>을 여러 개 만들어 두고, 아래 <b>주간 계획표</b>에서 요일·근무별로 어느 것을 쓸지 고르세요. 배정표에서 그날만 바꿀 수도 있습니다. 호수만 짧게 적으세요 — 1라인 <b>1~14</b>, 2라인 <b>51~64</b> (예: <code>1~3, 12</code>).',
+    desc:'근무 인원수(2~5인)별로 자리마다 맡을 방을 정합니다. 인원수마다 <b>프리셋</b>을 여러 개 만들어 두고, 아래 <b>주간 계획표</b>에서 요일·근무별로 어느 것을 쓸지 고르세요. 배정표에서 그날만 바꿀 수도 있습니다. 호수만 짧게 적으세요 — 1라인 <b>1~14</b>, 2라인 <b>51~64</b> (예: <code>1~3, 12</code>). 한 방을 둘이 나눠 볼 때는 <b>병상</b>까지 적습니다 — <code>4:1~3</code>(4호 1~3번 병상) · <code>4:4, 4:5</code>.',
     aux:`<button onclick="resetSchemes()" title="'기본' 프리셋 4벌을 프로그램 기본 나눔으로 되돌립니다 — 다른 프리셋은 그대로">기본 프리셋 복원</button>`,
     body(){ return `<div id="schemes"></div><div id="planBox" style="margin-top:20px"></div>`; },
     after(){ renderSchemes(); renderPlan(); }},
@@ -3482,7 +3559,7 @@ const ADMIN_PANELS={
             <td><div style="display:flex;gap:4px;flex-wrap:wrap">${ALL_CAPS.map(c=>
               `<span class="capChip${cp.includes(c)?' on':''}" onclick="toggleCap('${esc(n)}','${c}')">${c}</span>`).join('')}</div></td>
             <td><div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">${
-              bans.map(r=>`<span class="banChip">${esc(roomShort(r))}호<span class="x" onclick="delBan('${esc(n)}','${esc(r)}')">×</span></span>`).join('')}
+              bans.map(r=>`<span class="banChip">${esc(roomShort(r))}${splitBed(String(r))[1]==null?'호':''}<span class="x" onclick="delBan('${esc(n)}','${esc(r)}')">×</span></span>`).join('')}
               <span class="addChip banBtn" title="주지 않을 방 고르기" onclick="openRoomPick({kind:'nurse',name:'${esc(n)}'},event.pageX,event.pageY)">＋</span></div></td>
             <td style="white-space:nowrap"><button class="segbtn" title="한 칸 위로 (선임 쪽)" ${i===0?'disabled':''} onclick="moveNurse(${i},${i-1})">▲</button>`+
             `<button class="segbtn" title="한 칸 아래로" ${i===last?'disabled':''} onclick="moveNurse(${i},${i+1})">▼</button>`+
@@ -3593,8 +3670,8 @@ function renderSchemes(){
 function presetAuditHtml(p){
   const au=presetAudit(p);
   if(!au.missing.length&&!au.dup.length) return `<div class="psAudit ok">✓ 병실 ${(store.rooms||[]).length}개가 모두 한 자리씩 들어 있습니다</div>`;
-  return `<div class="psAudit bad">${au.missing.length?`<div>! 아무도 안 보는 방: <b>${au.missing.map(roomShort).join(', ')}호</b></div>`:''}${
-    au.dup.length?`<div>! 두 자리가 겹치는 방: <b>${au.dup.map(roomShort).join(', ')}호</b></div>`:''}<div class="sub">병실 목록의 모든 방이 한 자리씩 들어가야 합니다. 없는 방이면 병실 목록에서 빼세요.</div></div>`;
+  return `<div class="psAudit bad">${au.missing.length?`<div>! 아무도 안 보는 방: <b>${roomsLabel(collapseBeds(au.missing))}</b></div>`:''}${
+    au.dup.length?`<div>! 두 자리가 겹치는 방: <b>${roomsLabel(collapseBeds(au.dup))}</b></div>`:''}<div class="sub">병실 목록의 모든 방이 한 자리씩 들어가야 합니다. 없는 방이면 병실 목록에서 빼세요.</div></div>`;
 }
 function renderPlan(){
   const box=$('#planBox'); if(!box) return;
@@ -3689,7 +3766,9 @@ function setWard(code){
   const beds={}; for(const r of cur){ const p=roomPos(r[0]); if(p) beds[p]=+r[1]||0; }
   const byPos={}; for(const r of rooms) byPos[roomPos(r)]=r;
   // roomFull 은 옛 목록 기준 — 교체 전에. 새 목록에 없는 자리는 뺀다
-  const mv=list=>(list||[]).map(r=>{ const p=roomPos(roomFull(r)); return p?(byPos[p]||null):r; }).filter(Boolean);
+  const mv=list=>(list||[]).map(r=>{ const [room,no]=splitBed(roomFull(r)); const p=roomPos(room);
+    if(!p) return r;
+    const nr=byPos[p]; return nr?(no!=null?bedTok(nr,no):nr):null; }).filter(Boolean);
   for(const c in store.schemes) for(const l in store.schemes[c]) store.schemes[c][l]=mv(store.schemes[c][l]);
   for(const c in store.presets) for(const p of store.presets[c]) for(const l in p.rooms) p.rooms[l]=mv(p.rooms[l]);
   for(const n in store.banRooms) store.banRooms[n]=mv(store.banRooms[n]);
@@ -3714,15 +3793,16 @@ function attachRoom(r){
 /* 방을 방 구성·주지 않을 방에서 뺀다 (병실 목록에서 지울 때) */
 function detachRoom(r){
   r=String(r);
-  const rm=list=>(list||[]).filter(x=>String(x)!==r);
+  const rm=list=>(list||[]).filter(x=>splitBed(String(x))[0]!==r);   // 그 방의 병상 토큰까지 (2026-09-18)
   for(const c in store.schemes) for(const l in store.schemes[c]) store.schemes[c][l]=rm(store.schemes[c][l]);
   for(const c in store.presets) for(const p of store.presets[c]) for(const l in p.rooms) p.rooms[l]=rm(p.rooms[l]);
   for(const nm in store.banRooms) store.banRooms[nm]=rm(store.banRooms[nm]);
 }
 /* 프리셋 검사 — 병실 목록 기준으로 아무도 안 보는 방·두 자리가 겹치는 방 (실호실). 관리 > 방 구성과 확인 카드가 쓴다 (2026-09-17) */
 function presetAudit(p){
-  const all=(store.rooms||[]).map(r=>String(r[0])); const seen={}, dup=new Set();
-  for(const l in (p.rooms||{})) for(const t of (p.rooms[l]||[]).map(roomFull)){ if(seen[t]&&seen[t]!==l) dup.add(t); seen[t]=seen[t]||l; }
+  // 병상 단위로 본다 — 한 방을 둘이 나눠 봐도 '아무도 안 보는 방'으로 잡히지 않게 (2026-09-18)
+  const all=expandBeds((store.rooms||[]).map(r=>String(r[0]))); const seen={}, dup=new Set();
+  for(const l in (p.rooms||{})) for(const t of expandBeds(p.rooms[l]||[])){ if(seen[t]&&seen[t]!==l) dup.add(t); seen[t]=seen[t]||l; }
   return {missing:all.filter(r=>!seen[r]),dup:[...dup]};
 }
 const presetBad=p=>{ const a=presetAudit(p); return presetEmpty(p)||a.missing.length>0||a.dup.length>0; };
@@ -3735,12 +3815,26 @@ function setRoom(i,f,v){
     if(store.rooms.some((r,j)=>j!==i&&String(r[0])===v)){ toast('이미 있는 호실입니다: '+v,3200); renderAdmin(); return; }
     snapshot();
     store.rooms[i][0]=v;
-    // 방 구성·주지 않을 방의 그 호실도 함께 바꾼다 — 안 그러면 없는 방을 보는 자리가 된다
-    const mv=list=>(list||[]).map(x=>String(x)===old?v:x);
+    // 방 구성·주지 않을 방의 그 호실도 함께 바꾼다 — 안 그러면 없는 방을 보는 자리가 된다 (병상 번호는 그대로)
+    const mv=list=>(list||[]).map(x=>{ const [room,no]=splitBed(String(x));
+      return room===old?(no!=null?bedTok(v,no):v):x; });
     for(const c in store.schemes) for(const l in store.schemes[c]) store.schemes[c][l]=mv(store.schemes[c][l]);
     for(const c in store.presets) for(const p of store.presets[c]) for(const l in p.rooms) p.rooms[l]=mv(p.rooms[l]);
     for(const nm in store.banRooms) store.banRooms[nm]=mv(store.banRooms[nm]);
-  } else store.rooms[i][1]=+v||0;
+  } else {
+    const room=String(store.rooms[i][0]), was=+store.rooms[i][1]||0, now=+v||0;
+    store.rooms[i][1]=now;
+    // 병상이 줄면 없어진 병상 토큰을 걷어낸다 (5인실 → 3인실인데 4·5번 병상을 보는 자리가 남지 않게)
+    if(now&&was&&now<was){
+      snapshot();
+      const rm=list=>(list||[]).filter(x=>{ const [r2,no]=splitBed(String(x)); return !(r2===room&&no!=null&&no>now); });
+      for(const c in store.schemes) for(const l in store.schemes[c]) store.schemes[c][l]=rm(store.schemes[c][l]);
+      for(const c in store.presets) for(const pp of store.presets[c]) for(const l in pp.rooms) pp.rooms[l]=rm(pp.rooms[l]);
+      for(const nm in store.banRooms) store.banRooms[nm]=rm(store.banRooms[nm]);
+      for(const iso in store.roomOv) for(const P in store.roomOv[iso]) for(const l in store.roomOv[iso][P])
+        store.roomOv[iso][P][l]=abbrevRooms(rm(roomTokens(store.roomOv[iso][P][l]).map(roomFull)));
+    }
+  }
   touch(); recompute(); renderAdmin();
 }
 function delRoom(i){
@@ -4490,23 +4584,38 @@ function weeksOf(y,m){
   for(let d=new Date(start); d<=last; d.setDate(d.getDate()+7)) out.push(new Date(d));
   return out;
 }
+/* 방 목록 → 짧은 표기. 같은 층(층×100)이면 호수만 (901→1, 951→51).
+ * 방 통째는 연속을 묶어 `1~3`, 나눠 본 방은 방마다 `4:1~3` · `4:1, 4:4` (2026-09-18 병상 단위) */
 function abbrevRooms(list){
   if(!list||!list.length) return '';
-  // 같은 층(층×100)의 방들이면 호수만 — 901→1, 951→51, 1001→1. 층이 섞였거나 숫자가 아니면 그대로
-  const ns=list.map(roomFull).map(s=>+s);
-  const ok=ns.every(n=>Number.isInteger(n)&&n>0)&&new Set(ns.map(n=>Math.floor(n/100))).size===1;
-  if(!ok) return list.join(', ');
-  const base=Math.floor(ns[0]/100)*100;
-  const nums=[...new Set(ns.map(n=>n-base))].sort((a,b)=>a-b);
+  list=collapseBeds(list.map(roomFull));      // 한 방의 병상이 다 모이면 방 하나로
+  const base=roomsBase();
+  const shortOf=r=>{ const n=+r; return base!=null&&Number.isInteger(n)&&n>0&&Math.floor(n/100)*100===base?n-base:null; };
+  const items=list.map(t=>splitBed(t));
+  // 층이 하나라도 다르면 축약하지 않는다 — '1, 1002' 는 1 이 901 인지 1001 인지 알 수 없다
+  if(items.some(([room])=>shortOf(room)==null)) return items.map(([room,no])=>no!=null?bedTok(room,no):room).join(', ');
+  const whole=new Set(), byRoom={}, plain=[];
+  for(const [room,no] of items){
+    const sh=shortOf(room);
+    if(no==null) whole.add(sh); else (byRoom[sh]=byRoom[sh]||new Set()).add(no);
+  }
+  const rangeOf=nums=>{ const a=[...new Set(nums)].sort((x,y)=>x-y), out=[]; let i=0;
+    while(i<a.length){ let st=a[i],en=st;
+      while(i+1<a.length&&a[i+1]===en+1) en=a[++i];
+      if(en-st>=2) out.push(st+'~'+en); else for(let v=st;v<=en;v++) out.push(String(v));
+      i++; }
+    return out; };
+  const rooms=[...new Set([...whole,...Object.keys(byRoom).map(Number)])].sort((a,b)=>a-b);
   const out=[]; let i=0;
-  while(i<nums.length){
-    let st=nums[i],en=st;
-    while(i+1<nums.length&&nums[i+1]===en+1){en=nums[++i]}
-    if(en-st>=2) out.push(st+'~'+en);
-    else for(let v=st;v<=en;v++) out.push(String(v));
+  while(i<rooms.length){
+    const n=rooms[i];
+    if(!whole.has(n)){ out.push(rangeOf([...byRoom[n]]).map(x=>n+':'+x).join(', ')); i++; continue; }
+    let st=n,en=n;
+    while(i+1<rooms.length&&whole.has(rooms[i+1])&&rooms[i+1]===en+1) en=rooms[++i];
+    if(en-st>=2) out.push(st+'~'+en); else for(let v=st;v<=en;v++) out.push(String(v));
     i++;
   }
-  return out.join(', ');
+  return [...out,...plain].join(', ');
 }
 function weekData(sun){
   const days=[];
@@ -4876,8 +4985,10 @@ async function buildPrintArea(wholeMonth){
           if(day.blank||!day.secs[P].byLabel[label]){ wk+='<td></td><td></td>'; continue; }
           const pn=day.secs[P].byLabel[label], piso=isoOfD(day.date);
           const ptr=traineesUnder(piso,P,pn);
-          const rmv=roomsFor(P,day.secs[P].cnt,label,piso).replace(/,\s+/g,',');   // 쉼표 뒤 공백 없이 — 11.9mm 칸에서 두 줄로 접히지 않게
-          wk+=`<td class="prm${rmv.length>8?' long':''}">${rmv}</td>`+
+          // 쉼표 뒤 공백을 빼고, 길면 글자를 줄여 쉼표에서만 접는다 (병상 표기 1:1~3, 2:1, 2:2 는 길다)
+          const rmv=roomsFor(P,day.secs[P].cnt,label,piso).replace(/,\s+/g,',');
+          const rpt=rmv.length>16?4.8:rmv.length>11?5.4:rmv.length>8?6.2:7.5;
+          wk+=`<td class="prm${rmv.length>8?' long':''}" style="font-size:${rpt}pt">${esc(rmv).replace(/,/g,',<wbr>')}</td>`+
               `<td class="pnm${ptr.length?' two':''}">${esc(pn)}${ptr.map(T=>`<span class="ptr">/ ${esc(T)}</span>`).join('')}</td>`;
         }
         wk+='</tr>';
@@ -4957,7 +5068,7 @@ async function buildPrintArea122(wholeMonth){
       h+=dayHead(6,row)+'</tr>';
     }
     // 구역 D / 중간번 / E / N
-    const rmPt=t=>t.length>11?5.2:t.length>8?5.9:6.8;      // 칸(8.7~11.7mm)에 맞춰 — 잘리는 것보다 작은 글자가 낫다
+    const rmPt=t=>t.length>16?4.6:t.length>11?5.2:t.length>8?5.9:6.8;   // 칸(8.7~11.7mm)에 맞춰 — 잘리는 것보다 작은 글자가 낫다 (병상 표기는 더 길다)
     // 쉼표 뒤에서만 접히게 (숫자 중간에서 끊기지 않도록) — 가장 좁은 일요일 방 칸에서도 '2,3,12,13' 이 다 보인다
     const rmWrap=t=>esc(t).replace(/,/g,',<wbr>');
     const roomCell=(rc,P,li)=>{ const l=LBL_ORDER[li], o=grp[rc]; const rm=o&&o[P][l];
@@ -5560,7 +5671,8 @@ window.__app={get store(){return store},set store(v){store=v},
   get result(){return result},get tlKeys(){return tlKeys},
   ingestGrid,confirmPaste,recompute,renderWeek,weekData,downloadWeekXlsx,printWeek,
   openPick,pickChoose,pickShift,setSeed,abbrevRooms,parseCellRaw,readXlsxGrid,loadTemplate,dayInfo,roomsFor,
-  openRoomPick,toggleRoom,roomFull,roomShort,buildPrintArea,loadSidecar,tryAutoOpen,reloadFromFile,connectSave,
+  openRoomPick,toggleRoom,toggleBed,toggleBedOpen,applyRoomSel,roomFull,roomShort,roomTokens,abbrevRooms,
+  splitBed,bedTok,bedCount,bedKeys,expandBeds,collapseBeds,roomsLabel,presetAudit,dupRooms,buildPrintArea,loadSidecar,tryAutoOpen,reloadFromFile,connectSave,
   reattachHandle,setWard,wardRooms,wardOfRooms,roomsBase,roomPos,roomAtPos,setRoom,addRoom,delRoom,moveRoom,attachRoom,detachRoom,readOldLocalStore,clearOldLocalStore,migrateOldLocalData,
   setScheme,resetSchemes,presetsOf,presetById,presetFor,addPreset,renamePreset,deletePreset,setPresetRooms,setPlan,applyPresetDay,renderSchemes,renderPlan,get presetUI(){return presetUI;},moveNurse,attachTrainee,traineesUnder,preceptorOf,unattachedTrainees,
   nameWithTrainees,applyWrapStyles,packXlsx,openFormText,saveFormText,addNurse,renameNurseAdmin,removeNurse,applyNurseName,adminBadge,
