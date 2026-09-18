@@ -34,3 +34,5 @@ standalone/exe/dist/
 standalone/assign-data*.js
 standalone/assign-data*.json
 design/handoff/check/node_modules
+/node_modules/
+docs/manual/shots/
