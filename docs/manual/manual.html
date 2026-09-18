@@ -1,0 +1,351 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<title>어싸인 배정표 사용설명서</title><style>
+@font-face{font-family:'Pretendard';src:url(../../frontend/fonts/PretendardVariable.woff2) format('woff2-variations');font-weight:45 920;font-display:block}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Pretendard',sans-serif;color:#17191c;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@page{size:A4 portrait;margin:0}
+.pg{width:210mm;height:297mm;padding:16mm 15mm 14mm;page-break-after:always;position:relative;display:flex;flex-direction:column;background:#fff}
+.pg:last-child{page-break-after:auto}
+.pgnum{position:absolute;bottom:8mm;right:15mm;font-size:10pt;color:#9aa1ab}
+.pgft{position:absolute;bottom:8mm;left:15mm;font-size:10pt;color:#9aa1ab}
+
+/* 표지 */
+.cover{justify-content:center;align-items:center;text-align:center;background:linear-gradient(160deg,#10131a 0%,#1d2533 60%,#2b3purple 100%);background:#131722;color:#fff}
+.cover .big{font-size:44pt;font-weight:800;letter-spacing:-.03em;line-height:1.15}
+.cover .sub{font-size:16pt;font-weight:600;color:#aab4c4;margin-top:8mm;line-height:1.7}
+.cover .box{margin-top:18mm;padding:8mm 12mm;border-radius:6mm;background:rgba(255,255,255,.08);font-size:13pt;line-height:2;color:#e6ebf3;text-align:left}
+.cover .box b{color:#fff}
+.cover .foot{position:absolute;bottom:16mm;left:0;right:0;font-size:11pt;color:#7e8899}
+
+/* 제목 */
+h1{font-size:26pt;font-weight:800;letter-spacing:-.02em;line-height:1.25;margin-bottom:3mm}
+h1 .tag{display:inline-block;font-size:12pt;font-weight:800;color:#fff;background:#2b6ef2;border-radius:3mm;padding:1.5mm 4mm;margin-right:3mm;vertical-align:.8mm}
+h1 .tag.g{background:#17925a}h1 .tag.o{background:#c76a12}h1 .tag.r{background:#c0392f}h1 .tag.p{background:#6a49c4}
+.lead{font-size:13.5pt;line-height:1.75;color:#3c434e;margin-bottom:6mm}
+h2{font-size:15pt;font-weight:800;margin:6mm 0 3mm;color:#17191c}
+
+/* 단계 */
+.steps{list-style:none}
+.steps li{display:flex;gap:4mm;margin-bottom:4.5mm;font-size:13pt;line-height:1.7}
+.steps .n{flex:0 0 9mm;height:9mm;border-radius:50%;background:#17191c;color:#fff;font-weight:800;font-size:12pt;display:flex;align-items:center;justify-content:center;margin-top:.5mm}
+.steps b{font-weight:800}
+.steps .k{display:inline-block;background:#eef2f8;border:.4mm solid #c9d3e2;border-radius:2mm;padding:.3mm 2mm;font-weight:800;font-size:12pt}
+
+/* 캡처 */
+figure{margin:4mm 0}
+figure img{width:100%;border:.5mm solid #d7dce4;border-radius:2.5mm;display:block}
+figcaption{font-size:11pt;color:#6b7482;margin-top:2mm;line-height:1.6}
+.small img{width:78%;margin:0 auto}
+.tiny img{width:58%;margin:0 auto}
+figure.fit img{width:auto;max-width:100%;margin:0 auto}
+
+/* 상자 */
+.tip{margin:5mm 0;padding:4.5mm 5mm;border-radius:3mm;background:#f3f7ff;border-left:1.6mm solid #2b6ef2;font-size:12.5pt;line-height:1.75}
+.warn{background:#fff5f3;border-left-color:#c0392f}
+.ok{background:#f1faf4;border-left-color:#17925a}
+.tip b{font-weight:800}
+.tip .h{display:block;font-weight:800;margin-bottom:1.5mm}
+
+table.qa{width:100%;border-collapse:collapse;font-size:12pt;margin-top:3mm}
+table.qa td{border-bottom:.4mm solid #e3e7ee;padding:3.5mm 2mm;vertical-align:top;line-height:1.65}
+table.qa td.q{width:42%;font-weight:800}
+table.qa tr:last-child td{border-bottom:none}
+
+.cards{display:flex;flex-direction:column;gap:3.5mm;margin-top:4mm}
+.card{border:.5mm solid #dde2ea;border-radius:3mm;padding:4mm 5mm}
+.card .t{font-size:13pt;font-weight:800;margin-bottom:1.5mm}
+.card .d{font-size:12pt;color:#4a525e;line-height:1.7}
+.when{display:inline-block;font-size:10.5pt;font-weight:800;color:#fff;background:#6b7482;border-radius:2mm;padding:.8mm 2.5mm;margin-right:2mm}
+.when.a{background:#2b6ef2}.when.b{background:#17925a}.when.c{background:#c76a12}
+</style></head>
+<body><div class="pg cover">
+<div class="big">어싸인 배정표<br>사용설명서</div>
+<div class="sub">누가 어느 병실을 보는지<br>근무표만 넣으면 자동으로 정해 줍니다</div>
+<div class="box">
+처음 한 번만 &nbsp;<b>우리 병동 정하기</b><br>
+매달 한 번 &nbsp;<b>근무표 넣기</b><br>
+매주 &nbsp;<b>배정표 인쇄하기</b>
+</div>
+<div class="foot">이 설명서의 모든 화면은 실제 프로그램 화면입니다.<br>이름은 예시(홍길동·김영숙 등)입니다.</div>
+</div><div class="pg ">
+<h1>이 프로그램이 하는 일</h1>
+<div class="lead">병동 근무표가 나오면, <b>그 주에 누가 어느 병실을 맡는지</b>를 자동으로 정해 주고 인쇄까지 해 줍니다.
+손으로 짜던 배정표를 대신 만들어 주는 프로그램입니다.</div>
+
+<h2>세 가지만 기억하세요</h2>
+<div class="cards">
+  <div class="card"><div class="t"><span class="when a">처음 한 번</span>우리 병동을 알려 줍니다</div>
+    <div class="d">병동 번호를 고르고, 간호사 이름을 넣습니다. 한 번 해 두면 다시 할 일이 없습니다.</div></div>
+  <div class="card"><div class="t"><span class="when b">매달 한 번</span>근무표를 넣습니다</div>
+    <div class="d">엑셀 근무표를 복사해서 붙여넣기만 하면 됩니다.</div></div>
+  <div class="card"><div class="t"><span class="when c">매주</span>배정표를 인쇄합니다</div>
+    <div class="d">화면에 이미 만들어져 있습니다. [인쇄]를 누르면 A4 한 장으로 나옵니다.</div></div>
+</div>
+
+<div class="tip ok"><span class="h">인터넷이 필요 없습니다</span>
+이 프로그램은 파일 하나(assign.html)입니다. 인터넷으로 아무것도 보내지 않고,
+모든 내용은 이 컴퓨터 안에만 저장됩니다.</div>
+
+<div class="tip"><span class="h">잘못 눌러도 괜찮습니다</span>
+거의 모든 동작은 <b>Ctrl 키와 Z 키를 함께 눌러</b> 되돌릴 수 있습니다.
+화면 아래에 파란 알림이 뜨면 그 알림을 눌러도 되돌아갑니다.</div>
+<div class="pgnum">2</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1><span class="tag">준비 1</span>프로그램 열기</h1>
+<div class="lead">받은 파일 <b>assign.html</b> 을 두 번 누르면 인터넷 창처럼 열립니다.
+설치할 것도, 아이디를 만들 것도 없습니다.</div>
+
+<ol class="steps">
+<li><span class="n">1</span><div>파일 <b>assign.html</b> 을 두 번 누릅니다. 크롬이나 엣지 창이 열립니다.</div></li>
+<li><span class="n">2</span><div>아래 화면이 나오면 <span class="k">처음 시작</span> 을 누릅니다.</div></li>
+<li><span class="n">3</span><div>파일 이름을 물어보면 <b>그대로 두고</b> 저장을 누릅니다.
+저장 위치는 <b>assign.html 과 같은 폴더</b>로 하세요.</div></li>
+</ol>
+
+<figure><img src="shots/01-start.png"><figcaption>처음 열었을 때 나오는 화면입니다. 검은 [처음 시작] 단추를 누르세요.</figcaption></figure>
+
+<div class="tip"><span class="h">다음부터는 이 화면이 안 나옵니다</span>
+한 번 만들어 두면, 다음에 프로그램을 열 때 배정표가 바로 뜹니다.
+고칠 때 "파일을 볼 수 있도록 허용하시겠습니까?" 라고 물으면 <b>[허용]</b> 을 한 번 눌러 주세요.</div>
+<div class="pgnum">3</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1><span class="tag">준비 2</span>우리 병동 고르기</h1>
+<div class="lead">병동만 고르면 병실 번호가 저절로 채워집니다. <b>병상 수만</b> 적어 주시면 됩니다.</div>
+
+<ol class="steps">
+<li><span class="n">1</span><div>오른쪽 위 <span class="k">관리</span> 를 누릅니다.</div></li>
+<li><span class="n">2</span><div>왼쪽 목록에서 <span class="k">병실 목록</span> 을 누릅니다.</div></li>
+<li><span class="n">3</span><div><b>병동</b> 칸에서 우리 병동을 고릅니다. (예: 101병동)</div></li>
+<li><span class="n">4</span><div>방마다 <b>병상수</b> 를 적습니다. 5인실이면 5, 2인실이면 2 입니다.</div></li>
+<li><span class="n">5</span><div>우리 병동에 <b>없는 방</b>은 오른쪽 <span class="k">✕</span> 로 빼고,
+더 있으면 아래 <span class="k">＋ 방 추가</span> 로 넣습니다.</div></li>
+</ol>
+
+<figure><img src="shots/02-rooms.png"><figcaption>맨 위 한 줄에 우리 병동 병실이 모두 보입니다. 순서는 줄을 끌거나 ▲▼ 로 바꿉니다.</figcaption></figure>
+
+<div class="tip"><span class="h">병상 수는 왜 필요한가요</span>
+누가 환자를 몇 명 보는지 계산하고, 다음 날 <b>같은 환자를 계속 보도록</b> 이어 주는 데 씁니다.</div>
+<div class="pgnum">4</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1><span class="tag">준비 3</span>간호사 이름 넣기</h1>
+<div class="lead">이름은 근무표를 붙여넣으면 저절로 들어옵니다.
+여기서는 <b>순서</b>와 <b>차지 가능 여부</b>만 확인하시면 됩니다.</div>
+
+<ol class="steps">
+<li><span class="n">1</span><div><span class="k">관리</span> → <span class="k">간호사 관리</span> 를 누릅니다.</div></li>
+<li><span class="n">2</span><div><b>위에 있는 사람이 선임</b>입니다. 줄을 끌거나 <span class="k">▲</span> <span class="k">▼</span> 로 순서를 맞춥니다.</div></li>
+<li><span class="n">3</span><div>가능 근무에서 <b>DC · EC · NC</b> 를 켜면 그 시간대에 <b>차지</b>를 맡을 수 있습니다.</div></li>
+<li><span class="n">4</span><div>그만두거나 옮겨 간 사람은 <span class="k">전출</span> 을 누릅니다. 지난 기록은 그대로 남습니다.</div></li>
+</ol>
+
+<figure><img src="shots/03-nurses.png"><figcaption>차지는 매일 자동으로 정해집니다. 같은 날 차지 가능한 사람 중 <b>가장 위</b>에 있는 사람이 맡습니다.</figcaption></figure>
+
+<div class="tip warn"><span class="h">순서가 왜 중요한가요</span>
+이 순서가 곧 <b>선임 순서</b>입니다. 순서가 뒤바뀌면 차지를 맡는 사람이 달라집니다.</div>
+<div class="pgnum">5</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1><span class="tag">준비 4</span>방 나누기 정하기</h1>
+<div class="lead">그날 근무 인원이 <b>몇 명이냐</b>에 따라 각 자리가 맡을 병실을 정합니다.
+보통은 기본값 그대로 쓰시면 되고, 우리 병동 방식이 다를 때만 고치세요.</div>
+
+<ol class="steps">
+<li><span class="n">1</span><div><span class="k">관리</span> → <span class="k">방 구성</span> 을 누릅니다.</div></li>
+<li><span class="n">2</span><div>위쪽에서 <b>5인 · 4인 · 3인 · 2인</b> 중 고칠 인원수를 고릅니다.</div></li>
+<li><span class="n">3</span><div>자리마다 병실을 적습니다. 짧게 적으면 됩니다. 예: <b>1~3, 12</b></div></li>
+<li><span class="n">4</span><div>한 병실을 둘이 나눠 볼 때는 <b>병상</b>까지 적습니다. 예: <b>4:1~3</b> (4호 1~3번 병상)</div></li>
+</ol>
+
+<figure><img src="shots/13-schemes.png"><figcaption>아래 <b>주간 계획표</b>에서 요일마다 다른 나눔을 쓸 수도 있습니다.</figcaption></figure>
+
+<div class="tip ok"><span class="h">빠진 방이 있으면 알려 줍니다</span>
+아무도 안 보는 방이나 두 사람이 겹쳐 보는 방이 있으면 화면에 바로 표시됩니다.</div>
+<div class="pgnum">6</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1><span class="tag g">매달</span>근무표 넣기 (1)</h1>
+<div class="lead">엑셀 근무표를 <b>복사해서 붙여넣기</b> 하면 끝입니다. 한 달에 한 번만 하시면 됩니다.</div>
+
+<ol class="steps">
+<li><span class="n">1</span><div>엑셀에서 <b>이름 칸 + 날짜 줄 + 근무</b> 를 통째로 긁어 <span class="k">Ctrl</span>+<span class="k">C</span> 를 누릅니다.</div></li>
+<li><span class="n">2</span><div>배정표 화면에서 <span class="k">새 근무표 넣기</span> 를 누릅니다.</div></li>
+<li><span class="n">3</span><div>그 화면에서 <span class="k">Ctrl</span>+<span class="k">V</span> 를 누릅니다.</div></li>
+</ol>
+
+<figure><img src="shots/04-paste-empty.png"><figcaption>이 화면이 나오면 그냥 Ctrl+V 를 누르세요. 엑셀 파일을 창에 <b>끌어다 놓아도</b> 됩니다.</figcaption></figure>
+
+<div class="tip"><span class="h">이름 앞에 번호나 직급이 있어도 됩니다</span>
+제목 줄, 요일 줄, 합계 줄이 섞여 있어도 프로그램이 알아서 걸러 냅니다.
+<b>엑셀과 우리 명부의 순서가 달라도</b> 이름으로 맞춰 들어갑니다.</div>
+<div class="pgnum">7</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1><span class="tag g">매달</span>근무표 넣기 (2)</h1>
+<div class="lead">붙여넣으면 <b>이렇게 읽었어요</b> 화면이 나옵니다. 맞는지만 보고 저장하세요.</div>
+
+<ol class="steps">
+<li><span class="n">1</span><div><b>간호사 수</b>와 <b>기간</b>이 맞는지 봅니다.</div></li>
+<li><span class="n">2</span><div>노란 칸에 연·월이 나오면 맞는지 확인합니다. 틀리면 거기서 고칩니다.</div></li>
+<li><span class="n">3</span><div>모르는 표기가 있으면 <b>휴무</b>인지 <b>휴가</b>인지 한 번만 정해 줍니다. 다음부터는 자동입니다.</div></li>
+<li><span class="n">4</span><div>맨 아래 <span class="k">맞아요, 저장</span> 을 누릅니다.</div></li>
+</ol>
+
+<figure><img src="shots/05-paste-preview.png"><figcaption>색깔 표로 미리 보여 줍니다. 잘못 저장해도 Ctrl+Z 로 되돌릴 수 있습니다.</figcaption></figure>
+
+<div class="tip"><span class="h">이미 있는 기록을 덮어쓸 때</span>
+바뀌는 칸이 몇 칸인지 세어서 보여 주고, 저장 전에 한 번 더 물어봅니다.</div>
+<div class="pgnum">8</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1><span class="tag o">매주</span>배정표 보기</h1>
+<div class="lead">근무표를 넣으면 배정표는 <b>이미 만들어져 있습니다.</b> 따로 계산할 필요가 없습니다.</div>
+
+<figure><img src="shots/11-toolbar.png"><figcaption>맨 위 단추들입니다. <b>◀ 지난주 / 다음주 ▶</b> 로 주를 넘기고, <b>[오늘]</b> 로 이번 주에 돌아옵니다.</figcaption></figure>
+
+<figure><img src="shots/06-week.png"><figcaption>세로로 <b>D(낮) · E(저녁) · N(밤)</b>, 그 안에 <b>A(CN) · B · C · D · E</b> 자리가 있습니다.
+A(CN)이 차지입니다. 각 칸은 <b>왼쪽이 병실, 오른쪽이 이름</b>입니다.</figcaption></figure>
+
+<div class="tip"><span class="h">맨 위 줄은 교육·행사</span>
+그 칸을 누르면 적을 수 있습니다. 적은 내용은 인쇄물에도 그대로 나옵니다.</div>
+<div class="pgnum">9</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1><span class="tag o">매주</span>인쇄하기</h1>
+<div class="lead">배정표 화면에서 <span class="k">인쇄</span> 를 누르면 <b>A4 한 장</b>으로 나옵니다.</div>
+
+<ol class="steps">
+<li><span class="n">1</span><div>인쇄할 주가 화면에 떠 있는지 확인합니다.</div></li>
+<li><span class="n">2</span><div><span class="k">인쇄</span> 를 누릅니다.</div></li>
+<li><span class="n">3</span><div>인쇄 창이 뜨면 <b>[인쇄]</b> 를 누릅니다.</div></li>
+</ol>
+
+<figure class="small fit"><img style="max-height:138mm" src="shots/10-print.png"><figcaption>병실 배정표 양식 그대로 나옵니다. 물품체크 · CPR 업무분담 · 화재 안내까지 한 장에 들어갑니다.</figcaption></figure>
+
+<div class="tip ok"><span class="h">엑셀로 받고 싶을 때</span>
+<span class="k">이번 주 배정표 엑셀로 내보내기</span> 를 누르면 엑셀 파일로 저장됩니다.
+엑셀에서 고쳐 쓰실 수 있습니다.</div>
+<div class="pgnum">10</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1><span class="tag r">고치기</span>담당 바꾸기</h1>
+<div class="lead">두 사람의 자리를 맞바꿉니다. 근무표는 그대로 두고 <b>담당만</b> 바꾸는 것입니다.</div>
+
+<ol class="steps">
+<li><span class="n">1</span><div>바꾸고 싶은 사람의 <b>이름을 누릅니다.</b></div></li>
+<li><span class="n">2</span><div>그 시간대의 자리들이 이름·병실과 함께 나옵니다. 본인 자리는 회색입니다.</div></li>
+<li><span class="n">3</span><div>바꿀 상대를 누르면 두 사람이 자리를 맞바꿉니다.</div></li>
+</ol>
+
+<figure class="small fit"><img style="max-height:103mm" src="shots/07-pick.png"><figcaption>되돌리려면 다시 눌러 <b>[자동으로 되돌리기]</b> 를 고르면 됩니다.</figcaption></figure>
+
+<div class="tip"><span class="h">근무 자체를 바꾸려면</span>
+같은 창에서 <b>[근무 바꾸기]</b> 를 누르세요. D·E·N·OFF·연차 같은 근무를 바꿀 수 있고,
+인원이 달라지면 뒤의 배정이 자동으로 다시 맞춰집니다.</div>
+
+<div class="tip warn"><span class="h">손으로 바꾼 칸은 표시됩니다</span>
+이름 아래에 <b>빨간 밑줄</b>이 생깁니다.</div>
+<div class="pgnum">11</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1><span class="tag r">고치기</span>병실 바꾸기</h1>
+<div class="lead">그날 하루만 병실을 다르게 주고 싶을 때 씁니다.</div>
+
+<ol class="steps">
+<li><span class="n">1</span><div>바꾸고 싶은 칸의 <b>병실 번호(왼쪽 칸)</b> 를 누릅니다.</div></li>
+<li><span class="n">2</span><div>줄 방을 누르면 넣고, 다시 누르면 뺍니다.</div></li>
+<li><span class="n">3</span><div>다 골랐으면 <span class="k">✕ 닫기</span> 를 누릅니다. 원래대로 돌리려면 <span class="k">↵ 자동으로</span> 를 누르세요.</div></li>
+</ol>
+
+<figure class="small"><img src="shots/08-rooms-pick.png"><figcaption>아래에 <b>담당 병상</b>이 몇 개인지 나옵니다. 환자 수를 가늠할 수 있습니다.</figcaption></figure>
+
+<div class="tip"><span class="h">그날 방 나눔을 통째로 바꾸려면</span>
+맨 윗줄 <b>이 날 방 구성</b> 에서 고른 뒤 <b>[오늘만]</b> 또는 <b>[매주 ○요일]</b> 을 누르세요.</div>
+<div class="pgnum">12</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1><span class="tag r">고치기</span>한 병실을 둘이 나눠 보기</h1>
+<div class="lead">환자가 많을 때, 한 병실을 두 사람이 나눠 볼 수 있습니다.
+예를 들어 5인실을 한 사람이 1~3번 병상, 다른 사람이 4~5번 병상을 맡습니다.</div>
+
+<ol class="steps">
+<li><span class="n">1</span><div>병실 칸을 눌러 창을 엽니다.</div></li>
+<li><span class="n">2</span><div>나누고 싶은 방 <b>오른쪽의 점 세 개</b> <span class="k">⋮</span> 를 누릅니다.</div></li>
+<li><span class="n">3</span><div>병상 단추(<b>1:1 1:2 1:3 …</b>)가 펼쳐집니다. 맡을 병상만 누릅니다.</div></li>
+</ol>
+
+<figure class="small"><img src="shots/09-beds.png"><figcaption><b>1:1</b> 은 1호 1번 병상이라는 뜻입니다. 병상 번호는 병상 수에 따라 저절로 매겨집니다.</figcaption></figure>
+
+<div class="tip ok"><span class="h">다음 날도 이어집니다</span>
+나눠 본 사람은 다음 날에도 <b>같은 병상(같은 환자)</b>을 이어 맡도록 자동으로 맞춰집니다.</div>
+<div class="pgnum">13</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1><span class="tag p">확인</span>빨간 칸이 떴을 때</h1>
+<div class="lead">배정표 위에 <b>확인 필요</b> 카드가 뜨면, 사람이 한 번 봐야 하는 것이 있다는 뜻입니다.
+프로그램이 멈추는 것은 아닙니다.</div>
+
+<figure><img src="shots/15-warn.png"><figcaption>빨간 느낌표는 <b>확인 필요</b>, 노란 동그라미는 <b>안내</b>입니다.</figcaption></figure>
+
+<h2>자주 나오는 것들</h2>
+<table class="qa">
+<tr><td class="q">인원이 필요 인원과 다릅니다</td><td>그날 근무 인원이 우리 병동 기준과 다릅니다.
+기준은 관리 &gt; 요일별 필요 인원에서 고칩니다.</td></tr>
+<tr><td class="q">차지 가능한 사람이 없어 자격 없이 차지가 됐습니다</td><td>관리 &gt; 간호사 관리에서
+그 사람의 <b>DC · EC · NC</b> 를 켜 주세요.</td></tr>
+<tr><td class="q">아무도 안 보는 방</td><td>관리 &gt; 방 구성에서 그 방을 어느 자리에 넣어 주세요.
+우리 병동에 없는 방이면 병실 목록에서 빼면 됩니다.</td></tr>
+<tr><td class="q">근무표 없는 날</td><td>다음 달 근무표를 아직 안 넣었습니다. [새 근무표 넣기]로 넣으세요.</td></tr>
+</table>
+<div class="pgnum">14</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1><span class="tag">가끔</span>백업 받아 두기</h1>
+<div class="lead">한 주에 한 번이면 충분합니다. 컴퓨터를 바꾸거나 문제가 생겼을 때 되살릴 수 있습니다.</div>
+
+<ol class="steps">
+<li><span class="n">1</span><div><span class="k">관리</span> → <span class="k">데이터 보관</span> 을 누릅니다.</div></li>
+<li><span class="n">2</span><div><span class="k">백업 내려받기</span> 를 누릅니다. 파일 하나가 저장됩니다.</div></li>
+<li><span class="n">3</span><div>되살릴 때는 <span class="k">백업 불러오기</span> 를 누르고 그 파일을 고릅니다.</div></li>
+</ol>
+
+<figure><img src="shots/12-backup.png"><figcaption>맨 위에 지금 저장되고 있는 파일 이름이 나옵니다.</figcaption></figure>
+
+<div class="tip warn"><span class="h">백업 불러오기는 지금 내용을 덮어씁니다</span>
+확인 창이 한 번 뜹니다. 잘못 눌렀으면 <b>취소</b>를 누르세요.</div>
+<div class="pgnum">15</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1>프로그램 안에도 설명이 있습니다</h1>
+<div class="lead">오른쪽 아래 동그란 <b>?</b> 단추를 누르면 도움말이 열립니다.
+<b>F1</b> 키를 눌러도 됩니다.</div>
+
+<figure><img src="shots/14-help.png"><figcaption>주제를 고르면 설명이 나오고, <b>[▶ 화면에서 보여 주기]</b> 를 누르면
+실제 화면에서 눌러야 할 단추를 하나씩 짚어 줍니다.</figcaption></figure>
+
+<div class="tip ok"><span class="h">처음이라면</span>
+배정표 화면 위에 <b>시작 안내</b> 체크리스트가 나옵니다.
+해야 할 일이 차례로 적혀 있고, 다 끝나면 저절로 사라집니다.</div>
+<div class="pgnum">16</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1>이럴 땐 이렇게</h1>
+<table class="qa">
+<tr><td class="q">잘못 눌렀어요</td><td><b>Ctrl</b> 키와 <b>Z</b> 키를 함께 누르세요.
+화면 아래 파란 알림이 떠 있으면 그 알림을 눌러도 됩니다.</td></tr>
+<tr><td class="q">"저장되지 않음" 이라고 떠요</td><td>맨 위 <span class="k">저장 연결</span> 을 누르고
+우리 병동 파일을 한 번 골라 주세요. 그 뒤로는 자동으로 저장됩니다.</td></tr>
+<tr><td class="q">"파일을 볼 수 있도록 허용하시겠습니까?"</td><td><b>[허용]</b> 을 누르세요. 프로그램을 새로 열 때
+한 번만 물어봅니다.</td></tr>
+<tr><td class="q">배정표가 비어 있어요</td><td>그 주의 근무표가 없습니다.
+<span class="k">새 근무표 넣기</span> 로 근무표를 넣어 주세요.</td></tr>
+<tr><td class="q">이름이 두 번 나와요</td><td>엑셀의 이름과 명부의 이름이 조금 다른 경우입니다.
+붙여넣기 화면의 <b>이름 연결</b> 에서 같은 사람으로 이어 주면 다음부터 자동입니다.</td></tr>
+<tr><td class="q">인쇄가 두 장으로 나와요</td><td>인쇄 창에서 <b>배율</b>을 기본값으로,
+<b>머리글·바닥글</b>을 끄고 인쇄해 보세요.</td></tr>
+<tr><td class="q">컴퓨터를 바꿔야 해요</td><td>백업 파일과 assign.html 을 새 컴퓨터로 옮긴 뒤,
+프로그램을 열고 <span class="k">백업 불러오기</span> 를 누르세요.</td></tr>
+<tr><td class="q">화면이 너무 작아요</td><td><b>Ctrl</b> 키를 누른 채 <b>+</b> 를 누르면 커집니다.
+<b>Ctrl</b> + <b>0</b> 으로 원래대로 돌아옵니다.</td></tr>
+</table>
+<div class="pgnum">17</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
+<h1>한 장 요약</h1>
+<div class="lead">이 장만 책상에 붙여 두셔도 됩니다.</div>
+
+<div class="cards">
+  <div class="card"><div class="t"><span class="when a">처음 한 번</span></div>
+    <div class="d">① assign.html 두 번 누르기 → <b>[처음 시작]</b> → 같은 폴더에 저장<br>
+    ② 관리 &gt; 병실 목록 → 우리 병동 고르고 <b>병상수</b> 적기<br>
+    ③ 관리 &gt; 간호사 관리 → 순서(위가 선임)와 <b>DC·EC·NC</b> 확인</div></div>
+
+  <div class="card"><div class="t"><span class="when b">매달 한 번</span></div>
+    <div class="d">엑셀 근무표 긁어서 <b>Ctrl+C</b> → <b>[새 근무표 넣기]</b> → <b>Ctrl+V</b> → <b>[맞아요, 저장]</b></div></div>
+
+  <div class="card"><div class="t"><span class="when c">매주</span></div>
+    <div class="d">배정표 화면에서 <b>[인쇄]</b><br>
+    엑셀로 받으려면 <b>[이번 주 배정표 엑셀로 내보내기]</b></div></div>
+
+  <div class="card"><div class="t">고칠 때</div>
+    <div class="d"><b>이름</b>을 누르면 담당 바꾸기 · <b>병실 번호</b>를 누르면 병실 바꾸기<br>
+    잘못 눌렀으면 <b>Ctrl + Z</b></div></div>
+
+  <div class="card"><div class="t">가끔</div>
+    <div class="d">관리 &gt; 데이터 보관 &gt; <b>[백업 내려받기]</b> (한 주에 한 번이면 충분합니다)</div></div>
+</div>
+
+<div class="tip"><span class="h">막히면</span>
+오른쪽 아래 <b>?</b> 를 누르세요. 도움말에서 <b>[▶ 화면에서 보여 주기]</b> 를 누르면
+실제 화면에서 눌러야 할 곳을 짚어 줍니다.</div>
+<div class="pgnum">18</div><div class="pgft">어싸인 배정표 사용설명서</div></div></body></html>
