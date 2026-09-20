@@ -648,10 +648,10 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   범위 밖 — HTML 만 개발한다.** 초기 설정은 시작 안내 체크리스트(병동 고르기 → 병실 자동 생성)로 데이터 파일 안에서 끝낸다. 결정 2-22.
   동기화 `node scripts/build-assign-standalone.mjs` (코어 + 양식 + 폰트 + 버전 주입)
   — CI(`test.yml`)가 재빌드해 버전 줄 외 diff가 있으면 실패시키므로 `assign.html` 수정 후 반드시 실행.
-- 인트라넷용 ②: `standalone/app/` — 같은 화면을 담은 Windows 단일 exe (WebView2, 127.0.0.1 안 씀).
-  파일 저장 권한 확인 없이 바로 저장. 빌드 `standalone/app/build.cmd`
-  **범위 밖** (사용자 2026-09-17: 인트라넷에서 exe 를 못 쓰므로 HTML 만 개발) — 코드는 남아 있으나 손대지 않는다.
-- 인트라넷용 ③: `standalone/assign_vba.bas` (Excel VBA 매크로 4종)
+- ~~인트라넷용 ②·③ (Windows exe `standalone/app/` · Excel VBA `assign_vba.bas`)~~ — **삭제 (2026-09-20)**.
+  결정 2-22(exe 는 인트라넷에서 못 쓰므로 범위 밖)를 리포에도 반영했다. 실행 경로는 **HTML 더블클릭 하나뿐**이라
+  런처 `assign_app.cmd`·구형 `standalone.xlsm`·`사용법.txt`(NAS 공유 전제)도 함께 지웠다.
+  필요하면 git 이력에서 꺼낸다 (마지막 커밋 `2c79c7b`).
 - **인쇄용 설명서**: `docs/manual/` — 병동에 나눠 줄 A4 18쪽 PDF(`어싸인_배정표_사용설명서.pdf`).
   원본 `manual.html`, 캡처 `shots.mjs`(예시 데이터 홍길동 등 12명으로 실제 화면을 띄워 찍는다), 출력 `build.mjs`
   (쪽 넘침·쪽 번호 겹침을 먼저 검사하고 걸리면 PDF 를 쓰지 않는다). 화면을 바꿨으면 **캡처부터 다시 찍는다** —
