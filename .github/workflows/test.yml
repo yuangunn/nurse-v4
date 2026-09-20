@@ -77,6 +77,11 @@ jobs:
       - name: standalone 로직 회귀 (헤드리스 크롬)
         run: CHROME=google-chrome node scripts/test_assign_logic.mjs
 
+      # 화면을 실제로 눌러 끝까지 가 본다 — 처음 켜기부터 엑셀 내려받기까지.
+      # __app 을 직접 부르는 로직 검사로는 '버튼이 눌리는가'를 볼 수 없다.
+      - name: standalone 끝에서 끝까지 (헤드리스 크롬)
+        run: CHROME=google-chrome node scripts/test_assign_e2e.mjs
+
       # 병동이 주는 양식은 판마다 다르고 한 칸만 서식이 어긋나도 그 자리만 선이 빠진
       # 채 매주 인쇄된다 (122 H18 이 그랬다 — 쓰다가 사람이 알아챘다).
       - name: 배정표 양식 테두리에 구멍이 없는지

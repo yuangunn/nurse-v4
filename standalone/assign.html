@@ -656,11 +656,6 @@
     </span>
   </div>
   <div id="wkWarn"></div>
-  <div id="wiz"><div id="wizBox">
-  <div id="wizHead"><div id="wizSteps"></div><div id="wizNum"></div><div id="wizTitle"></div><div id="wizSub"></div></div>
-  <div id="wizBody"></div>
-  <div id="wizFoot"></div>
-</div></div>
 <div id="onboard" style="display:none"></div>
   <div class="card" style="padding:10px">
     <div id="wkBody"></div>
@@ -784,6 +779,11 @@
   </div>
 </div>
 <div id="intro"><div id="introBox"></div></div>
+<div id="wiz"><div id="wizBox">
+  <div id="wizHead"><div id="wizSteps"></div><div id="wizNum"></div><div id="wizTitle"></div><div id="wizSub"></div></div>
+  <div id="wizBody"></div>
+  <div id="wizFoot"></div>
+</div></div>
 <div id="printArea"></div>
 <div id="drop">파일을 놓으세요 (.xlsx 근무표 / .js·.json 데이터·백업)</div>
 <div id="tourShield" onclick="tourNext()"></div><div id="tourHole"></div><div id="tourBox"></div>
@@ -1259,7 +1259,7 @@ $('#modal').addEventListener('mousedown',e=>{ if(e.target.id==='modal') closeMod
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260920aa'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260920ad'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -3847,6 +3847,9 @@ function renderAdmin(){
     `<div class="apHead"><div style="flex:1"><div class="apTitle">${P.title}</div>`+
     `<div class="apDesc">${P.desc}</div></div>${P.aux||''}</div>`+P.body();
   if(P.after) P.after();
+  // 마법사는 같은 패널을 제 본문에 그려 쓴다. 관리 화면만 다시 그리면 마법사 안에서는
+  // 바뀐 게 안 보인다 — 가능 근무를 꺼도 칩이 그대로라 다시 눌러 되켜게 된다.
+  if(wizOn()&&WIZ[wizAt].panel) renderWizard();
 }
 function setSeed(name,attr,val){
   const s=(store.seedManual[name]=store.seedManual[name]||{});
