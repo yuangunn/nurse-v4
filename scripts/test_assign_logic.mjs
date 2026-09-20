@@ -272,6 +272,33 @@ async function main() {
   ok('구형 파일을 열어도 인원수별 프리셋이 병실을 다 덮는다',
     mig.presets && mig.miss.every(m => m === 0), JSON.stringify(mig));
 
+  // ── 9. 처음 설정 마법사 ─────────────────────────────────────────────────
+  // 화면을 새로 만들지 않고 기존 관리 패널을 품는다 — 패널 id 가 바뀌면 빈 단계가 된다.
+  step('9 마법사');
+  const wiz = await ev(`const A=window.__app; const out=[];
+    for(let i=0;i<A.WIZ.length;i++){ A.startWizard(i);
+      out.push({id:A.WIZ[i].id, body:document.querySelector('#wizBody').innerHTML.length,
+                num:document.querySelector('#wizNum').textContent}); }
+    A.closeWizard(); return out;`);
+  eq('마법사 단계 순서', wiz.map(w => w.id),
+    ['ward', 'scheme', 'req', 'paste', 'codes', 'caps', 'done']);
+  ok('단계마다 본문이 그려진다 (패널 id 가 어긋나면 빈다)',
+    wiz.every(w => w.body > 200), JSON.stringify(wiz.map(w => [w.id, w.body])));
+  eq('진행도 표시', wiz[2].num, '3 / 7 단계');
+
+  // 붙여넣기 단계만 전체 화면을 빌려 쓰고, 확정하면 마법사로 돌아온다
+  const trip = await ev(`const A=window.__app; A.startWizard(3); A.wizPaste();
+    const away=!document.querySelector('#wiz').classList.contains('on')
+      && document.querySelector('#scrPaste').style.display!=='none';
+    A.ingestGrid([['이름','9/1','9/2'],['홍길동','D','E'],['김영숙','E','N']]);
+    A.confirmPaste();
+    const back=document.querySelector('#wiz').classList.contains('on');
+    const at=document.querySelector('#wizNum').textContent;
+    A.closeWizard();
+    return {away, back, at};`);
+  ok('붙여넣기는 전체 화면으로 넘어간다', trip.away, JSON.stringify(trip));
+  ok('확정하면 마법사 다음 단계로 돌아온다', trip.back && trip.at === '5 / 7 단계', JSON.stringify(trip));
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
