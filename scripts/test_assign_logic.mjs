@@ -458,6 +458,33 @@ async function main() {
     cands.find(c => c[0] === '야간전날')[3] === true, JSON.stringify(cands));
   eq('고르기 쉬운 순서 — 가능 근무가 먼저', cands[0][2], true);
 
+  // ── 15. 근무표를 넣으면 어느 주로 가나 ────────────────────────────────
+  // 이번 달 근무표를 달 중간에 넣었는데 첫 주가 뜨면 매번 [오늘]을 눌러야 한다.
+  step('15 넣은 뒤 이동할 주');
+  const jump = await ev(`const A=window.__app;
+    const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const sun=d=>{const x=new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate()-x.getDay()); return iso(x);};
+    // 한 달만 넣으면 오늘이 그 달 첫 주일 때 검사가 헛돈다 — 지난달부터 두 달을 넣어
+    // 넣은 기간의 첫 주가 오늘 주와 반드시 다르게 만든다.
+    const grid=(from,to)=>{ const head=['이름'], n=[];
+      for(let d=new Date(from); d<=to; d.setDate(d.getDate()+1)){
+        head.push((d.getMonth()+1)+'/'+d.getDate()); n.push('D'); }
+      return [head, ['가간호', ...n], ['나간호', ...n.map(()=>'E')]]; };
+    const put=(from,to)=>{ A.store={...A.store, cells:{}, order:[]};
+      A.ingestGrid(grid(from,to)); A.confirmPaste(); return iso(A.wkSunday); };
+    const t=new Date(); t.setHours(0,0,0,0);
+    const 지난달1일=new Date(t.getFullYear(), t.getMonth()-1, 1);
+    const 이번달말=new Date(t.getFullYear(), t.getMonth()+1, 0);
+    const 안에=put(지난달1일, 이번달말);
+    const 앞=new Date(t.getFullYear(), t.getMonth()+3, 1);
+    const 뒤=new Date(t.getFullYear(), t.getMonth()+4, 0);
+    const 밖에=put(앞, 뒤);
+    return {안에, 오늘주:sun(t), 밖에, 그기간첫주:sun(앞), 첫주:sun(지난달1일)};`);
+  ok('검사가 헛돌지 않는다 (넣은 기간 첫 주 ≠ 오늘 주)', jump.첫주 !== jump.오늘주,
+    JSON.stringify(jump));
+  eq('오늘이 넣은 기간 안이면 오늘 주로 간다', jump.안에, jump.오늘주);
+  eq('기간 밖이면 넣은 기간의 첫 주로 간다', jump.밖에, jump.그기간첫주);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));

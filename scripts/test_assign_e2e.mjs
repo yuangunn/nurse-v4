@@ -224,6 +224,10 @@ try {
     ok('xlsx(zip) 로 열린다', buf[0] === 0x50 && buf[1] === 0x4b, buf.slice(0, 4).toString('hex'));
     ok('크기가 양식만큼 된다 (100KB+)', buf.length > 100000, String(buf.length));
     console.log(`  · 받은 파일: ${got[0]} (${(buf.length / 1024).toFixed(0)}KB)`);
+    // 근무표를 넣으면 오늘 주가 떠야 한다 — 파일 이름이 그 주를 그대로 담는다
+    const t = new Date(); t.setHours(0, 0, 0, 0); t.setDate(t.getDate() - t.getDay());
+    const sun = `${t.getFullYear()}${String(t.getMonth() + 1).padStart(2, '0')}${String(t.getDate()).padStart(2, '0')}`;
+    ok('내보낸 주가 오늘이 든 주다', got[0].includes(`배정표_${sun}~`), `${got[0]} / 오늘 주 ${sun}`);
   }
 
   step('10 받은 파일 열어 보기');

@@ -1259,7 +1259,7 @@ $('#modal').addEventListener('mousedown',e=>{ if(e.target.id==='modal') closeMod
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260920ad'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260920ae'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -3168,8 +3168,11 @@ function confirmPaste(){
   if(pending.adoptOrder)                               // 명부 순서를 이 표의 순서로 (없는 사람은 뒤에 그대로)
     store.order=[...pending.names,...store.order.filter(n=>!pending.names.includes(n))];
   touch(); recompute();
-  // 넣은 기간의 첫 주로 이동
-  const d=new Date(pending.minIso+'T00:00:00'); wkSunday=addDays(d,-d.getDay());
+  // 오늘이 넣은 기간 안이면 오늘 주로 — 이번 달 근무표를 중간에 넣었는데 첫 주가
+  // 뜨면 매번 [오늘]을 눌러야 한다. 다음 달 것을 미리 넣은 때만 그 첫 주로 간다.
+  const today=isoOfD(new Date());
+  const d=new Date((today>=pending.minIso&&today<=pending.maxIso?today:pending.minIso)+'T00:00:00');
+  wkSunday=addDays(d,-d.getDay());
   resetPaste();
   if(wizResume()) return;          // 마법사 중이면 다음 단계로 (전체 화면은 붙여넣기에만 빌려 준다)
   show('week');
