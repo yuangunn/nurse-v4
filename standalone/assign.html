@@ -1246,7 +1246,7 @@ $('#modal').addEventListener('mousedown',e=>{ if(e.target.id==='modal') closeMod
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260920j'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260920n'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1279,10 +1279,18 @@ const FORM_IDS=Object.keys(FORMS);
 function formId(){ return store&&FORMS[store.formId]?store.formId:'101'; }
 function formDef(){ return FORMS[formId()]; }
 function formOv(id){ id=id||formId(); const o=store&&store.forms&&store.forms[id]; return o&&o.b64?o:null; }   // 서식별 우리 병동 양식 {name,b64,savedAt,ph}
+/* 화면 상태는 **데이터 파일**에 둔다. 병원 PC 는 브라우저를 닫을 때 사이트 데이터를
+ * 지우도록 설정된 경우가 많아(2026-09-16 4차 기록), localStorage 에 두면 매일 아침
+ * '인쇄함' 체크가 풀려 시작 안내 카드가 영원히 남는다. 결정 2-22 대로 데이터 파일이
+ * 유일한 저장소이므로 여기가 제자리다. 옛 값은 migrateStore 가 한 번 옮긴다. */
+const uiGet=k=>!!(store&&store.ui&&store.ui[k]);
+function uiSet(k,v){ if(!store) return; store.ui=store.ui||{};
+  if(v) store.ui[k]=1; else delete store.ui[k]; touch(); }
 function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{},roomOv:{},events:{},
   seedManual:{},caps:{},alias:{},custom:{},nameAlias:{},trainee:{},trOv:{},req:JSON.parse(JSON.stringify(DEFAULT_REQ)),
   rooms:DEFAULT_ROOMS.map(r=>r.slice()),ward:'101',wardPicked:false,banRooms:{},formId:'101',forms:{},
   schemes:JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
+  ui:{},   // 화면 상태(인쇄함·시작안내 숨김·처음안내 봄) — localStorage 가 아니라 여기에 (2026-09-20)
   presets:{5:[],4:[],3:[],2:[]},presetPlan:{},presetDay:{},
   ovrPair:{},hidden:{},history:[],
   rules:{keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false}}; }
@@ -1320,6 +1328,13 @@ function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무
       ||Object.values(store.presets||{}).some(arr=>(arr||[]).some(p=>Object.values(p.rooms||{}).some(a=>(a||[]).includes(r))));
     if(!known) attachRoom(r);
   }
+  // 화면 상태 (2026-09-20): 옛 localStorage 값을 데이터 파일로 한 번 옮긴다.
+  // 병원 PC 가 사이트 데이터를 지우면 '인쇄함'·'숨김'이 풀려 시작 안내가 영원히 남았다.
+  if(!store.ui||typeof store.ui!=='object') store.ui={};
+  try{
+    const mv=[['assignPrinted','printed'],['assignOnboardHidden','obHidden'],['assignSeenIntro','seenIntro']];
+    for(const [old_,nu] of mv){ if(localStorage.getItem(old_)){ store.ui[nu]=1; localStorage.removeItem(old_); } }
+  }catch(e){}
   // 배정표 서식 (2026-09-17): 옛 파일의 store.form(우리 병동 양식 하나) → store.forms['101'] 로 옮기고, 고른 서식이 없으면 101
   if(!store.forms||typeof store.forms!=='object') store.forms={};
   if(store.form&&store.form.b64&&!store.forms['101']) store.forms['101']=store.form;
@@ -3598,9 +3613,12 @@ const ADMIN_PANELS={
     body(){ return `<div id="schemes"></div><div id="planBox" style="margin-top:20px"></div>`; },
     after(){ renderSchemes(); renderPlan(); }},
   req:{title:'요일별 필요 인원',
-    desc:'근무표 고치기 화면에서 미달·초과를 빨갛게 표시하는 기준입니다.',
-    body(){ return `<table id="reqTable" style="width:auto"></table>`; },
+    desc:'근무표 고치기 화면에서 미달·초과를 빨갛게 표시하고, 배정표의 <b>인원이 필요 인원과 다릅니다</b> 안내 기준이 됩니다. '+
+      '기본값은 101병동 기준이라 <b>우리 병동 값으로 고쳐야</b> 그 안내가 사라집니다.',
+    aux:`<button onclick="fitReqToSchedule()" title="넣은 근무표에서 요일별 D·E·N 인원을 세어 그대로 맞춥니다">이 근무표대로 맞추기</button>`,
+    body(){ return `<div id="reqFit" class="dim" style="line-height:1.8;margin-bottom:6px"></div><table id="reqTable" style="width:auto"></table>`; },
     after(){
+      renderReqFit();
       const WKK=[['mon','월'],['tue','화'],['wed','수'],['thu','목'],['fri','금'],['sat','토'],['sun','일']];
       $('#reqTable').innerHTML=`<tr><th></th>${WKK.map(([k,l])=>`<th style="min-width:3em">${l}</th>`).join('')}</tr>`+
         ['D','E','N'].map(P=>`<tr><td style="font-weight:700;color:${SHIFTS[P].fg}">${P}</td>`+WKK.map(([k])=>
@@ -3964,6 +3982,65 @@ function toggleCap(name,code){
   store.caps[name]=cp;
   touch(); recompute(); renderAdmin();
   if(curScr==='week') renderWeek();
+}
+/* 넣은 근무표에서 요일별 D·E·N 인원을 세어 제안한다 (2026-09-20).
+ * 기본값이 101 기준이라 다른 병동은 배정표에서 '인원이 필요 인원과 다릅니다' 를
+ * 매주 보게 된다. 고칠 곳으로 데려가는 길이 없었다 — 여기서 한 번에 맞춘다. */
+function reqFromSchedule(){
+  const WKK=['sun','mon','tue','wed','thu','fri','sat'];
+  const tally={}; for(const k of WKK) tally[k]={D:{},E:{},N:{}};
+  // 근무가 들어 있는 날짜 전부 (timelineRange 는 {min,max} 라 여기선 못 쓴다)
+  const set=new Set();
+  for(const n in store.cells){ if(store.hidden&&store.hidden[n]) continue;
+    for(const iso in store.cells[n]) set.add(iso); }
+  const dates=[...set].sort(); if(!dates.length) return null;
+  for(const iso of dates){
+    const wk=WKK[new Date(iso+'T00:00:00').getDay()];
+    const c={D:0,E:0,N:0};
+    let any=false;
+    for(const n of store.order){
+      if(store.hidden&&store.hidden[n]) continue;
+      const pc=parseCellRaw((store.cells[n]||{})[iso]||'');
+      if(!pc||!pc.code) continue;
+      any=true;
+      const P=AssignCore.periodOf(pc.code); if(P) c[P]++;
+    }
+    if(!any) continue;
+    for(const P of ['D','E','N']) tally[wk][P][c[P]]=(tally[wk][P][c[P]]||0)+1;
+  }
+  // 요일·시간대마다 가장 자주 나온 인원 (동률이면 큰 쪽 — 모자란 것보다 낫다)
+  const out={}; let have=false;
+  for(const k of WKK){ out[k]={};
+    for(const P of ['D','E','N']){
+      const e=Object.entries(tally[k][P]);
+      if(!e.length){ out[k][P]=store.req[k][P]; continue; }
+      e.sort((a,b)=>b[1]-a[1]||(+b[0])-(+a[0]));
+      out[k][P]=+e[0][0]; have=true;
+    } }
+  return have?out:null;
+}
+function renderReqFit(){
+  const el=$('#reqFit'); if(!el) return;
+  const sug=reqFromSchedule();
+  if(!sug){ el.textContent='넣은 근무표가 없어 제안할 값이 없습니다 — 근무표를 먼저 넣으세요.'; return; }
+  const WKK=[['sun','일'],['mon','월'],['tue','화'],['wed','수'],['thu','목'],['fri','금'],['sat','토']];
+  const diff=WKK.filter(([k])=>['D','E','N'].some(P=>store.req[k][P]!==sug[k][P]));
+  if(!diff.length){ el.innerHTML='<b>지금 값이 근무표와 같습니다.</b> 배정표의 인원 안내가 뜨지 않습니다.'; return; }
+  el.innerHTML='근무표에서 센 값과 <b>다른 요일 '+diff.length+'개</b> — '+
+    diff.map(([k,l])=>`${l} ${['D','E','N'].map(P=>sug[k][P]).join('/')}`).join(' · ')+
+    ' <span class="dim">(지금: '+diff.map(([k,l])=>`${l} ${['D','E','N'].map(P=>store.req[k][P]).join('/')}`).join(' · ')+')</span>';
+}
+function fitReqToSchedule(){
+  const sug=reqFromSchedule();
+  if(!sug){ toast('넣은 근무표가 없습니다 — 근무표를 먼저 넣으세요',3600); return; }
+  const WKK=[['sun','일'],['mon','월'],['tue','화'],['wed','수'],['thu','목'],['fri','금'],['sat','토']];
+  const lines=WKK.map(([k,l])=>`${l}  ${['D','E','N'].map(P=>sug[k][P]).join(' / ')}`).join('\n');
+  if(!confirm('넣은 근무표에서 센 요일별 인원입니다 (D / E / N).\n\n'+lines+
+    '\n\n이 값으로 맞출까요? 배정표의 "인원이 필요 인원과 다릅니다" 안내가 사라집니다.')) return;
+  snapshot();
+  for(const k in sug) for(const P of ['D','E','N']) store.req[k][P]=sug[k][P];
+  touch(); recompute(); renderAdmin();
+  toast('요일별 필요 인원을 근무표에 맞췄습니다 — 되돌리려면 Ctrl+Z',4200);
 }
 function setReq(k,P,v){ store.req[k][P]=Math.max(0,+v||0); touch();
   if(curScr==='edit') paintEdit(); }
@@ -5286,7 +5363,7 @@ function exportWeekXlsx(){
 }
 async function printWeek(wholeMonth){
   if(await customFormDiffers()&&!confirm('우리 병동 양식은 칸 구조가 기본 양식과 달라 화면 인쇄가 어긋날 수 있습니다.\n정확한 출력은 [엑셀로 내보내기]로 받아 엑셀에서 인쇄하는 방법입니다.\n\n그래도 화면 인쇄를 할까요?')) return;
-  try{ localStorage.setItem('assignPrinted','1'); }catch(e){}
+  uiSet('printed',1);
   try{ await buildPrintArea(wholeMonth); }
   catch(e){ toast(e.message,4200); return; }
   setTimeout(()=>window.print(),80);
@@ -5700,7 +5777,7 @@ function onboardItems(){
   let wkOk=false;
   for(let k=0;k<7&&!wkOk;k++){ const d=new Date(wkSunday); d.setDate(wkSunday.getDate()+k); const iso=isoOfD(d);
     for(const n of store.order){ if((store.cells[n]||{})[iso]){ wkOk=true; break; } } }
-  let printed=false; try{ printed=!!localStorage.getItem('assignPrinted'); }catch(e){}
+  const printed=uiGet('printed');
   return [
     {id:'file',ok:fileOk,lb:'데이터 파일',d:fileTxt,go:L.kind==='sidecar'?"connectSave()":"show('start')",goT:L.kind==='sidecar'?'저장 연결':'파일 열기',tour:'open'},
     {id:'ward',ok:wardOk,lb:'우리 병동',d:wardOk?`${ward}병동 · 병실 ${(store.rooms||[]).length}개`:`병동을 고르면 병실 14개가 채워집니다${ward?` (지금은 기본값 ${ward}병동)`:''}`,go:"show('admin');pickAdmin('rooms')",goT:'병동 고르기',tour:'roomlist'},
@@ -5827,7 +5904,7 @@ function wizResume(){
 }
 function renderOnboard(){
   const el=$('#onboard'); if(!el) return;
-  let hidden=false; try{ hidden=!!localStorage.getItem('assignOnboardHidden'); }catch(e){}
+  const hidden=uiGet('obHidden');
   if(hidden||!connected()||curScr!=='week'||tour){ el.style.display='none'; return; }
   const items=onboardItems(); const done=items.filter(i=>i.ok).length;
   if(done===items.length){ el.style.display='none'; return; }     // 다 됐으면 조용히 사라진다
@@ -5848,8 +5925,8 @@ function renderOnboard(){
       (TOURS[i.tour]?`<button onclick="startTopicTour('${i.tour}')" title="실제 화면에서 보여 줍니다">보여 주기</button>`:'')+`</div>`).join(''):'');
 }
 let obOpen=false;   // 접힘이 기본
-function hideOnboard(){ try{ localStorage.setItem('assignOnboardHidden','1'); }catch(e){} renderOnboard(); toast('시작 안내를 숨겼습니다 — ? 도움말 > 시작 안내에서 다시 열 수 있습니다',3600); }
-function showOnboard(){ try{ localStorage.removeItem('assignOnboardHidden'); }catch(e){} if(connected()) show('week'); renderOnboard(); }
+function hideOnboard(){ uiSet('obHidden',1); renderOnboard(); toast('시작 안내를 숨겼습니다 — ? 도움말 > 시작 안내에서 다시 열 수 있습니다',3600); }
+function showOnboard(){ uiSet('obHidden',0); if(connected()) show('week'); renderOnboard(); }
 let helpCur=null;
 function aboutLine(){
   return `<b>${esc(buildLabel())}</b><span class="sep"></span>`+
@@ -5896,7 +5973,7 @@ function renderHelpDoc(id){
 }
 /* 처음 안내 — 처음 켠 사람에게 한 번만 */
 function showIntro(force){
-  if(!force&&localStorage.getItem('assignSeenIntro')) return;
+  if(!force&&uiGet('seenIntro')) return;
   const conn=connected();
   $('#introBox').innerHTML=`<h2>어싸인 배정표에 오신 걸 환영합니다</h2>
     <div class="sub">처음이시라면 이 순서대로만 하시면 됩니다. 배정표 화면 위의 <b>시작 안내</b> 카드가 무엇이 남았는지 알려 줍니다.</div>
@@ -5914,7 +5991,7 @@ function showIntro(force){
 }
 function hideIntro(){
   $('#intro').classList.remove('on');
-  try{ localStorage.setItem('assignSeenIntro','1'); }catch(e){}
+  uiSet('seenIntro',1);
 }
 document.addEventListener('keydown',e=>{
   if(tour){ if(e.key==='Escape'){ e.preventDefault(); endTour(); } else if(e.key==='ArrowRight'||e.key==='Enter'){ e.preventDefault(); tourNext(); }
@@ -5958,6 +6035,8 @@ window.__app={get store(){return store},set store(v){store=v},
   startTour,endTour,tourNext,tourPrev,startTopicTour,renderOnboard,onboardItems,hideOnboard,showOnboard,xlMock,renderHelpDoc,openHelp,closeHelp,showIntro,hideIntro,get tour(){return tour},TOURS,HELP,
   get wkSunday(){return wkSunday},set wkSunday(v){wkSunday=v},show,
   startWizard,closeWizard,wizGo,wizPaste,wizResume,WIZ,get wizAt(){return wizAt},renderWizard,
+  hideOnboard,showOnboard,onboardItems,uiGet:(k)=>uiGet(k),
+  reqFromSchedule,fitReqToSchedule,
   memoryMode(){window.__memoryMode=true;
     setFileLoc({kind:'none'});afterLoad();}};
 </script>

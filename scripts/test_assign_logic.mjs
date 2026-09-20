@@ -338,6 +338,52 @@ async function main() {
   ok('붙여넣기는 전체 화면으로 넘어간다', trip.away, JSON.stringify(trip));
   ok('확정하면 마법사 다음 단계로 돌아온다', trip.back && trip.at === '5 / 7 단계', JSON.stringify(trip));
 
+  // ── 10. 화면 상태는 데이터 파일에 ──────────────────────────────────────
+  // 병원 PC 는 브라우저를 닫을 때 사이트 데이터를 지우는 경우가 많다.
+  // localStorage 에 두면 '인쇄함' 체크가 매일 풀려 시작 안내 카드가 영영 남는다.
+  step('10 화면 상태');
+  const ui = await ev(`const A=window.__app;
+    // 옛 파일 흉내 — localStorage 에만 있던 상태
+    localStorage.setItem('assignPrinted','1');
+    localStorage.setItem('assignOnboardHidden','1');
+    const s=A.store; delete s.ui; A.store=s; A.migrateStore();
+    return {옮김:A.store.ui, 옛값남음:[localStorage.getItem('assignPrinted'),
+              localStorage.getItem('assignOnboardHidden')]};`);
+  eq('옛 localStorage 상태를 데이터 파일로 옮긴다', ui.옮김, { printed: 1, obHidden: 1 });
+  eq('옮긴 뒤 옛 값은 지운다', ui.옛값남음, [null, null]);
+
+  const uiKeep = await ev(`const A=window.__app;
+    const s=A.store; s.ui={}; A.store=s;
+    A.hideOnboard();
+    const a=!!A.store.ui.obHidden;
+    A.showOnboard();
+    return {숨김저장:a, 되돌림:!A.store.ui.obHidden};`);
+  ok('숨기기·되돌리기가 데이터 파일에 남는다', uiKeep.숨김저장 && uiKeep.되돌림, JSON.stringify(uiKeep));
+
+  // ── 11. 요일별 필요 인원을 근무표에서 역산 ────────────────────────────
+  // 기본값이 101 기준이라 다른 병동은 배정표에서 '인원이 필요 인원과 다릅니다' 를
+  // 매주 본다. 고칠 곳으로 데려가는 길이 없었다.
+  step('11 필요 인원 역산');
+  const fit = await ev(`const A=window.__app; const s=A.store;
+    s.order=['가','나','다','라','마','바'];
+    s.cells={}; s.order.forEach(n=>s.cells[n]={});
+    // 2026-09-06(일) ~ 09-12(토) — 일요일만 D2, 나머지 요일은 D3 로 넣는다
+    const days=['2026-09-06','2026-09-07','2026-09-08','2026-09-09','2026-09-10','2026-09-11','2026-09-12'];
+    days.forEach((iso,i)=>{ const nD=i===0?2:3;
+      s.order.forEach((n,k)=>{ s.cells[n][iso] = k<nD?'D' : k<nD+2?'E' : k<nD+3?'N':'OF'; }); });
+    A.store=s; A.recompute();
+    const sug=A.reqFromSchedule();
+    return {일:sug.sun, 월:sug.mon, 토:sug.sat};`);
+  eq('일요일은 근무표대로 D 2명', fit.일.D, 2);
+  eq('월요일은 D 3명', fit.월.D, 3);
+  eq('E·N 도 센다', [fit.월.E, fit.월.N], [2, 1]);
+
+  const fitted = await ev(`const A=window.__app;
+    const before=JSON.parse(JSON.stringify(A.store.req));
+    A.fitReqToSchedule();
+    return {전:before.sun.D, 후:A.store.req.sun.D, 월:A.store.req.mon.D};`);
+  ok('맞추면 store.req 가 바뀐다', fitted.후 === 2 && fitted.월 === 3, JSON.stringify(fitted));
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
