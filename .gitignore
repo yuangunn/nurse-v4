@@ -33,3 +33,6 @@ standalone/assign-data*.json
 design/handoff/check/node_modules
 /node_modules/
 docs/manual/shots/
+
+# 102병동 원본 (실제 간호사 이름 포함 — 커밋 금지)
+standalone/102병동*.xls

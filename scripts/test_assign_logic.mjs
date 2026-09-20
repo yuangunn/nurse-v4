@@ -272,6 +272,45 @@ async function main() {
   ok('구형 파일을 열어도 인원수별 프리셋이 병실을 다 덮는다',
     mig.presets && mig.miss.every(m => m === 0), JSON.stringify(mig));
 
+  // ── 8-b. 서식 102 (방 칸 없는 병동) ─────────────────────────────────────
+  // 102 는 자리마다 보는 방이 고정이라 머리글에 한 번 적고, 매일 칸에는 이름만 쓴다.
+  // "배정표에 어싸인이 나오지 않게" 라는 요구가 양식에 이미 들어 있다.
+  step('8b 서식 102');
+  const l102 = await ev(`const A=window.__app;
+    return (async()=>{ const t=await A.loadBaseTemplate('102');
+      const L=A.findLayout102(A.sheetCells(t), A.sheetMerges(t));
+      return {days:(L.wdCols||[]).length, secs:(L.sections||[]).map(x=>x.P+':'+x.rows),
+              labels:L.labels, mid:!!L.midRow, sub:!!L.subRow, evt:!!L.eventRow};
+    })()`);
+  eq('102 구역 — D 4자리 · E 4자리 · N 3자리', l102.secs, ['D:4', 'E:4', 'N:3']);
+  eq('102 요일 7칸', l102.days, 7);
+  eq('102 자리 이름', l102.labels.slice(0, 4), ['A', 'B', 'C/비콘', 'D(CRN)']);
+  ok('102 중간번·대체·교육행사 줄을 찾는다', l102.mid && l102.sub && l102.evt, JSON.stringify(l102));
+
+  const f102 = await ev(`const A=window.__app; A.setFormId('102'); A.setWard('102');
+    const s=A.store; const iso='2026-09-07';
+    s.order=['김차지','이에이','박비','최씨','정야간','한야간','오야간'];
+    s.cells={김차지:{[iso]:'DC'},이에이:{[iso]:'D'},박비:{[iso]:'D'},최씨:{[iso]:'D'},
+             정야간:{[iso]:'NC'},한야간:{[iso]:'N'},오야간:{[iso]:'N'}};
+    A.store=s; A.recompute();
+    return (async()=>{ const r=await A.buildWeekXlsx(new Date(2026,8,6));
+      const c=A.sheetCells({...r.tpl, sheetXml:r.xml}); const g=k=>c[k]||'';
+      return {D:[g('E4'),g('E5'),g('E6'),g('E7')], N:[g('E14'),g('E15'),g('E16')],
+              날짜:g('E3'), 방칸:g('C4')+g('D4')};})()`);
+  eq('102 D — 차지는 D(CRN) 자리로', f102.D, ['이에이', '박비', '최씨', '김차지']);
+  eq('102 N — CRN 자리가 없으니 이름에 표기', f102.N, ['정야간 /CRN', '한야간', '오야간']);
+  ok('102 날짜는 엑셀 날짜로', /^\d{5}$/.test(String(f102.날짜)), String(f102.날짜));
+  eq('102 배정표에 방 번호가 나오지 않는다', f102.방칸, '');
+  await ev(`window.__app.setFormId('101'); return 1`);
+
+  // 병합 태그 모양 — 도구마다 다르다. 놓치면 양식 구조가 통째로 어긋난다.
+  eq('병합을 공백 있는 자동닫힘 태그에서도 읽는다',
+    await ev(`const A=window.__app;
+      return A.sheetMerges({sheetXml:'<mergeCells count="3">'
+        +'<mergeCell ref="A1:B1"/><mergeCell ref="A4:A7" />'
+        +'<mergeCell ref="C1:C2"></mergeCell></mergeCells>'});`),
+    ['A1:B1', 'A4:A7', 'C1:C2']);
+
   // ── 9. 처음 설정 마법사 ─────────────────────────────────────────────────
   // 화면을 새로 만들지 않고 기존 관리 패널을 품는다 — 패널 id 가 바뀌면 빈 단계가 된다.
   step('9 마법사');
