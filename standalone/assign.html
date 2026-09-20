@@ -1151,14 +1151,22 @@ const DEFAULT_ROOMS = [['1001',5],['1002',5],['1003',5],['1004',5],['1005',5],['
 const WARDS=['61','71','81','82','91','92','101','102','111','112','121','122','131','132'];
 /* 병동을 고르면 규칙대로 14개를 만든다. 병동마다 없는 방이 있을 수 있는데(13호가 대표적이지만 13호만 그런 건 아니다),
  * 그건 병실 목록에서 ✕ 로 빼고 ＋ 로 넣는다 — 특정 호실을 프로그램이 특별 취급하지 않는다 (사용자 2026-09-18) */
+/* 규칙(층×100 + 1~14 / 51~64)과 실제가 다른 병동 — 한 번만 적어 두면 [병동 고르기]가
+ * 바로 맞는 병실을 만든다. 예전에는 병동이 손으로 64 → 70 으로 고쳐야 했다 (2026-09-18 기록) */
+const WARD_ROOMS_FIX={ '122':[51,52,53,54,55,56,57,58,59,60,61,62,63,70] };
 function wardRooms(code){
+  const fix=WARD_ROOMS_FIX[String(code)];
+  if(fix){ const base=Math.floor(+String(code).slice(0,-1))*100; return fix.map(n=>String(base+n)); }
   const s=String(code||''); const floor=+s.slice(0,-1), line=+s.slice(-1);
   if(!floor||!(line===1||line===2)) return [];
   return [...Array(14)].map((_,i)=>String(floor*100+(line===2?50:0)+i+1));
 }
 // 방의 자리(몇 번째 방, 1~14) — 1라인 3호와 2라인 53호는 같은 자리. 규칙 밖 호실은 null
 function roomPos(r){ const n=+r; if(!Number.isInteger(n)||n<=0) return null;
-  const s=n%100, p=s>50?s-50:s; return p>=1&&p<=14?p:null; }
+  const s=n%100;
+  // 규칙 밖 호실(122 의 70 등)도 자리를 갖는다 — null 이면 병동 전환·이웃 붙이기가 끊긴다
+  for(const code in WARD_ROOMS_FIX){ const i=WARD_ROOMS_FIX[code].indexOf(s); if(i>=0) return i+1; }
+  const p=s>50?s-50:s; return p>=1&&p<=14?p:null; }
 function roomAtPos(p){ return ((store&&store.rooms)||[]).map(r=>String(r[0])).find(r=>roomPos(r)===p)||null; }
 // 병동 번호 추정 — 구형 파일(ward 없음)은 병실 목록에서 읽는다
 function wardOfRooms(rooms){
@@ -1246,7 +1254,7 @@ $('#modal').addEventListener('mousedown',e=>{ if(e.target.id==='modal') closeMod
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260920n'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260920p'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -5617,14 +5625,21 @@ function paintTour(el,step){
   if(el){ const b=el.getBoundingClientRect(); if(b.width>1&&b.height>1) r={x:b.left-pad,y:b.top-pad,w:b.width+pad*2,h:b.height+pad*2}; }
   if(r){ hole.classList.add('on'); Object.assign(hole.style,{left:r.x+'px',top:r.y+'px',width:r.w+'px',height:r.h+'px'}); }
   else hole.classList.remove('on');
-  // 말풍선: 대상 아래 → 위 → 오른쪽 → 왼쪽, 대상이 없으면 화면 가운데
+  // 말풍선 자리 — 아래·위·오른쪽·왼쪽 중에서 고르되, **열려 있는 픽커를 덮지 않는 자리**를
+  // 먼저 쓴다. 픽커 안의 버튼을 가리키면서 말풍선이 그 아래 항목을 덮던 문제 (2026-09-17 기록)
   const bw=box.offsetWidth, bh=box.offsetHeight, gap=12; let x,y;
+  const avoid=(()=>{ for(const id of ['#pick','#rpick']){ const p2=$(id);
+      if(p2&&p2.style.display==='block'){ const b=p2.getBoundingClientRect();
+        if(b.width>1) return b; } } return null; })();
+  const hits=(px,py)=>avoid&&!(px+bw<avoid.left||px>avoid.right||py+bh<avoid.top||py>avoid.bottom);
   if(r){
-    if(r.y+r.h+gap+bh<=vh-8){ y=r.y+r.h+gap; x=r.x; }
-    else if(r.y-gap-bh>=8){ y=r.y-gap-bh; x=r.x; }
-    else if(r.x+r.w+gap+bw<=vw-8){ x=r.x+r.w+gap; y=r.y; }
-    else if(r.x-gap-bw>=8){ x=r.x-gap-bw; y=r.y; }
-    else { x=(vw-bw)/2; y=vh-bh-24; }
+    const cand=[];
+    if(r.y+r.h+gap+bh<=vh-8) cand.push([r.x,r.y+r.h+gap]);
+    if(r.y-gap-bh>=8)        cand.push([r.x,r.y-gap-bh]);
+    if(r.x+r.w+gap+bw<=vw-8) cand.push([r.x+r.w+gap,r.y]);
+    if(r.x-gap-bw>=8)        cand.push([r.x-gap-bw,r.y]);
+    const pick=cand.find(([px,py])=>!hits(px,py))||cand[0];
+    if(pick){ x=pick[0]; y=pick[1]; } else { x=(vw-bw)/2; y=vh-bh-24; }
   } else { x=(vw-bw)/2; y=(vh-bh)/2; }
   x=Math.max(8,Math.min(x,vw-bw-8)); y=Math.max(8,Math.min(y,vh-bh-8));
   Object.assign(box.style,{left:x+'px',top:y+'px'});

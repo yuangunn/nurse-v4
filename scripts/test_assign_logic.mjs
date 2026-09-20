@@ -384,6 +384,20 @@ async function main() {
     return {전:before.sun.D, 후:A.store.req.sun.D, 월:A.store.req.mon.D};`);
   ok('맞추면 store.req 가 바뀐다', fitted.후 === 2 && fitted.월 === 3, JSON.stringify(fitted));
 
+  // ── 12. 규칙과 다른 병동 병실 ─────────────────────────────────────────
+  // 122 는 실제로 51~63 + 70 (64 없음). 규칙만 쓰면 병동이 손으로 고쳐야 했다.
+  step('12 병실 예외');
+  eq('122 병실은 51~63 + 70',
+    await ev(`const A=window.__app; const r=A.wardRooms('122');
+      return [r.length, r[0], r[12], r[13]];`),
+    [14, '1251', '1263', '1270']);
+  eq('규칙 밖 호실도 자리를 갖는다 (없으면 병동 전환이 끊긴다)',
+    await ev(`const A=window.__app; return [A.roomPos('1270'), A.roomPos('1251'), A.roomPos('964')];`),
+    [14, 1, 14]);
+  eq('예외가 없는 병동은 규칙대로',
+    await ev(`const A=window.__app; const r=A.wardRooms('92'); return [r[0], r[13]];`),
+    ['951', '964']);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
