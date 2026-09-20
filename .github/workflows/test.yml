@@ -77,6 +77,11 @@ jobs:
       - name: standalone 로직 회귀 (헤드리스 크롬)
         run: CHROME=google-chrome node scripts/test_assign_logic.mjs
 
+      # 병동이 주는 양식은 판마다 다르고 한 칸만 서식이 어긋나도 그 자리만 선이 빠진
+      # 채 매주 인쇄된다 (122 H18 이 그랬다 — 쓰다가 사람이 알아챘다).
+      - name: 배정표 양식 테두리에 구멍이 없는지
+        run: python3 scripts/check_form_borders.py
+
       - name: standalone 빌드가 소스와 동기인지 (버전 문자열만 달라야 한다)
         run: |
           node scripts/build-assign-standalone.mjs
