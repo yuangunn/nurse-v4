@@ -280,12 +280,16 @@ async function main() {
     return (async()=>{ const t=await A.loadBaseTemplate('102');
       const L=A.findLayout102(A.sheetCells(t), A.sheetMerges(t));
       return {days:(L.wdCols||[]).length, secs:(L.sections||[]).map(x=>x.P+':'+x.rows),
-              labels:L.labels, mid:!!L.midRow, sub:!!L.subRow, evt:!!L.eventRow};
+              labels:L.labels, mid:!!L.midRow, evt:!!L.eventRow,
+              evtRow:L.eventRow, labelCol:L.labelCol};
     })()`);
   eq('102 구역 — D 4자리 · E 4자리 · N 3자리', l102.secs, ['D:4', 'E:4', 'N:3']);
   eq('102 요일 7칸', l102.days, 7);
-  eq('102 자리 이름', l102.labels.slice(0, 4), ['A', 'B', 'C/비콘', 'D(CRN)']);
-  ok('102 중간번·대체·교육행사 줄을 찾는다', l102.mid && l102.sub && l102.evt, JSON.stringify(l102));
+  eq('102 자리 이름', l102.labels.slice(0, 4), ['A', 'B', 'C', 'D']);
+  ok('102 중간번·교육행사 줄을 찾는다 (교육행사가 표 위에 있어도)',
+    l102.mid && l102.evt, JSON.stringify(l102));
+  eq('교육·행사는 표 위(4행)', l102.evtRow, 4);
+  eq('자리 이름 열은 C', l102.labelCol, 3);
 
   const f102 = await ev(`const A=window.__app; A.setFormId('102'); A.setWard('102');
     const s=A.store; const iso='2026-09-07';
@@ -295,9 +299,10 @@ async function main() {
     A.store=s; A.recompute();
     return (async()=>{ const r=await A.buildWeekXlsx(new Date(2026,8,6));
       const c=A.sheetCells({...r.tpl, sheetXml:r.xml}); const g=k=>c[k]||'';
-      return {D:[g('E4'),g('E5'),g('E6'),g('E7')], N:[g('E14'),g('E15'),g('E16')],
-              날짜:g('E3'), 방칸:g('C4')+g('D4')};})()`);
-  eq('102 D — 차지는 D(CRN) 자리로', f102.D, ['이에이', '박비', '최씨', '김차지']);
+      // 병동 양식은 요일 칸이 두 칸씩 병합 — 월요일은 F열
+      return {D:[g('F5'),g('F6'),g('F7'),g('F8')], N:[g('F14'),g('F15'),g('F16')],
+              날짜:g('F3'), 방칸:g('B5')};})()`);
+  eq('102 D — 차지는 마지막 자리로 (양식의 D자리)', f102.D, ['이에이', '박비', '최씨', '김차지']);
   eq('102 N — CRN 자리가 없으니 이름에 표기', f102.N, ['정야간 /CRN', '한야간', '오야간']);
   ok('102 날짜는 엑셀 날짜로', /^\d{5}$/.test(String(f102.날짜)), String(f102.날짜));
   eq('102 배정표에 방 번호가 나오지 않는다', f102.방칸, '');
@@ -409,6 +414,14 @@ async function main() {
   eq('122 자리 수 5·5·3 · 방 칸 있음', [perForm['122'].rows, perForm['122'].noRooms], [[5, 5, 3], false]);
   eq('102 자리 수 4·4·3 · 방 칸 없음', [perForm['102'].rows, perForm['102'].noRooms], [[4, 4, 3], true]);
 
+  // 화면 줄 순서가 양식 줄 순서와 달라 차지가 엉뚱한 칸에 인쇄되던 적이 있다.
+  const order = await ev(`const A=window.__app; const out={};
+    for(const id of ['101','102']){ A.setFormId(id);
+      out[id]=['D','N'].map(P=>A.slotOrder(P).join(',')); }
+    A.setFormId('101'); return out;`);
+  eq('101 은 차지가 맨 위', order['101'], ['차지,A,B,C,D', '차지,A,B']);
+  eq('102 는 D·E 차지가 맨 아래(=D 자리), N 은 맨 위', order['102'], ['A,B,C,차지', '차지,A,B']);
+
   const wkCols = await ev(`const A=window.__app; const s=A.store; const iso='2026-09-07';
     s.order=['가','나','다','라','마','바']; s.cells={};
     s.order.forEach((n,i)=>{ s.cells[n]={[iso]: i===0?'DC' : i<5?'D':'N'}; });
@@ -421,8 +434,8 @@ async function main() {
     return {101:a, 102:b};`);
   ok('101 은 방 칸이 나온다', wkCols['101'].rm > 0, JSON.stringify(wkCols['101']));
   eq('102 는 방 칸이 나오지 않는다', wkCols['102'].rm, 0);
-  ok('102 에는 대체 줄이 있다', wkCols['102'].sub.includes('대체'), JSON.stringify(wkCols['102'].sub));
-  ok('101 에는 대체 줄이 없다', !wkCols['101'].sub.includes('대체'), JSON.stringify(wkCols['101'].sub));
+  ok('대체 줄은 양식에 있을 때만 (지금 102 양식엔 없다)',
+    !wkCols['102'].sub.includes('대체'), JSON.stringify(wkCols['102'].sub));
 
   // ── 14. 쉬는 사람을 근무로 올리기 ─────────────────────────────────────
   // 배정표에는 근무인 사람만 나오므로, OF 로 바꾼 사람은 화면에서 사라져

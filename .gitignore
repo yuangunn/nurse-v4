@@ -34,5 +34,11 @@ design/handoff/check/node_modules
 /node_modules/
 docs/manual/shots/
 
-# 102병동 원본 (실제 간호사 이름 포함 — 커밋 금지)
-standalone/102병동*.xls
+# 병동이 넘겨준 원본 파일은 커밋하지 않는다.
+#  - '102병동 어싸인 (최종).xls' 는 실제 간호사 이름이 들어 있다.
+#  - '102병동 배정표빈칸(양식).xlsx' 는 이름은 없지만
+#    '병실 배정표_102.xlsx' 로 그대로 복사해 두었으므로 중복이다.
+standalone/102병동*
+
+# 엑셀이 파일을 열어두면 만드는 잠금 파일 (~$…)
+standalone/~$*
