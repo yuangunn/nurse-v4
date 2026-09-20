@@ -67,7 +67,13 @@ jobs:
           node scripts/test_paste_dates.mjs
           node scripts/test_preinput_lint.mjs
           node scripts/test_night_badge.mjs
+          node scripts/test_juhu_rotation.mjs
           node scripts/verify_holidays.mjs
+
+      # assign.html 계산 로직 — 러너에 깔려 있는 크롬을 그대로 쓴다(설치 단계 없음).
+      # 못 찾으면 테스트가 SKIP 으로 빠져나가므로 러너 이미지가 바뀌어도 CI 가 깨지지 않는다.
+      - name: standalone 로직 회귀 (헤드리스 크롬)
+        run: CHROME=google-chrome node scripts/test_assign_logic.mjs
 
       - name: standalone 빌드가 소스와 동기인지 (버전 문자열만 달라야 한다)
         run: |

@@ -160,7 +160,8 @@ pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt �
 python3 -m pytest -q                  # 167건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
-  && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs
+  && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs \
+  && node scripts/test_assign_logic.mjs   # standalone 로직 (헤드리스 크롬, $CHROME 로 경로 지정 가능)
 # 화면(index.html)을 재배치했다면 — 핸들러 손실 0 확인 (REMOVED 는 전부 의도한 것이어야 한다)
 python3 scripts/handler_inventory.py <(git show origin/main:frontend/index.html) frontend/index.html
 # 리디자인 계약 검사 (design/handoff) — 1920×1080 으로 실제 앱을 열어 200+ 항목 getComputedStyle 검사, 불일치 0 이어야 한다

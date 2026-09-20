@@ -1207,7 +1207,7 @@ $('#modal').addEventListener('mousedown',e=>{ if(e.target.id==='modal') closeMod
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260920a'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260920b'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1256,6 +1256,9 @@ function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무
   if(!store.nameAlias) store.nameAlias={};
   if(!store.trainee) store.trainee={};
   if(!store.trOv) store.trOv={};
+  // 방 구성이 통째로 없으면(손으로 고친 파일·깨진 파일) 기본값으로 되살린다 —
+  // 없는 채로 두면 presetsOf 가 터져 화면이 통째로 안 뜬다 (2026-09-20 회귀로 확인)
+  if(!store.schemes||typeof store.schemes!=='object') store.schemes=JSON.parse(JSON.stringify(DEFAULT_SCHEMES));
   // 방 구성이 통째로 비어 있는 인원수(예전 기본값의 2인)는 기본값을 지금 병동 자리로 옮겨 채운다 — 비면 배정표 방 칸이 텅 빈다
   if(store.schemes) for(const c in DEFAULT_SCHEMES){
     const sc=store.schemes[c];
@@ -2031,7 +2034,7 @@ function weekTitle(sun){
  * 순서로 정한다. 인원수별로 따로 고르므로 "5인인 날은 5인 프리셋만" 보인다. */
 const WD_KEY=['sun','mon','tue','wed','thu','fri','sat'], WD_LBL={sun:'일',mon:'월',tue:'화',wed:'수',thu:'목',fri:'금',sat:'토'};
 const clampCnt=c=>Math.min(Math.max(+c||2,2),5);
-function presetsOf(cnt){ cnt=clampCnt(cnt); return [{id:'default',name:'기본',rooms:store.schemes[cnt]||{}},...(((store.presets||{})[cnt])||[])]; }
+function presetsOf(cnt){ cnt=clampCnt(cnt); return [{id:'default',name:'기본',rooms:(store.schemes||{})[cnt]||{}},...(((store.presets||{})[cnt])||[])]; }
 function presetById(cnt,id){ return presetsOf(cnt).find(p=>p.id===id)||null; }
 function presetEmpty(p){ const ls=Object.keys(p.rooms||{}); return !ls.length||ls.some(l=>!(p.rooms[l]||[]).length); }
 function presetFor(P,cnt,iso){
