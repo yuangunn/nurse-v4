@@ -398,6 +398,52 @@ async function main() {
     await ev(`const A=window.__app; const r=A.wardRooms('92'); return [r[0], r[13]];`),
     ['951', '964']);
 
+  // ── 13. 서식이 배정표 화면을 바꾼다 ───────────────────────────────────
+  // 화면과 양식이 어긋나면 사람이 화면에는 보이는데 인쇄물에서 사라진다.
+  step('13 서식별 화면');
+  const perForm = await ev(`const A=window.__app; const out={};
+    for(const id of ['101','122','102']){ A.setFormId(id);
+      out[id]={rows:['D','E','N'].map(P=>A.secRows(P)), noRooms:A.formNoRooms()}; }
+    A.setFormId('101'); return out;`);
+  eq('101 자리 수 5·5·3 · 방 칸 있음', [perForm['101'].rows, perForm['101'].noRooms], [[5, 5, 3], false]);
+  eq('122 자리 수 5·5·3 · 방 칸 있음', [perForm['122'].rows, perForm['122'].noRooms], [[5, 5, 3], false]);
+  eq('102 자리 수 4·4·3 · 방 칸 없음', [perForm['102'].rows, perForm['102'].noRooms], [[4, 4, 3], true]);
+
+  const wkCols = await ev(`const A=window.__app; const s=A.store; const iso='2026-09-07';
+    s.order=['가','나','다','라','마','바']; s.cells={};
+    s.order.forEach((n,i)=>{ s.cells[n]={[iso]: i===0?'DC' : i<5?'D':'N'}; });
+    A.store=s; A.recompute(); A.wkSunday=new Date(2026,8,6);
+    const look=id=>{ A.setFormId(id); A.show('week');
+      const rm=document.querySelectorAll('#wkTable td.rm').length;
+      const sub=[...document.querySelectorAll('#wkTable .midlab')].map(e=>e.textContent.trim());
+      return {rm, sub}; };
+    const a=look('101'), b=look('102'); A.setFormId('101'); A.show('week');
+    return {101:a, 102:b};`);
+  ok('101 은 방 칸이 나온다', wkCols['101'].rm > 0, JSON.stringify(wkCols['101']));
+  eq('102 는 방 칸이 나오지 않는다', wkCols['102'].rm, 0);
+  ok('102 에는 대체 줄이 있다', wkCols['102'].sub.includes('대체'), JSON.stringify(wkCols['102'].sub));
+  ok('101 에는 대체 줄이 없다', !wkCols['101'].sub.includes('대체'), JSON.stringify(wkCols['101'].sub));
+
+  // ── 14. 쉬는 사람을 근무로 올리기 ─────────────────────────────────────
+  // 배정표에는 근무인 사람만 나오므로, OF 로 바꾼 사람은 화면에서 사라져
+  // 되돌리기나 '근무표 고치기' 로 가야만 되돌릴 수 있었다.
+  step('14 휴무자 추가');
+  const cands = await ev(`const A=window.__app; const s=A.store; const iso='2026-09-07';
+    s.order=['근무자','쉬는사람','연차자','야간전날','자격없음'];
+    s.cells={근무자:{[iso]:'D'},쉬는사람:{[iso]:'OF'},연차자:{[iso]:'V'},
+             야간전날:{'2026-09-06':'N',[iso]:'OF'},자격없음:{[iso]:'OF'}};
+    s.caps={근무자:['D'],쉬는사람:['DC','D'],연차자:['D'],야간전날:['D'],자격없음:['N']};
+    A.store=s; A.recompute();
+    return A.offCandidates(iso,'D').map(c=>[c.n,c.code,c.can,c.bad]);`);
+  ok('근무 중인 사람은 목록에 없다', !cands.some(c => c[0] === '근무자'), JSON.stringify(cands));
+  ok('쉬는 사람·연차자는 나온다',
+    cands.some(c => c[0] === '쉬는사람') && cands.some(c => c[0] === '연차자'), JSON.stringify(cands));
+  ok('가능 근무가 아니면 표시된다',
+    cands.find(c => c[0] === '자격없음')[2] === false, JSON.stringify(cands));
+  ok('전날 야간이면 금지 전환으로 표시된다',
+    cands.find(c => c[0] === '야간전날')[3] === true, JSON.stringify(cands));
+  eq('고르기 쉬운 순서 — 가능 근무가 먼저', cands[0][2], true);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
