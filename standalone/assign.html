@@ -1259,7 +1259,7 @@ $('#modal').addEventListener('mousedown',e=>{ if(e.target.id==='modal') closeMod
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260920x'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260920z'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1283,16 +1283,16 @@ const FORMS={
     rows:{D:5,E:5,N:3},
     labels:{'차지':'CN',A:'A',B:'B',C:'C',D:'D'},labelsN:{'차지':'A',A:'B',B:'C',C:'D',D:'E'},
     desc:'요일마다 이름·메모 두 칸, 방은 일·월~금·토 세 열에 한 번씩. 자리 이름 CN·A·B·C·D(야간 A·B·C). 교육·행사 칸이 크고 아래에 물품체크·CPR·화재 안내.'},
-  // 102 는 **방 칸이 없다** — 자리(A·B·C·D(CRN))마다 보는 방이 고정이라 머리글에 한 번 적고,
+  // 102 는 **방 칸이 없다** — 자리(A·B·C·D)마다 보는 방이 고정이라 머리글에 한 번 적고,
   // 매일 칸에는 이름만 쓴다. "배정표에 어싸인이 나오지 않게" 라는 요구가 양식에 이미 들어 있다.
+  // 차지는 **방이 고정이 아니다** (2026-09-20 병동 확인) — 그 근무의 최선임 이름 뒤에
+  // ' /CRN' 을 붙일 뿐이라 자리를 옮기지 않는다. 최선임은 코어가 이미 그렇게 고른다
+  // (DC/EC/NC 표시자 → 차지 가능 최선임 → 최선임, 명부 순서 = 시니어리티).
   '102':{kind:'102',name:'102병동 서식',file:'병실 배정표_102',tplId:'tplB64_102',noRooms:true,
     rows:{D:4,E:4,N:3},   // 병동이 준 2026-09 양식에는 대체 줄이 없다 — 5번째는 확인 카드가 알려 준다
-    // 차지 자리 — D·E 는 마지막 자리(옛 양식의 D(CRN)), N 은 첫 자리에 이름 뒤 /CRN.
-    // 2026-09 양식은 (CRN) 표기를 뺐지만 자리 순서는 그대로라 여기에 규칙으로 남긴다.
-    chargeAt:{D:'last',E:'last',N:'first'},
-    labels:{'차지':'D',A:'A',B:'B',C:'C',D:'대체'},
+    labels:{'차지':'A',A:'B',B:'C',C:'D',D:'대체'},
     labelsN:{'차지':'A',A:'B',B:'C',C:'대체',D:'대체'},
-    desc:'요일마다 이름 한 칸(방 칸 없음). 자리 이름은 A·B·C/비콘·D(CRN), 야간은 A·B·C. 방 배정은 머리글에 고정으로 적혀 있고 배정표에는 나오지 않는다. 중간번·대체 줄과 물품체크·CPR·화재 안내가 있다.'},
+    desc:'요일마다 이름 한 칸(방 칸 없음). 자리 이름은 A·B·C·D, 야간은 A·B·C. 차지는 자리가 고정이 아니라 최선임 이름 뒤에 /CRN 이 붙는다. 방 배정은 머리글에 고정으로 적혀 있고 배정표에는 나오지 않는다. 중간번과 물품체크·CPR·화재 안내가 있다.'},
 };
 const FORM_IDS=Object.keys(FORMS);
 function formId(){ return store&&FORMS[store.formId]?store.formId:'101'; }
@@ -2114,14 +2114,6 @@ const SEC={D:{top:5,rows:5},E:{top:11,rows:5},N:{top:16,rows:3}};   // 101 양�
 /* 배정표 화면의 자리 수 — 서식마다 다르다. 102 는 D·E 가 4자리이고 D 아래에 '대체' 줄이 있다.
  * 화면과 양식이 어긋나면 사람이 화면에는 보이는데 인쇄물에서 사라진다. */
 function secRows(P){ const F=formDef(); return (F&&F.rows&&F.rows[P])||SEC[P].rows; }
-/* 자리 순서 — 화면 줄 순서가 양식 줄 순서와 같아야 한다. 102 는 차지가 **마지막**
- * 자리(D)이므로 맨 위에 그리면 화면과 인쇄물이 어긋난다. */
-function slotOrder(P){
-  const n=secRows(P), F=formDef();
-  let ls=LBL_ORDER.slice(0,n);
-  if((F.chargeAt||{})[P]==='last'){ ls=ls.filter(l=>l!=='차지'); ls.push('차지'); }
-  return ls;
-}
 const formNoRooms=()=>!!(formDef()&&formDef().noRooms);
 const LBL_ORDER=['차지','A','B','C','D'];
 /* 자리 이름 — 서식마다 다르다(FORMS.labels). P 를 주면 그 근무의 표기: 122 서식의 야간은 A·B·C */
@@ -2307,12 +2299,15 @@ function renderWeek(){
   });
   const noRm=formNoRooms();
   for(const P of ['D','E','N']){
-    const nRows=secRows(P), slots=slotOrder(P);
+    const nRows=secRows(P);
     for(let li=0;li<nRows;li++){
-      const label=slots[li];
+      const label=LBL_ORDER[li], labTxt=FORM_LBL(label,P);
+      // 자리 이름이 차지를 안 알려 주는 서식(102 의 'A')은 인쇄처럼 이름 뒤에 /CRN 을 보인다.
+      // 화면에 표시가 없으면 누구를 차지로 두고 고치는지 모른 채 자리를 바꾸게 된다.
+      const crn=(label==='차지'&&!/CN/i.test(labTxt))?' /CRN':'';
       h+='<tr style="height:34px">';
       if(li===0) h+=`<td class="seccol sec${P}" rowspan="${nRows}">${P}</td>`;
-      h+=`<td class="lab">${FORM_LBL(label,P)}</td>`;
+      h+=`<td class="lab">${labTxt}</td>`;
       days.forEach((d,di)=>{
         const iso=isoOfD(d), day=infos[di];
         const nm=day&&day[P].labels[label];
@@ -2326,16 +2321,11 @@ function renderWeek(){
         h+=(noRm?'':`<td class="rm${isRov?' rov':''}${hasDup?' rdup':''}${preOn?' rpre':''}${tdCls(d)}" data-iso="${iso}" data-p="${P}" data-l="${label}"`+
            ` title="${esc(rmStr)}호 — 클릭 = 이 날 방 수정·프리셋${pr.src!=='default'?' · 방 구성: '+esc(pr.name)+(pr.src==='day'?' (오늘만)':' (요일 계획)'):''}${hasDup?' · ⚠ 다른 어싸인과 방 겹침':''}">${esc(rmStr)}</td>`)+
            `<td class="nm${ov?' ovd':''}${tdCls(d)}" data-n="${esc(nm)}" data-iso="${iso}">${esc(nm)}${
+             crn?`<span class="dim">${crn}</span>`:''}${
              traineesUnder(iso,P,nm).map(T=>`<div class="trn">/ ${esc(T)}</div>`).join('')}</td>`;
       });
       h+='</tr>';
       if(P==='D'&&li===nRows-1){
-        if(formDef().subOnD){
-          // 대체 — 자리보다 사람이 많을 때 다음 사람이 여기로 (양식에 대체 줄이 있다)
-          h+=`<tr style="height:30px"><td class="midlab" colspan="2">대체</td>${days.map((d,di)=>{
-            const day=infos[di]; const nm=day&&day.D.labels[LBL_ORDER[nRows]];
-            return `<td colspan="${noRm?1:2}" class="mid${tdCls(d)}">${nm?esc(nm):''}</td>`;}).join('')}</tr>`;
-        }
         h+=`<tr style="height:30px"><td class="midlab" colspan="2">중간번</td>${days.map(d=>
           `<td colspan="${noRm?1:2}" class="mid${tdCls(d)}">${midsOf(isoOfD(d)).map(esc).join(', ')}</td>`).join('')}</tr>`;
       }
@@ -2371,9 +2361,9 @@ function renderWeekWarnings(days,infos){
     // 양식 칸보다 사람이 많으면 인쇄물에서 사라진다 — 서식마다 자리 수가 다르므로 secRows 로 센다
     // (102 는 D·E 가 4자리이고 대체 줄이 없다. 101·122 는 5·5·3)
     for(const P of ['D','E','N']){
-      const nR=secRows(P), sub=(P==='D'&&formDef().subOnD)?1:0;
-      const over=LBL_ORDER.slice(nR+sub).filter(l=>day[P].labels[l]);
-      if(over.length) push('err',`${md(iso)} ${P} ${over.map(l=>esc(day[P].labels[l])).join(', ')} — 양식의 ${P}칸(${nR+sub}개)을 넘어 인쇄에 나오지 않습니다. 수기로 적어주세요.`);
+      const nR=secRows(P);
+      const over=LBL_ORDER.slice(nR).filter(l=>day[P].labels[l]);
+      if(over.length) push('err',`${md(iso)} ${P} ${over.map(l=>esc(day[P].labels[l])).join(', ')} — 양식의 ${P}칸(${nR}개)을 넘어 인쇄에 나오지 않습니다. 수기로 적어주세요.`);
     }
     for(const P of ['D','E','N']){
       const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
@@ -5068,7 +5058,6 @@ const at102=(cells,r,c)=>cells[colName(c)+r]||'';
 function fillForm102(tpl,L,days){
   let xml=tpl.sheetXml;
   if(!L.wdRow||!L.sections.length) return xml;
-  const F=formDef();
   // 이름·날짜·교육행사 칸 비우기 (지난주 값이 남지 않게)
   for(const c of L.dateCols){
     xml=clearCell(xml,colName(c)+L.dateRow);
@@ -5090,11 +5079,9 @@ function fillForm102(tpl,L,days){
       // 그 구역의 자리 이름을 읽어, CRN 자리가 따로 있으면 차지를 거기에 놓는다.
       // 없으면(102 의 야간) 병동 관행대로 이름 뒤에 ' /CRN' 을 붙인다 — 실제 시트가 그렇다.
       const slots=[]; for(let k=0;k<sec.rows;k++) slots.push(normLabel(at102(cellsOf(tpl),sec.row+k,L.labelCol)));
-      // 자리 이름에 CRN 이 적혀 있으면 거기가 차지 자리. 없으면 서식의 규칙(chargeAt)대로 —
-      // 병동이 2026-09 에 준 양식은 (CRN) 표기를 뺐지만 자리 순서는 그대로다.
-      let crnAt=slots.findIndex(v=>/CRN/i.test(v));
-      if(crnAt<0){ const rule=(F.chargeAt||{})[sec.P];
-        if(rule==='last') crnAt=sec.rows-1; }
+      // 자리 이름에 CRN 이 적혀 있으면 거기가 차지 자리(옛 양식). 없으면 자리를 옮기지 않고
+      // 이름 뒤에 ' /CRN' 만 붙인다 — 102 는 차지 방이 고정이 아니다.
+      const crnAt=slots.findIndex(v=>/CRN/i.test(v));
       const charge=s2.byLabel['차지']||'';
       const rest=['A','B','C','D'].map(l=>s2.byLabel[l]).filter(Boolean);
       const put=new Array(sec.rows).fill('');
@@ -6199,7 +6186,7 @@ window.__app={get store(){return store},set store(v){store=v},
   get wkSunday(){return wkSunday},set wkSunday(v){wkSunday=v},show,
   startWizard,closeWizard,wizGo,wizPaste,wizResume,WIZ,get wizAt(){return wizAt},renderWizard,
   hideOnboard,showOnboard,onboardItems,uiGet:(k)=>uiGet(k),
-  reqFromSchedule,fitReqToSchedule,secRows,slotOrder,formNoRooms,renderWardChip,addWorker,offCandidates,
+  reqFromSchedule,fitReqToSchedule,secRows,formNoRooms,renderWardChip,addWorker,offCandidates,
   memoryMode(){window.__memoryMode=true;
     setFileLoc({kind:'none'});afterLoad();}};
 </script>

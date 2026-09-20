@@ -302,9 +302,17 @@ async function main() {
       // 병동 양식은 요일 칸이 두 칸씩 병합 — 월요일은 F열
       return {D:[g('F5'),g('F6'),g('F7'),g('F8')], N:[g('F14'),g('F15'),g('F16')],
               날짜:g('F3'), 방칸:g('B5')};})()`);
-  eq('102 D — 차지는 마지막 자리로 (양식의 D자리)', f102.D, ['이에이', '박비', '최씨', '김차지']);
-  eq('102 N — CRN 자리가 없으니 이름에 표기', f102.N, ['정야간 /CRN', '한야간', '오야간']);
+  // 102 는 차지 방이 고정이 아니다 — 자리를 옮기지 말고 최선임 이름 뒤에 /CRN 만 붙인다.
+  eq('102 D — 차지는 자리를 옮기지 않고 이름에 /CRN', f102.D, ['김차지 /CRN', '이에이', '박비', '최씨']);
+  eq('102 N — 차지는 자리를 옮기지 않고 이름에 /CRN', f102.N, ['정야간 /CRN', '한야간', '오야간']);
   ok('102 날짜는 엑셀 날짜로', /^\d{5}$/.test(String(f102.날짜)), String(f102.날짜));
+  // 화면에서 고친 자리와 인쇄된 자리가 달라지면 안 된다.
+  const scr102 = await ev(`const A=window.__app; A.setFormId('102'); A.wkSunday=new Date(2026,8,6);
+    A.show('week');
+    return [...document.querySelectorAll('#wkTable tr')].map(tr=>
+      [...tr.children].map(td=>(td.textContent||'').trim()).filter(Boolean)).flat()
+      .filter(v=>/김차지|이에이|박비|최씨/.test(v));`);
+  eq('102 화면이 인쇄와 같다 (줄 순서 · /CRN 표시)', scr102.slice(0, 4), f102.D);
   eq('102 배정표에 방 번호가 나오지 않는다', f102.방칸, '');
   await ev(`window.__app.setFormId('101'); return 1`);
 
@@ -414,13 +422,6 @@ async function main() {
   eq('122 자리 수 5·5·3 · 방 칸 있음', [perForm['122'].rows, perForm['122'].noRooms], [[5, 5, 3], false]);
   eq('102 자리 수 4·4·3 · 방 칸 없음', [perForm['102'].rows, perForm['102'].noRooms], [[4, 4, 3], true]);
 
-  // 화면 줄 순서가 양식 줄 순서와 달라 차지가 엉뚱한 칸에 인쇄되던 적이 있다.
-  const order = await ev(`const A=window.__app; const out={};
-    for(const id of ['101','102']){ A.setFormId(id);
-      out[id]=['D','N'].map(P=>A.slotOrder(P).join(',')); }
-    A.setFormId('101'); return out;`);
-  eq('101 은 차지가 맨 위', order['101'], ['차지,A,B,C,D', '차지,A,B']);
-  eq('102 는 D·E 차지가 맨 아래(=D 자리), N 은 맨 위', order['102'], ['A,B,C,차지', '차지,A,B']);
 
   const wkCols = await ev(`const A=window.__app; const s=A.store; const iso='2026-09-07';
     s.order=['가','나','다','라','마','바']; s.cells={};
