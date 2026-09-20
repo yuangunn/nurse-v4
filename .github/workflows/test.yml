@@ -57,9 +57,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22+ — 전역 WebSocket(테스트 하네스가 CDP 에 붙는 데 쓴다)이 기본 제공.
+      # release.yml 의 Node 20 고정은 @electron/packager 사정이라 여기와 무관하다.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: JS 검증 (외부 패키지 0 — 설치 단계 없음)
         run: |

@@ -39,6 +39,10 @@ if (!CHROME) {
   console.log('SKIP  크롬을 찾지 못했습니다 ($CHROME 로 지정하세요)');
   process.exit(0);
 }
+if (typeof WebSocket === 'undefined') {   // 전역 WebSocket 은 Node 22+
+  console.log(`SKIP  이 Node 에는 전역 WebSocket 이 없습니다 (${process.version}, 22 이상 필요)`);
+  process.exit(0);
+}
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const chrome = spawn(CHROME, [
