@@ -485,6 +485,60 @@ async function main() {
   eq('오늘이 넣은 기간 안이면 오늘 주로 간다', jump.안에, jump.오늘주);
   eq('기간 밖이면 넣은 기간의 첫 주로 간다', jump.밖에, jump.그기간첫주);
 
+  // ── 16. 한 장에 표가 둘인 번표 · 82병동 SU ────────────────────────────
+  // 82병동 파트장은 병동과 SU(Stroke unit) 근무표를 한 시트에서 관리한다. 통째로
+  // 붙이면 SU 간호사가 병동 명부에 섞여 병동 자리에 배정됐다 (2026-09-21 제보).
+  step('16 두 표 가르기 · SU');
+  const two = await ev(`const A=window.__app; A.setFormId('82'); A.setWard('82');
+    const s=A.store; s.cells={}; s.order=[]; s.unit={}; A.store=s;
+    A.ingestGrid([
+      ['이름','8/30','8/31','9/1','9/2','9/3','9/4','9/5'],
+      ['가병동','D','D','D','D','D','D','D'],
+      ['나병동','D','D','D','D','D','D','D'],
+      ['다병동','E','E','E','E','E','E','E'],
+      ['라병동','E','E','E','E','E','E','E'],
+      ['마병동','N','N','N','N','N','N','N'],
+      ['바병동','중','중','중','중','중','중','중'],
+      ['계','6','6','6','6','6','6','6'],
+      ['근무','O','O','O','O','O','O','O'],
+      ['2026년 9월(SU)','','','','','','',''],
+      ['이름','30','31','1','2','3','4','5'],
+      ['가에스유','D','D','D','D','D','D','D'],
+      ['나에스유','E','E','E','E','E','E','E'],
+      ['다에스유','N','N','N','N','N','N','N'],
+    ]);
+    A.confirmPaste();
+    return {명부:A.store.order, 소속:A.store.unit};`);
+  eq('합계·범례 줄은 사람이 아니다', two.명부.filter(n => ['계','근무','중간번','일자','요일'].includes(n)), []);
+  eq('두 번째 표는 SU 소속으로 가른다', Object.keys(two.소속).sort(), ['가에스유','나에스유','다에스유']);
+  eq('병동은 병동만', two.명부.filter(n => !two.소속[n]),
+    ['가병동','나병동','다병동','라병동','마병동','바병동']);
+
+  const su = await ev(`const A=window.__app;
+    return {D:A.unitWorker('2026-09-01','D','SU'), E:A.unitWorker('2026-09-01','E','SU'),
+            N:A.unitWorker('2026-09-01','N','SU'),
+            자리:['D','E','N'].map(P=>A.slotsOf(P).join(','))};`);
+  eq('82 자리 구성', su.자리, ['차지,A,SU,중간번', '차지,A,SU', '차지,SU']);
+  eq('SU 칸에는 SU 소속이 들어간다', [su.D, su.E, su.N], ['가에스유','나에스유','다에스유']);
+
+  const x82 = await ev(`const A=window.__app;
+    return (async()=>{ const r=await A.buildWeekXlsx(new Date(2026,7,30));
+      const c=A.sheetCells({...r.tpl, sheetXml:r.xml}); const g=k=>c[k]||'';
+      // 주는 8/30(일)부터 — F열이 9/1
+      return {날짜:g('F3'), D:[g('F4'),g('F5'),g('F6'),g('F7')],
+              E:[g('F8'),g('F9'),g('F10')], N:[g('F11'),g('F12')]};})()`);
+  eq('82 날짜는 글자로 (엑셀 날짜를 넣으면 5자리 수가 찍힌다)', x82.날짜, '9월 1일');
+  eq('82 D — 병동 2명 · SU · 중간번', x82.D, ['가병동','나병동','가에스유','바병동']);
+  eq('82 E — 병동 2명 · SU', x82.E, ['다병동','라병동','나에스유']);
+  eq('82 N — 병동 1명 · SU', x82.N, ['마병동','다에스유']);
+
+  // 전달 말일부터 시작하는 번표 — 첫 칸을 이번 달에 걸면 표 전체가 한 달 밀린다
+  const anchor = await ev(`const A=window.__app;
+    const days=Object.keys(A.store.cells['가병동']||{}).sort();
+    return {첫날:days[0], 끝날:days[days.length-1]};`);
+  eq('30·31 로 시작하면 전달로 건다', anchor.첫날, '2026-08-30');
+  eq('그 다음은 이번 달', anchor.끝날, '2026-09-05');
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));

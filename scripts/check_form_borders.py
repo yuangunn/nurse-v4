@@ -88,13 +88,19 @@ def layout(D):
         for (a, b, c2, d) in D['merges']:
             if a == c and b <= wd_row <= d: end = max(end, c2)
         blocks.append((c, end))
-    sec = [r for r in sorted(rows) if r > wd_row
-           and D['text'].get('A'+str(r), '').strip() in ('D', 'E', 'N')]
-    if not sec: raise SystemExit('D·E·N 구역을 찾지 못했습니다')
+    # 아래 물품체크 표도 A열에 A·B·C·D 를 쓴다 — '구분' 줄에서 끊는다(101·122·102).
     stop = next((r for r in sorted(rows)
                  if r > wd_row and D['text'].get('A'+str(r), '').strip() == '구분'), None)
-    last = (stop - 1) if stop else max(rows)
-    return blocks, list(range(sec[0], last + 1))
+    sec = [r for r in sorted(rows) if r > wd_row and (stop is None or r < stop)
+           and D['text'].get('A'+str(r), '').strip() in ('D', 'E', 'N')]
+    if not sec: raise SystemExit('D·E·N 구역을 찾지 못했습니다')
+    # 표의 끝 = 마지막 구역의 마지막 줄. A열 세로 병합이 그 구역의 높이다.
+    # ('구분' 줄만 믿으면 그게 없는 양식(82)에서 물품체크·화재 안내까지 표로 본다)
+    def height(r):
+        for (c1, r1, c2, r2) in D['merges']:
+            if c1 == 1 and r1 == r: return r2 - r1 + 1
+        return 1
+    return blocks, list(range(sec[0], sec[-1] + height(sec[-1])))
 
 def check(path):
     D = load(path)
@@ -102,13 +108,22 @@ def check(path):
     inner = {c for a, b in blocks for c in range(a, b)}
     span = range(blocks[0][0], blocks[-1][1])
     holes, thin = [], []
+    # 요일 경계선의 굵기는 양식마다 다르다 — 82 는 전부 thin 이다. 그 양식이
+    # 주로 쓰는 굵기를 기준으로 삼고, 혼자 다른 칸만 집어낸다.
+    seen = {}
+    for r in rows:
+        for c in span:
+            if c in inner or merged(D, c, r, c+1, r): continue
+            v = side(D, colname(c)+str(r), 'right') or side(D, colname(c+1)+str(r), 'left')
+            if v: seen[v] = seen.get(v, 0) + 1
+    usual = max(seen, key=seen.get) if seen else 'medium'
     for r in rows:
         for c in span:
             if merged(D, c, r, c+1, r): continue
             v = side(D, colname(c)+str(r), 'right') or side(D, colname(c+1)+str(r), 'left')
             ref = f'{colname(c)}{r}|{colname(c+1)}{r}'
             if v is None: holes.append((ref, '세로'))
-            elif c not in inner and v != 'medium': thin.append((ref, '요일 경계', v))
+            elif c not in inner and v != usual: thin.append((ref, '요일 경계', f'{v} (이 양식은 주로 {usual})'))
     lo, hi = blocks[0][0]-1, blocks[-1][1]+1     # 표 바깥 좌·우
     for r in rows:
         for a, b, lbl in ((lo, lo+1, '왼쪽 바깥'), (hi-1, hi, '오른쪽 바깥')):
@@ -131,7 +146,7 @@ def main(paths):
         for ref, kind in holes:
             print(f'   구멍  {ref:<12} {kind} — 양쪽 다 선이 없습니다')
         for ref, kind, v in thin:
-            print(f'   안내  {ref:<12} {kind}가 {v} (주위는 medium)')
+            print(f'   안내  {ref:<12} {kind}가 {v}')
         if not holes and not thin: print('   이상 없음')
         bad += len(holes)
     if bad:
