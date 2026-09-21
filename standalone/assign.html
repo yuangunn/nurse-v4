@@ -1260,7 +1260,7 @@ $('#modal').addEventListener('mousedown',e=>{ if(e.target.id==='modal') closeMod
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260921h'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260921m'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1291,6 +1291,7 @@ const FORMS={
   // (DC/EC/NC 표시자 → 차지 가능 최선임 → 최선임, 명부 순서 = 시니어리티).
   '102':{kind:'102',name:'102병동 서식',file:'병실 배정표_102',tplId:'tplB64_102',noRooms:true,
     rows:{D:4,E:4,N:3},   // 병동이 준 2026-09 양식에는 대체 줄이 없다 — 5번째는 확인 카드가 알려 준다
+    crnMark:true,          // 자리 이름에 CN 표기가 없어 이름 뒤에 /CRN 을 찍는다
     labels:{'차지':'A',A:'B',B:'C',C:'D',D:'대체'},
     labelsN:{'차지':'A',A:'B',B:'C',C:'대체',D:'대체'},
     desc:'요일마다 이름 한 칸(방 칸 없음). 자리 이름은 A·B·C·D, 야간은 A·B·C. 차지는 자리가 고정이 아니라 최선임 이름 뒤에 /CRN 이 붙는다. 방 배정은 머리글에 고정으로 적혀 있고 배정표에는 나오지 않는다. 중간번과 물품체크·CPR·화재 안내가 있다.'},
@@ -1306,8 +1307,23 @@ const FORMS={
     desc:'요일마다 이름 한 칸(방 칸 없음). D 는 A·B·SU·중간번, E 는 A·B·SU, N 은 ward·SU. SU 칸에는 SU 소속 간호사만 들어간다 — 병동 자리에는 나오지 않는다. 자리마다 자위소방대 임무가 고정으로 적혀 있다.'},
 };
 const FORM_IDS=Object.keys(FORMS);
-function formId(){ return store&&FORMS[store.formId]?store.formId:'101'; }
-function formDef(){ return FORMS[formId()]; }
+/* 내장 서식은 4벌뿐이지만 병동은 14개다. 양식 파일을 올리면 그 병동 서식이
+ * 스스로 목록에 생긴다 — 자리 수·자리 이름·방 칸 유무는 올릴 때 읽어 둔다. */
+function wardForm(id){
+  const o=store&&store.forms&&store.forms[id];
+  if(!o||!o.b64||FORMS[id]) return null;
+  return {kind:o.kind||'101',name:o.formName||(id+'병동 양식'),file:'',tplId:'',
+    noRooms:!!o.noRooms,rows:o.rows||null,slots:o.slots||null,crnMark:o.kind==='102',
+    labels:o.labels||FORMS['101'].labels,labelsN:o.labelsN||FORMS['101'].labelsN,
+    desc:o.desc||'이 병동에서 올린 양식입니다.',ward:id,custom:true};
+}
+function formDefOf(id){ return FORMS[id]||wardForm(id); }
+const formIds=()=>[...FORM_IDS,
+  ...Object.keys((store&&store.forms)||{}).filter(k=>!FORMS[k]&&wardForm(k))];
+/* 이 병동에 쓸 서식이 있나 (내장이든 올린 것이든) */
+const formFor=code=>code&&formDefOf(String(code))?String(code):'';
+function formId(){ return store&&formDefOf(store.formId)?store.formId:'101'; }
+function formDef(){ return formDefOf(formId()); }
 function formOv(id){ id=id||formId(); const o=store&&store.forms&&store.forms[id]; return o&&o.b64?o:null; }   // 서식별 우리 병동 양식 {name,b64,savedAt,ph}
 /* 화면 상태는 **데이터 파일**에 둔다. 병원 PC 는 브라우저를 닫을 때 사이트 데이터를
  * 지우도록 설정된 경우가 많아(2026-09-16 4차 기록), localStorage 에 두면 매일 아침
@@ -2334,7 +2350,8 @@ function renderWeek(){
       const label=other?null:slot, labTxt=other||FORM_LBL(slot,P);
       // 자리 이름이 차지를 안 알려 주는 서식(102 의 'A')은 인쇄처럼 이름 뒤에 /CRN 을 보인다.
       // 화면에 표시가 없으면 누구를 차지로 두고 고치는지 모른 채 자리를 바꾸게 된다.
-      const crn=(!other&&slot==='차지'&&!/CN/i.test(labTxt))?' /CRN':'';
+      // /CRN 을 보일지는 서식이 정한다 — 인쇄에 안 찍히는데 화면에만 보이면 어긋난다
+      const crn=(!other&&slot==='차지'&&formDef().crnMark)?' /CRN':'';
       h+='<tr style="height:34px">';
       if(li===0) h+=`<td class="seccol sec${P}" rowspan="${nRows}">${P}</td>`;
       h+=`<td class="lab">${labTxt}</td>`;
@@ -3692,11 +3709,15 @@ function adminBadge(id){
 }
 function pickAdmin(id){ adminPanel=id; renderAdmin(); }
 /* 배정표 서식 고르기 (101/122) — 고친 문구·올린 파일은 서식마다 따로 남아 있으므로 오가도 잃지 않는다 */
-function setFormId(id){
-  if(!FORMS[id]||id===formId()) return;
-  snapshot(); store.formId=id; TPL=null; touch(); renderAdmin();
+/* 병동과 서식은 한 쌍이다 — 한쪽을 바꾸면 다른 쪽도 따라간다.
+ * 그 병동 양식이 없으면(61·71 …) 서식은 건드리지 않는다. */
+function setFormId(id,fromWard){
+  const F=formDefOf(id); if(!F||id===formId()) return;
+  if(!fromWard&&WARDS.includes(id)&&String(store.ward||'')!==id) setWard(id,true);
+  snapshot(); store.formId=id; TPL=null; touch(); recompute(); renderAdmin();
   if(curScr==='week') renderWeek();
-  toast(`배정표 서식을 ${FORMS[id].name}으로 바꿨습니다 — 인쇄·엑셀·자리 이름에 적용됩니다`,3600,true);
+  renderWardChip();
+  toast(`배정표 서식을 ${F.name}으로 바꿨습니다 — 인쇄·엑셀·자리 이름에 적용됩니다`,3600,true);
 }
 function setRule(k,checked){
   store.rules[k]=checked;
@@ -3787,11 +3808,17 @@ const ADMIN_PANELS={
     }},
   form:{title:'배정표 양식',
     desc:'인쇄·엑셀 내보내기에 쓰는 <b>병실 배정표 양식</b>입니다. 먼저 <b>서식</b>을 고르고, 문구는 여기서 바로 고칩니다. 칸 구조가 다른 양식은 xlsx 파일을 올리면 어디가 달라졌는지, 그대로 쓸 수 있는지 알려 줍니다. 고친 문구·올린 파일은 서식마다 따로 남습니다.',
-    body(){ const id=formId(); return `<div class="fmSeg" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="margin-right:2px">서식</b>${
-        FORM_IDS.map(k=>`<button class="segbtn${k===id?' on':''}" onclick="setFormId('${k}')" title="${esc(FORMS[k].desc)}">${FORMS[k].name}${formOv(k)?' · 고침':''}</button>`).join('')}
-        <span class="dim">인쇄·엑셀 내보내기와 배정표 화면의 자리 이름에 바로 적용됩니다</span></div>
+    body(){ const id=formId(), w=String(store.ward||'');
+      const mine=formFor(w);
+      return `<div class="fmSeg" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="margin-right:2px">서식</b>${
+        formIds().map(k=>{ const F=formDefOf(k);
+          return `<button class="segbtn${k===id?' on':''}" onclick="setFormId('${k}')" title="${esc(F.desc)}">${F.name}${formOv(k)&&!F.custom?' · 고침':''}</button>`; }).join('')}
+        <span class="dim">서식을 고르면 병동과 방 구성도 함께 맞춰집니다</span></div>
+      ${w?`<div class="wizNote" style="margin:0 0 10px">${mine
+        ? `지금 <b>${esc(w)}병동</b>이고 <b>${esc(formDefOf(mine).name)}</b>을 씁니다 — 짝이 맞습니다.`
+        : `지금 <b>${esc(w)}병동</b>인데 <b>${esc(w)}병동 양식이 아직 없습니다</b>. 아래 [양식 파일 검사]로 이 병동 배정표 xlsx 를 올리면 <b>${esc(w)}병동 서식</b>으로 목록에 생기고, 다음부터 병동을 고르면 저절로 따라옵니다. 그 전까지는 위에서 고른 서식으로 나갑니다.`}</div>`:''}
       <div id="formNow" class="dim" style="line-height:1.9"></div>
-      ${formOv()?`<div style="margin:2px 0 6px"><button onclick="resetForm()">${FORMS[id].name} 기본 양식으로 되돌리기</button></div>`:''}
+      ${formOv()?`<div style="margin:2px 0 6px"><button onclick="resetForm()">${formDef().custom?formDef().name+' 지우기':formDef().name+' 기본 양식으로 되돌리기'}</button></div>`:''}
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px">
         <button class="pri" onclick="openFormText()">양식 문구 고치기 (여기서 바로)</button>
         <button onclick="$('#formFile').click()">양식 파일 검사 (xlsx 고르기)</button>
@@ -4057,7 +4084,7 @@ function resetSchemes(){
   for(const r of have) if(!Object.values(sc).some(x=>Object.values(x).some(a=>a.includes(r)))) attachRoom(r);
   touch(); recompute(); renderAdmin(); }
 /* 병동 고르기 — 병실 14개를 규칙대로 채우고, 병상수·방 구성·주지 않을 방은 같은 자리(몇 번째 방)로 옮긴다 */
-function setWard(code){
+function setWard(code,fromForm){
   const rooms=wardRooms(code);
   if(!rooms.length){ store.ward=''; touch(); renderAdmin(); return; }      // 직접 입력
   const cur=store.rooms||[];
@@ -4076,6 +4103,10 @@ function setWard(code){
   for(const n in store.banRooms) store.banRooms[n]=mv(store.banRooms[n]);
   store.ward=String(code); store.wardPicked=true;
   store.rooms=rooms.map(r=>[r,beds[roomPos(r)]||0]);
+  // 그 병동 양식이 있으면 서식도 함께 — 없으면 쓰던 서식을 그대로 둔다
+  const f=formFor(code);
+  if(!fromForm&&f&&f!==formId()){ store.formId=f; TPL=null;
+    toast(`${code}병동 서식으로 함께 바꿨습니다`,3200,true); }
   touch(); recompute(); renderAdmin(); renderWardChip();
 }
 /* 방 하나를 모든 방 구성에 넣는다 — **이웃 자리**(바로 앞 방을 보는 자리, 없으면 바로 뒤, 그것도 없으면 마지막 자리)에.
@@ -4433,6 +4464,41 @@ async function checkFormFile(input){
 }
 
 /* 검사한 양식을 우리 병동 양식으로 채택 — 데이터 파일에 함께 저장된다 */
+/* 올린 양식이 어떤 모양인지 구조로 읽는다 — 병동마다 양식이 다르니 가정하지 않는다.
+ *   요일 한 칸당 열이 2개인데 구역 줄에서 **병합이 아니면** 왼쪽이 방 칸이다 (101)
+ *   병합이면 이름 한 칸 (102), 한 열이면 방 칸이 없다 (82)
+ *   자리 이름에 SU 가 있으면 그 칸은 다른 소속 자리다 (82)
+ *   날짜 칸이 글자면 글자로 쓴다 — 엑셀 날짜를 넣으면 5자리 수가 찍힌다 */
+function detectFormShape(cells,merges){
+  const at=(r,c)=>cells[colName(c)+r]||'';
+  // 122 는 방을 요일 칸이 아니라 따로 세 열(일 / 월~금 / 토)에 적는다 — 그게 122 의 표식이다.
+  // (findLayout122 는 남는 열을 다 방 열로 잡으므로 '하나라도 있으면'으로 보면 전부 122 가 된다)
+  const L122=findLayout122(cells,merges);
+  if(L122&&L122.wdRow&&(L122.sections||[]).length>=3&&(L122.roomCols||[]).length>=3)
+    return {kind:'122',noRooms:false};
+  const L=findLayout102(cells,merges);
+  if(!L||!L.wdRow||!(L.sections||[]).length) return null;
+  const gap=L.wdCols.length>=2?L.wdCols[1]-L.wdCols[0]:1;
+  let noRooms=true;
+  if(gap>=2){
+    const c=L.wdCols[0], r=L.sections[0].row;
+    noRooms=(merges||[]).includes(colName(c)+r+':'+colName(c+gap-1)+r);
+  }
+  const rows={},slots={}; let hasUnit=false;
+  for(const sec of L.sections){
+    rows[sec.P]=sec.rows; let i=0;
+    slots[sec.P]=[...Array(sec.rows)].map((_,k)=>{
+      const lb=normLabel(at(sec.row+k,L.labelCol||2));
+      if(/^SU$/i.test(lb)){ hasUnit=true; return 'SU'; }
+      if(/^중간번?$/.test(lb)) return '중간번';
+      return LBL_ORDER[i++]||'D';
+    });
+  }
+  const d0=String(at(L.dateRow,L.dateCols[0])||'').trim();
+  const dateText=!!d0&&!/^-?\d+(\.\d+)?$/.test(d0);
+  return {kind:hasUnit?'82':(noRooms?'102':'101'),noRooms,rows,slots,dateText,
+    unitSlot:hasUnit?'SU':''};
+}
 function useCheckedForm(){
   const c=window.__checkedForm;
   if(!c){ toast('먼저 양식 파일을 검사하세요','',3000); return; }
@@ -4443,12 +4509,30 @@ function useCheckedForm(){
     (ph?'자리표시자가 있어 그 지시대로 채웁니다.\n':'자리표시자가 없어 기본 위치 규칙으로 채웁니다 — 구조가 다르면 [자리표시자 넣어서 내려받기]를 먼저 쓰세요.\n')+
     `데이터 파일이 약 ${Math.round(kb*1.34)}KB 커집니다.\n\n계속할까요?`)) return;
   snapshot();
-  (store.forms=store.forms||{})[formId()]={name:c.name,b64:bytesToB64(c.bytes),savedAt:Date.now(),ph};
-  TPL=null; touch(); renderAdmin();
-  toast('이 양식으로 바꿨습니다 — 엑셀 내보내기부터 적용됩니다',4200);
+  // 이 병동 서식이 아직 없으면(내장 4벌에 없는 병동) 올린 양식이 그 병동 서식이 된다
+  const w=String(store.ward||''), mkWard=w&&!formFor(w);
+  const id=mkWard?w:formId();
+  const rec={name:c.name,b64:bytesToB64(c.bytes),savedAt:Date.now(),ph};
+  if(mkWard){
+    const sh=detectFormShape(cells,sheetMerges(c.tpl));
+    if(!sh){ toast('양식에서 요일 줄과 D·E·N 구역을 찾지 못했습니다 — [자리표시자 넣어서 내려받기]를 먼저 쓰세요',6000); return; }
+    Object.assign(rec,sh,{formName:w+'병동 양식',
+      desc:`${w}병동에서 올린 양식입니다. ${sh.noRooms?'방 칸 없음':'방 칸 있음'}${sh.unitSlot?` · ${sh.unitSlot} 칸 있음`:''}.`});
+  }
+  (store.forms=store.forms||{})[id]=rec;
+  if(mkWard) store.formId=id;
+  TPL=null; touch(); recompute(); renderAdmin(); renderWardChip();
+  toast(mkWard?`${w}병동 서식으로 저장했습니다 — 다음부터 병동을 고르면 따라옵니다`
+              :'이 양식으로 바꿨습니다 — 엑셀 내보내기부터 적용됩니다',4600);
 }
 function resetForm(){
   const id=formId();
+  if(formDef().custom){                    // 병동이 올린 양식 — 돌아갈 기본이 없다
+    if(!confirm(`${FORMS[id]?'':id+'병동 '}양식을 지울까요? 지우면 이 병동 서식이 목록에서 사라집니다.`)) return;
+    snapshot(); delete store.forms[id]; store.formId='101'; TPL=null;
+    touch(); recompute(); renderAdmin(); renderWardChip();
+    toast('병동 양식을 지웠습니다',3600); return;
+  }
   if(!formOv(id)){ toast('기본 양식을 쓰는 중입니다'); return; }
   if(!confirm(`프로그램에 들어 있는 ${FORMS[id].name} 기본 양식으로 되돌릴까요?`)) return;
   snapshot(); delete store.forms[id]; TPL=null; touch(); renderAdmin();
@@ -6326,13 +6410,13 @@ window.__app={get store(){return store},set store(v){store=v},
   reattachHandle,setWard,wardRooms,wardOfRooms,roomsBase,roomPos,roomAtPos,setRoom,addRoom,delRoom,moveRoom,attachRoom,detachRoom,readOldLocalStore,clearOldLocalStore,migrateOldLocalData,
   setScheme,resetSchemes,presetsOf,presetById,presetFor,addPreset,renamePreset,deletePreset,setPresetRooms,setPlan,applyPresetDay,renderSchemes,renderPlan,get presetUI(){return presetUI;},moveNurse,attachTrainee,traineesUnder,preceptorOf,unattachedTrainees,
   nameWithTrainees,applyWrapStyles,packXlsx,openFormText,saveFormText,addNurse,renameNurseAdmin,removeNurse,applyNurseName,adminBadge,
-  FORMS,formId,formDef,formOv,FORM_LBL,setFormId,buildWeekXlsx,packWeekXlsx,fillForm122,findLayout122,fillForm102,findLayout102,findLayout,layoutOf,formVerdict,loadBaseTemplate,customFormDiffers,describeCurrentForm,resetForm,useCheckedForm,migrateStore,sheetCells,sheetMerges,parseXlsx,
+  FORMS,formId,formDef,formOv,FORM_LBL,setFormId,buildWeekXlsx,packWeekXlsx,fillForm122,findLayout122,fillForm102,findLayout102,findLayout,layoutOf,formVerdict,loadBaseTemplate,customFormDiffers,describeCurrentForm,resetForm,useCheckedForm,migrateStore,sheetCells,sheetMerges,parseXlsx,b64ToBytes,
   htmlDirPath,joinPath,dirOfPath,fileLocPath,renderFileInfo,setFileLoc,locateHandle,copyFilePath,get fileLoc(){return fileLoc},
   startTour,endTour,tourNext,tourPrev,startTopicTour,renderOnboard,onboardItems,hideOnboard,showOnboard,xlMock,renderHelpDoc,openHelp,closeHelp,showIntro,hideIntro,get tour(){return tour},TOURS,HELP,
   get wkSunday(){return wkSunday},set wkSunday(v){wkSunday=v},show,
   startWizard,closeWizard,wizGo,wizPaste,wizResume,WIZ,get wizAt(){return wizAt},renderWizard,
   hideOnboard,showOnboard,onboardItems,uiGet:(k)=>uiGet(k),
-  reqFromSchedule,fitReqToSchedule,secRows,slotsOf,unitWorker,unitSlotName,toggleUnit,fillForm82,formNoRooms,renderWardChip,addWorker,offCandidates,
+  reqFromSchedule,fitReqToSchedule,secRows,slotsOf,formIds,formDefOf,formFor,detectFormShape,unitWorker,unitSlotName,toggleUnit,fillForm82,formNoRooms,renderWardChip,addWorker,offCandidates,
   memoryMode(){window.__memoryMode=true;
     setFileLoc({kind:'none'});afterLoad();}};
 </script>

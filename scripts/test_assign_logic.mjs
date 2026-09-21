@@ -539,6 +539,52 @@ async function main() {
   eq('30·31 로 시작하면 전달로 건다', anchor.첫날, '2026-08-30');
   eq('그 다음은 이번 달', anchor.끝날, '2026-09-05');
 
+  // ── 17. 병동과 서식은 한 쌍 ───────────────────────────────────────────
+  step('17 병동↔서식 연동');
+  const link = await ev(`const A=window.__app; const out={};
+    const now=()=>[A.store.ward, A.formId(), A.store.rooms.length?A.store.rooms[0][0]:''];
+    A.setWard('101'); out.병동101=now();
+    A.setWard('82');  out.병동82=now();
+    A.setFormId('122'); out.서식122=now();
+    A.setWard('61');  out.양식없는병동=now();
+    out.있나={'82':A.formFor('82'),'61':A.formFor('61')};
+    return out;`);
+  eq('병동을 고르면 서식도 따라온다', link.병동82, ['82', '82', '851']);
+  eq('서식을 고르면 병동·방도 따라온다', link.서식122, ['122', '122', '1251']);
+  eq('양식 없는 병동은 쓰던 서식을 그대로 둔다', link.양식없는병동, ['61', '122', '601']);
+  eq('이 병동 양식이 있나', link.있나, { '82': '82', '61': '' });
+
+  // ── 18. 올린 양식의 모양을 구조로 읽는다 ──────────────────────────────
+  // 병동마다 양식이 다르므로 가정하지 않는다 — 내장 4벌로 검출기를 되짚어 본다.
+  step('18 양식 모양 판별');
+  const shapes = await ev(`const A=window.__app;
+    return (async()=>{ const out={};
+      for(const id of ['101','122','102','82']){
+        const tpl=await A.loadBaseTemplate(id);
+        const sh=A.detectFormShape(A.sheetCells(tpl),A.sheetMerges(tpl));
+        out[id]=sh?[sh.kind,sh.noRooms,!!sh.dateText,sh.unitSlot||'']:'못 읽음';
+      }
+      return out;})()`);
+  eq('101 — 방 칸 있음', shapes['101'], ['101', false, false, '']);
+  eq('122 — 방을 따로 세 열에', shapes['122'], ['122', false, false, '']);
+  eq('102 — 방 칸 없음', shapes['102'], ['102', true, false, '']);
+  eq('82 — 방 칸 없음 · 날짜 글자 · SU 칸', shapes['82'], ['82', true, true, 'SU']);
+
+  const slots82 = await ev(`const A=window.__app;
+    return (async()=>{ const tpl=await A.loadBaseTemplate('82');
+      const sh=A.detectFormShape(A.sheetCells(tpl),A.sheetMerges(tpl));
+      return ['D','E','N'].map(P=>sh.slots[P].join(','));})()`);
+  eq('82 자리를 손으로 쓴 서식과 같게 읽는다', slots82,
+    ['차지,A,SU,중간번', '차지,A,SU', '차지,SU']);
+
+  // ── 19. 82 화면과 인쇄가 같은가 ───────────────────────────────────────
+  // 82 병동 원본에는 /CRN 표시가 없다 — 화면에만 붙으면 어긋난다.
+  step('19 82 화면=인쇄');
+  const crn = await ev(`const A=window.__app; const out={};
+    for(const id of ['102','82']){ A.setFormId(id); out[id]=!!A.formDef().crnMark; }
+    A.setFormId('101'); return out;`);
+  eq('102 는 이름 뒤에 /CRN, 82 는 안 찍는다', crn, { '102': true, '82': false });
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
