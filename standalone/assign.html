@@ -1260,7 +1260,7 @@ $('#modal').addEventListener('mousedown',e=>{ if(e.target.id==='modal') closeMod
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260921m'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260921p'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -3284,12 +3284,36 @@ function confirmPaste(){
   show('week');
   toast('저장했습니다',2800,true);                       // show() 뒤 — 화면 전환이 알림을 지우지 않게
 }
+/* 엑셀이 클립보드에 넣는 글자를 격자로.
+ * 탭으로 칸, 줄바꿈으로 줄을 나누지만 **칸 안에 줄바꿈·탭·따옴표가 있으면 그 칸을
+ * 큰따옴표로 감싸고** 안의 따옴표는 두 번 쓴다. 순진하게 \n 으로 자르면 줄바꿈이 든
+ * 칸 하나가 표 전체를 찢는다 — 82병동 번표는 날짜 줄에 '잔↵여↵휴↵가' 칸이 있어
+ * 42행이 74줄이 되고 명부에 메모 조각 4개만 남았다 (2026-09-21 재현). */
+function parseClipboard(txt){
+  const rows=[]; let row=[],cell='',inQ=false,fresh=true;
+  for(let i=0;i<txt.length;i++){
+    const ch=txt[i];
+    if(inQ){
+      if(ch==='"'){ if(txt[i+1]==='"'){ cell+='"'; i++; } else inQ=false; }
+      else cell+=ch;
+      continue;
+    }
+    if(fresh&&ch==='"'){ inQ=true; fresh=false; continue; }
+    if(ch==='\t'){ row.push(cell); cell=''; fresh=true; continue; }
+    if(ch==='\r') continue;
+    if(ch==='\n'){ row.push(cell); rows.push(row); row=[]; cell=''; fresh=true; continue; }
+    cell+=ch; fresh=false;
+  }
+  row.push(cell); rows.push(row);
+  // 칸 안의 줄바꿈은 빈칸으로 — 날짜·이름 판별이 한 줄짜리 글자를 전제로 한다
+  return rows.map(r=>r.map(c=>String(c).replace(/\s*[\r\n]+\s*/g,' ')));
+}
 document.addEventListener('paste',e=>{
   if(/^(INPUT|TEXTAREA)$/.test((e.target&&e.target.tagName)||'')) return;
   if(curScr==='edit') return;                       // 고치기 화면은 그리드 paste가 처리
   const txt=e.clipboardData.getData('text/plain'); if(!txt) return;
   e.preventDefault();
-  const g=txt.replace(/\r\n?/g,'\n').split('\n').map(l=>l.split('\t'));
+  const g=parseClipboard(txt);
   while(g.length&&g[g.length-1].every(c=>!c.trim())) g.pop();
   ingestGrid(g);
 });
@@ -3637,7 +3661,7 @@ document.addEventListener('paste',e=>{
   if(/^(INPUT|TEXTAREA)$/.test((e.target&&e.target.tagName)||'')) return;
   const txt=e.clipboardData.getData('text/plain'); if(!txt) return;
   e.preventDefault();
-  const g=txt.replace(/\r\n?/g,'\n').split('\n').map(l=>l.split('\t'));
+  const g=parseClipboard(txt);
   while(g.length&&g[g.length-1].every(c=>!c.trim())) g.pop();
   snapshot();
   const R=rect(); let set=0;
@@ -3798,7 +3822,9 @@ const ADMIN_PANELS={
         (store.rooms.map((r,i)=>
           `<tr class="rrow" draggable="true" ondragstart="rowDragStart(event,${i},'room')" ondragover="rowDragOver(event,${i},'room')" ondragleave="rowDragLeave(event)" ondrop="rowDrop(event,${i},'room')" ondragend="rowDragEnd(event,'room')">`+
           `<td class="grip" title="끌어서 순서 바꾸기"><span class="gripIco">⋮⋮</span><b>${i+1}</b></td>`+
-          `<td><input type="text" style="width:110px;font-weight:800" value="${esc(String(r[0]))}" title="실제 호실 번호" onchange="setRoom(${i},0,this.value)"><span style="margin-left:4px;font-weight:800">호</span></td>`+
+          // 입력칸 폭을 못 박으면(110px + 안쪽 여백 = 132px) 열이 좁을 때 '호' 가 아래로 떨어진다 —
+          // 마법사 안에서 그랬다. 한 줄로 묶고 입력칸이 남는 폭을 쓰게 한다.
+          `<td><span style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="text" style="flex:1;min-width:0;width:0;box-sizing:border-box;font-weight:800" value="${esc(String(r[0]))}" title="실제 호실 번호" onchange="setRoom(${i},0,this.value)"><b>호</b></span></td>`+
           `<td class="dim" style="font-weight:700">${esc(roomShort(r[0]))}호</td>`+
           `<td><input type="number" min="0" max="20" style="width:80px" value="${+r[1]||''}" placeholder="?" onchange="setRoom(${i},1,this.value)"></td>`+
           `<td style="white-space:nowrap"><button class="segbtn" title="한 칸 위로" ${i===0?'disabled':''} onclick="moveRoom(${i},${i-1})">▲</button>`+
@@ -6410,7 +6436,7 @@ window.__app={get store(){return store},set store(v){store=v},
   reattachHandle,setWard,wardRooms,wardOfRooms,roomsBase,roomPos,roomAtPos,setRoom,addRoom,delRoom,moveRoom,attachRoom,detachRoom,readOldLocalStore,clearOldLocalStore,migrateOldLocalData,
   setScheme,resetSchemes,presetsOf,presetById,presetFor,addPreset,renamePreset,deletePreset,setPresetRooms,setPlan,applyPresetDay,renderSchemes,renderPlan,get presetUI(){return presetUI;},moveNurse,attachTrainee,traineesUnder,preceptorOf,unattachedTrainees,
   nameWithTrainees,applyWrapStyles,packXlsx,openFormText,saveFormText,addNurse,renameNurseAdmin,removeNurse,applyNurseName,adminBadge,
-  FORMS,formId,formDef,formOv,FORM_LBL,setFormId,buildWeekXlsx,packWeekXlsx,fillForm122,findLayout122,fillForm102,findLayout102,findLayout,layoutOf,formVerdict,loadBaseTemplate,customFormDiffers,describeCurrentForm,resetForm,useCheckedForm,migrateStore,sheetCells,sheetMerges,parseXlsx,b64ToBytes,
+  FORMS,ADMIN_PANELS,pickAdmin,formId,formDef,formOv,FORM_LBL,setFormId,buildWeekXlsx,packWeekXlsx,fillForm122,findLayout122,fillForm102,findLayout102,findLayout,layoutOf,formVerdict,loadBaseTemplate,customFormDiffers,describeCurrentForm,resetForm,useCheckedForm,migrateStore,sheetCells,sheetMerges,parseXlsx,b64ToBytes,parseClipboard,
   htmlDirPath,joinPath,dirOfPath,fileLocPath,renderFileInfo,setFileLoc,locateHandle,copyFilePath,get fileLoc(){return fileLoc},
   startTour,endTour,tourNext,tourPrev,startTopicTour,renderOnboard,onboardItems,hideOnboard,showOnboard,xlMock,renderHelpDoc,openHelp,closeHelp,showIntro,hideIntro,get tour(){return tour},TOURS,HELP,
   get wkSunday(){return wkSunday},set wkSunday(v){wkSunday=v},show,

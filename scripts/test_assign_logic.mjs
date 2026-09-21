@@ -585,6 +585,21 @@ async function main() {
     A.setFormId('101'); return out;`);
   eq('102 는 이름 뒤에 /CRN, 82 는 안 찍는다', crn, { '102': true, '82': false });
 
+  // ── 20. 엑셀 클립보드 글자 ────────────────────────────────────────────
+  // 엑셀은 칸 안에 줄바꿈이 있으면 그 칸을 큰따옴표로 감싸 내보낸다. \n 으로 순진하게
+  // 자르면 표 전체가 찢어진다 — 82병동 번표가 42행 → 74줄이 되어 명부에 메모 조각만 남았다.
+  step('20 클립보드 해석');
+  const clip = await ev(`const A=window.__app;
+    const q=String.fromCharCode(34), nl=String.fromCharCode(10), tab=String.fromCharCode(9), cr=String.fromCharCode(13);
+    const txt=['이름',q+'잔'+nl+'여'+nl+'휴'+nl+'가'+q,'9/1','9/2'].join(tab)+cr+nl+
+              ['가간호','3','D','E'].join(tab)+cr+nl+
+              ['나간호',q+'메모에 '+q+q+'따옴표'+q+q+' 와'+nl+'줄바꿈'+q,'N','OF'].join(tab)+cr+nl;
+    const g=A.parseClipboard(txt);
+    return {줄:g.length, 칸:g.map(r=>r.length), 머리:g[0][1], 메모:g[2][1], 끝줄:g[g.length-1].join('')};`);
+  eq('줄바꿈이 든 칸이 줄을 찢지 않는다', clip.칸.slice(0, 3), [4, 4, 4]);
+  eq('칸 안의 줄바꿈은 빈칸으로', clip.머리, '잔 여 휴 가');
+  eq('두 번 쓴 따옴표는 하나로', clip.메모, '메모에 "따옴표" 와 줄바꿈');
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
