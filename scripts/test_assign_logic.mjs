@@ -600,6 +600,75 @@ async function main() {
   eq('칸 안의 줄바꿈은 빈칸으로', clip.머리, '잔 여 휴 가');
   eq('두 번 쓴 따옴표는 하나로', clip.메모, '메모에 "따옴표" 와 줄바꿈');
 
+  // ── 21. 다른 소속(SU)이 화면에 보이는가 ───────────────────────────────
+  // "뒤에서 코드로는 정리돼 있지만 유저는 모른다" (2026-09-21 사용자 지적).
+  step('21 SU 가 눈에 보인다');
+  const vis = await ev(`const A=window.__app; A.setFormId('82'); A.setWard('82');
+    const s=A.store; s.cells={}; s.unit={};
+    s.order=['가에스유','가병동','나에스유','나병동','다병동'];
+    for(const n of s.order){ s.cells[n]={}; for(let d=1;d<=30;d++)
+      s.cells[n]['2026-09-'+String(d).padStart(2,'0')]=/에스유/.test(n)?'D':(n==='가병동'?'D':n==='나병동'?'D':'E'); }
+    s.unit={가에스유:'SU',나에스유:'SU'};
+    A.store=s; A.groupUnits(); A.recompute();
+    const order=A.store.order.slice();
+    A.show('edit');
+    // 앞선 검사가 달을 옮겨 놓았을 수 있다 — 단추로 2026년 9월까지 간다
+    for(let i=0;i<24&&!/2026년 9월$/.test(document.querySelector('#edTitle').textContent);i++){
+      const t=document.querySelector('#edTitle').textContent.match(/([0-9]+)년 ([0-9]+)월/);   // 템플릿 리터럴 안에서는 \\d 가 d 가 된다
+      const cur=+t[1]*12+ +t[2], want=2026*12+9;
+      [...document.querySelectorAll('button')].find(b=>(b.getAttribute('onclick')||'')===
+        (cur<want?'moveEditMonth(1)':'moveEditMonth(-1)')).click(); }
+    const heads=[...document.querySelectorAll('#wrap tr.unitHd')].map(e=>(e.textContent||'').trim().slice(0,4));
+    const foot=[...document.querySelectorAll('#wrap tfoot th')].map(e=>(e.textContent||'').trim());
+    const d1=id=>(document.getElementById(id)||{}).textContent||'';
+    return {order, heads, foot, 달:(document.querySelector('#edTitle')||{}).textContent,
+      병동D:d1('cnt-D-0'), SU_D:d1('cnt-SU-D-0'),
+      역산:(A.reqFromSchedule()||{}).mon, 후보:A.offCandidates('2026-09-07','N').map(c=>c.n)};`);
+  eq('SU 는 명부 뒤쪽에 모인다 (소속 안 순서는 그대로)', vis.order,
+    ['가병동','나병동','다병동','가에스유','나에스유']);
+  eq('근무표 고치기에 구역 머리줄이 있다', vis.heads, ['병동 —', 'SU —']);
+  ok('인원을 병동과 SU 로 따로 센다',
+    vis.foot.includes('병동 D 인원') && vis.foot.includes('SU D'), JSON.stringify(vis.foot));
+  // SU 2명 + 병동 2명이 D — 같이 세면 4 가 된다
+  ok('병동 D 인원에 SU 가 섞이지 않는다', /^2/.test(vis.병동D), vis.병동D+' @'+vis.달);
+  ok('SU D 는 칸 수(1)와 비교한다', vis.SU_D === '2/1', vis.SU_D);
+  eq('필요 인원 역산도 병동만 센다', vis.역산 && vis.역산.D, 2);
+  ok('쉬는 사람 후보에 SU 가 없다', !vis.후보.some(n => /에스유/.test(n)), JSON.stringify(vis.후보));
+
+  const pick = await ev(`const A=window.__app; A.wkSunday=new Date(2026,8,6); A.show('week');
+    const td=[...document.querySelectorAll('#wkTable td.nm')][0]; if(!td) return '이름 칸 없음';
+    td.click();
+    const t=(document.querySelector('#pick')||{}).textContent||'';
+    const warn=(document.querySelector('#wkWarn')||{}).textContent||'';
+    if(A.closePick) A.closePick();
+    return {넣기:/쉬는 사람 넣기/.test(t), 방번호:/[0-9]{2}~[0-9]{2}|[0-9]{2}, [0-9]{2}/.test(t.split('이 근무에')[0]),
+      방경고:/아무도 안 보는 방|겹치는 방/.test(warn)};`);
+  eq('어싸인 바꾸기 모달에 [쉬는 사람 넣기]가 있다', pick.넣기, true);
+  eq('방 칸 없는 서식은 모달에 방 번호를 안 보인다', pick.방번호, false);
+  eq('방 칸 없는 서식은 방 경고를 안 띄운다', pick.방경고, false);
+
+  // 제목에 (SU) 가 없어도 두 번째 표는 다른 소속 — 조용히 섞이면 처음 버그로 돌아간다
+  const untitled = await ev(`const A=window.__app; const s=A.store; s.cells={}; s.order=[]; s.unit={}; A.store=s;
+    A.ingestGrid([['이름','9/1','9/2','9/3','9/4'],['가병동','D','D','D','D'],['나병동','E','E','E','E'],
+      ['이름','1','2','3','4'],['가에스유','D','D','D','D']]);
+    A.confirmPaste(); return A.store.unit;`);
+  eq('제목 없는 두 번째 표도 서식의 소속 이름으로 가른다', untitled, { '가에스유': 'SU' });
+
+  // 필요 인원을 손댄 적 없으면 처음 넣은 근무표에 맞춘다 — 안 그러면 넣자마자 매일 빨갛다
+  const autoFit = await ev(`const A=window.__app; const s=A.store; s.cells={}; s.order=[]; s.unit={};
+    s.req=JSON.parse(JSON.stringify(A.DEFAULT_REQ)); A.store=s;
+    // 날짜 칸이 3개는 돼야 날짜 줄로 알아본다
+    A.ingestGrid([['이름','9/7','9/8','9/9','9/10'],['가병동','D','D','D','D'],['나병동','D','D','D','D'],
+                  ['다병동','E','E','E','E'],['라병동','N','N','N','N']]);
+    A.confirmPaste(); const first=JSON.parse(JSON.stringify(A.store.req.mon));
+    // 이번엔 손댄 값 — 건드리면 안 된다
+    const s2=A.store; s2.req.mon={D:9,E:9,N:9}; A.store=s2;
+    A.ingestGrid([['이름','9/14','9/15','9/16','9/17'],['가병동','D','D','D','D']]); A.confirmPaste();
+    return {first, second:A.store.req.mon};`);
+  eq('기본값 그대로면 근무표에 맞춘다', autoFit.first, { D: 2, E: 1, N: 1 });
+  eq('손댄 값은 건드리지 않는다', autoFit.second, { D: 9, E: 9, N: 9 });
+  await ev(`window.__app.setFormId('101'); return 1`);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));

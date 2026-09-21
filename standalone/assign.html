@@ -334,6 +334,11 @@
   .wchip .warnx{background:rgba(255,255,255,.22);padding:1px 6px;border-radius:9999px}
   .wchip:hover{filter:brightness(1.08)}
   #capsTable tr.gone td{opacity:.45}
+  /* 소속 구역 — 누가 SU 인지 표에서 바로 보이게 */
+  #wrap tr.unitHd th,#capsTable tr.unitHd th,#pvWrap tr.unitHd th,tr.unitHd th{text-align:left;padding:9px 10px 5px;font-size:12px;font-weight:800;letter-spacing:-0.01em;
+    color:var(--ink);background:var(--card-warm);box-shadow:inset 0 -1px 0 var(--rule),inset 0 1px 0 var(--rule);position:static}
+  tr.unitHd th .dim{font-weight:600}
+  tr.unitRow th.nm,tr.unitRow td.nm2{box-shadow:inset 3px 0 0 var(--accent)}
   .histRow{display:flex;align-items:center;gap:12px;padding:8px 0;box-shadow:inset 0 -1px 0 var(--rule-faint);flex-wrap:wrap}
   .histRow .hl{font-weight:700;min-width:12em}
   #planTable td,#planTable th{padding:6px 8px}
@@ -648,7 +653,7 @@
     </div>
     <button class="act" style="padding:9px 16px" onclick="goToday()">오늘</button>
     <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="act" onclick="addWorker()" title="쉬는 사람을 그 날 근무로 올립니다 — 실수로 OF·연차로 바꾼 사람을 되돌리거나, 인원이 모자란 날 사람을 부를 때">＋ 근무 추가</button>
+      <button class="act" onclick="addWorker()" title="쉬는 사람(OF·연차 등)을 그 날 근무로 올립니다 — 배정표에서 이름을 눌러도 같은 단추가 있습니다">＋ 쉬는 사람 넣기</button>
       <button class="act" onclick="show('edit')">근무표 고치기</button>
       <button class="act" onclick="show('paste')">새 근무표 넣기</button>
       <button class="act" onclick="printWeek(false)">인쇄</button>
@@ -1260,7 +1265,7 @@ $('#modal').addEventListener('mousedown',e=>{ if(e.target.id==='modal') closeMod
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260921p'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260921y'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -2437,7 +2442,8 @@ function renderWeekWarnings(days,infos){
       if(need!=null&&cnt!==need) short.push(`${md(iso)} ${P} ${cnt}명(필요 ${need})`+(cnt<need?` <button class="inl" title="쉬는 사람 중에서 골라 이 근무에 넣습니다" onclick="addWorker('${iso}','${P}')">＋ 넣기</button>`:''));
       for(const T of unattachedTrainees(iso,P,day)) (trMiss[T]=trMiss[T]||[]).push({iso,P,workers:[...Object.values(day[P].labels),...day[P].extra]});
       // 방 — 아무도 안 보는 방·두 자리가 겹치는 방 (같은 내용은 날짜·시간대를 묶어 한 줄)
-      if(cnt){ const seen=new Set();
+      // 방 칸이 없는 서식(102·82)은 방을 사람이 짜므로 묻지 않는다 — 고칠 길도 없는 경고는 소음이다
+      if(cnt&&!formNoRooms()){ const seen=new Set();
         for(const l in day[P].labels) expandBeds(roomTokens(roomsFor(P,cnt,l,iso))).forEach(t=>seen.add(t));
         const miss=roomsLabel(collapseBeds(allBeds.filter(r=>!seen.has(r))));
         const dup=roomsLabel(collapseBeds([...dupRooms(iso,P,day)]));
@@ -2446,7 +2452,7 @@ function renderWeekWarnings(days,infos){
           (roomIssue[key]=roomIssue[key]||[]).push(`${md(iso)} ${P}`); } }
       for(const l in day[P].labels){
         const nm=day[P].labels[l], bans=store.banRooms[nm];
-        if(!bans||!bans.length) continue;
+        if(!bans||!bans.length||formNoRooms()) continue;
         const banKeys=expandBeds(bans);
         const hit=expandBeds(roomTokens(roomsFor(P,cnt,l,iso))).filter(t=>banKeys.includes(t));
         if(hit.length) push('err',`${md(iso)} ${P} ${esc(nm)} — ${roomsLabel(collapseBeds(hit))}는 주지 않을 방인데 배정됐습니다. 대안이 없습니다.`);
@@ -2523,6 +2529,7 @@ function offCandidates(iso,P){
   const out=[];
   for(const n of store.order){
     if(store.hidden&&store.hidden[n]) continue;
+    if(unitOfName(n)) continue;                    // 다른 소속(SU)은 병동 자리 후보가 아니다
     const raw=(store.cells[n]||{})[iso]||'';
     const pc=raw?parseCellRaw(raw):null;
     const code=pc&&pc.code||'';
@@ -2599,13 +2606,16 @@ function openPick(name,iso,x,y){
     `<div style="display:flex;flex-direction:column;gap:4px">`+
     labels.map(l=>{
       const who=day.labels[l], me=who===name;
-      const rm=roomsFor(info.period,cnt,l,iso);
+      const rm=formNoRooms()?'':roomsFor(info.period,cnt,l,iso);
       return `<button class="swapBtn" ${me?'disabled':''} onclick="pickChoose('${l}')">`+
         `<span class="lb">${FORM_LBL(l,info.period)}</span>`+
         `<span class="who">${esc(who)}${me?' (본인)':''}</span>`+
         `<span class="rm">${esc(rm)}</span></button>`;
     }).join('')+'</div>'+
     `<button style="margin-top:4px" onclick="pickChoose(null)">자동으로 되돌리기</button>`+
+    (()=>{ const n=offCandidates(iso,info.period).length;
+      return `<div class="dim" style="margin:8px 0 2px;border-top:1px solid var(--rule);padding-top:6px">이 근무에 사람 넣기 — ${+iso.slice(8,10)}일 ${info.period}</div>`+
+        `<button ${n?'':'disabled'} onclick="closePick();addWorker('${iso}','${info.period}')" title="그 날 쉬는 사람 목록에서 골라 ${info.period} 근무로 올립니다">＋ 쉬는 사람 넣기${n?` (${n}명 쉬는 중)`:' — 쉬는 사람 없음'}</button>`; })()+
     (store.ovr[iso]&&store.ovr[iso][info.period]?`<button style="margin-top:4px" onclick="pickClearDay()" title="이 날 이 시간대의 수동 교체를 모두 풉니다">이 날 ${info.period} 교체 모두 풀기</button>`:'')+
     (trs.length?`<div class="dim" style="margin:8px 0 2px;border-top:1px solid var(--rule);padding-top:6px">신규 간호사 붙이기 — 이 날 ${info.period} 에 /${info.period} 인 신규</div>`+
       trs.map(T=>{ const cur=preceptorOf(T,iso), mine=cur===name, b='style="font-size:13px;padding:8px 12px;margin:0"';
@@ -3065,6 +3075,9 @@ function buildPending(){
         for(const cell of body[k]||[]){
           const m=String(cell??'').match(/\(([^)]{1,12})\)\s*$/);
           if(m&&!/^\d/.test(m[1])){ unitName=m[1].trim(); break; } }
+      // 제목에서 못 읽었으면 서식의 소속 칸 이름(82 의 SU)을, 그것도 없으면 '2번째 표' 로 —
+      // 이름을 못 찾았다고 병동에 조용히 섞으면 처음 제보받은 버그로 돌아간다.
+      if(!unitName) unitName=unitSlotName()||'2번째 표';
       break; }
   }
   const unitOf={};
@@ -3233,9 +3246,18 @@ function buildPending(){
     const d0=pc&&pc.code?SH(pc.code):null;
     const st=d0?`style="background:${d0.bg};color:${d0.fg}"`:'';
     return `<td ${st}>${esc(v)}</td>`;};
-  if(cx.hasNameCol)
-    for(const nm of namesIn)
+  if(cx.hasNameCol){
+    // 미리보기에서도 소속이 갈려 보여야 한다 — 저장하기 전에 눈으로 확인하는 자리다
+    const uOf=nm=>unitOf[nm]||unitOfName(nm), split=namesIn.some(uOf);
+    let last=null;
+    for(const nm of [...namesIn.filter(n=>!uOf(n)),...namesIn.filter(uOf)]){
+      if(split&&uOf(nm)!==last){ last=uOf(nm);
+        h+=`<tr class="unitHd"><th colspan="${isoList.length+1}">${last
+          ?`${esc(last)} <span class="dim">— 병동 자리에 배정되지 않고 배정표의 ${esc(last)} 칸에만 나옵니다</span>`
+          :`병동 <span class="dim">— 방 배정을 받는 간호사</span>`}</th></tr>`; }
       h+=`<tr><th>${esc(nm)}</th>`+isoList.map(i=>cellTd(byName[nm],i)).join('')+'</tr>';
+    }
+  }
   else  // 이름 없는 표 — 줄마다 어느 간호사로 들어가는지 보여주고 그 자리에서 바꿀 수 있게
     for(const rw of rows)
       h+=`<tr><th style="padding:3px 5px"><select onchange="setPasteRow(${rw.ri},this.value)" style="font-size:12px;font-weight:700;padding:5px 7px;max-width:8.5em">`+
@@ -3273,16 +3295,24 @@ function confirmPaste(){
   }
   if(pending.adoptOrder)                               // 명부 순서를 이 표의 순서로 (없는 사람은 뒤에 그대로)
     store.order=[...pending.names,...store.order.filter(n=>!pending.names.includes(n))];
+  groupUnits();
+  // 필요 인원을 손댄 적이 없으면(=101 기준 기본값 그대로) 방금 넣은 근무표에 맞춘다.
+  // 안 그러면 다른 병동은 넣자마자 '인원 안 맞는 날 30일' 을 빨갛게 본다 — 고장처럼 보인다.
+  if(Object.keys(DEFAULT_REQ).every(k=>['D','E','N'].every(P=>(store.req[k]||{})[P]===DEFAULT_REQ[k][P]))){   // 키 순서가 달라도 같은 값이면 기본값
+    const sug=reqFromSchedule();
+    if(sug){ for(const k in sug) for(const P of ['D','E','N']) store.req[k][P]=sug[k][P]; pending.reqFit=true; }
+  }
   touch(); recompute();
   // 오늘이 넣은 기간 안이면 오늘 주로 — 이번 달 근무표를 중간에 넣었는데 첫 주가
   // 뜨면 매번 [오늘]을 눌러야 한다. 다음 달 것을 미리 넣은 때만 그 첫 주로 간다.
   const today=isoOfD(new Date());
   const d=new Date((today>=pending.minIso&&today<=pending.maxIso?today:pending.minIso)+'T00:00:00');
   wkSunday=addDays(d,-d.getDay());
+  const fitted=!!pending.reqFit;
   resetPaste();
   if(wizResume()) return;          // 마법사 중이면 다음 단계로 (전체 화면은 붙여넣기에만 빌려 준다)
   show('week');
-  toast('저장했습니다',2800,true);                       // show() 뒤 — 화면 전환이 알림을 지우지 않게
+  toast(fitted?'저장했습니다 — 요일별 필요 인원도 이 근무표에 맞췄습니다 (관리에서 고칠 수 있습니다)':'저장했습니다',fitted?4600:2800,true);   // show() 뒤 — 화면 전환이 알림을 지우지 않게
 }
 /* 엑셀이 클립보드에 넣는 글자를 격자로.
  * 탭으로 칸, 줄바꿈으로 줄을 나누지만 **칸 안에 줄바꿈·탭·따옴표가 있으면 그 칸을
@@ -3402,15 +3432,25 @@ function renderEditGrid(){
   for(let d=1;d<=edDays;d++){ const w=new Date(edY,edM-1,d).getDay(), td=d-1===edToday;
     h+=`<th class="${w===0?'sun wkend':w===6?'sat wkend':''}${td?' today':''}"${td?' title="오늘"':''}><div class="dd">${d}</div><div class="dw">${td?'오늘':WD[w]}</div></th>`; }
   h+='</tr></thead><tbody>';
+  const grouped=hasUnits(); let lastUnit=null;
   edRows.forEach((oi,r)=>{ const n=store.order[oi];
-    h+=`<tr><th class="nm" data-nr="${r}" title="클릭 = 이름 수정/삭제">${esc(n)}${store.hidden&&store.hidden[n]?' <span class="trChip" title="전출 — 이 달에 근무가 있어 보입니다">전출</span>':''}</th>`;
+    // 소속이 바뀌는 자리에 머리줄 — 누가 SU 인지 표에서 바로 보여야 한다
+    if(grouped&&unitOfName(n)!==lastUnit){ h+=unitHeadHtml(n,edDays+1); lastUnit=unitOfName(n); }
+    h+=`<tr${unitOfName(n)?' class="unitRow"':''}><th class="nm" data-nr="${r}" title="클릭 = 이름 수정/삭제">${esc(n)}${store.hidden&&store.hidden[n]?' <span class="trChip" title="전출 — 이 달에 근무가 있어 보입니다">전출</span>':''}</th>`;
     for(let c=0;c<edDays;c++) h+=`<td class="cell" data-r="${r}" data-c="${c}"></td>`;
     h+='</tr>';
   });
   h+='</tbody><tfoot>';
   for(const k of ['D','E','N']){
-    h+=`<tr><th class="nm" style="color:${SHIFTS[k].fg}">${k} 인원</th>`;
+    h+=`<tr><th class="nm" style="color:${SHIFTS[k].fg}">${grouped?'병동 ':''}${k} 인원</th>`;
     for(let c=0;c<edDays;c++) h+=`<td id="cnt-${k}-${c}"></td>`;
+    h+='</tr>';
+  }
+  // 다른 소속은 따로 센다 — 같이 세면 병동 인원이 매일 '3/2' 로 틀려 보인다
+  const un=grouped?[...new Set(store.order.map(unitOfName).filter(Boolean))]:[];
+  for(const u of un) for(const k of ['D','E','N']){
+    h+=`<tr class="unitRow"><th class="nm" style="color:${SHIFTS[k].fg}">${esc(u)} ${k}</th>`;
+    for(let c=0;c<edDays;c++) h+=`<td id="cnt-${esc(u)}-${k}-${c}"></td>`;
     h+='</tr>';
   }
   h+='</tfoot></table>';
@@ -3424,6 +3464,7 @@ function renderEditGrid(){
 function paintEdit(){
   const R=rect();
   const cnt={D:Array(edDays).fill(0),E:Array(edDays).fill(0),N:Array(edDays).fill(0)};
+  const cntU={};                                   // 소속별 {SU:{D:[..],E:[..],N:[..]}}
   const bucket={day:'D',evening:'E',night:'N'};
   for(let r=0;r<edRows.length;r++) for(let c=0;c<edDays;c++){
     const td=cellEls[r][c]; if(!td) continue;
@@ -3434,7 +3475,18 @@ function paintEdit(){
     td.style.background=def?def.bg:''; td.style.color=def?def.fg:'';
     const inSel=r>=R.r1&&r<=R.r2&&c>=R.c1&&c<=R.c2;
     td.className='cell'+(inSel?' sel':'')+(r===sel.r&&c===sel.c?' anchor':'')+(pc&&pc.label?' pre':'')+(c===edToday?' tdy':'');
-    const b=def&&bucket[def.p]; if(b) cnt[b][c]++;
+    const b=def&&bucket[def.p];
+    if(b){ const u=unitOfName(edName(r));
+      if(u){ const o=(cntU[u]=cntU[u]||{D:Array(edDays).fill(0),E:Array(edDays).fill(0),N:Array(edDays).fill(0)}); o[b][c]++; }
+      else cnt[b][c]++; }
+  }
+  // 소속 인원 — 필요 수는 그 서식의 그 소속 칸 수
+  for(const u in cntU) for(const k of ['D','E','N']) for(let c=0;c<edDays;c++){
+    const el=document.getElementById(`cnt-${u}-${k}-${c}`); if(!el) continue;
+    const need=slotsOf(k).filter(x=>x===u).length, got=cntU[u][k][c];
+    el.textContent=got||''; el.title=need?`${u} 칸 ${need}개`:'';
+    if(need&&got!==need){ el.style.color='var(--err)'; el.style.fontWeight='800'; el.textContent=got+'/'+need; }
+    else{ el.style.color='var(--ink-2)'; el.style.fontWeight='600'; }
   }
   const WKMAP=['sun','mon','tue','wed','thu','fri','sat'];
   const misDays=new Set();
@@ -3901,13 +3953,14 @@ const ADMIN_PANELS={
     body(){ return `<table id="capsTable"></table>`; },
     after(){
       const last=store.order.length-1;
-      $('#capsTable').innerHTML=`<tr class="hd"><th style="width:64px">순위</th><th style="width:170px">간호사</th><th style="width:300px">가능 근무</th><th>주지 않을 방</th><th style="width:120px"></th></tr>`+
+      $('#capsTable').innerHTML=`<tr class="hd"><th style="width:64px">순위</th><th style="width:170px">간호사</th><th style="width:300px">가능 근무</th><th>주지 않을 방</th><th style="width:184px"></th></tr>`+
         (store.order.map((n,i)=>{
           const cp=capsOf(n), bans=store.banRooms[n]||[], gone=!!(store.hidden&&store.hidden[n]);
-          return `<tr class="nrow${gone?' gone':''}" draggable="true" ondragstart="rowDragStart(event,${i},'nurse')" ondragover="rowDragOver(event,${i},'nurse')" ondragleave="rowDragLeave(event)" ondrop="rowDrop(event,${i},'nurse')" ondragend="rowDragEnd(event,'nurse')">
+          const hd=hasUnits()&&(i===0||unitOfName(n)!==unitOfName(store.order[i-1]))?unitHeadHtml(n,5):'';
+          return hd+`<tr class="nrow${gone?' gone':''}${unitOfName(n)?' unitRow':''}" draggable="true" ondragstart="rowDragStart(event,${i},'nurse')" ondragover="rowDragOver(event,${i},'nurse')" ondragleave="rowDragLeave(event)" ondrop="rowDrop(event,${i},'nurse')" ondragend="rowDragEnd(event,'nurse')">
             <td class="grip" title="끌어서 순서 바꾸기 — 위가 선임"><span class="gripIco">⋮⋮</span><b>${i+1}</b></td>
             <td class="nm2">${esc(n)}${isTrainee(n)?' <span class="trChip" title="근무표에 /D·/E·/N 으로 적힌 신규 간호사 — 인원·어싸인에서 빠집니다">신규</span>':''}${gone?' <span class="trChip" title="전출·퇴사 — 명부에서 접어 두었습니다. 근무표 기록은 그대로입니다">전출</span>':''}${
-              unitSlotName()?` <span class="capChip${(store.unit||{})[n]===unitSlotName()?' on':''}" style="min-width:34px;height:24px" title="${esc(unitSlotName())} 소속 — 켜면 병동 자리에 배정되지 않고 배정표의 ${esc(unitSlotName())} 칸에만 나옵니다" onclick="toggleUnit('${esc(n)}')">${esc(unitSlotName())}</span>`:''} <button class="segbtn" style="min-width:0;padding:4px 8px" title="이름 수정" onclick="renameNurseAdmin(${i})">✎</button></td>
+              (unitSlotName()||unitOfName(n))?` <span class="capChip${unitOfName(n)?' on':''}" style="min-width:34px;height:24px;padding:0 6px" title="${esc(unitOfName(n)||unitSlotName())} 소속 — 켜면 병동 자리에 배정되지 않고 배정표의 그 칸에만 나옵니다. 끄면 병동 간호사로 돌아옵니다" onclick="toggleUnit('${esc(n)}')">${esc(unitOfName(n)||unitSlotName())}</span>`:''} <button class="segbtn" style="min-width:0;padding:4px 8px" title="이름 수정" onclick="renameNurseAdmin(${i})">✎</button></td>
             <td><div style="display:flex;gap:4px;flex-wrap:wrap">${ALL_CAPS.map(c=>
               `<span class="capChip${cp.includes(c)?' on':''}" onclick="toggleCap('${esc(n)}','${c}')">${c}</span>`).join('')}</div></td>
             <td><div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">${
@@ -4255,10 +4308,27 @@ const nurseDragStart=(e,i)=>rowDragStart(e,i,'nurse'), nurseDragOver=(e,i)=>rowD
       nurseDragLeave=e=>rowDragLeave(e), nurseDrop=(e,i)=>rowDrop(e,i,'nurse'), nurseDragEnd=e=>rowDragEnd(e,'nurse');
 /* 이 서식에 다른 소속 칸이 있나 (82 의 SU) */
 const unitSlotName=()=>(formDef()||{}).unitSlot||'';
+const unitOfName=n=>(store.unit||{})[n]||'';
+/* 다른 소속은 명부 뒤쪽에 모은다. 화면마다 따로 정렬하지 않아도 어디서든 병동 / SU 가
+ * 갈려 보이게 하는 불변식이다 — 소속 안에서의 순서(시니어리티)는 그대로 둔다. */
+function groupUnits(){
+  const u=store.unit||{}; if(!Object.keys(u).length) return;
+  const kinds=[...new Set(store.order.map(n=>u[n]||'').filter(Boolean))];
+  store.order=[...store.order.filter(n=>!u[n]),...kinds.flatMap(k=>store.order.filter(n=>u[n]===k))];
+}
+/* 구역 머리줄 — 명부를 차례로 그리다가 소속이 바뀌는 자리에 끼운다 */
+function unitHeadHtml(name,span,first){
+  const un=unitOfName(name);
+  return `<tr class="unitHd"><th colspan="${span}">${un
+    ? `${esc(un)} <span class="dim">— 병동 자리에 배정되지 않고 배정표의 ${esc(un)} 칸에만 나옵니다</span>`
+    : `병동 <span class="dim">— 방 배정을 받는 간호사</span>`}</th></tr>`;
+}
+const hasUnits=()=>store.order.some(n=>unitOfName(n));
 function toggleUnit(name){
-  const u=unitSlotName(); if(!u) return;
   store.unit=store.unit||{};
-  if(store.unit[name]===u) delete store.unit[name]; else store.unit[name]=u;
+  if(store.unit[name]) delete store.unit[name];          // 붙어 있으면 뗀다 (서식에 소속 칸이 없어도)
+  else{ const u=unitSlotName(); if(!u) return; store.unit[name]=u; }
+  groupUnits();
   touch(); recompute(); renderAdmin();
   if(curScr==='week') renderWeek();
 }
@@ -4287,6 +4357,7 @@ function reqFromSchedule(){
     let any=false;
     for(const n of store.order){
       if(store.hidden&&store.hidden[n]) continue;
+      if(unitOfName(n)) continue;                  // 다른 소속(SU)은 병동 필요 인원이 아니다
       const pc=parseCellRaw((store.cells[n]||{})[iso]||'');
       if(!pc||!pc.code) continue;
       any=true;
@@ -6436,13 +6507,13 @@ window.__app={get store(){return store},set store(v){store=v},
   reattachHandle,setWard,wardRooms,wardOfRooms,roomsBase,roomPos,roomAtPos,setRoom,addRoom,delRoom,moveRoom,attachRoom,detachRoom,readOldLocalStore,clearOldLocalStore,migrateOldLocalData,
   setScheme,resetSchemes,presetsOf,presetById,presetFor,addPreset,renamePreset,deletePreset,setPresetRooms,setPlan,applyPresetDay,renderSchemes,renderPlan,get presetUI(){return presetUI;},moveNurse,attachTrainee,traineesUnder,preceptorOf,unattachedTrainees,
   nameWithTrainees,applyWrapStyles,packXlsx,openFormText,saveFormText,addNurse,renameNurseAdmin,removeNurse,applyNurseName,adminBadge,
-  FORMS,ADMIN_PANELS,pickAdmin,formId,formDef,formOv,FORM_LBL,setFormId,buildWeekXlsx,packWeekXlsx,fillForm122,findLayout122,fillForm102,findLayout102,findLayout,layoutOf,formVerdict,loadBaseTemplate,customFormDiffers,describeCurrentForm,resetForm,useCheckedForm,migrateStore,sheetCells,sheetMerges,parseXlsx,b64ToBytes,parseClipboard,
+  FORMS,DEFAULT_REQ,ADMIN_PANELS,pickAdmin,formId,formDef,formOv,FORM_LBL,setFormId,buildWeekXlsx,packWeekXlsx,fillForm122,findLayout122,fillForm102,findLayout102,findLayout,layoutOf,formVerdict,loadBaseTemplate,customFormDiffers,describeCurrentForm,resetForm,useCheckedForm,migrateStore,sheetCells,sheetMerges,parseXlsx,b64ToBytes,parseClipboard,
   htmlDirPath,joinPath,dirOfPath,fileLocPath,renderFileInfo,setFileLoc,locateHandle,copyFilePath,get fileLoc(){return fileLoc},
   startTour,endTour,tourNext,tourPrev,startTopicTour,renderOnboard,onboardItems,hideOnboard,showOnboard,xlMock,renderHelpDoc,openHelp,closeHelp,showIntro,hideIntro,get tour(){return tour},TOURS,HELP,
   get wkSunday(){return wkSunday},set wkSunday(v){wkSunday=v},show,
   startWizard,closeWizard,wizGo,wizPaste,wizResume,WIZ,get wizAt(){return wizAt},renderWizard,
   hideOnboard,showOnboard,onboardItems,uiGet:(k)=>uiGet(k),
-  reqFromSchedule,fitReqToSchedule,secRows,slotsOf,formIds,formDefOf,formFor,detectFormShape,unitWorker,unitSlotName,toggleUnit,fillForm82,formNoRooms,renderWardChip,addWorker,offCandidates,
+  reqFromSchedule,fitReqToSchedule,secRows,slotsOf,groupUnits,unitOfName,formIds,formDefOf,formFor,detectFormShape,unitWorker,unitSlotName,toggleUnit,fillForm82,formNoRooms,renderWardChip,addWorker,offCandidates,
   memoryMode(){window.__memoryMode=true;
     setFileLoc({kind:'none'});afterLoad();}};
 </script>
