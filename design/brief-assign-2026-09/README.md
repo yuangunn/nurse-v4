@@ -19,3 +19,7 @@
 | 11 | 배정표 | 다크 |
 
 이전 라운드(M8, frontend 앱)의 패키지 형식은 `design/handoff/README.md` — 이번에도 같은 형식을 요청한다.
+
+## Claude Design에 넘긴 묶음 다시 만들기
+
+`00-먼저-읽기.md` · `01-브리프.md` · `02-프롬프트.txt` + 이 폴더의 png 11장 + `standalone/assign.html`(현재앱/) + `:root` 토큰 발췌 + `design/handoff/`(이전라운드-패키지형식/) 를 한 zip으로 묶었다(2026-09-22, 47개 파일, 4.4MB). 사용자에게 파일로 전달했고 리포에는 zip을 두지 않는다(전부 여기서 다시 만들 수 있다).
