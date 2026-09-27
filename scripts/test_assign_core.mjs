@@ -111,8 +111,50 @@ assert.equal(periodOf('OF'), null);
   const sched = {};
   nurses.forEach((n, i) => (sched[n.id] = { d1: i === 0 ? 'DC' : 'D' }));
   const r = compute(nurses, sched, ['d1']);
-  assert.deepEqual(Object.keys(r.byDay.d1.D.labels).sort(), [...LABELS].sort());
+  assert.deepEqual(Object.keys(r.byDay.d1.D.labels).sort(), LABELS.slice(0, 5).sort());   // 기본 자리 5
   assert.equal(r.byDay.d1.D.extra.length, 1); // 6번째는 어싸인 없음
+}
+// ── 자리 6개 (2026-09-27 — 122 양식 D 6칸, 대체간호사가 오는 날) ──
+{
+  assert.deepEqual(LABELS, ['차지', 'A', 'B', 'C', 'D', 'E']);
+  const nurses = [0, 1, 2, 3, 4, 5, 6].map((i) => N('n' + i, i));
+  const six = {}; nurses.slice(0, 6).forEach((n, i) => (six[n.id] = { d1: i === 0 ? 'DC' : 'D' }));
+  let r = compute(nurses, six, ['d1'], { maxSeats: 6 });
+  assert.deepEqual(Object.keys(r.byDay.d1.D.labels).sort(), [...LABELS].sort());
+  assert.equal(r.byDay.d1.D.extra.length, 0);                 // 6명이 6자리에 다 앉는다
+  assert.equal(r.byDay.d1.D.labels['E'], 'n5');               // 막내가 마지막 자리
+  const seven = {}; nurses.forEach((n, i) => (seven[n.id] = { d1: i === 0 ? 'DC' : 'D' }));
+  r = compute(nurses, seven, ['d1'], { maxSeats: 6 });
+  assert.deepEqual(r.byDay.d1.D.extra, ['n6']);               // 자리보다 많으면 헬퍼
+  // 근무마다 자리 수가 다를 수 있다 (122: D 6 · E 5 · N 3줄 → 6/5/5)
+  const both = {}; nurses.slice(0, 6).forEach((n, i) => (both[n.id] = { d1: i === 0 ? 'DC' : 'D', d2: i === 0 ? 'EC' : 'E' }));
+  r = compute(nurses, both, ['d1', 'd2'], { maxSeats: (P) => (P === 'D' ? 6 : 5) });
+  assert.equal(Object.keys(r.byDay.d1.D.labels).length, 6);
+  assert.equal(Object.keys(r.byDay.d2.E.labels).length, 5);
+  assert.equal(r.byDay.d2.E.extra.length, 1);
+  // 잘못된 값은 기본 5 · 7 이상은 6으로
+  r = compute(nurses, six, ['d1'], { maxSeats: 'x' });
+  assert.equal(Object.keys(r.byDay.d1.D.labels).length, 5);
+  r = compute(nurses, seven, ['d1'], { maxSeats: 9 });
+  assert.equal(Object.keys(r.byDay.d1.D.labels).length, 6);
+}
+// ── 자리 6개 + 방 기준 연속성: 5인→6인(대체 한 명이 온 날)에도 정규 간호사는 보던 방을 잇는다 ──
+{
+  // 5인 방 구성 → 6인 방 구성 (6번째 E 는 가벼운 방)
+  const R5 = { 차지: ['12', '13', '14'], A: ['1', '2'], B: ['3', '4'], C: ['5', '10', '11'], D: ['6', '7', '8', '9'] };
+  const R6 = { 차지: ['12', '13', '14'], A: ['1', '2'], B: ['3', '4'], C: ['5', '10'], D: ['6', '7', '8'], E: ['9', '11'] };
+  const roomsFor = (P, cnt, label) => ((cnt >= 6 ? R6 : R5)[label] || []);
+  const nurses = ['a', 'b', 'c', 'd', 'e'].map((id, i) => N(id, i)).concat([N('relief', 9, false)]);
+  // d1: 5명 — 선임 순으로 차지·A·B·C·D. d2: 대체 한 명이 와서 6명
+  const sched = { a: { d1: 'DC', d2: 'DC' }, b: { d1: 'D', d2: 'D' }, c: { d1: 'D', d2: 'D' }, d: { d1: 'D', d2: 'D' }, e: { d1: 'D', d2: 'D' }, relief: { d2: 'D' } };
+  // 첫날 자리를 못 박는다: e 가 C(5,10,11), d 가 D(6~9)
+  const ovr = { d1: { D: { b: 'A', c: 'B', e: 'C', d: 'D' } } };
+  const r = compute(nurses, sched, ['d1', 'd2'], { roomsFor, overrides: ovr, maxSeats: 6 });
+  const L2 = r.byDay.d2.D.labels;
+  assert.equal(L2['A'], 'b'); assert.equal(L2['B'], 'c');
+  assert.equal(L2['C'], 'e');        // 5·10 을 이어 본다 (11 은 E 로 넘어감)
+  assert.equal(L2['D'], 'd');        // 6~8 을 이어 본다 (9 는 E 로 넘어감)
+  assert.equal(L2['E'], 'relief');   // 대체는 남는 자리(가벼운 방)
 }
 {
   const nurses = [N('a', 0), N('b', 1)];

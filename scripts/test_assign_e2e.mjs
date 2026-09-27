@@ -4,10 +4,12 @@
  * "버튼이 실제로 눌리는가"는 못 본다. 여기서는 좌표로 마우스를 눌러 클릭하고,
  * 진짜 paste 이벤트를 쏘고, 브라우저가 내려받은 xlsx 파일을 열어 확인한다.
  *
- *   처음 켜기 → 마법사 6단계(병동·방구성·근무표 붙여넣기·표기·가능근무)
- *   → 배정표가 뜨는지 → 휴무자 투입 → 엑셀로 내보내기 → 받은 파일 열어 보기
+ *   처음 켜기(환영 = 마법사 첫 단계 → [처음 시작] 한 번에 파일 만들기)
+ *   → 마법사(병동·방구성·근무표 붙여넣기·표기·가능근무) → 배정표가 뜨는지
+ *   → 빈 자리에 대체간호사 넣기 → 교육·행사 매주 일정 → 엑셀로 내보내기 → 받은 파일 열어 보기
  *
- * 저장만 memoryMode 를 쓴다 — file:// 헤드리스에서는 파일 선택창을 띄울 수 없다.
+ * 파일 저장 창만 흉내 낸다 — file:// 헤드리스에서는 저장 창을 띄울 수 없어서, 사용자가 저장 창에서
+ * [저장]을 누른 것처럼 메모리 속 파일 핸들을 돌려준다(읽기·쓰기는 진짜 경로를 탄다).
  */
 import { spawn, execSync } from 'node:child_process';
 import { mkdtempSync, copyFileSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -41,8 +43,9 @@ const send = (m, p = {}) => new Promise((res, rej) => {
   ws.send(JSON.stringify({ id, method: m, params: p }));
 });
 async function ev(expr, ms = 20000) {
+  // 돌려준 약속을 window 에 붙잡아 둔다 — 안 그러면 가끔 CDP 가 "Promise was collected" 를 돌려준다
   const r = await Promise.race([
-    send('Runtime.evaluate', { expression: `(()=>{${expr}})()`, returnByValue: true, awaitPromise: true }),
+    send('Runtime.evaluate', { expression: `window.__evKeep=(()=>{${expr}})()`, returnByValue: true, awaitPromise: true }),
     sleep(ms).then(() => { throw new Error(`[${STEP}] 응답 없음 ${ms}ms`); })]);
   if (r.exceptionDetails) {
     const d = r.exceptionDetails.exception || {};
@@ -88,19 +91,34 @@ async function tap(text, scope = 'body') {
   return box.t;
 }
 
-/* 엑셀에서 긁어 온 것처럼 탭으로 나뉜 근무표 — 16명 4주 블록 근무 */
+/* 글자가 아니라 자리로 찾는 칸(빈 자리·교육 칸 같은 td)을 진짜로 누른다 */
+async function tapSel(sel) {
+  const box = await ev(`
+    const el=document.querySelector(${JSON.stringify(sel)});
+    if(!el) return null;
+    el.scrollIntoView({block:'center'});
+    const r=el.getBoundingClientRect();
+    const x=r.x+r.width/2, y=r.y+r.height/2;
+    const top=document.elementFromPoint(x,y);
+    return {x,y,막힘: top&&top!==el&&!el.contains(top) ? (top.id||top.className||top.tagName) : null};`);
+  if (!box) throw new Error(`[${STEP}] '${sel}' 칸이 화면에 없습니다`);
+  if (box.막힘) throw new Error(`[${STEP}] '${sel}' 를 '${box.막힘}' 가 덮고 있습니다`);
+  for (const type of ['mousePressed', 'mouseReleased'])
+    await send('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left', clickCount: 1 });
+  await sleep(160);
+}
+
+/* 엑셀에서 긁어 온 것처럼 탭으로 나뉜 근무표 — 16명 5주 블록 근무.
+ * 날짜는 오늘 기준(지난주 일요일부터 35일) — 달력에 못 박으면 다음 달부터 '이번 주 근무표 없음'으로 깨진다.
+ * 날짜 칸에 월을 적으므로(10/31 → 11/1) 달이 바뀌어도, 해가 바뀌어도 그대로 읽힌다. */
 function schedule() {
   const NAMES = ['가선임','나선임','다선임','라간호','마간호','바간호','사간호','아간호',
                  '자간호','차간호','카간호','타간호','파간호','하간호','거간호','너간호'];
   const SLOT = i => i < 5 ? 'D' : i < 10 ? 'E' : i < 13 ? 'N' : 'OF';
-  const head = ['이름'];
-  for (let d = 1; d <= 30; d++) head.push(`9/${d}`);
-  const rows = [head];
-  NAMES.forEach((n, i) => {
-    const r = [n];
-    for (let d = 1; d <= 30; d++) r.push(SLOT((i + d) % 16));
-    rows.push(r);
-  });
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0); t0.setDate(t0.getDate() - t0.getDay() - 7);
+  const days = Array.from({ length: 35 }, (_, k) => { const d = new Date(t0); d.setDate(d.getDate() + k); return d; });
+  const rows = [['이름', ...days.map(d => `${d.getMonth() + 1}/${d.getDate()}`)]];
+  NAMES.forEach((n, i) => rows.push([n, ...days.map((_, k) => SLOT((i + k) % 16))]));
   return rows.map(r => r.join('\t')).join('\n');
 }
 
@@ -125,29 +143,26 @@ try {
   for (let i = 0; i < 60; i++) { if (await ev('return !!(window.__app&&window.__app.startWizard)')) break; await sleep(250); }
   await ev(`window.confirm=()=>true; window.alert=()=>{}; window.__errs=[];
     window.addEventListener('error',e=>window.__errs.push(String(e.message))); return 1`);
-  await ev('window.__app.memoryMode(); return 1');
 
-  step('1 처음 켠 화면');
-  // 환영 카드는 켜고 0.7초 뒤에 뜬다 — 사람은 이걸 먼저 보고 닫는다.
-  for (let i = 0; i < 20 && !(await ev(`return document.querySelector('#intro').classList.contains('on')`)); i++)
+  step('1 처음 켠 화면 — 환영 = 마법사 첫 단계');
+  // 옆에 데이터 파일이 없으니 자동 열기가 실패하고, 곧바로 환영 단계가 뜬다.
+  for (let i = 0; i < 40 && !(await ev(`return document.querySelector('#wiz').classList.contains('on')`)); i++)
     await sleep(150);
-  ok('처음 켜면 환영 카드가 뜬다', await ev(`return document.querySelector('#intro').classList.contains('on')`), '안 뜸');
-  await tap('시작하기');
-  ok('환영 카드가 닫혔다', !(await ev(`return document.querySelector('#intro').classList.contains('on')`)), '열린 채');
-  ok('시작 안내가 떠 있다', await ev(`const e=document.querySelector('#onboard');
-    return !!e&&getComputedStyle(e).display!=='none';`), '안 보임');
-  // 1920 에서는 시작 안내가 표 오른쪽 열에 펼쳐져 있다 — 표를 밀어내지 않는다 (2026-09-27).
-  // 좁은 화면이면 표 위에 접혀 있으니 펼친다.
-  const side = await ev(`const o=document.querySelector('#onboard').getBoundingClientRect(),
-      p=document.querySelector('#wkPaper').getBoundingClientRect(), n=document.querySelector('.wknav').getBoundingClientRect();
-    return {열:document.querySelector('#onboard').classList.contains('side'), 오른쪽:o.left>=p.right-1, 표위:Math.round(p.top-n.bottom),
-      화면폭:innerWidth};`);
-  if (side.화면폭 >= 1860) {
-    ok('1920 에서 시작 안내는 표 오른쪽 열에 선다', side.열 && side.오른쪽, JSON.stringify(side));
-    ok('표가 도구 띠 바로 아래에서 시작한다', side.표위 < 30, JSON.stringify(side));
-  } else await tap('남은 준비 보기');   // 좁은 화면 — 시작 안내 카드는 접혀 있다
-  await tap('처음 설정 다시 하기');
-  ok('마법사가 열렸다', await ev(`return document.querySelector('#wiz').classList.contains('on')`), '안 열림');
+  eq('처음 켜면 환영 단계가 뜬다', await ev(`return document.querySelector('#wizTitle').textContent`), '어싸인 배정표에 오신 걸 환영합니다');
+  eq('진행 막대에 단계 이름', await ev(`return [...document.querySelectorAll('#wizSteps span')].map(e=>e.textContent)`),
+    ['시작', '병동', '방 구성', '근무표', '표기', '간호사', '끝']);
+  await ev(`window.showSaveFilePicker=async()=>{ let data='';
+      return {name:'assign-data.js',kind:'file',
+        requestPermission:async()=>'granted', queryPermission:async()=>'granted',
+        getFile:async()=>new File([data],'assign-data.js'),
+        createWritable:async()=>{ let buf=''; return {write:async x=>{ buf+=typeof x==='string'?x:await new Blob([x]).text(); },
+          close:async()=>{ data=buf; }, abort:async()=>{}}; }}; };
+    return 1`);
+  await tap('처음 시작', '#wiz');
+  for (let i = 0; i < 20 && (await ev(`return document.querySelector('#wizTitle').textContent`)) !== '어느 병동인가요?'; i++)
+    await sleep(150);
+  eq('[처음 시작] 한 번으로 파일을 만들고 바로 병동 단계로', await ev(`return document.querySelector('#wizTitle').textContent`), '어느 병동인가요?');
+  eq('데이터 파일이 연결됐다', await ev(`return window.__app.fileLoc.kind+':'+window.__app.fileLoc.name`), 'file:assign-data.js');
 
   step('2 병동 고르기');
   await ev(`const s=[...document.querySelectorAll('#wizBody select')].find(x=>[...x.options].some(o=>o.value==='122'));
@@ -221,6 +236,65 @@ try {
     return {줄:t?t.querySelectorAll('tr').length:0, 이름:t?t.querySelectorAll('td.nm').length:0};`);
   ok('배정표에 줄이 그려졌다', wk.줄 > 10, JSON.stringify(wk));
   ok('배정표에 이름이 찼다', wk.이름 > 40, JSON.stringify(wk));
+  ok('시작 안내가 떠 있다 (인쇄를 아직 안 했다)', await ev(`const e=document.querySelector('#onboard');
+    return !!e&&getComputedStyle(e).display!=='none';`), '안 보임');
+  // 1920 에서는 시작 안내가 표 오른쪽 열에 펼쳐져 있다 — 표를 밀어내지 않는다 (2026-09-27).
+  const side = await ev(`const o=document.querySelector('#onboard').getBoundingClientRect(),
+      p=document.querySelector('#wkPaper').getBoundingClientRect(), n=document.querySelector('.wknav').getBoundingClientRect();
+    return {열:document.querySelector('#onboard').classList.contains('side'), 오른쪽:o.left>=p.right-1, 표위:Math.round(p.top-n.bottom),
+      화면폭:innerWidth};`);
+  if (side.화면폭 >= 1860) {
+    ok('1920 에서 시작 안내는 표 오른쪽 열에 선다', side.열 && side.오른쪽, JSON.stringify(side));
+    ok('표가 도구 띠 바로 아래에서 시작한다', side.표위 < 30, JSON.stringify(side));
+  }
+
+  step('7b 빈 자리에 대체간호사');
+  // 122 는 D 가 6줄 — 이 근무표는 D 가 5명이라 날마다 한 칸이 빈다
+  const empties = await ev(`return document.querySelectorAll('#wkTable td.emp[data-empty]:not(.rm)[data-p="D"]').length`);
+  ok('122 D 에 빈 자리가 있다', empties > 0, String(empties));
+  await tapSel('#wkTable td.emp[data-empty]:not(.rm)[data-p="D"]');
+  ok('빈 자리를 누르면 두 길이 나온다', await ev(`const t=document.querySelector('#pick').textContent;
+    return t.includes('쉬는 간호사 넣기')&&t.includes('대체간호사 넣기')`), await ev(`return document.querySelector('#pick').textContent.slice(0,80)`));
+  await tap('대체간호사 넣기', '#pick');
+  await sleep(150);
+  await ev(`const i=document.querySelector('#mdInput'); i.value='한대체'; return 1`);
+  await tap('넣기', '#modalBox');
+  await sleep(300);
+  const relief = await ev(`const t=[...document.querySelectorAll('#wkTable td.nm')].find(e=>e.dataset.n==='한대체');
+    return {보임:!!t, 표시:t?t.textContent.includes('대체'):false,
+      빈칸:document.querySelectorAll('#wkTable td.emp[data-empty]:not(.rm)[data-p="D"]').length};`);
+  ok('대체간호사가 배정표에 들어갔다', relief.보임 && relief.표시, JSON.stringify(relief));
+  eq('빈 자리가 하나 줄었다', relief.빈칸, empties - 1);
+
+  step('7c 교육·행사 매주 일정');
+  await tapSel('#wkTable td.evt');
+  await sleep(150);
+  eq('일정이 없는 날은 바로 넣기 창', await ev(`return document.querySelector('#modalBox .mt').textContent`), '교육·행사 넣기');
+  await ev(`const b=document.querySelector('#modalBox'); b.querySelector('#evText').value='병동 회의'; return 1`);
+  await tapSel('#modalBox label[for="evmW"]');
+  ok('[매주]를 누르면 그 줄이 골라진다', await ev(`return document.querySelector('#modalBox #evmW').checked`), '안 골라짐');
+  // 누른 날의 요일은 이미 켜져 있다 — 하나 더 켠다(누른 날이 목이면 금)
+  const wdMore = await ev(`return document.querySelector('#modalBox .wdPick input[value="4"]').checked?5:4`);
+  await tapSel(`#modalBox .wdPick label:has(input[value="${wdMore}"])`);
+  eq('요일 칩이 둘 켜졌다', await ev(`return document.querySelectorAll('#modalBox .wdPick input:checked').length`), 2);
+  ok('미리 보기 문장이 매주로 바뀐다', /매주/.test(await ev(`return document.querySelector('#evNote').textContent`)),
+    await ev(`return document.querySelector('#evNote').textContent`));
+  await tap('넣기', '#modalBox .mf');
+  await sleep(300);
+  const evRow = await ev(`const cells=[...document.querySelectorAll('#wkTable td.evt')];
+    return cells.map(c=>({wd:new Date(c.dataset.iso+'T00:00:00').getDay(), t:c.textContent.includes('병동 회의')}));`);
+  const wds = [evRow[0].wd, wdMore];
+  ok('매주 일정이 고른 요일마다 들어갔다',
+    evRow.filter(x => x.t).length === 2 && evRow.every(x => x.t === wds.includes(x.wd)), JSON.stringify(evRow));
+  ok('반복 일정엔 ↻ 표시', await ev(`return [...document.querySelectorAll('#wkTable td.evt .evRep')].length`) === 2,
+    await ev(`return document.querySelectorAll('#wkTable td.evt .evRep').length`));
+  // 다음 주에도 저절로 들어간다
+  await tap('다음주');
+  await sleep(250);
+  eq('다음 주에도 같은 요일에 들어가 있다', await ev(`return [...document.querySelectorAll('#wkTable td.evt')]
+    .filter(c=>c.textContent.includes('병동 회의')).length`), 2);
+  await tap('지난주');
+  await sleep(250);
 
   step('8 엑셀로 내보내기');
   await tap('엑셀');
