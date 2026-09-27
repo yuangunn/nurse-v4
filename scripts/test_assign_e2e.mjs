@@ -457,6 +457,11 @@ try {
   const paper3 = await ev(`return document.querySelector('#dayPreview .hsheet').textContent`);
   ok('이름만 적고 칸을 벗어나면 S-zone 번호가 종이에 붙는다', paper3.includes('최세브') && paper3.includes('#48001'), paper3.slice(-120));
   eq('그 이름은 그 날 진료지원 당직표에 들어간다', await ev(`const A=window.__app, k=Object.keys(A.store.duty.roster).find(k=>k.includes('진료지원')); return A.store.duty.roster[k][${JSON.stringify(dayIso)}]`), '최세브');
+  ok('당직표에 넣었다는 알림에 되돌리기가 붙는다', (await ev(`const t=document.querySelector('#toast'); return t.style.display!=='none'&&t.classList.contains('undo')?t.textContent:''`)).includes('최세브'));
+  await tapSel('#toast');
+  await sleep(1000);
+  eq('알림을 누르면 당직표에서 빠진다', await ev(`const A=window.__app, k=Object.keys(A.store.duty.roster).find(k=>k.includes('진료지원')); return (A.store.duty.roster[k]||{})[${JSON.stringify(dayIso)}]||null`), null);
+  ok('되돌린 뒤 종이에서도 빠진다', !(await ev(`return document.querySelector('#dayPreview .hsheet').textContent`)).includes('#48001'));
   // 양식 글자 고치기 — 자리 이름의 내선 번호(CN(48455))를 병동 것으로 고쳐 저장하면 종이에 그대로 나온다
   ok('양식의 자리 이름이 종이에 있다', paper3.includes('CN(48455)'));
   await tap('양식 글자 고치기', '#daySide');

@@ -740,10 +740,12 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   병동 문구를 코드에 넣지 말고 양식에서 고친다. 채운 당직 칸은 당직 칸에서 가장 많이 쓰인 문단 모양(`L.dutyPara`)으로 맞춘다(101 양식 GS 칸만
   줄 간격 100%였다). 칸마다 `fixed`(늘 같은 번호 — 당직폰) · `prefer`({번호} = 전화 먼저/`#`내선 먼저, 안 고르면 번호표에 내선 있는 사람이 절반
   이상일 때 내선) · 토큰 `{전화}`. 하루 어싸인표 당직 칸에 번호 없이 이름 한 줄만 적으면 번호표·늘 같은 번호 칸은 **그 날 당직표에 넣는다**
-  (`dayDutyChange` — 그래야 번호가 바뀌어도 따라간다). **양식 글자 고치기**(관리 > 하루 어싸인표 양식, `dayEditItems`/`saveDayFormText`):
+  (`dayDutyChange` — **칸을 벗어날 때만**, 되돌리기 알림; 그래야 번호가 바뀌어도 따라간다). **양식 글자 고치기**(관리 > 하루 어싸인표 양식, `dayEditItems`/`saveDayFormText`):
   자리 이름 CN(48455)·화재반·기본 공지·당직 이름표·표 밖 글자 → `store.dayForm{edited:true}`, 바뀐 문단만 고치고 다시 훑어 자리 줄·당직 칸 수가
   같을 때만 저장, 당직 칸 이름이 바뀌면 `dutyRenameKeys` 로 자료를 옮긴다. 공지가 늘면 `hwFitPage` 가 빈 줄(두 표 사이 → 공지 아래 → 제목 아래)을
   걷어 A4 한 장 — 높이는 한글 단위(`hwTopH`: lineseg, 없으면 글자 크기×줄 간격×접힌 줄 수, 표는 크기+바깥 여백).
+  **빈 줄은 그 날 종이에서만 걷는다**(저장한 양식은 `baseH` 로 고치기 전 높이를 기억) · 첫 장(`hwPage1`, 쪽 나누기 전)만 센다 ·
+  선·번호가 보이는 빈 줄(`hwParaVisible`)은 두고, 한 ★ 안 여러 줄 공지는 글 칸에서 둘째 줄을 두 칸 띄워(`dayNoteShow`↔`dayNoteSplit`) 한 공지로 읽는다.
   **상단 파일 칩** (2026-09-16, 사용자 요청 "항상 현재 연결된 저장파일 경로+파일명"): `#fileInfo` 는 `fileLoc`
   ({kind:native|sidecar|file|local|ro|none, name, dir}) 하나를 `renderFileInfo()` 가 그린다 — 다른 곳에서 textContent 를
   직접 쓰지 말고 `setFileLoc()`. 경로를 아는 경우는 exe(`nativeInfo.path`)와 자동 열림 파일(`htmlDirPath()` = HTML 주소의

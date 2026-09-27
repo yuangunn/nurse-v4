@@ -824,6 +824,7 @@
   .dtyChips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
   .dtyChips button{min-height:34px}
   .dtyPrefer{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  .dfEd{scroll-margin-top:72px}   /* 위 머리 띠(sticky)에 제목·설명이 가리지 않게 */
   .dtyPrefer button{min-height:34px}
   .dtyFixed{display:grid;grid-template-columns:1fr 8em;gap:8px;margin-top:10px}
   .dtyFixed label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:700;color:var(--ink-2)}
@@ -1617,7 +1618,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260927ae'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260927ag'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -4473,6 +4474,7 @@ function undoAny(){
   if(curScr==='edit') renderEditGrid();
   else if(curScr==='week') renderWeek();
   else if(curScr==='admin') renderAdmin();
+  else if(curScr==='day'){ clearTimeout(dayInputTimer); dayFocusVal=null; renderDay(true); }   // 남은 칸 글자가 되돌린 값을 다시 덮지 않게
   toast('되돌렸습니다');
 }
 const undoEdit=undoAny;
@@ -6648,7 +6650,9 @@ function hwpxStyles(headXml){
     const pick=name=>{ const all=hwAll(p,name); return all.find(x=>x.parentNode&&x.parentNode.localName==='default')||all[0]; };
     const ls=pick('lineSpacing'), mg=pick('margin');
     const mv=k=>{ const e=mg&&hwKids(mg,k)[0]; return e?+e.getAttribute('value')||0:0; };
+    const hd=hwKids(p,'heading')[0], brd=pick('border');
     st.para[p.getAttribute('id')]={align:(al&&al.getAttribute('horizontal'))||'JUSTIFY',
+      heading:hd?hd.getAttribute('type')||'NONE':'NONE',bf:brd?brd.getAttribute('borderFillIDRef'):null,
       lsType:ls?ls.getAttribute('type')||'PERCENT':'PERCENT',ls:ls?+ls.getAttribute('value')||160:160,
       left:mv('left'),right:mv('right'),indent:mv('intent'),prev:mv('prev'),next:mv('next')};
   }
@@ -6667,6 +6671,7 @@ async function loadDayTpl(){
   const t=await parseHwpx(b64ToBytes(ov?ov.b64:embeddedDayB64()));
   t.styles=hwpxStyles(t.head);
   t.name=ov?ov.name:'기본 양식 (101병동 하루 어싸인표)'; t.custom=!!ov; t.__key=key;
+  t.baseH=ov&&+ov.baseH>0?+ov.baseH:null;
   DAYTPL=t; return t;
 }
 /* 표 한 개 → 칸 목록 (칸마다 자리·합침·크기·테두리·여백) */
@@ -6725,16 +6730,18 @@ function dayLayout(doc){
       const cell=rc[rc.length-1], label=rc.slice(0,-1).map(c=>c.text).join('\n').trim();
       let key=(label.split('\n')[0]||'').trim()||`당직 ${L.fields.length+1}`;
       if(seen[key]) key+=' '+(++seen[key]); else seen[key]=1;
-      L.fields.push({key,cell,label,def:cell.text,labCells:rc.slice(0,-1)});
+      L.fields.push({key,cell,label,def:cell.text,labCells:rc.slice(0,-1),ti:ti2});
     }
   });
   // 당직 칸 문단 모양 — 양식에서 칸마다 줄 간격이 다를 수 있다(101: OS·진료지원 160%, GS 100%).
-  // 채운 칸은 가장 많은 칸의 모양(같으면 앞 칸)으로 맞춘다 — 안 그러면 같은 '이름⏎번호'가 칸마다 다른 간격으로 찍힌다
-  const cnt={}; let best=null;
+  // 채운 칸은 **같은 표** 칸들 가운데 가장 많은 모양(같으면 앞 칸)으로 맞춘다 — 안 그러면 같은 '이름⏎번호'가 칸마다 다른 간격으로 찍힌다.
+  // 다른 표(점검표·결재 칸)는 표를 넘어 투표하지 않는다
+  const byT={};
   for(const f of L.fields){ const p=hwKids(f.cell.sub,'p')[0]; if(!p) continue;
-    const k=(p.getAttribute('paraPrIDRef')||'')+'|'+(p.getAttribute('styleIDRef')||'');
-    cnt[k]=(cnt[k]||0)+1; if(best==null||cnt[k]>cnt[best]) best=k; }
-  if(best!=null){ const [para,style]=best.split('|'); L.dutyPara={para,style}; }
+    const g=byT[f.ti]=byT[f.ti]||{cnt:{},best:null}, k=(p.getAttribute('paraPrIDRef')||'')+'|'+(p.getAttribute('styleIDRef')||'');
+    g.cnt[k]=(g.cnt[k]||0)+1; if(g.best==null||g.cnt[k]>g.cnt[g.best]) g.best=k; }
+  for(const f of L.fields){ const g=byT[f.ti]; if(!g||g.best==null) continue;
+    const [para,style]=g.best.split('|'); f.para={para,style}; if(!L.dutyPara) L.dutyPara=f.para; }
   return L;
 }
 /* 채운 당직 칸의 문단 모양을 L.dutyPara 로 */
@@ -6816,14 +6823,29 @@ function setDateText(p,d){
  * notes 가 없으면 기본 공지(양식의 ★ 줄, dayLayout noticeDefs) + 그 날 교육·행사 일정 (2026-09-27) */
 const dayData=iso=>(store.daily||{})[iso]||{};
 const dayNoteKey=s=>String(s||'').replace(DAY_BULLET,'').replace(/\s+/g,'');
-function dayNotesDef(iso,defs){
-  const out=(defs||[]).slice(), seen=new Set(out.map(dayNoteKey));
+/* 이 날 기본 공지 문단 — 양식의 ★ 문단 그대로(문단 안 줄바꿈도) + 그 날 교육·행사 */
+function dayNoteDefParas(iso,defs){
+  const out=(defs||[]).filter(s=>String(s).trim()), seen=new Set(out.map(dayNoteKey));
   for(const e of eventText(iso).split('\n').map(s=>s.trim()).filter(Boolean))
     if(!seen.has(dayNoteKey(e))){ seen.add(dayNoteKey(e)); out.push(e); }   // 일정이 기본 공지와 같으면 두 번 적지 않는다
-  return out.join('\n');
+  return out;
 }
+/* 글 칸에 보일 때 — 한 공지 안의 둘째 줄부터는 앞을 두 칸 띄워 보인다(dayNoteSplit 이 그 두 칸을 떼고 다시 한 공지로 읽는다) */
+const dayNoteShow=x=>String(x).split('\n').map((l,i)=>i?'  '+l:l).join('\n');
+const dayNotesDef=(iso,defs)=>dayNoteDefParas(iso,defs).map(dayNoteShow).join('\n');
 const dayNotes=(iso,defs)=>{ const d=dayData(iso); return d.notes!=null?d.notes:dayNotesDef(iso,defs); };
-/* 당직 칸 — 이 날 적은 값(없으면 null). 안 적은 칸은 양식 칸을 그대로 둔다(빈 줄 여러 개로 높이를 잡아 둔 양식도 있다) */
+/* 공지 글 → 공지 문단들. ★ 없이 앞이 띄어진 줄은 앞 공지에 이어지는 줄 — 양식에서 한 ★ 문단 안에 줄을 바꿔 쓴 공지가 둘로 갈라지지 않게 */
+function dayNoteSplit(text){
+  const out=[];
+  for(const raw of String(text||'').split('\n')){
+    if(!raw.trim()) continue;
+    if(/^\s/.test(raw)&&out.length&&!DAY_BULLET.test(raw)) out[out.length-1]+='\n'+raw.replace(/^\s{1,2}/,'').replace(/\s+$/,'');   // 보일 때 붙인 두 칸만 뗀다
+    else out.push(raw.replace(DAY_BULLET,'').trim());
+  }
+  return out;
+}
+/* 종이에 들어갈 공지 문단 — 이 날 고친 공지가 있으면 그것, 없으면 기본 공지 + 일정 */
+const dayNoteParas=(iso,defs)=>{ const d=dayData(iso); return d.notes!=null?dayNoteSplit(d.notes):dayNoteDefParas(iso,defs); };
 /* ── A4 한 장 맞추기 ──
  * 공지 줄이 양식보다 많아지면 그만큼 표가 밀려 종이 두 장이 된다. 늘어난 만큼 양식의 빈 줄을 걷어 낸다.
  * 높이는 한글 단위(1/7200인치): 문단 = 줄 높이(lineseg 가 있으면 그 값, 글자를 바꿔 없으면 글자 크기×줄 간격을
@@ -6842,25 +6864,36 @@ function hwTopH(p,st,avail){
   const n=String(hwText(p)).split('\n').reduce((a,ln)=>a+Math.max(1,Math.ceil(hwTextW(ln,pt)/w)),0);
   return n*lh+pp.prev+pp.next;
 }
-function hwBodyH(doc,st){ const pg=hwPage(doc); return hwKids(doc.documentElement,'p').reduce((a,p)=>a+hwTopH(p,st,pg.W-pg.left-pg.right),0); }
+/* 첫 장의 맨 바깥 문단 — 쪽·단 나누기가 있는 문단부터는 다음 장이라 세지도 걷지도 않는다 */
+const hwBreak=p=>p.getAttribute('pageBreak')==='1'||p.getAttribute('columnBreak')==='1';
+function hwPage1(doc){ const top=hwKids(doc.documentElement,'p'), i=top.findIndex((p,k)=>k>0&&hwBreak(p)); return i<0?top:top.slice(0,i); }
+function hwBodyH(doc,st){ const pg=hwPage(doc); return hwPage1(doc).reduce((a,p)=>a+hwTopH(p,st,pg.W-pg.left-pg.right),0); }
 /* 걷어 내도 되는 빈 줄 — 글자·표·그림·구역 정의가 없는 맨 바깥 문단 */
 const HW_BLANK_OK=new Set(['run','t','linesegarray','lineseg','lineBreak']);
-const hwBlankPara=p=>!hwText(p).trim()&&[...p.getElementsByTagName('*')].every(e=>HW_BLANK_OK.has(e.localName));
+const hwBlankPara=p=>!hwBreak(p)&&!hwText(p).trim()&&[...p.getElementsByTagName('*')].every(e=>HW_BLANK_OK.has(e.localName));
+/* 문단 모양이 보이는 빈 줄(테두리·배경이 있는 줄 = 선, 번호 붙은 줄)은 빈 줄이어도 걷지 않는다 */
+function hwParaVisible(p,st){
+  const pp=st.para[p.getAttribute('paraPrIDRef')]; if(!pp) return false;
+  if(pp.heading&&pp.heading!=='NONE') return true;
+  const bf=pp.bf!=null&&st.bf[pp.bf]; if(!bf) return false;
+  return !!bf.bg||['l','r','t','b'].some(k=>bf[k]&&bf[k].type&&bf[k].type!=='NONE');
+}
 /* 양식이 차지하던 높이(h0, 한 장보다 길면 그 높이)를 넘는 만큼 빈 줄을 걷어 낸다 — 두 표 사이·맨 끝 → 공지와 표 사이 → 제목과 공지 사이 순서.
- * 걷어 낸 줄 수를 돌려준다 */
+ * 첫 장 안에서만 걷는다. 걷어 낸 줄 수를 돌려준다 */
 function hwFitPage(doc,L,st,h0){
   const pg=hwPage(doc), limit=Math.max(pg.H-pg.top-pg.bottom,h0||0);
   let h=hwBodyH(doc,st); if(h<=limit) return 0;
-  const top=hwKids(doc.documentElement,'p'), up=el=>{ while(el&&el.parentNode!==doc.documentElement) el=el.parentNode; return el; };
+  const top=hwPage1(doc), up=el=>{ while(el&&el.parentNode!==doc.documentElement) el=el.parentNode; return el; };
   const at=el=>{ const i=top.indexOf(up(el)); return i<0?null:i; };
   const iMain=L.main?at(L.main.m.tbl):null, iNote=L.notices.length?at(L.notices[0]):null, iTitle=L.title?at(L.title):null;
   const rank=i=>iMain!=null&&i>iMain?0:iNote!=null&&i>iNote?1:2;
-  const cand=top.map((p,i)=>({p,i})).filter(x=>x.i!==iTitle&&(iTitle==null||x.i>iTitle)&&hwBlankPara(x.p))
+  const cand=top.map((p,i)=>({p,i})).filter(x=>x.i!==iTitle&&(iTitle==null||x.i>iTitle)&&hwBlankPara(x.p)&&!hwParaVisible(x.p,st))
     .sort((a,b)=>rank(a.i)-rank(b.i)||b.i-a.i);
   const avail=pg.W-pg.left-pg.right; let n=0;
   for(const x of cand){ if(h<=limit) break; h-=hwTopH(x.p,st,avail); x.p.remove(); n++; }
   return n;
 }
+/* 당직 칸 — 이 날 적은 값(없으면 null). 안 적은 칸은 양식 칸을 그대로 둔다(빈 줄 여러 개로 높이를 잡아 둔 양식도 있다) */
 const dayField=(iso,f)=>{ const d=dayData(iso); return d.duty&&d.duty[f.key]!=null?d.duty[f.key]:null; };
 const dayFieldDef=f=>String(f.def||'').trim();
 async function buildDayDoc(iso){
@@ -6869,13 +6902,13 @@ async function buildDayDoc(iso){
   if(doc.getElementsByTagName('parsererror').length) throw new Error('양식 본문을 읽지 못했습니다');
   const L=dayLayout(doc), warn=[], d=new Date(iso+'T00:00:00');
   if(!L.main) throw new Error('양식에서 자리 표(DAY·EVENING·NIGHT 머리칸)를 찾지 못했습니다');
-  const h0=hwBodyH(doc,T.styles);
+  const h0=T.baseH||hwBodyH(doc,T.styles);   // 글자를 고쳐 저장한 양식은 고치기 전 높이를 기준으로 (빈 줄은 그 날 종이에서만 걷는다)
   if(L.title) setDateText(L.title,d); else warn.push('양식에서 날짜 제목(예: 9월 28일)을 찾지 못해 날짜를 넣지 못했습니다');
   // 공지 — 첫 공지 문단을 본으로 줄 수만큼 늘리고 줄인다
-  const lines=dayNotes(iso,L.noticeDefs).split('\n').map(s=>s.trim()).filter(Boolean).map(s=>DAY_BULLET.test(s)?s:L.bullet+s);
+  const lines=dayNoteParas(iso,L.noticeDefs).map(s=>DAY_BULLET.test(s)?s:L.bullet+s);
   if(L.notices.length){
     const model=L.notices[0].cloneNode(true);
-    L.notices.forEach((p,i)=>{ if(i<lines.length) setParaText(p,lines[i]); });
+    L.notices.forEach((p,i)=>{ if(i<lines.length&&hwText(p)!==lines[i]) setParaText(p,lines[i]); });   // 같은 글이면 한글이 잰 줄 배치를 그대로 둔다
     let last=L.notices[Math.min(lines.length,L.notices.length)-1];
     for(let i=L.notices.length;i<lines.length;i++){ const cl=model.cloneNode(true); setParaText(cl,lines[i]); last.after(cl); last=cl; }
     for(let i=lines.length;i<L.notices.length;i++) L.notices[i].remove();
@@ -6904,7 +6937,7 @@ async function buildDayDoc(iso){
   for(const f of L.fields){
     const own=dayField(iso,f), au=own==null?dutyAuto(f.key,iso):null;
     const v=own!=null?own:au?au.text:null;
-    if(v!=null){ setCellText(f.cell,v); dayUnifyPara(f.cell,L.dutyPara); }
+    if(v!=null){ setCellText(f.cell,v); dayUnifyPara(f.cell,f.para); }
     if(au&&!au.m&&dutyNeedsBook(f.key)) warn.push(`${f.key} '${au.raw}' — 번호표에 없어 번호 없이 들어갑니다 (⚙ 관리 > 당직표·번호)`);
   }
   return {doc,L,warn,T,info};
@@ -7089,6 +7122,12 @@ async function dayThumbPng(doc,st){
 let dayIso=null, dayRenderSeq=0, dayInputTimer=null;
 let dayFieldsCur=[];      // 지금 화면의 당직 칸 {key,def} — 저장할 때 양식 글자 그대로면 저장하지 않는다
 let dayNoticeDefsCur=[];  // 지금 양식의 기본 공지(★ 줄) — 공지가 기본 + 일정 그대로면 저장하지 않는다
+/* 옆 열을 다시 그리는 중 — 그 사이 칸이 빠지며 나는 blur·change·focus 는 사람이 한 것이 아니다.
+ * dayFocusVal = 사람이 칸에 들어왔을 때의 글자(벗어날 때 바뀌었으면 이름 넣기를 본다), dayEditSnap = 이번에 들어와 고친 것의 되돌리기 지점을 남겼나 */
+let dayDrawing=false, dayFocusVal=null, dayEditSnap=false;
+function dayFieldFocus(t){ if(dayDrawing) return; dayFocusVal={k:t.dataset.k||'#notes',v:t.value}; dayEditSnap=false; }
+/* 코드가 칸으로 돌아갈 때 — 사람이 새로 들어온 것으로 치지 않고, 쓰던 자리(커서)도 지킨다 */
+function dayRefocus(t,sel){ if(!t) return; dayDrawing=true; try{ t.focus(); if(sel) t.setSelectionRange(sel[0],sel[1]); }catch(e){} finally{ dayDrawing=false; } }
 function defaultDayIso(){
   const t=new Date(); t.setHours(0,0,0,0);
   const end=addDays(wkSunday,6);
@@ -7137,12 +7176,12 @@ function dayPrevValue(iso,key){
 function renderDaySide(res,err){
   const box=$('#daySide'); if(!box) return;
   const iso=dayIso, T=DAYTPL;
-  if(!res){ box.innerHTML=`<div class="dsSec"><div class="dsH">양식</div><div class="dsWarn err">${esc(err?err.message:'양식을 읽지 못했습니다')}</div>
-    <button onclick="show('admin');pickAdmin('daily')">하루 어싸인표 양식 열기</button></div>`; return; }
+  if(!res){ dayDrawing=true; try{ box.innerHTML=`<div class="dsSec"><div class="dsH">양식</div><div class="dsWarn err">${esc(err?err.message:'양식을 읽지 못했습니다')}</div>
+    <button onclick="show('admin');pickAdmin('daily')">하루 어싸인표 양식 열기</button></div>`; }finally{ dayDrawing=false; } return; }
   const defs=res.L.noticeDefs||[], own=dayData(iso).notes!=null, notes=dayNotes(iso,defs), ev=!!eventText(iso).trim();
   const src=[defs.length?'양식의 기본 공지':'',ev?'이 날 교육·행사 일정':''].filter(Boolean).join('와 ');
   let h=`<div class="dsSec"><div class="dsH">공지 <span class="dsSub">줄마다 ${esc(res.L.bullet.trim())} 가 붙습니다</span></div>
-    <textarea id="dayNotes" rows="${Math.min(8,Math.max(3,notes.split('\n').length+1))}" placeholder="이 날 공지가 없습니다 — 적으면 제목 아래에 들어갑니다" oninput="dayInput()">${esc(notes)}</textarea>
+    <textarea id="dayNotes" rows="${Math.min(8,Math.max(3,notes.split('\n').length+1))}" placeholder="이 날 공지가 없습니다 — 적으면 제목 아래에 들어갑니다" onfocus="dayFieldFocus(this)" oninput="dayInput()">${esc(notes)}</textarea>
     <div class="dsNote">${own?'이 날만 고친 공지입니다.':src?`${src}입니다. 여기서 고치면 이 날 어싸인표에만 들어갑니다.`:'기본 공지도 교육·행사도 없는 날입니다. 적으면 이 날 어싸인표에만 들어갑니다.'}</div>
     <div class="dsBtns">${own?`<button onclick="dayNotesReset()" title="고친 공지를 버리고 기본 공지와 교육·행사 일정대로 되돌립니다">기본대로 되돌리기</button>`:''}
       <button onclick="openDayFormText(true)" title="매일 들어가는 기본 공지(★ 줄)를 고칩니다 — ⚙ 관리 > 하루 어싸인표 양식의 양식 글자 고치기">기본 공지 고치기</button>
@@ -7163,7 +7202,7 @@ function renderDaySide(res,err){
         else note=`<div class="dsNote">${Object.keys(((store.duty||{}).roster||{})[f.key]||{}).length?'당직표에 이 날 당직이 없습니다':'당직표가 없습니다'}. `+
           (canNum?`이름을 적고 칸을 벗어나면 ${fx?'늘 같은 번호':'번호표의 번호'}를 붙여 적습니다.`:'여기 적으면 이 날에만 들어갑니다. 아래 [당직표·번호 관리]에서 당직표를 올리면 날짜마다 저절로 채워집니다.')+`</div>`;
         return `<div class="dsF"><div class="dsL"><b>${esc(l1)}</b>${lr.length?`<span>${esc(lr.join(' · '))}</span>`:''}</div>
-          <textarea data-k="${k}" rows="${Math.min(6,Math.max(2,String(v).split('\n').length))}" placeholder="${canNum?'이름을 적으면 번호를 찾아 넣습니다':'이름 · 연락처'}" oninput="dayInput();dayDutySuggest(this)" onchange="dayDutyChange(this)">${esc(v)}</textarea>
+          <textarea data-k="${k}" rows="${Math.min(6,Math.max(2,String(v).split('\n').length))}" placeholder="${canNum?'이름을 적으면 번호를 찾아 넣습니다':'이름 · 연락처'}" onfocus="dayFieldFocus(this)" oninput="dayInput();dayDutySuggest(this)" onblur="dayDutyChange(this)">${esc(v)}</textarea>
           <div class="dsSug" data-sk="${k}"></div>${note}
           ${prev&&prev.v!==v?`<button class="dsPrev" onclick="dayUsePrev(this.dataset.k)" data-k="${k}" title="${escA(fmtMD(new Date(prev.iso+'T00:00:00')))}에 적은 값: ${escA(prev.v.replace(/\n/g,' / '))}">${fmtMD(new Date(prev.iso+'T00:00:00'))} 값 넣기</button>`:''}</div>`;
       }).join('')+
@@ -7174,7 +7213,7 @@ function renderDaySide(res,err){
     (T&&!T.custom&&String(store.ward||'')!=='101'&&store.wardPicked?`<div class="dsWarn">기본 양식은 101병동 것입니다(자리 이름의 내선 번호·화재반). 우리 병동 양식을 올리거나 [양식 글자 고치기]로 고쳐 주세요.</div>`:'')+
     `<div class="dsBtns"><button onclick="openDayFormText(true)" title="자리 이름의 내선 번호(CN(48455) 같은 것)·화재반·기본 공지·당직 이름표를 고쳐 이 병동 양식으로 저장합니다">양식 글자 고치기</button>`+
     `<button onclick="show('admin');pickAdmin('daily')" title="⚙ 관리 > 하루 어싸인표 양식 — 병동 한글 양식을 올립니다">양식 바꾸기</button></div></div>`;
-  box.innerHTML=h;
+  dayDrawing=true; try{ box.innerHTML=h; }finally{ dayDrawing=false; }
   renderDayWarn(res);
 }
 function renderDayWarn(res){
@@ -7193,16 +7232,19 @@ function daySave(){
     // 당직표(없으면 양식 칸)와 같으면 저장하지 않는다 — 나중에 당직표·번호를 고치면 그대로 따라가게
     if(au?v===au.text.trim():(f&&v===f.def)) delete duty[k]; else duty[k]=v;
   }
-  const was=Object.keys((dayData(iso).duty)||{}).sort().join('|');
+  const was=Object.keys((dayData(iso).duty)||{}).sort().join('|'), before=JSON.stringify((store.daily||{})[iso]||null);
   if(Object.keys(duty).length) cur.duty=duty; else delete cur.duty;
-  store.daily=store.daily||{};
-  if(Object.keys(cur).length) store.daily[iso]=cur; else delete store.daily[iso];
-  touch();
+  if(JSON.stringify(Object.keys(cur).length?cur:null)!==before){
+    if(!dayEditSnap){ snapshot(); dayEditSnap=true; }   // 칸에 들어와 처음 고칠 때 한 번 — 되돌리면 고치기 전으로
+    store.daily=store.daily||{};
+    if(Object.keys(cur).length) store.daily[iso]=cur; else delete store.daily[iso];
+    touch();
+  }
   if(was===Object.keys(duty).sort().join('|')){ renderDay(false); return; }
   // '당직표대로' 단추·안내가 바뀐다 — 옆 열을 다시 그리고 쓰던 칸으로 돌아간다
   const a=document.activeElement, k=a&&a.dataset&&a.dataset.k, sel=a&&[a.selectionStart,a.selectionEnd];
   renderDay(true).then(()=>{ if(!k) return; const t=document.querySelector(`#daySide textarea[data-k="${CSS.escape(k)}"]`);
-    if(t){ t.focus(); try{ t.setSelectionRange(sel[0],sel[1]); }catch(e){} dayDutySuggest(t); } });
+    if(t){ dayRefocus(t,sel); dayDutySuggest(t); } });
 }
 function dayNotesReset(){ const d=Object.assign({},dayData(dayIso)); delete d.notes;
   store.daily=store.daily||{}; if(Object.keys(d).length) store.daily[dayIso]=d; else delete store.daily[dayIso];
@@ -7216,14 +7258,15 @@ function dayUsePrev(k){ const p=dayPrevValue(dayIso,k); const t=document.querySe
 /* 당직 칸에 이름만 적으면 — 번호표에서 찾아(또는 늘 같은 번호로) 번호를 붙인다 (2026-09-27, 진료지원 S-zone).
  * 이름 한 줄(숫자 없음)이고 번호표에 있거나 늘 같은 번호 칸이면 그 날 당직표에 적는다 — 그러면 번호가 바뀌어도 따라가고
  * 관리 > 당직표·번호 달력에도 보인다. 번호를 직접 적은 글자는 예전처럼 이 날만 고친 값으로 둔다 */
+const dutyTypedNum=v=>DUTY_PHONE.test(v)||/#\s*[0-9]/.test(v)||/[0-9]{4,}/.test(v);   // 전화번호·#내선·네 자리 넘는 숫자를 직접 적었다
 function dayDutyName(key,v){
   v=String(v||'').trim();
-  if(!v||/\n/.test(v)||/[0-9]/.test(v)||v.length>30) return null;
+  if(!v||/\n/.test(v)||v.length>30||dutyTypedNum(v)) return null;
   if(dutyFixed(key)) return v;
   return dutyMatch(key,v)?v:null;
 }
 function dayDutySetRoster(key,iso,v){
-  snapshot();
+  if(!dayEditSnap){ snapshot(); dayEditSnap=true; }
   const D=dutyStore(), R=D.roster[key]=D.roster[key]||{}; R[iso]=v;
   const d=Object.assign({},dayData(iso)), duty=Object.assign({},d.duty||{}); delete duty[key];
   if(Object.keys(duty).length) d.duty=duty; else delete d.duty;
@@ -7232,21 +7275,27 @@ function dayDutySetRoster(key,iso,v){
   dayRerenderKeepFocus();
 }
 function dayDutyChange(t){
+  if(dayDrawing) return;                                 // 다시 그리며 칸이 빠진 것 — 사람이 벗어난 것이 아니다
   const key=t.dataset.k, iso=dayIso; if(!key||!iso) return;
-  const nm=dayDutyName(key,t.value);
-  if(nm==null){ clearTimeout(dayInputTimer); daySave(); return; }
+  const base=dayFocusVal&&dayFocusVal.k===key?dayFocusVal.v:null; dayFocusVal=null;
+  const nm=dayDutyName(key,t.value), au=dutyAuto(key,iso);
   clearTimeout(dayInputTimer);
-  const au=dutyAuto(key,iso);
-  if(au&&t.value.trim()===au.text.trim()) return;       // 당직표 그대로
+  // 이름이 아니거나·들어왔다 그냥 나갔거나·당직표 그대로면 이 날 값만 저장 — 포커스가 옮겨 간 뒤에(Tab 으로 간 칸을 지킨다)
+  if(nm==null||(base!=null&&t.value===base)||(au&&t.value.trim()===au.text.trim())){ dayInputTimer=setTimeout(daySave,0); return; }
+  dayDutyToRoster(key,iso,nm);
+}
+/* 그 날 당직표에 이름을 넣고 알린다 — 알림을 누르면 되돌린다 */
+function dayDutyToRoster(key,iso,nm){
+  const old=dutyRaw(key,iso);
   dayDutySetRoster(key,iso,nm);
   const m=dutyMatch(key,nm), num=dutyNumOf(key,m&&m.b);
-  if(num) toast(`${m?m.name:nm} ${num} — ${key} 당직표 ${fmtMD(new Date(iso+'T00:00:00'))}에 넣었습니다`,2600,true);
+  toast(`${key} 당직표 ${fmtMD(new Date(iso+'T00:00:00'))}: ${old&&old!==nm?old+' → ':''}${m?m.name:nm}${num?' '+num:''}`,3000,true);
 }
 /* 적는 동안 번호표에서 이름이 맞는 사람을 보여 준다 — 누르면 바로 넣는다 */
 function dayDutySuggest(t){
   const key=t.dataset.k, box=document.querySelector(`#daySide .dsSug[data-sk="${CSS.escape(key)}"]`); if(!box) return;
   const v=String(t.value||'').trim(), q=dutyNorm(v), au=dutyAuto(key,dayIso);
-  if(!q||/\n/.test(v)||/[0-9]/.test(v)||(au&&v===au.text.trim())){ box.innerHTML=''; return; }
+  if(!q||/\n/.test(v)||dutyTypedNum(v)||(au&&v===au.text.trim())){ box.innerHTML=''; return; }
   const fx=dutyFixed(key);
   const hits=dutyBook(key).map((b,i)=>({b,i})).filter(x=>dutyNorm(x.b.name).includes(q)).slice(0,5);
   const num=b=>dutyNumOf(key,b);
@@ -7257,16 +7306,16 @@ function dayDutySuggest(t){
 function dayDutyPick(key,i){
   const b=dutyBook(key)[+i]; if(!b||!dayIso) return;
   clearTimeout(dayInputTimer);
-  dayDutySetRoster(key,dayIso,b.name);
+  dayDutyToRoster(key,dayIso,b.name);
 }
 /* 옆 열을 다시 그리고, 그 사이 눌러 둔 칸으로 돌아간다 */
 function dayRerenderKeepFocus(){
   setTimeout(()=>{
     const a=document.activeElement, inSide=a&&a.closest&&a.closest('#daySide');
-    const k=inSide&&a.dataset?a.dataset.k:null, isN=inSide&&a.id==='dayNotes';
+    const k=inSide&&a.dataset?a.dataset.k:null, isN=inSide&&a.id==='dayNotes', sel=inSide&&a.tagName==='TEXTAREA'?[a.selectionStart,a.selectionEnd]:null;
     renderDay(true).then(()=>{
       const t=k?document.querySelector(`#daySide textarea[data-k="${CSS.escape(k)}"]`):isN?$('#dayNotes'):null;
-      if(t) t.focus();
+      dayRefocus(t,k&&t?[t.value.length,t.value.length]:sel);   // 당직 칸은 당직표 글자로 바뀌었으니 커서는 끝으로
     });
   },0);
 }
@@ -7315,12 +7364,18 @@ function resetDayForm(){ if(!store.dayForm) return; snapshot(); delete store.day
  * 날마다 채우는 자리(날짜 제목·자리 표의 방배정·간호사 칸·당직 칸)와 구조를 찾는 머리칸(DAY·EVENING·NIGHT, 방배정·간호사)은 목록에 없다.
  * 저장 전에 구조를 다시 읽어 자리 줄·당직 칸 수가 그대로인지 본다 — 자리 이름을 지우면 자리 순서(차지·A·B…)가 밀린다 */
 const DAY_SEAT_BAD=/중간|헬퍼|비고|메모|합계/;   // dayMainOf 가 자리 줄에서 빼는 글자
+/* 글자만 든 문단 — 그림·표·조종 문자가 든 문단은 양식 글자 고치기가 건드리지 않는다 */
+const HW_TEXT_OK=new Set(['run','t','linesegarray','lineseg','lineBreak','tab']);
+const hwTextPara=p=>[...p.getElementsByTagName('*')].every(e=>HW_TEXT_OK.has(e.localName));
+const hwCellEdText=cell=>hwKids(cell.sub,'p').filter(hwTextPara).map(hwText).join('\n');
+/* 비교용 — 줄 끝 공백·끝 빈 줄은 없는 것으로 (안 고친 칸을 '고쳤다'로 보지 않게) */
+const dfNorm=s=>String(s??'').replace(/\r\n?/g,'\n').split('\n').map(x=>x.replace(/\s+$/,'')).join('\n').replace(/\n+$/,'');
 const daySeatName=i=>i===0?'차지':(LBL_ORDER[i]||'')+' 자리';
 function dayEditItems(doc,L){
   const items=[], M=L.main, used=new Set();
-  if(L.notices.length) items.push({g:'notice',id:'n',text:L.noticeDefs.join('\n')});
+  if(L.notices.length) items.push({g:'notice',id:'n',text:L.noticeDefs.map(dayNoteShow).join('\n')});
   if(M){
-    M.rows.forEach((row,i)=>{ const c=M.m.at(row.r,M.labCol); if(!c) return; used.add(c); items.push({g:'seat',id:'s'+i,cell:c,text:c.text,seat:i}); });
+    M.rows.forEach((row,i)=>{ const c=M.m.at(row.r,M.labCol); if(!c) return; used.add(c); items.push({g:'seat',id:'s'+i,cell:c,text:hwCellEdText(c),seat:i}); });
     const fillCols=new Set(), seatRows=new Set(M.rows.map(r=>r.r));
     for(const P in M.shifts){ const sc=M.shifts[P]; if(sc.room!=null) fillCols.add(sc.room); if(sc.nurse!=null) fillCols.add(sc.nurse); }
     for(const c of M.m.cells){
@@ -7328,13 +7383,13 @@ function dayEditItems(doc,L){
       const t=c.text.replace(/\s+/g,''); if(!t) continue;
       if(Object.values(DAY_HEAD).some(re=>re.test(t))) continue;                                  // D·E·N 머리칸
       if(fillCols.has(c.c)&&(seatRows.has(c.r)||/방|병실|병상|호실|ROOM|간호사|이름|성명|담당자|RN/i.test(t))) continue;   // 채우는 칸과 그 머리
-      items.push({g:'main',id:'m'+c.r+'_'+c.c,cell:c,text:c.text});
+      items.push({g:'main',id:'m'+c.r+'_'+c.c,cell:c,text:hwCellEdText(c)});
     }
   }
-  L.fields.forEach((f,i)=>{ (f.labCells||[]).forEach((c,j)=>{ used.add(c); items.push({g:'duty',id:'d'+i+'_'+j,cell:c,text:c.text,field:i,first:j===0}); }); used.add(f.cell); });
-  (L.others||[]).forEach((m,ti)=>{ for(const c of m.cells){ if(used.has(c)||!c.text.trim()) continue; items.push({g:'other',id:'o'+ti+'_'+c.r+'_'+c.c,cell:c,text:c.text}); } });
+  L.fields.forEach((f,i)=>{ (f.labCells||[]).forEach((c,j)=>{ used.add(c); items.push({g:'duty',id:'d'+i+'_'+j,cell:c,text:hwCellEdText(c),field:i,first:j===0}); }); used.add(f.cell); });
+  (L.others||[]).forEach((m,ti)=>{ for(const c of m.cells){ if(used.has(c)||!hwCellEdText(c).trim()) continue; items.push({g:'other',id:'o'+ti+'_'+c.r+'_'+c.c,cell:c,text:hwCellEdText(c)}); } });
   for(const [i,p] of hwKids(doc.documentElement,'p').entries()){
-    if(p===L.title||L.notices.includes(p)||hwTblsOf(p).length) continue;
+    if(p===L.title||L.notices.includes(p)||hwTblsOf(p).length||!hwTextPara(p)) continue;
     const t=hwText(p); if(!t.trim()) continue;
     items.push({g:'para',id:'p'+i,p,text:t});
   }
@@ -7348,7 +7403,7 @@ async function renderDayFormText(){
     if(!$('#dayFormText')) return;
     const items=dayEditItems(doc,L);
     const fld=(it,rows)=>{ const multi=/\n/.test(it.text)||rows>1;
-      return multi?`<textarea data-ed="${it.id}" rows="${Math.max(rows||2,it.text.split('\n').length)}">${esc(it.text)}</textarea>`
+      return multi?`<textarea data-ed="${it.id}" rows="${Math.max(rows||2,it.text.split('\n').length)}">\n${esc(it.text)}</textarea>`
         :`<input type="text" data-ed="${it.id}" value="${escA(it.text)}">`; };
     const grp=(g,title,sub,body)=>items.some(x=>x.g===g)?`<div class="dfG"><div class="dfGH">${title} <span class="dtySub">${sub}</span></div>${body}</div>`:'';
     const tbl=(g,head,nameOf)=>`<table class="dt dfTbl"><tr><th style="width:9em">${head}</th><th>양식 글자</th></tr>`+
@@ -7356,7 +7411,7 @@ async function renderDayFormText(){
     const notice=items.find(x=>x.g==='notice');
     box.innerHTML=`<section class="dfEd"><div class="dfEdH">양식 글자 고치기</div>
       <div class="dtySub">병동마다 다른 글자를 고쳐 <b>이 병동 양식</b>으로 저장합니다. 날짜·자리 칸·당직 칸은 날마다 채우는 자리라 여기 없습니다.</div>
-      ${notice?`<div class="dfG"><div class="dfGH">기본 공지 <span class="dtySub">줄마다 ${esc(L.bullet.trim())} 가 붙어 매일 제목 아래에 들어갑니다 · 그 날 교육·행사는 뒤에 붙습니다</span></div>${fld(notice,3)}</div>`
+      ${notice?`<div class="dfG"><div class="dfGH">기본 공지 <span class="dtySub">줄마다 ${esc(L.bullet.trim())} 가 붙어 매일 제목 아래에 들어갑니다 · 앞을 띄운 줄은 윗줄 공지에 이어집니다 · 그 날 교육·행사는 뒤에 붙습니다</span></div>${fld(notice,3)}</div>`
         :`<div class="dfG"><div class="dsWarn">이 양식에는 ★ 로 시작하는 공지 줄이 없어 기본 공지를 둘 수 없습니다 — 한글에서 제목 아래에 ★ 줄을 하나 넣어 올려 주세요.</div></div>`}
       ${grp('seat','자리 이름','괄호 안 번호(내선)를 병동에 맞게 고치세요 · 위에서부터 차지·A·B·C 자리입니다',tbl('seat','자리',x=>daySeatName(x.seat)))}
       ${grp('duty','당직 칸 이름표','첫 줄이 칸 이름입니다 — 고치면 당직표·번호도 새 이름을 따라갑니다',
@@ -7376,18 +7431,21 @@ async function openDayFormText(nav){
   ed.scrollIntoView({block:'start',behavior:'smooth'});
   const first=ed.querySelector('[data-ed]'); if(first) first.focus({preventScroll:true});
 }
-/* 칸 글자 — 줄마다 문단 하나(칸의 문단 모양 그대로). 바뀐 문단만 고치고(줄 배치 캐시를 떼고), 줄이 늘면 마지막 문단을 본떠 더한다 */
+/* 칸 글자 — 글자만 든 문단에 원래 문단마다의 줄 수대로 나눠 넣는다(문단 안 줄바꿈은 줄바꿈 그대로).
+ * 남는 줄은 마지막 문단에 잇고, 줄이 모자라면 뒤 문단을 뺀다. 끝의 빈 문단(칸 높이를 잡아 둔 것)·그림 문단은 그대로 둔다.
+ * 바뀐 문단만 고친다(줄 배치 캐시를 뗀다) */
 function hwSetCellLines(cell,text){
-  const ps=hwKids(cell.sub,'p'); if(!ps.length) return;
+  const tps=hwKids(cell.sub,'p').filter(hwTextPara); if(!tps.length) return;
+  let tail=0; while(tail<tps.length-1&&!hwText(tps[tps.length-1-tail])) tail++;
+  const act=tps.slice(0,tps.length-tail), cnt=act.map(p=>hwText(p).split('\n').length);
   const lines=String(text).split('\n');
-  let last=null;
-  lines.forEach((ln,i)=>{
-    let p=ps[i];
-    if(!p){ p=ps[ps.length-1].cloneNode(true); (last||ps[ps.length-1]).after(p); setParaText(p,ln); }
-    else if(hwText(p)!==ln) setParaText(p,ln);
-    last=p;
+  let at=0;
+  act.forEach((p,i)=>{
+    if(at>=lines.length&&i>0){ p.remove(); return; }
+    const take=i===act.length-1?lines.length-at:Math.min(cnt[i],lines.length-at);
+    const chunk=lines.slice(at,at+Math.max(take,0)).join('\n'); at+=Math.max(take,0);
+    if(hwText(p)!==chunk) setParaText(p,chunk);
   });
-  for(let i=lines.length;i<ps.length;i++) ps[i].remove();
 }
 /* 기본 공지 — 첫 공지 문단을 본으로 줄 수만큼. 다 지우면 ★ 만 남긴 줄 하나로 공지 자리를 지킨다 */
 function hwSetNotices(L,lines){
@@ -7401,7 +7459,14 @@ function hwSetNotices(L,lines){
 /* 당직 칸 이름이 바뀌면 그 칸의 당직표·번호표·모양·이 날 고친 값도 새 이름으로 (맞바꿈도 되게 한꺼번에 옮긴다) */
 function dutyRenameKeys(pairs){
   if(!pairs.length) return;
-  const mv=obj=>{ if(!obj) return; const tmp=pairs.map(([o])=>obj[o]); pairs.forEach(([o])=>delete obj[o]); pairs.forEach(([,n],i)=>{ if(tmp[i]!==undefined) obj[n]=tmp[i]; }); };
+  // 새 이름에 이미 자료가 있으면(양식에서 빠진 옛 칸 등) 덮지 않고 합친다 — 옮겨 오는 쪽이 이긴다. 맞바꿈(새 이름도 옮겨 가는 칸)은 그냥 옮긴다
+  const srcs=new Set(pairs.map(([o])=>o));
+  const merge=(a,b)=>Array.isArray(a)&&Array.isArray(b)?[...b,...a.filter(x=>!b.some(y=>dutyNorm(y.name)===dutyNorm(x.name)))]
+    :a&&b&&typeof a==='object'&&typeof b==='object'?{...a,...b}:b;
+  const mv=obj=>{ if(!obj) return;
+    const tmp=pairs.map(([o])=>obj[o]), keep=pairs.map(([,n])=>srcs.has(n)?undefined:obj[n]);
+    pairs.forEach(([o])=>delete obj[o]);
+    pairs.forEach(([,n],i)=>{ if(tmp[i]===undefined) return; obj[n]=keep[i]===undefined?tmp[i]:merge(keep[i],tmp[i]); }); };
   const D=dutyStore(); mv(D.lines); mv(D.book); mv(D.roster);
   for(const iso in store.daily||{}) mv(store.daily[iso].duty);
   const p=pairs.find(([o])=>o===dutyUI.key); if(p) dutyUI.key=p[1];
@@ -7416,14 +7481,15 @@ async function saveDayFormText(){
     for(const it of items){
       const el=document.querySelector(`#dayFormText [data-ed="${CSS.escape(it.id)}"]`); if(!el) continue;
       let v=el.value.replace(/\r\n?/g,'\n');
-      if(it.g==='notice'){ const lines=v.split('\n').map(x=>x.replace(DAY_BULLET,'').trim()).filter(Boolean);
-        if(lines.join('\n')!==it.text) changed.push({it,lines}); continue; }
-      v=v.split('\n').map(x=>x.replace(/\s+$/,'')).join('\n').replace(/\n+$/,'');
+      if(it.g==='notice'){ const lines=dayNoteSplit(v);
+        const nk=a=>JSON.stringify(a.map(x=>String(x).split('\n').map(y=>y.trim()).join('\n')));   // 줄 앞뒤 공백은 보지 않는다
+        if(nk(lines)!==nk(L.noticeDefs)) changed.push({it,lines}); continue; }
+      v=dfNorm(v);
       if(it.g==='seat'){ const t=v.trim();
         if(!t) errs.push(`${daySeatName(it.seat)} 이름이 비었습니다 — 자리 줄을 찾는 데 쓰여 비울 수 없습니다`);
         else if(DAY_SEAT_BAD.test(t)) errs.push(`${daySeatName(it.seat)} 이름에 '중간·헬퍼·비고·메모·합계'가 들어가면 자리 줄로 보지 않습니다`); }
       if(it.g==='duty'&&it.first&&!v.split('\n')[0].trim()) errs.push('당직 칸 이름표의 첫 줄(칸 이름)이 비었습니다');
-      if(v!==it.text) changed.push({it,v});
+      if(v!==dfNorm(it.text)) changed.push({it,v});
     }
     if(errs.length){ bad(errs.map(esc).join('<br>')); return; }
     if(!changed.length){ toast('바뀐 글자가 없습니다'); return; }
@@ -7436,12 +7502,12 @@ async function saveDayFormText(){
     if(!!L2.main!==!!L.main||n1!==n2||L2.fields.length!==L.fields.length){
       bad(`고친 글자 때문에 양식 구조를 다시 찾지 못해 저장하지 않았습니다 (자리 줄 ${n1} → ${n2}, 당직 칸 ${L.fields.length} → ${L2.fields.length}).`); return; }
     const renames=L.fields.map((f,i)=>[f.key,L2.fields[i].key]).filter(([a,b])=>a!==b);
-    hwFitPage(doc,L2,T.styles,h0);   // 기본 공지를 늘렸으면 빈 줄을 걷어 A4 한 장에
     const bytes=packXlsx(T,{'Contents/section0.xml':hwSerialize(doc,T.sec)},0x0021);
     snapshot();
     dutyRenameKeys(renames);
     const base=T.custom?T.name.replace(/ \(글자 고침\)$/,''):'101병동 기본 양식';
-    store.dayForm={name:base+' (글자 고침)',b64:bytesToB64(bytes),savedAt:new Date().toISOString(),edited:true};
+    // 양식의 빈 줄은 그대로 저장한다 — 기본 공지가 늘어 한 장을 넘으면 그 날 종이에서만 걷는다(고치기 전 높이 baseH 기준)
+    store.dayForm={name:base+' (글자 고침)',b64:bytesToB64(bytes),savedAt:new Date().toISOString(),edited:true,baseH:T.baseH||h0};
     DAYTPL=null; touch(); renderAdmin();
     toast(`양식 글자 ${changed.length}곳을 고쳐 이 병동 양식으로 저장했습니다 — 하루 어싸인표에 바로 들어갑니다${renames.length?` · 당직 칸 이름 ${renames.map(r=>r[1]).join(', ')}`:''}`,4200,true);
   }catch(e){ bad('저장하지 못했습니다: '+esc(e.message)); }
@@ -7497,8 +7563,8 @@ function dutyFill(fmt,name,b,prefer){
 }
 /* 늘 같은 번호 — GS 당직처럼 당직폰·내선이 정해진 칸 (store.duty.lines[칸].fixed={phone,ext}).
  * 칸이 '늘 같은 번호'로 돼 있으면(fixed 가 있으면) 사람과 상관없이 그 번호를 적는다. 번호를 아직 안 적었으면 null */
-const dutyFixedOn=key=>{ const l=((store.duty||{}).lines||{})[key]; return !!(l&&l.fixed); };
-const dutyFixed=key=>{ const l=((store.duty||{}).lines||{})[key], f=l&&l.fixed; return f&&(f.phone||f.ext)?{phone:f.phone||'',ext:f.ext||''}:null; };
+const dutyFixedOn=key=>{ const l=((store.duty||{}).lines||{})[key]; return !!(l&&l.fixed&&!l.fixed.off); };   // off = 꺼 둠(번호는 남겨 둔다)
+const dutyFixed=key=>{ const l=((store.duty||{}).lines||{})[key], f=l&&l.fixed; return f&&!f.off&&(f.phone||f.ext)?{phone:f.phone||'',ext:f.ext||''}:null; };
 const dutyNum=(key,b)=>dutyFixed(key)||b||null;
 /* {번호} 자리에 먼저 적을 번호 — store.duty.lines[칸].prefer ('phone'|'ext'). 정하지 않았으면 번호를 보고 고른다:
  * 늘 같은 번호면 전화번호가 있을 때 전화번호, 번호표면 내선이 적힌 사람이 절반 이상일 때 내선
@@ -7853,17 +7919,20 @@ function dutyNumHtml(key){
     ${on?`<div class="dtyFixed">
         <label>전화번호 <input type="text" id="dutyFxPhone" value="${escA(f.phone||'')}" onchange="dutySetFixed('phone',this.value)" title="당직폰 번호 — 모양의 {번호} 자리에 늘 이 번호가 들어갑니다"></label>
         <label>내선(S-zone) <input type="text" id="dutyFxExt" value="${escA(f.ext||'')}" onchange="dutySetFixed('ext',this.value)" title="내선 번호, 숫자만 — 모양의 {내선} 자리에 들어갑니다(전화번호가 없으면 {번호} 자리에 #내선)"></label>
-        <div class="dtySub">${f.phone||f.ext?'이름만 날마다 바뀌고 이 번호가 늘 들어갑니다.':'번호를 적으면 이 칸에 늘 그 번호가 들어갑니다.'}</div></div>`
+        <div class="dtySub" id="dutyFxNote">${dutyFixedNote(key)}</div></div>`
       :`<div class="dtySub" style="margin-top:6px">당직표의 이름으로 아래 번호표에서 번호를 찾습니다.</div>`}
     ${dutyPreferHtml(key)}`;
 }
 /* {번호} 자리에 먼저 적을 번호 — 전화번호 · 내선(S-zone) */
 function dutyPreferHtml(key){
-  const p=dutyPrefer(key), set=dutyPreferSet(key);
-  return `<div class="dtyPrefer"><span class="dtySub">번호 자리에 먼저</span>
+  const p=dutyPrefer(key), set=dutyPreferSet(key), fx=dutyFixed(key), bk=dutyBook(key).filter(b=>b.phone||b.ext);
+  const why=set?'':fx?(p==='phone'?'늘 같은 번호에 전화번호가 있어 전화번호를 골랐습니다':'늘 같은 번호에 내선만 있어 내선을 골랐습니다')
+    :!bk.length?'번호표가 비어 있어 전화번호를 먼저 적습니다 — 번호표에 내선이 적힌 사람이 많으면 내선으로 바뀝니다'
+    :p==='ext'?'번호표에 내선이 적힌 사람이 많아 내선을 골랐습니다':'번호표에 전화번호가 많아 전화번호를 골랐습니다';
+  return `<div class="dtyPrefer" id="dutyPreferBox"><span class="dtySub">번호 자리에 먼저</span>
     <button class="segbtn${p==='phone'?' on':''}" onclick="dutySetPrefer('phone')" title="{번호} 자리에 전화번호를 적습니다 — 전화번호가 없는 사람은 #내선">전화번호</button>
     <button class="segbtn${p==='ext'?' on':''}" onclick="dutySetPrefer('ext')" title="{번호} 자리에 #내선(S-zone)을 적습니다 — 내선이 없는 사람은 전화번호">내선(S-zone)</button>
-    ${set?'':`<span class="dtySub">${p==='ext'?'번호표에 내선이 적힌 사람이 많아 내선을':'번호표에 전화번호가 많아 전화번호를'} 골랐습니다</span>`}</div>`;
+    ${why?`<span class="dtySub">${why}</span>`:''}</div>`;
 }
 function dutySetPrefer(v){
   const key=dutyUI.key; if(!key||(v!=='phone'&&v!=='ext')||dutyPreferSet(key)===v) return;
@@ -7872,12 +7941,15 @@ function dutySetPrefer(v){
   const sec=$('#dutyNumSec'); if(sec) sec.innerHTML=dutyNumHtml(key);
   dutyRefreshCal();
 }
+const dutyFixedNote=key=>dutyFixed(key)?'이름만 날마다 바뀌고 이 번호가 늘 들어갑니다.':'번호를 적으면 이 칸에 늘 그 번호가 들어갑니다.';
 function dutySetFixedOn(on){
   const key=dutyUI.key; if(!key||on===dutyFixedOn(key)) return;
-  snapshot(); const D=dutyStore(), L=D.lines[key]={...(D.lines[key]||{})};
-  if(on) L.fixed={phone:'',ext:''}; else delete L.fixed;
+  snapshot(); const D=dutyStore(), L=D.lines[key]={...(D.lines[key]||{})}, f=L.fixed||{};
+  if(on){ const {off,...rest}=f; L.fixed={phone:rest.phone||'',ext:rest.ext||''}; }   // 꺼 두었던 번호가 있으면 그대로 살아난다
+  else if(f.phone||f.ext) L.fixed={...f,off:true};   // 적어 둔 번호는 지우지 않는다 — 다시 [늘 같은 번호]를 누르면 돌아온다
+  else delete L.fixed;
   if(!Object.keys(L).length) delete D.lines[key];
-  touch(); renderDuty().then(()=>{ const i=$('#dutyFxPhone'); if(i) i.focus(); });
+  touch(); renderDuty().then(()=>{ const i=$('#dutyFxPhone'); if(on&&i&&!i.value) i.focus(); });
 }
 function dutySetFixed(k,v){
   const key=dutyUI.key; if(!key||!dutyFixedOn(key)) return;
@@ -7888,7 +7960,9 @@ function dutySetFixed(k,v){
   if(v===(cur[k]||'')){ const i=$(k==='phone'?'#dutyFxPhone':'#dutyFxExt'); if(i) i.value=v; return; }
   snapshot(); D.lines[key]={...D.lines[key],fixed:{...cur,[k]:v}};
   touch();
-  const sec=$('#dutyNumSec'); if(sec) sec.innerHTML=dutyNumHtml(key);
+  const inp=$(k==='phone'?'#dutyFxPhone':'#dutyFxExt'); if(inp&&inp.value!==v) inp.value=v;
+  const note=$('#dutyFxNote'); if(note) note.textContent=dutyFixedNote(key);
+  const pf=$('#dutyPreferBox'); if(pf) pf.outerHTML=dutyPreferHtml(key);
   dutyRefreshCal();
 }
 function dutyTok(tok){
@@ -7981,8 +8055,10 @@ function renderDutyPv(){
   const md=i=>fmtMD(new Date(i+'T00:00:00'));
   const hw={date:'날짜 칸에서 읽음',md:'날짜 칸에서 읽음',text:'제목·시트 이름에서 읽음',none:'표에 달이 없어 보고 있던 달로 봤습니다',user:'고른 달'}[pv.ym.how]||'';
   const opts=[-2,-1,0,1,2].map(n=>{ const k=pv.ym.y*12+pv.ym.m-1+n, y=Math.floor(k/12), m=k%12+1; return `<option value="${y}-${m}"${n===0?' selected':''}>${y}년 ${m}월</option>`; }).join('');
-  const nm=v=>{ const t=dutyMatchIn(mg.book,v); return t?{name:t.name,num:t.b.phone||(t.b.ext?'#'+t.b.ext:'')}:null; };
-  const miss=row?[...new Set(isos.map(i=>row.byIso[i]).filter(v=>!nm(v)))]:[];
+  const fx=dutyFixed(key), pref=dutyPrefer(key);
+  const nm=v=>{ const t=dutyMatchIn(mg.book,v); if(t) return {name:t.name,num:dutyNumStr(dutyNum(key,t.b),pref)};
+    return fx?{name:String(v).trim(),num:dutyNumStr(fx,pref)}:null; };   // 늘 같은 번호 칸은 번호표에 없어도 번호가 붙는다
+  const miss=row&&dutyNeedsBook(key)?[...new Set(isos.map(i=>row.byIso[i]).filter(v=>!nm(v)))]:[];
   box.innerHTML=`<div class="dtyPv">
     <div class="dtyPvH">읽은 내용 <span class="dtySub">${esc(pv.src)}${pv.sheetName&&pv.src!==pv.sheetName?' · '+esc(pv.sheetName)+' 시트':''}</span></div>
     ${pv.dates.length?`<div class="dtyPvL">당직 날짜 <b>${pv.dates.length}일</b> (${md(pv.dates[0])} ~ ${md(pv.dates[pv.dates.length-1])})
@@ -8806,7 +8882,7 @@ window.__app={get store(){return store},set store(v){store=v},
   dutySetDay,dutySetBook,dutyAddBook,dutyDelBook,dutySetFmt,dutyPvMonth,dutyFile,openDutyAdmin,dutyLines,dayDutyReset,dutyStore,get dutyUI(){return dutyUI},
   dutyFixed,dutyFixedOn,dutyNum,dutyNeedsBook,dutySetFixedOn,dutySetFixed,dayNotes,dayNotesDef,dayDutyName,dayDutyChange,dayDutyPick,dayDutySuggest,dayDutySetRoster,
   dayEditItems,renderDayFormText,openDayFormText,saveDayFormText,dutyRenameKeys,hwSetCellLines,hwSetNotices,
-  hwKids,hwPage,hwTopH,hwBodyH,hwFitPage,hwBlankPara,dutyPrefer,dutyPreferSet,dutySetPrefer,dutyNumStr,dutyNumOf,
+  hwKids,hwPage,hwTopH,hwBodyH,hwFitPage,hwBlankPara,hwPage1,hwParaVisible,dayNoteSplit,dayNoteShow,dayNoteParas,dutyPrefer,dutyPreferSet,dutySetPrefer,dutyNumStr,dutyNumOf,
   memoryMode(){window.__memoryMode=true;
     setFileLoc({kind:'none'});afterLoad();}};
 </script>

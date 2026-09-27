@@ -1106,7 +1106,9 @@ async function main() {
     ed.새자리=A.dayEditItems(doc2,L2).find(x=>x.g==='seat'&&x.seat===0).text;
     ed.새공지=L2.noticeDefs; ed.새칸=L2.fields[0].key;
     ed.옮김=[!!s.duty.book['정형 당직'],!s.duty.book[K[0]]];
-    ed.한장=A.hwBodyH(doc2,T2.styles)<=limit;
+    // 저장한 양식은 빈 줄을 그대로 두고(고치기 전 높이를 기억) 그 날 종이에서만 걷는다
+    const d2=await A.buildDayDoc('2026-09-29');
+    ed.한장=[T2.baseH>0, A.hwBodyH(d2.doc,T2.styles)<=limit, A.dayLayout(d2.doc).notices.length];
     // 이름을 비우거나 '중간·헬퍼' 를 넣은 자리는 저장하지 않는다
     await A.renderDayFormText();
     const it2=A.dayEditItems(doc2,L2).find(x=>x.g==='seat'&&x.seat===1);
@@ -1140,9 +1142,49 @@ async function main() {
   eq('자리 이름의 내선 번호를 고친다', dfm.ed.새자리, 'CN(40000)');
   eq('기본 공지를 늘린다', dfm.ed.새공지, ['이름표 꽂기 (스테이션 및 1인, 2인실 병실 앞)', '부서예방 점검 3PM 이전 시행', '세 번째 공지']);
   eq('당직 칸 이름을 바꾸면 번호표도 새 이름으로', [dfm.ed.새칸, dfm.ed.옮김], ['정형 당직', [true, true]]);
-  ok('공지를 늘려 저장해도 A4 한 장', dfm.ed.한장);
+  eq('공지를 늘려 저장해도 그 날 종이는 A4 한 장', dfm.ed.한장, [true, true, 3]);
   eq("자리 이름에 '중간'이 들어가면 저장하지 않고 이유를 말한다", dfm.ed.막음, [true, true]);
   eq('저장한 양식도 Ctrl+Z (당직 칸 이름까지)', dfm.ed.되돌림, [true, true]);
+
+  step('26b 하루 어싸인표 — 여러 줄 공지·쪽 나눔·당직 칸');
+  const rv = await ev(`const A=window.__app; return (async()=>{
+    const s=A.store, NL=String.fromCharCode(10);
+    s.daily={}; s.duty={}; A.dutyStore(); s.dayForm=null; A.DAYTPL=null; s.evRules=[];
+    // 한 ★ 안에서 줄을 바꾼 공지 — 글 칸에선 둘째 줄을 띄워 보이고, 다시 읽으면 한 공지
+    const x=['가 공지'+NL+'이어지는 줄','다 공지'], shown=x.map(A.dayNoteShow).join(NL);
+    const note={왕복:A.dayNoteSplit(shown), 새줄:A.dayNoteSplit('★ 하나'+NL+' 둘'+NL+'셋')};
+    s.daily['2026-09-29']={notes:shown};
+    const r=await A.buildDayDoc('2026-09-29'), L=A.dayLayout(r.doc);
+    note.종이=L.notices.map(p=>A.hwText(p));
+    s.daily={};
+    // 쪽 나누기 뒤는 둘째 장 — 높이에 넣지 않고, 빈 줄이어도 걷지 않는다
+    const T=await A.loadDayTpl(), doc=new DOMParser().parseFromString(T.sec,'application/xml');
+    const h=A.hwBodyH(doc,T.styles), top=A.hwKids(doc.documentElement,'p'), blank=top.find(p=>A.hwBlankPara(p));
+    const pb=blank.cloneNode(true); pb.setAttribute('pageBreak','1'); doc.documentElement.appendChild(pb);
+    doc.documentElement.appendChild(top[0].cloneNode(true));
+    const pg={높이같음:A.hwBodyH(doc,T.styles)===h, 첫장:A.hwPage1(doc).length===top.length, 나눔은빈줄아님:A.hwBlankPara(pb),
+      양식빈줄보임:top.filter(p=>A.hwBlankPara(p)).some(p=>A.hwParaVisible(p,T.styles))};
+    // 당직 칸 — 'R4' 처럼 연차만 적어도 번호표 사람, 칸 이름을 옛 칸 이름으로 바꾸면 합친다, 늘 같은 번호를 껐다 켜도 번호는 남는다
+    const K=A.dayLayout(doc).fields.map(f=>f.key);
+    s.duty.book[K[0]]=[{name:'R4 이순신',phone:'010-0000-0004',ext:''}];
+    const duty={R4:A.dayDutyName(K[0],'R4'), 번호:A.dayDutyName(K[0],'R4 010-0000-0004')};
+    s.duty.book['옛 칸']=[{name:'가',phone:'010-0000-0011',ext:''}];
+    s.duty.book['새 칸']=[{name:'나',phone:'010-0000-0012',ext:''},{name:'가',phone:'010-0000-0099',ext:''}];
+    A.dutyRenameKeys([['옛 칸','새 칸']]);
+    duty.합침=[!s.duty.book['옛 칸'], s.duty.book['새 칸'].map(b=>b.name+' '+b.phone)];
+    A.dutyUI.key=K[1]; s.duty.lines[K[1]]={fixed:{phone:'010-0000-9999',ext:''}};
+    A.dutySetFixedOn(false); duty.끔=[!A.dutyFixed(K[1]), s.duty.lines[K[1]].fixed.phone];
+    A.dutySetFixedOn(true); duty.켬=(A.dutyFixed(K[1])||{}).phone;
+    s.duty={}; A.dutyStore(); A.DAYTPL=null;
+    return {note,pg,duty}; })();`);
+  eq('여러 줄 공지 — 글 칸에서 다시 읽어도 한 공지', rv.note.왕복, ['가 공지\n이어지는 줄', '다 공지']);
+  eq('앞을 띄운 줄은 윗 공지에 이어지고, 붙인 줄은 새 공지', rv.note.새줄, ['하나\n둘', '셋']);
+  eq('종이에도 한 ★ 문단 안에서 줄바꿈', rv.note.종이, ['★ 가 공지\n이어지는 줄', '★ 다 공지']);
+  eq('쪽 나누기 뒤(둘째 장)는 한 장 높이에 넣지 않고 걷지도 않는다', rv.pg, {높이같음: true, 첫장: true, 나눔은빈줄아님: false, 양식빈줄보임: false});
+  eq("당직 칸에 'R4'만 적어도 번호표 사람으로 (번호를 적으면 그대로)", [rv.duty.R4, rv.duty.번호], ['R4', null]);
+  eq('당직 칸 이름을 이미 있는 칸 이름으로 바꾸면 번호표를 합친다 (옮겨 온 번호가 이김)', rv.duty.합침,
+    [true, ['가 010-0000-0011', '나 010-0000-0012']]);
+  eq('늘 같은 번호를 꺼도 적어 둔 번호는 남고, 다시 켜면 돌아온다', [rv.duty.끔, rv.duty.켬], [[true, '010-0000-9999'], '010-0000-9999']);
 
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
