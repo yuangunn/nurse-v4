@@ -8,6 +8,7 @@
  *   → 마법사(병동·방구성·근무표 붙여넣기·표기·가능근무) → 배정표가 뜨는지
  *   → 빈 자리에 대체간호사 넣기 → 교육·행사 매주 일정 → 엑셀로 내보내기 → 받은 파일 열어 보기
  *   → 날짜 머리칸을 눌러 하루 어싸인표 → 당직 적기 → 한글 파일로 받기
+ *   → 진료지원 연락처 붙이기 → 이름만 적으면 S-zone → 양식 글자 고치기(CN(48455))
  *
  * 파일 저장 창만 흉내 낸다 — file:// 헤드리스에서는 저장 창을 띄울 수 없어서, 사용자가 저장 창에서
  * [저장]을 누른 것처럼 메모리 속 파일 핸들을 돌려준다(읽기·쓰기는 진짜 경로를 탄다).
@@ -421,6 +422,64 @@ try {
   const paper2 = await ev(`return document.querySelector('#dayPreview .hsheet').textContent`);
   ok('당직표대로 — 이름·바뀐 번호가 종이에 들어간다', paper2.includes('R4 김영숙') && paper2.includes('010-0000-7777'), paper2.slice(-160));
   eq('손으로 적은 값은 지워졌다', await ev(`return ((window.__app.store.daily||{})[${JSON.stringify(dayIso)}]||{}).duty||null`), null);
+  await tap('← 배정표');
+  await sleep(300);
+
+  step('11b 진료지원 이름 → S-zone · 양식 글자 고치기');
+  // 진료지원 칸 번호표에 연락처(이름·전화번호·S-zone)를 붙여 넣고, 하루 어싸인표에서 이름만 적으면 S-zone 번호가 붙는다
+  await tapSel(`#wkTable th.day[data-iso="${dayIso}"]`);
+  await sleep(900);
+  await tap('당직표·번호 관리');
+  await sleep(700);
+  await tapSel('#adminPanelBox button[data-k*="진료지원"]');
+  await sleep(500);
+  await tapSel('#dutyPaste');
+  await send('Input.insertText', { text: [['이름', '임상과', '전화번호', 'S-zone'], ['최세브', '외과', '010-0000-0100', '48001'], ['박세브', '내과', '010-0000-0101', '48002']]
+    .map(r => r.join('\t')).join('\n') });
+  await sleep(500);
+  await tapSel('#dutyPv button.pri');
+  await sleep(500);
+  eq('연락처가 진료지원 번호표에 들어갔다', await ev(`const A=window.__app, k=Object.keys(A.store.duty.book).find(k=>k.includes('진료지원')); return A.store.duty.book[k].map(b=>b.name+' '+b.ext)`),
+    ['최세브 48001', '박세브 48002']);
+  ok('번호 자리에 먼저 — 내선(S-zone)이 골라져 있다', (await ev(`const b=[...document.querySelectorAll('#dutyNumSec .dtyPrefer button.on')]; return b.map(x=>x.textContent).join()`)).includes('내선'));
+  await tap('배정표', '.topbar');
+  await sleep(400);
+  await tapSel(`#wkTable th.day[data-iso="${dayIso}"]`);
+  await sleep(1000);
+  await tapSel('#daySide textarea[data-k*="진료지원"]');
+  await ev(`document.activeElement.select(); return 1`);
+  await send('Input.insertText', { text: '최세' });
+  await sleep(300);
+  ok('적는 동안 번호표에서 찾은 사람을 보여 준다', (await ev(`const b=document.querySelector('#daySide .dsSug[data-sk*="진료지원"]'); return b?b.textContent:''`)).includes('#48001'));
+  await send('Input.insertText', { text: '브' });
+  await tapSel('#dayNotes');
+  await sleep(1000);
+  const paper3 = await ev(`return document.querySelector('#dayPreview .hsheet').textContent`);
+  ok('이름만 적고 칸을 벗어나면 S-zone 번호가 종이에 붙는다', paper3.includes('최세브') && paper3.includes('#48001'), paper3.slice(-120));
+  eq('그 이름은 그 날 진료지원 당직표에 들어간다', await ev(`const A=window.__app, k=Object.keys(A.store.duty.roster).find(k=>k.includes('진료지원')); return A.store.duty.roster[k][${JSON.stringify(dayIso)}]`), '최세브');
+  ok('당직표에 넣었다는 알림에 되돌리기가 붙는다', (await ev(`const t=document.querySelector('#toast'); return t.style.display!=='none'&&t.classList.contains('undo')?t.textContent:''`)).includes('최세브'));
+  await tapSel('#toast');
+  await sleep(1000);
+  eq('알림을 누르면 당직표에서 빠진다', await ev(`const A=window.__app, k=Object.keys(A.store.duty.roster).find(k=>k.includes('진료지원')); return (A.store.duty.roster[k]||{})[${JSON.stringify(dayIso)}]||null`), null);
+  ok('되돌린 뒤 종이에서도 빠진다', !(await ev(`return document.querySelector('#dayPreview .hsheet').textContent`)).includes('#48001'));
+  // 양식 글자 고치기 — 자리 이름의 내선 번호(CN(48455))를 병동 것으로 고쳐 저장하면 종이에 그대로 나온다
+  ok('양식의 자리 이름이 종이에 있다', paper3.includes('CN(48455)'));
+  await tap('양식 글자 고치기', '#daySide');
+  await sleep(900);
+  const seatId = await ev(`const e=document.querySelector('#dayFormText [data-ed^="s"]'); return e?e.dataset.ed:null`);
+  ok('양식 글자 고치기가 열렸다', !!seatId);
+  await tapSel(`#dayFormText [data-ed="${seatId}"]`);
+  await ev(`document.activeElement.select(); return 1`);
+  await send('Input.insertText', { text: 'CN(40000)' });
+  await tap('이대로 저장', '#dayFormText');
+  await sleep(900);
+  eq('이 병동 양식으로 저장됐다', await ev(`const f=window.__app.store.dayForm; return !!(f&&f.edited)`), true);
+  await tap('배정표', '.topbar');
+  await sleep(400);
+  await tapSel(`#wkTable th.day[data-iso="${dayIso}"]`);
+  await sleep(1000);
+  const paper4 = await ev(`return document.querySelector('#dayPreview .hsheet').textContent`);
+  ok('고친 자리 이름이 종이에 나온다', paper4.includes('CN(40000)') && !paper4.includes('CN(48455)'), paper4.slice(0, 160));
   await tap('← 배정표');
   await sleep(300);
 

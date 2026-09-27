@@ -131,10 +131,13 @@ await page.evaluate(()=>{
   const R={}, res=['R1','R2','R3','R4'];
   for(let d=new Date(2026,7,30),i=0;d<=new Date(2026,9,3);d=addDays(d,1),i++) R[isoOfD(d)]=res[i%4];
   R['2026-09-30']='이황';
-  store.duty={lines:{},roster:{'OS 당직':R},book:{'OS 당직':[
+  store.duty={lines:{'GS 당직':{fixed:{phone:'010-0000-9999',ext:''}}},
+    roster:{'OS 당직':R,'GS 당직':{'2026-09-14':'장영실'},'당직진료지원간호사':{'2026-09-14':'허난설'}},
+    book:{'OS 당직':[
     {name:'R4 유성룡',phone:'010-0000-0004',ext:''},{name:'R3 정약용',phone:'010-0000-0003',ext:''},
     {name:'R2 김정호',phone:'010-0000-0002',ext:''},{name:'R1 안창호',phone:'010-0000-0001',ext:''},
-    {name:'신사임당',phone:'010-0000-0010',ext:''}]}};
+    {name:'신사임당',phone:'010-0000-0010',ext:''}],
+    '당직진료지원간호사':[{name:'허난설',phone:'010-0000-0100',ext:'48001'},{name:'황진이',phone:'010-0000-0101',ext:'48002'}]}};
 });
 
 // ── 18. 하루 어싸인표 (한글 양식) — 교육이 있는 월요일, 당직은 당직표에서 ──
