@@ -332,14 +332,15 @@ async function main() {
       out.push({id:A.WIZ[i].id, body:document.querySelector('#wizBody').innerHTML.length,
                 num:document.querySelector('#wizNum').textContent}); }
     A.closeWizard(); return out;`);
+  // 요일별 필요 인원 단계는 없다 — 완성된 근무표를 받으므로 인원을 재지 않는다 (2026-09-27, 결정 2-28)
   eq('마법사 단계 순서', wiz.map(w => w.id),
-    ['ward', 'scheme', 'req', 'paste', 'codes', 'caps', 'done']);
+    ['ward', 'scheme', 'paste', 'codes', 'caps', 'done']);
   ok('단계마다 본문이 그려진다 (패널 id 가 어긋나면 빈다)',
     wiz.every(w => w.body > 200), JSON.stringify(wiz.map(w => [w.id, w.body])));
-  eq('진행도 표시', wiz[2].num, '3 / 7 단계');
+  eq('진행도 표시', wiz[2].num, '3 / 6 단계');
 
   // 붙여넣기 단계만 전체 화면을 빌려 쓰고, 확정하면 마법사로 돌아온다
-  const trip = await ev(`const A=window.__app; A.startWizard(3); A.wizPaste();
+  const trip = await ev(`const A=window.__app; A.startWizard(A.WIZ.findIndex(w=>w.id==='paste')); A.wizPaste();
     const away=!document.querySelector('#wiz').classList.contains('on')
       && document.querySelector('#scrPaste').style.display!=='none';
     A.ingestGrid([['이름','9/1','9/2'],['홍길동','D','E'],['김영숙','E','N']]);
@@ -349,7 +350,7 @@ async function main() {
     A.closeWizard();
     return {away, back, at};`);
   ok('붙여넣기는 전체 화면으로 넘어간다', trip.away, JSON.stringify(trip));
-  ok('확정하면 마법사 다음 단계로 돌아온다', trip.back && trip.at === '5 / 7 단계', JSON.stringify(trip));
+  ok('확정하면 마법사 다음 단계로 돌아온다', trip.back && trip.at === '4 / 6 단계', JSON.stringify(trip));
 
   // ── 10. 화면 상태는 데이터 파일에 ──────────────────────────────────────
   // 병원 PC 는 브라우저를 닫을 때 사이트 데이터를 지우는 경우가 많다.
@@ -373,29 +374,47 @@ async function main() {
     return {숨김저장:a, 되돌림:!A.store.ui.obHidden};`);
   ok('숨기기·되돌리기가 데이터 파일에 남는다', uiKeep.숨김저장 && uiKeep.되돌림, JSON.stringify(uiKeep));
 
-  // ── 11. 요일별 필요 인원을 근무표에서 역산 ────────────────────────────
-  // 기본값이 101 기준이라 다른 병동은 배정표에서 '인원이 필요 인원과 다릅니다' 를
-  // 매주 본다. 고칠 곳으로 데려가는 길이 없었다.
-  step('11 필요 인원 역산');
-  const fit = await ev(`const A=window.__app; const s=A.store;
+  // ── 11. 필요 인원은 재지 않는다 ────────────────────────────────────────
+  // 이 도구는 완성된 근무표를 받는다 — 인원이 맞는지는 근무표를 짤 때 정해졌다 (2026-09-27, 결정 2-28).
+  // 예전엔 요일별 필요 인원을 두고 확인 카드·고치기 화면에서 '인원이 다릅니다'를 띄웠다.
+  step('11 필요 인원 없음');
+  const noReq = await ev(`const A=window.__app; const s=A.store;
+    s.req={mon:{D:9,E:9,N:9}};                         // 옛 파일 흉내
     s.order=['가','나','다','라','마','바'];
-    s.cells={}; s.order.forEach(n=>s.cells[n]={});
-    // 2026-09-06(일) ~ 09-12(토) — 일요일만 D2, 나머지 요일은 D3 로 넣는다
+    s.cells={}; s.unit={}; s.order.forEach(n=>s.cells[n]={});
+    // 2026-09-06(일) ~ 09-12(토) — 매일 D 2 · E 2 · N 1 (옛 기본값과 모두 다르다)
     const days=['2026-09-06','2026-09-07','2026-09-08','2026-09-09','2026-09-10','2026-09-11','2026-09-12'];
-    days.forEach((iso,i)=>{ const nD=i===0?2:3;
-      s.order.forEach((n,k)=>{ s.cells[n][iso] = k<nD?'D' : k<nD+2?'E' : k<nD+3?'N':'OF'; }); });
-    A.store=s; A.recompute();
-    const sug=A.reqFromSchedule();
-    return {일:sug.sun, 월:sug.mon, 토:sug.sat};`);
-  eq('일요일은 근무표대로 D 2명', fit.일.D, 2);
-  eq('월요일은 D 3명', fit.월.D, 3);
-  eq('E·N 도 센다', [fit.월.E, fit.월.N], [2, 1]);
+    days.forEach(iso=>s.order.forEach((n,k)=>{ s.cells[n][iso]=['D','D','E','E','N','OF'][k]; }));
+    A.store=s; A.migrateStore(); A.recompute(); A.wkSunday=new Date(2026,8,6); A.show('week');
+    const warn=(document.querySelector('#wkWarn')||{}).textContent||'';
+    A.show('admin'); const menu=(document.querySelector('#adminNav')||{}).textContent||'';
+    A.show('edit');
+    const foot=[...document.querySelectorAll('#wrap tfoot td')].map(e=>e.textContent).filter(Boolean);
+    const out={옛값:'req' in A.store, 카드:/필요 인원|인원이/.test(warn),
+      관리:!!A.ADMIN_PANELS.req||/필요 인원/.test(menu), 칩:!!document.querySelector('#edMis'),
+      숫자만:foot.length>0&&foot.every(t=>/^[0-9]+$/.test(t))};
+    A.show('week'); return out;`);
+  eq('필요 인원을 어디서도 재지 않는다', noReq, { 옛값: false, 카드: false, 관리: false, 칩: false, 숫자만: true });
 
-  const fitted = await ev(`const A=window.__app;
-    const before=JSON.parse(JSON.stringify(A.store.req));
-    A.fitReqToSchedule();
-    return {전:before.sun.D, 후:A.store.req.sun.D, 월:A.store.req.mon.D};`);
-  ok('맞추면 store.req 가 바뀐다', fitted.후 === 2 && fitted.월 === 3, JSON.stringify(fitted));
+  // 방 구성 주간 계획표는 인원수 탭을 따른다 — 필요 인원이 없으니 '그 근무가 n명인 날'의 표
+  const plan = await ev(`const A=window.__app; const s=A.store;
+    s.presets={5:[],4:[{id:'pz',name:'회진일',rooms:JSON.parse(JSON.stringify(s.schemes[4]||{}))}],3:[],2:[]};
+    s.presetPlan={}; s.presetDay={}; A.store=s;
+    A.show('admin'); A.pickAdmin('schemes');
+    A.presetUI.cnt=5; A.renderSchemes();
+    const five=(document.querySelector('#planBox')||{}).textContent||'';
+    const fiveSel=document.querySelectorAll('#planTable select').length;
+    A.presetUI.cnt=4; A.renderSchemes();
+    const sel=document.querySelector('#planTable select');
+    const title=sel?sel.title:'';
+    // 화요일 D 칸 = 표의 D 줄 세 번째 칸 (일·월·화)
+    const tueD=document.querySelectorAll('#planTable tr')[1].querySelectorAll('select')[2];
+    tueD.value='pz'; tueD.dispatchEvent(new Event('change',{bubbles:true}));
+    const saved=((A.store.presetPlan.tue||{}).D||{})[4];
+    const used=(A.presetFor('D',4,'2026-09-08')||{}).id, other=(A.presetFor('D',5,'2026-09-08')||{}).id;
+    A.presetUI.cnt=5; A.show('week');
+    return {기본뿐:/기본.*하나뿐/.test(five)&&fiveSel===0, 제목:/4명일 때/.test(title), 저장:saved, 화D4:used, 화D5:other};`);
+  eq('주간 계획표가 인원수 탭을 따른다', plan, { 기본뿐: true, 제목: true, 저장: 'pz', 화D4: 'pz', 화D5: 'default' });
 
   // ── 12. 규칙과 다른 병동 병실 ─────────────────────────────────────────
   // 122 는 실제로 51~63 + 70 (64 없음). 규칙만 쓰면 병동이 손으로 고쳐야 했다.
@@ -623,7 +642,7 @@ async function main() {
     const d1=id=>(document.getElementById(id)||{}).textContent||'';
     return {order, heads, foot, 달:(document.querySelector('#edTitle')||{}).textContent,
       병동D:d1('cnt-D-0'), SU_D:d1('cnt-SU-D-0'),
-      역산:(A.reqFromSchedule()||{}).mon, 후보:A.offCandidates('2026-09-07','N').map(c=>c.n)};`);
+      후보:A.offCandidates('2026-09-07','N').map(c=>c.n)};`);
   eq('SU 는 명부 뒤쪽에 모인다 (소속 안 순서는 그대로)', vis.order,
     ['가병동','나병동','다병동','가에스유','나에스유']);
   eq('근무표 고치기에 구역 머리줄이 있다', vis.heads, ['병동 —', 'SU —']);
@@ -631,8 +650,7 @@ async function main() {
     vis.foot.includes('병동 D 인원') && vis.foot.includes('SU D'), JSON.stringify(vis.foot));
   // SU 2명 + 병동 2명이 D — 같이 세면 4 가 된다
   ok('병동 D 인원에 SU 가 섞이지 않는다', /^2/.test(vis.병동D), vis.병동D+' @'+vis.달);
-  ok('SU D 는 칸 수(1)와 비교한다', vis.SU_D === '2/1', vis.SU_D);
-  eq('필요 인원 역산도 병동만 센다', vis.역산 && vis.역산.D, 2);
+  eq('SU D 도 숫자만 (칸 수와 견주지 않는다 — 넘치면 배정표 확인 카드가 알린다)', vis.SU_D, '2');
   ok('쉬는 사람 후보에 SU 가 없다', !vis.후보.some(n => /에스유/.test(n)), JSON.stringify(vis.후보));
 
   const pick = await ev(`const A=window.__app; A.wkSunday=new Date(2026,8,6); A.show('week');
@@ -654,19 +672,12 @@ async function main() {
     A.confirmPaste(); return A.store.unit;`);
   eq('제목 없는 두 번째 표도 서식의 소속 이름으로 가른다', untitled, { '가에스유': 'SU' });
 
-  // 필요 인원을 손댄 적 없으면 처음 넣은 근무표에 맞춘다 — 안 그러면 넣자마자 매일 빨갛다
-  const autoFit = await ev(`const A=window.__app; const s=A.store; s.cells={}; s.order=[]; s.unit={};
-    s.req=JSON.parse(JSON.stringify(A.DEFAULT_REQ)); A.store=s;
-    // 날짜 칸이 3개는 돼야 날짜 줄로 알아본다
+  // 붙여넣기는 필요 인원을 만들거나 맞추지 않는다 (결정 2-28)
+  const pasted = await ev(`const A=window.__app; const s=A.store; s.cells={}; s.order=[]; s.unit={}; A.store=s;
     A.ingestGrid([['이름','9/7','9/8','9/9','9/10'],['가병동','D','D','D','D'],['나병동','D','D','D','D'],
                   ['다병동','E','E','E','E'],['라병동','N','N','N','N']]);
-    A.confirmPaste(); const first=JSON.parse(JSON.stringify(A.store.req.mon));
-    // 이번엔 손댄 값 — 건드리면 안 된다
-    const s2=A.store; s2.req.mon={D:9,E:9,N:9}; A.store=s2;
-    A.ingestGrid([['이름','9/14','9/15','9/16','9/17'],['가병동','D','D','D','D']]); A.confirmPaste();
-    return {first, second:A.store.req.mon};`);
-  eq('기본값 그대로면 근무표에 맞춘다', autoFit.first, { D: 2, E: 1, N: 1 });
-  eq('손댄 값은 건드리지 않는다', autoFit.second, { D: 9, E: 9, N: 9 });
+    A.confirmPaste(); return {req:'req' in A.store, 사람:A.store.order.length};`);
+  eq('붙여넣기가 필요 인원을 만들지 않는다', pasted, { req: false, 사람: 4 });
   await ev(`window.__app.setFormId('101'); return 1`);
 
   // ── 22. 화면 인쇄가 없는 서식은 101 인쇄 틀로 빠지지 않는다 ──────────

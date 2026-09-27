@@ -4,7 +4,7 @@
  * "버튼이 실제로 눌리는가"는 못 본다. 여기서는 좌표로 마우스를 눌러 클릭하고,
  * 진짜 paste 이벤트를 쏘고, 브라우저가 내려받은 xlsx 파일을 열어 확인한다.
  *
- *   처음 켜기 → 마법사 7단계(병동·방구성·필요인원·근무표 붙여넣기·표기·가능근무)
+ *   처음 켜기 → 마법사 6단계(병동·방구성·근무표 붙여넣기·표기·가능근무)
  *   → 배정표가 뜨는지 → 휴무자 투입 → 엑셀로 내보내기 → 받은 파일 열어 보기
  *
  * 저장만 memoryMode 를 쓴다 — file:// 헤드리스에서는 파일 선택창을 띄울 수 없다.
@@ -157,12 +157,11 @@ try {
   eq('병실 14개가 자동으로 찼다', await ev('return window.__app.store.rooms.length'), 14);
   await tap('다음', '#wizFoot');
 
-  step('3 방 구성 · 4 필요 인원');
-  await tap('다음', '#wizFoot');
+  step('3 방 구성');
   await tap('다음', '#wizFoot');
   eq('근무표 붙여넣기 단계', await ev(`return document.querySelector('#wizTitle').textContent`), '근무표를 넣어 주세요');
 
-  step('5 근무표 붙여넣기');
+  step('4 근무표 붙여넣기');
   await tap('근무표', '#wizBody').catch(() => tap('넣기', '#wizBody'));
   await sleep(250);
   await ev(`const dt=new DataTransfer(); dt.setData('text/plain', ${JSON.stringify(schedule())});
@@ -175,7 +174,7 @@ try {
   ok('간호사 16명이 들어왔다', (await ev('return window.__app.store.order.length')) === 16,
      await ev('return window.__app.store.order.length'));
 
-  step('6 표기 · 7 가능 근무');
+  step('5 표기 · 6 가능 근무');
   if (await ev(`return document.querySelector('#wiz').classList.contains('on')?
       document.querySelector('#wizTitle').textContent:''`) === '모르는 표기가 있나요?')
     await tap('다음', '#wizFoot');
@@ -216,14 +215,14 @@ try {
   await tap('배정표 보기', '#wizFoot');
   await sleep(400);
 
-  step('8 배정표 화면');
+  step('7 배정표 화면');
   ok('마법사가 닫혔다', !(await ev(`return document.querySelector('#wiz').classList.contains('on')`)), '열린 채');
   const wk = await ev(`const t=document.querySelector('#wkTable');
     return {줄:t?t.querySelectorAll('tr').length:0, 이름:t?t.querySelectorAll('td.nm').length:0};`);
   ok('배정표에 줄이 그려졌다', wk.줄 > 10, JSON.stringify(wk));
   ok('배정표에 이름이 찼다', wk.이름 > 40, JSON.stringify(wk));
 
-  step('9 엑셀로 내보내기');
+  step('8 엑셀로 내보내기');
   await tap('엑셀');
   for (let i = 0; i < 40 && !(existsSync(DOWN) && readdirSync(DOWN).some(f => f.endsWith('.xlsx'))); i++) await sleep(250);
   const got = existsSync(DOWN) ? readdirSync(DOWN).filter(f => f.endsWith('.xlsx')) : [];
@@ -239,7 +238,7 @@ try {
     ok('내보낸 주가 오늘이 든 주다', got[0].includes(`배정표_${sun}~`), `${got[0]} / 오늘 주 ${sun}`);
   }
 
-  step('10 받은 파일 열어 보기');
+  step('9 받은 파일 열어 보기');
   if (got.length) {
     const file = join(DOWN, got[0]);
     // 테두리 검사기를 그대로 다시 쓴다 — 양식이 아니라 '내보낸 결과물'에 구멍이 없는지
@@ -274,7 +273,7 @@ try {
       screen.length > 8, `파일 ${cells.이름.length}명 / 화면 ${screen.length}명`);
   }
 
-  step('11 화면에서 난 오류');
+  step('10 화면에서 난 오류');
   eq('콘솔 오류 없음', await ev('return window.__errs.slice(0,5)'), []);
 
 } catch (e) {

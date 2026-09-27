@@ -304,7 +304,6 @@
   .statChip .sl{font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--ink-3)}
   .statChip .sv{font-size:13px;font-weight:700;color:var(--ink)}
   .statChip .ssep{width:1px;height:12px;background:var(--paper-3)}
-  .statChip #edMis{font-size:13px;font-weight:800}
   .lgdBar{display:flex;align-items:center;gap:18px;padding:11px 16px;border-radius:12px;background:var(--card);
     box-shadow:0 0 0 1px var(--rule);flex-wrap:wrap;margin-bottom:12px}
   .lgdBar .lg{display:flex;align-items:center;gap:8px}
@@ -333,6 +332,7 @@
     box-shadow:inset -1px 0 0 var(--rule),inset 0 -1px 0 var(--rule-faint);cursor:pointer}
   #wrap tfoot td,#wrap tfoot th{position:sticky;bottom:0;z-index:3;background:var(--card-warm);height:28px;font-size:11px;
     font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 var(--rule)}
+  #wrap tfoot td{color:var(--ink-2);font-weight:600}   /* 그날 근무자 수 — 숫자만, 필요 인원과 견주지 않는다 */
   #wrap tfoot th.nm{z-index:4;font-size:11px;font-weight:800;
     box-shadow:inset -1px 0 0 var(--rule),inset 0 1px 0 var(--rule)}
   #wrap td.cell{cursor:cell;user-select:none;font-weight:800;box-shadow:inset 0 -1px 0 var(--rule-faint)}
@@ -822,7 +822,6 @@
     </div>
     <div class="statChip">
       <span class="sl">이번 달</span><span class="sv" id="edStat"></span>
-      <span class="ssep"></span><span id="edMis"></span>
     </div>
     <span style="margin-left:auto;display:flex;gap:8px">
       <button class="act" onclick="undoEdit()">되돌리기</button>
@@ -1269,7 +1268,7 @@ function wardOfRooms(rooms){
  * 데이터 저장소 — 이 컴퓨터의 데이터 파일 하나 (File System Access API). 각 병동은 컴퓨터 한 대에 파일 하나 — 공유·동기화 없음 (2026-09-17)
  * store = {order, cells:{name:{iso:code}}, ovr:{iso:{P:{name:label}}},
  *          events:{iso:text}, seedManual:{name:{label,period}},
- *          caps:{name:[가능근무]}, req:{요일:{D,E,N}}, rooms:[[호실,병상수]],
+ *          caps:{name:[가능근무]}, rooms:[[호실,병상수]],
  *          banRooms:{name:[호실]}, schemes, rules, rev}
  * ════════════════════════════════════════════════════════════════ */
 const $=s=>document.querySelector(s);
@@ -1341,7 +1340,7 @@ $('#modal').addEventListener('mousedown',e=>{ if(e.target.id==='modal') closeMod
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260927d'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260927e'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1349,8 +1348,8 @@ const ABOUT={
 };
 const buildLabel=()=>ABOUT.name+' '+BUILD.ver;
 const ALL_CAPS=['DC','D','EC','E','NC','N'];
-const DEFAULT_REQ={mon:{D:4,E:5,N:3},tue:{D:5,E:5,N:3},wed:{D:5,E:5,N:3},thu:{D:5,E:5,N:3},
-  fri:{D:5,E:4,N:3},sat:{D:4,E:3,N:2},sun:{D:3,E:4,N:3}};   // 토 4/3/2 — 본 앱 제1원칙 4 와 같게 (2026-09-17)
+/* 요일별 필요 인원(옛 store.req)은 두지 않는다 — 이 도구는 **완성된 근무표**를 받아 방만 나눈다. 인원이 맞는지는
+ * 근무표를 짤 때 이미 정해졌고, 여기서 다시 재면 병동마다 기본값과 달라 '인원이 다릅니다'만 매주 뜬다 (2026-09-27, 결정 2-28) */
 /* ── 배정표 서식 (2026-09-17, 사용자 요청: 101병동·122병동 서식 중 고르고 각각 문구를 고칠 수 있게) ──
  * 프로그램에 두 벌이 들어 있다 — 101(병실 배정표.xlsx: 요일마다 방·이름 두 칸)·122(병실 배정표_122.xlsx: 요일마다
  * 이름·메모 두 칸, 방 열은 일·월~금·토 세 곳). 어느 것을 쓰는지 = store.formId, 서식마다 고친 문구·올린 파일 =
@@ -1417,7 +1416,7 @@ const uiGet=k=>!!(store&&store.ui&&store.ui[k]);
 function uiSet(k,v){ if(!store) return; store.ui=store.ui||{};
   if(v) store.ui[k]=1; else delete store.ui[k]; touch(); }
 function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{},roomOv:{},events:{},
-  seedManual:{},caps:{},unit:{},alias:{},custom:{},nameAlias:{},trainee:{},trOv:{},req:JSON.parse(JSON.stringify(DEFAULT_REQ)),
+  seedManual:{},caps:{},unit:{},alias:{},custom:{},nameAlias:{},trainee:{},trOv:{},
   rooms:DEFAULT_ROOMS.map(r=>r.slice()),ward:'101',wardPicked:false,banRooms:{},formId:'101',forms:{},
   schemes:JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
   ui:{},   // 화면 상태(인쇄함·시작안내 숨김·처음안내 봄) — localStorage 가 아니라 여기에 (2026-09-20)
@@ -1431,7 +1430,7 @@ function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무
     for(const n in store.charge) if(store.charge[n]===false) store.caps[n]=['D','E','N'];
     delete store.charge;
   }
-  if(!store.req) store.req=JSON.parse(JSON.stringify(DEFAULT_REQ));
+  delete store.req;   // 옛 파일의 요일별 필요 인원 — 더는 쓰지 않는다 (결정 2-28)
   if(!store.rooms||!store.rooms.length) store.rooms=DEFAULT_ROOMS.map(r=>r.slice());
   if(!store.banRooms) store.banRooms={};
   if(!store.alias) store.alias={};
@@ -2501,18 +2500,16 @@ if(SIDE_MQ&&SIDE_MQ.addEventListener) SIDE_MQ.addEventListener('change',()=>{
 const WARN_FIX={
   caps:['간호사 관리 열기',"show('admin');pickAdmin('caps')",'⚙ 관리 > 간호사 관리 — 가능 근무(DC·EC·NC 포함)와 주지 않을 방'],
   schemes:['방 구성 열기',"show('admin');pickAdmin('schemes')",'⚙ 관리 > 방 구성 — 인원수별 자리마다 보는 방'],
-  req:['필요 인원 열기',"show('admin');pickAdmin('req')",'⚙ 관리 > 요일별 필요 인원 — 인원 차이를 재는 기준'],
 };
-/* 이번 주 확인 카드 — 빨강(규칙 위반·인쇄 누락·금지 방·방 누락/겹침·차지 자격)과 노랑(안내: 인원·헬퍼·신규·근무표 없는 날)을
+/* 이번 주 확인 카드 — 빨강(규칙 위반·인쇄 누락·금지 방·방 누락/겹침·차지 자격)과 노랑(안내: 헬퍼·신규·근무표 없는 날)을
  * 나눠 보여준다. 같은 종류는 사람별·내용별로 한 줄에 묶고, 6줄이 넘으면 접는다 — 카드 15줄에 배정표가 화면 밖으로
  * 밀리던 것 (2026-09-17 전수조사). 빈 주에도 불러 지난 주 카드가 남지 않게 한다. */
 let wkWarnOpen=false, wkWarnAll=false;   // 접힘이 기본 — 표가 먼저 보여야 한다
 function renderWeekWarnings(days,infos){
   const wb=$('#wkWarn');
   const w=[]; const push=(lv,html,fix)=>w.push({lv,html,fix});
-  const WK=['sun','mon','tue','wed','thu','fri','sat'];
   const md=iso=>iso.slice(5,7)+'/'+iso.slice(8,10);
-  const capMiss={}, chgMiss=[], short=[], trMiss={}, roomIssue={}, noSched=[];
+  const capMiss={}, chgMiss=[], trMiss={}, roomIssue={}, noSched=[];
   const allRooms=(store.rooms||[]).map(r=>String(r[0]));
   const allBeds=expandBeds(allRooms);              // 병상 단위 — 나눠 본 방도 빠짐없이 센다
   const anyDay=infos.some(Boolean);
@@ -2546,9 +2543,7 @@ function renderWeekWarnings(days,infos){
       // 차지 자격 — 차지 표기(DC 등) 없이 자동으로 뽑힌 사람이 차지 가능이 아니면 (표기가 있으면 위 '가능 근무' 경고가 맡는다)
       const ch=day[P].labels['차지'];
       if(ch){ const pc=parseCellRaw((store.cells[ch]||{})[iso]||''); if(pc&&pc.code&&!/C$/.test(pc.code)&&!capsOf(ch).includes(P+'C')) chgMiss.push(`${md(iso)} ${P} ${esc(ch)}`); }
-      // 인원 — 요일별 필요 인원과 다르면 (기준은 관리 > 요일별 필요 인원)
-      const need=(store.req[WK[d.getDay()]]||{})[P];
-      if(need!=null&&cnt!==need) short.push(`${md(iso)} ${P} ${cnt}명(필요 ${need})`+(cnt<need?` <button class="inl" title="쉬는 사람 중에서 골라 이 근무에 넣습니다" onclick="addWorker('${iso}','${P}')">＋ 넣기</button>`:''));
+      // 인원은 재지 않는다 — 완성된 근무표를 받는다 (결정 2-28). 양식 칸을 넘는 것만 위에서 알린다(인쇄에서 사라지므로)
       for(const T of unattachedTrainees(iso,P,day)) (trMiss[T]=trMiss[T]||[]).push({iso,P,workers:[...Object.values(day[P].labels),...day[P].extra]});
       // 방 — 아무도 안 보는 방·두 자리가 겹치는 방 (같은 내용은 날짜·시간대를 묶어 한 줄)
       // 방 칸이 없는 서식(102·82)은 방을 사람이 짜므로 묻지 않는다 — 고칠 길도 없는 경고는 소음이다
@@ -2571,7 +2566,6 @@ function renderWeekWarnings(days,infos){
   for(const nm in capMiss) push('err',`${esc(nm)} — ${capMiss[nm].join(', ')}: 가능 근무가 아닙니다. 관리 > 간호사 관리에서 확인하세요.`,'caps');
   if(chgMiss.length) push('err',`차지 가능한 사람이 없어 자격 없이 차지가 됐습니다 — ${chgMiss.join(', ')}. 관리 > 간호사 관리에서 DC·EC·NC 를 확인하세요.`,'caps');
   for(const key in roomIssue){ const L=roomIssue[key]; push('err',`${L.length>=15?'이번 주 대부분':L.join(', ')} — ${key}. 관리 > 방 구성(또는 그날 방 수정)을 확인하세요.`,'schemes'); }
-  if(short.length) push('warn',`인원이 필요 인원과 다릅니다 — ${short.join(' · ')}. 기준은 관리 > 요일별 필요 인원.`,'req');
   if(noSched.length){ const a=noSched[0], b=noSched[noSched.length-1];
     push('warn',`${md(a)}${a!==b?'~'+md(b):''} 근무표가 없습니다 — 다음 달 근무표를 넣으면 채워집니다. <button class="inl" onclick="show('paste')">새 근무표 넣기</button>`); }
   for(const T in trMiss){
@@ -2592,7 +2586,7 @@ function renderWeekWarnings(days,infos){
     if(side&&anyDay){
       wb.style.display='flex'; wb.classList.remove('soft','shut'); wb.classList.add('okay');
       wb.innerHTML=`<div class="wsHead"><span class="cnt">✓</span><span class="ttl">이번 주 확인할 것 없음</span></div>`+
-        `<div class="okSub">가능 근무·차지·인원${formNoRooms()?'':'·방 구성'}·신규 간호사를 살펴봤고 걸리는 것이 없습니다.</div>`;
+        `<div class="okSub">가능 근무·차지${formNoRooms()?'':'·방 구성'}·신규 간호사를 살펴봤고 걸리는 것이 없습니다.</div>`;
       return;
     }
     wb.style.display='none'; wb.innerHTML=''; wb.classList.remove('soft'); return;
@@ -3443,23 +3437,16 @@ function confirmPaste(){
   if(pending.adoptOrder)                               // 명부 순서를 이 표의 순서로 (없는 사람은 뒤에 그대로)
     store.order=[...pending.names,...store.order.filter(n=>!pending.names.includes(n))];
   groupUnits();
-  // 필요 인원을 손댄 적이 없으면(=101 기준 기본값 그대로) 방금 넣은 근무표에 맞춘다.
-  // 안 그러면 다른 병동은 넣자마자 '인원 안 맞는 날 30일' 을 빨갛게 본다 — 고장처럼 보인다.
-  if(Object.keys(DEFAULT_REQ).every(k=>['D','E','N'].every(P=>(store.req[k]||{})[P]===DEFAULT_REQ[k][P]))){   // 키 순서가 달라도 같은 값이면 기본값
-    const sug=reqFromSchedule();
-    if(sug){ for(const k in sug) for(const P of ['D','E','N']) store.req[k][P]=sug[k][P]; pending.reqFit=true; }
-  }
   touch(); recompute();
   // 오늘이 넣은 기간 안이면 오늘 주로 — 이번 달 근무표를 중간에 넣었는데 첫 주가
   // 뜨면 매번 [오늘]을 눌러야 한다. 다음 달 것을 미리 넣은 때만 그 첫 주로 간다.
   const today=isoOfD(new Date());
   const d=new Date((today>=pending.minIso&&today<=pending.maxIso?today:pending.minIso)+'T00:00:00');
   wkSunday=addDays(d,-d.getDay());
-  const fitted=!!pending.reqFit;
   resetPaste();
   if(wizResume()) return;          // 마법사 중이면 다음 단계로 (전체 화면은 붙여넣기에만 빌려 준다)
   show('week');
-  toast(fitted?'저장했습니다 — 요일별 필요 인원도 이 근무표에 맞췄습니다 (관리에서 고칠 수 있습니다)':'저장했습니다',fitted?4600:2800,true);   // show() 뒤 — 화면 전환이 알림을 지우지 않게
+  toast('저장했습니다',2800,true);   // show() 뒤 — 화면 전환이 알림을 지우지 않게
 }
 /* 엑셀이 클립보드에 넣는 글자를 격자로.
  * 탭으로 칸, 줄바꿈으로 줄을 나누지만 **칸 안에 줄바꿈·탭·따옴표가 있으면 그 칸을
@@ -3538,7 +3525,7 @@ let edY=new Date().getFullYear(), edM=new Date().getMonth()+1, edDays=31;
 let sel={r:0,c:0,r2:0,c2:0}, dragging=false, cellEls=[];
 const undoStack=[];
 const edIso=c=>edY+'-'+pad2(edM)+'-'+pad2(c+1);
-let edRows=[], edToday=-1, edMisList=[];   // 화면 줄 → 명부 index (전출 간호사는 그 달에 근무가 없으면 줄을 뺀다) · 오늘 열 · 인원 안 맞는 날
+let edRows=[], edToday=-1;   // 화면 줄 → 명부 index (전출 간호사는 그 달에 근무가 없으면 줄을 뺀다) · 오늘 열
 const edName=r=>store.order[edRows[r]];
 function edVisibleRows(){
   const pre=edY+'-'+pad2(edM)+'-';
@@ -3627,35 +3614,13 @@ function paintEdit(){
       if(u){ const o=(cntU[u]=cntU[u]||{D:Array(edDays).fill(0),E:Array(edDays).fill(0),N:Array(edDays).fill(0)}); o[b][c]++; }
       else cnt[b][c]++; }
   }
-  // 소속 인원 — 필요 수는 그 서식의 그 소속 칸 수
-  for(const u in cntU) for(const k of ['D','E','N']) for(let c=0;c<edDays;c++){
-    const el=document.getElementById(`cnt-${u}-${k}-${c}`); if(!el) continue;
-    const need=slotsOf(k).filter(x=>x===u).length, got=cntU[u][k][c];
-    el.textContent=got||''; el.title=need?`${u} 칸 ${need}개`:'';
-    if(need&&got!==need){ el.style.color='var(--err)'; el.style.fontWeight='800'; el.textContent=got+'/'+need; }
-    else{ el.style.color='var(--ink-2)'; el.style.fontWeight='600'; }
-  }
-  const WKMAP=['sun','mon','tue','wed','thu','fri','sat'];
-  const misDays=new Set();
-  for(const k of ['D','E','N']) for(let c=0;c<edDays;c++){
-    const el=$(`#cnt-${k}-${c}`); if(!el) continue;
-    const need=store.req[WKMAP[new Date(edY,edM-1,c+1).getDay()]][k];
-    el.textContent=cnt[k][c]||'';
-    el.title=`필요 ${need}명`;
-    if(cnt[k][c]!==need&&(cnt[k][c]||need)){   // 미달·초과 = 빨강 (xlsm 조건부서식과 동일)
-      el.style.color='var(--err)'; el.style.fontWeight='800';
-      el.textContent=(cnt[k][c]||0)+'/'+need;
-      misDays.add(c);
-    } else { el.style.color='var(--ink-2)'; el.style.fontWeight='600'; }
-  }
-  // 툴바 상태 칩 — 안 맞는 날 칩을 누르면 다음 안 맞는 날로 간다
+  // 맨 아래 줄 = 그날 D·E·N 근무자 수 (숫자만). 필요 인원과 견주지 않는다 — 이 도구는 완성된 근무표를 받는다 (결정 2-28)
+  const put=(el,n)=>{ if(!el) return; const t=n?String(n):''; if(el.textContent!==t) el.textContent=t; };
+  const units=hasUnits()?[...new Set(store.order.map(unitOfName).filter(Boolean))]:[];
+  for(const u of units) for(const k of ['D','E','N']) for(let c=0;c<edDays;c++)
+    put(document.getElementById(`cnt-${u}-${k}-${c}`),((cntU[u]||{})[k]||[])[c]);
+  for(const k of ['D','E','N']) for(let c=0;c<edDays;c++) put($(`#cnt-${k}-${c}`),cnt[k][c]);
   $('#edStat').textContent=`${edRows.length}명 · ${edRows.length*edDays}칸`;
-  const mis=$('#edMis');
-  edMisList=[...misDays].sort((a,b)=>a-b);
-  if(misDays.size){ mis.textContent=`인원 안 맞는 날 ${misDays.size}일 ›`; mis.style.color='var(--err)'; mis.style.cursor='pointer'; mis.title='누르면 다음 안 맞는 날로 갑니다'; }
-  else{ mis.textContent='정원 맞음'; mis.style.color='var(--ok)'; mis.style.cursor=''; mis.title=''; }
-  mis.onclick=()=>{ if(!edMisList.length) return; const c=edMisList.find(x=>x>sel.c)??edMisList[0];
-    sel={r:sel.r,c,r2:sel.r,c2:c}; paintEdit(); const td=cellEls[sel.r]&&cellEls[sel.r][c]; if(td) td.scrollIntoView({block:'nearest',inline:'center'}); };
 }
 const rect=()=>({r1:Math.min(sel.r,sel.r2),r2:Math.max(sel.r,sel.r2),
                  c1:Math.min(sel.c,sel.c2),c2:Math.max(sel.c,sel.c2)});
@@ -3907,7 +3872,7 @@ const undoEdit=undoAny;
 let adminPanel='weekx';
 const ADMIN_NAV=[
   ['자주 쓰는',[['weekx','주간 배정표 내려받기'],['seed','지난 어싸인 직접 입력']]],
-  ['우리 병동',[['rooms','병실 목록'],['schemes','방 구성'],['req','요일별 필요 인원'],['codes','근무 표기'],['form','배정표 양식']]],
+  ['우리 병동',[['rooms','병실 목록'],['schemes','방 구성'],['codes','근무 표기'],['form','배정표 양식']]],
   ['간호사',[['caps','간호사 관리']]],
   ['배정 규칙',[['rules','배정 원칙'],['manual','수동 수정 관리']]],
   ['데이터',[['data','데이터 보관']]],
@@ -4081,20 +4046,7 @@ const ADMIN_PANELS={
     desc:'근무 인원수(2~5인)별로 자리마다 맡을 방을 정합니다. 인원수마다 <b>프리셋</b>을 여러 개 만들어 두고, 아래 <b>주간 계획표</b>에서 요일·근무별로 어느 것을 쓸지 고르세요. 배정표에서 그날만 바꿀 수도 있습니다. 호수만 짧게 적으세요 — 1라인 <b>1~14</b>, 2라인 <b>51~64</b> (예: <code>1~3, 12</code>). 한 방을 둘이 나눠 볼 때는 <b>병상</b>까지 적습니다 — <code>4:1~3</code>(4호 1~3번 병상) · <code>4:4, 4:5</code>.',
     aux:`<button onclick="resetSchemes()" title="'기본' 프리셋 4벌을 프로그램 기본 나눔으로 되돌립니다 — 다른 프리셋은 그대로">기본 프리셋 복원</button>`,
     body(){ return `<div id="schemes"></div><div id="planBox" style="margin-top:20px"></div>`; },
-    after(){ renderSchemes(); renderPlan(); }},
-  req:{title:'요일별 필요 인원',
-    desc:'근무표 고치기 화면에서 미달·초과를 빨갛게 표시하고, 배정표의 <b>인원이 필요 인원과 다릅니다</b> 안내 기준이 됩니다. '+
-      '기본값은 101병동 기준이라 <b>우리 병동 값으로 고쳐야</b> 그 안내가 사라집니다.',
-    aux:`<button onclick="fitReqToSchedule()" title="넣은 근무표에서 요일별 D·E·N 인원을 세어 그대로 맞춥니다">이 근무표대로 맞추기</button>`,
-    body(){ return `<div id="reqFit" class="dim" style="line-height:1.8;margin-bottom:6px"></div><table id="reqTable" style="width:auto"></table>`; },
-    after(){
-      renderReqFit();
-      const WKK=[['mon','월'],['tue','화'],['wed','수'],['thu','목'],['fri','금'],['sat','토'],['sun','일']];
-      $('#reqTable').innerHTML=`<tr><th></th>${WKK.map(([k,l])=>`<th style="min-width:3em">${l}</th>`).join('')}</tr>`+
-        ['D','E','N'].map(P=>`<tr><td style="font-weight:700;color:${SHIFTS[P].fg}">${P}</td>`+WKK.map(([k])=>
-          `<td><input type="number" min="0" max="20" style="width:52px" value="${store.req[k][P]}"
-            onchange="setReq('${k}','${P}',this.value)"></td>`).join('')+'</tr>').join('');
-    }},
+    after(){ renderSchemes(); }},   // 계획표는 renderSchemes 가 함께 그린다(인원수 탭을 따라간다)
   caps:{title:'간호사 관리',
     desc:'<b>위가 선임</b>입니다 — 같은 날 차지 가능한 사람 중 가장 위에 있는 사람이 차지(배정표의 첫 자리 — A(CN) 또는 CN)를 맡습니다. 줄을 끌어서(또는 ▲▼) 순서를 바꾸세요. 가능한 근무에서 <b>DC · EC · NC</b> 를 켜면 그 시간대에 차지로 뽑힐 수 있습니다.<br>배정표에 다른 소속 칸이 있는 병동(82의 <b>SU</b>)은 이름 옆 칩으로 소속을 켜고 끕니다 — 켜면 병동 자리에 배정되지 않고 그 칸에만 나옵니다.',
     aux:`<button onclick="addNurse()">＋ 간호사 추가</button>`,
@@ -4222,6 +4174,7 @@ function renderSchemes(){
         <input type="text" value="${esc(abbrevRooms(cur.rooms[l]))}" placeholder="예: ${roomHint()}"
          ${(cur.rooms[l]||[]).length?'':'style="box-shadow:0 0 0 2px var(--err)" title="비어 있음 — 이 프리셋을 쓰는 날엔 방이 안 나옵니다"'}
          onchange="setPresetRooms(${cnt},'${selId}','${l}',this.value)"></div>`).join('')}</div>`+presetAuditHtml(cur);
+  renderPlan();
 }
 function presetAuditHtml(p){
   const au=presetAudit(p);
@@ -4229,19 +4182,28 @@ function presetAuditHtml(p){
   return `<div class="psAudit bad">${au.missing.length?`<div>! 아무도 안 보는 방: <b>${roomsLabel(collapseBeds(au.missing))}</b></div>`:''}${
     au.dup.length?`<div>! 두 자리가 겹치는 방: <b>${roomsLabel(collapseBeds(au.dup))}</b></div>`:''}<div class="sub">병실 목록의 모든 방이 한 자리씩 들어가야 합니다. 없는 방이면 병실 목록에서 빼세요.</div></div>`;
 }
+/* 주간 계획표 — 위에서 고른 인원수 탭의 계획만 보인다. 그날 그 근무가 몇 명인지는 근무표에서 세므로
+ * 따로 적어 둘 '필요 인원'이 없다: 5인 탭의 표 = "그 근무가 5명인 날에 쓸 프리셋" (2026-09-27, 결정 2-28).
+ * 저장 모양은 그대로 store.presetPlan[요일][P][인원수] — presetFor 가 그날 실제 인원수로 찾는다. */
 function renderPlan(){
   const box=$('#planBox'); if(!box) return;
-  box.innerHTML=`<div style="font-weight:800;margin-bottom:4px">주간 계획표 — 요일·근무별로 어느 프리셋을 쓸지</div>
-    <div class="dim" style="margin-bottom:8px;line-height:1.6">칸의 인원수는 요일별 필요 인원입니다. 그날 실제 인원이 다르면 그 인원수의 기본 프리셋을 씁니다 —
-      배정표에서 방 칸을 눌러 그날만 바꾸거나 '매주 이 요일'로 정할 수 있습니다.</div>
+  const cnt=presetUI.cnt, list=presetsOf(cnt);
+  const head=`<div style="font-weight:800;margin-bottom:4px">주간 계획표 — ${cnt}인 근무일 때 요일·근무별로 쓸 프리셋</div>`;
+  if(list.length<2){
+    box.innerHTML=head+`<div id="planTable" class="dim" style="line-height:1.6">${cnt}인 프리셋이 <b>기본</b> 하나뿐이라 그 근무가 ${cnt}명인 날은 늘 기본을 씁니다. `+
+      `위의 [＋ 새 프리셋]을 만들면 요일·근무별로 고를 수 있습니다.</div>`;
+    return;
+  }
+  box.innerHTML=head+`<div class="dim" style="margin-bottom:8px;line-height:1.6">그날 그 근무가 <b>${cnt}명</b>이면 이 표의 프리셋을 씁니다 — 몇 명인지는 근무표에서 셉니다.
+      다른 인원수는 위의 탭에서 고르세요. 배정표에서 방 칸을 눌러 그날만 바꾸거나 '매주 이 요일'로 정할 수도 있습니다.</div>
     <table id="planTable" style="width:auto"><tr><th></th>${WD_KEY.map(k=>`<th style="min-width:7.5em">${WD_LBL[k]}</th>`).join('')}</tr>`+
     ['D','E','N'].map(P=>`<tr><td style="font-weight:700;color:${SHIFTS[P].fg}">${P}</td>`+WD_KEY.map(k=>{
-      const need=clampCnt(store.req[k][P]); const plan=(store.presetPlan[k]||{})[P]||{};
-      const curId=presetById(need,plan[need])?plan[need]:'default';
-      const others=Object.keys(plan).filter(c=>+c!==need&&presetById(+c,plan[c])).map(c=>`${c}인: ${esc(presetById(+c,plan[c]).name)}`);
-      return `<td style="vertical-align:top"><select onchange="setPlan('${k}','${P}',${need},this.value)" title="${WD_LBL[k]}요일 ${P} 근무(${need}인)에 쓸 프리셋">${
-          presetsOf(need).map(p=>`<option value="${p.id}"${p.id===curId?' selected':''}>${esc(p.name)}</option>`).join('')}</select>
-        <div class="dim" style="font-size:12px;margin-top:2px">${need}인 기준${others.length?'<br>'+others.join('<br>'):''}</div></td>`;
+      const plan=(store.presetPlan[k]||{})[P]||{};
+      const curId=presetById(cnt,plan[cnt])?plan[cnt]:'default';
+      const others=Object.keys(plan).filter(c=>+c!==cnt&&presetById(+c,plan[c])).map(c=>`${c}인: ${esc(presetById(+c,plan[c]).name)}`);
+      return `<td style="vertical-align:top"><select onchange="setPlan('${k}','${P}',${cnt},this.value)" title="${WD_LBL[k]}요일 ${P} 근무가 ${cnt}명일 때 쓸 프리셋">${
+          list.map(p=>`<option value="${p.id}"${p.id===curId?' selected':''}>${esc(p.name)}</option>`).join('')}</select>`+
+        (others.length?`<div class="dim" style="font-size:12px;margin-top:2px">${others.join('<br>')}</div>`:'')+`</td>`;
     }).join('')+'</tr>').join('')+'</table>';
 }
 function addPreset(cnt){
@@ -4488,68 +4450,6 @@ function toggleCap(name,code){
   touch(); recompute(); renderAdmin();
   if(curScr==='week') renderWeek();
 }
-/* 넣은 근무표에서 요일별 D·E·N 인원을 세어 제안한다 (2026-09-20).
- * 기본값이 101 기준이라 다른 병동은 배정표에서 '인원이 필요 인원과 다릅니다' 를
- * 매주 보게 된다. 고칠 곳으로 데려가는 길이 없었다 — 여기서 한 번에 맞춘다. */
-function reqFromSchedule(){
-  const WKK=['sun','mon','tue','wed','thu','fri','sat'];
-  const tally={}; for(const k of WKK) tally[k]={D:{},E:{},N:{}};
-  // 근무가 들어 있는 날짜 전부 (timelineRange 는 {min,max} 라 여기선 못 쓴다)
-  const set=new Set();
-  for(const n in store.cells){ if(store.hidden&&store.hidden[n]) continue;
-    for(const iso in store.cells[n]) set.add(iso); }
-  const dates=[...set].sort(); if(!dates.length) return null;
-  for(const iso of dates){
-    const wk=WKK[new Date(iso+'T00:00:00').getDay()];
-    const c={D:0,E:0,N:0};
-    let any=false;
-    for(const n of store.order){
-      if(store.hidden&&store.hidden[n]) continue;
-      if(unitOfName(n)) continue;                  // 다른 소속(SU)은 병동 필요 인원이 아니다
-      const pc=parseCellRaw((store.cells[n]||{})[iso]||'');
-      if(!pc||!pc.code) continue;
-      any=true;
-      const P=AssignCore.periodOf(pc.code); if(P) c[P]++;
-    }
-    if(!any) continue;
-    for(const P of ['D','E','N']) tally[wk][P][c[P]]=(tally[wk][P][c[P]]||0)+1;
-  }
-  // 요일·시간대마다 가장 자주 나온 인원 (동률이면 큰 쪽 — 모자란 것보다 낫다)
-  const out={}; let have=false;
-  for(const k of WKK){ out[k]={};
-    for(const P of ['D','E','N']){
-      const e=Object.entries(tally[k][P]);
-      if(!e.length){ out[k][P]=store.req[k][P]; continue; }
-      e.sort((a,b)=>b[1]-a[1]||(+b[0])-(+a[0]));
-      out[k][P]=+e[0][0]; have=true;
-    } }
-  return have?out:null;
-}
-function renderReqFit(){
-  const el=$('#reqFit'); if(!el) return;
-  const sug=reqFromSchedule();
-  if(!sug){ el.textContent='넣은 근무표가 없어 제안할 값이 없습니다 — 근무표를 먼저 넣으세요.'; return; }
-  const WKK=[['sun','일'],['mon','월'],['tue','화'],['wed','수'],['thu','목'],['fri','금'],['sat','토']];
-  const diff=WKK.filter(([k])=>['D','E','N'].some(P=>store.req[k][P]!==sug[k][P]));
-  if(!diff.length){ el.innerHTML='<b>지금 값이 근무표와 같습니다.</b> 배정표의 인원 안내가 뜨지 않습니다.'; return; }
-  el.innerHTML='근무표에서 센 값과 <b>다른 요일 '+diff.length+'개</b> — '+
-    diff.map(([k,l])=>`${l} ${['D','E','N'].map(P=>sug[k][P]).join('/')}`).join(' · ')+
-    ' <span class="dim">(지금: '+diff.map(([k,l])=>`${l} ${['D','E','N'].map(P=>store.req[k][P]).join('/')}`).join(' · ')+')</span>';
-}
-function fitReqToSchedule(){
-  const sug=reqFromSchedule();
-  if(!sug){ toast('넣은 근무표가 없습니다 — 근무표를 먼저 넣으세요',3600); return; }
-  const WKK=[['sun','일'],['mon','월'],['tue','화'],['wed','수'],['thu','목'],['fri','금'],['sat','토']];
-  const lines=WKK.map(([k,l])=>`${l}  ${['D','E','N'].map(P=>sug[k][P]).join(' / ')}`).join('\n');
-  if(!confirm('넣은 근무표에서 센 요일별 인원입니다 (D / E / N).\n\n'+lines+
-    '\n\n이 값으로 맞출까요? 배정표의 "인원이 필요 인원과 다릅니다" 안내가 사라집니다.')) return;
-  snapshot();
-  for(const k in sug) for(const P of ['D','E','N']) store.req[k][P]=sug[k][P];
-  touch(); recompute(); renderAdmin();
-  toast('요일별 필요 인원을 근무표에 맞췄습니다 — 되돌리려면 Ctrl+Z',4200);
-}
-function setReq(k,P,v){ store.req[k][P]=Math.max(0,+v||0); touch();
-  if(curScr==='edit') paintEdit(); }
 async function pickNewLocation(){
   try{
     const h=await window.showSaveFilePicker({suggestedName:fileHandle?fileHandle.name:SIDE_NAME,
@@ -6018,7 +5918,7 @@ const HELP=[
  steps:['[처음 시작]으로 파일을 만듭니다. 이름은 <b>assign-data.js</b> 그대로 두고 이 프로그램과 같은 폴더에 저장하세요.',
         '[새 근무표 넣기] → 엑셀에서 근무표를 긁어 복사(<kbd>Ctrl+C</kbd>) → 이 창에서 <kbd>Ctrl+V</kbd> → 읽은 내용을 확인하고 [맞아요, 저장].',
         '[인쇄]를 누르면 병실 배정표 양식 그대로 A4 한 장이 나옵니다. 102·82병동 서식은 [이번 주 배정표 엑셀로 내보내기]로 받아 엑셀에서 인쇄합니다.'],
- tips:['방 구성·필요 인원 같은 병동 설정은 ⚙ 관리에서 한 번만 맞춰 두면 됩니다.']},
+ tips:['방 구성·간호사 가능 근무 같은 병동 설정은 ⚙ 관리에서 한 번만 맞춰 두면 됩니다.']},
 {cat:'시작하기',id:'onboard',title:'시작 안내 카드 — 무엇이 남았는지',
  lead:'배정표 화면 위(넓은 화면에서는 표 오른쪽)의 <b>시작 안내</b> 카드는 데이터 파일·병동·방 구성·차지 가능자·이번 주 근무표·인쇄가 준비됐는지를 <b>실제 상태로</b> ✓ ○ 표시합니다. 다 되면 저절로 사라집니다.',
  steps:['○ 인 줄의 단추(<b>병동 고르기·방 구성</b> 등)를 누르면 그 화면으로 바로 갑니다.',
@@ -6059,13 +5959,12 @@ const HELP=[
  tips:['손으로 고친 방 칸은 <b>파란 밑줄</b>로 표시됩니다.',
        '두 사람이 같은 병실을 보게 되면 <b>빨간 글씨</b>로 알려 줍니다 — 자동으로 고치지는 않으니 확인하고 정리하세요.']},
 {cat:'이번 주 배정표',id:'warn',title:'확인 필요 · 안내 카드 읽는 법',
- lead:'그 주에 확인이 필요한 것만 표 위에 모아 보여 줍니다 — 넓은 화면(1920 등)에서는 <b>표 오른쪽</b>에 펼쳐진 채로 섭니다. <b>빨강 = 규칙 위반</b>(고쳐야 함), <b>노랑 = 안내</b>. 없으면 표 위에는 카드가 뜨지 않고, 오른쪽 열에는 초록 <b>확인할 것 없음</b>이 섭니다. 같은 종류는 사람별·내용별로 한 줄에 묶이고, 줄 아래 단추(<b>간호사 관리 열기·방 구성 열기·필요 인원 열기</b>)로 고칠 곳에 바로 갑니다.',
+ lead:'그 주에 확인이 필요한 것만 표 위에 모아 보여 줍니다 — 넓은 화면(1920 등)에서는 <b>표 오른쪽</b>에 펼쳐진 채로 섭니다. <b>빨강 = 규칙 위반</b>(고쳐야 함), <b>노랑 = 안내</b>. 없으면 표 위에는 카드가 뜨지 않고, 오른쪽 열에는 초록 <b>확인할 것 없음</b>이 섭니다. 같은 종류는 사람별·내용별로 한 줄에 묶이고, 줄 아래 단추(<b>간호사 관리 열기·방 구성 열기</b>)로 고칠 곳에 바로 갑니다.',
  steps:['<b>가능 근무가 아닙니다</b> — 그 간호사가 못 하는 근무가 배정돼 있습니다. ⚙ 관리 &gt; 간호사 관리에서 확인하세요.',
         '<b>차지 가능한 사람이 없어 자격 없이 차지가 됐습니다</b> — 그날 그 시간대 근무자 중 DC·EC·NC 가능자가 없어 최선임이 차지가 된 경우입니다.',
         '<b>아무도 안 보는 방 · 두 자리가 겹치는 방</b> — 방 구성(또는 그날 방 수정)에 빠진 방·겹친 방이 있습니다. ⚙ 관리 &gt; 방 구성에서 고치세요.',
         '<b>양식의 N칸(3개)을 넘어</b> — 야간 인원이 인쇄 양식 칸보다 많습니다. 수기로 적어야 합니다.',
         '<b>주지 않을 방인데 배정됐습니다</b> — 피하려 했지만 다른 방법이 없던 경우입니다.',
-        '<b>인원이 필요 인원과 다릅니다</b>(노랑) — 근무표의 그날 D·E·N 인원이 ⚙ 관리 &gt; 요일별 필요 인원과 다릅니다.',
         '<b>근무표가 없습니다</b>(노랑) — 월말 주처럼 다음 달 근무표가 아직 없는 날입니다. [새 근무표 넣기]로 넣으면 채워집니다.',
         '<b>어싸인 없이 근무합니다(헬퍼)</b> — 6명 이상이라 자리가 모자란 경우입니다.',
         '<b>신규 ○○ — 붙일 간호사가 없습니다</b>(노랑) — 날짜마다 [붙일 사람…]에서 그날만 붙이거나, [계속 붙일 사람]으로 프리셉터를 정하면 사라집니다.']},
@@ -6112,9 +6011,8 @@ const HELP=[
         '드래그하면 여러 칸을 한 번에 고를 수 있습니다.',
         '더블클릭(또는 <kbd>Space</kbd>, 우클릭)하면 <b>근무 고르기</b> 창이 뜹니다 — 근무·휴무·트레이닝·우리 병동 표기 중에서 누르고, 목록에 없으면 [✏ 직접 입력]으로 <b>D/A</b>(어싸인 고정)나 새 표기를 적습니다. 여러 칸을 골라 두면 한꺼번에 들어갑니다.',
         '이 달이면 <b>오늘 열</b>이 검정 머리칸과 파란 테두리로 표시되고, 처음 열 때 오늘 칸이 골라져 있습니다.',
-        '<kbd>Ctrl+Z</kbd> 되돌리기, 맨 아래 줄에서 그날 <b>D·E·N 인원</b>을 확인합니다.'],
- tips:['인원이 안 맞는 날은 <b>4/5</b> 처럼 빨갛게 나옵니다(실제/필요). 기준은 ⚙ 관리 &gt; 요일별 필요 인원. 위의 <b>인원 안 맞는 날 n일 ›</b> 을 누르면 그날로 갑니다.',
-       '이름을 클릭하면 이름 수정·삭제가 됩니다. 전출한 사람은 그 달에 근무가 없으면 줄이 빠집니다.']},
+        '<kbd>Ctrl+Z</kbd> 되돌리기. 맨 아래 줄은 그날 <b>D·E·N 근무자 수</b>입니다.'],
+ tips:['이름을 클릭하면 이름 수정·삭제가 됩니다. 전출한 사람은 그 달에 근무가 없으면 줄이 빠집니다.']},
 {cat:'근무표 넣기·고치기',id:'trainee',title:'트레이닝 근무 (/D /E /N)',
  lead:'교육 중이라 인력으로 세면 안 되는 근무입니다.',
  steps:['근무표에 <b>/D</b>, <b>/E</b>, <b>/N</b> 으로 적습니다. 표에는 회색으로 보이지만 <b>인원 수와 어싸인에서는 빠집니다</b>.',
@@ -6133,15 +6031,11 @@ const HELP=[
  lead:'그날 근무 인원이 몇 명이냐에 따라 각 자리가 맡을 병실을 정합니다. 인원수마다 프리셋을 여러 개 두고, 요일·근무별로 어느 것을 쓸지 정할 수 있습니다.',
  steps:['⚙ 관리 &gt; 방 구성에서 <b>5인·4인·3인·2인</b> 탭을 고르고 자리마다 병실을 적습니다 — 예: <b>6~9</b> 또는 <b>1, 12</b>.',
         '[＋ 새 프리셋]으로 같은 인원수의 다른 나눔을 만듭니다(보고 있던 것을 복제해서 시작). 이름은 <b>회진일</b>·<b>수술 많은 날</b>처럼 알아볼 수 있게.',
-        '아래 <b>주간 계획표</b>에서 요일·근무(D/E/N)마다 프리셋을 고릅니다. 월요일 Day 와 화요일 Day 가 다른 나눔이어도 됩니다.',
+        '아래 <b>주간 계획표</b>에서 요일·근무(D/E/N)마다 프리셋을 고릅니다 — 보고 있는 인원수 탭의 표입니다(5인 탭 = 그 근무가 5명인 날). 월요일 Day 와 화요일 Day 가 다른 나눔이어도 됩니다.',
         '배정표에서 방 칸을 누르면 <b>이 날 방 구성</b> 줄이 있습니다 — 프리셋을 골라 [오늘만] 또는 [매주 이 요일]. 프리셋이 기본이 아닌 날은 A(CN) 방 칸 왼쪽에 초록 띠가 보입니다.'],
- tips:['이 표가 어싸인의 기준입니다. 그날 실제 인원이 계획표의 인원수와 다르면 그 인원수의 기본 프리셋이 쓰입니다.',
+ tips:['이 표가 어싸인의 기준입니다. 그날 그 근무가 몇 명인지는 근무표에서 세고, 그 인원수 탭의 계획을 따릅니다 — 정하지 않은 칸은 기본.',
        '프리셋 아래에 <b>아무도 안 보는 방 · 두 자리가 겹치는 방</b>이 바로 표시됩니다. 병실 목록의 모든 방이 한 자리씩 들어가야 하고, 문제가 있으면 관리 메뉴에 <b>확인 n</b>, 배정표 카드에도 뜹니다.',
        '비어 있는 자리가 있으면 관리 메뉴에 <b>빈 칸 n</b> 이 뜨고, 그 프리셋을 쓰는 날엔 방이 안 나옵니다.']},
-{cat:'우리 병동 설정',id:'req',title:'요일별 필요 인원',
- lead:'요일마다 D·E·N 이 몇 명 필요한지입니다. 근무표 고치기 화면에서 부족·초과를 빨갛게 표시하는 기준입니다.',
- steps:['⚙ 관리 &gt; 요일별 필요 인원에서 숫자를 고칩니다.',
-        '차지를 포함한 총 인원입니다 (D=4 면 차지 1 + 일반 3).']},
 {cat:'우리 병동 설정',id:'nurse',title:'간호사 관리 (가능 근무·차지·주지 않을 방)',
  lead:'사람마다 할 수 있는 근무와, 주면 안 되는 병실을 정합니다.',
  steps:['<b>위가 선임</b>입니다 — 같은 날 차지 가능한 사람 중 가장 위에 있는 사람이 차지를 맡습니다. 줄을 끌어서(또는 ▲▼) 순서를 바꾸세요.',
@@ -6294,7 +6188,7 @@ const TOURS={
       ?{sel:'#btnPrint',title:'인쇄',text:'이번 주 배정표가 양식 그대로 <b>A4 한 장</b>으로 나옵니다. 옆의 [엑셀로 내보내기]는 같은 양식의 엑셀 파일입니다.'}
       :{sel:'#btnXlsx',title:'엑셀로 내보내기',text:'이 서식은 병동 양식 그대로 <b>엑셀 파일</b>로 받아 엑셀에서 인쇄합니다.'},
     sideMode()?{el:()=>{ const w=document.querySelector('#wkWarn'); return w&&w.offsetHeight>4?w:null; },title:'이번 주 확인할 것',text:'넓은 화면에서는 표 <b>오른쪽</b>에 모입니다. 빨강은 고칠 것, 노랑은 안내이고, 줄마다 고치러 가는 단추가 붙어 있습니다.'}:null,
-    {sel:'#tabAdmin',title:'⚙ 관리',text:'병실·방 구성·간호사·필요 인원·데이터 보관은 여기서 <b>한 번만</b> 맞춰 두면 됩니다.'},
+    {sel:'#tabAdmin',title:'⚙ 관리',text:'병실·방 구성·간호사·데이터 보관은 여기서 <b>한 번만</b> 맞춰 두면 됩니다.'},
     {sel:'#helpFab',title:'막히면 ?',text:'언제든 <b>?</b> (또는 F1) 을 누르면 기능별 사용법과 이런 투어가 있습니다.'},
   ]},
   open:{steps:()=>[
@@ -6347,7 +6241,7 @@ const TOURS={
   edit:{needData:true,steps:()=>[
     {before:()=>show('edit'),el:()=>document.querySelector('#scrEdit table tbody td'),title:'칸을 클릭하고 키를 누르세요',text:'<kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>O</kbd> 를 누르면 바로 입력됩니다. 드래그하면 여러 칸을 한 번에 고릅니다.'},
     {el:()=>document.querySelector('#scrEdit table tbody td'),title:'더블클릭 = 직접 입력',text:'<b>D/A</b> 처럼 어싸인까지 정하거나 <b>/D</b> 로 트레이닝 근무를 적습니다.'},
-    {el:()=>document.querySelector('#scrEdit table tfoot')||document.querySelector('#scrEdit table'),title:'맨 아래 = 그날 인원',text:'D·E·N 인원을 <b>실제/필요</b>로 보여 주고, 안 맞는 날은 빨갛게 표시합니다.',after:()=>show('week')},
+    {el:()=>document.querySelector('#scrEdit table tfoot')||document.querySelector('#scrEdit table'),title:'맨 아래 = 그날 근무자 수',text:'그날 D·E·N 이 몇 명인지 셉니다.',after:()=>show('week')},
   ],cleanup:()=>{ if(connected()) show('week'); }},
   trainee:{needData:true,steps:()=>[
     {before:()=>show('week'),el:_firstNm,title:'신규 붙이기',text:'신규가 <b>/D</b> 로 적힌 날, 그 시간대 간호사 <b>이름</b>을 누르면 아래에 <b>신규 간호사 붙이기</b>가 나옵니다 — [계속 붙이기]는 프리셉터로 정하는 것, [오늘만 붙이기]는 그 날만.'},
@@ -6361,10 +6255,7 @@ const TOURS={
     {before:()=>{ show('admin'); pickAdmin('schemes'); },sel:'#schemes .psTabs',title:'인원수 탭',text:'5·4·3·2인 근무별로 프리셋을 따로 둡니다. 5인인 날은 5인 프리셋 중에서만 고르게 됩니다.'},
     {sel:'#schemes .psList',title:'프리셋 목록',text:'<b>기본</b> 외에 [＋ 새 프리셋]으로 다른 나눔을 만듭니다. 이름은 회진일·수술 많은 날처럼 알아볼 수 있게.'},
     {el:()=>document.querySelector('#schemes .schemeRow input'),title:'자리마다 병실',text:'A(CN)·B·C… 자리가 맡을 병실을 적습니다. <b>51~53, 62</b> 처럼 짧게 써도 됩니다.'},
-    {sel:'#planTable',title:'주간 계획표',text:'요일·근무별로 어느 프리셋을 쓸지 고릅니다. 칸의 인원수는 요일별 필요 인원이고, 그날 인원이 다르면 그 인원수의 기본 프리셋이 쓰입니다.',after:()=>{ if(connected()) show('week'); }},
-  ],cleanup:()=>{ if(connected()) show('week'); }},
-  req:{steps:()=>[
-    {before:()=>{ show('admin'); pickAdmin('req'); },el:()=>document.querySelector('#adminPanelBox table')||document.querySelector('#adminPanelBox'),title:'요일별 필요 인원',text:'요일마다 D·E·N 이 몇 명 필요한지입니다(차지 포함). 근무표 고치기 화면에서 부족·초과를 빨갛게 표시하는 기준입니다.',after:()=>{ if(connected()) show('week'); }},
+    {sel:'#planTable',title:'주간 계획표',text:'요일·근무별로 어느 프리셋을 쓸지 고릅니다. 보고 있는 인원수 탭의 표입니다 — 5인 탭이면 그 근무가 5명인 날에 씁니다(몇 명인지는 근무표에서 셉니다).',after:()=>{ if(connected()) show('week'); }},
   ],cleanup:()=>{ if(connected()) show('week'); }},
   nurse:{steps:()=>[
     {before:()=>{ show('admin'); pickAdmin('caps'); },el:()=>document.querySelector('#capsTable tr.nrow')||document.querySelector('#adminPanelBox'),title:'위가 선임',text:'같은 날 차지 가능한 사람 중 <b>가장 위</b>가 차지를 맡습니다. 줄을 끌거나 ▲▼ 로 순서를 바꾸세요.'},
@@ -6451,9 +6342,6 @@ const WIZ=[
   {id:'scheme',panel:'schemes',t:'방 구성이 어떻게 되나요?',
    sub:'근무 인원이 5·4·3·2명일 때 각 자리가 어느 방을 보는지입니다. 기본값이 채워져 있으니 우리 병동과 다른 것만 고치면 됩니다.',
    ok:()=>[5,4,3,2].every(c=>!presetBad(presetsOf(c)[0]))},
-  {id:'req',panel:'req',t:'요일별 필요 인원이 어떻게 되나요?',
-   sub:'요일마다 D·E·N 이 몇 명인지입니다. 이 숫자가 배정표의 인원 확인 기준이 됩니다 — 우리 병동 값과 다르면 매주 "인원이 다릅니다" 안내가 뜹니다.',
-   ok:()=>true},
   {id:'paste',t:'근무표를 넣어 주세요',
    sub:'이번 달 근무표를 엑셀에서 복사해 붙여넣습니다. 간호사 이름은 근무표에서 자동으로 읽어 옵니다 — 따로 입력하지 않아도 됩니다.',
    ok:()=>store.order.length>0},
@@ -6561,7 +6449,7 @@ function renderOnboard(){
   el.classList.toggle('side',side);
   el.classList.toggle('shut',!open);
   const left=items.length-done;
-  const acts=`<button onclick="startWizard(0)" title="병동·방 구성·필요 인원·근무표를 한 번에 하나씩 묻습니다">▶ 처음 설정 다시 하기</button>
+  const acts=`<button onclick="startWizard(0)" title="병동·방 구성·근무표·가능 근무를 한 번에 하나씩 묻습니다">▶ 처음 설정 다시 하기</button>
       <button onclick="startTopicTour('look')" title="지금 화면의 버튼을 하나씩 짚어 줍니다 — 그림이 아니라 실제 화면입니다">▶ 화면 둘러보기</button>
       <button onclick="hideOnboard()" title="다 아는 내용이면 숨깁니다 — ? 도움말 > 시작 안내에서 다시 열 수 있습니다">숨기기</button>`;
   el.innerHTML=`<div class="obHead"><span class="obTitle">시작 안내</span><span class="obProg">${done} / ${items.length} 완료${open?'':` · ${left}개 남음`}</span>`+
@@ -6679,13 +6567,13 @@ window.__app={get store(){return store},set store(v){store=v},
   reattachHandle,setWard,wardRooms,wardOfRooms,roomsBase,roomPos,roomAtPos,setRoom,addRoom,delRoom,moveRoom,attachRoom,detachRoom,readOldLocalStore,clearOldLocalStore,migrateOldLocalData,
   setScheme,resetSchemes,presetsOf,presetById,presetFor,addPreset,renamePreset,deletePreset,setPresetRooms,setPlan,applyPresetDay,renderSchemes,renderPlan,get presetUI(){return presetUI;},moveNurse,attachTrainee,traineesUnder,preceptorOf,unattachedTrainees,
   nameWithTrainees,applyWrapStyles,packXlsx,openFormText,saveFormText,addNurse,renameNurseAdmin,removeNurse,applyNurseName,adminBadge,
-  FORMS,DEFAULT_REQ,ADMIN_PANELS,pickAdmin,formId,formDef,formOv,FORM_LBL,setFormId,buildWeekXlsx,packWeekXlsx,fillForm122,findLayout122,fillForm102,findLayout102,findLayout,layoutOf,formVerdict,loadBaseTemplate,customFormDiffers,describeCurrentForm,resetForm,useCheckedForm,migrateStore,sheetCells,sheetMerges,parseXlsx,b64ToBytes,parseClipboard,
+  FORMS,ADMIN_PANELS,pickAdmin,formId,formDef,formOv,FORM_LBL,setFormId,buildWeekXlsx,packWeekXlsx,fillForm122,findLayout122,fillForm102,findLayout102,findLayout,layoutOf,formVerdict,loadBaseTemplate,customFormDiffers,describeCurrentForm,resetForm,useCheckedForm,migrateStore,sheetCells,sheetMerges,parseXlsx,b64ToBytes,parseClipboard,
   htmlDirPath,joinPath,dirOfPath,fileLocPath,renderFileInfo,setFileLoc,locateHandle,copyFilePath,get fileLoc(){return fileLoc},
   startTour,endTour,tourNext,tourPrev,startTopicTour,renderOnboard,onboardItems,hideOnboard,showOnboard,xlMock,renderHelpDoc,openHelp,closeHelp,showIntro,hideIntro,get tour(){return tour},TOURS,HELP,
   get wkSunday(){return wkSunday},set wkSunday(v){wkSunday=v},show,
   startWizard,closeWizard,wizGo,wizPaste,wizResume,WIZ,get wizAt(){return wizAt},renderWizard,
   hideOnboard,showOnboard,onboardItems,uiGet:(k)=>uiGet(k),
-  reqFromSchedule,fitReqToSchedule,secRows,slotsOf,groupUnits,unitOfName,formIds,formDefOf,formFor,detectFormShape,unitWorker,unitSlotName,toggleUnit,fillForm82,formNoRooms,renderWardChip,addWorker,offCandidates,
+  secRows,slotsOf,groupUnits,unitOfName,formIds,formDefOf,formFor,detectFormShape,unitWorker,unitSlotName,toggleUnit,fillForm82,formNoRooms,renderWardChip,addWorker,offCandidates,
   canPrint,exportWeekXlsx,saveMsg,sideMode,syncWeekTools,togglePickShifts,closePick,get pkShiftOpen(){return pkShiftOpen},
   memoryMode(){window.__memoryMode=true;
     setFileLoc({kind:'none'});afterLoad();}};
