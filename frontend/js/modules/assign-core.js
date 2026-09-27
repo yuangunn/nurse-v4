@@ -17,14 +17,18 @@
  *  (5인→4인)은 방 구성이 통째로 달라지므로 라벨을 이으면 방이 어긋난다.
  *  → 전에 본 병실과 오늘 각 라벨의 병실이 겹치는 정도로 짝지어, 전날 6~9호를
  *    본 사람이 오늘 6~10호 라벨을 가져간다. 겹침 총합이 최대가 되도록 배정
- *    (할당 문제 — 라벨 ≤5라 비트마스크 DP로 정확 해).
+ *    (할당 문제 — 라벨 ≤6이라 비트마스크 DP로 정확 해).
  *  방 정보가 없는 자리(스킴 미정의·시드·roomsFor 미제공)나 겹치는 방이 아예
  *  없을 때만 기존처럼 라벨 일치로 폴백한다.
+ *
+ * 자리 수 — 기본 5(차지·A·B·C·D). 양식에 D 가 6줄인 병동(122: 대체간호사가 오는 날)은
+ *  opts.maxSeats 로 6번째 자리(E)를 연다. 자리보다 사람이 많으면 남는 사람은 헬퍼(extra).
  * ─────────────────────────────────────────────────────────────────────────── */
 (function (root) {
   const PERIOD_CODES = { D: ['DC', 'D'], E: ['EC', 'E'], N: ['NC', 'N'] };
   const CHARGE_CODES = { DC: 1, EC: 1, NC: 1 };
-  const LABELS = ['차지', 'A', 'B', 'C', 'D'];
+  const LABELS = ['차지', 'A', 'B', 'C', 'D', 'E'];
+  const DEFAULT_SEATS = 5;
 
   // 근무코드 → 'D'|'E'|'N'|null (중간번·D1·트레이니(/) 등은 어싸인 제외)
   function periodOf(code) {
@@ -50,7 +54,7 @@
   }
 
   /* 최대 총 가중치 매칭 — W[i][j] = 간호사 i를 라벨 j에 둘 때 점수(0 = 불가).
-   * 라벨이 최대 5개라 라벨 집합을 비트마스크로 두고 정확한 최적해를 구한다
+   * 라벨이 최대 6개라 라벨 집합을 비트마스크로 두고 정확한 최적해를 구한다
    * (그리디는 "겹침 4를 잡느라 다른 사람 겹침 3을 통째로 날리는" 선택을 함). */
   function maxMatch(W, nL) {
     const full = 1 << nL;
@@ -92,7 +96,8 @@
    *                  seed:{nurseId:{label,period,idx,rooms?}},  idx<0 = 전월 (말일=-1)
    *                  avoid:{dateKey:{P:{nurseId:[label]}}},  금지 방 등 회피 라벨 (소프트 —
    *                  대안 없으면 그대로 배정, 수동 오버라이드·DC/EC/NC 표시자는 회피 무시)
-   *                  roomsFor:(P,cnt,label,dateKey)=>[방 토큰]}  ← 주면 방 기준 연속성
+   *                  roomsFor:(P,cnt,label,dateKey)=>[방 토큰],  ← 주면 방 기준 연속성
+   *                  maxSeats: 숫자 또는 (P,cnt,dateKey)=>숫자  ← 자리 수(1~6, 기본 5)}
    * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId]}}},
    *           byNurse:{nurseId:{dk:{period,label}}}}
    */
@@ -108,6 +113,10 @@
     const avoid = opts.avoid || {};
     const roomsFor = opts.roomsFor || null;
     const bedsOf = opts.bedsOf || null;
+    const seatsOf = function (P, cnt, dk) {
+      const v = typeof opts.maxSeats === 'function' ? opts.maxSeats(P, cnt, dk) : opts.maxSeats;
+      return Math.max(1, Math.min(LABELS.length, Math.floor(+v) || DEFAULT_SEATS));
+    };
     const byDay = {}, byNurse = {};
     const lastSeen = {}; // nurseId -> {label, idx, period, rooms}
     // 전월 연속성 시드 — 전월에 마지막으로 본 방을 상대 idx로 주입하면 원칙1~4가 월 경계를 넘어 작동.
@@ -128,7 +137,7 @@
         });
         if (!staff.length) continue;
 
-        const labels = LABELS.slice(0, Math.min(staff.length, 5));
+        const labels = LABELS.slice(0, Math.min(staff.length, seatsOf(P, staff.length, dk)));
         const av = (avoid[dk] || {})[P] || {};
         const avOk = function (nid, label) { return (av[nid] || []).indexOf(label) < 0; };
         const assigned = {}; // label -> nurse
@@ -188,7 +197,8 @@
           // > 최근에 본 사람 > 선임. 등급이 자리뿐 아니라 **방 선택**에서도 앞선다: 예전엔 겹침을
           // 등급 없이 합쳐서, 오프 복귀자가 4칸 겹치는 방을 잡으려고 전일 근무자를 2칸짜리 방으로
           // 밀어내는(5~10 보던 사람이 6~9 대신 5,10,11) 일이 있었다. 자릿수는 2^53 안에 들도록
-          // 잡았다: 후보 ≤5, 겹침 ≤99 → 등급별 합 ≤495.
+          // 잡았다: 차지는 이 매칭 전에 앉으므로 짝 ≤5(자리 6개일 때도), 겹침 ≤99 → 등급별 합 ≤495
+          // < 원칙3 자리 하나(1e13 / 2e10 = 500). 자리 합도 5×1e15 + … < 2^53(≈9.007e15).
           const SEAT_W = [1e15, 1e14, 1e13], OV_W = [2e10, 4e7, 8e4];
           const free = freeLabels().filter(function (l) { return roomsByLabel[l].length; });
           if (free.length) {
@@ -253,7 +263,7 @@
           const n = leftover.splice(pick, 1)[0];
           assigned[rem[i]] = n; taken[n.id] = true;
         }
-        // 6인 이상: 라벨 소진 후 잔여 인원은 어싸인 없음(헬퍼)
+        // 자리보다 사람이 많으면(보통 6인 이상): 라벨 소진 후 잔여 인원은 어싸인 없음(헬퍼)
         const extra = leftover.map(function (n) { return n.id; });
 
         // 회피 라벨 복구: 회피 라벨에 배정된 간호사를 서로 문제 없는 상대와 맞교환.

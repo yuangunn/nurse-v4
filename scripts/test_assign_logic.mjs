@@ -64,8 +64,10 @@ const step = s => { STEP = s; if (process.env.VERBOSE) console.log('  · ' + s);
 /** 페이지 안에서 식을 평가하고 값을 가져온다. 예외·무응답은 그대로 던진다.
  *  awaitPromise 는 약속이 영원히 안 풀리면 CDP 가 응답을 안 준다 — 자체 타임아웃 필수. */
 async function ev(expr, ms = 20000) {
+  // 돌려준 약속을 window 에 붙잡아 둔다 — 약속이 풀린 직후 그 결과를 넘기기 전에 페이지가 무거운 일(양식 xlsx 풀기)로
+  // 가비지 수집을 돌리면, 아무도 안 잡고 있는 약속이 먼저 치워져 CDP 가 "Promise was collected" 를 돌려준다(가끔).
   const call = send('Runtime.evaluate', {
-    expression: `(()=>{${expr}})()`, returnByValue: true, awaitPromise: true,
+    expression: `window.__evKeep=(()=>{${expr}})()`, returnByValue: true, awaitPromise: true,
   });
   const r = await Promise.race([
     call,
@@ -330,14 +332,17 @@ async function main() {
   const wiz = await ev(`const A=window.__app; const out=[];
     for(let i=0;i<A.WIZ.length;i++){ A.startWizard(i);
       out.push({id:A.WIZ[i].id, body:document.querySelector('#wizBody').innerHTML.length,
-                num:document.querySelector('#wizNum').textContent}); }
+                on:(document.querySelector('#wizSteps span.on')||{}).textContent,
+                names:[...document.querySelectorAll('#wizSteps span')].map(e=>e.textContent)}); }
     A.closeWizard(); return out;`);
   // 요일별 필요 인원 단계는 없다 — 완성된 근무표를 받으므로 인원을 재지 않는다 (2026-09-27, 결정 2-28)
+  // 환영(파일 만들기)이 0단계다 — 처음 켠 사람이 환영 카드 → 시작 화면 → 마법사로 세 번 갈아타지 않게 (2026-09-27)
   eq('마법사 단계 순서', wiz.map(w => w.id),
-    ['ward', 'scheme', 'paste', 'codes', 'caps', 'done']);
+    ['hello', 'ward', 'scheme', 'paste', 'codes', 'caps', 'done']);
   ok('단계마다 본문이 그려진다 (패널 id 가 어긋나면 빈다)',
-    wiz.every(w => w.body > 200), JSON.stringify(wiz.map(w => [w.id, w.body])));
-  eq('진행도 표시', wiz[2].num, '3 / 6 단계');
+    wiz.filter(w => w.id !== 'hello').every(w => w.body > 200), JSON.stringify(wiz.map(w => [w.id, w.body])));
+  eq('진행 막대는 단계 이름', wiz[0].names, ['시작', '병동', '방 구성', '근무표', '표기', '간호사', '끝']);
+  eq('지금 단계가 진하다', wiz[3].on, '근무표');
 
   // 붙여넣기 단계만 전체 화면을 빌려 쓰고, 확정하면 마법사로 돌아온다
   const trip = await ev(`const A=window.__app; A.startWizard(A.WIZ.findIndex(w=>w.id==='paste')); A.wizPaste();
@@ -346,11 +351,21 @@ async function main() {
     A.ingestGrid([['이름','9/1','9/2'],['홍길동','D','E'],['김영숙','E','N']]);
     A.confirmPaste();
     const back=document.querySelector('#wiz').classList.contains('on');
-    const at=document.querySelector('#wizNum').textContent;
+    const at=(document.querySelector('#wizSteps span.on')||{}).textContent;
     A.closeWizard();
     return {away, back, at};`);
   ok('붙여넣기는 전체 화면으로 넘어간다', trip.away, JSON.stringify(trip));
-  ok('확정하면 마법사 다음 단계로 돌아온다', trip.back && trip.at === '4 / 6 단계', JSON.stringify(trip));
+  ok('확정하면 마법사 다음 단계로 돌아온다', trip.back && trip.at === '표기', JSON.stringify(trip));
+
+  // 파일이 없으면 환영 단계에서 못 넘어간다 — 다음 단계 패널이 쓸 데이터 파일이 아직 없다
+  const hello = await ev(`const A=window.__app; window.__memoryMode=false;
+    A.startWizard(3); const at=A.wizAt; A.wizGo(1); const after=A.wizAt;
+    const body=document.querySelector('#wizBody').textContent, foot=document.querySelector('#wizFoot').textContent;
+    const pri=document.querySelectorAll('#wiz .pri').length;
+    window.__memoryMode=true; A.closeWizard();
+    return {at, after, 처음시작:/처음 시작/.test(body), 열기:/이미 만든 파일 열기/.test(body), 다음:/다음/.test(foot), pri};`);
+  eq('파일이 없으면 환영 단계부터 · 다음 없음 · 주 단추 하나', hello,
+    { at: 0, after: 0, 처음시작: true, 열기: true, 다음: false, pri: 1 });
 
   // ── 10. 화면 상태는 데이터 파일에 ──────────────────────────────────────
   // 병원 PC 는 브라우저를 닫을 때 사이트 데이터를 지우는 경우가 많다.
@@ -438,7 +453,8 @@ async function main() {
       out[id]={rows:['D','E','N'].map(P=>A.secRows(P)), noRooms:A.formNoRooms()}; }
     A.setFormId('101'); return out;`);
   eq('101 자리 수 5·5·3 · 방 칸 있음', [perForm['101'].rows, perForm['101'].noRooms], [[5, 5, 3], false]);
-  eq('122 자리 수 5·5·3 · 방 칸 있음', [perForm['122'].rows, perForm['122'].noRooms], [[5, 5, 3], false]);
+  // 122 는 D 가 6줄 — 대체간호사가 오는 날 여섯이 병실을 나눈다 (2026-09-27 병동 양식)
+  eq('122 자리 수 6·5·3 · 방 칸 있음', [perForm['122'].rows, perForm['122'].noRooms], [[6, 5, 3], false]);
   eq('102 자리 수 4·4·3 · 방 칸 없음', [perForm['102'].rows, perForm['102'].noRooms], [[4, 4, 3], true]);
 
 
@@ -659,9 +675,9 @@ async function main() {
     const t=(document.querySelector('#pick')||{}).textContent||'';
     const warn=(document.querySelector('#wkWarn')||{}).textContent||'';
     if(A.closePick) A.closePick();
-    return {넣기:/쉬는 사람 넣기/.test(t), 방번호:/[0-9]{2}~[0-9]{2}|[0-9]{2}, [0-9]{2}/.test(t.split('이 근무에')[0]),
+    return {넣기:/쉬는 간호사 넣기/.test(t)&&/대체간호사 넣기/.test(t), 방번호:/[0-9]{2}~[0-9]{2}|[0-9]{2}, [0-9]{2}/.test(t.split('이 근무에')[0]),
       방경고:/아무도 안 보는 방|겹치는 방/.test(warn)};`);
-  eq('어싸인 바꾸기 모달에 [쉬는 사람 넣기]가 있다', pick.넣기, true);
+  eq('어싸인 바꾸기 모달에 [쉬는 간호사 넣기]·[대체간호사 넣기]가 있다', pick.넣기, true);
   eq('방 칸 없는 서식은 모달에 방 번호를 안 보인다', pick.방번호, false);
   eq('방 칸 없는 서식은 방 경고를 안 띄운다', pick.방경고, false);
 
@@ -724,6 +740,147 @@ async function main() {
     td.click(); const c=vis(); A.togglePickShifts(); A.closePick();
     return {처음:a, 펼침:b, 다시열기:c, 끝:A.pkShiftOpen};`);
   eq('근무 코드는 접혀 있다가 펼치면 보인다', fold, { 처음: false, 펼침: true, 다시열기: true, 끝: false });
+
+  // ── 23. 대체간호사 · 빈 자리 (2026-09-27) ──────────────────────────────
+  // 122 는 D 가 6줄 — 5명인 날은 한 칸이 비고, 그 칸을 누르면 쉬는 간호사·대체간호사를 넣는다.
+  // 대체간호사는 근무표에 없는 사람이라 store.relief 에만 있고, 한 사람으로 세어 병실을 나눈다.
+  step('23 대체간호사 · 빈 자리');
+  const rel = await ev(`const A=window.__app; const s=A.store;
+    Object.assign(s,{cells:{},order:[],unit:{},relief:{},ovr:{},ovrPair:{},trainee:{},trOv:{},hidden:{},caps:{},roomOv:{},presetDay:{},presetPlan:{}});
+    A.store=s; A.setFormId('122');
+    const names=['가','나','다','라','마','바','사','아','자','차','카','타','파','하'];
+    names.forEach((n,i)=>{ s.order.push(n); s.cells[n]={};
+      for(let d=6; d<=12; d++) s.cells[n]['2026-09-'+String(d).padStart(2,'0')]= i<5?'D': i<10?'E': i<13?'N':'OF'; });
+    A.recompute(); A.wkSunday=new Date(2026,8,6); A.show('week');
+    const empD=[...document.querySelectorAll('#wkTable td.emp[data-empty]:not(.rm)')].filter(t=>t.dataset.p==='D').length;
+    const seats={D:A.seatsFor('D'),E:A.seatsFor('E'),N:A.seatsFor('N')}, tabs=A.cntTabs();
+    const td=document.querySelector('#wkTable td.emp[data-empty]:not(.rm)[data-p="D"]');
+    td.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:400,clientY:400}));
+    const pk=(document.querySelector('#pick')||{}).textContent||'';
+    A.closePick();
+    s.relief={'2026-09-07':{D:['대체한명']}}; A.recompute(); A.renderWeek();
+    const lab=(A.result.byNurse['대체한명']||{})['2026-09-07'];
+    const day=A.dayInfo('2026-09-07');
+    const shown=[...document.querySelectorAll('#wkTable td.nm')].some(t=>t.dataset.n==='대체한명'&&t.textContent.includes('대체'));
+    const empAfter=[...document.querySelectorAll('#wkTable td.emp[data-empty]:not(.rm)')].filter(t=>t.dataset.p==='D').length;
+    const res={empD, seats, tabs, 두길:pk.includes('쉬는 간호사 넣기')&&pk.includes('대체간호사 넣기'),
+      자리:!!(lab&&lab.label), D인원:Object.keys(day.D.labels).length, shown, empAfter,
+      차지:day.D.labels['차지']==='대체한명'};
+    s.relief={'2026-09-07':{D:['가']}}; res.명부이름=A.reliefDay('2026-09-07');
+    s.relief={}; A.recompute(); return res;`);
+  eq('122 D 가 5명인 날은 빈 자리 하나 (한 주 7칸)', rel.empD, 7);
+  eq('자리 수 — 122 D 6 · 나머지 5', rel.seats, { D: 6, E: 5, N: 5 });
+  eq('방 구성에 6인 탭이 생긴다', rel.tabs, [6, 5, 4, 3, 2]);
+  ok('빈 자리를 누르면 쉬는 간호사·대체간호사 두 길', rel.두길);
+  ok('대체간호사도 한 사람으로 세어 자리를 받는다', rel.자리 && rel.D인원 === 6, JSON.stringify(rel));
+  ok('대체간호사 이름 옆에 대체 표시', rel.shown);
+  eq('대체간호사가 들어간 날은 빈 자리가 준다', rel.empAfter, 6);
+  eq('대체간호사는 차지를 맡지 않는다', rel.차지, false);
+  eq('우리 명부 이름은 대체간호사로 세지 않는다', rel.명부이름, []);
+  // 101 은 5줄이라 여섯째는 헬퍼 — 서식이 자리 수를 정한다
+  eq('101 은 D 도 5자리', await ev(`const A=window.__app; A.setFormId('101'); const n=A.seatsFor('D'); const t=A.cntTabs(); A.setFormId('122'); return [n,t];`),
+    [5, [5, 4, 3, 2]]);
+
+  // ── 24. 신규 표시가 끝나는 날 (2026-09-27) ─────────────────────────────
+  // 예전엔 근무표 어디에든 /D 가 남아 있으면 영영 '신규'였다 — 몇 달 전 교육 기간 기록 때문에.
+  step('24 신규 표시');
+  const nw = await ev(`const A=window.__app; const s=A.store;
+    const d=k=>{ const x=new Date(); x.setDate(x.getDate()+k); return A.isoOfD(x); };
+    s.order=['선배','새내기','옛신규']; s.cells={선배:{},새내기:{},옛신규:{}}; s.newUntil={};
+    s.cells.새내기[d(-3)]='/D'; s.cells.새내기[d(2)]='/E'; s.cells.새내기[d(5)]='/D'; s.cells.새내기[d(6)]='D';
+    s.cells.옛신규[d(-90)]='/D'; s.cells.옛신규[d(-80)]='/N'; s.cells.옛신규[d(1)]='D';
+    A.recompute();
+    const a={새내기:A.traineeUntil('새내기'), 옛신규:A.traineeUntil('옛신규'),
+      지금:{새내기:A.isTrainee('새내기'), 옛신규:A.isTrainee('옛신규'), 선배:A.isTrainee('선배')},
+      칩:A.newChip('새내기').includes('신규 ~'), 옛칩:A.newChip('옛신규')};
+    s.newUntil.새내기=d(30); const b={until:A.traineeUntil('새내기')};
+    s.cells.새내기[d(40)]='/N'; b.cellWins=A.traineeUntil('새내기')===d(40);
+    delete s.cells.새내기[d(40)]; delete s.newUntil.새내기;
+    return {a, b, d5:d(5), dm80:d(-80), d30:d(30)};`);
+  eq('신규는 근무표의 마지막 /D 날까지', nw.a.새내기, nw.d5);
+  eq('몇 달 전 /D 는 그 날에서 끝난다', nw.a.옛신규, nw.dm80);
+  eq('오늘 신규인지', nw.a.지금, { 새내기: true, 옛신규: false, 선배: false });
+  ok('간호사 관리 칩은 끝나는 날까지만', nw.a.칩 && nw.a.옛칩 === '', JSON.stringify(nw.a));
+  eq('날짜를 늦게 정하면 그 날까지', nw.b.until, nw.d30);
+  ok('근무표에 더 늦은 /D 가 오면 근무표가 이긴다', nw.b.cellWins);
+  const nuEdit = await ev(`return (async()=>{ const A=window.__app; const s=A.store;
+    const d=k=>{ const x=new Date(); x.setDate(x.getDate()+k); return A.isoOfD(x); };
+    const p=A.editNewUntil('새내기'); await new Promise(r=>setTimeout(r,60));
+    const box=document.querySelector('#modalBox');
+    box.querySelector('input[name=nu][value=now]').click(); await new Promise(r=>setTimeout(r,20));
+    const note=box.querySelector('#nuNote').textContent;
+    box.querySelector('#mdOk').click(); await p;
+    const res={note, cells:[d(-3),d(2),d(5),d(6)].map(k=>s.cells.새내기[k]), 지금:A.isTrainee('새내기'), nu:s.newUntil.새내기||null};
+    A.undoAny(); res.undo=[d(2),d(5)].map(k=>s.cells.새내기[k]);
+    return res; })()`);
+  ok('오늘부터 떼기는 바뀔 날 수를 미리 알린다', nuEdit.note.includes('2일'), nuEdit.note);
+  eq('오늘부터 떼면 앞으로의 /D·/E 는 D·E 로, 지난 기록은 그대로', nuEdit.cells, ['/D', 'E', 'D', 'D']);
+  eq('뗀 뒤로는 신규가 아니다', [nuEdit.지금, nuEdit.nu], [false, null]);
+  eq('Ctrl+Z 로 되돌아온다', nuEdit.undo, ['/E', '/D']);
+
+  // ── 25. 교육·행사 일정 (2026-09-27) ────────────────────────────────────
+  step('25 교육·행사 일정');
+  const evs = await ev(`const A=window.__app; const s=A.store;
+    s.evRules=[
+      {id:'a',text:'CPR 교육',from:'2026-10-05',to:'2026-10-05'},
+      {id:'b',text:'QI 발표 준비',from:'2026-10-06',to:'2026-10-08'},
+      {id:'c',text:'주간 회의',from:'2026-10-01',to:'',wds:[1,3]},
+      {id:'d',text:'감염 교육',from:'2026-10-01',to:'2026-10-31',wds:[2],skip:['2026-10-13']},
+      {id:'e',text:'끝 없는 기간',from:'2026-10-01',to:''}];
+    const t=iso=>A.eventText(iso);
+    return {월:t('2026-10-05'), 화:t('2026-10-06'), 수:t('2026-10-07'), 목:t('2026-10-08'), 금:t('2026-10-09'),
+      다음수:t('2026-10-14'), 끝없음:t('2026-11-02'), 뺀날:t('2026-10-13'), 다른화:t('2026-10-20'), 시작전:t('2026-09-28'),
+      desc:[A.evDesc(s.evRules[0]),A.evDesc(s.evRules[1]),A.evDesc(s.evRules[2]),A.evDesc(s.evRules[3])]};`);
+  eq('이 날만 + 매주 월', evs.월, 'CPR 교육\n주간 회의');
+  eq('기간 + 매주 화', evs.화, 'QI 발표 준비\n감염 교육');
+  eq('기간 + 매주 수', evs.수, 'QI 발표 준비\n주간 회의');
+  eq('기간 끝날', evs.목, 'QI 발표 준비');
+  eq('아무 일정 없는 날', evs.금, '');
+  eq('매주 반복은 다음 주에도', evs.다음수, '주간 회의');
+  eq('끝을 비우면 계속', evs.끝없음, '주간 회의');
+  eq('이 날만 뺀 날', evs.뺀날, '');
+  eq('뺀 날 말고는 그대로', evs.다른화, '감염 교육');
+  eq('시작 전에는 없다', evs.시작전, '');
+  eq('일정 설명', evs.desc, ['이 날만 · 10/05(월)', '기간 · 10/06(화)~10/08(목) · 3일',
+    '매주 월·수 · 10/01부터 계속', '매주 화 · 10/01~10/31 · 3일 · 1일 뺌']);
+  const evMig = await ev(`const A=window.__app; const s=A.store; const keep=s.evRules; s.evRules=[];
+    s.events={'2026-10-02':'옛 행사','2026-10-01':'  '}; A.migrateStore();
+    const out={rules:s.evRules.map(r=>[r.text,r.from,r.to]), events:s.events}; s.evRules=keep; return out;`);
+  eq('옛 날짜별 글자는 이 날만 일정으로 옮긴다', evMig, { rules: [['옛 행사', '2026-10-02', '2026-10-02']], events: {} });
+  const add = await ev(`return (async()=>{ const A=window.__app; const s=A.store; s.evRules=[];
+    const wait=ms=>new Promise(r=>setTimeout(r,ms));
+    const p=A.editEventRule('2026-10-05',null); await wait(60);
+    const box=document.querySelector('#modalBox');
+    box.querySelector('#evText').value='병동 회의';
+    box.querySelector('input[name=evm][value=week]').click();
+    box.querySelector('.wdPick input[value="4"]').click();
+    const to=box.querySelector('#evWTo'); to.value='2026-10-31'; to.dispatchEvent(new Event('input',{bubbles:true}));
+    const note=box.querySelector('#evNote').textContent;
+    box.querySelector('#mdOk').click(); await p;
+    const r=s.evRules[0];
+    const p2=A.editEventRule('2026-10-05',null); await wait(60);
+    document.querySelector('#mdOk').click(); await wait(20);
+    const err=document.querySelector('#mdErr').textContent; A.closeModal(null); await p2;
+    s.cells.선배=s.cells.선배||{}; s.cells.선배['2026-10-05']='D'; A.recompute();   // 근무표가 없는 주는 표 대신 안내만 나온다
+    A.wkSunday=new Date(2026,9,4); A.renderWeek();
+    const cell=[...document.querySelectorAll('#wkTable td.evt')].find(t=>t.dataset.iso==='2026-10-05');
+    const shown={글자:cell?cell.textContent:'', 반복표시:!!(cell&&cell.querySelector('.evRep'))};
+    await A.buildPrintArea(false);
+    const printed=(document.querySelector('#printArea')||{}).textContent.includes('병동 회의');
+    const p3=A.openEventDay('2026-10-08'); await wait(60);
+    [...document.querySelectorAll('#modalBox button')].find(b=>b.textContent.includes('병동 회의')).click(); await wait(60);
+    [...document.querySelectorAll('#modalBox button')].find(b=>b.textContent.includes('만 빼기')).click(); await p3;
+    const skipped={skip:s.evRules[0].skip, 목:A.eventText('2026-10-08'), 다음목:A.eventText('2026-10-15')};
+    A.undoAny(); skipped.undo=A.eventText('2026-10-08');
+    return {rule:[r.text,r.from,r.to,r.wds], note, err, n:s.evRules.length, shown, printed, skipped}; })()`);
+  eq('매주 여러 요일로 넣는다', add.rule, ['병동 회의', '2026-10-05', '2026-10-31', [1, 4]]);
+  ok('몇 날에 드는지 미리 알려 준다', add.note.includes('매주 월·목 · 10/05~10/31 · 8일'), add.note);
+  eq('내용이 비면 넣지 않는다', [add.err, add.n], ['내용을 적으세요', 1]);
+  ok('배정표 맨 윗줄에 반복 표시와 함께 나온다', add.shown.글자.includes('병동 회의') && add.shown.반복표시, JSON.stringify(add.shown));
+  ok('인쇄물에도 나온다', add.printed);
+  eq('반복 일정은 이 날만 뺄 수 있다', [add.skipped.skip, add.skipped.목, add.skipped.다음목], [['2026-10-08'], '', '병동 회의']);
+  eq('뺀 것도 Ctrl+Z 로 되돌아온다', add.skipped.undo, '병동 회의');
+  await ev(`const A=window.__app; A.store.evRules=[]; A.wkSunday=new Date(2026,8,6); return 1`);
 
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
