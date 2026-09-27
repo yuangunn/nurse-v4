@@ -7,12 +7,13 @@
  *   처음 켜기(환영 = 마법사 첫 단계 → [처음 시작] 한 번에 파일 만들기)
  *   → 마법사(병동·방구성·근무표 붙여넣기·표기·가능근무) → 배정표가 뜨는지
  *   → 빈 자리에 대체간호사 넣기 → 교육·행사 매주 일정 → 엑셀로 내보내기 → 받은 파일 열어 보기
+ *   → 날짜 머리칸을 눌러 하루 어싸인표 → 당직 적기 → 한글 파일로 받기
  *
  * 파일 저장 창만 흉내 낸다 — file:// 헤드리스에서는 저장 창을 띄울 수 없어서, 사용자가 저장 창에서
  * [저장]을 누른 것처럼 메모리 속 파일 핸들을 돌려준다(읽기·쓰기는 진짜 경로를 탄다).
  */
 import { spawn, execSync } from 'node:child_process';
-import { mkdtempSync, copyFileSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -347,7 +348,83 @@ try {
       screen.length > 8, `파일 ${cells.이름.length}명 / 화면 ${screen.length}명`);
   }
 
-  step('10 화면에서 난 오류');
+  step('10 하루 어싸인표');
+  // 날짜 머리칸을 누르면 그 날 한글 양식 어싸인표가 열린다
+  const ls = () => existsSync(DOWN) ? readdirSync(DOWN).filter(f => !/\.crdownload$/.test(f)) : [];
+  const had = new Map(ls().map(f => [f, statSync(join(DOWN, f)).mtimeMs]));
+  const dayIso = await ev(`return document.querySelectorAll('#wkTable th.day[data-iso]')[1].dataset.iso`);
+  await tapSel(`#wkTable th.day[data-iso="${dayIso}"]`);
+  await sleep(900);
+  eq('하루 어싸인표 화면이 열렸다', await ev(`return [window.__app.dayIso, getComputedStyle(document.querySelector('#scrDay')).display!=='none']`), [dayIso, true]);
+  const paper = await ev(`const s=document.querySelector('#dayPreview .hsheet'); return s?s.textContent:''`);
+  const onDay = await ev(`const i=window.__app.dayInfo(${JSON.stringify(dayIso)}); return i?Object.values(i.D.labels):[]`);
+  ok('종이에 그 날 D 근무자가 다 있다', onDay.length > 0 && onDay.every(n => paper.includes(n)), `${onDay} / ${paper.slice(0, 80)}`);
+  // 당직 칸에 적으면 그 날에 저장된다
+  await tapSel('#daySide textarea[data-k]');
+  await send('Input.insertText', { text: '당직 가나다' });
+  await sleep(700);
+  eq('적은 당직이 그 날에 저장됐다', await ev(`const d=(window.__app.store.daily||{})[${JSON.stringify(dayIso)}]||{}; return Object.values(d.duty||{})`), ['당직 가나다']);
+  ok('종이에도 바로 나온다', (await ev(`return document.querySelector('#dayPreview .hsheet').textContent`)).includes('당직 가나다'));
+  // 한글 파일로 받기 — 브라우저에 따라 blob 이름이 안 붙어 같은 이름('download')에 덮어쓰기도 한다: 새로 생기거나 바뀐 파일을 내용으로 가린다
+  await tap('한글 파일로 받기');
+  let hw = [];
+  for (let i = 0; i < 40 && !hw.length; i++) {
+    await sleep(250);
+    hw = ls().filter(f => had.get(f) !== statSync(join(DOWN, f)).mtimeMs);
+  }
+  ok('hwpx 파일이 내려받아졌다', hw.length === 1, JSON.stringify(hw));
+  if (hw.length) {
+    const buf = readFileSync(join(DOWN, hw[0]));
+    ok('한글 hwpx(zip) — 첫 항목 mimetype 무압축', buf.slice(30, 38).toString() === 'mimetype' && buf.readUInt16LE(8) === 0 &&
+      buf.slice(38, 57).toString() === 'application/hwp+zip', buf.slice(0, 60).toString('latin1'));
+    console.log(`  · 받은 파일: ${hw[0]} (${(buf.length / 1024).toFixed(0)}KB)`);
+  }
+  await tap('← 배정표');
+  await sleep(300);
+  eq('배정표로 돌아왔다', await ev(`return getComputedStyle(document.querySelector('#scrWeek')).display!=='none'`), true);
+
+  step('11 당직표·번호');
+  // 하루 어싸인표 → [당직표·번호 관리] → 엑셀에서 복사한 당직표를 붙인다 → 넣기 → 그 날 당직 칸이 번호까지 채워진다
+  await tapSel(`#wkTable th.day[data-iso="${dayIso}"]`);
+  await sleep(900);
+  await tap('당직표·번호 관리');
+  await sleep(700);
+  eq('당직표·번호 화면이 열렸다', await ev(`return [window.__app.store&&document.querySelector('#adminPanelBox .apTitle').textContent, !!document.querySelector('#dutyCal')]`), ['당직표·번호', true]);
+  const md = iso => { const [, m, d] = iso.split('-').map(Number); return `${m}/${d}`; };
+  const near = k => { const d = new Date(dayIso + 'T00:00:00'); d.setDate(d.getDate() + k); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const roster = [['', md(near(-1)), md(dayIso), md(near(1))], ['전공의', 'R3', 'R4', 'R1'], ['전문의', '', '홍길동', ''], [], ['R4 김영숙', '010-0000-0004'], ['홍길동', '010-0000-0010']]
+    .map(r => r.join('\t')).join('\n');
+  await tapSel('#dutyPaste');
+  await send('Input.insertText', { text: roster });
+  await sleep(500);
+  const pv = await ev(`const b=document.querySelector('#dutyPv'); return b?b.textContent.replace(/\s+/g,' '):''`);
+  ok('붙이면 무엇을 읽었는지 먼저 보여 준다 (날짜·줄·번호)', /당직 날짜 3일/.test(pv) && pv.includes('전공의') && /번호 2개/.test(pv), pv.slice(0, 160));
+  await tapSel('#dutyPv button.pri');
+  await sleep(500);
+  eq('넣은 당직이 날짜마다 저장됐다', await ev(`return window.__app.store.duty.roster['OS 당직'][${JSON.stringify(dayIso)}]`), 'R4');
+  ok('달력 칸에 찾은 이름·번호가 보인다', (await ev(`const t=document.querySelector('#dutyCal td[data-iso="${dayIso}"] .dcN'); return t?t.textContent:''`)).includes('010-0000-0004'));
+  // 번호가 바뀌면 번호표에서 고친다
+  await tapSel('#dutyBookBox tr:nth-of-type(2) td:nth-of-type(2) input');
+  await ev(`document.activeElement.select(); return 1`);
+  await send('Input.insertText', { text: '010-0000-7777' });
+  await tapSel('#dutyFmt');
+  await sleep(300);
+  ok('번호표를 고치면 달력도 바로 따라간다', (await ev(`return document.querySelector('#dutyCal td[data-iso="${dayIso}"] .dcN').textContent`)).includes('010-0000-7777'));
+  // 하루 어싸인표 — 앞 단계에서 이 날 손으로 적은 당직이 먼저, [당직표대로]로 당직표를 따른다
+  await tap('배정표', '.topbar');
+  await sleep(400);
+  await tapSel(`#wkTable th.day[data-iso="${dayIso}"]`);
+  await sleep(1000);
+  ok('이 날 손으로 적은 값이 먼저다', (await ev(`return document.querySelector('#dayPreview .hsheet').textContent`)).includes('당직 가나다'));
+  await tap('당직표대로');
+  await sleep(1000);
+  const paper2 = await ev(`return document.querySelector('#dayPreview .hsheet').textContent`);
+  ok('당직표대로 — 이름·바뀐 번호가 종이에 들어간다', paper2.includes('R4 김영숙') && paper2.includes('010-0000-7777'), paper2.slice(-160));
+  eq('손으로 적은 값은 지워졌다', await ev(`return ((window.__app.store.daily||{})[${JSON.stringify(dayIso)}]||{}).duty||null`), null);
+  await tap('← 배정표');
+  await sleep(300);
+
+  step('12 화면에서 난 오류');
   eq('콘솔 오류 없음', await ev('return window.__errs.slice(0,5)'), []);
 
 } catch (e) {

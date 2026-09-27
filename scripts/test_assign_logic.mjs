@@ -882,6 +882,180 @@ async function main() {
   eq('뺀 것도 Ctrl+Z 로 되돌아온다', add.skipped.undo, '병동 회의');
   await ev(`const A=window.__app; A.store.evRules=[]; A.wkSunday=new Date(2026,8,6); return 1`);
 
+  // ── 하루 어싸인표 (병동 한글 양식, 2026-09-27) ───────────────────────────
+  // 양식 hwpx 를 그대로 두고 칸만 채운다. 칸 위치는 훑어서 찾는다 — 자리 줄은 위에서부터 차지·A·B…
+  step('23 하루 어싸인표');
+  const day = await ev(`const A=window.__app; return (async()=>{
+    const s=A.store; s.cells={}; s.unit={}; s.relief={}; s.daily={}; s.evRules=[]; s.trainee={}; s.trOv={};
+    s.order=['가간호','나간호','다간호','라간호','마간호','바간호','사간호'];
+    const plan=['D','D','D','E','E','N','OF'];
+    s.order.forEach((n,i)=>{ s.cells[n]={'2026-09-28':plan[i]}; });
+    s.evRules=[{id:'x',text:'이름표 꽂기',from:'2026-09-28',to:'2026-09-28'},{id:'y',text:'부서 점검',from:'2026-09-28',to:'2026-09-28'},{id:'z',text:'셋째 공지',from:'2026-09-28',to:'2026-09-28'}];
+    A.recompute(); A.DAYTPL=null;
+    const T=await A.loadDayTpl();
+    const L0=A.dayLayout(new DOMParser().parseFromString(T.sec,'application/xml'));
+    const layout={제목:!!L0.title, 공지:L0.notices.length, 자리:L0.main.rows.length, 머리:Object.keys(L0.main.shifts), 당직:L0.fields.length, 기호:L0.bullet};
+    const r=await A.buildDayDoc('2026-09-28'), L1=A.dayLayout(r.doc);   // 채운 뒤 다시 훑어 읽는다 (r.L 은 채우기 전 칸)
+    const M=L1.main, txt=(row,col)=>{ const c=M.m.at(row,col); return c?c.text:null; };
+    const info=A.dayInfo('2026-09-28'), cnt=P=>Object.keys(info[P].labels).length+info[P].extra.length;
+    const seats=['D','E','N'].map(P=>M.rows.slice(0,cnt(P)).every((row,i)=>{ const lab=['차지','A','B','C','D','E'][i];
+      return txt(row.r,M.shifts[P].nurse)===info[P].labels[lab] && txt(row.r,M.shifts[P].room)===A.roomsFor(P,cnt(P),lab,'2026-09-28'); }));
+    const blankRest=M.rows.slice(cnt('N')).every(row=>txt(row.r,M.shifts.N.nurse)===''&&txt(row.r,M.shifts.N.room)==='');
+    const fill={제목:A.hwText(L1.title), 공지:L1.notices.map(A.hwText), 자리:seats, 빈자리비움:blankRest, 경고:r.warn};
+    // 당직: 안 적은 칸은 양식 그대로, 적은 칸은 줄바꿈이 lineBreak 로
+    s.daily={'2026-09-28':{duty:{[r.L.fields[0].key]:'가나다'+String.fromCharCode(10)+'010-0000-0000'}}};
+    const bytes=await A.dayHwpxBytes('2026-09-28');
+    const ents=A.readZip(bytes), text=async n=>{ const e=ents.find(x=>x.name===n); return new TextDecoder().decode(e.meth===8?await A.inflateRaw(e.raw):e.raw); };
+    const sec=await text('Contents/section0.xml'), doc=new DOMParser().parseFromString(sec,'application/xml');
+    const L2=A.dayLayout(doc);
+    const baseEnts=T.ents.map(e=>e.name);
+    const zip={순서:JSON.stringify(ents.map(e=>e.name))===JSON.stringify(baseEnts), 첫항목:ents[0].name, 첫압축:ents[0].meth,
+      XML:!doc.getElementsByTagName('parsererror').length, 줄바꿈:/<hp:t>가나다<hp:lineBreak\/>010-0000-0000<\/hp:t>/.test(sec),
+      당직1:A.hwText(L2.fields[0].cell.sub.querySelector('*')), 당직2그대로:L2.fields[1].cell.text===L0.fields[1].def,
+      제목캐시없음:!L2.title.getElementsByTagNameNS('*','linesegarray').length,
+      문서제목:/9월 28일 어싸인표/.test(await text('Contents/content.hpf')), 미리보기글:(await text('Preview/PrvText.txt')).includes('가간호')};
+    // 공지를 이 날만 고치면 일정 대신 그것이 나가고, 지우면 일정으로 돌아온다
+    s.daily={'2026-09-28':{notes:'하나만'}};
+    const own=A.dayLayout((await A.buildDayDoc('2026-09-28')).doc).notices.map(A.hwText);
+    s.daily={};
+    // 올린 양식 검사 — .hwp·엑셀은 이유를 말하고 거절한다
+    const rej=async u8=>{ try{ await A.parseHwpx(u8); return 'ok'; }catch(e){ return e.message; } };
+    const hwp=await rej(new Uint8Array([0xD0,0xCF,0x11,0xE0,0,0,0,0]));
+    const xl=await rej(A.b64ToBytes(document.querySelector('#tplB64').textContent.replace(/[/][*][^*]*[*][/]/g,'').trim()));
+    // 시작 안내 마지막 줄은 엑셀 내려받기 (사용자 2026-09-27)
+    const ob=A.onboardItems().slice(-1)[0];
+    s.evRules=[]; A.recompute();
+    return {layout,fill,zip,own,hwp:/HWPX/.test(hwp),xl:/엑셀/.test(xl),ob:[ob.lb,ob.go,ob.goT]}; })();`);
+  eq('기본 양식 구조를 찾는다', day.layout, { 제목: true, 공지: 2, 자리: 5, 머리: ['D', 'E', 'N'], 당직: 3, 기호: '★ ' });
+  eq('제목은 그 날 날짜·요일', day.fill.제목, '9월 28일 (월)');
+  eq('공지는 교육·행사 일정 — 줄 수만큼 늘어난다', day.fill.공지, ['★ 이름표 꽂기', '★ 부서 점검', '★ 셋째 공지']);
+  eq('D·E·N 자리마다 배정표의 이름·방', day.fill.자리, [true, true, true]);
+  ok('사람 없는 자리는 양식 예시 글자를 비운다', day.fill.빈자리비움);
+  eq('경고 없음', day.fill.경고, []);
+  eq('한글 파일 — zip 순서 그대로, mimetype 맨 앞 무압축', [day.zip.순서, day.zip.첫항목, day.zip.첫압축], [true, 'mimetype', 0]);
+  ok('본문 XML 이 깨지지 않는다', day.zip.XML);
+  ok('당직 줄바꿈은 lineBreak', day.zip.줄바꿈);
+  ok('안 적은 당직 칸은 양식 그대로', day.zip.당직2그대로);
+  ok('글자를 바꾼 문단은 줄 배치 캐시를 뗀다', day.zip.제목캐시없음);
+  ok('문서 제목·미리보기 글도 그 날로', day.zip.문서제목 && day.zip.미리보기글, JSON.stringify(day.zip));
+  eq('이 날만 고친 공지가 일정보다 앞선다', day.own, ['★ 하나만']);
+  ok('.hwp 는 HWPX 로 저장하라고 알려 준다', day.hwp);
+  ok('엑셀 파일은 한글 양식이 아니라고 알려 준다', day.xl);
+  eq('시작 안내 마지막 줄 = 엑셀 내려받기', day.ob, ['엑셀로 내려받기', 'exportWeekXlsx()', '엑셀 다운로드']);
+
+  // ── 당직표·번호 (2026-09-27) ────────────────────────────────────────────
+  // 엑셀 당직표를 올리거나 붙이면 날짜별 당직·전화번호를 읽고, 하루 어싸인표 당직 칸을 날마다 채운다.
+  // 표 모양은 병원·과마다 달라 자리를 가정하지 않고 훑는다 — 이름은 가짜, 번호는 010-0000-…
+  step('24 당직표·번호');
+  const duty = await ev(`const A=window.__app; return (async()=>{
+    const s=A.store, NL=String.fromCharCode(10), TAB=String.fromCharCode(9);
+    s.duty={}; s.daily={}; A.dutyStore();
+    const tsv=rows=>rows.map(r=>r.join(TAB)).join(NL);
+    // ① 달력형 xlsx (정형외과식) — 날짜 줄(날짜 서식) 아래 전공의·전문의 줄, 표 아래 이름·번호
+    const X=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    const col=n=>String.fromCharCode(65+n);
+    const cells=[], put=(r,c,v,style)=>cells.push({r,c,v,style});
+    put(1,0,'<< 정형외과 당직표 >>');
+    ['일','월','화','수','목','금','토'].forEach((w,i)=>put(2,i+1,w));
+    const wk=[[46264,['R1','R2','R3','R4','R1','R2','R3'],['','','텀체인지','','홍길동','','']],
+              [46271,['R4','R1','R2','R3','R4','R1','R2'],['','','','','','','']]];
+    let r=3;
+    for(const [d0,res,att] of wk){ put(r,0,'날짜'); for(let i=0;i<7;i++) put(r,i+1,d0+i,1);
+      put(r+1,0,'전공의'); res.forEach((v,i)=>put(r+1,i+1,v)); put(r+2,0,'전문의'); att.forEach((v,i)=>v&&put(r+2,i+1,v)); r+=3; }
+    put(r+1,0,'R4 이순신'); put(r+1,1,'010-0000-0004'); put(r+2,0,'R1 박미경'); put(r+2,1,'01000000001'); put(r+3,0,'홍길동'); put(r+3,1,'010-0000-0010');
+    const byRow={}; cells.forEach(x=>(byRow[x.r]=byRow[x.r]||[]).push(x));
+    const sheet='<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'+
+      Object.keys(byRow).sort((a,b)=>a-b).map(rn=>'<row r="'+rn+'">'+byRow[rn].map(x=>typeof x.v==='number'
+        ?'<c r="'+col(x.c)+rn+'" s="'+(x.style||0)+'"><v>'+x.v+'</v></c>'
+        :'<c r="'+col(x.c)+rn+'" t="inlineStr"><is><t>'+X(x.v)+'</t></is></c>').join('')+'</row>').join('')+'</sheetData></worksheet>';
+    const parts={'[Content_Types].xml':'<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>',
+      'xl/workbook.xml':'<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="2026-09" sheetId="1" r:id="rId1"/></sheets></workbook>',
+      'xl/_rels/workbook.xml.rels':'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="x" Target="worksheets/sheet1.xml"/></Relationships>',
+      'xl/styles.xml':'<?xml version="1.0"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="176" formatCode="mm&quot;월&quot;\\ dd&quot;일&quot;"/></numFmts><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="176"/></cellXfs></styleSheet>',
+      'xl/worksheets/sheet1.xml':sheet};
+    const u8=A.packXlsx({ents:Object.keys(parts).map(name=>({name}))},parts,0);
+    const g=await A.readXlsxGrid(u8,{what:'당직표',isoDates:true});
+    const os=A.parseDutyGrid(g,{sheetName:g.sheetName,ctx:{y:2025,m:1}});
+    const osOut={시트:g.sheetName, 날짜:[os.dates[0],os.dates[os.dates.length-1],os.dates.length], 달:[os.ym.y,os.ym.m,os.ym.how],
+      줄:os.rows.map(x=>[x.label,x.n]), 번호:os.book.map(b=>b.name+' '+b.phone)};
+    // 넣기 — 가장 긴 줄(전공의)이 기본
+    A.dutyUI.key='OS 당직'; A.dutyIngest(g,{src:'x.xlsx',sheetName:g.sheetName});
+    const pick=A.dutyUI.pv.rows[A.dutyUI.pv.pick].label;
+    A.dutyApply();
+    const R=s.duty.roster['OS 당직'];
+    const auto=['2026-09-02','2026-08-31','2026-09-03'].map(i=>{ const a=A.dutyAuto('OS 당직',i); return a&&[a.raw,a.text,!!a.m]; });
+    // 하루 어싸인표 — 당직표로 채우고, 번호표에 없으면 확인에 알린다. 이 날 고친 글자가 먼저
+    A.DAYTPL=null;
+    const cellOf=async iso=>{ const b=await A.buildDayDoc(iso); const L=A.dayLayout(b.doc); return {t:L.fields[0].cell.text,w:b.warn.filter(x=>x.includes('OS 당직'))}; };
+    const d2=await cellOf('2026-09-02'), d31=await cellOf('2026-08-31');
+    s.daily={'2026-09-02':{duty:{'OS 당직':'손으로 적음'}}};
+    const own=(await cellOf('2026-09-02')).t;
+    s.daily={};
+    // 번호가 바뀌면 — 번호표만 고치면 모든 날이 따라간다
+    const i4=s.duty.book['OS 당직'].findIndex(b=>b.name==='R4 이순신');
+    A.dutyUI.key='OS 당직'; A.dutySetBook(i4,'phone','01000009999');
+    const changed=A.dutyAuto('OS 당직','2026-09-06').text;
+    A.undoAny(); const undone=A.dutyAuto('OS 당직','2026-09-06').text;
+    // ② 붙여넣기(외과식) — 날짜 칸이 1·2·3 뿐, 연·월은 제목에서, 30·31 은 지난달. 오른쪽 이름·번호 목록, R1a/이름 은 이름으로 찾는다
+    const gs=A.parseDutyGrid(A.parseClipboard(tsv([
+      ['','2026','','9월','외과'],
+      ['','','30','31','1','2','3','4','5','','과','이름','번호'],
+      ['','응급실','김영숙','','R1a/정다래','강민호','','','','','간담췌','정다래','010-0000-0020'],
+      ['','병동/ICU','','','','','','','','','','강민호','010 0000 0021'],
+      ['','','6','7','8','9','10','11','12'],
+      ['','응급실','윤서영','임태균','','','','','']])),{ctx:{y:2025,m:1}});
+    const gsOut={달:[gs.ym.y,gs.ym.m,gs.ym.how], 날짜:[gs.dates[0],gs.dates[gs.dates.length-1]], 줄:gs.rows.map(x=>[x.label,x.n]),
+      넷째:gs.rows[0].byIso['2026-09-01'], 번호:gs.book.map(b=>b.name+' '+b.phone),
+      찾기:[A.dutyMatchIn(gs.book,'R1a/정다래'),A.dutyMatchIn(gs.book,'강민호')].map(m=>m&&[m.name,m.b.phone])};
+    // ③ 번호만 (머리 줄 이름·번호·내선) · ④ 세로 당직표 · ⑤ 일련번호 열은 날짜가 아니다 · ⑥ 달 넘김
+    const only=A.parseDutyGrid(A.parseClipboard(tsv([['이름','번호','내선'],['홍길동','010-0000-0010','48001'],['김영숙','01000000011','']])));
+    const vert=A.parseDutyGrid(A.parseClipboard(tsv([['날짜','OS 당직'],['9/1','R4'],['9/2','R1'],['9/3','홍길동']])),{ctx:{y:2026,m:9}});
+    const cnt=A.parseDutyGrid(A.parseClipboard(tsv([['번호','이름','전화'],['1','홍길동','010-0000-0010'],['2','김영숙','010-0000-0011'],['3','이순신','010-0000-0012']])),{ctx:{y:2026,m:9}});
+    const roll=A.parseDutyGrid(A.parseClipboard(tsv([['','28','29','30','1','2'],['당직','가','나','다','라','마']])),{ctx:{y:2026,m:9}});
+    const rollOct=A.parseDutyGrid(roll.grid,{ym:{y:2026,m:10,how:'user'}});
+    // 번호표 합치기 — 이름이 같으면 새 번호, 없던 이름은 뒤에, 지우지 않는다
+    const mg=A.dutyMergeBook([{name:'홍길동',phone:'010-0000-0010',ext:''},{name:'최정훈',phone:'010-0000-0005',ext:''}],[{name:'홍길동',phone:'010-0000-0099',ext:''},{name:'한지민',phone:'010-0000-0006',ext:'48002'}]);
+    // 모양 — {이름} {번호} {내선}. 번호가 없고 내선만 있으면 {번호} 자리에 #내선, 비어 버린 # 는 걷는다
+    const fill=[A.dutyFill('{이름} #{내선}'+NL+'(20:00 ~ 익일 6am)','한지민',{phone:'',ext:'48002'}),
+                A.dutyFill('{이름} #{내선}','최정훈',{phone:'010-0000-0005',ext:''}),
+                A.dutyFill('{이름}'+NL+'{번호}','텀체인지',null),
+                A.dutyFill('{이름}'+NL+'{번호}','한지민',{phone:'',ext:'48002'})];
+    const out={osOut,pick,R:[R['2026-09-02'],R['2026-09-03'],Object.keys(R).length],auto,d2,d31,own,changed,undone,gsOut,
+      only:[only.dates.length,only.book.map(b=>[b.name,b.phone,b.ext])],
+      vert:[vert.dates,vert.rows.map(x=>[x.label,x.n])], cnt:[cnt.dates.length,cnt.book.length],
+      roll:[roll.dates[0],roll.dates[4],roll.ym.how], rollOct:[rollOct.dates[0],rollOct.dates[4]],
+      mg:[mg.book.map(b=>b.name+' '+b.phone),mg.added,mg.changed.map(c=>c.name+':'+c.from+'→'+c.to)], fill};
+    s.duty={}; A.dutyStore();
+    return out; })();`);
+  eq('xlsx 당직표 — 날짜 서식 칸은 연도까지 읽는다', duty.osOut.날짜, ['2026-08-30', '2026-09-12', 14]);
+  eq('달은 날짜 칸에서', duty.osOut.달, [2026, 9, 'date']);
+  eq('날짜 줄 아래 줄 이름으로 나눈다 (줄마다 몇 날)', duty.osOut.줄, [['전공의', 14], ['전문의', 2]]);
+  eq('표 아래 이름·번호를 번호표로 (번호 모양 맞춤)', duty.osOut.번호, ['R4 이순신 010-0000-0004', 'R1 박미경 010-0000-0001', '홍길동 010-0000-0010']);
+  eq('가장 긴 줄이 기본', duty.pick, '전공의');
+  eq('넣으면 날짜마다 당직표 글자 그대로', duty.R, ['R4', 'R1', 14]);
+  eq('당직표 R4 → 번호표 R4 이순신 · 번호 / 번호표에 없는 R2 는 글자만', duty.auto,
+    [['R4', 'R4 이순신\n010-0000-0004', true], ['R2', 'R2', false], ['R1', 'R1 박미경\n010-0000-0001', true]]);
+  eq('하루 어싸인표 당직 칸이 저절로 채워진다', duty.d2, { t: 'R4 이순신\n010-0000-0004', w: [] });
+  ok('번호표에 없는 당직은 확인에 알린다', duty.d31.t === 'R2' && duty.d31.w.length === 1 && duty.d31.w[0].includes('번호표에 없어'), JSON.stringify(duty.d31));
+  eq('이 날 고친 글자가 당직표보다 먼저', duty.own, '손으로 적음');
+  eq('번호가 바뀌면 번호표만 고치면 된다 (번호 모양도 맞춘다)', duty.changed, 'R4 이순신\n010-0000-9999');
+  eq('번호 고친 것도 Ctrl+Z', duty.undone, 'R4 이순신\n010-0000-0004');
+  eq('붙여넣기 — 연·월은 제목에서', duty.gsOut.달, [2026, 9, 'text']);
+  eq('날짜만 있는 칸 — 첫 주 30·31 은 지난달', duty.gsOut.날짜, ['2026-08-30', '2026-09-12']);
+  eq('줄 이름(응급실)으로 모은다', duty.gsOut.줄, [['응급실', 5]]);
+  eq('R1a/이름 도 그대로 읽는다', duty.gsOut.넷째, 'R1a/정다래');
+  eq('오른쪽 목록 — 머리 줄의 이름 열, 띄어 쓴 번호도', duty.gsOut.번호, ['정다래 010-0000-0020', '강민호 010-0000-0021']);
+  eq('R1a/이름 → 그 이름의 번호, 이름은 당직표 글자 그대로', duty.gsOut.찾기, [['R1a/정다래', '010-0000-0020'], ['강민호', '010-0000-0021']]);
+  eq('번호만 붙여도 된다 (내선 열까지)', duty.only, [0, [['홍길동', '010-0000-0010', '48001'], ['김영숙', '010-0000-0011', '']]]);
+  eq('세로 당직표(날짜가 한 열)도 읽는다', duty.vert, [['2026-09-01', '2026-09-02', '2026-09-03'], [['OS 당직', 3]]]);
+  eq('일련번호(번호 1·2·3) 열은 날짜로 읽지 않는다', duty.cnt, [0, 3]);
+  eq('달 없는 28·29·30·1·2 — 보던 달 기준 앞은 지난달', duty.roll, ['2026-08-28', '2026-09-02', 'none']);
+  eq('달을 고르면 다시 맞춘다', duty.rollOct, ['2026-09-28', '2026-10-02']);
+  eq('번호표 합치기 — 같은 이름은 새 번호, 없던 이름은 뒤에', duty.mg,
+    [['홍길동 010-0000-0099', '최정훈 010-0000-0005', '한지민 010-0000-0006'], 1, ['홍길동:010-0000-0010→010-0000-0099']]);
+  eq('종이 모양 — 내선·시간, 빈 # 걷기, 번호 없으면 #내선', duty.fill,
+    ['한지민 #48002\n(20:00 ~ 익일 6am)', '최정훈', '텀체인지', '한지민\n#48002']);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));

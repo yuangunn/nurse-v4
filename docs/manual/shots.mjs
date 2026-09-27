@@ -126,6 +126,27 @@ await page.evaluate(()=>{ const pa=document.querySelector('#printArea'); pa.styl
 await page.waitForTimeout(400);
 await el('11-toolbar','#scrWeek .wknav');
 
+// ── 당직표·번호 — 정형외과식 당직표(연차만 적힘) + 번호표. 번호표에 없는 이름 하나(번호 없음) ──
+await page.evaluate(()=>{
+  const R={}, res=['R1','R2','R3','R4'];
+  for(let d=new Date(2026,7,30),i=0;d<=new Date(2026,9,3);d=addDays(d,1),i++) R[isoOfD(d)]=res[i%4];
+  R['2026-09-30']='이황';
+  store.duty={lines:{},roster:{'OS 당직':R},book:{'OS 당직':[
+    {name:'R4 유성룡',phone:'010-0000-0004',ext:''},{name:'R3 정약용',phone:'010-0000-0003',ext:''},
+    {name:'R2 김정호',phone:'010-0000-0002',ext:''},{name:'R1 안창호',phone:'010-0000-0001',ext:''},
+    {name:'신사임당',phone:'010-0000-0010',ext:''}]}};
+});
+
+// ── 18. 하루 어싸인표 (한글 양식) — 교육이 있는 월요일, 당직은 당직표에서 ──
+await page.evaluate(()=>{ store.daily={}; openDay('2026-09-14'); window.scrollTo(0,0); });
+await page.waitForTimeout(1500);
+await shot('18-day',{x:0,y:60,width:1920,height:1020});
+
+// ── 19. 관리 > 당직표·번호 ──
+await page.evaluate(async ()=>{ dutyUI.y=2026; dutyUI.m=9; openDutyAdmin('OS 당직'); await renderDuty(); window.scrollTo(0,0); });
+await page.waitForTimeout(400);
+await shot('19-duty',{x:505,y:150,width:1195,height:910});   // 관리 패널만 (칸 탭·달력·번호표)
+
 // ── 12. 데이터 보관(백업) ──
 await page.evaluate(()=>{ show('admin'); pickAdmin('data'); window.scrollTo(0,0); });
 await shot('12-backup',ADMIN(420));
