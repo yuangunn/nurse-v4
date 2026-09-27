@@ -136,7 +136,16 @@ try {
   ok('환영 카드가 닫혔다', !(await ev(`return document.querySelector('#intro').classList.contains('on')`)), '열린 채');
   ok('시작 안내가 떠 있다', await ev(`const e=document.querySelector('#onboard');
     return !!e&&getComputedStyle(e).display!=='none';`), '안 보임');
-  await tap('남은 준비 보기');          // 시작 안내 카드는 접혀 있다
+  // 1920 에서는 시작 안내가 표 오른쪽 열에 펼쳐져 있다 — 표를 밀어내지 않는다 (2026-09-27).
+  // 좁은 화면이면 표 위에 접혀 있으니 펼친다.
+  const side = await ev(`const o=document.querySelector('#onboard').getBoundingClientRect(),
+      p=document.querySelector('#wkPaper').getBoundingClientRect(), n=document.querySelector('.wknav').getBoundingClientRect();
+    return {열:document.querySelector('#onboard').classList.contains('side'), 오른쪽:o.left>=p.right-1, 표위:Math.round(p.top-n.bottom),
+      화면폭:innerWidth};`);
+  if (side.화면폭 >= 1860) {
+    ok('1920 에서 시작 안내는 표 오른쪽 열에 선다', side.열 && side.오른쪽, JSON.stringify(side));
+    ok('표가 도구 띠 바로 아래에서 시작한다', side.표위 < 30, JSON.stringify(side));
+  } else await tap('남은 준비 보기');   // 좁은 화면 — 시작 안내 카드는 접혀 있다
   await tap('처음 설정 다시 하기');
   ok('마법사가 열렸다', await ev(`return document.querySelector('#wiz').classList.contains('on')`), '안 열림');
 

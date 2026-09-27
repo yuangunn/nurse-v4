@@ -669,6 +669,51 @@ async function main() {
   eq('손댄 값은 건드리지 않는다', autoFit.second, { D: 9, E: 9, N: 9 });
   await ev(`window.__app.setFormId('101'); return 1`);
 
+  // ── 22. 화면 인쇄가 없는 서식은 101 인쇄 틀로 빠지지 않는다 ──────────
+  // 82 가 101 틀로 빠져 방 칸이 있고 SU 줄이 없는 종이가 나오고 있었다 (2026-09-27).
+  // 102·82 는 엑셀로 받아 엑셀에서 인쇄한다 — 도구 띠의 검정 단추도 엑셀로 바뀐다.
+  step('22 인쇄 서식 가드');
+  const guard = await ev(`const A=window.__app; return (async()=>{
+    const s=A.store; s.cells={}; s.unit={}; s.order=['가간호','나간호','다간호','라간호'];
+    for(const n of s.order){ s.cells[n]={}; for(let d=13;d<=19;d++) s.cells[n]['2026-09-'+d]=['D','D','E','N'][s.order.indexOf(n)]; }
+    A.store=s; A.recompute(); A.wkSunday=new Date(2026,8,13);
+    const out={can:{}};
+    for(const id of ['101','122','102','82']){ A.setFormId(id); out.can[id]=A.canPrint(); }
+    const bar=()=>{ A.show('week'); const p=document.querySelector('#btnPrint'), x=document.querySelector('#btnXlsx');
+      return {인쇄:getComputedStyle(p).display!=='none', 엑셀주:x.classList.contains('pri')}; };
+    A.setFormId('82'); out.bar82=bar();
+    let msg=''; try{ await A.buildPrintArea(false); msg='만들어짐'; }catch(e){ msg=e.message; }
+    const pa=document.querySelector('#printArea');
+    out.print82={엑셀안내:/엑셀/.test(msg), 장:pa.querySelectorAll('.sheet').length, 표:!!pa.querySelector('table')};
+    let called=false; const keep=window.print; window.print=()=>{ called=true; };
+    await A.printWeek(false); await new Promise(r=>setTimeout(r,300)); window.print=keep;
+    out.print82.인쇄창=called;
+    A.setFormId('101'); out.bar101=bar();
+    return out; })();`);
+  eq('화면 인쇄는 101·122 만', guard.can, { '101': true, '122': true, '102': false, '82': false });
+  eq('82 는 [인쇄]를 숨기고 엑셀이 주 단추', guard.bar82, { 인쇄: false, 엑셀주: true });
+  eq('101 은 [인쇄]가 주 단추', guard.bar101, { 인쇄: true, 엑셀주: false });
+  eq('82 인쇄 영역은 101 표가 아니라 안내 한 장', guard.print82, { 엑셀안내: true, 장: 1, 표: false, 인쇄창: false });
+
+  // 저장 상태는 파일 칩 끝에 붙는다 — 따로 뜨던 빨간 배지(saveDot)는 없다.
+  // 쓸 수 없는 상태(파일 없음·읽기 전용)에서는 칩이 이미 말하므로 저장 상태를 덧붙이지 않는다.
+  const chip = await ev(`const A=window.__app; const el=document.querySelector('#fileInfo'), t=()=>el.textContent;
+    const out={배지:!!document.querySelector('#saveDot')};
+    A.setFileLoc({kind:'file',name:'assign-data.js'}); A.saveMsg('저장됨'); out.저장됨=/저장됨/.test(t());
+    A.saveMsg('⚠ 저장 보류 (파일 확인 불가)'); out.보류=/저장 보류/.test(t())&&el.classList.contains('off');
+    A.setFileLoc({kind:'none'}); A.saveMsg('⚠ 파일 미연결 — 저장되지 않음'); out.미연결중복=/파일 미연결/.test(t());
+    A.saveMsg(''); return out;`);
+  eq('저장 상태는 파일 칩 하나에', chip, { 배지: false, 저장됨: true, 보류: true, 미연결중복: false });
+
+  // 이름 클릭 창 — 근무 코드는 접혀 있다가 펼치면 보이고, 펼친 것은 창을 다시 열어도 남는다
+  const fold = await ev(`const A=window.__app; A.show('week');
+    const td=document.querySelector('#wkTable td.nm'); if(!td) return '이름 칸 없음';
+    const vis=()=>getComputedStyle(document.querySelector('#pick .shl')).display!=='none';
+    td.click(); const a=vis(); A.togglePickShifts(); const b=vis(); A.closePick();
+    td.click(); const c=vis(); A.togglePickShifts(); A.closePick();
+    return {처음:a, 펼침:b, 다시열기:c, 끝:A.pkShiftOpen};`);
+  eq('근무 코드는 접혀 있다가 펼치면 보인다', fold, { 처음: false, 펼침: true, 다시열기: true, 끝: false });
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
