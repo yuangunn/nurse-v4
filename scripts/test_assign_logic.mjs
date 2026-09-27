@@ -928,7 +928,8 @@ async function main() {
     return {layout,fill,zip,own,hwp:/HWPX/.test(hwp),xl:/엑셀/.test(xl),ob:[ob.lb,ob.go,ob.goT]}; })();`);
   eq('기본 양식 구조를 찾는다', day.layout, { 제목: true, 공지: 2, 자리: 5, 머리: ['D', 'E', 'N'], 당직: 3, 기호: '★ ' });
   eq('제목은 그 날 날짜·요일', day.fill.제목, '9월 28일 (월)');
-  eq('공지는 교육·행사 일정 — 줄 수만큼 늘어난다', day.fill.공지, ['★ 이름표 꽂기', '★ 부서 점검', '★ 셋째 공지']);
+  eq('공지는 양식의 기본 공지 + 교육·행사 일정 — 줄 수만큼 늘어난다', day.fill.공지,
+    ['★ 이름표 꽂기 (스테이션 및 1인, 2인실 병실 앞)', '★ 부서예방 점검 3PM 이전 시행', '★ 이름표 꽂기', '★ 부서 점검', '★ 셋째 공지']);
   eq('D·E·N 자리마다 배정표의 이름·방', day.fill.자리, [true, true, true]);
   ok('사람 없는 자리는 양식 예시 글자를 비운다', day.fill.빈자리비움);
   eq('경고 없음', day.fill.경고, []);
@@ -1055,6 +1056,93 @@ async function main() {
     [['홍길동 010-0000-0099', '최정훈 010-0000-0005', '한지민 010-0000-0006'], 1, ['홍길동:010-0000-0010→010-0000-0099']]);
   eq('종이 모양 — 내선·시간, 빈 # 걷기, 번호 없으면 #내선', duty.fill,
     ['한지민 #48002\n(20:00 ~ 익일 6am)', '최정훈', '텀체인지', '한지민\n#48002']);
+
+  // ── 기본 공지 · 당직 번호 · 양식 글자 고치기 (2026-09-27 저녁, 결정 2-36) ──────────
+  // 병동마다 쓰는 양식이 달라 CN(48455) 같은 자리 이름·기본 공지·당직 칸 이름을 병동이 고쳐 데이터 파일에 저장한다
+  step('26 기본 공지·당직 번호·양식 글자');
+  const dfm = await ev(`const A=window.__app; return (async()=>{
+    const s=A.store, NL=String.fromCharCode(10);
+    s.daily={}; s.duty={}; A.dutyStore(); s.dayForm=null; A.DAYTPL=null;
+    s.evRules=[{id:'a',text:'신규 교육',from:'2026-09-28',to:'2026-09-28'},{id:'b',text:'★ 부서예방 점검 3PM 이전 시행',from:'2026-09-28',to:'2026-09-28'}];
+    const T=await A.loadDayTpl(), doc0=new DOMParser().parseFromString(T.sec,'application/xml'), L0=A.dayLayout(doc0);
+    const K=L0.fields.map(f=>f.key);
+    const notes={기본:L0.noticeDefs, 이날:A.dayNotes('2026-09-28',L0.noticeDefs).split(NL), 없는날:A.dayNotes('2026-09-29',L0.noticeDefs).split(NL)};
+    // 당직 칸 문단 모양 — 양식에서 GS 칸만 줄 간격이 달랐다. 채운 칸은 가장 많은 모양으로 맞춘다
+    const paraOf=f=>A.hwKids(f.cell.sub,'p')[0].getAttribute('paraPrIDRef');
+    const before=L0.fields.map(paraOf);
+    // GS = 늘 같은 번호 · 진료지원 = 번호표에 S-zone
+    s.duty.lines[K[1]]={fixed:{phone:'010-0000-9999',ext:''}};
+    s.duty.roster[K[1]]={'2026-09-28':'홍길동'};
+    s.duty.book[K[2]]=[{name:'최세브',phone:'010-0000-0100',ext:'48001'},{name:'박세브',phone:'010-0000-0101',ext:'48002'}];
+    s.duty.book[K[0]]=[{name:'R4 이순신',phone:'010-0000-0004',ext:''}];
+    const name=[A.dayDutyName(K[2],'최세브'),A.dayDutyName(K[2],'최세브 #48001'),A.dayDutyName(K[2],'모르는 사람'),A.dayDutyName(K[1],'아무개')];
+    s.duty.roster[K[2]]={'2026-09-28':'최세브'};
+    const r=await A.buildDayDoc('2026-09-28'), L1=A.dayLayout(r.doc);
+    const num={prefer:[A.dutyPrefer(K[0]),A.dutyPrefer(K[1]),A.dutyPrefer(K[2])], GS:L1.fields[1].cell.text, PA:L1.fields[2].cell.text,
+      경고:r.warn.filter(w=>K.some(k=>w.includes(k)))};
+    A.dutyUI.key=K[2]; A.dutySetPrefer('phone'); num.전화로=A.dutyAuto(K[2],'2026-09-28').text;
+    A.undoAny(); num.되돌림=A.dutyAuto(K[2],'2026-09-28').text;
+    num.토큰=A.dutyFill('{이름} {전화} {내선}','가',{phone:'010-0000-0001',ext:'48009'});
+    const para={양식:before, 채움:L1.fields.map(paraOf), 기준:L0.dutyPara.para};
+    // A4 한 장 — 공지가 늘면 빈 줄을 걷고, 두 줄(양식 그대로)이면 건드리지 않는다
+    const pg=A.hwPage(doc0), limit=pg.H-pg.top-pg.bottom, top=d=>A.hwKids(d.documentElement,'p').length;
+    const base=await A.buildDayDoc('2026-09-29');
+    s.evRules=['하나','둘','셋'].map((t,i)=>({id:'f'+i,text:t+' 공지',from:'2026-09-30',to:'2026-09-30'}));
+    const many=await A.buildDayDoc('2026-09-30'), Lm=A.dayLayout(many.doc);
+    const fit={양식높이:A.hwBodyH(doc0,T.styles)<=limit, 그대로:top(base.doc)===top(doc0), 걷음:top(doc0)-top(many.doc),
+      한장:A.hwBodyH(many.doc,T.styles)<=limit, 공지:Lm.notices.length, 표:!!Lm.main&&Lm.fields.length===K.length, 제목:!!Lm.title};
+    // 양식 글자 고치기 — 자리 이름 CN(48455) · 기본 공지 · 당직 칸 이름. 당직 칸 이름이 바뀌면 그 칸 자료도 따라간다
+    const box=document.createElement('div'); box.id='dayFormText'; document.body.appendChild(box);
+    await A.renderDayFormText();
+    const items=A.dayEditItems(doc0,L0), seat0=items.find(x=>x.g==='seat'&&x.seat===0), dut=items.find(x=>x.g==='duty'&&x.first&&x.text.split(NL)[0]===K[0]);
+    const set=(id,v)=>{ const el=box.querySelector('[data-ed="'+id+'"]'); el.value=v; };
+    const ed={자리:seat0&&seat0.text, 칸:box.querySelectorAll('[data-ed]').length>5};
+    set(seat0.id,'CN(40000)'); set('n',notes.기본.join(NL)+NL+'세 번째 공지');
+    set(dut.id,dut.text.replace(K[0],'정형 당직'));
+    await A.saveDayFormText();
+    A.DAYTPL=null;
+    const T2=await A.loadDayTpl(), doc2=new DOMParser().parseFromString(T2.sec,'application/xml'), L2=A.dayLayout(doc2);
+    ed.저장=[!!s.dayForm&&s.dayForm.edited, T2.name];
+    ed.새자리=A.dayEditItems(doc2,L2).find(x=>x.g==='seat'&&x.seat===0).text;
+    ed.새공지=L2.noticeDefs; ed.새칸=L2.fields[0].key;
+    ed.옮김=[!!s.duty.book['정형 당직'],!s.duty.book[K[0]]];
+    ed.한장=A.hwBodyH(doc2,T2.styles)<=limit;
+    // 이름을 비우거나 '중간·헬퍼' 를 넣은 자리는 저장하지 않는다
+    await A.renderDayFormText();
+    const it2=A.dayEditItems(doc2,L2).find(x=>x.g==='seat'&&x.seat===1);
+    const f0=s.dayForm.b64; set(it2.id,'중간번'); await A.saveDayFormText();
+    ed.막음=[s.dayForm.b64===f0, /자리 줄로 보지 않습니다/.test((box.querySelector('#dfEdMsg')||{}).textContent||'')];
+    A.undoAny();   // 막힌 저장은 되돌리기에 남지 않는다 — 한 번 되돌리면 이름 바꾼 저장 전(양식·당직 칸 이름)으로
+    ed.되돌림=[!s.dayForm||!s.dayForm.b64, !!s.duty.book[K[0]]];
+    box.remove(); s.dayForm=null; A.DAYTPL=null; s.duty={}; A.dutyStore(); s.evRules=[]; s.daily={};
+    return {notes,num,name,para,fit,ed}; })();`);
+  eq('기본 공지 = 양식의 ★ 줄', dfm.notes.기본, ['이름표 꽂기 (스테이션 및 1인, 2인실 병실 앞)', '부서예방 점검 3PM 이전 시행']);
+  eq('기본 공지 뒤에 그 날 교육·행사 — 같은 글은 한 번', dfm.notes.이날,
+    ['이름표 꽂기 (스테이션 및 1인, 2인실 병실 앞)', '부서예방 점검 3PM 이전 시행', '신규 교육']);
+  eq('일정이 없는 날도 기본 공지는 나간다', dfm.notes.없는날, ['이름표 꽂기 (스테이션 및 1인, 2인실 병실 앞)', '부서예방 점검 3PM 이전 시행']);
+  ok('양식에선 당직 칸 문단 모양이 달랐다 (GS 줄 간격)', new Set(dfm.para.양식).size > 1, JSON.stringify(dfm.para));
+  ok('채운 당직 칸은 모두 같은 문단 모양', dfm.para.채움.every(p => p === dfm.para.기준), JSON.stringify(dfm.para));
+  eq('칸이 먼저 쓰는 번호 — OS 전화 · GS 늘 같은 번호(전화) · 진료지원 내선', dfm.num.prefer, ['phone', 'phone', 'ext']);
+  eq('GS — 누가 당직이든 늘 같은 번호', dfm.num.GS, '홍길동\n010-0000-9999');
+  eq('진료지원 — 이름만 적으면 S-zone 번호', dfm.num.PA, '최세브\n#48001');
+  eq('늘 같은 번호·번호표에 있는 사람은 번호 경고 없음', dfm.num.경고, []);
+  eq('전화번호 먼저로 바꾸면 전화번호', dfm.num.전화로, '최세브\n010-0000-0100');
+  eq('바꾼 것도 Ctrl+Z', dfm.num.되돌림, '최세브\n#48001');
+  eq('{전화} {내선} 은 그것만', dfm.num.토큰, '가 010-0000-0001 48009');
+  eq('이름만 적은 칸 → 당직표로 (번호가 든 글·번호표에 없는 이름은 아님, 늘 같은 번호 칸은 아무 이름이나)', dfm.name, ['최세브', null, null, '아무개']);
+  ok('양식은 A4 한 장', dfm.fit.양식높이);
+  ok('공지가 두 줄이면 빈 줄을 건드리지 않는다', dfm.fit.그대로);
+  ok('공지가 늘면 빈 줄을 걷어 A4 한 장', dfm.fit.걷음 > 0 && dfm.fit.한장, JSON.stringify(dfm.fit));
+  eq('걷어도 제목·공지·표는 그대로', [dfm.fit.제목, dfm.fit.공지, dfm.fit.표], [true, 5, true]);
+  eq('양식 글자 고치기 — 첫 자리 이름', dfm.ed.자리, 'CN(48455)');
+  ok('고칠 칸이 여럿 보인다', dfm.ed.칸);
+  eq('이 병동 양식으로 저장', dfm.ed.저장, [true, '101병동 기본 양식 (글자 고침)']);
+  eq('자리 이름의 내선 번호를 고친다', dfm.ed.새자리, 'CN(40000)');
+  eq('기본 공지를 늘린다', dfm.ed.새공지, ['이름표 꽂기 (스테이션 및 1인, 2인실 병실 앞)', '부서예방 점검 3PM 이전 시행', '세 번째 공지']);
+  eq('당직 칸 이름을 바꾸면 번호표도 새 이름으로', [dfm.ed.새칸, dfm.ed.옮김], ['정형 당직', [true, true]]);
+  ok('공지를 늘려 저장해도 A4 한 장', dfm.ed.한장);
+  eq("자리 이름에 '중간'이 들어가면 저장하지 않고 이유를 말한다", dfm.ed.막음, [true, true]);
+  eq('저장한 양식도 Ctrl+Z (당직 칸 이름까지)', dfm.ed.되돌림, [true, true]);
 
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
