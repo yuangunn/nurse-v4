@@ -1,4 +1,4 @@
-// assign-core.js + 병실 배정표.xlsx·병실 배정표_122.xlsx(base64, 배정표 서식 두 벌) + 폰트를 standalone/assign.html 마커에 재주입 (단일 소스 동기화)
+// assign-core.js + 병실 배정표 xlsx(base64, 서식 4벌) + 하루 어싸인표.hwpx + 폰트를 standalone/assign.html 마커에 재주입 (단일 소스 동기화)
 // 도움말 그림(GIF)은 2026-09-17 에 실제 화면 투어로 대체돼 더 이상 심지 않는다.
 // 사용: node scripts/build-assign-standalone.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -9,6 +9,8 @@ const tplB64 = readFileSync('standalone/병실 배정표.xlsx').toString('base64
 const tpl122B64 = readFileSync('standalone/병실 배정표_122.xlsx').toString('base64');   // 122병동 서식 (2026-09-17)
 const tpl102B64 = readFileSync('standalone/병실 배정표_102.xlsx').toString('base64');   // 102병동 서식 (2026-09-20) — 방 칸 없이 자리·이름만
 const tpl82B64  = readFileSync('standalone/병실 배정표_82.xlsx').toString('base64');    // 82병동 서식 (2026-09-21) — 자리마다 SU(Stroke unit) 칸이 따로 있다
+// 하루 어싸인표 기본 양식 (2026-09-27) — 101병동 한글(hwpx). 공개 저장소라 예시 당직 이름·연락처·작성자만 비웠다(결정 2-34)
+const tplDayB64 = readFileSync('standalone/하루 어싸인표.hwpx').toString('base64');
 const fontB64 = readFileSync('frontend/fonts/PretendardVariable.woff2').toString('base64');
 
 const htmlPath = 'standalone/assign.html';
@@ -49,6 +51,9 @@ out = out.replace(
 ).replace(
   /\/\*TEMPLATE82_B64_BEGIN\*\/[\s\S]*?\/\*TEMPLATE82_B64_END\*\//,
   '/*TEMPLATE82_B64_BEGIN*/' + tpl82B64 + '/*TEMPLATE82_B64_END*/'
+).replace(
+  /\/\*TEMPLATEDAY_B64_BEGIN\*\/[\s\S]*?\/\*TEMPLATEDAY_B64_END\*\//,
+  '/*TEMPLATEDAY_B64_BEGIN*/' + tplDayB64 + '/*TEMPLATEDAY_B64_END*/'
 );
 // Pretendard Variable 내장 (오프라인 단일 파일 — CDN 금지)
 out = out.replace(
@@ -63,4 +68,4 @@ out = out.replace(
 );
 if (out === html) console.log('변경 없음');
 else { writeFileSync(htmlPath, out); console.log(`standalone/assign.html 동기화 완료 — ${ASSIGN_VER}`,
-    '· 코어 + 양식 4벌(101·122·102·82) + 폰트 (도움말은 그림 없이 실제 화면 투어)'); }
+    '· 코어 + 양식 4벌(101·122·102·82) + 하루 어싸인표(hwpx) + 폰트 (도움말은 그림 없이 실제 화면 투어)'); }
