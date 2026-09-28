@@ -722,15 +722,31 @@ async function main() {
   eq('101 은 [인쇄]가 주 단추', guard.bar101, { 인쇄: true, 엑셀주: false });
   eq('82 인쇄 영역은 101 표가 아니라 안내 한 장', guard.print82, { 엑셀안내: true, 장: 1, 표: false, 인쇄창: false });
 
-  // 저장 상태는 파일 칩 끝에 붙는다 — 따로 뜨던 빨간 배지(saveDot)는 없다.
-  // 쓸 수 없는 상태(파일 없음·읽기 전용)에서는 칩이 이미 말하므로 저장 상태를 덧붙이지 않는다.
-  const chip = await ev(`const A=window.__app; const el=document.querySelector('#fileInfo'), t=()=>el.textContent;
+  // 저장 상태는 머리줄 알약 하나에 (사용자 시안 2026-09-28, 결정 2-37) — 따로 뜨던 빨간 배지(saveDot)는 없다.
+  // 초록 '저장됨 · 시각' · 회색 '저장 중…'(고친 것이 아직 파일에 없을 때도) · ⚠ 는 짧게 · 읽기 전용은 노랑.
+  // 쓸 수 없는 상태(파일 없음·읽기 전용)에서는 알약이 이미 말하므로 저장 상태를 덧붙이지 않는다. 경로는 툴팁에.
+  const chip = await ev(`const A=window.__app; const el=document.querySelector('#fileInfo'), t=()=>el.textContent.trim(), c=k=>el.classList.contains(k);
     const out={배지:!!document.querySelector('#saveDot')};
-    A.setFileLoc({kind:'file',name:'assign-data.js'}); A.saveMsg('저장됨'); out.저장됨=/저장됨/.test(t());
-    A.saveMsg('⚠ 저장 보류 (파일 확인 불가)'); out.보류=/저장 보류/.test(t())&&el.classList.contains('off');
+    const keepSaved=A.store.saved, keepDirty=A.dirty; const sv=new Date(); sv.setHours(14,2,0,0); A.store.saved=sv.toISOString(); A.dirty=false;
+    A.setFileLoc({kind:'file',name:'assign-data.js'}); A.saveMsg('저장됨'); out.저장됨=t()==='저장됨 · 14:02'&&c('ok');
+    out.경로툴팁=el.title.startsWith('파일: assign-data.js');
+    A.saveMsg('저장 중…'); out.저장중=t()==='저장 중…'&&c('busy');
+    A.saveMsg(''); A.dirty=true; A.renderFileInfo(); out.고친것대기=t()==='저장 중…'&&c('busy'); A.dirty=false;
+    A.saveMsg('⚠ 저장 보류 (파일 확인 불가)'); out.보류=t()==='저장 보류'&&c('off');
+    A.saveMsg(''); A.setFileLoc({kind:'sidecar',name:'assign-data.js'}); out.읽기전용=t()==='읽기 전용'&&c('warn');
     A.setFileLoc({kind:'none'}); A.saveMsg('⚠ 파일 미연결 — 저장되지 않음'); out.미연결중복=/파일 미연결/.test(t());
-    A.saveMsg(''); return out;`);
-  eq('저장 상태는 파일 칩 하나에', chip, { 배지: false, 저장됨: true, 보류: true, 미연결중복: false });
+    A.store.saved=keepSaved; A.dirty=keepDirty; A.saveMsg(''); return out;`);
+  eq('저장 상태는 머리줄 알약 하나에', chip, { 배지: false, 저장됨: true, 경로툴팁: true, 저장중: true, 고친것대기: true, 보류: true, 읽기전용: true, 미연결중복: false });
+
+  // 머리줄 — 가운데 탭 셋(배정표·근무표·관리), 보고 있는 화면만 켜짐. 떠 있던 ? 단추는 없고 머리줄 [도움말].
+  const hdr = await ev(`const A=window.__app; const on=()=>[...document.querySelectorAll('.tbTabs .tab.on')].map(b=>b.textContent.trim());
+    const out={탭:[...document.querySelectorAll('.tbTabs .tab')].map(b=>b.textContent.trim()), 떠있는물음표:!!document.querySelector('#helpFab'),
+      도움말:!!document.querySelector('.tbR #helpBtn')};
+    A.show('week'); out.배정표=on(); A.show('edit'); out.근무표=on(); A.show('paste'); out.넣기=on(); A.show('admin'); out.관리=on();
+    out.aria=document.querySelector('#tabAdmin').getAttribute('aria-current');
+    A.show('week'); return out;`);
+  eq('머리줄 탭과 도움말', hdr, { 탭: ['배정표', '근무표', '관리'], 떠있는물음표: false, 도움말: true,
+    배정표: ['배정표'], 근무표: ['근무표'], 넣기: ['근무표'], 관리: ['관리'], aria: 'page' });
 
   // 이름 클릭 창 — 근무 코드는 접혀 있다가 펼치면 보이고, 펼친 것은 창을 다시 열어도 남는다
   const fold = await ev(`const A=window.__app; A.show('week');
