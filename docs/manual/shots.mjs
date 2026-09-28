@@ -1,4 +1,4 @@
-// 설명서용 실제 화면 캡처 — 예시 데이터(홍길동 등) (2026-09-18, 2026-09-27 다시 찍음)
+// 설명서용 실제 화면 캡처 — 예시 데이터(홍길동 등) (2026-09-18, 2026-09-27·09-28 다시 찍음)
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -15,8 +15,8 @@ const errs=[]; page.on('pageerror',e=>errs.push(String(e)));
 page.on('dialog',d=>d.accept());
 const shot=async(name,clip)=>{ await page.waitForTimeout(250); await page.screenshot({path:OUT+name+'.png',...(clip?{clip}:{})}); console.log('  '+name); };
 const el=async(name,sel)=>{ const h=await page.$(sel); if(!h){ console.log('  !! 없음 '+sel); return; } await page.waitForTimeout(200); await h.screenshot({path:OUT+name+'.png'}); console.log('  '+name); };
-// 관리 화면 = 왼쪽 메뉴 + 패널 (1920 에서 x 220~1700)
-const ADMIN=h=>({x:220,y:60,width:1480,height:h});
+// 관리 화면 = 왼쪽 메뉴 + 패널 (1920 에서 x 220~1700) — 머리줄 60px 아래 4px 부터
+const ADMIN=h=>({x:220,y:64,width:1480,height:h});
 
 await page.goto(HTML);
 
@@ -41,9 +41,13 @@ await page.evaluate(({names,plan})=>{
   store.evRules=[{id:'e1',text:'신규 간호사 교육 14:00',from:iso(1),to:iso(1)},
                  {id:'e2',text:'물품 점검',from:iso(-7),to:'',wds:[4]}];
   wkSunday=new Date(2026,8,13);
+  // 머리줄 저장 상태 — 파일에 저장된 것처럼 (캡처는 파일을 쓰지 않는다)
+  window.writeStore=async()=>{ dirty=false; saveMsg(''); };
+  const sv=new Date(); sv.setHours(14,2,0,0); store.saved=sv.toISOString();
+  setFileLoc({kind:'file',name:'assign-data.js'});
   touch(); recompute(); show('week');
 },{names:NAMES,plan:PLAN});
-await page.waitForTimeout(600);
+await page.waitForTimeout(1200);
 
 // ── 2. 병실 목록 (병동 ⇄ 서식 카드) ──
 await page.evaluate(()=>{ show('admin'); pickAdmin('rooms'); window.scrollTo(0,0); });
@@ -148,7 +152,7 @@ await shot('18-day',{x:0,y:60,width:1920,height:1020});
 // ── 19. 관리 > 당직표·번호 ──
 await page.evaluate(async ()=>{ dutyUI.y=2026; dutyUI.m=9; openDutyAdmin('OS 당직'); await renderDuty(); window.scrollTo(0,0); });
 await page.waitForTimeout(400);
-await shot('19-duty',{x:505,y:150,width:1195,height:910});   // 관리 패널만 (칸 탭·달력·번호표)
+await shot('19-duty',{x:505,y:154,width:1195,height:910});   // 관리 패널만 (칸 탭·달력·번호표)
 
 // ── 12. 데이터 보관(백업) ──
 await page.evaluate(()=>{ show('admin'); pickAdmin('data'); window.scrollTo(0,0); });

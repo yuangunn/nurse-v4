@@ -8,7 +8,7 @@
      공유·동기화 기능은 없다 — 파일은 백업 내려받기·백업 불러오기로만 다룬다. 2026-09-17)
   · 근무표는 연속 타임라인으로 저장 — 월 경계가 없어 이웃달 연속성이 자동.
   · 새 근무표 넣기: 엑셀 복사 → Ctrl+V → 미리보기 → [맞아요]. xlsx 파일 드롭도 가능.
-  · 주간 배정표 인쇄 + '병실 배정표.xlsx' 양식 그대로 xlsx 다운로드(⚙ 관리).
+  · 주간 배정표 인쇄 + '병실 배정표.xlsx' 양식 그대로 xlsx 다운로드(관리).
 
   로직은 nurse-v4/frontend/js/modules/assign-core.js 와 동일 (단일 소스).
   코어·양식 동기화: node scripts/build-assign-standalone.mjs
@@ -74,27 +74,42 @@
   input[type=text],input[type=number],select{font:inherit;padding:7px 10px;border:none;border-radius:10px;
     background:var(--card-warm);box-shadow:inset 0 0 0 1px var(--rule)}
   .dim{color:var(--ink-3);font-size:13px}
-  .topbar{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--card);box-shadow:inset 0 -1px 0 var(--rule);
-          position:sticky;top:0;z-index:10;flex-wrap:wrap}
-  .topbar .mark{width:22px;height:22px;border-radius:7px;background:var(--accent);flex:0 0 auto}
-  .topbar h1{font-size:16px;font-weight:800;letter-spacing:-0.02em;margin:0}
-  .topbar .tab{box-shadow:none;background:transparent;color:var(--ink-2);padding:8px 14px;font-size:14px;border-radius:12px}
-  .topbar .tab.on{background:var(--rule-soft);color:var(--ink)}
-  /* 상단 '지금 저장되는 파일' 칩 — 폴더는 줄이되 파일 이름은 항상 보인다. 클릭 = 경로 복사 (2026-09-16)
-   * 저장 상태(저장 중…·저장됨·저장 보류)도 이 칩 끝에 붙는다 — 예전엔 옆에 배지가 따로 떠서
-   * '저장 파일 없음'과 '파일 미연결'이 빨간 배지 둘로 같은 말을 했다 (2026-09-27, 브리프 문제 8) */
-  #fileInfo{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:46vw;padding:5px 12px;border-radius:9999px;background:var(--rule-soft);
-    color:var(--ink-2);font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
+  /* 머리줄 = 왼쪽 이름·병동 칩 | 가운데 화면 탭 | 오른쪽 저장 상태·화면 밝기·도움말 (2026-09-28 사용자 시안)
+   * 탭은 화면 가운데에 선다(양옆 1fr). 좁으면(1280 미만) 양옆으로 벌리고, 더 좁으면 줄을 바꾼다 */
+  .topbar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;column-gap:20px;row-gap:8px;
+          padding:5px 24px;background:var(--card);box-shadow:inset 0 -1px 0 var(--rule);position:sticky;top:0;z-index:10}
+  .tbL{display:flex;align-items:center;gap:12px;min-width:0;overflow:hidden}
+  .tbR{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-right:-12px}   /* 글자 단추 안쪽 여백만큼 당겨 좌우 끝을 맞춘다 */
+  .topbar h1{font-size:20px;font-weight:800;letter-spacing:-0.03em;margin:0;white-space:nowrap;flex:0 0 auto}
+  .tbTabs{display:flex;gap:2px;padding:4px;border-radius:14px;background:var(--paper-2)}
+  .tbTabs .tab{min-width:90px;min-height:42px;padding:0 20px;border-radius:11px;background:transparent;box-shadow:none;
+    color:var(--ink-2);font-size:16px;font-weight:700;letter-spacing:-0.01em}
+  .tbTabs .tab:hover{background:transparent;color:var(--ink)}
+  .tbTabs .tab.on{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 1px 3px rgba(15,17,21,.10),0 0 0 1px var(--rule)}
+  :root[data-theme=dark] .tbTabs .tab.on{background:var(--rule-2);box-shadow:none}   /* 다크는 카드가 바탕보다 어두워 눌린 것처럼 보인다 — 한 단 밝게 */
+  .tbBtn{min-height:36px;padding:0 12px;border-radius:10px;background:transparent;box-shadow:none;color:var(--ink);
+    font-size:16px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap}
+  .tbBtn:hover{background:var(--rule-soft)}
+  .tbBtn.tbConnect{background:var(--warn-bg);color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn-ring)}
+  /* 좁은 창 — 줄을 바꾸면 머리줄 높이가 상태마다 달라진다. 오른쪽 무리는 제 너비를 지키고(max-content) 왼쪽 병동 칩이
+   * 말줄임으로 줄어든다(전체 글은 칩 툴팁에). 넓으면 두 1fr 이 같아 탭이 화면 가운데에 선다. 1024 미만만 탭을 둘째 줄로 */
+  .topbar{grid-template-columns:minmax(0,1fr) auto minmax(max-content,1fr)}
+  @media (max-width:1023px){ .topbar{grid-template-columns:minmax(0,1fr) max-content;grid-template-areas:'l r' 't t'}
+    .tbL{grid-area:l} .tbR{grid-area:r} .tbTabs{grid-area:t;justify-self:center} }
+  /* 저장 상태 알약 — 초록 '저장됨 · 14:02' · 회색 '저장 중…' · 노랑 읽기 전용 · 빨강 저장 안 됨.
+   * 파일 이름·경로는 알약에 마우스를 올리면 보이고, 누르면 경로를 복사한다 (2026-09-16 파일 칩 → 2026-09-28 알약) */
+  #fileInfo{display:inline-flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;min-width:132px;max-width:300px;
+    min-height:34px;padding:0 14px;border-radius:9999px;background:var(--rule-soft);color:var(--ink-2);font-size:14px;font-weight:700;
+    white-space:nowrap;cursor:pointer;font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
   #fileInfo:empty{display:none}
-  #fileInfo .fiIco{flex:0 0 auto}
-  #fileInfo .fiDir{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ink-3);font-weight:500}
-  #fileInfo .fiName{flex:0 0 auto;color:var(--ink);font-weight:800}
-  #fileInfo .fiTail{flex:0 0 auto;color:var(--ink-3);font-weight:600}
-  #fileInfo.warn{background:var(--warn-bg)} #fileInfo.warn .fiName,#fileInfo.warn .fiTail,#fileInfo.warn .fiDir{color:var(--warn)}
-  #fileInfo.off{background:var(--err-bg)} #fileInfo.off .fiName,#fileInfo.off .fiTail{color:var(--err)}
-  #fileInfo .fiSave{flex:0 0 auto;font-weight:700;color:var(--ink-2)}
-  #fileInfo .fiSave.ok{color:var(--ok)}
-  #fileInfo .fiSave.bad{color:var(--err)}
+  #fileInfo .fiDot{width:8px;height:8px;border-radius:9999px;background:currentColor;flex:0 0 auto}
+  #fileInfo .fiTxt{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  #fileInfo.ok{background:var(--ok-bg);color:var(--ok)}
+  #fileInfo.warn{background:var(--warn-bg);color:var(--warn)}
+  #fileInfo.off{background:var(--err-bg);color:var(--err)}
+  #fileInfo.busy .fiDot{animation:fiPulse 1.1s ease-in-out infinite}
+  @keyframes fiPulse{50%{opacity:.25}}
+  @media (prefers-reduced-motion:reduce){ #fileInfo.busy .fiDot{animation:none} }
   .screen{max-width:1480px;margin:0 auto;padding:18px 20px 20px}
   .card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:14px;
     box-shadow:var(--shadow-card)}
@@ -156,7 +171,7 @@
   @media (min-width:1860px){
     #scrWeek.screen{max-width:1836px;grid-template-columns:minmax(0,1fr) 340px;column-gap:16px;
       grid-template-areas:"nav ." "paper side"}
-    #wkSide{position:sticky;top:76px;align-self:start;max-height:calc(100vh - 96px);overflow:auto;
+    #wkSide{position:sticky;top:calc(var(--tbH,60px) + 20px);align-self:start;max-height:calc(100vh - var(--tbH,60px) - 36px);overflow:auto;
       display:flex;flex-direction:column;gap:12px}
     #wkPaper{align-self:start}   /* 옆 열이 길어도 종이가 따라 늘어나 빈 칸이 생기지 않게 */
     #wkSide #wkWarn,#wkSide #onboard{margin:0}
@@ -286,7 +301,7 @@
       grid-template-rows:auto auto 1fr auto;grid-template-areas:"head side" "stats side" "wrap side" "bar bar"}
     #scrPaste.wide #pvHead{grid-area:head}
     #scrPaste.wide #pvStats{grid-area:stats}
-    #scrPaste.wide #pvSide{grid-area:side;position:sticky;top:76px;max-height:calc(100vh - 190px);overflow:auto;padding:1px}
+    #scrPaste.wide #pvSide{grid-area:side;position:sticky;top:calc(var(--tbH,60px) + 20px);max-height:calc(100vh - var(--tbH,60px) - 130px);overflow:auto;padding:1px}
     #scrPaste.wide #pvWrap{grid-area:wrap;max-height:calc(100vh - 360px)}
     #scrPaste.wide #pvBar{grid-area:bar}
     #scrPaste.wide #pvYM{flex-direction:column;align-items:flex-start;gap:10px}
@@ -455,11 +470,14 @@
   .psAudit.ok{background:var(--ok-bg);color:var(--ok)}
   .psAudit.bad{background:var(--err-bg);color:var(--err)}
   .psAudit.bad .sub{font-weight:500;opacity:.85}
-  .wchip{padding:4px 11px;border-radius:9999px;background:var(--accent);color:var(--on-accent);font-size:12px;font-weight:800;letter-spacing:-0.01em}
+  .wchip{display:inline-block;height:32px;line-height:32px;padding:0 14px;border-radius:9999px;background:var(--paper-2);color:var(--ink);
+    font-size:14px;font-weight:700;letter-spacing:-0.01em;white-space:nowrap;font-variant-numeric:tabular-nums;
+    min-width:0;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis}
   .wchip{cursor:pointer}
-  .wchip .sep{opacity:.45;margin:0 5px}
-  .wchip .warnx{background:rgba(255,255,255,.22);padding:1px 6px;border-radius:9999px}
-  .wchip:hover{filter:brightness(1.08)}
+  .wchip b{font-weight:800}
+  .wchip .sep{color:var(--ink-2);font-weight:800;margin:0 6px}
+  .wchip .warnx{background:var(--warn-bg);color:var(--warn);padding:1px 8px;border-radius:9999px}
+  .wchip:hover{background:var(--rule-2)}
   #capsTable tr.gone td{opacity:.45}
   /* 소속 구역 — 누가 SU 인지 표에서 바로 보이게 */
   #wrap tr.unitHd th,#capsTable tr.unitHd th,#pvWrap tr.unitHd th,tr.unitHd th{text-align:left;padding:9px 10px 5px;font-size:12px;font-weight:800;letter-spacing:-0.01em;
@@ -552,10 +570,6 @@
   #rpick button.on{background:var(--accent);color:var(--on-accent);box-shadow:none;font-weight:700}
 
   /* ── 도움말 ── */
-  #helpFab{position:fixed;right:18px;bottom:18px;z-index:150;width:46px;height:46px;border-radius:9999px;
-    background:var(--accent);color:var(--on-accent);font-size:20px;font-weight:800;box-shadow:var(--shadow-pop);
-    display:flex;align-items:center;justify-content:center;padding:0}
-  #helpFab:hover{background:var(--accent-hover)}
   #helpWrap{display:none;position:fixed;inset:0;z-index:160;background:rgba(15,17,21,.45);padding:24px}
   #helpWrap.on{display:flex;justify-content:center;align-items:stretch}
   #helpPanel{width:100%;max-width:1100px;display:flex;flex-direction:column;background:var(--card);
@@ -620,7 +634,7 @@
   /* ── 시작 안내 체크리스트 — 실제 상태를 읽어 ✓/○ 로 보여 준다 */
   #onboard{margin-bottom:12px;padding:14px 18px 10px;border-radius:16px;background:var(--card);box-shadow:0 0 0 1px var(--rule)}
   /* 처음 시작 마법사 — 한 번에 하나씩 묻는다. 관리 화면을 뒤지지 않게 (2026-09-20) */
-  /* 마법사는 도움말 단추(150) 위, 고르기 창(158)·도움말(160)·공용 창(180)·알림(200) 아래 — 예전엔 400 이라 마법사 안에서 연
+  /* 마법사(155)는 머리줄(10) 위, 고르기 창(158)·도움말(160)·공용 창(180)·알림(200) 아래 — 예전엔 400 이라 마법사 안에서 연
    * 주지 않을 방 고르기·확인 창·알림이 전부 마법사 뒤에 깔려 안 보였다 (2026-09-27) */
   #wiz{position:fixed;inset:0;z-index:155;display:none;align-items:center;justify-content:center;
     background:rgba(15,17,21,.55);padding:24px}
@@ -731,7 +745,7 @@
     @page{size:A4 portrait;margin:0}
     body{background:#fff;padding:0}
     .app{display:none}
-    #helpFab,#helpWrap,#wiz,#toast,#drop,#pick,#rpick,#tourShield,#tourHole,#tourBox,#onboard{display:none !important}
+    #helpWrap,#wiz,#toast,#drop,#pick,#rpick,#tourShield,#tourHole,#tourBox,#onboard{display:none !important}
     #printArea{display:block}
   }
   .sheet{width:210mm;height:297mm;padding:10mm;box-sizing:border-box;page-break-after:always;
@@ -754,7 +768,7 @@
   #dayPaper{margin:0;padding:18px;background:var(--paper-2);box-shadow:none}
   #dayPreview{display:flex;justify-content:center;min-height:240px}
   #dayPreview .hsheet{box-shadow:0 2px 12px rgba(15,17,21,.18)}
-  #daySide{margin:0;position:sticky;top:76px;max-height:calc(100vh - 96px);overflow:auto;
+  #daySide{margin:0;position:sticky;top:calc(var(--tbH,60px) + 20px);max-height:calc(100vh - var(--tbH,60px) - 36px);overflow:auto;
     display:flex;flex-direction:column;gap:18px;padding:16px 18px}
   #daySide .dsH{font-size:15px;font-weight:800;margin-bottom:8px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
   #daySide .dsSub{font-size:13px;font-weight:600;color:var(--ink-3)}
@@ -824,7 +838,7 @@
   .dtyChips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
   .dtyChips button{min-height:34px}
   .dtyPrefer{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
-  .dfEd{scroll-margin-top:72px}   /* 위 머리 띠(sticky)에 제목·설명이 가리지 않게 */
+  .dfEd{scroll-margin-top:calc(var(--tbH,60px) + 16px)}   /* 위 머리 띠(sticky)에 제목·설명이 가리지 않게 */
   .dtyPrefer button{min-height:34px}
   .dtyFixed{display:grid;grid-template-columns:1fr 8em;gap:8px;margin-top:10px}
   .dtyFixed label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:700;color:var(--ink-2)}
@@ -866,16 +880,21 @@
 <body>
 <div class="app">
 <div class="topbar">
-  <div class="mark"></div>
-  <h1>어싸인 배정표</h1><span id="wardChip" class="wchip" style="display:none" title="이 데이터 파일의 병동 — ⚙ 관리 > 병실 목록에서 고릅니다"></span>
-  <span id="fileInfo" onclick="copyFilePath()"></span>
-  <span style="margin-left:auto;display:flex;gap:8px">
-    <button id="btnConnect" class="tab" style="display:none;background:var(--warn-bg);color:var(--warn)"
+  <div class="tbL">
+    <h1>어싸인 배정표</h1><span id="wardChip" class="wchip" style="display:none" title="이 데이터 파일의 병동 — 관리 > 병실 목록에서 고릅니다"></span>
+  </div>
+  <nav class="tbTabs" aria-label="화면">
+    <button id="tabWeek" class="tab" onclick="show('week')" title="주간 배정표 — 이번 주 누가 어느 방을 보는지">배정표</button>
+    <button id="tabEdit" class="tab" onclick="show('edit')" title="근무표 — 이 달 근무를 칸마다 고치거나 새 근무표를 넣습니다">근무표</button>
+    <button id="tabAdmin" class="tab" onclick="show('admin')" title="방 구성·간호사·양식·백업 등 관리자 설정">관리</button>
+  </nav>
+  <div class="tbR">
+    <span id="fileInfo" onclick="copyFilePath()"></span>
+    <button id="btnConnect" class="tbBtn tbConnect" style="display:none"
       onclick="connectSave()" title="자동으로 읽기만 한 상태입니다 — 파일을 한 번 골라 주면 이후 수정이 자동 저장됩니다">저장 연결</button>
-    <button id="themeBtn" class="tab" onclick="cycleTheme()" title="화면 테마 — 자동(기기 설정 따름)/다크/라이트 전환"></button>
-    <button id="tabWeek" class="tab" onclick="show('week')" title="주간 배정표">배정표</button>
-    <button id="tabAdmin" class="tab" onclick="show('admin')" title="방 구성·백업 등 관리자 설정">관리</button>
-  </span>
+    <button id="themeBtn" class="tbBtn" onclick="cycleTheme()" title="화면 밝기 — 누를 때마다 자동(기기 설정 따름) → 다크 → 라이트"></button>
+    <button id="helpBtn" class="tbBtn" onclick="openHelp()" title="도움말 (F1) — 기능별 사용법과 화면에서 보여 주기">도움말</button>
+  </div>
 </div>
 
 <!-- ══ 시작 화면 ══ -->
@@ -908,7 +927,7 @@
         이 프로그램(assign.html)과 <b>같은 폴더</b>에 저장하면 됩니다.</span></div>
       <div class="row"><span class="n">2</span><span>다음부터는 켜자마자 배정표가 뜹니다. 고칠 때 브라우저가 "파일을 볼 수 있도록 허용하시겠습니까?" 라고
         물으면 <b>[허용]</b>을 누르세요. 그 뒤로는 고치는 즉시 저장됩니다.</span></div>
-      <div class="row"><span class="n">3</span><span>가끔 ⚙ 관리 &gt; 데이터 보관 &gt; <b>[백업 내려받기]</b>로 사본을 받아 두세요.
+      <div class="row"><span class="n">3</span><span>가끔 관리 &gt; 데이터 보관 &gt; <b>[백업 내려받기]</b>로 사본을 받아 두세요.
         컴퓨터를 바꾸거나 파일에 문제가 생기면 <b>[백업 불러오기]</b>로 되살립니다.</span></div>
     </div>
     <div class="startBand"><span style="font-weight:800">＋</span><span>데이터 파일이나 백업 파일(.js/.json)을 이 창에 끌어다 놓아도 열립니다.</span></div>
@@ -1061,6 +1080,7 @@
       <span class="sl">이번 달</span><span class="sv" id="edStat"></span>
     </div>
     <span style="margin-left:auto;display:flex;gap:8px">
+      <button class="act" onclick="show('paste')" title="엑셀에서 복사한 근무표를 붙여넣습니다">새 근무표 넣기</button>
       <button class="act" onclick="undoEdit()">되돌리기</button>
       <button class="pri" onclick="show('week')">배정표 보기</button>
     </span>
@@ -1080,7 +1100,6 @@
 </div>
 </div><!-- /.app -->
 
-<button id="helpFab" onclick="openHelp()" title="도움말 (F1) — 기능별 사용법">?</button>
 <div id="helpWrap">
   <div id="helpPanel">
     <div class="hHead">
@@ -1525,13 +1544,16 @@ function applyTheme(){
   const dark=m==='dark'||(m==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme=dark?'dark':'light';
   const b=$('#themeBtn');
-  if(b) b.textContent='◐ '+(m==='auto'?'자동':m==='dark'?'다크':'라이트');
+  if(b) b.textContent='◐ 화면: '+(m==='auto'?'자동':m==='dark'?'다크':'라이트');
 }
 function cycleTheme(){
   const m=localStorage.getItem('assignTheme')||'auto';
   localStorage.setItem('assignTheme',{auto:'dark',dark:'light',light:'auto'}[m]);
   applyTheme();
 }
+/* 머리줄 높이(좁은 창에서 두 줄이 되면 달라진다) → --tbH. 옆 열의 sticky 윗자리가 이것을 쓴다 */
+try{ const tb=document.querySelector('.topbar');
+  new ResizeObserver(()=>document.documentElement.style.setProperty('--tbH',tb.offsetHeight+'px')).observe(tb); }catch(e){}
 try{ matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme); }catch(e){}
 applyTheme();
 const esc=s=>String(s).replace(/[<>&]/g,m=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]));
@@ -1618,7 +1640,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260927ag'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260928f'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1885,12 +1907,12 @@ async function useHandle(h,{create=false}={}){
 /* 저장 — rev는 실제 쓰기 성공 후에만 올린다(실패 시 되감김 방지),
  * 충돌(파일 rev가 더 큼) 시: 대화형이면 [덮어쓰기/백업 내려받기], 자동 저장이면 보류.
  * 파일을 읽을 수 없으면 절대 덮어쓰지 않고 보류한다(깨진/잠긴 파일 보호). */
-/* 저장 상태는 파일 칩 끝에 붙인다(따로 배지를 두지 않는다). 쓸 수 있는 파일이 연결됐을 때만
- * 의미가 있다 — 읽기 전용·미연결은 칩 자체가 이미 그렇게 말하므로 같은 말을 또 하지 않는다. */
+/* 저장 상태는 머리줄 오른쪽 알약 하나가 말한다(따로 배지를 두지 않는다). 쓸 수 있는 파일이 연결됐을 때만
+ * 의미가 있다 — 읽기 전용·미연결은 알약 자체가 이미 그렇게 말하므로 같은 말을 또 하지 않는다. */
 let saveState='';
 function saveMsg(t){ saveState=t||''; renderFileInfo(); }
-/* ── 상단 '지금 저장되는 파일' 표시 (사용자 요청 2026-09-16) ────────────────
- * 어느 파일에 저장되는지 항상 보여 준다. 경로를 아는 경우는 둘 — exe(네이티브가 전체 경로를
+/* ── 어느 파일에 저장되는지 (사용자 요청 2026-09-16 → 2026-09-28 시안에서 알약 툴팁으로) ────────────────
+ * 알약에 마우스를 올리면 파일 경로, 누르면 복사. 경로를 아는 경우는 둘 — exe(네이티브가 전체 경로를
  * 준다)와 자동 열림 파일(이 HTML 옆에서 <script src> 로 읽었으니 HTML 주소의 폴더 + 이름).
  * 파일 핸들은 브라우저 보안상 폴더를 알려주지 않는다 — 대신 핸들 파일의 내용이 HTML 옆
  * 같은 이름 파일과 일치(rev·saved)하면 그 폴더로 보고, 아니면 이름만 보여 준다(툴팁에 이유). */
@@ -1934,32 +1956,46 @@ function renderWardChip(){
 }
 function setFileLoc(l){ fileLoc=l||{kind:'none'}; renderFileInfo(); try{ renderOnboard(); }catch(e){} }
 function fileLocPath(){ const L=fileLoc||{}; return L.dir?joinPath(L.dir,L.name||''):(L.name||''); }
+/* 마지막 저장 시각 — 오늘이면 14:02, 다른 날이면 09/27 14:02 */
+function savedClock(iso){
+  const d=iso?new Date(iso):null; if(!d||isNaN(d)) return '';
+  const hm=pad2(d.getHours())+':'+pad2(d.getMinutes());
+  return isoOfD(d)===isoOfD(new Date())?hm:fmtMD(d)+' '+hm;
+}
+/* 알약에는 짧게 — '⚠ 저장 실패: …' → '저장 실패', '⚠ 파일이 밖에서 바뀜 — 저장 대기' → '파일이 밖에서 바뀜'. 전체 문장은 툴팁에 */
+const saveShort=t=>String(t).replace(/^⚠\s*/,'').split(/\s*[—(:]/)[0].trim();
 function renderFileInfo(){
   const el=$('#fileInfo'); if(!el) return;
   const L=fileLoc||{kind:'none'};
-  let ico='💾', cls='', dir='', name='', tail='', title='';
-  if(L.kind==='none'){ ico='⚠'; cls='off'; name='저장 파일 없음'; tail='저장되지 않음';
+  let cls='', txt='', dir='', name='', title='';
+  if(L.kind==='none'){ cls='off'; txt='저장 파일 없음';
     title='연결된 데이터 파일이 없습니다 — 시작 화면에서 데이터 파일을 열거나 만드세요'; }
-  else if(L.kind==='ro'){ ico='⚠'; cls='warn'; name=L.name||''; tail='읽기 전용 — 저장 안 됨';
+  else if(L.kind==='ro'){ cls='warn'; name=L.name||''; txt='읽기 전용';
     title='이 브라우저는 파일 저장을 지원하지 않습니다 — Edge 또는 Chrome(103+)에서 여세요'; }
   else{
     name=L.name||''; dir=L.dir||'';
-    if(L.kind==='sidecar'){ ico='📄'; cls='warn'; tail='읽기 전용 — 저장 연결 필요';
+    if(L.kind==='sidecar'){ cls='warn'; txt='읽기 전용';
       title='이 HTML 옆의 '+name+' 를 자동으로 읽었습니다. 수정하려면 [저장 연결]을 눌러 같은 파일을 한 번 골라 주세요'; }
-    else if(L.kind==='native'){ tail=L.writable===false?'쓰기 불가 폴더':''; title='프로그램이 직접 읽고 쓰는 데이터 파일입니다 — 고친 내용이 여기에 자동 저장됩니다'; }
+    else if(L.kind==='native'&&L.writable===false){ cls='warn'; txt='쓰기 불가 폴더';
+      title='이 폴더에는 파일을 쓸 수 없습니다 — 고친 내용이 저장되지 않습니다'; }
+    else if(L.kind==='native') title='프로그램이 직접 읽고 쓰는 데이터 파일입니다 — 고친 내용이 여기에 자동 저장됩니다';
     else title='저장 연결됨 — 고친 내용이 이 파일에 자동 저장됩니다'+(dir?'':'. 브라우저 보안 정책상 폴더 경로는 보여 주지 못합니다 (파일을 이 HTML 옆 폴더에 두면 경로가 표시됩니다)');
-    title+='\n클릭 = 경로 복사';
   }
   const path=(L.kind==='none')?'':(dir?joinPath(dir,name):name);   // 라벨은 경로가 아니다 — 복사 대상 아님
-  // 저장 상태 — 쓸 수 있는 파일일 때만 (저장 중… / 저장됨 / ⚠ 저장 보류 …)
+  // 저장 상태 — 쓸 수 있는 파일일 때만 (저장 중… / 저장됨 · 시각 / 저장 보류 …). 읽기 전용·파일 없음은 그 말이 곧 상태다
   const writable=L.kind==='file'||(L.kind==='native'&&L.writable!==false);
-  const sv=writable?saveState:'', bad=sv.startsWith('⚠');
-  if(bad&&cls!=='off') cls='off';
-  el.className=cls; el.title=(path?path+'\n':'')+title+(sv?'\n지금: '+sv.replace(/^⚠\s*/,''):''); el.dataset.path=path||'';
-  el.innerHTML=`<span class="fiIco">${ico}</span>`+(dir?`<span class="fiDir">${esc(dir)}</span>`:'')+
-    `<span class="fiName">${esc(name)}</span>`+(tail?`<span class="fiTail">· ${esc(tail)}</span>`:'')+
-    (sv?`<span class="fiSave${bad?' bad':sv==='저장됨'?' ok':''}">· ${esc(sv.replace(/^⚠\s*/,''))}${sv==='저장됨'?' ✓':''}</span>`:'');
+  const sv=writable?saveState:'';
+  if(writable){
+    if(sv.startsWith('⚠')){ cls='off'; txt=saveShort(sv); }
+    else if(sv==='저장 중…'||dirty){ cls='busy'; txt='저장 중…'; }   // 고친 것이 아직 파일에 없으면 '저장됨' 이라 하지 않는다
+    else{ const c=savedClock(store.saved); cls='ok'; txt=c?'저장됨 · '+c:'저장됨'; }
+  }
+  el.className=cls;
+  el.title=(path?'파일: '+path+'\n':'')+title+(sv?'\n지금: '+sv.replace(/^⚠\s*/,''):'')+(path?'\n클릭 = 경로 복사':'');
+  el.dataset.path=path||'';
+  el.innerHTML=`<span class="fiDot"></span><span class="fiTxt">${esc(txt)}</span>`;
 }
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') renderFileInfo(); });
 async function copyFilePath(){
   const p=$('#fileInfo').dataset.path||'';
   if(!p){ toast('복사할 경로가 없습니다'); return; }
@@ -2000,7 +2036,7 @@ function conflictOk(savedAt){
 }
 function writeStore(opts={}){
   if(_saving){ _again=true; _againOpts=opts; return _saving; }
-  _saving=_writeStore(opts).finally(()=>{
+  _saving=_writeStore(opts).catch(e=>{ saveMsg('⚠ 저장 실패: '+e.message); throw e; }).finally(()=>{   // 어느 길로 부른 저장이든 실패는 알약이 말한다
     _saving=null;
     if(_again){ _again=false; writeStore(_againOpts).catch(()=>{}); }
   });
@@ -2022,7 +2058,7 @@ async function _writeStore({interactive=true}={}){
   }catch(e){}
   if(!readOk){
     saveMsg('⚠ 저장 보류 (파일 확인 불가)');
-    if(interactive) toast('데이터 파일을 읽을 수 없어 저장을 보류했습니다 — 네트워크/파일을 확인하거나 ⚙ 관리에서 백업을 내려받으세요',5000);
+    if(interactive) toast('데이터 파일을 읽을 수 없어 저장을 보류했습니다 — 네트워크/파일을 확인하거나 관리에서 백업을 내려받으세요',5000);
     return;                                            // dirty 유지 → 다음 편집/저장 때 재시도
   }
   if(fileRev>(store.rev||0)&&fileBy===CLIENT_ID) store.rev=fileRev;   // 내가 쓴 것 — 물어볼 일 아니다
@@ -2408,8 +2444,10 @@ function show(name){
   curScr=name;
   renderFileInfo(); renderOnboard(); renderWardChip();
   for(const k in SCREENS) $('#'+SCREENS[k]).style.display=(k===name)?'':'none';
-  $('#tabWeek').classList.toggle('on',['week','paste','edit','day'].includes(name));
-  $('#tabAdmin').classList.toggle('on',name==='admin');
+  $('.tbTabs').style.visibility=connected()?'':'hidden';   // 파일이 없으면 탭을 눌러도 시작 화면이다
+  const tabOn={tabWeek:['week','day'],tabEdit:['edit','paste'],tabAdmin:['admin']};
+  for(const id in tabOn){ const b=$('#'+id), on=tabOn[id].includes(name); b.classList.toggle('on',on);
+    if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); }
   if(name==='week') renderWeek();
   if(name==='edit'){ edY=wkSunday.getFullYear(); edM=wkSunday.getMonth()+1; renderEditGrid(); }
   if(name==='admin') renderAdmin();
@@ -2943,8 +2981,8 @@ if(SIDE_MQ&&SIDE_MQ.addEventListener) SIDE_MQ.addEventListener('change',()=>{
   if(curScr==='week'&&connected()){ renderWeek(); renderOnboard(); } });
 /* 확인 카드 줄마다 고치러 가는 단추 — 무엇을 확인하라는지만 적혀 있고 어디로 갈지는 사람이 찾아야 했다 */
 const WARN_FIX={
-  caps:['간호사 관리 열기',"show('admin');pickAdmin('caps')",'⚙ 관리 > 간호사 관리 — 가능 근무(DC·EC·NC 포함)와 주지 않을 방'],
-  schemes:['방 구성 열기',"show('admin');pickAdmin('schemes')",'⚙ 관리 > 방 구성 — 인원수별 자리마다 보는 방'],
+  caps:['간호사 관리 열기',"show('admin');pickAdmin('caps')",'관리 > 간호사 관리 — 가능 근무(DC·EC·NC 포함)와 주지 않을 방'],
+  schemes:['방 구성 열기',"show('admin');pickAdmin('schemes')",'관리 > 방 구성 — 인원수별 자리마다 보는 방'],
 };
 /* 이번 주 확인 카드 — 빨강(규칙 위반·인쇄 누락·금지 방·방 누락/겹침·차지 자격)과 노랑(안내: 헬퍼·신규·근무표 없는 날)을
  * 나눠 보여준다. 같은 종류는 사람별·내용별로 한 줄에 묶고, 6줄이 넘으면 접는다 — 카드 15줄에 배정표가 화면 밖으로
@@ -4276,7 +4314,7 @@ async function openShiftModal(r,c){
   const t=String(v).trim();
   if(t&&parseCellRaw(t)===undefined){
     // 모르는 표기 — 그 자리에서 휴무/휴가로 등록하면 다음부터 자동으로 인식한다
-    const k=await askModal({title:`'${esc(t)}' 는 모르는 표기입니다`,sub:'우리 병동 표기로 등록하면 다음부터 자동으로 인식합니다. (⚙ 관리 > 근무 표기에서 바꿀 수 있습니다)',
+    const k=await askModal({title:`'${esc(t)}' 는 모르는 표기입니다`,sub:'우리 병동 표기로 등록하면 다음부터 자동으로 인식합니다. (관리 > 근무 표기에서 바꿀 수 있습니다)',
       groups:[{options:[{label:'휴무로 등록',value:'rest'},{label:'휴가로 등록',value:'leave'}]}]});
     if(!k) return;
     mapUnknown(t,k);                                   // 그리드가 다시 그려져 선택이 초기화된다 — 아래서 복원
@@ -5376,7 +5414,7 @@ async function restoreBackup(file){
     const j=parseStoreText(await f.text());
     if(!j||j.app!=='assign') throw new Error('어싸인 데이터 파일이 아닙니다');
     const n=(j.order||[]).length, when=j.saved?fmtWhen(Date.parse(j.saved)):'';
-    if(!confirm(`${f.name} 의 내용으로 지금 데이터를 바꿀까요?\n(간호사 ${n}명${when?' · '+when+' 저장본':''})\n\n지금 내용은 사라집니다 — 필요하면 먼저 ⚙ 관리 > [백업 내려받기].`)) return false;
+    if(!confirm(`${f.name} 의 내용으로 지금 데이터를 바꿀까요?\n(간호사 ${n}명${when?' · '+when+' 저장본':''})\n\n지금 내용은 사라집니다 — 필요하면 먼저 관리 > [백업 내려받기].`)) return false;
     const rev=Math.max(store.rev||0,j.rev||0);          // 파일 rev 보다 뒤로 가지 않게 — 자동 저장이 '다른 창이 먼저 저장' 으로 오해하지 않는다
     keepHistory('백업 불러오기 전'); const hist=store.history;  // 되돌릴 수 있게 지금 상태를 남긴다
     store={...emptyStore(),...j,rev,history:hist}; migrateStore();
@@ -6938,7 +6976,7 @@ async function buildDayDoc(iso){
     const own=dayField(iso,f), au=own==null?dutyAuto(f.key,iso):null;
     const v=own!=null?own:au?au.text:null;
     if(v!=null){ setCellText(f.cell,v); dayUnifyPara(f.cell,f.para); }
-    if(au&&!au.m&&dutyNeedsBook(f.key)) warn.push(`${f.key} '${au.raw}' — 번호표에 없어 번호 없이 들어갑니다 (⚙ 관리 > 당직표·번호)`);
+    if(au&&!au.m&&dutyNeedsBook(f.key)) warn.push(`${f.key} '${au.raw}' — 번호표에 없어 번호 없이 들어갑니다 (관리 > 당직표·번호)`);
   }
   return {doc,L,warn,T,info};
 }
@@ -7184,7 +7222,7 @@ function renderDaySide(res,err){
     <textarea id="dayNotes" rows="${Math.min(8,Math.max(3,notes.split('\n').length+1))}" placeholder="이 날 공지가 없습니다 — 적으면 제목 아래에 들어갑니다" onfocus="dayFieldFocus(this)" oninput="dayInput()">${esc(notes)}</textarea>
     <div class="dsNote">${own?'이 날만 고친 공지입니다.':src?`${src}입니다. 여기서 고치면 이 날 어싸인표에만 들어갑니다.`:'기본 공지도 교육·행사도 없는 날입니다. 적으면 이 날 어싸인표에만 들어갑니다.'}</div>
     <div class="dsBtns">${own?`<button onclick="dayNotesReset()" title="고친 공지를 버리고 기본 공지와 교육·행사 일정대로 되돌립니다">기본대로 되돌리기</button>`:''}
-      <button onclick="openDayFormText(true)" title="매일 들어가는 기본 공지(★ 줄)를 고칩니다 — ⚙ 관리 > 하루 어싸인표 양식의 양식 글자 고치기">기본 공지 고치기</button>
+      <button onclick="openDayFormText(true)" title="매일 들어가는 기본 공지(★ 줄)를 고칩니다 — 관리 > 하루 어싸인표 양식의 양식 글자 고치기">기본 공지 고치기</button>
       <button onclick="openEventDay(dayIso).then(()=>{ if(curScr==='day') renderDay(true); })" title="이 날(또는 매주·기간) 교육·행사 일정을 넣습니다 — 배정표와 주간 인쇄에도 나옵니다">교육·행사 일정 넣기</button></div></div>`;
   if(res.L.fields.length){
     h+=`<div class="dsSec dsDuty"><div class="dsH">당직 <span class="dsSub">당직표에서 채웁니다 · 고치면 이 날에만</span></div>`+
@@ -7206,13 +7244,13 @@ function renderDaySide(res,err){
           <div class="dsSug" data-sk="${k}"></div>${note}
           ${prev&&prev.v!==v?`<button class="dsPrev" onclick="dayUsePrev(this.dataset.k)" data-k="${k}" title="${escA(fmtMD(new Date(prev.iso+'T00:00:00')))}에 적은 값: ${escA(prev.v.replace(/\n/g,' / '))}">${fmtMD(new Date(prev.iso+'T00:00:00'))} 값 넣기</button>`:''}</div>`;
       }).join('')+
-      `<div class="dsBtns"><button onclick="openDutyAdmin(null,dayIso)" title="⚙ 관리 > 당직표·번호 — 엑셀 당직표 올리기, 번호 고치기, 날짜별 당직 고치기">당직표·번호 관리</button></div></div>`;
+      `<div class="dsBtns"><button onclick="openDutyAdmin(null,dayIso)" title="관리 > 당직표·번호 — 엑셀 당직표 올리기, 번호 고치기, 날짜별 당직 고치기">당직표·번호 관리</button></div></div>`;
   }
   h+=`<div class="dsSec"><div class="dsH">확인</div><div id="dayWarn"></div></div>`+
     `<div class="dsSec dsForm"><div class="dsH">양식</div><div class="dsNote">${esc(T?T.name:'')}</div>`+
     (T&&!T.custom&&String(store.ward||'')!=='101'&&store.wardPicked?`<div class="dsWarn">기본 양식은 101병동 것입니다(자리 이름의 내선 번호·화재반). 우리 병동 양식을 올리거나 [양식 글자 고치기]로 고쳐 주세요.</div>`:'')+
     `<div class="dsBtns"><button onclick="openDayFormText(true)" title="자리 이름의 내선 번호(CN(48455) 같은 것)·화재반·기본 공지·당직 이름표를 고쳐 이 병동 양식으로 저장합니다">양식 글자 고치기</button>`+
-    `<button onclick="show('admin');pickAdmin('daily')" title="⚙ 관리 > 하루 어싸인표 양식 — 병동 한글 양식을 올립니다">양식 바꾸기</button></div></div>`;
+    `<button onclick="show('admin');pickAdmin('daily')" title="관리 > 하루 어싸인표 양식 — 병동 한글 양식을 올립니다">양식 바꾸기</button></div></div>`;
   dayDrawing=true; try{ box.innerHTML=h; }finally{ dayDrawing=false; }
   renderDayWarn(res);
 }
@@ -8093,24 +8131,24 @@ function dutyApply(){
 
 /* ════════════════════════════════════════════════════════════════
  * 도움말 (위키) + 처음 안내
- *   · 오른쪽 아래 ? 버튼 또는 F1 로 언제나 열린다.
+ *   · 머리줄 오른쪽 [도움말] 또는 F1 로 언제나 열린다.
  *   · 지금 보고 있는 화면에 맞는 항목이 먼저 열린다.
- *   · 그림은 실제 화면을 녹화해 만든 것 — scripts/make-help-media.py
+ *   · 그림 대신 실제 화면 투어(TOURS) — [▶ 화면에서 보여 주기].
  * ════════════════════════════════════════════════════════════════ */
 const HELP=[
 {cat:'시작하기',id:'open',title:'켜기와 저장',
  lead:'배정표는 이 컴퓨터의 파일 하나(<b>assign-data.js</b>)에 저장됩니다. 이 파일이 프로그램(assign.html)과 <b>같은 폴더</b>에 있으면 켜자마자 이번 주 배정표가 뜹니다.',
  steps:['처음 켜면 뜨는 환영 창에서 <b>[처음 시작 — 우리 병동 파일 만들기]</b>를 누릅니다 — 이름은 assign-data.js 그대로, 위치는 프로그램과 같은 폴더. 그 뒤로는 켤 때 아무것도 고르지 않아도 됩니다.',
-        '<b>고치려면</b> 브라우저가 묻는 <b>[허용]</b>을 한 번 누르면 됩니다 (브라우저는 닫았다 켤 때마다 쓰기 권한을 잊습니다). 오른쪽 위에 [저장 연결]이 보이면 그걸 누르세요. 그 뒤로는 고치는 즉시 저장됩니다.',
-        '상단의 <b>파일 칩</b>이 지금 어느 파일에 저장되는지 항상 보여 줍니다 — 노랑이면 아직 읽기만 하는 상태, 빨강이면 파일이 없는 상태. 마우스를 올리면 전체 경로, 클릭하면 경로 복사.'],
+        '<b>고치려면</b> 브라우저가 묻는 <b>[허용]</b>을 한 번 누르면 됩니다 (브라우저는 닫았다 켤 때마다 쓰기 권한을 잊습니다). 맨 위 오른쪽에 [저장 연결]이 보이면 그걸 누르세요. 그 뒤로는 고치는 즉시 저장됩니다.',
+        '맨 위 오른쪽 <b>저장 상태</b>가 초록 <b>저장됨 · 14:02</b> 이면 그 시각에 저장된 것입니다 — 노랑이면 아직 읽기만 하는 상태, 빨강이면 저장되지 않는 상태. 마우스를 올리면 파일 경로, 누르면 경로 복사.'],
  tips:['브라우저는 보안 규칙 때문에 파일에 쓰기 전에 사용자의 허락이 필요합니다 — 처음엔 파일 고르기, 그 뒤로는 [허용] 한 번입니다.',
-       '가끔 ⚙ 관리 &gt; 데이터 보관 &gt; [백업 내려받기]로 사본을 받아 두세요. 되살릴 때는 [백업 불러오기] 또는 백업 파일을 창에 끌어다 놓으면 됩니다.']},
+       '가끔 관리 &gt; 데이터 보관 &gt; [백업 내려받기]로 사본을 받아 두세요. 되살릴 때는 [백업 불러오기] 또는 백업 파일을 창에 끌어다 놓으면 됩니다.']},
 {cat:'시작하기',id:'first',title:'처음이라면 — 3단계',
  lead:'아무 것도 없는 상태에서 이번 주 배정표를 인쇄하기까지. 처음 켜면 환영 창이 뜨고, 거기서부터 한 단계씩 묻습니다.',
  steps:['환영 창의 <b>[처음 시작]</b>을 누르면 저장 창이 뜹니다. 이름은 <b>assign-data.js</b> 그대로 두고 이 프로그램과 같은 폴더에 저장하세요. 저장하면 바로 <b>병동 → 방 구성 → 근무표 → 표기 → 간호사</b> 순서로 묻습니다.',
         '근무표 단계에서 엑셀 근무표를 긁어 복사(<kbd>Ctrl+C</kbd>) → 넣기 화면에서 <kbd>Ctrl+V</kbd> → 읽은 내용을 확인하고 [맞아요, 저장]. 다음 달부터는 배정표 화면의 [새 근무표 넣기]로 같은 일을 합니다.',
         '[인쇄]를 누르면 병실 배정표 양식 그대로 A4 한 장이 나옵니다. 102·82병동 서식은 [이번 주 배정표 엑셀로 내보내기]로 받아 엑셀에서 인쇄합니다.'],
- tips:['방 구성·간호사 가능 근무 같은 병동 설정은 ⚙ 관리에서 한 번만 맞춰 두면 됩니다.',
+ tips:['방 구성·간호사 가능 근무 같은 병동 설정은 관리에서 한 번만 맞춰 두면 됩니다.',
        '환영 창을 [나중에 하기]로 닫았으면 시작 화면의 [처음 시작]이 같은 일을 합니다. 도움말 위의 [처음 안내 다시 보기]로 언제든 다시 열 수 있습니다.']},
 {cat:'시작하기',id:'onboard',title:'시작 안내 카드 — 무엇이 남았는지',
  lead:'배정표 화면 위(넓은 화면에서는 표 오른쪽)의 <b>시작 안내</b> 카드는 데이터 파일·병동·방 구성·차지 가능자·이번 주 근무표·엑셀 내려받기가 준비됐는지를 <b>실제 상태로</b> ✓ ○ 표시합니다. 다 되면 저절로 사라집니다.',
@@ -8124,7 +8162,7 @@ const HELP=[
         '<b>확인 필요 카드</b> — 빨강(규칙 위반)은 고치고, 노랑(신규 미배정 등)은 이름을 눌러 붙입니다.',
         '<b>손질</b> — 이름 클릭으로 담당을 바꾸고, 방 칸 클릭으로 그날 병실을 고칩니다. 잘못하면 <kbd>Ctrl+Z</kbd>.',
         '<b>인쇄</b> 또는 엑셀로 내보내기.'],
- tips:['고치는 즉시 저장됩니다 — 상단 파일 칩 끝에 <b>저장됨 ✓</b>이 잠깐 붙습니다.']},
+ tips:['고치는 즉시 저장됩니다 — 맨 위 오른쪽이 <b>저장 중…</b> 에서 <b>저장됨 · 시각</b> 으로 바뀝니다.']},
 
 {cat:'이번 주 배정표',id:'week',title:'배정표 보는 법',tour:'look',
  lead:'켜면 바로 나오는 기본 화면입니다. 병실 배정표 양식과 같은 모양이라 그대로 인쇄하면 됩니다.',
@@ -8134,7 +8172,7 @@ const HELP=[
         '각 칸은 <b>왼쪽=담당 병실, 오른쪽=간호사 이름</b> 입니다.',
         '오늘 날짜 칸은 파란 바탕과 <b>오늘</b> 표시로 구분됩니다. 키보드 <kbd>←</kbd> <kbd>→</kbd> 로도 주를 넘깁니다.'],
  tips:['맨 위 <b>교육·행사</b> 줄을 누르면 일정을 넣습니다 — 이 날만 · 기간 · 매주 요일(여러 개). 인쇄물에도 그대로 나옵니다.',
-       '상단 이름 옆의 <b>병동 칩</b>(예: 92병동)이 지금 열린 파일의 병동입니다.']},
+       '맨 위 이름 옆의 <b>병동 칩</b>(예: 92병동 · 병실 14 · 간호사 14)이 지금 열린 파일의 병동입니다 — 누르면 병실 목록으로 갑니다.']},
 {cat:'이번 주 배정표',id:'swap',title:'담당 바꾸기 (이름 클릭)',
  lead:'두 사람의 자리를 맞바꿉니다. 근무표는 그대로 두고 어싸인만 바꾸는 것입니다.',
  steps:['바꾸고 싶은 사람의 <b>이름을 클릭</b>합니다.',
@@ -8152,7 +8190,7 @@ const HELP=[
         '<b>[대체간호사 넣기]</b> — 우리 근무표에 없는 사람(병원 대체 인력)의 이름을 적습니다. 근무표는 그대로 두고, 그 날 그 근무에 <b>한 사람으로 세어 병실을 나눕니다</b>.',
         '넣은 대체간호사는 이름 옆에 <b>대체</b> 표시가 붙습니다. 이름을 누르면 <b>[이름 고치기] · [이 날 빼기]</b>가 있습니다.'],
  tips:['대체간호사는 차지를 맡지 않고 가장 후임으로 셉니다 — 보통 남는 자리가 돌아갑니다. 다른 자리가 좋으면 이름을 눌러 맞바꾸세요.',
-       '122병동 서식은 D 가 <b>6줄</b>입니다. 대체간호사가 와서 6명이 되는 날은 ⚙ 관리 &gt; 방 구성의 <b>6인</b> 탭 나눔을 씁니다.',
+       '122병동 서식은 D 가 <b>6줄</b>입니다. 대체간호사가 와서 6명이 되는 날은 관리 &gt; 방 구성의 <b>6인</b> 탭 나눔을 씁니다.',
        '자리가 다 찼을 때는 아무 이름이나 눌러 <b>＋ 대체간호사 넣기</b>를 쓰면 됩니다. 자리보다 사람이 많으면 그 사람은 헬퍼로 적힙니다.',
        '근무표를 붙여넣을 때 대체간호사까지 적어 두어도 됩니다 — 그러면 명부에 들어가 우리 간호사처럼 다뤄집니다.']},
 {cat:'이번 주 배정표',id:'event',title:'교육·행사 일정 (이 날만·기간·매주)',
@@ -8173,9 +8211,9 @@ const HELP=[
        '두 사람이 같은 병실을 보게 되면 <b>빨간 글씨</b>로 알려 줍니다 — 자동으로 고치지는 않으니 확인하고 정리하세요.']},
 {cat:'이번 주 배정표',id:'warn',title:'확인 필요 · 안내 카드 읽는 법',
  lead:'그 주에 확인이 필요한 것만 표 위에 모아 보여 줍니다 — 넓은 화면(1920 등)에서는 <b>표 오른쪽</b>에 펼쳐진 채로 섭니다. <b>빨강 = 규칙 위반</b>(고쳐야 함), <b>노랑 = 안내</b>. 없으면 표 위에는 카드가 뜨지 않고, 오른쪽 열에는 초록 <b>확인할 것 없음</b>이 섭니다. 같은 종류는 사람별·내용별로 한 줄에 묶이고, 줄 아래 단추(<b>간호사 관리 열기·방 구성 열기</b>)로 고칠 곳에 바로 갑니다.',
- steps:['<b>가능 근무가 아닙니다</b> — 그 간호사가 못 하는 근무가 배정돼 있습니다. ⚙ 관리 &gt; 간호사 관리에서 확인하세요.',
+ steps:['<b>가능 근무가 아닙니다</b> — 그 간호사가 못 하는 근무가 배정돼 있습니다. 관리 &gt; 간호사 관리에서 확인하세요.',
         '<b>차지 가능한 사람이 없어 자격 없이 차지가 됐습니다</b> — 그날 그 시간대 근무자 중 DC·EC·NC 가능자가 없어 최선임이 차지가 된 경우입니다.',
-        '<b>아무도 안 보는 방 · 두 자리가 겹치는 방</b> — 방 구성(또는 그날 방 수정)에 빠진 방·겹친 방이 있습니다. ⚙ 관리 &gt; 방 구성에서 고치세요.',
+        '<b>아무도 안 보는 방 · 두 자리가 겹치는 방</b> — 방 구성(또는 그날 방 수정)에 빠진 방·겹친 방이 있습니다. 관리 &gt; 방 구성에서 고치세요.',
         '<b>양식의 N칸(3개)을 넘어</b> — 야간 인원이 인쇄 양식 칸보다 많습니다. 수기로 적어야 합니다.',
         '<b>주지 않을 방인데 배정됐습니다</b> — 피하려 했지만 다른 방법이 없던 경우입니다.',
         '<b>근무표가 없습니다</b>(노랑) — 월말 주처럼 다음 달 근무표가 아직 없는 날입니다. [새 근무표 넣기]로 넣으면 채워집니다.',
@@ -8184,11 +8222,11 @@ const HELP=[
 {cat:'이번 주 배정표',id:'print',title:'인쇄와 엑셀 내려받기',
  lead:'병실 배정표 양식 그대로 A4 한 장에 나옵니다. <b>102·82병동 서식은 화면 인쇄가 없어</b> 엑셀로 받아 엑셀에서 인쇄합니다 — 그때는 도구 띠의 검정 단추가 [이번 주 배정표 엑셀로 내보내기]로 바뀝니다.',
  steps:['[인쇄] — 지금 보고 있는 주 한 장.',
-        '⚙ 관리 &gt; 주간 배정표 내려받기 &gt; [이번 달 전체 인쇄] — 그 달 5~6장.',
+        '관리 &gt; 주간 배정표 내려받기 &gt; [이번 달 전체 인쇄] — 그 달 5~6장.',
         '같은 화면에서 주차별 버튼을 누르면 <b>엑셀 파일(xlsx)</b>로 받습니다. 양식 그대로라 엑셀에서 고칠 수 있습니다.',
         '하루치만 필요하면 <b>[하루 어싸인표]</b> — 병동 한글 양식으로 그 날 한 장을 인쇄하거나 한글 파일로 받습니다.'],
  tips:['인쇄가 흐리거나 색이 빠지면 인쇄 창에서 <b>배경 그래픽</b>을 켜 보세요(보통은 켜지 않아도 나옵니다).',
-       '⚙ 관리 &gt; 배정표 양식에서 <b>칸 구조가 다른 양식</b>으로 바꿨다면 화면 인쇄가 어긋날 수 있습니다 — 그때는 엑셀로 내보내 엑셀에서 인쇄하세요. 인쇄 전에 한 번 알려 줍니다.']},
+       '관리 &gt; 배정표 양식에서 <b>칸 구조가 다른 양식</b>으로 바꿨다면 화면 인쇄가 어긋날 수 있습니다 — 그때는 엑셀로 내보내 엑셀에서 인쇄하세요. 인쇄 전에 한 번 알려 줍니다.']},
 
 {cat:'이번 주 배정표',id:'daily',title:'하루 어싸인표 (한글 양식)',
  lead:'병동이 날마다 한글로 만들던 <b>하루 어싸인표</b>를 그 날 배정 그대로 채웁니다 — 날짜·공지(★)·D·E·N 자리마다 방과 간호사·당직. 병동 한글 양식(hwpx)의 글꼴·선을 그대로 씁니다.',
@@ -8197,15 +8235,15 @@ const HELP=[
         '오른쪽 <b>공지</b>는 양식의 <b>기본 공지</b>(★ 줄) 뒤에 그 날 교육·행사 일정이 붙습니다. 여기서 고치면 <b>그 날에만</b> 들어갑니다 — [기본대로 되돌리기]로 원래대로. 매일 나가는 기본 공지는 [기본 공지 고치기]에서 바꿉니다.',
         '<b>당직</b> 칸은 <b>당직표·번호</b>에 넣어 둔 당직표로 날짜마다 채워집니다. <b>이름만</b> 적으면 번호표에서 번호를 찾아 넣고 그 날 당직표에 넣습니다. 다른 글자로 고치면 그 날에만 들어가고 [당직표대로]로 되돌립니다.',
         '<b>[인쇄]</b> — A4 한 장. <b>[한글 파일로 받기]</b> — 같은 내용의 hwpx 파일이라 한글에서 열어 고치고 인쇄할 수 있습니다.'],
- tips:['기본 양식은 101병동 것입니다. 우리 병동 양식은 ⚙ 관리 &gt; 하루 어싸인표 양식에서 한글 파일(.hwpx)로 올리세요. .hwp 는 한글에서 [다른 이름으로 저장] → 파일 형식 <b>HWPX</b> 로 저장해 올립니다.',
+ tips:['기본 양식은 101병동 것입니다. 우리 병동 양식은 관리 &gt; 하루 어싸인표 양식에서 한글 파일(.hwpx)로 올리세요. .hwp 는 한글에서 [다른 이름으로 저장] → 파일 형식 <b>HWPX</b> 로 저장해 올립니다.',
        '자리 표 첫 열의 자리 이름(CN·A방 …)은 병동마다 달라 <b>위에서부터 차지·A·B·C… 순서</b>로 채웁니다. 양식 줄보다 사람이 많으면 오른쪽 <b>확인</b>에 알려 줍니다.',
-       '자리 이름의 번호(<b>CN(48455)</b>)·화재반·기본 공지·당직 칸 이름은 ⚙ 관리 &gt; 하루 어싸인표 양식의 <b>[양식 글자 고치기]</b>에서 고쳐 이 병동 양식으로 저장합니다. Ctrl+Z 로 되돌립니다.',
+       '자리 이름의 번호(<b>CN(48455)</b>)·화재반·기본 공지·당직 칸 이름은 관리 &gt; 하루 어싸인표 양식의 <b>[양식 글자 고치기]</b>에서 고쳐 이 병동 양식으로 저장합니다. Ctrl+Z 로 되돌립니다.',
        '공지가 늘면 양식의 빈 줄을 걷어 <b>A4 한 장</b>에 맞춥니다. 그래도 넘치면 오른쪽 확인에 알려 줍니다.',
        '화면은 이 컴퓨터에 양식 글꼴(함초롬돋움)이 없으면 비슷한 글꼴로 보입니다. 한글 파일로 받으면 양식 글꼴 그대로입니다.']},
 
 {cat:'이번 주 배정표',id:'duty',title:'당직표·번호 (하루 어싸인표 당직 칸)',
  lead:'과마다 받는 <b>당직표</b>(엑셀)와 당직의 <b>전화번호</b>를 넣어 두면 하루 어싸인표의 당직 칸이 날짜마다 저절로 채워집니다. 번호가 바뀌거나 그 날 당직이 바뀌면 여기서 고칩니다.',
- steps:['⚙ 관리 &gt; <b>당직표·번호</b> (하루 어싸인표 화면의 [당직표·번호 관리]로도 옵니다). 위의 칸 탭(OS 당직·GS 당직 …)에서 넣을 칸을 고릅니다.',
+ steps:['관리 &gt; <b>당직표·번호</b> (하루 어싸인표 화면의 [당직표·번호 관리]로도 옵니다). 위의 칸 탭(OS 당직·GS 당직 …)에서 넣을 칸을 고릅니다.',
         '<b>[엑셀 파일 올리기]</b>로 당직표 파일을 고르거나, 엑셀에서 당직표를 복사해 옆 칸에 <b>붙여 넣습니다</b>(Ctrl+V). 번호 목록만 골라 붙여도 됩니다.',
         '읽은 내용이 먼저 나옵니다 — 날짜 며칠, <b>어느 줄</b>(전공의·전문의·응급실 …)을 넣을지, 번호 몇 개가 새로 들어가고 바뀌는지. 맞으면 <b>[넣기]</b>.',
         '<b>그 날 당직이 바뀌면</b> 달력 칸의 글자를 고칩니다. <b>번호가 바뀌면</b> 오른쪽 번호표에서 고칩니다 — 그 사람이 당직인 날이 모두 따라갑니다.',
@@ -8243,10 +8281,10 @@ const HELP=[
         '표기마다 [휴무로] [휴가로] 중 하나를 고르면 그 글자 그대로 표에 남습니다.',
         '[다른 근무로 바꾸기]를 고르면 기존 근무(OF·V·D 등)로 바뀌어 들어갑니다.',
         '한 번 정하면 파일에 저장돼 <b>다음 붙여넣기부터 자동</b>으로 인식합니다.'],
- tips:['나중에 바꾸거나 지우려면 ⚙ 관리 &gt; 근무 표기에서 하면 됩니다.',
+ tips:['나중에 바꾸거나 지우려면 관리 &gt; 근무 표기에서 하면 됩니다.',
        '정하지 않으면 그 칸은 빈칸으로 들어갑니다.']},
 {cat:'근무표 넣기·고치기',id:'edit',title:'근무표 고치기 (엑셀처럼)',
- lead:'월별 표에서 근무를 직접 고칩니다. 엑셀과 비슷하게 씁니다.',
+ lead:'맨 위 <b>근무표</b> 탭(배정표 화면의 [근무표 고치기]도 같은 곳)에서 월별 표로 근무를 직접 고칩니다. 엑셀과 비슷하게 씁니다.',
  steps:['칸을 클릭하고 <kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>O</kbd> 를 누르면 바로 입력됩니다.',
         '드래그하면 여러 칸을 한 번에 고를 수 있습니다.',
         '더블클릭(또는 <kbd>Space</kbd>, 우클릭)하면 <b>근무 고르기</b> 창이 뜹니다 — 근무·휴무·트레이닝·우리 병동 표기 중에서 누르고, 목록에 없으면 [✏ 직접 입력]으로 <b>D/A</b>(어싸인 고정)나 새 표기를 적습니다. 여러 칸을 골라 두면 한꺼번에 들어갑니다.',
@@ -8259,19 +8297,19 @@ const HELP=[
         '배정표에서 함께 다닐 간호사(프리셉터) 이름을 누르면 <b>신규 간호사 붙이기</b>가 있습니다 — [계속 붙이기]는 그 사람을 프리셉터로 정하는 것, [오늘만 붙이기]는 그 날만.',
         '붙은 신규는 그 간호사 이름 아래 <b>/ 이름</b>으로 화면·인쇄·엑셀(줄바꿈)에 나옵니다. 프리셉터가 그 시간대 근무가 아닌 날은 <b>안내 카드</b>에 떠서, 날짜 옆 [붙일 사람…]에서 바로 그날만 붙일 수 있습니다.'],
  tips:['엑셀 근무표에 이미 /D 로 적혀 있으면 그대로 붙여넣으면 됩니다.',
-       '⚙ 관리 &gt; 간호사 관리에 <b>신규 ~10/31</b>처럼 끝나는 날과 함께 표시가 붙고, <b>근무표의 마지막 /D·/E·/N 날이 지나면 저절로 떼집니다</b>. 눌러서 끝나는 날을 고칩니다 — 더 오래 두거나, 일찍 떼면 그 뒤의 /D·/E·/N 이 D·E·N 으로 바뀌어 어싸인에 들어갑니다.',
+       '관리 &gt; 간호사 관리에 <b>신규 ~10/31</b>처럼 끝나는 날과 함께 표시가 붙고, <b>근무표의 마지막 /D·/E·/N 날이 지나면 저절로 떼집니다</b>. 눌러서 끝나는 날을 고칩니다 — 더 오래 두거나, 일찍 떼면 그 뒤의 /D·/E·/N 이 D·E·N 으로 바뀌어 어싸인에 들어갑니다.',
        '신규 기간이 끝난 간호사는 프리셉터(계속 붙일 사람) 후보에 다시 나옵니다.']},
 
 {cat:'우리 병동 설정',id:'roomlist',title:'병실 목록 (병동 고르기)',
  lead:'병동 번호는 층 + 라인입니다(92 = 9층 2라인). 1라인은 1~14호, 2라인은 51~64호라서 <b>병동만 고르면 병실 14개가 저절로</b> 채워집니다.',
- steps:['⚙ 관리 &gt; 병실 목록에서 <b>병동</b>을 고릅니다 — 호실이 자동으로 채워지고 화면·인쇄·엑셀 표기(1~14 / 51~64)도 맞춰집니다.',
+ steps:['관리 &gt; 병실 목록에서 <b>병동</b>을 고릅니다 — 호실이 자동으로 채워지고 화면·인쇄·엑셀 표기(1~14 / 51~64)도 맞춰집니다.',
         '방마다 <b>병상 수</b>를 적습니다. 방 칸을 누를 때 몇 명까지 보는지 합계가 나오고, 어싸인 이어 주기도 병상 수로 셉니다.',
         '우리 병동에 <b>없는 방은 ✕</b>로 빼고, 더 있으면 <b>[＋ 방 추가]</b>로 넣습니다 — 병동마다 있는 방이 다릅니다. 뺀 방은 방 구성·주지 않을 방에서도 같이 빠지고, 넣은 방은 이웃 자리에 붙습니다.',
         '줄을 끌거나 <b>▲▼</b> 로 <b>순서</b>를 바꿉니다. 호실은 <b>전체 번호</b>(1001호)로 고치고, 배정표에는 짧게(1호) 적힙니다.',
         '병동을 바꾸면 방 구성·주지 않을 방의 호실도 <b>같은 자리</b>(1라인 3호 ↔ 2라인 53호)로 함께 옮겨집니다.']},
 {cat:'우리 병동 설정',id:'scheme',title:'방 구성 (인원수별 프리셋·주간 계획)',
  lead:'그날 근무 인원이 몇 명이냐에 따라 각 자리가 맡을 병실을 정합니다. 인원수마다 프리셋을 여러 개 두고, 요일·근무별로 어느 것을 쓸지 정할 수 있습니다.',
- steps:['⚙ 관리 &gt; 방 구성에서 <b>5인·4인·3인·2인</b> 탭을 고르고 자리마다 병실을 적습니다 — 예: <b>6~9</b> 또는 <b>1, 12</b>. D 가 6줄인 서식(122)은 대체간호사가 오는 날을 위한 <b>6인</b> 탭도 있습니다.',
+ steps:['관리 &gt; 방 구성에서 <b>5인·4인·3인·2인</b> 탭을 고르고 자리마다 병실을 적습니다 — 예: <b>6~9</b> 또는 <b>1, 12</b>. D 가 6줄인 서식(122)은 대체간호사가 오는 날을 위한 <b>6인</b> 탭도 있습니다.',
         '[＋ 새 프리셋]으로 같은 인원수의 다른 나눔을 만듭니다(보고 있던 것을 복제해서 시작). 이름은 <b>회진일</b>·<b>수술 많은 날</b>처럼 알아볼 수 있게.',
         '아래 <b>주간 계획표</b>에서 요일·근무(D/E/N)마다 프리셋을 고릅니다 — 보고 있는 인원수 탭의 표입니다(5인 탭 = 그 근무가 5명인 날). 월요일 Day 와 화요일 Day 가 다른 나눔이어도 됩니다.',
         '배정표에서 방 칸을 누르면 <b>이 날 방 구성</b> 줄이 있습니다 — 프리셋을 골라 [오늘만] 또는 [매주 이 요일]. 프리셋이 기본이 아닌 날은 A(CN) 방 칸 왼쪽에 초록 띠가 보입니다.'],
@@ -8283,7 +8321,7 @@ const HELP=[
  steps:['<b>위가 선임</b>입니다 — 같은 날 차지 가능한 사람 중 가장 위에 있는 사람이 차지를 맡습니다. 줄을 끌어서(또는 ▲▼) 순서를 바꾸세요.',
         '[＋ 간호사 추가]로 명부에 넣고, 이름 옆 ✎ 로 이름을 고치고, ✕ 로 뺍니다 (근무표·설정이 같이 따라갑니다. Ctrl+Z 가능).',
         '전출·퇴사한 사람은 ✕ 대신 <b>[전출]</b>로 접어 두세요 — 지난 배정표는 그대로 남고, 목록에서만 빠집니다. 새 근무표에 그 이름의 근무가 들어오면 저절로 복귀합니다.',
-        '⚙ 관리 &gt; 간호사 관리에서 <b>DC · D · EC · E · NC · N</b> 을 눌러 켜고 끕니다.',
+        '관리 &gt; 간호사 관리에서 <b>DC · D · EC · E · NC · N</b> 을 눌러 켜고 끕니다.',
         '<b>DC·EC·NC</b> 를 켜면 그 시간대에 <b>차지</b>로 뽑힐 수 있습니다.',
         '이름 옆 <b>신규 ~10/31</b> 은 근무표의 /D·/E·/N 이 끝나는 날입니다 — 그 날이 지나면 저절로 떼지고, 눌러서 끝나는 날을 고칩니다.',
         '오른쪽 <b>주지 않을 방</b>의 ＋ 를 눌러 격리방·중증방 등을 고릅니다.'],
@@ -8299,39 +8337,39 @@ const HELP=[
        '차지는 원칙과 상관없이 매일 자동으로 정해집니다(DC/EC/NC 표시가 있으면 그 사람 우선).']},
 {cat:'우리 병동 설정',id:'seed',title:'지난 어싸인 직접 입력',
  lead:'표에 지난 기록이 없을 때(처음 시작할 때) 이어짐의 시작점을 알려 주는 곳입니다.',
- steps:['⚙ 관리 &gt; 지난 어싸인 직접 입력에서 사람마다 마지막 어싸인(B~E)과 근무를 고릅니다.',
+ steps:['관리 &gt; 지난 어싸인 직접 입력에서 사람마다 마지막 어싸인(B~E)과 근무를 고릅니다.',
         '근무표에 기록이 있으면 그 기록이 우선입니다.'],
  tips:['차지(A(CN))였던 사람은 <b>없음</b>으로 두세요 — 차지는 매일 자동으로 정해집니다.']},
 
 {cat:'우리 병동 설정',id:'form',title:'배정표 양식 (서식 고르기·문구 고치기·양식 교체)',
  lead:'인쇄·엑셀에 쓰는 병실 배정표 양식입니다. 101병동·122병동 서식 중 고르고, 글자는 여기서 바로 고치고, 칸 구조가 다른 양식은 엑셀 파일을 올려 교체합니다.',
- steps:['⚙ 관리 &gt; 배정표 양식 &gt; <b>서식</b>에서 <b>101병동 서식</b>(요일마다 방·이름) 또는 <b>122병동 서식</b>(요일마다 이름·메모, 방은 일·월~금·토 열에 한 번씩)을 고릅니다. 배정표 화면의 자리 이름(A(CN)·B… / CN·A·B…)도 함께 바뀝니다.',
+ steps:['관리 &gt; 배정표 양식 &gt; <b>서식</b>에서 <b>101병동 서식</b>(요일마다 방·이름) 또는 <b>122병동 서식</b>(요일마다 이름·메모, 방은 일·월~금·토 열에 한 번씩)을 고릅니다. 배정표 화면의 자리 이름(A(CN)·B… / CN·A·B…)도 함께 바뀝니다.',
         '<b>[양식 문구 고치기]</b> — 제목·물품체크·CPR·화재 등 글자 칸을 고쳐 [이대로 저장]. 고친 문구는 서식마다 따로 남아, 서식을 오가도 잃지 않습니다.',
         '요일·날짜·구역·어싸인 라벨처럼 구조 인식에 쓰는 칸은 🔒 잠겨 있습니다(고치면 배정표를 못 채웁니다).',
         '칸 배치가 다른 양식은 <b>[양식 파일 검사 (xlsx 고르기)]</b>로 올리면 어디가 다른지, 그대로 쓸 수 있는지 알려 줍니다.'],
  tips:['구조가 다르면 {{이름}} {{방}} 같은 자리표시자를 꽂아 내려 주니, 엑셀에서 위치만 손봐 다시 올리면 됩니다.']},
 
 {cat:'그 밖에',id:'data',title:'저장과 백업',
- lead:'고친 내용은 그때그때 데이터 파일에 저장됩니다. 상단 파일 칩 끝에 <b>저장 중… → 저장됨 ✓</b> 이 잠깐 붙었다 사라지고, 칩에는 지금 저장되는 파일의 경로가 보입니다. 칩이 빨갛게 <b>저장 보류</b>를 말하면 파일을 확인하세요.',
- steps:['<b>백업</b>: ⚙ 관리 &gt; 데이터 보관 &gt; [백업 내려받기]로 언제든 사본을 받아 둘 수 있습니다. 근무표를 새로 넣은 뒤처럼 한 주에 한 번이면 충분합니다.',
+ lead:'고친 내용은 그때그때 데이터 파일에 저장됩니다. 맨 위 오른쪽 저장 상태가 <b>저장 중… → 저장됨 · 14:02</b> 로 바뀌며 마지막 저장 시각을 보여 주고, 마우스를 올리면 지금 저장되는 파일의 경로가 보입니다. 빨갛게 <b>저장 보류</b>를 말하면 파일을 확인하세요.',
+ steps:['<b>백업</b>: 관리 &gt; 데이터 보관 &gt; [백업 내려받기]로 언제든 사본을 받아 둘 수 있습니다. 근무표를 새로 넣은 뒤처럼 한 주에 한 번이면 충분합니다.',
         '<b>되살리기</b>: [백업 불러오기]로 백업 파일을 고르거나, 백업 파일을 이 창에 끌어다 놓으세요. 지금 내용은 사라지므로 확인창이 한 번 뜹니다.',
         '<b>컴퓨터를 바꿀 때</b>: 옛 컴퓨터에서 백업을 내려받아 새 컴퓨터로 옮긴 뒤, 새 컴퓨터에서 [처음 시작]으로 파일을 만들고 [백업 불러오기]. 데이터 파일(assign-data.js)을 그대로 복사해 프로그램 옆에 두어도 됩니다.'],
- tips:['<b>이전 상태로 되돌리기</b>: 새 근무표 넣기·백업 불러오기·간호사 삭제·병동 바꾸기 직전의 상태를 파일 안에 최근 3개까지 남겨 둡니다. 창을 닫은 뒤라도 ⚙ 관리 &gt; 데이터 보관에서 [이 상태로]를 누르면 돌아갑니다.',
+ tips:['<b>이전 상태로 되돌리기</b>: 새 근무표 넣기·백업 불러오기·간호사 삭제·병동 바꾸기 직전의 상태를 파일 안에 최근 3개까지 남겨 둡니다. 창을 닫은 뒤라도 관리 &gt; 데이터 보관에서 [이 상태로]를 누르면 돌아갑니다.',
        '저장은 임시 파일에 쓴 뒤 바꿔치기 방식이라, 저장 도중 전원이 나가도 원본이 깨지지 않습니다.',
        '같은 파일을 창 두 개에서 함께 고치면 나중 저장 때 <b>덮어쓸지 / 내 것을 백업으로 받을지</b> 물어봅니다.']},
 {cat:'그 밖에',id:'theme',title:'화면 밝기 (다크 모드)',
- lead:'오른쪽 위 ◐ 버튼으로 <b>자동 → 다크 → 라이트</b> 순서로 바뀝니다.',
+ lead:'맨 위 오른쪽 <b>◐ 화면</b> 단추를 누를 때마다 <b>자동 → 다크 → 라이트</b> 순서로 바뀝니다.',
  steps:['자동은 그 컴퓨터의 설정을 따라갑니다.',
         '이 설정은 컴퓨터마다 따로 저장되며 데이터 파일에는 영향이 없습니다.'],
  tips:['인쇄물은 화면 밝기와 상관없이 항상 밝은 양식 그대로 나옵니다.']},
 {cat:'그 밖에',id:'trouble',title:'안 될 때',
  lead:'자주 나오는 상황과 해결법입니다.',
  steps:['<b>켰는데 시작 화면만 나온다</b> — 데이터 파일(assign-data.js)이 이 프로그램과 같은 폴더에 있는지, 이름이 맞는지 확인하세요.',
-        '<b>고쳤는데 저장이 안 된다</b> — 오른쪽 위 [저장 연결]을 한 번 누르세요.',
+        '<b>고쳤는데 저장이 안 된다</b> — 맨 위 오른쪽 저장 상태가 노랑 "읽기 전용"이면 옆의 [저장 연결]을 한 번 누르세요. 초록 "저장됨 · 시각"이면 저장된 것입니다.',
         '<b>인쇄가 백지로 나온다</b> — 배정표 화면에서 인쇄하세요(다른 화면에서는 그 주 내용이 준비되지 않습니다).',
         '<b>붙여넣었는데 칸이 비어 있다</b> — 모르는 표기일 수 있습니다. 미리보기의 노란 카드에서 정해 주세요.',
-        '<b>어느 파일에 저장되는지 모르겠다</b> — 상단 파일 칩에 마우스를 올리면 전체 경로가 나옵니다. 칩이 노랑이면 아직 읽기 전용입니다.'],
- tips:['그래도 안 되면 ⚙ 관리 &gt; 데이터 보관 &gt; [백업 내려받기]로 사본을 먼저 받아 두세요. 백업이 있으면 [백업 불러오기]로 언제든 되살립니다.']},
+        '<b>어느 파일에 저장되는지 모르겠다</b> — 맨 위 오른쪽 저장 상태에 마우스를 올리면 파일 이름이 나옵니다(프로그램 옆 폴더면 경로까지). 관리 &gt; 데이터 보관에도 나옵니다. 노랑이면 아직 읽기 전용입니다.'],
+ tips:['그래도 안 되면 관리 &gt; 데이터 보관 &gt; [백업 내려받기]로 사본을 먼저 받아 두세요. 백업이 있으면 [백업 불러오기]로 언제든 되살립니다.']},
 ];
 const HELP_FOR_SCREEN={start:'open',week:'week',paste:'paste',edit:'edit',admin:'rules',day:'daily'};
 /* ── 실제 화면 투어 — 도움말 GIF 대신 진짜 화면 위에 스포트라이트 + 말풍선 (2026-09-17)
@@ -8421,7 +8459,7 @@ function _firstRm(){ return document.querySelector('#wkTable td.rm[data-l]:not(.
 function _pageXY(el){ const r=el.getBoundingClientRect(); return [r.left+scrollX, r.bottom+scrollY+4]; }
 const TOURS={
   look:{needData:true,steps:()=>[
-    {before:()=>show('week'),sel:'#fileInfo',title:'지금 저장되는 파일',text:'상단 칩이 <b>어느 파일에 저장되는지</b> 항상 보여 줍니다. 노랑이면 읽기 전용(저장 연결 필요), 마우스를 올리면 전체 경로, 클릭하면 경로 복사.'},
+    {before:()=>show('week'),sel:'#fileInfo',title:'저장 상태',text:'<b>저장됨 · 시각</b> 이면 고친 내용이 파일에 저장된 것입니다. 노랑이면 읽기 전용(저장 연결 필요). 마우스를 올리면 파일 경로, 누르면 경로 복사.'},
     {sel:'.wknav .seg',title:'주 넘기기',text:'<b>◀ 지난주 / 다음주 ▶</b> 로 주를 넘기고, 옆의 [오늘]로 이번 주로 돌아옵니다.'},
     // 방 칸이 없는 서식(102·82)은 가리킬 방 칸이 없다 — 그 단계를 빼고 이름 칸만 짚는다
     formNoRooms()?null:{el:_firstRm,title:'왼쪽 = 담당 병실',text:'각 칸의 왼쪽은 그 사람이 보는 병실입니다. 눌러서 <b>그 날만</b> 병실을 바꿀 수 있습니다.'},
@@ -8432,11 +8470,12 @@ const TOURS={
       ?{sel:'#btnPrint',title:'인쇄',text:'이번 주 배정표가 양식 그대로 <b>A4 한 장</b>으로 나옵니다. 옆의 [엑셀로 내보내기]는 같은 양식의 엑셀 파일입니다.'}
       :{sel:'#btnXlsx',title:'엑셀로 내보내기',text:'이 서식은 병동 양식 그대로 <b>엑셀 파일</b>로 받아 엑셀에서 인쇄합니다.'},
     sideMode()?{el:()=>{ const w=document.querySelector('#wkWarn'); return w&&w.offsetHeight>4?w:null; },title:'이번 주 확인할 것',text:'넓은 화면에서는 표 <b>오른쪽</b>에 모입니다. 빨강은 고칠 것, 노랑은 안내이고, 줄마다 고치러 가는 단추가 붙어 있습니다.'}:null,
-    {sel:'#tabAdmin',title:'⚙ 관리',text:'병실·방 구성·간호사·데이터 보관은 여기서 <b>한 번만</b> 맞춰 두면 됩니다.'},
-    {sel:'#helpFab',title:'막히면 ?',text:'언제든 <b>?</b> (또는 F1) 을 누르면 기능별 사용법과 이런 투어가 있습니다.'},
+    {sel:'#tabEdit',title:'근무표',text:'이 달 근무를 칸마다 고치거나 <b>새 근무표</b>를 넣습니다.'},
+    {sel:'#tabAdmin',title:'관리',text:'병실·방 구성·간호사·데이터 보관은 여기서 <b>한 번만</b> 맞춰 두면 됩니다.'},
+    {sel:'#helpBtn',title:'막히면 도움말',text:'언제든 맨 위 <b>도움말</b> (또는 F1) 을 누르면 기능별 사용법과 이런 투어가 있습니다.'},
   ]},
   open:{steps:()=>[
-    {sel:'#fileInfo',title:'지금 저장되는 파일',text:'이 칩이 <b>어느 파일</b>에 저장되는지 보여 줍니다. 노랑 = 읽기 전용(저장 연결 필요), 빨강 = 미연결. 클릭 = 경로 복사.'},
+    {sel:'#fileInfo',title:'저장 상태',text:'초록 = <b>저장됨</b>(마지막 저장 시각), 노랑 = 읽기 전용(저장 연결 필요), 빨강 = 저장 안 됨. 마우스를 올리면 파일 경로, 누르면 복사.'},
     document.querySelector('#btnConnect')&&document.querySelector('#btnConnect').style.display!=='none'
       ?{sel:'#btnConnect',title:'저장 연결',text:'지금은 옆 파일을 읽기만 한 상태입니다. 한 번 눌러 같은 파일을 골라 주면 이후 수정이 <b>자동 저장</b>됩니다.'}:null,
     {before:()=>{ show('admin'); pickAdmin('data'); },sel:'#adminPanelBox',title:'데이터 보관',text:'백업 내려받기·백업 불러오기·파일 위치 변경을 여기서 합니다.',after:()=>show('week')},
@@ -8464,7 +8503,7 @@ const TOURS={
     canPrint()?{before:()=>show('week'),sel:'#btnPrint',title:'이번 주 인쇄',text:'지금 보고 있는 주가 병실 배정표 양식 그대로 <b>A4 한 장</b>으로 나옵니다.'}:null,
     {before:()=>show('week'),sel:'#btnXlsx',title:'엑셀로 내보내기',text:canPrint()?'같은 양식의 <b>xlsx</b> 파일로 받습니다. 엑셀에서 고칠 수 있습니다.'
       :`${esc(formDef().name)}은 화면 인쇄가 없습니다 — 양식 그대로 <b>xlsx</b> 파일로 받아 엑셀에서 손본 뒤 인쇄합니다.`},
-    {before:()=>{ show('admin'); pickAdmin('weekx'); },sel:'#adminPanelBox',title:canPrint()?'한 달 전체·주차별':'주차별 엑셀',text:canPrint()?'⚙ 관리 &gt; 주간 배정표 내려받기에서 <b>이번 달 전체 인쇄</b>와 주차별 엑셀을 받습니다.':'⚙ 관리 &gt; 주간 배정표 내려받기에서 지난달·이번달·다음달의 <b>주차별 엑셀</b>을 받습니다.',after:()=>show('week')},
+    {before:()=>{ show('admin'); pickAdmin('weekx'); },sel:'#adminPanelBox',title:canPrint()?'한 달 전체·주차별':'주차별 엑셀',text:canPrint()?'관리 &gt; 주간 배정표 내려받기에서 <b>이번 달 전체 인쇄</b>와 주차별 엑셀을 받습니다.':'관리 &gt; 주간 배정표 내려받기에서 지난달·이번달·다음달의 <b>주차별 엑셀</b>을 받습니다.',after:()=>show('week')},
   ]},
   paste:{steps:()=>[
     {before:()=>{ show('paste'); },el:()=>document.querySelector('#scrPaste .stepCard'),title:'1. 엑셀에서 긁어 복사',text:'<b>이름 열 + 날짜 줄 + 근무</b>를 통째로 긁어 <kbd>Ctrl+C</kbd>. 번호·직급 열이 섞여 있어도 이름 열을 알아서 찾습니다.'},
@@ -8480,7 +8519,7 @@ const TOURS={
   ],cleanup:()=>{ resetPaste(); if(connected()) show('week'); }},
   codes:{steps:()=>[
     {before:()=>{ show('paste'); ingestGrid([['이름','8/2','8/3','8/4'],['김수진','경가','D','E'],['이영희','D','조가','OF']]); },sel:'#pvUnknownBox',title:'모르는 표기가 있으면',text:'<b>이 병동 표기 n가지를 모릅니다</b> 카드가 뜹니다. 표기마다 [휴무로] [휴가로] 또는 [다른 근무로 바꾸기]를 고르면 됩니다. 한 번 정하면 다음부터 자동입니다.',after:()=>resetPaste()},
-    {before:()=>{ show('admin'); pickAdmin('codes'); },sel:'#adminPanelBox',title:'나중에 바꾸려면',text:'⚙ 관리 &gt; 근무 표기에서 정한 표기를 고치거나 지웁니다.',after:()=>{ if(connected()) show('week'); }},
+    {before:()=>{ show('admin'); pickAdmin('codes'); },sel:'#adminPanelBox',title:'나중에 바꾸려면',text:'관리 &gt; 근무 표기에서 정한 표기를 고치거나 지웁니다.',after:()=>{ if(connected()) show('week'); }},
   ],cleanup:()=>{ resetPaste(); if(connected()) show('week'); }},
   edit:{needData:true,steps:()=>[
     {before:()=>show('edit'),el:()=>document.querySelector('#scrEdit table tbody td'),title:'칸을 클릭하고 키를 누르세요',text:'<kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>O</kbd> 를 누르면 바로 입력됩니다. 드래그하면 여러 칸을 한 번에 고릅니다.'},
@@ -8546,11 +8585,11 @@ const TOURS={
     {sel:'#adminPanelBox',title:'양식 파일 교체',text:'칸 배치가 다른 양식은 xlsx 를 올려 검사한 뒤 채택합니다.',after:()=>{ if(connected()) show('week'); }},
   ],cleanup:()=>{ if(connected()) show('week'); }},
   data:{steps:()=>[
-    {sel:'#fileInfo',title:'지금 저장되는 파일',text:'칩에 마우스를 올리면 전체 경로, 클릭하면 복사됩니다. 고치는 즉시 이 파일에 저장됩니다.'},
+    {sel:'#fileInfo',title:'저장 상태',text:'고치는 즉시 파일에 저장되고 마지막 저장 시각이 보입니다. 마우스를 올리면 파일 경로, 누르면 복사됩니다.'},
     {before:()=>{ show('admin'); pickAdmin('data'); },el:()=>document.querySelector('#adminPanelBox button[onclick="downloadBackup()"]')||document.querySelector('#adminPanelBox'),title:'백업 내려받기',text:'언제든 사본을 받아 둘 수 있습니다. 한 주에 한 번이면 충분합니다.'},
     {el:()=>document.querySelector('#adminPanelBox button[onclick="restoreBackup()"]')||document.querySelector('#adminPanelBox'),title:'백업 불러오기',text:'백업 파일을 골라 그 내용으로 되살립니다. 백업 파일을 창에 끌어다 놓아도 됩니다. 지금 내용은 사라지므로 확인창이 한 번 뜹니다.',after:()=>{ if(connected()) show('week'); }},
   ],cleanup:()=>{ if(connected()) show('week'); }},
-  theme:{steps:()=>[{sel:'#themeBtn',title:'화면 밝기',text:'◐ 를 누를 때마다 <b>자동 → 다크 → 라이트</b>. 인쇄물은 항상 밝은 양식입니다.'}]},
+  theme:{steps:()=>[{sel:'#themeBtn',title:'화면 밝기',text:'<b>◐ 화면</b> 을 누를 때마다 <b>자동 → 다크 → 라이트</b>. 인쇄물은 항상 밝은 양식입니다.'}]},
 };
 function startTopicTour(id){
   const t=TOURS[id]; if(!t) return false;
@@ -8714,7 +8753,7 @@ function renderWizard(){
       ③ <b>[인쇄]</b> 또는 <b>[엑셀로 내보내기]</b>.<br><br>
       <b>매달 하는 일</b><br>
       새 근무표가 나오면 <b>[새 근무표 넣기]</b> 로 붙여넣습니다.<br><br>
-      막히면 오른쪽 아래 <b>?</b> 를 누르세요 — 지금 화면에서 직접 짚어 드립니다.
+      막히면 맨 위 오른쪽 <b>도움말</b>(또는 <kbd>F1</kbd>)을 누르세요 — 지금 화면에서 직접 짚어 드립니다.
     </div>`;
   }
   const first=wizAt===0, last=wizAt===WIZ.length-1;
@@ -8761,7 +8800,7 @@ function renderOnboard(){
   const left=items.length-done;
   const acts=`<button onclick="startWizard(1)" title="병동·방 구성·근무표·가능 근무를 한 번에 하나씩 묻습니다">▶ 처음 설정 다시 하기</button>
       <button onclick="startTopicTour('look')" title="지금 화면의 버튼을 하나씩 짚어 줍니다 — 그림이 아니라 실제 화면입니다">▶ 화면 둘러보기</button>
-      <button onclick="hideOnboard()" title="다 아는 내용이면 숨깁니다 — ? 도움말 > 시작 안내에서 다시 열 수 있습니다">숨기기</button>`;
+      <button onclick="hideOnboard()" title="다 아는 내용이면 숨깁니다 — 맨 위 [도움말] > 시작 안내 카드에서 다시 열 수 있습니다">숨기기</button>`;
   el.innerHTML=`<div class="obHead"><span class="obTitle">시작 안내</span><span class="obProg">${done} / ${items.length} 완료${open?'':` · ${left}개 남음`}</span>`+
       (side?'':`<span style="margin-left:auto;display:flex;gap:8px">`+(obOpen?acts:'')+
       `<button class="obFold" onclick="obOpen=!obOpen;renderOnboard()" title="${obOpen?'접어서 배정표를 넓게 봅니다':'남은 준비를 펼쳐 봅니다'}">${obOpen?'접기 ▴':'남은 준비 보기 ▾'}</button>`+
@@ -8772,7 +8811,7 @@ function renderOnboard(){
     (side?`<div class="obFoot">${acts}</div>`:'');
 }
 let obOpen=false;   // 접힘이 기본
-function hideOnboard(){ uiSet('obHidden',1); renderOnboard(); toast('시작 안내를 숨겼습니다 — ? 도움말 > 시작 안내에서 다시 열 수 있습니다',3600); }
+function hideOnboard(){ uiSet('obHidden',1); renderOnboard(); toast('시작 안내를 숨겼습니다 — 맨 위 [도움말] > 시작 안내 카드에서 다시 열 수 있습니다',3600); }
 function showOnboard(){ uiSet('obHidden',0); if(connected()) show('week'); renderOnboard(); }
 let helpCur=null;
 function aboutLine(){
@@ -8871,7 +8910,7 @@ window.__app={get store(){return store},set store(v){store=v},
   startWizard,closeWizard,wizGo,wizPaste,wizResume,WIZ,get wizAt(){return wizAt},renderWizard,
   hideOnboard,showOnboard,onboardItems,uiGet:(k)=>uiGet(k),
   secRows,slotsOf,groupUnits,unitOfName,formIds,formDefOf,formFor,detectFormShape,unitWorker,unitSlotName,toggleUnit,fillForm82,formNoRooms,renderWardChip,addWorker,offCandidates,
-  canPrint,exportWeekXlsx,saveMsg,sideMode,syncWeekTools,togglePickShifts,closePick,get pkShiftOpen(){return pkShiftOpen},
+  canPrint,exportWeekXlsx,saveMsg,get dirty(){return dirty},set dirty(v){dirty=v},sideMode,syncWeekTools,togglePickShifts,closePick,get pkShiftOpen(){return pkShiftOpen},
   seatsFor,cntTabs,clampCnt,reliefOn,reliefDay,addRelief,removeRelief,renameRelief,openEmptyPick,isRelief,
   traineeLast,traineeUntil,isNewOn,isTrainee,editNewUntil,newChip,
   evMatch,eventsOn,eventText,evDesc,openEventDay,editEventRule,formModal,askModal,closeModal,isoOfD,undoAny,

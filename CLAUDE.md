@@ -702,7 +702,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   (이 날만 from=to · 기간 · 매주 요일 여러 개, 끝 비우면 계속, `skip`=이 날만 빼기). 그 날 글자는 **`eventText(iso)` 하나**가 화면·인쇄·
   엑셀·`{{교육}}` 에 쓴다 — 날짜 글자를 따로 만들지 말 것. 옛 `store.events` 는 `migrateStore` 가 이 날만 일정으로 옮긴다. 입력은 공용
   `formModal({title,sub,body,change,read,okLabel})`(라디오 줄 `.mrad`·요일 칩 `.wdPick`). ⑥ **첫 실행 = 마법사 0단계(환영)** — 환영
-  카드를 없앴다. [처음 시작]이 곧 파일 만들기이고 만들면 병동 단계로 간다. **z 순서** 도움말 단추 150 < `#wiz` 155 < 고르기 창 158 <
+  카드를 없앴다. [처음 시작]이 곧 파일 만들기이고 만들면 병동 단계로 간다. **z 순서** 머리줄 10 < `#wiz` 155 < 고르기 창 158 <
   도움말 160 < 투어 169~171 < 공용 창 180 < 끌어 놓기 190 < 알림 200 — 마법사가 400 이던 때 그 안에서 연 창이 전부 뒤에 깔렸다.
   **마법사가 관리 패널을 품을 때 id 가 겹친다** — 가려진 관리 화면에 같은 패널이 그려져 있으면 `$()` 가 앞선 관리 쪽을 채워 마법사
   본문이 텅 빈다. `renderWizard` 가 `#adminPanelBox` 의 id 를 떼고, `closeWizard` 가 `#wizBody` 를 비운다(결정 2-33).
@@ -746,15 +746,19 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   걷어 A4 한 장 — 높이는 한글 단위(`hwTopH`: lineseg, 없으면 글자 크기×줄 간격×접힌 줄 수, 표는 크기+바깥 여백).
   **빈 줄은 그 날 종이에서만 걷는다**(저장한 양식은 `baseH` 로 고치기 전 높이를 기억) · 첫 장(`hwPage1`, 쪽 나누기 전)만 센다 ·
   선·번호가 보이는 빈 줄(`hwParaVisible`)은 두고, 한 ★ 안 여러 줄 공지는 글 칸에서 둘째 줄을 두 칸 띄워(`dayNoteShow`↔`dayNoteSplit`) 한 공지로 읽는다.
-  **상단 파일 칩** (2026-09-16, 사용자 요청 "항상 현재 연결된 저장파일 경로+파일명"): `#fileInfo` 는 `fileLoc`
-  ({kind:native|sidecar|file|local|ro|none, name, dir}) 하나를 `renderFileInfo()` 가 그린다 — 다른 곳에서 textContent 를
-  직접 쓰지 말고 `setFileLoc()`. 경로를 아는 경우는 exe(`nativeInfo.path`)와 자동 열림 파일(`htmlDirPath()` = HTML 주소의
-  폴더: file:///D:/x/ → `D:\x\`, file://srv/share/ → `\\srv\share\`, http 는 origin+경로). **파일 핸들은 브라우저가
-  폴더를 알려주지 않는다** — `locateHandle(h)` 가 핸들 파일의 rev·saved 를 HTML 옆 같은 이름 파일(`probeSidecar`)과
-  대조해 일치하면 그 폴더로 표시(`verified`), 아니면 이름만 + 툴팁에 이유. 클릭 = 경로 복사. 관리 > 데이터 보관도
-  `fileLocPath()`. **저장 상태(저장 중…·저장됨 ✓·⚠ 저장 보류)도 이 칩 끝에 붙는다** (2026-09-27) — `saveMsg()` 는 `saveState`
-  만 바꾸고 `renderFileInfo()` 가 그린다(쓸 수 있는 파일일 때만; 파일 없음·읽기 전용은 칩이 이미 말한다). 옆에 따로 뜨던 `#saveDot`
-  배지는 없앴다 — '저장 파일 없음'과 '파일 미연결'이 빨간 배지 둘로 같은 말을 했다. **저장 연결 검증은 진짜 핸들로**: OPFS(`navigator.storage.getDirectory()`) 핸들은 file:// 에서
+  **머리줄 = 사용자 시안** (2026-09-28, 결정 2-37): 왼쪽 앱 이름 + 병동 칩(`renderWardChip`, 좁으면 말줄임) · **가운데 탭 셋**
+  배정표(week·day)/근무표(edit·paste)/관리(admin) — `show()` 가 `.on`·`aria-current` 를 달고, 파일이 없으면 탭을 숨긴다 · 오른쪽 **저장 상태 알약**
+  `#fileInfo` + [저장 연결](읽기 전용일 때만) + `◐ 화면: 자동|다크|라이트` + [도움말]. 떠 있던 `?` 단추(`#helpFab`)는 없앴다(F1 은 그대로).
+  머리줄은 grid `minmax(0,1fr) auto minmax(max-content,1fr)` — 1024px 이상 한 줄(60px), 미만은 탭이 둘째 줄. 높이가 바뀌면 ResizeObserver 가
+  `--tbH` 를 고치고 옆 열(`#wkSide`·`#pvSide`·`#daySide`)의 sticky 윗자리가 그것을 쓴다 — 머리줄 높이를 숫자로 박지 말 것.
+  **알약** `#fileInfo` 는 `fileLoc`({kind:native|sidecar|file|local|ro|none, name, dir}) 하나를 `renderFileInfo()` 가 그린다 — 다른 곳에서
+  textContent 를 직접 쓰지 말고 `setFileLoc()`·`saveMsg()`. 상태: 초록 `저장됨 · 14:02`(`store.saved`, 오늘이 아니면 `mm/dd 14:02`) ·
+  회색 `저장 중…`(**`dirty` 면 저장 전이라도 이것** — 고친 것이 파일에 없는데 '저장됨'이라 하지 않는다) · 빨강 ⚠ 첫 구절(`saveShort`) ·
+  노랑 `읽기 전용`(sidecar·ro)·`쓰기 불가 폴더` · 빨강 `저장 파일 없음`(시작 화면에서만 보인다). **파일 이름·경로는 알약에 없다** — 툴팁 첫 줄 `파일: 경로`, 클릭 = 경로 복사,
+  관리 > 데이터 보관에도(9/16 '항상 경로+파일명' 요청을 시안이 대신한다). 경로를 아는 경우는 exe(`nativeInfo.path`)와 자동 열림 파일(`htmlDirPath()` =
+  HTML 주소의 폴더: file:///D:/x/ → `D:\x\`, file://srv/share/ → `\\srv\share\`, http 는 origin+경로). **파일 핸들은 브라우저가 폴더를 알려주지
+  않는다** — `locateHandle(h)` 가 핸들 파일의 rev·saved 를 HTML 옆 같은 이름 파일(`probeSidecar`)과 대조해 일치하면 그 폴더로(`verified`).
+  `writeStore` 는 어느 길로 부른 저장이든 실패를 알약에 남긴다. 옛 `#saveDot` 배지는 없다. **저장 연결 검증은 진짜 핸들로**: OPFS(`navigator.storage.getDirectory()`) 핸들은 file:// 에서
   SecurityError 라 스크래치 폴더를 `http://127.0.0.1` 로 띄워 검사한다(스크래치 `test-save-connect.mjs`: 새 파일→자동
   저장→새로고침 0클릭 재연결→충돌 보류/덮어쓰기/내 rev 이어쓰기→파일 사라짐 보류·복구, 사이드카 읽기 전용→저장 연결→
   폴더 확인, exe 경로. 가짜 `chrome.webview` 로 네이티브 분기까지).
