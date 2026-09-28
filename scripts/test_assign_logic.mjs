@@ -1782,6 +1782,203 @@ async function main() {
       const r=[n1, A.formOv('101').name]; reset(); return r; })()`, 30000);
   eq('양식 이름 꼬리는 하나만 — 문구 고치기와 맵핑 저장을 번갈아 해도', cs3, ['병실 배정표 (고침)', '병실 배정표 (맵핑)']);
 
+  step('30 양식 고치기 — 칸 글자 · 자리 줄 넣기·빼기 (M11 ④)');
+  const ed = await ev(`const A=window.__app; ${setupWeek}
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms)), sun=new Date(2026,8,6), NL=String.fromCharCode(10);
+    const modal=()=>({t:(document.querySelector('#modalBox .mt')||{}).textContent||'', 글자단추:!!document.querySelector('#mdTextBtn')});
+    const clickRef=async ref=>{ const xs=document.querySelector('#fvSheet .xs'), M=A.fvCache.M, m=ref.match(/^([A-Z]+)([0-9]+)$/), c=A.colNum(m[1]), r=+m[2];
+      const rc=xs.getBoundingClientRect(), k=rc.width/A.fvCache.w;
+      xs.dispatchEvent(new MouseEvent('click',{clientX:rc.left+(M.X[c]+3)*k,clientY:rc.top+(M.Y[r]+3)*k,bubbles:true})); await sleep(200); };
+    // [✏ 글자 고치기] → 글 상자에 적고 확인 — 처음 들어 있던 글을 돌려준다
+    const typeText=async t=>{ document.querySelector('#mdTextBtn').click(); await sleep(50); const i=document.querySelector('#mdInput'), v0=i.value;
+      i.value=t; document.querySelector('#mdOk').click(); await sleep(250); return v0; };
+    const toastTxt=()=>(document.querySelector('#toast')||{}).textContent||'';
+    const rows=()=>[...document.querySelectorAll('#fvSide .fvRow')].map(x=>x.querySelector('span').textContent);
+    const chg=()=>{ const m=((document.querySelector('#fvSide .fvEdit')||{}).textContent||'').match(/(고친 칸[^—]*|자리 줄 [DEN][^—]*)—/); return m?m[1].trim():''; };
+    const dc=()=>A.sheetCells({sheetXml:A.fvDraft.xml,sst:A.fvDraft.sst});
+    const warns=()=>[...document.querySelectorAll('#wkWarn *')].filter(x=>x.children.length===0).map(x=>x.textContent).filter(t=>/인쇄에 나오지/.test(t));
+    return (async()=>{ const out={};
+      setup('101'); A.wkSunday=new Date(sun); A.show('admin'); A.pickAdmin('form');
+      await A.openFormView('current'); await A.renderFormView();
+      out.상자=rows();
+      // D +1 — 끝 줄(아래 굵은 선) 앞에 줄을 넣고 끝 줄을 새 자리 F 로. 끝 자리 표시자를 본떠 E 자리
+      await A.fvRowOp('D',1); await sleep(200);
+      { const c=dc(); out.넣기={상자:rows()[0], C9:c.C9, C10:c.C10, D10:c.D10, E10:c.E10, 요약:chg()}; }
+      await A.fvRowOp('E',-1); await sleep(200);
+      out.빼기=[rows()[1], chg(), toastTxt()];
+      // 표 밖 칸 글자 — 고치고, 구조를 바꾸는 글자(중간번)는 거절
+      await clickRef('C20'); out.글자창=modal(); out.글자처음=await typeText('마약, 비품약');
+      out.글자=dc().C20;
+      await clickRef('C20'); await typeText('중간번'); out.거절=[/양식 구조/.test(toastTxt()), dc().C20];
+      out.칸수=[A.fvCellEdits(), A.fvChangedCount(), chg()];
+      // 하나 되돌리기 — 글자 → E −1 순서
+      A.fvUndoCell(); await sleep(150); out.되1=[A.fvCellEdits(), A.fvDraft.ops.length, chg()];
+      A.fvUndoCell(); await sleep(150); out.되2=[rows(), chg()];
+      await A.fvRowOp('E',-1); await sleep(200);
+      await clickRef('C20'); await typeText('마약, 비품약');
+      let msg=''; window.confirm=m=>{ msg=m; return false; }; A.show('week'); out.떠나기=(msg.match(/고친 것[(][^)]*[)]/)||[''])[0]; window.confirm=()=>true;
+      await A.fvSave(); await sleep(400);
+      out.저장=[/칸 1곳 · 자리 줄 D [+]1 · E −1을/.test(toastTxt()), !!(A.store.forms['101']||{}).ph];
+      await A.loadTemplate(); A.recompute();
+      out.자리=[A.secRows('D'), A.secRows('E'), A.slotsOf('D').join(','), A.FORM_LBL('E','D'), A.canPrint()];
+      const r=await A.buildWeekXlsx(sun), x=A.sheetCells({...r.tpl,sheetXml:r.xml});
+      out.내보내기={C10:x.C10, E10:x.E10, C15:x.C15, E15:x.E15, C16:x.C16, C20:x.C20};
+      A.show('week'); await sleep(600);
+      out.화면=[warns().filter(t=>/배디/.test(t)).length>0, [...document.querySelectorAll('#wkTable td.lab')].map(td=>td.textContent).slice(0,13).join(' ')];
+      A.undoAny(); await sleep(300); out.되돌림=[!!(A.store.forms||{})['101'], A.secRows('D'), A.secRows('E')];
+      // 102 — 넣은 자리 이름은 종이 글자(E), 그림은 한 줄 아래로(보기·파일 모두)
+      A.store.forms={}; setup('102'); A.wkSunday=new Date(sun); A.show('admin'); A.pickAdmin('form'); await A.openFormView('current'); await A.renderFormView();
+      const t0=await A.loadTemplate(), im0=(await A.xlsxSheetImages(t0)).map(i=>i.fr);
+      await A.fvRowOp('D',1); await sleep(200);
+      const imV=A.fvImgShift(await A.xlsxSheetImages(t0),A.fvDraft.ops).map(i=>i.fr);
+      await A.fvSave(); await sleep(400);
+      const t1=await A.loadTemplate(); A.recompute();
+      { const r2=await A.buildWeekXlsx(sun), y=A.sheetCells({...r2.tpl,sheetXml:r2.xml});
+        out.m102={그림:[im0,imV,(await A.xlsxSheetImages(t1)).map(i=>i.fr)], 이름:A.FORM_LBL('D','D'), 자리:A.secRows('D'), C9:y.C9, D9:y.D9, A10:y.A10, D10:y.D10}; }
+      // 82 — SU·중간번 줄이 구역 안이라 자리 줄은 막고, 조각 서식 칸(인계사항)은 바뀐 부분만 바꾼다
+      A.store.forms={}; setup('82'); await A.openFormView('current'); await A.renderFormView();
+      out.m82=[/82 모양/.test((document.querySelector('#fvSide .fvEdit.off')||{}).textContent||''), rows().length];
+      await A.fvRowOp('D',1); await sleep(100); out.m82t=[/82 모양/.test(toastTxt()), A.fvDraft?A.fvDraft.ops.length:0];
+      await clickRef('H13'); const f13o=await typeText('<인계사항>'+NL+'새 글');
+      const raw=(A.fvDraft.xml.match(/<c r="F13"[^>]*?(?:[/]>|>[^]*?<[/]c>)/)||[''])[0];
+      out.f13={처음:f13o.slice(0,6), 조각:[...raw.matchAll(/<r>([^]*?)<[/]r>/g)].map(m=>[/FFFF0000/.test(m[1]), ((m[1].match(/<t[^>]*>([^]*?)<[/]t>/)||[])[1]||'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')])};
+      A.fvDiscard(); A.store.forms={}; setup('101'); A.show('week');
+      return out; })()`, 60000);
+  eq('자리 줄 상자 — 근무마다 지금 자리 수', ed.상자, ['D 근무 5자리', 'E 근무 5자리', 'N 근무 3자리']);
+  eq('D 자리 줄 넣기 — 끝 줄 앞에 넣고 새 자리 F 는 끝 자리 표시자를 본뜬다', ed.넣기,
+    {상자: 'D 근무 6자리', C9: 'E', C10: 'F', D10: '{{방:D.E}}', E10: '{{이름:D.E}}', 요약: '자리 줄 D +1'});
+  eq('E 자리 줄 빼기', ed.빼기, ['E 근무 4자리', '자리 줄 D +1 · E −1', 'E 근무 마지막 자리 줄(E)을 뺐습니다']);
+  eq('표 밖 칸은 [✏ 글자 고치기]가 있고 고친 글이 들어간다', [ed.글자창, ed.글자처음, ed.글자],
+    [{t: 'C20 칸에 무엇을 채울까요?', 글자단추: true}, '마약, 비품약, E-cart, 냉장고', '마약, 비품약']);
+  eq('구역 이름으로 읽히는 글자(중간번)는 거절하고 초안을 그대로 둔다', ed.거절, [true, '마약, 비품약']);
+  eq('고친 곳 = 칸 + 자리 줄', ed.칸수, [1, 3, '고친 칸 1곳 · 자리 줄 D +1 · E −1']);
+  eq('하나 되돌리기 — 글자 먼저, 다음은 자리 줄', [ed.되1, ed.되2],
+    [[0, 2, '자리 줄 D +1 · E −1'], [['D 근무 6자리', 'E 근무 5자리', 'N 근무 3자리'], '자리 줄 D +1']]);
+  eq('저장 전에 떠나면 고친 곳 수를 말하고 묻는다', ed.떠나기, '고친 것(3곳)');
+  eq('저장 — 토스트에 칸·자리 줄, 자리표시자 양식', ed.저장, [true, true]);
+  eq('저장 뒤 자리 — D 6 · E 4, 여섯째 자리 이름은 종이 글자 F, 101 인쇄 틀은 안 쓴다', ed.자리, [6, 4, '차지,A,B,C,D,E', 'F', false]);
+  eq('엑셀 내보내기 — 새 D 자리에 여섯째 사람, E 는 네 줄, 표 아래 글자도 고친 대로', ed.내보내기,
+    {C10: 'F', E10: '한이', C15: 'D', E15: '장씨', C16: 'A(CN)', C20: '마약, 비품약'});
+  eq('배정표 화면 — 뺀 E 자리 사람은 인쇄에 안 나온다고 알리고 자리 이름은 종이대로', ed.화면,
+    [true, 'A(CN) B C D E F A(CN) B C D A(CN) B C']);
+  eq('저장을 되돌리면 자리 수도 돌아온다', ed.되돌림, [false, 5, 5]);
+  eq('102 D 자리 넣기 — 새 자리 이름 E, 그림은 보기·파일 모두 한 줄 아래, 중간번 줄은 그대로 채운다', ed.m102,
+    {그림: [[23], [24], [24]], 이름: 'E', 자리: 5, C9: 'E', D9: '정디', A10: '중간번', D10: '중간이'});
+  eq('82 — 자리 줄은 이유를 말하고 막는다', [ed.m82, ed.m82t], [[true, 0], [true, 0]]);
+  eq('82 인계사항(조각 서식) — 빨간 머리글은 그대로, 바뀐 본문만 본문 서식으로', ed.f13,
+    {처음: '<인계사항>', 조각: [[true, '<인계사항>'], [false, '\n새 글']]});
+
+  step('30b 자리 줄 — 선·병합·자리 이름 열·줄 수식');
+  const rs = await ev(`const A=window.__app;
+    const shapeMap=x=>{ const o={}; for(const m of x.matchAll(/<c r="([A-Z]+)([0-9]+)"([^>]*?)(?:[/]>|>)/g)) o[m[1]+m[2]]=(m[3].match(/s="([0-9]+)"/)||[])[1]||''; return o; };
+    const merges=x=>[...x.matchAll(/<mergeCell ref="([^"]+)"/g)].map(m=>m[1]).sort().join(' ');
+    const rowTags=x=>[...x.matchAll(/<row [^>]*>/g)].map(m=>m[0].replace(/ spans="[^"]*"/,'')).join('');
+    const same=(a,b)=>{ const A1=shapeMap(a),B1=shapeMap(b); return [...new Set([...Object.keys(A1),...Object.keys(B1)])].filter(k=>A1[k]!==B1[k]).length===0&&merges(a)===merges(b)&&rowTags(a)===rowTags(b); };
+    return (async()=>{ const out={};
+      for(const id of ['101','102']){
+        const tpl=await A.loadBaseTemplate(id), F=A.formDefOf(id), base=A.fvDraftStart(tpl,F);
+        const run=ops=>{ let x=base; const log=[]; for(const [P,d] of ops){ const r=(d>0?A.seatRowAdd:A.seatRowDel)(x,tpl,F,P,{base}); if(r.why){ log.push('막음'); continue; } x=r.xml; log.push(r.label); } return {x,log}; };
+        const lay=x=>A.layoutOf(F,A.sheetCells({...tpl,sheetXml:x}),A.sheetMerges({...tpl,sheetXml:x}));
+        // 두 자리 구역(N 3→2)에 다시 넣으면 처음 양식과 칸 서식·병합·줄 높이가 같다 — 새 줄은 안쪽 줄 모양(첫 줄의 굵은 윗선을 본뜨지 않는다)
+        const a=run([['N',-1],['N',1]]);
+        // D 를 두 자리까지 빼고(더는 막음) 다시 채우면 처음과 같다
+        const b=run([['D',-1],['D',-1],['D',-1],['D',-1],['D',1],['D',1],['D',1]].slice(0,id==='101'?7:6));
+        // 자리 줄을 많이 빼도 자리 이름 열은 표 쪽(C) — 표 아래 블록(B열 A(CN)~E)이 이기지 않는다
+        const c=run([['D',-1],['D',-1],['D',-1],['E',-1],['E',-1],['E',-1],['N',-1]]), Lc=lay(c.x);
+        out[id]={N:[a.log.join(','), same(base,a.x)], D:[b.log.includes('막음'), same(base,b.x)], 열:[Lc.labelCol, Lc.sections.map(s=>s.P+s.rows).join(' ')]};
+      }
+      // 줄마다 제 줄을 보는 수식 — 넣고 빼도 제 줄을 본다
+      const tpl=await A.loadBaseTemplate('102'), F=A.formDefOf('102'); let x=A.fvDraftStart(tpl,F);
+      for(let r=5;r<=16;r++) x=A.putCell(x,'S'+r,'<f>COUNTA(D'+r+':Q'+r+')</f><v>0</v>','');
+      const f=(xx,ref)=>((xx.match(new RegExp('<c r="'+ref+'"[^>]*><f>([^<]*)<'))||[])[1]||'');
+      const ad=A.seatRowAdd(x,tpl,F,'D',{base:x}), dl=A.seatRowDel(x,tpl,F,'D',{base:x});
+      out.수식=[f(ad.xml,'S8'),f(ad.xml,'S9'),f(dl.xml,'S7')];
+      return out; })()`, 30000);
+  for (const id of ['101', '102']) {
+    eq(`${id} 두 자리 구역에 다시 넣으면 처음 양식과 같다 (선·병합·줄 높이)`, rs[id].N, ['C,C', true]);
+    eq(`${id} 두 자리까지만 빼고 다시 채우면 처음과 같다`, rs[id].D, [true, true]);
+    eq(`${id} 자리 줄을 많이 빼도 자리 이름 열은 표 쪽`, rs[id].열, [3, 'D2 E2 N2']);
+  }
+  eq('줄마다 제 줄을 보는 수식은 넣고 빼도 제 줄을 본다', rs.수식, ['COUNTA(D8:Q8)', 'COUNTA(D9:Q9)', 'COUNTA(D7:Q7)']);
+
+  step('30c 자리 줄 — 저장 전 채워 보기 · 새 자리 이름은 종이 순서');
+  const dp = await ev(`const A=window.__app; ${setupWeek}
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms)), sun=new Date(2026,8,6);
+    const t=ref=>{ const u=document.querySelector('#fvSheet [data-ref="'+ref+'"]'); return u?u.textContent:''; };
+    return (async()=>{ const out={};
+      setup('101'); A.wkSunday=new Date(sun); A.show('admin'); A.pickAdmin('form');
+      await A.openFormView('current'); await A.renderFormView();
+      await A.fvRowOp('D',1); await sleep(200);
+      A.fvSet('mode','fill'); await sleep(600);
+      out.채워보기={E10:t('E10'), D10:t('D10'), D9:t('D9'), 안내:/저장하지 않은/.test(document.querySelector('#fvSide').textContent)};
+      out.새지않음=[A.seatsFor('D'), A.weekData(sun).some(d=>d.secs&&d.secs.D.byLabel.E)];
+      A.fvSet('mode','map'); await sleep(200); await A.fvSave(); await sleep(400);
+      { const r=await A.buildWeekXlsx(sun), y=A.sheetCells({...r.tpl,sheetXml:r.xml}); out.내보내기={E10:y.E10, D10:y.D10, D9:y.D9, 안내:true}; }
+      A.undoAny(); await sleep(300); A.show('week');
+      const tpl=await A.loadBaseTemplate('101'), F=A.formDefOf('101'); let x=A.fvDraftStart(tpl,F);
+      const lab={5:'CN',6:'A',7:'B',8:'C',9:'D',11:'CN',12:'A',13:'B',14:'C',15:'D',16:'CN',17:'A',18:'B'};
+      for(const r in lab) x=A.putCell(x,'C'+r,'<is><t>'+lab[r]+'</t></is>','inlineStr');
+      const d=A.seatRowAdd(x,tpl,F,'D',{base:x}), n=A.seatRowAdd(x,tpl,F,'N',{base:x});
+      out.이름=[d.label, A.sheetCells({...tpl,sheetXml:d.xml}).C10, n.label, A.sheetCells({...tpl,sheetXml:n.xml}).C19];
+      return out; })()`, 30000);
+  eq('저장 전 채워 보기 = 저장 뒤 엑셀 내보내기 (넣은 D 자리에 여섯째 사람, 방은 여섯 자리로)', dp.채워보기, dp.내보내기);
+  eq('채워 보기 — 새 F 줄에 여섯째 사람', [dp.채워보기.E10, dp.채워보기.안내], ['한이', true]);
+  eq('채워 보기는 저장된 자리 수를 건드리지 않는다', dp.새지않음, [5, false]);
+  eq('CN·A·B… 로 적은 양식 — 새 자리 이름은 종이 순서대로 (D 다음 E, N 은 B 다음 C)', dp.이름, ['E', 'E', 'C', 'C']);
+
+  step('30d 글자 고치기 — 조각 서식 · 그대로 확인 · 곳 수 · 줄바꿈 서식 · 옆 상자 줄');
+  const tx = await ev(`const A=window.__app; ${setupWeek}
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms)), sun=new Date(2026,8,6), NL=String.fromCharCode(10);
+    return (async()=>{
+
+      const clickRef=async ref=>{ const xs=document.querySelector('#fvSheet .xs'), M=A.fvCache.M, m=ref.match(/^([A-Z]+)([0-9]+)$/), c=A.colNum(m[1]), r=+m[2];
+        const rc=xs.getBoundingClientRect(), k=rc.width/A.fvCache.w;
+        xs.dispatchEvent(new MouseEvent('click',{clientX:rc.left+(M.X[c]+3)*k,clientY:rc.top+(M.Y[r]+3)*k,bubbles:true})); await sleep(200); };
+      const typeText=async t=>{ document.querySelector('#mdTextBtn').click(); await sleep(50); const i=document.querySelector('#mdInput'), v0=i.value;
+        i.value=typeof t==='function'?t(v0):t; document.querySelector('#mdOk').click(); await sleep(250); return v0; };
+      const runsOf=(xml,ref)=>{ const raw=(xml.match(new RegExp('<c r="'+ref+'"[^>]*?(?:[/]>|>[^]*?<[/]c>)'))||[''])[0];
+        return [...raw.matchAll(/<r>([^]*?)<[/]r>/g)].map(m=>[/FFFF0000/.test(m[1])?'R':(/002060/.test(m[1])?'N':'-'), /<b[/]>/.test(m[1])?'B':'', ((m[1].match(/<t[^>]*>([^]*?)<[/]t>/)||[])[1]||'').slice(0,14)]); };
+      const out={};
+      // (a) 82 F13 두 곳 고치기
+      setup('82'); A.wkSunday=new Date(sun); A.show('admin'); A.pickAdmin('form'); await A.openFormView('current'); await A.renderFormView();
+      out.f13전=runsOf(A.fvDraft?A.fvDraft.xml:A.TPL.sheetXml,'F13');
+      await clickRef('H13'); const v0=await typeText(v=>v.replace('낙상예방활동','낙상 예방활동').replace('비치의약품','비치 의약품'));
+      out.f13후=runsOf(A.fvDraft.xml,'F13');
+      // (d) C11 줄바꿈 → 칸 서식 줄바꿈
+      await clickRef('C11'); await typeText('경보반,소화반'+NL+'대피유도반');
+      out.c11=runsOf(A.fvDraft.xml,'C11');
+      { const t=await A.loadTemplate(); const w=await A.applyWrapStyles(t,A.fvDraft.xml); const s=(w.xml.match(/<c r="C11"[^>]*s="([0-9]+)"/)||[])[1];
+        const xfs=(w.styles||'').match(/<cellXfs[^>]*>([^]*?)<[/]cellXfs>/); const xl=xfs?xfs[1].match(/<xf[^]*?(?:[/]>|<[/]xf>)/g):[]; out.c11wrap=[s, /wrapText="1"/.test(xl[+s]||''), runsOf(w.xml,'C11').length]; }
+      A.fvDiscard();
+      // (b) 101 B32 그대로 확인 / (c) 떠날 때 곳 수 / (e) 옆 상자 줄
+      A.store.forms={}; setup('101'); A.show('admin'); A.pickAdmin('form'); await A.openFormView('current'); await A.renderFormView();
+      await clickRef('B32'); await typeText(v=>v);
+      out.그대로=[A.fvDirty(), A.fvCellEdits(), A.fvChangedCount()];
+      await clickRef('A1'); await typeText(v=>v+' (9월)');
+      await A.fvRowOp('E',1); await sleep(150); await A.fvRowOp('E',-1); await sleep(150); await A.fvRowOp('D',1); await sleep(150);
+      out.곳수=[A.fvChangedCount(), (document.querySelector('#fvSide .fvEdit')||{}).textContent.match(/고친 칸[^—]*/)[0].trim()];
+      out.줄=[...document.querySelectorAll('#fvSide .fvRow span b, #fvSide .fvEdit > span b')].map(b=>getComputedStyle(b).display);
+      out.머리=[...document.querySelectorAll('#fvSide .fvEdit > b:first-child')].map(b=>getComputedStyle(b).display);
+      A.fvDiscard();
+      // (f) 한 조각 서식 제목
+      { const tpl=await A.loadBaseTemplate('101'); let x=A.putCell(tpl.sheetXml,'A1','<is><r><rPr><b/><sz val="24"/><color rgb="FFFF0000"/></rPr><t>병실 배정표</t></r></is>','inlineStr');
+        const y=A.setCellPlain(x,tpl,'A1','병실 배정표 (9월)',''), z=A.setCellTag(x,tpl,'A1','{{날짜:M월 D일}}',false);
+        out.한조각=[runsOf(y,'A1'), runsOf(z,'A1')]; }
+      A.store.forms={}; A.show('week');
+      return out;
+
+    })()`, 60000);
+  eq('82 인계사항 — 두 곳을 한 번에 고쳐도 그 사이 빨강·남색·굵은 글자는 제 서식', tx.f13후, [
+    ['R', '', '&lt;인계사항&gt;'], ['-', '', '\n1. 낙상 예방활동_시설'], ['R', 'B', '(매월 17일)'], ['-', '', '\n2'],
+    ['N', '', '. 휴가, 생휴 전 전산 '], ['-', '', '\n3. 정기 낙상/욕창 평'], ['R', 'B', '4. 비치 의약품 유효기간']]);
+  eq('조각 서식 칸에 줄을 바꾸면 조각은 그대로, 칸 서식에 줄바꿈이 켜진다', [tx.c11, tx.c11wrap[1], tx.c11wrap[2]],
+    [[['R', 'B', '경보반'], ['-', 'B', ',소화반\n대피유도반']], true, 2]);
+  eq('줄바꿈이 든 칸을 고치지 않고 확인하면 고친 것이 아니다', tx.그대로, [false, 0, 0]);
+  eq('떠날 때 묻는 곳 수 = 옆 상자 (넣었다 뺀 자리 줄은 세지 않는다)', tx.곳수, [2, '고친 칸 1곳 · 자리 줄 D +1']);
+  eq('옆 상자 — 자리 수·곳 수는 제 줄에 붙고 머리글만 한 줄', [tx.줄.every(d => d === 'inline'), tx.머리], [true, ['block', 'block']]);
+  eq('한 조각 서식 제목(굵은 빨강)은 글자를 고치거나 표시자를 붙여도 서식 그대로', tx.한조각,
+    [[['R', 'B', '병실 배정표 (9월)']], [['R', 'B', '병실 배정표'], ['R', 'B', '\n{{날짜:M월 D일}}']]]);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
