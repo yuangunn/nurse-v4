@@ -7,7 +7,7 @@ name: Tests
 # 빠져 11건이 안 돌고도 초록으로 보였다 (2026-08-24, requirements-dev.txt 신설).
 #
 # 범위: pytest 전체 + JS 검증 5종. 여기 있는 것 중 긴 솔버 작업은 없다
-# (전체 ~25초, 최장 단일 테스트 8초). 12개월 이월 시뮬 같은 무거운 건
+# (한 줄로 돌리면 ~5분 — 아래 pytest 는 4개 러너에 나눠 ~2분). 12개월 이월 시뮬 같은 무거운 건
 # scripts/sim_chain.py 쪽이고 pytest 밖이라 CI 에 넣지 않는다.
 #
 # Python 3.11 고정 — highspy/ortools 휠 (release.yml 과 동일).
@@ -26,9 +26,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pytest:
+  # pytest 는 4개 러너에 나눠 동시에 돈다 (2026-09-28). 한 줄로 돌리면 5분 13초였고
+  # 그중 4분 10초가 CP-SAT 테스트 4개(v_report 98초·weekly_of 60초·juhu_block 45초×2)였다.
+  # 느린 파일 셋을 한 러너씩 주면 가장 느린 러너 ≈ 2분. xdist 로 한 러너 안에서 나누지
+  # 않은 건 CP-SAT 이 코어를 다 쓰기 때문 — 같은 러너에서 겹치면 시간 제한 안에 못 풀 수 있다.
+  # 새 테스트 파일은 저절로 'rest' 에 들어간다. 느린 파일이 새로 생기면 그룹을 하나 더 만든다.
+  pytest-group:
+    name: pytest (${{ matrix.group }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: v_report
+            args: tests/test_v_report.py
+          - group: constraints
+            args: tests/test_constraints.py
+          - group: juhu_block
+            args: tests/test_juhu_block.py
+          - group: rest
+            args: >-
+              tests
+              --ignore=tests/test_v_report.py
+              --ignore=tests/test_constraints.py
+              --ignore=tests/test_juhu_block.py
     steps:
       - uses: actions/checkout@v4
 
@@ -49,7 +71,20 @@ jobs:
         run: python -m pytest --collect-only -q
 
       - name: pytest
-        run: python -m pytest -q --durations=10
+        run: python -m pytest -q --durations=10 ${{ matrix.args }}
+
+  # 예전 체크 이름 'pytest' 를 그대로 남긴다 — 필수 체크로 걸려 있어도 머지가 막히지 않게.
+  pytest:
+    needs: pytest-group
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 네 그룹이 모두 통과했는지
+        run: |
+          if [ "${{ needs.pytest-group.result }}" != "success" ]; then
+            echo "::error::pytest 그룹 중 실패한 것이 있습니다 (${{ needs.pytest-group.result }})"
+            exit 1
+          fi
 
   js:
     runs-on: ubuntu-latest
