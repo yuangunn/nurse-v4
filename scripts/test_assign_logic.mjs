@@ -1202,6 +1202,145 @@ async function main() {
     [true, ['가 010-0000-0011', '나 010-0000-0012']]);
   eq('늘 같은 번호를 꺼도 적어 둔 번호는 남고, 다시 켜면 돌아온다', [rv.duty.끔, rv.duty.켬], [[true, '010-0000-9999'], '010-0000-9999']);
 
+  // ── 27. 배정표 양식 자동 맵핑 ─────────────────────────────────────────────
+  // 올린 양식에 자리표시자를 양식 모양대로 꽂는다(autoMap). 내장 서식 채우기와 **같은 칸에 같은 값**이어야
+  // 자동 맵핑을 믿고 올린 양식을 채울 수 있다 — 칸 하나라도 다르면 종이에서 그 자리가 틀린다 (2026-09-28).
+  step('27 양식 자동 맵핑');
+  const setupWeek = `const setup=(id)=>{ A.setFormId(id); A.setWard(id); const s=A.store;
+      const days=['2026-09-06','2026-09-07','2026-09-08','2026-09-09','2026-09-10','2026-09-11'];
+      const D=['김차지','이에이','박비','최씨','정디','한이'], E=['오차지','유에이','문비','장씨','배디'], N=['정야간','한야간','오야간'];
+      s.order=[...D,...E,...N,'중간이','신규일','가에스유','나에스유','다에스유'];
+      s.cells={}; for(const n of s.order) s.cells[n]={};
+      days.forEach((iso,i)=>{ D.forEach((n,k)=>{ if(!(i===1&&k===5)) s.cells[n][iso]=k===0?'DC':'D'; });
+        E.forEach((n,k)=>{ s.cells[n][iso]=k===0?'EC':'E'; }); N.forEach((n,k)=>{ s.cells[n][iso]=k===0?'NC':'N'; });
+        if(i%2===0) s.cells['중간이'][iso]='중';
+        if(id==='82'){ s.cells['가에스유'][iso]='D'; s.cells['나에스유'][iso]='E'; s.cells['다에스유'][iso]='N'; } });
+      s.cells['신규일']['2026-09-07']='/D';
+      s.unit=id==='82'?{가에스유:'SU',나에스유:'SU',다에스유:'SU'}:{};
+      s.trainee={'신규일':{pre:'이에이'}};
+      s.evRules=[{id:'e1',text:'간호부 교육',from:'2026-09-08',to:'2026-09-08'},{id:'e2',text:'CPR 훈련',from:'2026-09-10',to:'2026-09-10'}];
+      A.store=s; A.recompute(); };`;
+  const par = await ev(`const A=window.__app; ${setupWeek}
+    return (async()=>{ const out={};
+      for(const id of ['101','102','82']){ setup(id);
+        const tpl=await A.loadBaseTemplate(id), cells=A.sheetCells(tpl), merges=A.sheetMerges(tpl);
+        const days=A.weekData(new Date(2026,8,6)), L=A.layoutOf(A.formDefOf(id),cells,merges);
+        const x1=id==='101'?A.fillForm101(tpl,days):id==='102'?A.fillForm102(tpl,L,days):A.fillForm82(tpl,L,days);
+        const sh=A.detectFormShape(cells,merges), am=A.autoMap(tpl,sh);
+        if(!am.ok){ out[id]={err:am.why}; continue; }
+        const t2={...tpl,sheetXml:am.xml}, c2=A.sheetCells(t2);
+        const x2=A.fillByPlaceholders(t2,c2,A.layoutOf({kind:sh.kind},c2,merges),days,{dateXf:await A.dateStyleSet(tpl)});
+        const a=A.sheetCells({...tpl,sheetXml:x1}), b=A.sheetCells({...tpl,sheetXml:x2});
+        const diff=[...new Set([...Object.keys(a),...Object.keys(b)])].filter(k=>a[k]!==b[k]);
+        out[id]={same:x1===x2, diff:diff.slice(0,6), missing:am.missing, cells:b};
+      }
+      return out; })()`);
+  for (const id of ['101', '102', '82']) {
+    ok(`${id} — 자동 맵핑으로 채운 엑셀이 내장 서식 채우기와 칸마다 같다`, par[id] && par[id].same && !par[id].diff.length,
+      JSON.stringify(par[id] && (par[id].err || par[id].diff)));
+    eq(`${id} — 자동 맵핑이 못 찾은 자리 없음`, par[id] && par[id].missing, []);
+  }
+  const c101 = par['101'].cells, c102 = par['102'].cells, c82 = par['82'].cells;
+  ok('시험 주가 빈 주가 아니다 (날짜·차지·신규·중간번·교육)',
+    /^[0-9]{5}$/.test(c101.D3) && c101.E5 === '김차지' && /신규일/.test(c101.G6) && c101.H10 === '중간이' && c101.H4 === '간호부 교육',
+    JSON.stringify([c101.D3, c101.E5, c101.G6, c101.H10, c101.H4]));
+  eq('102 — 차지 이름 뒤 /CRN', c102.F5, '김차지 /CRN');
+  eq('82 — SU 칸 · 날짜 글자', [c82.E6, c82.E3], ['가에스유', '9월 7일']);
+  // 82 원본의 13행은 A13:E13 '<교육 및 행사 일정>' · F13:J13 '<인계사항>' 두 상자다.
+  // 예전 채우기는 D13~J13 을 비우고 써서 인계사항이 내보낼 때마다 지워지고 일정은 가려진 칸에 들어갔다.
+  ok('82 — 인계사항 상자가 그대로 남는다', /^<인계사항>/.test(c82.F13 || ''), JSON.stringify(c82.F13));
+  eq('82 — 교육·행사는 이름표 상자에 그 주 목록으로', (c82.A13 || '').split(String.fromCharCode(10)),
+    ['<교육 및 행사 일정>', '9/8(화) 간호부 교육', '9/10(목) CPR 훈련']);
+  eq('82 — 가려진 칸(G13)에 쓰지 않는다', c82.G13 || '', '');
+
+  const exp82 = await ev(`const A=window.__app; ${setupWeek} setup('82');
+    return (async()=>{ const r=await A.buildWeekXlsx(new Date(2026,8,6)); const c=A.sheetCells({...r.tpl,sheetXml:r.xml});
+      return {F13:c.F13||'', A13:c.A13||''}; })()`);
+  ok('82 내보내기(buildWeekXlsx)도 인계사항을 지우지 않는다', /^<인계사항>/.test(exp82.F13) && /간호부 교육/.test(exp82.A13), JSON.stringify(exp82));
+
+  // 올린 101 양식(칸이 같아도)은 자동 맵핑 길로 채운다 — 결과가 고정 위치 채우기와 같아야 한다
+  const ov101 = await ev(`const A=window.__app; ${setupWeek} setup('101');
+    return (async()=>{ const b64=document.querySelector('#tplB64').textContent.replace(/[/][*][^*]*[*][/]/g,'').trim();
+      A.store.forms['101']={name:'올린 101.xlsx',b64,savedAt:5,ph:false};
+      const r=await A.buildWeekXlsx(new Date(2026,8,6));
+      const base=await A.loadBaseTemplate('101');
+      const x1=A.fillForm101(base,A.weekData(new Date(2026,8,6)));
+      const a=A.sheetCells({...base,sheetXml:x1}), b=A.sheetCells({...r.tpl,sheetXml:r.xml});
+      const diff=[...new Set([...Object.keys(a),...Object.keys(b)])].filter(k=>a[k]!==b[k]);
+      delete A.store.forms['101'];
+      return diff; })()`);
+  eq('올린 101 양식 — 자동 맵핑 길의 결과가 고정 위치 채우기와 같다', ov101, []);
+
+  // 자리표시자 양식(자동 맵핑을 내려받아 다시 올린 것)은 적힌 대로 채우고, 화면 인쇄 틀 대신 엑셀로 인쇄한다
+  const tagged = await ev(`const A=window.__app; ${setupWeek} setup('102');
+    return (async()=>{ const base=await A.loadBaseTemplate('102'), am=A.autoMap(base);
+      const bytes=A.packXlsx(base,{'xl/worksheets/sheet1.xml':am.xml});
+      A.store.forms['102']={name:'자리표시자.xlsx',b64:A.bytesToB64(bytes),savedAt:6,ph:true};
+      const r=await A.buildWeekXlsx(new Date(2026,8,6)); const c=A.sheetCells({...r.tpl,sheetXml:r.xml});
+      const out={F5:c.F5, F3:c.F3, 남은표시자:Object.values(c).filter(v=>/[{][{]/.test(v)).length, 인쇄:A.canPrint()};
+      delete A.store.forms['102']; return out; })()`);
+  eq('자리표시자 양식 — 적힌 대로 채우고 표시자가 남지 않는다 (날짜는 엑셀 날짜)',
+    [tagged.F5, /^[0-9]{5}$/.test(String(tagged.F3)), tagged.남은표시자], ['김차지 /CRN', true, 0]);
+  eq('자리표시자 양식은 화면 인쇄 대신 엑셀', tagged.인쇄, false);
+
+  // ── 27b. 병동 양식 저장 ────────────────────────────────────────────────
+  step('27b 병동 양식 저장');
+  const wf = await ev(`const A=window.__app;
+    return (async()=>{ const out={};
+      const b82=document.querySelector('#tplB64_82').textContent.replace(/[/][*][^*]*[*][/]/g,'').trim();
+      const s=A.store; s.ward='55'; s.wardPicked=true; s.rooms=A.wardRooms('55').map(r=>[r,4]); s.formId='101'; s.forms={};
+      A.store=s; A.migrateStore(); A.show('admin'); A.pickAdmin('form');
+      await A.checkFormFile({files:[new File([A.b64ToBytes(b82)],'55병동.xlsx')],value:''});
+      const rep=document.querySelector('#formReport'); out.안내=rep?(rep.textContent||'').trim().slice(0,60):'(보고 칸 없음)';
+      A.useCheckedForm();
+      out.처음=[A.store.formId, A.store.forms['55'].kind, A.unitSlotName()];
+      // 파일을 다시 열면(migrateStore) 병동 양식이 그대로여야 — 예전엔 내장 4벌만 보고 101 로 되돌렸다
+      A.migrateStore(); out.다시열기=A.store.formId;
+      // 같은 병동이 다시 올려도 모양을 잃지 않는다
+      await A.checkFormFile({files:[new File([A.b64ToBytes(b82)],'55병동 새판.xlsx')],value:''});
+      A.useCheckedForm(); out.다시올림=[A.store.forms['55'].kind, A.store.forms['55'].unitSlot, A.store.forms['55'].name];
+      // 문구를 고쳐 저장해도 모양을 잃지 않는다
+      await A.openFormText();
+      const ta=[...document.querySelectorAll('#formText textarea')];
+      out.인계사항고칠수있음=ta.some(t=>t.dataset.ref==='F13'&&!t.readOnly);
+      out.요일잠금=ta.filter(t=>/^[D-J]2$/.test(t.dataset.ref)).every(t=>t.readOnly);
+      const t1=ta.find(t=>t.dataset.ref==='A1'); t1.value='업무분담 (고침)'; await A.saveFormText();
+      out.고친뒤=[A.store.forms['55'].kind, A.store.forms['55'].unitSlot, A.formDef().name];
+      // 병동 양식이 없어진 파일: 병동 서식 → 없으면 101
+      s.formId='77'; s.ward='102'; A.migrateStore(); out.병동서식으로=A.store.formId;
+      s.formId='77'; s.ward='61'; A.migrateStore(); out.없으면101=A.store.formId;
+      // 구조를 바꾸는 글자 고치기는 저장하지 않는다 (101: 화재발생시 → 중간번 이면 중간번 줄이 바뀐다)
+      A.setWard('101'); A.setFormId('101'); delete A.store.forms['101'];
+      await A.openFormText();
+      const a31=[...document.querySelectorAll('#formText textarea')].find(t=>t.dataset.ref==='A31');
+      a31.value='중간번'; await A.saveFormText(); out.구조바뀜저장안함=!A.formOv('101');
+      A.store.forms={}; A.setWard('101'); A.setFormId('101'); A.show('week');
+      return out; })()`);
+  ok('새 병동 양식 — 지금 서식과 견주지 않고 그 병동 서식으로 안내', /^55병동 서식으로 쓸 수 있습니다/.test(wf.안내), JSON.stringify(wf));
+  eq('새 병동 양식이 그 병동 서식이 된다 (82 모양 · SU 칸)', wf.처음, ['55', '82', 'SU']);
+  eq('다시 열어도 병동 양식을 쓴다', wf.다시열기, '55');
+  eq('다시 올려도 모양이 남는다', wf.다시올림, ['82', 'SU', '55병동 새판.xlsx']);
+  eq('문구를 고쳐도 모양이 남는다', wf.고친뒤, ['82', 'SU', '55병동 양식']);
+  ok('82 인계사항 문구를 고칠 수 있고 요일은 잠겨 있다', wf.인계사항고칠수있음 && wf.요일잠금, JSON.stringify(wf));
+  eq('병동 양식이 없어진 파일은 그 병동 서식으로', wf.병동서식으로, '102');
+  eq('그 병동 서식도 없으면 101', wf.없으면101, '101');
+  eq('구조 인식을 바꾸는 문구는 저장하지 않는다', wf.구조바뀜저장안함, true);
+
+  // ── 27c. 칸 쓰기 ─────────────────────────────────────────────────────────
+  // 없는 칸을 줄 맨 앞에 끼우면 엑셀이 '복구'를 묻는다. 줄이 없으면 예전엔 조용히 안 썼다.
+  step('27c 칸 쓰기');
+  const pc = await ev(`const A=window.__app;
+    const xml='<worksheet><sheetData><row r="2"><c r="B2" s="1"/><c r="D2"><v>1</v></c></row><row r="5"/></sheetData></worksheet>';
+    const refs=x=>[...x.matchAll(/<c r="([A-Z]+[0-9]+)"/g)].map(m=>m[1]);
+    return {열순서:refs(A.setCellStr(xml,'C2','가')), 새줄:refs(A.setCellStr(xml,'A3','나')), 끝줄:refs(A.setCellStr(xml,'E9','다')),
+      빈줄:refs(A.setCellStr(xml,'B5','라')), 달러:A.sheetCells({sheetXml:A.setCellStr(xml,'D2','$&x'),sst:[]}).D2,
+      날짜모양:['9월 13일','09/13','2026-09-13'].map(A.dateFmtOf), 날짜:A.fmtDateTok(new Date(2026,8,6),'YYYY년 MM월 DD일 M/D')};`);
+  eq('없는 칸은 열 순서대로 끼운다', pc.열순서, ['B2', 'C2', 'D2']);
+  eq('없는 줄은 줄 순서대로 만든다', [pc.새줄, pc.끝줄, pc.빈줄], [['B2', 'D2', 'A3'], ['B2', 'D2', 'E9'], ['B2', 'D2', 'B5']]);
+  eq("이름에 '$&' 가 있어도 그대로 쓴다", pc.달러, '$&x');
+  eq('양식에 적힌 날짜에서 글자 모양을 읽는다', pc.날짜모양, ['M월 D일', 'MM/DD', 'YYYY-MM-DD']);
+  eq('날짜 글자 모양', pc.날짜, '2026년 09월 06일 9/6');
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
