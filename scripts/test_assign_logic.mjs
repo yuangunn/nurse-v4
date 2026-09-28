@@ -1341,6 +1341,118 @@ async function main() {
   eq('양식에 적힌 날짜에서 글자 모양을 읽는다', pc.날짜모양, ['M월 D일', 'MM/DD', 'YYYY-MM-DD']);
   eq('날짜 글자 모양', pc.날짜, '2026년 09월 06일 9/6');
 
+  // ── 27d. 교차 검토에서 나온 것들 ───────────────────────────────────────────
+  // 자동 맵핑 PR 을 네 갈래(채우기 대조·xlsx 유효성·저장 호환·화면 흐름)로 따로 검토해 재현한 것들 (2026-09-28).
+  step('27d 양식 검토 회귀');
+  const rv27 = await ev(`const A=window.__app; ${setupWeek}
+    const b64Of=id=>document.querySelector(id==='101'?'#tplB64':'#tplB64_'+id).textContent.replace(/[/][*][^*]*[*][/]/g,'').trim();
+    const rawCells=x=>{ const o={}; for(const m of x.matchAll(/<c r="([A-Z]+[0-9]+)"[^>]*?(?:[/]>|>[^]*?<[/]c>)/g)) o[m[1]]=m[0]; return o; };
+    const cellDiff=(x1,x2,tpl)=>{ const a=A.sheetCells({...tpl,sheetXml:x1}), b=A.sheetCells({...tpl,sheetXml:x2});
+      return [...new Set([...Object.keys(a),...Object.keys(b)])].filter(k=>a[k]!==b[k]); };
+    const reXml=async(tpl,xml)=>A.parseXlsx(A.packXlsx(tpl,{'xl/worksheets/sheet1.xml':xml}));
+    const upload=(id,xmlTpl)=>{ A.store.forms[id]={name:'올린.xlsx',b64:A.bytesToB64(A.packXlsx(xmlTpl.tpl,{'xl/worksheets/sheet1.xml':xmlTpl.xml})),savedAt:9,ph:!!xmlTpl.ph,kind:xmlTpl.kind}; A.setFormId(id); };
+    const sun=new Date(2026,8,6);
+    return (async()=>{ const out={};
+      // ① 101 날짜 줄이 빈 양식(병동이 주는 빈 양식) — {{날짜}} 가 요일 칸을 덮고 일요일만 채우던 것
+      setup('101');
+      { const base=await A.loadBaseTemplate('101');
+        const xml=base.sheetXml.replace(/<c r="([D-Q])3"([^>]*?)(?:[/]>|>[^]*?<[/]c>)/g,(m,c,at)=>'<c r="'+c+'3"'+at.replace(/ t="[^"]*"/,'')+'/>');
+        upload('101',{tpl:base,xml,kind:'101'});
+        const r=await A.buildWeekXlsx(sun), x1=A.fillForm101(base,A.weekData(sun));
+        out.빈날짜줄=cellDiff(x1,r.xml,base); delete A.store.forms['101']; }
+      // ② 102 '대체' 줄 — 양식 자리 밖 D 근무자가 대체 줄에 (fillForm102 와 같게)
+      setup('102');
+      { const base=await A.loadBaseTemplate('102');
+        const t2={...base,sheetXml:A.setCellStr(A.setCellStr(A.setCellStr(base.sheetXml,'A9','대체'),'D9','지난주 대체'),'F9','지난주 대체')};
+        const c=A.sheetCells(t2), m=A.sheetMerges(t2), L=A.layoutOf({kind:'102'},c,m), days=A.weekData(sun);
+        const x1=A.fillForm102(t2,L,days), am=A.autoMap(t2), t3={...t2,sheetXml:am.xml}, c3=A.sheetCells(t3);
+        const x2=A.fillByPlaceholders(t3,c3,A.layoutOf({kind:'102'},c3,m),days,{dateXf:await A.dateStyleSet(t2)});
+        out.대체줄={subRow:L.subRow, diff:cellDiff(x1,x2,t2), D9:A.sheetCells({...t2,sheetXml:x2}).D9||''}; }
+      // ③ 날짜 예시의 요일·두 자리 연도
+      out.날짜모양=['9/13(일)','26.09.13','2026.09.13 (일)','9월 13일 일요일'].map(A.dateFmtOf);
+      out.날짜글자=['M/D(aaa)','YY.MM.DD','M월 D일 aaaa'].map(f=>A.fmtDateTok(new Date(2026,8,7),f));
+      // ④ 방 칸이 있는 양식에 SU 자리 — 병동 자리로 꽂지 않는다
+      setup('101');
+      { const base=await A.loadBaseTemplate('101'), t2={...base,sheetXml:A.setCellStr(base.sheetXml,'C9','SU')};
+        const c=A.sheetCells(t2), m=A.sheetMerges(t2), sh=A.detectFormShape(c,m), am=A.autoMap(t2,sh), c2=A.sheetCells({...t2,sheetXml:am.xml});
+        const row9=Object.keys(c2).filter(k=>/^[D-Q]9$/.test(k)).map(k=>c2[k]).join(' ');
+        out.SU={kind:sh&&sh.kind, row9, 자리수:(am.found||[]).filter(f=>/^D /.test(f)).join(',')}; }
+      // ⑤ 문구 고치기 — 여러 줄 칸(CRLF)을 고친 칸으로 보고 조각 서식을 지우던 것: A1 만 고치면 A1 만 바뀐다
+      { const b82=b64Of('82'); const s=A.store; s.ward='55'; s.wardPicked=true; s.rooms=A.wardRooms('55').map(r=>[r,4]); s.formId='101'; s.forms={};
+        A.store=s; A.migrateStore(); A.show('admin'); A.pickAdmin('form');
+        await A.checkFormFile({files:[new File([A.b64ToBytes(b82)],'55병동.xlsx')],value:''}); A.useCheckedForm();
+        await A.openFormText();
+        const t1=[...document.querySelectorAll('#formText textarea')].find(t=>t.dataset.ref==='A1'); t1.value='업무분담 (고침)'; await A.saveFormText();
+        const before=rawCells((await A.loadBaseTemplate('82')).sheetXml), after=rawCells((await A.parseXlsx(A.b64ToBytes(A.store.forms['55'].b64))).sheetXml);
+        out.문구고침=Object.keys({...before,...after}).filter(k=>before[k]!==after[k]);
+        // ⑥ 검사 결과는 병동을 바꾸면 사라진다 (검사할 때의 병동 이름으로 다른 병동에 저장되던 것)
+        await A.checkFormFile({files:[new File([A.b64ToBytes(b82)],'55병동.xlsx')],value:''});
+        const had=!!window.__checkedForm; A.setWard('61');
+        out.검사결과={had, after:!!window.__checkedForm, 글:((document.querySelector('#formReport')||{}).textContent||'').includes('55병동')};
+        A.store.forms={}; A.setWard('101'); A.setFormId('101'); A.show('week'); }
+      // ⑦ 82 이름표 상자의 조각 서식(빨간 굵은 제목)을 지키고, 인계사항 상자가 첫 요일 칸에서 시작해도 지우지 않는다
+      setup('82');
+      { const r=await A.buildWeekXlsx(sun), a13=rawCells(r.xml).A13||'';
+        out.이름표서식={runs:(a13.match(/<r>/g)||[]).length, 빨강:/FFFF0000/.test(a13), 글:A.sheetCells({...r.tpl,sheetXml:r.xml}).A13||''};
+        const base=await A.loadBaseTemplate('82'), c=A.sheetCells(base);
+        let xml=base.sheetXml.replace('<mergeCell ref="A13:E13"/>','<mergeCell ref="A13:C13"/>').replace('<mergeCell ref="F13:J13"/>','<mergeCell ref="D13:J13"/>');
+        xml=A.setCellStr(xml,'D13',c.F13); xml=xml.replace(/<c r="F13"([^>]*?)(?:[/]>|>[^]*?<[/]c>)/,(m,at)=>'<c r="F13"'+at.replace(/ t="[^"]*"/,'')+'/>');
+        const t2={...base,sheetXml:xml}, c2=A.sheetCells(t2), m2=A.sheetMerges(t2), L=A.layoutOf({kind:'82'},c2,m2);
+        const f82=A.sheetCells({...t2,sheetXml:A.fillForm82(t2,L,A.weekData(sun))}), am=A.autoMap(t2);
+        out.인계사항={채움:(f82.D13||'').slice(0,6), 맵핑:(A.sheetCells({...t2,sheetXml:am.xml}).D13||'').slice(0,6), 목록:/간호부 교육/.test(f82.A13||'')}; }
+      // ⑧ 일정이 많은 주는 두 개씩 한 줄 — 높이가 고정된 칸에서 잘리지 않게
+      { A.store.evRules=[{id:'w',text:'주중 교육',from:'2026-09-01',to:'2026-09-30',wds:[1,2,3,4,5]},{id:'s',text:'일요 행사',from:'2026-09-06',to:'2026-09-06'}];
+        const ls=A.eventListLines(A.weekData(sun)); out.일정줄={줄:ls.length, 다있음:ls.join(' ').split('(').length-1}; }
+      // ⑨ 수식 칸을 채우면 calcChain 을 뺀다 — 남기면 엑셀이 '복구'를 묻는다
+      { const base=await A.loadBaseTemplate('101'), enc=new TextEncoder();
+        const ctE=base.ents.find(e=>e.name==='[Content_Types].xml'), relE=base.ents.find(e=>e.name==='xl/_rels/workbook.xml.rels');
+        const rd=async e=>{ const b=e.meth===8?new Uint8Array(await new Response(new Blob([e.raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()):e.raw; return new TextDecoder().decode(b); };
+        const ct=(await rd(ctE)).replace('</Types>','<Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/></Types>');
+        const rel=(await rd(relE)).replace('</Relationships>','<Relationship Id="rIdCalc" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain" Target="calcChain.xml"/></Relationships>');
+        const cc=enc.encode('<calcChain xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><c r="F3" i="1"/></calcChain>');
+        const withCalc={...base,ents:[...base.ents,{name:'xl/calcChain.xml',meth:0,crc:0,usz:cc.length,raw:cc}]};
+        const t1=await A.parseXlsx(A.packXlsx(withCalc,{'[Content_Types].xml':ct,'xl/_rels/workbook.xml.rels':rel}));
+        const t2=await A.parseXlsx(A.packXlsx(t1,{'xl/worksheets/sheet1.xml':t1.sheetXml}));
+        const names=t=>t.ents.map(e=>e.name);
+        out.calc={처음:names(t1).includes('xl/calcChain.xml'), 뒤:names(t2).includes('xl/calcChain.xml'),
+          종류:/calcChain/.test(await rd(t2.ents.find(e=>e.name==='[Content_Types].xml'))), 관계:/calcChain/.test(await rd(t2.ents.find(e=>e.name==='xl/_rels/workbook.xml.rels')))}; }
+      // ⑩ 122 는 자리표시자 양식이어도 화면 인쇄 (방 세 열을 그리는 길은 화면 인쇄뿐), 101 자리표시자 양식은 엑셀
+      setup('122');
+      { A.store.forms['122']={name:'옛 표시자.xlsx',b64:b64Of('122'),savedAt:9,ph:true}; A.setFormId('122'); out.인쇄122=A.canPrint();
+        delete A.store.forms['122']; setup('101'); A.store.forms['101']={name:'표시자.xlsx',b64:b64Of('101'),savedAt:9,ph:true}; out.인쇄101=A.canPrint(); delete A.store.forms['101']; }
+      // ⑪ 못 박은 표시자와 못 박지 않은 표시자를 섞은 양식 — 화면 자리 수가 종이와 같다
+      setup('101');
+      { const base=await A.loadBaseTemplate('101'), am=A.autoMap(base), m=A.sheetMerges(base);
+        const mixed=am.xml.replace(/[{][{](이름|방):[DEN][.](A|B|C|D|E)[}][}]/g,(x,k)=>'{{'+k+'}}');
+        const c1=A.sheetCells({...base,sheetXml:am.xml}), c2=A.sheetCells({...base,sheetXml:mixed});
+        out.자리수={못박음:A.tagRows(c1,A.layoutOf({kind:'101'},c1,m)), 섞음:A.tagRows(c2,A.layoutOf({kind:'101'},c2,m)), 줄모름:A.tagRows(c2)};
+        // ⑫ 표시자가 없는 요일 칸(지난주 방)은 비운다
+        const t3={...base,sheetXml:A.setCellStr(am.xml.replace(/<c r="D5"([^>]*?)(?:[/]>|>[^]*?<[/]c>)/,(x,at)=>'<c r="D5"'+at.replace(/ t="[^"]*"/,'')+'/>'),'F5','12,14 (지난주)')};
+        const c3=A.sheetCells(t3), x3=A.fillByPlaceholders(t3,c3,A.layoutOf({kind:'101'},c3,m),A.weekData(sun),{dateXf:await A.dateStyleSet(base)});
+        const f3=A.sheetCells({...t3,sheetXml:x3}); out.지난주={F5:f3.F5||'', E5:f3.E5||''}; }
+      // ⑬ 82·102 모양 병동 양식의 자리 이름은 그 모양의 내장 서식 이름
+      { A.store.forms['56']={name:'56.xlsx',b64:b64Of('102'),savedAt:9,kind:'102'}; A.store.forms['57']={name:'57.xlsx',b64:b64Of('82'),savedAt:9,kind:'82'};
+        const f=id=>JSON.stringify([A.formDefOf(id).labels,A.formDefOf(id).labelsN]);
+        out.자리이름=[f('56')===f('102'), f('57')===f('82')]; delete A.store.forms['56']; delete A.store.forms['57']; }
+      return out; })()`);
+  eq('101 날짜 줄이 빈 양식 — 요일 칸을 덮지 않고 이레 모두 채운다 (내장 채우기와 같다)', rv27.빈날짜줄, []);
+  eq("102 '대체' 줄 — 양식 자리 밖 사람이 대체 줄에 (내장 채우기와 같다)", [rv27.대체줄.subRow, rv27.대체줄.diff, rv27.대체줄.D9], [9, [], '정디']);
+  eq('날짜 예시의 요일은 날마다, 두 자리 연도는 연도로', rv27.날짜모양, ['M/D(aaa)', 'YY.MM.DD', 'YYYY.MM.DD (aaa)', 'M월 D일 aaaa']);
+  eq('날짜 글자 — 요일·두 자리 연도', rv27.날짜글자, ['9/7(월)', '26.09.07', '9월 7일 월요일']);
+  ok('방 칸 양식의 SU 자리는 SU 이름 칸으로 (병동 자리·방으로 꽂지 않는다)',
+    rv27.SU.kind === '82' && /[{][{]이름:D[.]SU[}][}]/.test(rv27.SU.row9) && !/[{][{]방/.test(rv27.SU.row9), JSON.stringify(rv27.SU));
+  eq('문구 고치기 — A1 만 고치면 A1 만 바뀐다 (여러 줄 칸의 조각 서식이 남는다)', rv27.문구고침, ['A1']);
+  eq('병동을 바꾸면 양식 검사 결과가 사라진다', rv27.검사결과, {had: true, after: false, 글: false});
+  ok('82 이름표 상자의 빨간 제목 서식이 남는다', rv27.이름표서식.runs >= 2 && rv27.이름표서식.빨강 && /간호부 교육/.test(rv27.이름표서식.글), JSON.stringify(rv27.이름표서식));
+  eq('인계사항 상자가 첫 요일 칸에서 시작해도 지우지 않는다', rv27.인계사항, {채움: '<인계사항>', 맵핑: '<인계사항>', 목록: true});
+  eq('일정 여섯 날은 세 줄로 (두 개씩)', rv27.일정줄, {줄: 3, 다있음: 6});
+  eq('시트를 고쳐 싸면 calcChain 이 빠진다 (종류·관계 목록에서도)', rv27.calc, {처음: true, 뒤: false, 종류: false, 관계: false});
+  eq('122 자리표시자 양식은 화면 인쇄, 101 자리표시자 양식은 엑셀', [rv27.인쇄122, rv27.인쇄101], [true, false]);
+  eq('못 박은 표시자·못 박지 않은 표시자를 섞어도 화면 자리 수가 같다', [rv27.자리수.섞음, rv27.자리수.줄모름], [rv27.자리수.못박음, null]);
+  ok('못 박은 표시자로 센 자리 수', rv27.자리수.못박음 && rv27.자리수.못박음.D >= 4, JSON.stringify(rv27.자리수));
+  eq('표시자가 없는 요일 칸의 지난주 값은 비운다', [rv27.지난주.F5, rv27.지난주.E5], ['', '김차지']);
+  eq('82·102 모양 병동 양식의 자리 이름 = 그 모양의 내장 서식', rv27.자리이름, [true, true]);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
