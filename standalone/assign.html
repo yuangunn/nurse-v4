@@ -808,6 +808,11 @@
   .date{--mk:#7C3AED;--mk-bg:#EDE9FE} .event{--mk:#D97706;--mk-bg:#FEF3C7}
   .mid{--mk:#0D9488;--mk-bg:#CCFBF1} .unit{--mk:#DB2777;--mk-bg:#FCE7F3}
   .memo{--mk:#93C5FD;--mk-bg:#EFF6FF} .clr{--mk:#6B7280;--mk-bg:#F3F4F6} .fvK.lock{--mk:#8A93A1;--mk-bg:transparent}
+  .xs.edit{cursor:cell}
+  #fvHov{position:absolute;display:none;pointer-events:none;box-shadow:inset 0 0 0 2px #0F1115;background:rgba(15,17,21,.06);z-index:2}
+  .fvEdit{margin:10px 0 4px;padding:10px 12px;border-radius:10px;background:var(--subtle);font-size:13px;line-height:1.55;color:var(--ink-2)}
+  .fvEdit b:first-child{display:block;color:var(--ink);font-size:14px;margin-bottom:2px}
+  .fvEdit.off{background:transparent;padding:0}
   .dayWrap{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;align-items:start}
   @media (max-width:1100px){ .dayWrap{grid-template-columns:minmax(0,1fr)} }
   #dayPaper{margin:0;padding:18px;background:var(--paper-2);box-shadow:none}
@@ -1713,7 +1718,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260928o'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260928p'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -2521,6 +2526,9 @@ let curScr='start';
 const connected=()=>!!fileHandle||!!nativeInfo||!!window.__memoryMode;
 function show(name){
   if(name!=='start'&&!connected()){ name='start'; }
+  if(curScr==='form'&&name!=='form'&&fvDirty()){
+    if(!confirm(`저장하지 않은 칸 맵핑 ${fvDraft.refs.size}곳이 있습니다.\n저장하지 않고 나갈까요? (취소를 누르면 양식 보기에 남습니다)`)) return;
+    fvDraft=null; }
   curScr=name;
   renderFileInfo(); renderOnboard(); renderWardChip();
   for(const k in SCREENS) $('#'+SCREENS[k]).style.display=(k===name)?'':'none';
@@ -5291,7 +5299,7 @@ function formCellRoles(tpl,F){
   }
   let tagged=cells;
   if(!hasPlaceholders(cells)){
-    const am=autoMap(tpl,{kind:F.kind,noRooms:!!F.noRooms,dateText:!!F.dateText});
+    const am=autoMap(tpl,{kind:F.kind,noRooms:!!F.noRooms,dateText:!!F.dateText,unitSlot:F.unitSlot});
     if(am.ok) tagged=sheetCells({...tpl,sheetXml:am.xml});
   }
   const st=dc[1]-dc[0];
@@ -5727,6 +5735,8 @@ async function renderFormView(){
   const sheetBox=$('#fvSheet'), side=$('#fvSide'); if(!sheetBox) return;
   let src;
   try{ src=await fvSource(); }catch(e){ sheetBox.innerHTML=`<div class="tip"><b>양식을 읽지 못했습니다</b><span>${esc(e.message)}</span></div>`; return; }
+  if(fvDraft&&(src.checked||fvDraft.key!==fvKeyOf())) fvDraft=src.checked?fvDraft:null;   // 양식이 바뀌면(저장·교체) 초안은 버린다
+  if(fvDraft&&!src.checked) src={...src,tpl:{...src.tpl,sheetXml:fvDraft.xml},custom:true};
   if(!fvSun) fvSun=new Date(wkSunday);
   const days=weekData(fvSun);
   $('#fvTitle').textContent=src.title;
@@ -5746,8 +5756,10 @@ async function renderFormView(){
   if(fvMode==='map'){ Object.assign(marks,roles.marks); formLockMarks(src.tpl,src.F,marks); }
   else for(const ref in roles.marks) marks[ref]={...roles.marks[ref],cls:roles.marks[ref].cls+' ol',tag:''};
   const r=xlsxSheetHtml(M,book,{marks,imgs,grid:fvGrid});
-  fvCache={w:r.w,h:r.h};
+  fvCache={w:r.w,h:r.h,M};
   sheetBox.innerHTML=r.html;
+  const editWhy=fvEditBlock(src);
+  if(fvMode==='map'&&!editWhy){ const xs=sheetBox.querySelector('.xs'); xs.classList.add('edit'); xs.insertAdjacentHTML('beforeend','<div id="fvHov"></div>'); }
   fitFormView();
   // 오른쪽 열 — 무엇을 찾았나, 못 찾은 것, 색 설명
   const cnt={}; for(const ref in roles.marks){ const k=roles.marks[ref].cls; cnt[k]=(cnt[k]||0)+1; }
@@ -5759,6 +5771,13 @@ async function renderFormView(){
       ?'색칠한 칸을 앱이 채웁니다. 칸에 마우스를 올리면 무엇이 들어가는지 나옵니다. 나머지 글자·선·그림은 양식 그대로 나갑니다.'
       :'엑셀로 내보낼 때와 <b>같은 파일</b>을 그렸습니다. 테두리 친 칸이 앱이 채운 칸입니다.'+(noData?' 근무표가 아직 없어 날짜·교육·행사만 들어갑니다.':'')}</div>`+
     (fillErr?`<div class="tip" style="margin-top:10px"><b>채우지 못했습니다</b><span>${esc(fillErr)}</span></div>`:'')+
+    (fvMode!=='map'?(fvDirty()?`<div class="fvEdit"><span>저장하지 않은 맵핑(고친 칸 <b>${fvDraft.refs.size}곳</b>)으로 채웠습니다.</span></div>`:'')
+      :editWhy?`<div class="fvEdit off"><span>${esc(editWhy)}</span></div>`
+      :`<div class="fvEdit"><b>칸을 눌러 맵핑 고치기</b><span>칸을 누르면 그 칸에 무엇을 채울지 고릅니다.`+
+        (fvDirty()?` 고친 칸 <b>${fvDraft.refs.size}곳</b> — 아직 저장하지 않았습니다.</span>`+fvDupHtml(src)+
+          `<div class="dsBtns"><button class="pri" onclick="fvSave()" title="고친 맵핑을 이 서식의 우리 병동 양식으로 저장합니다">맵핑 저장</button>`+
+          `<button onclick="fvUndoCell()" title="마지막으로 고친 칸을 되돌립니다 (Ctrl+Z)">한 칸 되돌리기</button>`+
+          `<button onclick="fvDiscard()" title="저장하지 않고 고친 칸을 모두 버립니다">처음대로</button></div>`:'</span>')+`</div>`)+
     `<div class="fvLegend">${legend}</div>`+
     `<div class="dsF"><div class="dsL"><b>${roles.ok?'찾은 방법':'찾지 못했습니다'}</b>${esc(roles.how)}</div>`+
     (roles.found.length?`<ul class="fvList">${roles.found.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'')+
@@ -5777,11 +5796,19 @@ function fitFormView(){
   xs.style.zoom=String(z); xs.style.setProperty('--fvz',String(z));   // 표시 글자는 줄여도 12px 로 읽히게
 }
 window.addEventListener('resize',()=>{ if(curScr==='form') fitFormView(); });
+$('#fvSheet').addEventListener('click',e=>{ if(curScr!=='form'||fvMode!=='map'||!e.target.closest('.xs.edit')) return;
+  const ref=fvCellAt(e); if(ref) fvPickCell(ref); });
+$('#fvSheet').addEventListener('mousemove',e=>{ const h=$('#fvHov'); if(!h) return;
+  const ref=e.target.closest('.xs.edit')?fvCellAt(e):null; if(!ref){ h.style.display='none'; return; }
+  const {X,Y,maxR,maxC}=fvCache.M, m=ref.match(/^([A-Z]+)(\d+)$/); let c1=colNum(m[1]), r1=+m[2], c2=c1, r2=r1;
+  for(const g of fvCache.M.merges) if(c1>=g.c1&&c1<=g.c2&&r1>=g.r1&&r1<=g.r2){ c1=g.c1; r1=g.r1; c2=Math.min(g.c2,maxC); r2=Math.min(g.r2,maxR); break; }
+  Object.assign(h.style,{display:'block',left:X[c1]+'px',top:Y[r1]+'px',width:(X[c2+1]-X[c1])+'px',height:(Y[r2+1]-Y[r1])+'px'}); });
+$('#fvSheet').addEventListener('mouseleave',()=>{ const h=$('#fvHov'); if(h) h.style.display='none'; });
 /* 지금 서식에 자리표시자를 꽂아 내려받기 — 검사한 파일용 downloadMarkedForm 과 같은 모양의 파일 */
 async function downloadMarkedCurrent(){
   try{
     const tpl=await loadTemplate(), F=formDef();
-    const am=hasPlaceholders(sheetCells(tpl))?{ok:true,xml:tpl.sheetXml}:autoMap(tpl,{kind:F.kind,noRooms:!!F.noRooms,dateText:!!F.dateText,unitSlot:F.unitSlot});
+    const am=fvDirty()?{ok:true,xml:fvDraft.xml}:hasPlaceholders(sheetCells(tpl))?{ok:true,xml:tpl.sheetXml}:autoMap(tpl,{kind:F.kind,noRooms:!!F.noRooms,dateText:!!F.dateText,unitSlot:F.unitSlot});
     if(!am.ok){ toast(am.why,5000); return; }
     const w=await applyWrapStyles(tpl,am.xml);
     const parts={'xl/worksheets/sheet1.xml':w.xml}; if(w.styles) parts['xl/styles.xml']=w.styles;
@@ -5792,6 +5819,149 @@ async function downloadMarkedCurrent(){
     setTimeout(()=>URL.revokeObjectURL(a.href),4000);
     toast('자리표시자를 넣어 내려받았습니다 — 엑셀에서 자리를 옮겨 다시 올리면 적힌 대로 채웁니다',5000);
   }catch(e){ toast('만들지 못했습니다: '+e.message,4000); }
+}
+/* ── 칸 눌러 맵핑 (M11 ③) ─────────────────────────────────────────────
+ * '어디에 무엇이' 화면에서 칸을 누르면 그 칸에 무엇을 채울지 고른다. 고른 것은 그 칸의 **자리표시자**로 적는다(결정 2-38 —
+ * 맵핑을 따로 저장하지 않는다). 요일 칸은 첫 요일(일요일) 칸에 적은 것이 이레에 복제되므로, 다른 요일 칸을 눌러도 일요일 칸을 고친다.
+ * 저장 전까지는 초안(fvDraft)이다 — 보기·채워 보기 모두 초안으로 그리고, [저장]하면 이 서식의 우리 병동 양식(자리표시자 양식)이 된다. */
+let fvDraft=null;   // {key, base, xml, hist:[xml…], refs:Set}
+const fvKeyOf=()=>{ const ov=formOv(); return formId()+':'+(ov?ov.savedAt||0:'base'); };
+/* 칸 맵핑을 고칠 수 있나 — 안 되면 이유 */
+function fvEditBlock(src,roles){
+  if(src.checked) return '검사한 파일은 [이 양식 쓰기]로 쓴 뒤 칸을 고칠 수 있습니다.';
+  if(src.F.kind==='122') return '122 모양은 방을 일·월~금·토 세 열에 묶어 적는 규칙이 있어 칸 맵핑을 바꾸지 않습니다.';
+  const cells=sheetCells(src.tpl), L=layoutOf(src.F,cells,sheetMerges(src.tpl));
+  if(!L.wdRow||(L.dateCols||[]).length<2) return '양식에서 요일 줄(일·월·화…)을 찾지 못해 칸마다 이레로 나눌 수 없습니다 — 요일 줄이 있는 양식을 올려 주세요.';
+  return '';
+}
+/* 초안의 시작 — 지금 채우기가 쓰는 맵핑 그대로 (자리표시자 양식이면 그대로, 아니면 자동 맵핑, 자리 줄을 못 찾은 101 은 고정 위치) */
+function fvDraftStart(tpl,F){
+  const cells=sheetCells(tpl);
+  if(hasPlaceholders(cells)) return tpl.sheetXml;
+  const am=autoMap(tpl,{kind:F.kind,noRooms:!!F.noRooms,dateText:!!F.dateText,unitSlot:F.unitSlot});
+  if(F.kind==='101'&&(!am.ok||am.missing.some(m=>/ 자리$/.test(m)))){
+    let xml=tpl.sheetXml; const fx=fixed101Tags(); for(const ref in fx.tags) xml=setCellStr(xml,ref,fx.tags[ref]); return xml; }
+  return am.ok?am.xml:tpl.sheetXml;
+}
+/* 칸에 자리표시자를 적는다. 요일 칸(tag 가 이레로 복제되는 칸)은 칸 글자를 통째로 바꾸고 — 예시 이름이 남으면 채울 때 이름 옆에 붙는다 —
+ * 요일 칸 밖(이름표 칸)은 이름표 글자를 두고 표시자만 바꾼다(조각 서식은 조각째). tag='' 는 표시자만 지운다. */
+function setCellTag(xml,tpl,ref,tag,whole){
+  const strip=t=>{ PH_RE.lastIndex=0; const o=String(t).replace(PH_RE,''); PH_RE.lastIndex=0; return o; };
+  if(whole) return tag?setCellStr(xml,ref,tag):clearCell(xml,ref);
+  const runs=cellRuns(xml,tpl,ref);
+  if(runs&&runs.length>1){
+    const {keep,rpr}=trimRunsEnd(runs.map(r=>r.replace(/(<t\b[^>]*>)([\s\S]*?)(<\/t>)/g,(_,a,x,b)=>a+XESC(strip(XUN(x)))+b)));
+    const has=keep.some(r=>runText(r).trim());
+    if(!tag) return has?putCell(xml,ref,'<is>'+keep.join('')+'</is>','inlineStr'):clearCell(xml,ref);
+    return putCell(xml,ref,'<is>'+keep.join('')+'<r>'+rpr+'<t xml:space="preserve">'+XESC((has?'\n':'')+tag)+'</t></r></is>','inlineStr');
+  }
+  const rest=strip(getCellText(xml,(tpl&&tpl.sst)||[],ref)).replace(/\s+$/,'').replace(/^\s+/,'');
+  const out=tag?(rest?rest+'\n'+tag:tag):rest;
+  return out?setCellStr(xml,ref,out):clearCell(xml,ref);
+}
+/* 누른 칸 → 고칠 칸. 병합은 왼쪽 위, 요일 칸은 첫 요일 칸의 같은 자리 */
+function fvSourceCell(ref,L,merges){
+  const m=ref.match(/^([A-Z]+)(\d+)$/); if(!m) return null;
+  let c=colNum(m[1]), r=+m[2];
+  for(const mg of merges||[]){ const x=String(mg).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/); if(!x) continue;
+    const c1=colNum(x[1]),r1=+x[2],c2=colNum(x[3]),r2=+x[4]; if(c>=c1&&c<=c2&&r>=r1&&r<=r2){ c=c1; r=r1; break; } }
+  const dc=L.dateCols||[], stride=dc.length>1?dc[1]-dc[0]:0;
+  for(let k=dc.length-1;k>=0&&stride;k--){ const o=c-dc[k];
+    if(o>=0&&o<stride) return {ref:colName(dc[0]+o)+r, clicked:colName(c)+r, day:k, inDays:true}; }
+  return {ref:colName(c)+r, clicked:colName(c)+r, day:null, inDays:false};
+}
+/* 고를 것 — 그 서식의 자리 이름(인쇄 표기)으로. 자리는 지금 있는 수 + 하나(새 자리)까지 */
+function fvTagGroups(F,cells,L,cur){
+  const lb=(P,l)=>(P==='N'&&F.labelsN||F.labels||{})[l]||l;
+  const have=tagRows(cells,L)||{}, rows=F.rows||{};
+  const crn=F.crnMark||/\{\{\s*차지/.test(cur||'');
+  const groups=[{name:'날짜',options:[{label:'날짜',value:'{{날짜}}',hint:'그 날 날짜 — 칸 서식이 날짜면 엑셀 날짜, 아니면 M/D'},{label:'요일',value:'{{요일}}',hint:'일·월·화…'}]}];
+  for(const P of ['D','E','N']){
+    const n=Math.min(LBL_ORDER.length,Math.max(have[P]||0,rows[P]||0,1)+1), ops=[];
+    for(let i=0;i<n;i++){ const l=LBL_ORDER[i], nm=lb(P,l), neu=i>=Math.max(have[P]||0,rows[P]||0);
+      ops.push({label:`${nm} 이름${neu?' (새 자리)':''}`,value:`{{이름:${P}.${l}}}`,hint:`${P} 근무 ${nm} 자리 간호사 이름 — 신규는 아래 줄에 / 이름`});
+      if(l==='차지'&&crn) ops.push({label:`${nm} 이름 /CRN`,value:`{{이름:${P}.차지}}{{차지: /CRN}}`,hint:`${P} 근무 차지 이름 뒤에 /CRN`});
+      if(!F.noRooms) ops.push({label:`${nm} 방`,value:`{{방:${P}.${l}}}`,hint:`${P} 근무 ${nm} 자리가 보는 병실`}); }
+    if(F.unitSlot) ops.push({label:`${F.unitSlot} 이름`,value:`{{이름:${P}.${F.unitSlot}}}`,hint:`${P} 근무인 ${F.unitSlot} 소속 간호사`});
+    if(P==='D') ops.push({label:'대체',value:'{{대체:D}}',hint:'D 근무에서 양식에 자리가 없는 간호사 (차지 빼고 A~D 중 남는 사람)'});
+    groups.push({name:P+' 근무',options:ops});
+  }
+  groups.push({name:'그 밖',options:[{label:'중간번',value:'{{중간번}}',hint:'그 날 중간번 간호사'},
+    {label:'교육·행사 (그 날)',value:'{{교육}}',hint:'그 날 교육·행사 일정'},
+    {label:'교육·행사 (그 주 목록)',value:'{{교육:목록}}',hint:'그 주 일정을 M/D(요일) 내용 줄마다 — 요일 칸 밖 이름표 칸에'},
+    {label:'앱이 채우지 않음',value:'',hint:'이 칸의 자리표시자를 지웁니다 — 양식 글자 그대로 나갑니다',style:'color:var(--err)'}]});
+  return groups;
+}
+/* 칸을 눌렀을 때 */
+async function fvPickCell(ref){
+  const src=await fvSource(); if(fvMode!=='map') return;
+  const roles0=formMapRoles(src.tpl,src.F), why=fvEditBlock(src,roles0);
+  if(why){ toast(why,5000); return; }
+  if(!fvDraft||fvDraft.key!==fvKeyOf()){ const x=fvDraftStart(src.tpl,src.F); fvDraft={key:fvKeyOf(),base:x,xml:x,hist:[],refs:new Set()}; }
+  const t2={...src.tpl,sheetXml:fvDraft.xml}, cells=sheetCells(t2), merges=sheetMerges(t2), L=layoutOf(src.F,cells,merges);
+  const sc=fvSourceCell(ref,L,merges); if(!sc) return;
+  // 요일·구역·자리 이름 칸은 구조를 읽는 칸 — 여기에 적으면 채우는 자리가 달라진다
+  if(formCellRoles(t2,src.F).locked.has(sc.ref)){ toast(`${sc.ref} 칸은 요일·구역·자리 이름을 읽는 칸이라 맵핑하지 않습니다 — 바꾸면 채우는 자리가 달라집니다`,4500); return; }
+  const curTxt=String(cells[sc.ref]||''); PH_RE.lastIndex=0;
+  const cur=(curTxt.match(PH_RE)||[]).join(''); PH_RE.lastIndex=0;
+  const role=cur?phRole(cur,cellSeat(cur)||rowSlots(L)[+sc.ref.match(/\d+$/)[0]]||null,src.F):null;
+  const where=sc.inDays
+    ?(sc.day>0?`${WD[sc.day]}요일 칸을 누르셨습니다 — 요일 칸은 <b>일요일 칸(${sc.ref})</b>에 적은 것이 이레에 같은 자리로 들어갑니다.`
+      :`요일 칸 — 여기 적은 것이 이레에 같은 자리로 들어갑니다.`)
+    :`요일 칸 밖이라 <b>한 번만</b> 채웁니다 (그 주 교육·행사 목록 같은 것). 칸의 글자는 그대로 두고 뒤에 붙입니다.`;
+  const v=await askModal({title:`${sc.ref} 칸에 무엇을 채울까요?`,
+    sub:`${where}<br>지금: <b>${role?esc(role.tag):(curTxt.trim()?'양식 글자 그대로':'비어 있음')}</b>`,
+    groups:fvTagGroups(src.F,cells,L,cur),current:cur});
+  if(v===null||v===cur) return;
+  fvDraft.hist.push(fvDraft.xml);
+  fvDraft.xml=setCellTag(fvDraft.xml,src.tpl,sc.ref,v,sc.inDays);
+  fvDraft.refs.add(sc.ref);
+  renderFormView();
+}
+function fvUndoCell(){ if(!fvDraft||!fvDraft.hist.length) return false; fvDraft.xml=fvDraft.hist.pop();
+  if(!fvDraft.hist.length) fvDraft.refs.clear(); renderFormView(); return true; }
+function fvDiscard(){ fvDraft=null; renderFormView(); }
+const fvDirty=()=>!!(fvDraft&&fvDraft.key===fvKeyOf()&&fvDraft.xml!==fvDraft.base);
+/* 저장 — 이 서식의 우리 병동 양식(자리표시자 양식)으로. 구조 인식(요일 줄·구역·자리 이름)이 달라지면 저장하지 않는다 */
+async function fvSave(){
+  if(!fvDirty()) return;
+  try{
+    const src=await fvSource(), F=src.F, tpl=src.tpl, id=formId(), ov=formOv(id);
+    const merges=sheetMerges(tpl);
+    const bad=formVerdict(layoutOf(F,sheetCells({...tpl,sheetXml:fvDraft.base}),merges),layoutOf(F,sheetCells({...tpl,sheetXml:fvDraft.xml}),merges));
+    if(bad.length){ toast(`고친 칸 때문에 양식 구조(${bad.join(', ')})가 달라집니다 — 저장하지 않았습니다. 요일·구역·자리 이름 칸은 그대로 두세요`,6500); return; }
+    if(F.kind==='101'&&!(ov&&ov.ph)&&!confirm('칸 맵핑을 고친 101 양식은 화면 인쇄 틀(101 고정 위치)과 달라집니다.\n'+
+      '저장하면 이 서식은 [엑셀로 내보내기]로 받아 엑셀에서 인쇄합니다. 저장할까요?')) return;
+    const w=await applyWrapStyles(tpl,fvDraft.xml);
+    const parts={'xl/worksheets/sheet1.xml':w.xml}; if(w.styles) parts['xl/styles.xml']=w.styles;
+    const bytes=packXlsx(tpl,parts);
+    const n=fvDraft.refs.size;
+    snapshot();
+    const base=(ov&&ov.name?ov.name:(F.file||F.name)).replace(/ \((고침|맵핑)\)$/,'');
+    const keep={}; for(const k of FORM_SHAPE_KEYS) if(ov&&ov[k]!=null) keep[k]=ov[k];
+    (store.forms=store.forms||{})[id]={...keep,name:base+' (맵핑)',b64:bytesToB64(bytes),savedAt:Date.now(),ph:true};
+    TPL=null; fvDraft=null; touch();
+    await renderFormView();
+    toast(`칸 ${n}곳의 맵핑을 ${F.name}의 우리 병동 양식으로 저장했습니다 — 엑셀 내보내기에 바로 적용됩니다`,4200,true);
+  }catch(e){ toast('저장 실패: '+e.message,4000); }
+}
+/* 같은 자리를 두 칸에 적었나 — 둘 다 채워지지만 대개 실수다 */
+function fvDupHtml(src){
+  const cells=sheetCells(src.tpl), at={};
+  for(const ref in cells) for(const m of String(cells[ref]).matchAll(/\{\{\s*(?:이름|방)\s*:\s*[DEN]\.[^}\s]+\s*\}\}/g)){ const k=m[0].replace(/\s+/g,''); (at[k]=at[k]||[]).push(ref); }
+  const dup=Object.entries(at).filter(([,v])=>v.length>1);
+  if(!dup.length) return '';
+  return `<ul class="fvList miss">${dup.map(([k,v])=>{ const r=phRole(k,null,src.F); return `<li>${esc(r?r.tag:k)} — ${v.join('·')} 두 곳 이상</li>`; }).join('')}</ul>`;
+}
+/* 종이 위 좌표 → 칸. 맞춤(zoom)과 상관없이 그려진 크기와 모델 크기의 비로 되돌린다 */
+function fvCellAt(e){
+  const xs=$('#fvSheet .xs'); if(!xs||!fvCache||!fvCache.M) return null;
+  const rc=xs.getBoundingClientRect(); if(!rc.width) return null;
+  const k=rc.width/fvCache.w, x=(e.clientX-rc.left)/k, y=(e.clientY-rc.top)/k, {X,Y,maxR,maxC}=fvCache.M;
+  if(x<0||y<0||x>=X[maxC+1]||y>=Y[maxR+1]) return null;
+  let c=1; while(c<maxC&&X[c+1]<=x) c++;
+  let r=1; while(r<maxR&&Y[r+1]<=y) r++;
+  return colName(c)+r;
 }
 /* 양식의 글자 칸을 HTML 안에서 고친다 — 앱이 채우는 칸과 자리표시자 칸은 빼고, 구조 인식에 쓰는 글자는 잠근다.
  * 고친 결과는 xlsx 로 다시 싸서 '우리 병동 양식'(store.forms[서식])으로 저장한다 — 데이터 파일에 함께 저장된다.
@@ -9276,10 +9446,12 @@ const HELP=[
  lead:'인쇄·엑셀에 쓰는 병실 배정표 양식입니다. 101병동·122병동 서식 중 고르고, 글자는 여기서 바로 고치고, 칸 구조가 다른 양식은 엑셀 파일을 올려 교체합니다.',
  steps:['관리 &gt; 배정표 양식 &gt; <b>서식</b>에서 <b>101병동 서식</b>(요일마다 방·이름) 또는 <b>122병동 서식</b>(요일마다 이름·메모, 방은 일·월~금·토 열에 한 번씩)을 고릅니다. 배정표 화면의 자리 이름(A(CN)·B… / CN·A·B…)도 함께 바뀝니다.',
         '<b>[양식 보기]</b> — 엑셀 양식을 그대로 띄워 앱이 채우는 칸(이름·방·날짜·교육·행사·중간번)을 색으로 보여 줍니다. <b>[이번 주로 채워 보기]</b>를 누르면 엑셀로 받을 모습이 그대로 나옵니다.',
+        '양식 보기에서 <b>칸을 누르면</b> 그 칸에 무엇을 채울지(날짜·D A 이름·D A 방·중간번·교육·행사…) 고릅니다. 요일 칸은 일요일 칸에 고른 것이 이레에 같은 자리로 들어갑니다. [이번 주로 채워 보기]로 확인하고 <b>[맵핑 저장]</b>.',
         '<b>[양식 문구 고치기]</b> — 제목·물품체크·CPR·화재 등 글자 칸을 고쳐 [이대로 저장]. 고친 문구는 서식마다 따로 남아, 서식을 오가도 잃지 않습니다.',
         '요일·구역·자리 이름처럼 구조 인식에 쓰는 칸은 🔒 잠겨 있습니다(고치면 배정표를 못 채웁니다). 날짜·이름·방처럼 앱이 채우는 칸은 목록에 없습니다.',
         '칸 배치가 다른 양식은 <b>[양식 파일 검사 (xlsx 고르기)]</b>로 올리면 어디가 다른지, 어느 칸에 무엇을 채울지(<b>자동 맵핑</b>) 알려 줍니다. 우리 병동 서식이 아직 없으면 올린 양식이 그대로 우리 병동 서식이 됩니다.'],
- tips:['자동 맵핑이 틀린 자리가 있으면 [자리표시자 넣어서 내려받기]로 {{이름:D.A}} 같은 자리표시자가 꽂힌 파일을 받아, 엑셀에서 틀린 자리만 옮겨 다시 올리면 됩니다.']},
+ tips:['자동 맵핑이 틀린 자리가 있으면 [양식 보기]에서 그 칸을 눌러 바로 고칩니다. 엑셀에서 고치고 싶으면 [자리표시자 넣어서 받기]로 {{이름:D.A}} 같은 자리표시자가 꽂힌 파일을 받아 자리만 옮겨 다시 올리면 됩니다.',
+       '칸 맵핑을 고친 101 양식은 화면 인쇄 틀과 달라지므로 [엑셀로 내보내기]로 받아 엑셀에서 인쇄합니다.']},
 
 {cat:'그 밖에',id:'data',title:'저장과 백업',
  lead:'고친 내용은 그때그때 데이터 파일에 저장됩니다. 맨 위 오른쪽 저장 상태가 <b>저장 중… → 저장됨 · 14:02</b> 로 바뀌며 마지막 저장 시각을 보여 주고, 마우스를 올리면 지금 저장되는 파일의 경로가 보입니다. 빨갛게 <b>저장 보류</b>를 말하면 파일을 확인하세요.',
@@ -9513,7 +9685,7 @@ const TOURS={
   ],cleanup:()=>{ if(connected()) show('week'); }},
   form:{steps:()=>[
     {before:()=>{ show('admin'); pickAdmin('form'); },sel:'#adminPanelBox .fmSeg',title:'서식 고르기',text:'101병동·122병동 서식 중 인쇄·엑셀에 쓸 것을 고릅니다. 배정표 화면의 자리 이름도 따라 바뀝니다.'},
-    {sel:'#btnFormView',title:'양식 보기',text:'엑셀 양식을 그대로 띄워 앱이 어느 칸에 무엇을 채우는지 색으로 보여 줍니다. 이번 주로 채운 모습도 미리 봅니다.'},
+    {sel:'#btnFormView',title:'양식 보기',text:'엑셀 양식을 그대로 띄워 앱이 어느 칸에 무엇을 채우는지 색으로 보여 줍니다. 칸을 누르면 그 칸에 무엇을 채울지 고칠 수 있고, 이번 주로 채운 모습도 미리 봅니다.'},
     {sel:'#adminPanelBox button[onclick="openFormText()"]',title:'양식 문구 고치기',text:'제목·물품체크·CPR·화재 같은 글자 칸을 여기서 바로 고칩니다. 구조 인식에 쓰는 칸은 🔒 잠겨 있습니다.'},
     {sel:'#adminPanelBox',title:'양식 파일 교체',text:'칸 배치가 다른 양식은 xlsx 를 올려 검사한 뒤 채택합니다.',after:()=>{ if(connected()) show('week'); }},
   ],cleanup:()=>{ if(connected()) show('week'); }},
@@ -9806,6 +9978,7 @@ document.addEventListener('keydown',e=>{
   if(curScr==='day'&&!(e.ctrlKey||e.metaKey||e.altKey)&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
     const t=e.target; if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
     e.preventDefault(); dayMove(e.key==='ArrowLeft'?-1:1); }
+  if(curScr==='form'&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); if(!fvUndoCell()) undoAny(); return; }
   if(curScr==='form'&&fvMode==='fill'&&!(e.ctrlKey||e.metaKey||e.altKey)&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
     const t=e.target; if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
     e.preventDefault(); fvSet('week',e.key==='ArrowLeft'?-1:1); }
@@ -9845,7 +10018,7 @@ window.__app={get store(){return store},set store(v){store=v},
   get wkSunday(){return wkSunday},set wkSunday(v){wkSunday=v},show,
   startWizard,closeWizard,wizGo,wizPaste,wizResume,WIZ,get wizAt(){return wizAt},renderWizard,
   hideOnboard,showOnboard,onboardItems,uiGet:(k)=>uiGet(k),
-  secRows,slotsOf,groupUnits,unitOfName,formIds,formDefOf,formFor,detectFormShape,autoMap,fillByPlaceholders,fillForm101,dateStyleSet,hiddenCells,putCell,setCellStr,dateFmtOf,fmtDateTok,weekEventLines,tagRows,formShapeText,checkFormFile,downloadMarkedForm,bytesToB64,appendRich,cellRuns,eventListLines,eventsPerDay,packXlsx,phTargets,phStaleCells,fillWeekXml,formMapRoles,formLockMarks,phRole,openFormView,fvSet,renderFormView,fitFormView,downloadMarkedCurrent,
+  secRows,slotsOf,groupUnits,unitOfName,formIds,formDefOf,formFor,detectFormShape,autoMap,fillByPlaceholders,fillForm101,dateStyleSet,hiddenCells,putCell,setCellStr,dateFmtOf,fmtDateTok,weekEventLines,tagRows,formShapeText,checkFormFile,downloadMarkedForm,bytesToB64,appendRich,cellRuns,eventListLines,eventsPerDay,packXlsx,phTargets,phStaleCells,fillWeekXml,formMapRoles,fvPickCell,setCellTag,fvSourceCell,fvTagGroups,fvSave,fvUndoCell,fvDiscard,fvDirty,fvCellAt,fvDraftStart,fvEditBlock,get fvDraft(){return fvDraft},get fvCache(){return fvCache},formLockMarks,phRole,openFormView,fvSet,renderFormView,fitFormView,downloadMarkedCurrent,
   xlsxBook,xlsxSheetModel,xlsxSheetHtml,xlsxSheetImages,xlColor,xlTint,xlDateText,xlNumText,zipPath,get fvState(){return {src:fvSrc,mode:fvMode,sun:fvSun,zoom:fvZoom,grid:fvGrid}},unitWorker,unitSlotName,toggleUnit,fillForm82,formNoRooms,renderWardChip,addWorker,offCandidates,
   canPrint,exportWeekXlsx,saveMsg,get dirty(){return dirty},set dirty(v){dirty=v},sideMode,syncWeekTools,togglePickShifts,closePick,get pkShiftOpen(){return pkShiftOpen},
   seatsFor,cntTabs,clampCnt,reliefOn,reliefDay,addRelief,removeRelief,renameRelief,openEmptyPick,isRelief,
