@@ -129,6 +129,7 @@ await page.evaluate(()=>{ const pa=document.querySelector('#printArea'); pa.styl
   document.querySelector('.app').style.display=''; show('week'); window.scrollTo(0,0); });
 await page.waitForTimeout(400);
 await el('11-toolbar','#scrWeek .wknav');
+await el('20-header','.topbar');   // 맨 위 줄 — 병동 · 가운데 탭 · 저장 상태 · 도움말 (2026-09-28 머리줄 바꿈)
 
 // ── 당직표·번호 — 정형외과식 당직표(연차만 적힘) + 번호표. 번호표에 없는 이름 하나(번호 없음) ──
 await page.evaluate(()=>{
