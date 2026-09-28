@@ -1453,6 +1453,67 @@ async function main() {
   eq('표시자가 없는 요일 칸의 지난주 값은 비운다', [rv27.지난주.F5, rv27.지난주.E5], ['', '김차지']);
   eq('82·102 모양 병동 양식의 자리 이름 = 그 모양의 내장 서식', rv27.자리이름, [true, true]);
 
+  // ── 28. 양식 보기 (엑셀 화면 + 칸 색 + 이번 주로 채워 보기) ─────────────────────
+  // 양식을 앱 안에 그리고 앱이 채우는 칸에 색을 칠한다. 색칠한 칸과 실제로 채워지는 칸이 어긋나면 화면이 거짓말을 한다 —
+  // 내장 네 서식에서 '채우면 바뀌는 칸 ⊆ 색칠한 칸'을 칸마다 확인한다 (M11 ②, 2026-09-28).
+  step('28 양식 보기');
+  const fv = await ev(`const A=window.__app; ${setupWeek}
+    const sun=new Date(2026,8,6);
+    return (async()=>{ const out={};
+      for(const id of ['101','102','82','122']){ setup(id);
+        const tpl=await A.loadBaseTemplate(id), F=A.formDefOf(id), days=A.weekData(sun);
+        const roles=A.formMapRoles(tpl,F), x1=await A.fillWeekXml(tpl,F,days,false);
+        const a=A.sheetCells(tpl), b=A.sheetCells({...tpl,sheetXml:x1});
+        const changed=[...new Set([...Object.keys(a),...Object.keys(b)])].filter(k=>(a[k]||'')!==(b[k]||''));
+        const cnt={}; for(const r in roles.marks){ const c=roles.marks[r].cls; cnt[c]=(cnt[c]||0)+1; }
+        const bw=await A.buildWeekXlsx(sun);
+        const M=A.xlsxSheetModel(tpl.sheetXml,tpl.sst,await A.xlsxBook(tpl)), h=A.xlsxSheetHtml(M,await A.xlsxBook(tpl),{marks:roles.marks,imgs:await A.xlsxSheetImages(tpl),grid:true});
+        out[id]={ok:roles.ok, missing:roles.missing, cnt, 안칠함:changed.filter(k=>!roles.marks[k]), 바뀜:changed.length,
+          같은파일:bw.xml===x1, 크기:[M.maxR>10,M.maxC>6,h.w>500,h.h>500], 표시:(h.html.match(/<u /g)||[]).length, 칸수:Object.keys(roles.marks).length};
+      }
+      // 대체 줄·비우는 칸 표시
+      out.대체=A.phRole('{{대체:D}}',null,A.formDefOf('102'));
+      setup('101');
+      { const base=await A.loadBaseTemplate('101'), am=A.autoMap(base);
+        const xml=A.setCellStr(am.xml.replace(/<c r="D5"([^>]*?)(?:[/]>|>[^]*?<[/]c>)/,(x,at)=>'<c r="D5"'+at.replace(/ t="[^"]*"/,'')+'/>'),'F5','12,14 (지난주)');
+        const r=A.formMapRoles({...base,sheetXml:xml},A.formDefOf('101')); out.비움=r.marks.F5&&r.marks.F5.cls; }
+      // 화면 — 관리 > 배정표 양식 [양식 보기] → 이번 주로 채워 보기 → 검사한 파일 보기 → 쓰기
+      setup('101'); A.show('admin'); A.pickAdmin('form');
+      out.단추=!!document.querySelector('#btnFormView');
+      await A.openFormView('current'); await A.renderFormView();
+      const sheet=()=>document.querySelector('#fvSheet .xs'), txt=()=>(document.querySelector('#fvSheet')||{}).textContent||'';
+      out.보기={화면:document.querySelector('#scrForm').style.display!=='none'&&!!sheet(), 칠함:document.querySelectorAll('#fvSheet u').length,
+        탭:document.querySelector('#tabAdmin')&&document.querySelector('#tabAdmin').classList.contains('on'), 주넘기기숨김:document.querySelector('#fvWeekNav').style.display==='none'};
+      A.fvSet('mode','fill'); await A.renderFormView();
+      out.채움={이름:txt().includes('김차지'), 주넘기기:document.querySelector('#fvWeekNav').style.display!=='none', 글:document.querySelector('#fvWeekTitle').textContent};
+      A.fvSet('week',1); await A.renderFormView(); out.다음주=document.querySelector('#fvWeekTitle').textContent;
+      const b82=document.querySelector('#tplB64_82').textContent.replace(/[/][*][^*]*[*][/]/g,'').trim();
+      const s=A.store; s.ward='55'; s.wardPicked=true; s.rooms=A.wardRooms('55').map(r=>[r,4]); s.forms={}; A.store=s; A.migrateStore();
+      A.show('admin'); A.pickAdmin('form');
+      await A.checkFormFile({files:[new File([A.b64ToBytes(b82)],'55병동.xlsx')],value:''});
+      const vb=[...document.querySelectorAll('#formReport button')].find(b=>/이 양식 보기/.test(b.textContent));
+      out.검사보기단추=!!vb; if(vb){ vb.click(); await new Promise(r=>setTimeout(r,50)); await A.renderFormView(); }
+      out.검사={src:A.fvState.src, 제목:document.querySelector('#fvTitle').textContent, 쓰기:!![...document.querySelectorAll('#fvSide button')].find(b=>b.textContent==='이 양식 쓰기')};
+      A.store.forms={}; A.setWard('101'); A.setFormId('101'); A.show('week');
+      return out; })()`);
+  for (const id of ['101', '102', '82', '122']) {
+    const f = fv[id];
+    ok(`${id} — 양식 보기가 칸을 찾았다`, f && f.ok && !f.missing.length, JSON.stringify(f && [f.ok, f.missing]));
+    eq(`${id} — 채우면 바뀌는 칸은 모두 색칠돼 있다`, f && f.안칠함, []);
+    ok(`${id} — 이번 주로 채워 보기는 엑셀 내보내기와 같은 파일`, f && f.같은파일 && f.바뀜 > 20, JSON.stringify(f && [f.같은파일, f.바뀜]));
+    ok(`${id} — 양식을 그린다 (크기·색칠한 칸 수)`, f && f.크기.every(Boolean) && f.표시 === f.칸수, JSON.stringify(f && [f.크기, f.표시, f.칸수]));
+  }
+  eq('101 — 이름·방 91칸씩 (13자리 × 7일), 날짜·교육·중간번 7칸씩',
+    [fv['101'].cnt.name, fv['101'].cnt.room, fv['101'].cnt.date, fv['101'].cnt.event, fv['101'].cnt.mid], [91, 91, 7, 7, 7]);
+  eq('122 — 이름 98칸 (14자리 × 7일), 방 세 열 42칸', [fv['122'].cnt.name, fv['122'].cnt.room], [98, 42]);
+  ok('82 — SU 칸은 다른 소속 색', fv['82'].cnt.unit >= 14, JSON.stringify(fv['82'].cnt));
+  eq("'대체' 자리표시자는 이름 색 'D 대체'", [fv.대체 && fv.대체.cls, fv.대체 && fv.대체.tag], ['name', 'D 대체']);
+  eq('표시자 줄에 남은 지난주 값은 비우는 칸으로 표시', fv.비움, 'clr');
+  ok('관리 > 배정표 양식에 [양식 보기]', fv.단추);
+  ok('양식 보기 화면 — 엑셀 모양으로 그리고 칸을 칠한다 (관리 탭 켜짐)', fv.보기.화면 && fv.보기.칠함 > 100 && fv.보기.탭 && fv.보기.주넘기기숨김, JSON.stringify(fv.보기));
+  ok('이번 주로 채워 보기 — 이름이 들어가고 주를 넘긴다', fv.채움.이름 && fv.채움.주넘기기 && fv.채움.글 === '09/06 ~ 09/12' && fv.다음주 === '09/13 ~ 09/19', JSON.stringify([fv.채움, fv.다음주]));
+  ok('검사한 파일을 쓰기 전에 본다', fv.검사보기단추 && fv.검사.src === 'checked' && /55병동/.test(fv.검사.제목) && fv.검사.쓰기, JSON.stringify(fv.검사));
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));

@@ -763,6 +763,51 @@
   .hsheet table.ht td{overflow:hidden}
   /* 하루 어싸인표 화면 = 도구 띠 + 종이 + 오른쪽 입력 열(공지·당직·확인·양식) */
   #scrDay.screen{max-width:1836px}
+  /* ── 배정표 양식 보기 (M11 ②, 2026-09-28) — 엑셀 양식을 그대로 그린 종이 + 오른쪽 설명 열.
+     종이는 다크 모드에서도 흰 바탕(엑셀 그대로). 층은 바탕·눈금·선·글자·그림·표시 — 글자가 한 층이라 넘친 글자가 옆 칸 바탕에 안 가린다 */
+  #scrForm.screen{max-width:1836px}
+  #fvModeSeg button.on{background:var(--ink);color:var(--paper);font-weight:700}
+  #fvZoomSeg button.on,#fvGridBtn.on{background:var(--paper-2);color:var(--ink);font-weight:800;box-shadow:inset 0 0 0 1px var(--rule-2)}
+  .fvHead{display:flex;flex-direction:column;min-width:0;max-width:420px}
+  .fvHead .title{padding:0 8px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fvSub{font-size:13px;color:var(--ink-2);padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fvWrap{grid-template-columns:minmax(0,1fr) 360px}
+  #fvPaper{margin:0;padding:14px;background:var(--paper-2);box-shadow:none;overflow:auto;max-height:calc(100vh - var(--tbH,60px) - 110px)}
+  #fvSheet{min-height:240px}
+  #fvSheet .xs{box-shadow:0 2px 12px rgba(15,17,21,.18)}
+  #fvSide{margin:0;position:sticky;top:calc(var(--tbH,60px) + 20px);max-height:calc(100vh - var(--tbH,60px) - 36px);overflow:auto;padding:18px}
+  #fvSide .dsH{font-size:15px;font-weight:800;margin-bottom:8px}
+  #fvSide .dsNote{font-size:13px;color:var(--ink-2);line-height:1.55;margin:0 0 10px}
+  #fvSide .dsF{margin:12px 0}
+  #fvSide .dsL{font-size:13px;color:var(--ink-2);line-height:1.5}
+  #fvSide .dsL b{display:block;color:var(--ink);font-size:14px;margin-bottom:2px}
+  #fvSide .dsBtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  #fvSide button{font-size:13px;padding:8px 12px;min-height:36px}
+  .fvLegend{display:flex;flex-wrap:wrap;gap:6px 12px;margin:4px 0 2px}
+  .fvLg{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-2)}
+  .fvLg b{color:var(--ink);font-weight:700}
+  .fvK{width:16px;height:12px;border-radius:3px;background:var(--mk-bg);box-shadow:inset 0 0 0 1.5px var(--mk)}
+  .fvList{margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--ink-2)}
+  .fvList.miss{color:var(--err)}
+  .xs{position:relative;background:#fff;color:#000;--fv-font:'맑은 고딕','Malgun Gothic','Apple SD Gothic Neo','Pretendard Variable',Pretendard,sans-serif;
+    --fv-grid:#E4E7EB;font-family:var(--fv-font);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .xs>div{position:absolute;inset:0;pointer-events:none}
+  .xs>.xsMk{pointer-events:auto}
+  .xs i,.xs b,.xs u,.xs img{position:absolute;display:block;box-sizing:border-box}
+  .xs b{display:flex;overflow:hidden;padding:0 3px;font-weight:400;line-height:1.15;white-space:pre}
+  .xs b.w span{white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere}
+  .xs b.c span{text-align:center}
+  .xs b.r span{text-align:right}
+  .xs b.v span{writing-mode:vertical-rl;text-orientation:upright}
+  .xs u{display:flex;align-items:center;justify-content:center;overflow:hidden;text-decoration:none;background:var(--mk-bg);box-shadow:inset 0 0 0 1.5px var(--mk)}
+  .xs u span{font:700 calc(12px / var(--fvz,1))/1.2 'Pretendard Variable',Pretendard,system-ui,sans-serif;color:#0F1115;padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .xs u:hover{box-shadow:inset 0 0 0 3px var(--mk);z-index:1}
+  .xs u.ol{background:transparent}
+  .xs u.lock{background:transparent;box-shadow:none;outline:1.5px dashed #B8BFC9;outline-offset:-2px}
+  .name{--mk:#059669;--mk-bg:#D1FAE5} .room{--mk:#2563EB;--mk-bg:#DBEAFE}
+  .date{--mk:#7C3AED;--mk-bg:#EDE9FE} .event{--mk:#D97706;--mk-bg:#FEF3C7}
+  .mid{--mk:#0D9488;--mk-bg:#CCFBF1} .unit{--mk:#DB2777;--mk-bg:#FCE7F3}
+  .memo{--mk:#93C5FD;--mk-bg:#EFF6FF} .clr{--mk:#6B7280;--mk-bg:#F3F4F6} .fvK.lock{--mk:#8A93A1;--mk-bg:transparent}
   .dayWrap{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;align-items:start}
   @media (max-width:1100px){ .dayWrap{grid-template-columns:minmax(0,1fr)} }
   #dayPaper{margin:0;padding:18px;background:var(--paper-2);box-shadow:none}
@@ -1065,6 +1110,34 @@
   <div class="dayWrap">
     <div id="dayPaper" class="card"><div id="dayPreview"></div></div>
     <aside id="daySide" class="card"></aside>
+  </div>
+</div>
+
+<!-- ══ 배정표 양식 보기 — 엑셀 양식을 그대로 그리고 앱이 채우는 칸을 색으로 (2026-09-28, M11 ②) ══ -->
+<div id="scrForm" class="screen" style="display:none">
+  <div class="wknav">
+    <button class="act lite" onclick="show('admin')" title="관리 &gt; 배정표 양식으로 돌아갑니다">← 관리</button>
+    <div class="fvHead"><span class="title" id="fvTitle"></span><span class="fvSub" id="fvSub"></span></div>
+    <div class="seg" id="fvModeSeg">
+      <button data-m="map" onclick="fvSet('mode','map')" title="앱이 채우는 칸을 색으로 보여 줍니다">어디에 무엇이</button>
+      <button data-m="fill" onclick="fvSet('mode','fill')" title="이 주 배정표를 이 양식에 채워 봅니다 — 엑셀로 받을 때와 같은 모습입니다">이번 주로 채워 보기</button>
+    </div>
+    <div class="seg" id="fvWeekNav" style="display:none">
+      <button onclick="fvSet('week',-1)" title="지난주 (← 키)">◀</button>
+      <span class="title" id="fvWeekTitle"></span>
+      <button onclick="fvSet('week',1)" title="다음 주 (→ 키)">▶</button>
+    </div>
+    <span class="wkTools">
+      <button id="fvGridBtn" class="act lite" onclick="fvSet('grid')" title="엑셀처럼 칸 눈금선을 옅게 긋습니다 (인쇄에는 안 나옵니다)">눈금선</button>
+      <span class="seg" id="fvZoomSeg">
+        <button data-z="fit" onclick="fvSet('zoom','fit')" title="종이를 화면 폭에 맞춥니다">맞춤</button>
+        <button data-z="1" onclick="fvSet('zoom','1')" title="엑셀 100% 크기로 봅니다 — 옆으로 밀어서 봅니다">100%</button>
+      </span>
+    </span>
+  </div>
+  <div class="dayWrap fvWrap">
+    <div id="fvPaper" class="card"><div id="fvSheet"></div></div>
+    <aside id="fvSide" class="card"></aside>
   </div>
 </div>
 
@@ -1640,7 +1713,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260928m'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260928o'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -2443,7 +2516,7 @@ function afterLoad(){ if(wizOn()&&WIZ[wizAt].id==='hello'){ wizAt=-1; $('#wiz').
 /* ════════════════════════════════════════════════════════════════
  * 화면 전환
  * ════════════════════════════════════════════════════════════════ */
-const SCREENS={start:'scrStart',week:'scrWeek',paste:'scrPaste',edit:'scrEdit',admin:'scrAdmin',day:'scrDay'};
+const SCREENS={start:'scrStart',week:'scrWeek',paste:'scrPaste',edit:'scrEdit',admin:'scrAdmin',day:'scrDay',form:'scrForm'};
 let curScr='start';
 const connected=()=>!!fileHandle||!!nativeInfo||!!window.__memoryMode;
 function show(name){
@@ -2452,7 +2525,7 @@ function show(name){
   renderFileInfo(); renderOnboard(); renderWardChip();
   for(const k in SCREENS) $('#'+SCREENS[k]).style.display=(k===name)?'':'none';
   $('.tbTabs').style.visibility=connected()?'':'hidden';   // 파일이 없으면 탭을 눌러도 시작 화면이다
-  const tabOn={tabWeek:['week','day'],tabEdit:['edit','paste'],tabAdmin:['admin']};
+  const tabOn={tabWeek:['week','day'],tabEdit:['edit','paste'],tabAdmin:['admin','form']};
   for(const id in tabOn){ const b=$('#'+id), on=tabOn[id].includes(name); b.classList.toggle('on',on);
     if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); }
   if(name==='week') renderWeek();
@@ -2460,6 +2533,7 @@ function show(name){
   if(name==='admin') renderAdmin();
   if(name==='paste') resetPaste();
   if(name==='day') renderDay(true);
+  if(name==='form') renderFormView();
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -4676,7 +4750,7 @@ const ADMIN_PANELS={
          ||`<tr><td colspan="5" class="note">병실이 없습니다. 위에서 병동을 고르거나 [＋ 방 추가]를 누르세요.</td></tr>`);
     }},
   form:{title:'배정표 양식',
-    desc:'인쇄·엑셀에 쓰는 <b>병실 배정표 양식</b>입니다 — 문구는 여기서 바로 고칩니다.',
+    desc:'인쇄·엑셀에 쓰는 <b>병실 배정표 양식</b>입니다 — [양식 보기]로 앱이 어느 칸에 무엇을 채우는지 봅니다.',
     more:'칸 구조가 다른 양식은 xlsx 파일을 올리면 어디가 달라졌는지, 어느 칸에 무엇을 채울지(자동 맵핑) 알려 줍니다. 고친 문구·올린 파일은 서식마다 따로 남습니다. '+
          '서식과 병동은 한 쌍이라 한쪽을 바꾸면 다른 쪽도 따라갑니다.',
     body(){
@@ -4684,7 +4758,8 @@ const ADMIN_PANELS={
       <div id="formNow" class="dim" style="line-height:1.9"></div>
       ${formOv()?`<div style="margin:2px 0 6px"><button onclick="resetForm()">${formDef().custom?formDef().name+' 지우기':formDef().name+' 기본 양식으로 되돌리기'}</button></div>`:''}
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px">
-        <button class="pri" onclick="openFormText()">양식 문구 고치기 (여기서 바로)</button>
+        <button id="btnFormView" class="pri" onclick="openFormView('current')" title="엑셀 양식을 그대로 띄워 앱이 채우는 칸을 색으로 보여 줍니다 — 이번 주로 채운 모습도 미리 봅니다">양식 보기 (어디에 무엇이 들어가는지)</button>
+        <button onclick="openFormText()">양식 문구 고치기</button>
         <button onclick="$('#formFile').click()">양식 파일 검사 (xlsx 고르기)</button>
         <input type="file" id="formFile" accept=".xlsx" style="display:none" onchange="checkFormFile(this)">
         <span class="dim apNote">문구는 여기서, 칸 구조는 엑셀에서 고쳐 올리세요</span>
@@ -5235,6 +5310,489 @@ function formCellRoles(tpl,F){
   }
   return {cells,L,filled,locked,tableTop,tableEnd};
 }
+/* ── 엑셀 양식 그리기 (M11 ②, 2026-09-28) ──────────────────────────────
+ * 양식 xlsx 한 장을 앱 안에 그린다 — 칸 너비·줄 높이·병합·글꼴·바탕·선·맞춤·그림을 양식 파일에서 읽는다.
+ * 채운 모습은 내보내기와 **같은 XML**(fillWeekXml)을 그린다 — 보기용 채우기를 따로 두면 보기와 결과가 갈라진다.
+ * 엑셀을 흉내 낼 뿐 똑같지는 않다(조건부 서식·도형·글자 줄이기는 생략) — 어디에 무엇이 들어가는지 보는 화면이다.
+ * 층: 눈금선 → 바탕(칠한 칸은 눈금선을 가린다) → 선 → 글자 → 그림 → 맵핑 표시. 글자를 바탕 위 한 층에 모아야 넘친 글자가 옆 칸 바탕에 안 가린다. */
+const XL_IDX=('000000 FFFFFF FF0000 00FF00 0000FF FFFF00 FF00FF 00FFFF 000000 FFFFFF FF0000 00FF00 0000FF FFFF00 FF00FF 00FFFF '+
+  '800000 008000 000080 808000 800080 008080 C0C0C0 808080 9999FF 993366 FFFFCC CCFFFF 660066 FF8080 0066CC CCCCFF '+
+  '000080 FF00FF FFFF00 00FFFF 800080 800000 008080 0000FF 00CCFF CCFFFF CCFFCC FFFF99 99CCFF FF99CC CC99FF FFCC99 '+
+  '3366FF 33CCCC 99CC00 FFCC00 FF9900 FF6600 666699 969696 003366 339966 003300 333300 993300 993366 333399 333333').split(' ');
+/* 엑셀 기본 날짜 서식(한국어 엑셀 표시) — 양식이 번호만 적어 두는 것들 */
+const XL_FMT={14:'yyyy-mm-dd',15:'d-mmm-yy',16:'d-mmm',17:'mmm-yy',22:'yyyy-mm-dd h:mm',
+  27:'yyyy"년" mm"월" dd"일"',28:'mm-dd',29:'mm-dd',30:'mm-dd-yy',31:'yyyy"년" mm"월" dd"일"',
+  50:'yyyy"년" mm"월" dd"일"',51:'mm-dd',52:'yyyy"년" mm"월"',53:'mm"월" dd"일"',54:'mm"월" dd"일"',55:'yyyy"년" mm"월"',56:'mm"월" dd"일"',57:'yyyy"년" mm"월"',58:'mm"월" dd"일"'};
+const xlAttr=(tag,k)=>{ const m=String(tag||'').match(new RegExp('\\b'+k+'="([^"]*)"')); return m?m[1]:null; };
+function xlTint(hex,t){
+  const c=[0,2,4].map(i=>parseInt(hex.slice(i,i+2),16)/255);
+  const mx=Math.max(...c), mn=Math.min(...c); let h=0,s=0,l=(mx+mn)/2;
+  if(mx!==mn){ const d=mx-mn; s=l>0.5?d/(2-mx-mn):d/(mx+mn);
+    h=mx===c[0]?(c[1]-c[2])/d+(c[1]<c[2]?6:0):mx===c[1]?(c[2]-c[0])/d+2:(c[0]-c[1])/d+4; h/=6; }
+  l=t<0?l*(1+t):l*(1-t)+t;
+  const f=(p,q,x)=>{ if(x<0)x+=1; if(x>1)x-=1; return x<1/6?p+(q-p)*6*x:x<1/2?q:x<2/3?p+(q-p)*(2/3-x)*6:p; };
+  let o; if(!s) o=[l,l,l]; else { const q=l<0.5?l*(1+s):l+s-l*s, p=2*l-q; o=[f(p,q,h+1/3),f(p,q,h),f(p,q,h-1/3)]; }
+  return o.map(v=>Math.max(0,Math.min(255,Math.round(v*255))).toString(16).padStart(2,'0')).join('').toUpperCase();
+}
+/* <color rgb|theme|indexed tint> → '#RRGGBB' (자동·없음은 null) */
+function xlColor(tag,book){
+  if(!tag) return null;
+  let hex=null; const rgb=xlAttr(tag,'rgb'), th=xlAttr(tag,'theme'), ix=xlAttr(tag,'indexed');
+  if(rgb) hex=rgb.slice(-6).toUpperCase();
+  else if(th!=null) hex=book.theme[+th]||null;
+  else if(ix!=null) hex=+ix<64?book.palette[+ix]:null;   // 64 = 시스템 색(자동)
+  if(!hex||!/^[0-9A-F]{6}$/.test(hex)) return null;
+  const t=+(xlAttr(tag,'tint')||0); if(t) hex=xlTint(hex,t);
+  return '#'+hex;
+}
+/* 서식 책 — styles.xml(글꼴·바탕·선·칸 서식·숫자 서식) + 테마 색. 양식마다 한 번 읽어 tpl 에 둔다 */
+async function xlsxBook(tpl){
+  if(tpl.__book) return tpl.__book;
+  const get=async nm=>{ const e=tpl.ents.find(x=>x.name===nm); return e?dec.decode(e.meth===8?await inflateRaw(e.raw):e.raw):''; };
+  const st=await get('xl/styles.xml'), th=await get('xl/theme/theme1.xml');
+  const sect=tag=>{ const m=st.match(new RegExp('<'+tag+'\\b[^>]*>([\\s\\S]*?)</'+tag+'>')); return m?m[1]:''; };
+  const items=(body,tag)=>body.match(new RegExp('<'+tag+'\\b[^>]*?(?:/>|>[\\s\\S]*?</'+tag+'>)','g'))||[];
+  const clr=nm=>{ const m=th.match(new RegExp('<a:'+nm+'>([\\s\\S]*?)</a:'+nm+'>')); if(!m) return null;
+    const s=m[1].match(/srgbClr val="([0-9A-Fa-f]{6})"/)||m[1].match(/lastClr="([0-9A-Fa-f]{6})"/); return s?s[1].toUpperCase():null; };
+  const book={theme:[clr('lt1')||'FFFFFF',clr('dk1')||'000000',clr('lt2')||'E7E6E6',clr('dk2')||'44546A',
+    ...['accent1','accent2','accent3','accent4','accent5','accent6','hlink','folHlink'].map(clr)],palette:XL_IDX.slice(),fmts:{}};
+  const ic=st.match(/<indexedColors>([\s\S]*?)<\/indexedColors>/);
+  if(ic) (ic[1].match(/rgb="([0-9A-Fa-f]{8})"/g)||[]).forEach((m,i)=>{ book.palette[i]=m.slice(7,13).toUpperCase(); });
+  for(const m of st.matchAll(/<numFmt\b[^>]*>/g)){ const id=xlAttr(m[0],'numFmtId'), fc=xlAttr(m[0],'formatCode'); if(id!=null&&fc!=null) book.fmts[+id]=XUN(fc); }
+  const on=(f,t)=>{ const m=f.match(new RegExp('<'+t+'(\\s[^>]*)?/?>')); if(!m) return false; const v=xlAttr(m[0],'val'); return v==null||v==='1'||v==='true'; };
+  book.fonts=items(sect('fonts'),'font').map(f=>({b:on(f,'b'),i:on(f,'i'),strike:on(f,'strike'),
+    u:/<u\b/.test(f)&&xlAttr((f.match(/<u\b[^>]*>/)||[''])[0],'val')!=='none',
+    sz:+(xlAttr((f.match(/<sz\b[^>]*>/)||[''])[0],'val')||11),name:XUN(xlAttr((f.match(/<name\b[^>]*>/)||[''])[0],'val')||''),
+    color:xlColor((f.match(/<color\b[^>]*>/)||[''])[0],book)}));
+  book.fills=items(sect('fills'),'fill').map(f=>{
+    const pt=xlAttr((f.match(/<patternFill\b[^>]*>/)||[''])[0],'patternType');
+    if(/<gradientFill/.test(f)) return xlColor((f.match(/<color\b[^>]*>/)||[''])[0],book);
+    if(!pt||pt==='none'||pt==='gray125') return null;
+    return xlColor((f.match(/<fgColor\b[^>]*>/)||[''])[0],book)||(pt==='solid'?null:'#D9D9D9');
+  });
+  book.borders=items(sect('borders'),'border').map(b=>{
+    const o={};
+    for(const side of ['left','right','top','bottom']){
+      const m=b.match(new RegExp('<'+side+'\\b([^>]*?)(?:/>|>([\\s\\S]*?)</'+side+'>)'));
+      const style=m&&xlAttr('<x'+m[1]+'>','style');
+      if(style&&style!=='none') o[side]={style,color:xlColor(((m[2]||'').match(/<color\b[^>]*>/)||[''])[0],book)||'#000000'};
+    }
+    return o;
+  });
+  book.xfs=items(sect('cellXfs'),'xf').map(x=>{
+    const a=(x.match(/<alignment\b[^>]*>/)||[''])[0];
+    return {fmt:+(xlAttr(x,'numFmtId')||0),font:+(xlAttr(x,'fontId')||0),fill:+(xlAttr(x,'fillId')||0),border:+(xlAttr(x,'borderId')||0),
+      h:xlAttr(a,'horizontal')||'',v:xlAttr(a,'vertical')||'',wrap:xlAttr(a,'wrapText')==='1'||xlAttr(a,'wrapText')==='true',
+      rot:+(xlAttr(a,'textRotation')||0),indent:+(xlAttr(a,'indent')||0)};
+  });
+  if(!book.xfs.length) book.xfs=[{fmt:0,font:0,fill:0,border:0,h:'',v:'',wrap:false,rot:0,indent:0}];
+  if(!book.fonts.length) book.fonts=[{sz:11,name:'',b:false,i:false,u:false,strike:false,color:null}];
+  return (tpl.__book=book);
+}
+const xlIsDateFmt=(id,code)=>(id>=14&&id<=22)||(id>=27&&id<=36)||(id>=45&&id<=47)||(id>=50&&id<=58)||
+  (!!code&&/[ymd]/i.test(String(code).replace(/"[^"]*"/g,'').replace(/\\./g,'').replace(/\[[^\]]*\]/g,'')));
+/* 엑셀 날짜(일련번호)를 서식 글자대로 — 한국어 양식이 쓰는 것(yyyy·mm·dd·aaa·"월") 위주 */
+function xlDateText(n,code){
+  const d=new Date(Date.UTC(1899,11,30)+Math.round(n*86400000));
+  const Y=d.getUTCFullYear(), M=d.getUTCMonth()+1, D=d.getUTCDate(), W=d.getUTCDay(), h=d.getUTCHours(), mi=d.getUTCMinutes(), s=d.getUTCSeconds();
+  code=String(code).split(';')[0].replace(/\[[^\]]*\]/g,'');
+  let out='', i=0, lastH=false;
+  while(i<code.length){
+    const ch=code[i];
+    if(ch==='"'){ const j=code.indexOf('"',i+1); out+=code.slice(i+1,j<0?code.length:j); i=j<0?code.length:j+1; continue; }
+    if(ch==='\\'){ out+=code[i+1]||''; i+=2; continue; }
+    if(ch==='_'||ch==='*'){ if(ch==='_') out+=' '; i+=2; continue; }
+    const m=code.slice(i).match(/^(yyyy|yy|mmmmm|mmmm|mmm|mm|m|dddd|ddd|dd|d|aaaa|aaa|hh|h|ss|s|AM\/PM|am\/pm|A\/P)/i);
+    if(!m){ out+=ch; i++; continue; }
+    const tk=m[1].toLowerCase(); i+=m[1].length;
+    const minute=lastH||/^[^a-z]*s/i.test(code.slice(i).replace(/"[^"]*"/g,''));
+    if(tk==='yyyy') out+=Y; else if(tk==='yy') out+=String(Y).slice(-2);
+    else if(tk==='mmmmm'||tk==='mmmm'||tk==='mmm') out+=M+'월';
+    else if(tk==='mm') out+=minute?pad2(mi):pad2(M); else if(tk==='m') out+=minute?mi:M;
+    else if(tk==='dddd'||tk==='aaaa') out+=WD[W]+'요일'; else if(tk==='ddd'||tk==='aaa') out+=WD[W];
+    else if(tk==='dd') out+=pad2(D); else if(tk==='d') out+=D;
+    else if(tk==='hh') out+=pad2(h); else if(tk==='h') out+=h;
+    else if(tk==='ss') out+=pad2(s); else if(tk==='s') out+=s;
+    else out+=h<12?'오전':'오후';
+    lastH=tk==='hh'||tk==='h';
+  }
+  return out;
+}
+function xlNumText(v,id,code){
+  const n=parseFloat(v); if(!Number.isFinite(n)) return String(v);
+  if(xlIsDateFmt(id,code)&&n>0&&n<2958466) return xlDateText(n,code||XL_FMT[id]||'yyyy-mm-dd');
+  const c=code||({1:'0',2:'0.00',3:'#,##0',4:'#,##0.00',9:'0%',10:'0.00%'})[id];
+  if(!c||/general/i.test(c)) return String(+n.toPrecision(11));
+  const f=String(c).split(';')[0].replace(/"[^"]*"/g,'').replace(/\[[^\]]*\]/g,'');
+  const pct=/%/.test(f), dec=(f.split('.')[1]||'').replace(/[^0#]/g,'').length, x=pct?n*100:n;
+  let t=x.toFixed(dec); if(/,/.test(f)){ const [a,b]=t.split('.'); t=a.replace(/\B(?=(\d{3})+(?!\d))/g,',')+(b?'.'+b:''); }
+  return t+(pct?'%':'');
+}
+/* 시트 모양 — 칸 너비·줄 높이(px), 칸(값·서식), 병합, 그릴 범위 */
+function xlsxSheetModel(xml,sst,book){
+  const fmt=(xml.match(/<sheetFormatPr\b[^>]*>/)||[''])[0];
+  const f0=book.fonts[0];
+  const kor=/맑은|Malgun|굴림|Gulim|돋움|Dotum|바탕|Batang|나눔|Nanum|함초롬/i.test(f0.name||'');
+  const mdw=Math.max(5,Math.round((f0.sz||11)*(kor?8:7)/11));   // 기본 글꼴 숫자 폭(px) — 엑셀 열 너비 단위
+  const w2px=w=>Math.max(0,Math.trunc(((256*w+Math.trunc(128/mdw))/256)*mdw));
+  const defW=xlAttr(fmt,'defaultColWidth')!=null?w2px(+xlAttr(fmt,'defaultColWidth')):Math.round(+(xlAttr(fmt,'baseColWidth')||8)*mdw+8);
+  const defH=+(xlAttr(fmt,'defaultRowHeight')||15)*4/3;
+  const colW={}, colS={};
+  for(const m of xml.matchAll(/<col\b[^>]*>/g)){
+    const a=+xlAttr(m[0],'min'), b=Math.min(+xlAttr(m[0],'max'),200), w=xlAttr(m[0],'width'), s=xlAttr(m[0],'style');
+    const hid=xlAttr(m[0],'hidden')==='1'||xlAttr(m[0],'hidden')==='true';
+    for(let c=a;c<=b;c++){ colW[c]=hid?0:(w!=null?w2px(+w):defW); if(s!=null) colS[c]=+s; }
+  }
+  const rowH={}, rowS={}, cells=new Map();
+  for(const rm of xml.matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)){
+    const r=+xlAttr('<x'+rm[1]+'>','r'); if(!r||r>400) continue;
+    const ht=xlAttr('<x'+rm[1]+'>','ht'), hid=xlAttr('<x'+rm[1]+'>','hidden');
+    if(hid==='1'||hid==='true') rowH[r]=0; else if(ht!=null) rowH[r]=+ht*4/3;
+    if(xlAttr('<x'+rm[1]+'>','customFormat')==='1'&&xlAttr('<x'+rm[1]+'>','s')!=null) rowS[r]=+xlAttr('<x'+rm[1]+'>','s');
+    for(const cm of (rm[2]||'').matchAll(/<c r="([A-Z]+)(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)){
+      const c=colNum(cm[1]); if(c>200) continue;
+      const at='<x'+cm[3]+'>', t=xlAttr(at,'t')||'', s=+(xlAttr(at,'s')||0), body=cm[4]||'';
+      let text='';
+      if(t==='s'){ const v=body.match(/<v>(\d+)<\/v>/); text=v?(sst[+v[1]]||''):''; }
+      else if(t==='inlineStr'||t==='str'||/<is>/.test(body)) text=XUN([...body.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(p=>p[1]).join(''));
+      else{ const v=body.match(/<v>([\s\S]*?)<\/v>/);
+        if(v){ const xf=book.xfs[s]||book.xfs[0]; text=t==='b'?(v[1]==='1'?'TRUE':'FALSE'):t==='e'?XUN(v[1]):xlNumText(XUN(v[1]),xf.fmt,book.fmts[xf.fmt]); } }
+      cells.set(c+':'+r,{r,c,s,text,num:!t&&text!==''&&/<v>/.test(body)});
+    }
+  }
+  const merges=[];
+  for(const mg of (xml.match(/<mergeCell\b[^>]*>/g)||[])){
+    const m=String(xlAttr(mg,'ref')||'').match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/); if(!m) continue;
+    merges.push({c1:colNum(m[1]),r1:+m[2],c2:colNum(m[3]),r2:+m[4]});
+  }
+  // 그릴 범위 — 글자·선·바탕이 있는 칸과 병합의 끝까지 (서식만 있는 빈 칸이 수백 줄 이어져도 거기서 멈춘다)
+  const visible=s=>{ const xf=book.xfs[s]||book.xfs[0], b=book.borders[xf.border]||{}; return !!(book.fills[xf.fill]||b.left||b.right||b.top||b.bottom); };
+  let maxR=1, maxC=1;
+  for(const x of cells.values()) if(x.text!==''||visible(x.s)){ if(x.r>maxR) maxR=x.r; if(x.c>maxC) maxC=x.c; }
+  for(const m of merges){ if(m.r2>maxR&&m.r2<=400) maxR=m.r2; if(m.c2>maxC&&m.c2<=200) maxC=m.c2; }
+  maxR=Math.min(maxR,300); maxC=Math.min(maxC,80);
+  const W=c=>colW[c]!=null?colW[c]:defW, H=r=>rowH[r]!=null?rowH[r]:defH;
+  const X=[0,0], Y=[0,0];
+  for(let c=1;c<=maxC+1;c++) X[c+1]=X[c]+W(c);
+  for(let r=1;r<=maxR+1;r++) Y[r+1]=Y[r]+H(r);
+  return {cells,merges,colS,rowS,X,Y,maxR,maxC,defFont:f0};
+}
+const XL_BW={thin:3,medium:4,thick:6,double:5,hair:1,dotted:2,dashed:2,mediumDashed:4,dashDot:2,mediumDashDot:4,dashDotDot:2,mediumDashDotDot:4,slantDashDot:4};
+const xlBorderCss=b=>{ const st=b.style;
+  const w=/^thick$/.test(st)?3:/^double$/.test(st)?3:/^medium/.test(st)||st==='slantDashDot'?2:1;
+  const k=st==='double'?'double':/dot/i.test(st)&&!/dash/i.test(st)||st==='hair'?'dotted':/dash/i.test(st)?'dashed':'solid';
+  return {w,css:`${w}px ${k} ${b.color||'#000'}`}; };
+/* 시트를 HTML 로 — opt.marks: {ref:{cls,tag,title}} 맵핑 표시, opt.grid: 눈금선, opt.imgs: 그림 [{x,y,w,h,url}] */
+function xlsxSheetHtml(M,book,opt){
+  opt=opt||{};
+  const {cells,merges,X,Y,maxR,maxC}=M;
+  const cover=new Map(), anchor=new Map();
+  for(const m of merges){ if(m.r1>maxR||m.c1>maxC) continue;
+    anchor.set(m.c1+':'+m.r1,m);
+    for(let r=m.r1;r<=m.r2;r++) for(let c=m.c1;c<=m.c2;c++) cover.set(c+':'+r,m); }
+  const sOf=(r,c)=>{ const x=cells.get(c+':'+r); if(x) return x.s;
+    const mg=cover.get(c+':'+r); if(mg){ const a=cells.get(mg.c1+':'+mg.r1); if(a) return a.s; }
+    return M.rowS[r]!=null?M.rowS[r]:M.colS[c]!=null?M.colS[c]:0; };
+  const xfOf=(r,c)=>book.xfs[sOf(r,c)]||book.xfs[0];
+  const boxOf=(r,c)=>{ const m=anchor.get(c+':'+r);
+    const r2=m?Math.min(m.r2,maxR):r, c2=m?Math.min(m.c2,maxC):c;
+    return {x:X[c],y:Y[r],w:X[c2+1]-X[c],h:Y[r2+1]-Y[r]}; };
+  const px=v=>Math.round(v*100)/100+'px';
+  let bg='', lines='', text='', grid='';
+  // 바탕 — 병합은 왼쪽 위 칸의 바탕으로 통째로
+  for(let r=1;r<=maxR;r++) for(let c=1;c<=maxC;c++){
+    const mg=cover.get(c+':'+r); if(mg&&(mg.r1!==r||mg.c1!==c)) continue;
+    const f=book.fills[xfOf(r,c).fill]; if(!f) continue;
+    const b=boxOf(r,c); bg+=`<i style="left:${px(b.x)};top:${px(b.y)};width:${px(b.w)};height:${px(b.h)};background:${f}"></i>`;
+  }
+  if(opt.grid){
+    for(let c=2;c<=maxC+1;c++) grid+=`<i style="left:${px(X[c])};top:0;width:0;height:${px(Y[maxR+1])};border-left:1px solid var(--fv-grid)"></i>`;
+    for(let r=2;r<=maxR+1;r++) grid+=`<i style="left:0;top:${px(Y[r])};height:0;width:${px(X[maxC+1])};border-top:1px solid var(--fv-grid)"></i>`;
+  }
+  // 선 — 맞닿은 두 칸 중 굵은 쪽. 같은 병합 안쪽 경계는 긋지 않는다. 같은 모양이 이어지면 한 줄로
+  const bd=(r,c,side)=>{ if(r<1||c<1||r>maxR||c>maxC) return null; const b=book.borders[xfOf(r,c).border]; return b&&b[side]||null; };
+  const pick=(a,b)=>!a?b:!b?a:((XL_BW[b.style]||1)>(XL_BW[a.style]||1)?b:a);
+  const same=(r1,c1,r2,c2)=>{ const a=cover.get(c1+':'+r1); return !!a&&a===cover.get(c2+':'+r2); };
+  for(let r=1;r<=maxR+1;r++){ let run=null;
+    const flush=()=>{ if(run){ lines+=`<i style="left:${px(X[run.c])};top:${px(Y[r]-(run.w>1?run.w/2:0))};width:${px(X[run.e+1]-X[run.c])};height:0;border-top:${run.css}"></i>`; run=null; } };
+    for(let c=1;c<=maxC;c++){
+      const b=same(r-1,c,r,c)?null:pick(bd(r-1,c,'bottom'),bd(r,c,'top'));
+      const k=b?xlBorderCss(b):null;
+      if(k&&run&&run.css===k.css&&run.e===c-1){ run.e=c; continue; }
+      flush(); if(k) run={c,e:c,css:k.css,w:k.w};
+    }
+    flush(); }
+  for(let c=1;c<=maxC+1;c++){ let run=null;
+    const flush=()=>{ if(run){ lines+=`<i style="left:${px(X[c]-(run.w>1?run.w/2:0))};top:${px(Y[run.r])};height:${px(Y[run.e+1]-Y[run.r])};width:0;border-left:${run.css}"></i>`; run=null; } };
+    for(let r=1;r<=maxR;r++){
+      const b=same(r,c-1,r,c)?null:pick(bd(r,c-1,'right'),bd(r,c,'left'));
+      const k=b?xlBorderCss(b):null;
+      if(k&&run&&run.css===k.css&&run.e===r-1){ run.e=r; continue; }
+      flush(); if(k) run={r,e:r,css:k.css,w:k.w};
+    }
+    flush(); }
+  // 글자
+  const has=(r,c)=>{ const x=cells.get(c+':'+r); return !!(x&&x.text!=='')||(cover.has(c+':'+r)); };
+  for(const x of cells.values()){
+    if(x.text===''||x.r>maxR||x.c>maxC) continue;
+    const mg=cover.get(x.c+':'+x.r); if(mg&&(mg.r1!==x.r||mg.c1!==x.c)) continue;
+    const xf=book.xfs[x.s]||book.xfs[0], f=book.fonts[xf.font]||book.fonts[0], b=boxOf(x.r,x.c);
+    const hz=xf.h||(x.num?'right':'left'), vt=xf.v||'bottom';
+    const jc=hz==='center'||hz==='centerContinuous'||hz==='distributed'?'center':hz==='right'?'flex-end':'flex-start';
+    const ai=vt==='top'?'flex-start':vt==='center'||vt==='distributed'||vt==='justify'?'center':'flex-end';
+    const spill=!xf.wrap&&!mg&&!has(x.r,x.c+1)&&jc==='flex-start';   // 엑셀처럼 빈 옆 칸으로 넘친다
+    const face=f.name?`font-family:'${String(f.name).replace(/['\\<>]/g,'')}',var(--fv-font);`:'';
+    const st=`left:${px(b.x)};top:${px(b.y)};width:${px(b.w)};height:${px(b.h)};justify-content:${jc};align-items:${ai};`+
+      `font-size:${f.sz||11}pt;${face}${f.b?'font-weight:700;':''}${f.i?'font-style:italic;':''}`+
+      `${f.u||f.strike?`text-decoration:${f.u?'underline':''} ${f.strike?'line-through':''};`:''}${f.color?`color:${f.color};`:''}`+
+      `${xf.indent?`padding-left:${xf.indent*9+2}px;`:''}${spill?'overflow:visible;':''}`;
+    const tc=`${xf.wrap?'w':''}${xf.rot===255?' v':''}${hz==='center'||hz==='centerContinuous'?' c':hz==='right'?' r':''}`;
+    text+=`<b class="${tc}" data-ref="${colName(x.c)+x.r}" style="${st}"><span>${esc(x.text)}</span></b>`;
+  }
+  // 그림 — 칸 기준 위치(오프셋은 EMU: 9525 = 1px)
+  let pics='';
+  for(const p of opt.imgs||[]){
+    const x=(X[Math.min(p.fc+1,maxC+1)]||X[maxC+1])+p.fx, y=(Y[Math.min(p.fr+1,maxR+1)]||Y[maxR+1])+p.fy;
+    let w=p.w, h=p.h;
+    if(p.tc!=null){ w=(X[Math.min(p.tc+1,maxC+1)]||X[maxC+1])+p.tx-x; h=(Y[Math.min(p.tr+1,maxR+1)]||Y[maxR+1])+p.ty-y; }
+    if(w>0&&h>0) pics+=`<img src="${p.url}" alt="" style="left:${px(x)};top:${px(y)};width:${px(w)};height:${px(h)}">`;
+  }
+  // 맵핑 표시 — 칸(병합이면 병합 전체)을 역할 색으로
+  let marks='';
+  for(const ref in opt.marks||{}){
+    const m=ref.match(/^([A-Z]+)(\d+)$/); if(!m) continue;
+    const c=colNum(m[1]), r=+m[2]; if(r>maxR||c>maxC) continue;
+    const mk=opt.marks[ref], b=boxOf(r,c);
+    marks+=`<u class="${mk.cls||''}" data-ref="${ref}" title="${esc(mk.title||'')}" style="left:${px(b.x)};top:${px(b.y)};width:${px(b.w)};height:${px(b.h)}">${mk.tag?`<span>${esc(mk.tag)}</span>`:''}</u>`;
+  }
+  const W=X[maxC+1], H=Y[maxR+1];
+  return {w:W,h:H,html:`<div class="xs" style="width:${px(W)};height:${px(H)}"><div class="xsGrid">${grid}</div><div class="xsBg">${bg}</div>`+
+    `<div class="xsLn">${lines}</div><div class="xsTx">${text}</div><div class="xsPic">${pics}</div><div class="xsMk">${marks}</div></div>`};
+}
+/* zip 안 상대 경로 — '../media/image1.png' 를 'xl/media/image1.png' 로 */
+function zipPath(dir,target){
+  if(!target) return '';
+  if(target[0]==='/') return target.slice(1);
+  const out=dir.split('/').filter(Boolean);
+  for(const p of target.split('/')){ if(p==='..') out.pop(); else if(p&&p!=='.') out.push(p); }
+  return out.join('/');
+}
+/* 시트의 그림(xl/media) — drawing 의 앵커 위치와 함께. 한 번 만든 그림 주소는 tpl 에 둔다 */
+async function xlsxSheetImages(tpl){
+  if(tpl.__imgs) return tpl.__imgs;
+  const out=[];
+  try{
+    const get=async nm=>{ const e=tpl.ents.find(x=>x.name===nm); return e?(e.meth===8?await inflateRaw(e.raw):e.raw):null; };
+    const txt=async nm=>{ const b=await get(nm); return b?dec.decode(b):''; };
+    const rels=await txt('xl/worksheets/_rels/sheet1.xml.rels');
+    const dr=(rels.match(/<Relationship\b[^>]*>/g)||[]).find(r=>/\/drawing$/.test(xlAttr(r,'Type')||''));
+    if(dr){
+      const dname=zipPath('xl/worksheets/',xlAttr(dr,'Target'));
+      const dxml=await txt(dname), drel=await txt(dname.replace(/([^/]+)$/,'_rels/$1.rels'));
+      const relT={}; for(const r of (drel.match(/<Relationship\b[^>]*>/g)||[])) relT[xlAttr(r,'Id')]=xlAttr(r,'Target');
+      const n=(s,t)=>{ const m=s&&s.match(new RegExp('<xdr:'+t+'>(-?\\d+)</xdr:'+t+'>')); return m?+m[1]:0; };
+      for(const am of dxml.matchAll(/<xdr:(oneCellAnchor|twoCellAnchor|absoluteAnchor)\b[\s\S]*?<\/xdr:\1>/g)){
+        const a=am[0], emb=(a.match(/r:embed="([^"]+)"/)||[])[1]; if(!emb||!relT[emb]) continue;
+        const mpath=zipPath(dname.replace(/[^/]+$/,''),relT[emb]);
+        const bytes=await get(mpath); if(!bytes) continue;
+        const type=/\.jpe?g$/i.test(mpath)?'image/jpeg':/\.gif$/i.test(mpath)?'image/gif':'image/png';
+        const url=URL.createObjectURL(new Blob([bytes],{type}));
+        const fr=(a.match(/<xdr:from>([\s\S]*?)<\/xdr:from>/)||[])[1], to=(a.match(/<xdr:to>([\s\S]*?)<\/xdr:to>/)||[])[1];
+        const ext=a.match(/<xdr:ext\b[^>]*>/), E=9525;
+        if(am[1]==='absoluteAnchor'){ const pos=a.match(/<xdr:pos\b[^>]*>/);
+          out.push({url,fc:-1,fr:-1,fx:+xlAttr(pos&&pos[0],'x')/E,fy:+xlAttr(pos&&pos[0],'y')/E,w:+xlAttr(ext&&ext[0],'cx')/E,h:+xlAttr(ext&&ext[0],'cy')/E}); continue; }
+        const o={url,fc:n(fr,'col'),fr:n(fr,'row'),fx:n(fr,'colOff')/E,fy:n(fr,'rowOff')/E};
+        if(am[1]==='twoCellAnchor'&&to) Object.assign(o,{tc:n(to,'col'),tr:n(to,'row'),tx:n(to,'colOff')/E,ty:n(to,'rowOff')/E});
+        else Object.assign(o,{w:+xlAttr(ext&&ext[0],'cx')/E,h:+xlAttr(ext&&ext[0],'cy')/E});
+        out.push(o);
+      }
+    }
+  }catch(e){}
+  return (tpl.__imgs=out);
+}
+/* ── 양식 보기 화면 (M11 ②) — 어디에 무엇이 들어가는지 · 이번 주로 채워 보기 ─────────────
+ * 맵핑 표시는 채우기와 **같은 규칙**에서 뽑는다: 자리표시자 양식 = 적힌 자리표시자, 101·102·82 모양 = autoMap,
+ * 122 모양 = findLayout122 의 칸(fillForm122 가 쓰는 칸 그대로). 채운 모습은 fillWeekXml — 엑셀 내보내기와 같은 XML. */
+const FV_KIND={name:'이름',room:'방',date:'날짜·요일',event:'교육·행사',mid:'중간번',unit:'다른 소속',memo:'방 (다른 날만)',clr:'채울 때 비우는 칸',lock:'구조를 읽는 칸'};
+let fvSrc='current', fvMode='map', fvSun=null, fvZoom='fit', fvGrid=true, fvCache=null;
+/* 101 내장 양식의 고정 위치(fillForm101)를 자리표시자 모양으로 — 올린 101 양식에서 자동 맵핑이 자리 줄을 못 찾을 때 */
+function fixed101Tags(){
+  const t={}, dc=[];
+  for(let i=0;i<7;i++) dc.push(4+i*2);   // D·F·H … P
+  t.D3='{{날짜}}'; t.D4='{{교육}}'; t.D10='{{중간번}}';
+  for(const P of ['D','E','N']) for(let li=0;li<SEC[P].rows;li++){
+    const l=LBL_ORDER[li]; t['D'+(SEC[P].top+li)]=`{{방:${P}.${l}}}`; t['E'+(SEC[P].top+li)]=`{{이름:${P}.${l}}}`; }
+  return {tags:t,L:{dateCols:dc,sections:[]}};
+}
+/* 자리표시자 한 칸 → 표시 (색 종류·짧은 이름·설명) */
+function phRole(txt,seat,F){
+  const toks=[...String(txt).matchAll(PH_RE)].map(m=>({k:m[1],a:(m[2]||'').trim()}));
+  if(!toks.length) return null;
+  const main=toks.find(t=>t.k!=='차지')||toks[0];
+  let P=seat&&seat.P, l=seat&&seat.label;
+  if(/^[DEN]\./.test(main.a)){ P=main.a[0]; l=main.a.slice(2); }
+  const lb=(P==='N'&&F.labelsN||F.labels||{})[l]||l;
+  const crn=toks.find(t=>t.k==='차지');
+  switch(main.k){
+    case '이름':
+      if(!P||!l) return {cls:'name',tag:'이름',title:'그 줄 자리의 간호사 이름 — 자리를 못 찾았습니다'};
+      if(!LBL_ORDER.includes(l)) return {cls:'unit',tag:`${P} ${l}`,title:`${P} 근무인 ${l} 소속 간호사`};
+      return {cls:'name',tag:`${P} ${lb} 이름`+(crn?' '+(crn.a||'/CN'):''),
+        title:`${P} 근무 ${lb} 자리 간호사 이름`+(crn?` — 차지면 뒤에 '${crn.a||'/CN'}'`:'')+' · 신규는 아래 줄에 / 이름'};
+    case '방': return (!P||!l)?{cls:'room',tag:'방',title:'그 줄 자리의 병실 — 자리를 못 찾았습니다'}
+      :{cls:'room',tag:`${P} ${lb} 방`,title:`${P} 근무 ${lb} 자리가 보는 병실 (방 구성·그 날 고친 방)`};
+    case '날짜': return {cls:'date',tag:'날짜',title:'그 날 날짜'+(main.a?` — '${main.a}' 모양`:' — 칸 서식대로')};
+    case '요일': return {cls:'date',tag:'요일',title:'그 날 요일'};
+    case '중간번': return {cls:'mid',tag:'중간번',title:'그 날 중간번 간호사'};
+    case '대체': { const P2=((main.a||'D')[0]||'D').toUpperCase();
+      return {cls:'name',tag:`${P2} 대체`,title:`${P2} 근무에서 양식에 자리가 없는 간호사 (차지 빼고 A~D 중 남는 사람)`}; }
+    case '교육': return main.a==='목록'?{cls:'event',tag:'교육·행사 목록',title:'그 주 교육·행사 일정 — 줄마다 M/D(요일) 내용'}
+      :{cls:'event',tag:'교육·행사',title:'그 날 교육·행사 일정'};
+    default: return {cls:'name',tag:'차지 표시',title:`차지면 '${main.a||'/CN'}'`};
+  }
+}
+/* 양식 칸마다 앱이 채우는 것 — {marks:{ref:{cls,tag,title}}, found, missing, how, ok} */
+function formMapRoles(tpl,F){
+  const cells=sheetCells(tpl), merges=sheetMerges(tpl), hid=hiddenCells(merges);
+  const marks={}, day=i=>i==null?'':WD[i]+'요일 ';
+  const put=(ref,r,di)=>{ if(!r||hid.has(ref)) return; marks[ref]={...r,title:day(di)+r.title}; };
+  const lb=(P,l)=>(P==='N'&&F.labelsN||F.labels||{})[l]||l;
+  if(F.kind==='122'&&!hasPlaceholders(cells)){
+    const L=findLayout122(cells,merges);
+    if(!L.dateCols||L.dateCols.length<7||!L.sections.length) return {marks,found:[],missing:['요일 칸·D·E·N 구역'],how:'122 모양',ok:false};
+    L.dateCols.forEach((c,i)=>{
+      put(colName(c)+L.dateRow,{cls:'date',tag:'날짜',title:'그 날 날짜'},i);
+      if(L.eventRow) put(colName(c)+L.eventRow,{cls:'event',tag:'교육·행사',title:'그 날 교육·행사 일정'},i);
+      if(L.midRow) put(colName(c)+L.midRow,{cls:'mid',tag:'중간번',title:'그 날 중간번 간호사'},i);
+      for(const sec of L.sections) for(let k=0;k<sec.rows&&k<LBL_ORDER.length;k++){
+        const l=LBL_ORDER[k], r=sec.row+k;
+        put(colName(c)+r,{cls:'name',tag:`${sec.P} ${lb(sec.P,l)} 이름`,title:`${sec.P} 근무 ${lb(sec.P,l)} 자리 간호사 이름`},i);
+        put(colName(L.memoCols[i])+r,{cls:'memo',tag:'방',title:`${sec.P} 근무 ${lb(sec.P,l)} 자리 — 방 열과 다른 날만 그 날 병실`},i);
+      }
+    });
+    const grpName={}; L.roomColOf.forEach((rc,i)=>{ if(rc!=null) (grpName[rc]=grpName[rc]||[]).push(WD[i]); });
+    for(const rc in grpName) for(const sec of L.sections) for(let k=0;k<sec.rows&&k<LBL_ORDER.length;k++){
+      const l=LBL_ORDER[k], ds=grpName[rc], span=ds.length>1?ds[0]+'~'+ds[ds.length-1]:ds[0];
+      put(colName(+rc)+(sec.row+k),{cls:'room',tag:`${sec.P} ${lb(sec.P,l)} 방`,title:`${span}요일 ${sec.P} 근무 ${lb(sec.P,l)} 자리 이름과 병실 — 묶음의 첫 근무일 기준`});
+    }
+    return {marks,found:[`요일 ${L.dateCols.length}칸 (${L.wdRow}행)`,...L.sections.map(s=>`${s.P} ${s.rows}자리 (${s.row}~${s.row+s.rows-1}행)`),
+      `방 열 ${Object.keys(grpName).map(c=>colName(+c)).join('·')}`],missing:[],how:'122 모양 — 방은 일·월~금·토 세 열에 한 번씩',ok:true};
+  }
+  let tagged=cells, L=null, found=[], missing=[], how='양식에 적힌 자리표시자대로';
+  if(!hasPlaceholders(cells)){
+    const am=autoMap(tpl,{kind:F.kind,noRooms:!!F.noRooms,dateText:!!F.dateText,unitSlot:F.unitSlot});
+    if(F.kind==='101'&&(!am.ok||am.missing.some(m=>/ 자리$/.test(m)))){   // fillWeekXml 과 같은 판단 — 자리 줄을 못 찾으면 고정 위치
+      const fx=fixed101Tags(); tagged=fx.tags; L=fx.L; how='101 기본 위치 (D~Q 열, 3~18행) — 자동 맵핑이 자리 줄을 다 찾지 못했습니다';
+      if(am.ok){ found=am.found; missing=am.missing; } else missing=[am.why]; }
+    else if(!am.ok) return {marks,found:[],missing:[am.why],how:'자동 맵핑',ok:false};
+    else{ found=am.found; missing=am.missing; how='자동 맵핑 — 요일 줄·D·E·N 구역·자리 이름을 읽어 찾았습니다';
+      tagged=sheetCells({...tpl,sheetXml:am.xml}); }
+  }
+  if(!L) L=layoutOf(F,tagged,merges);
+  const T=phTargets(tagged,L,hid), slots=rowSlots(L);
+  if(!T) return {marks,found,missing:missing.concat('날짜 칸'),how,ok:false};
+  for(const t of T){ if(t.hidden) continue;
+    put(t.tgt,phRole(t.txt,cellSeat(t.txt)||slots[t.row]||null,F),t.one?null:t.day); }
+  // 표시자 줄에 남은 글자(지난주 방·메모) — 채울 때 비운다 (fillByPlaceholders 와 같은 칸)
+  for(const ref of phStaleCells(tagged,L,hid)) if(!marks[ref]) marks[ref]={cls:'clr',tag:'비움',title:'채울 때 비우는 칸 — 지난주 값이 이번 주 이름 옆에 남지 않게'};
+  return {marks,found,missing,how,ok:true};
+}
+/* 구조를 읽는 칸(요일·구역·자리 이름·중간번·교육 이름표) — 고치면 채우는 자리가 바뀐다. formCellRoles 의 잠금과 같다 */
+function formLockMarks(tpl,F,marks){
+  try{ const {locked}=formCellRoles(tpl,F);
+    for(const ref of locked) if(!marks[ref]) marks[ref]={cls:'lock',tag:'',title:'구조를 읽는 칸 — 요일·구역·자리 이름. 바꾸면 채우는 자리가 달라집니다'}; }catch(e){}
+  return marks;
+}
+/* 보는 양식 — 지금 서식(current) 또는 방금 검사한 파일(checked, 아직 쓰지 않음) */
+async function fvSource(){
+  if(fvSrc==='checked'&&window.__checkedForm){
+    const c=window.__checkedForm, sh=c.shape||{kind:'101'}, base=FORMS[sh.kind]||FORMS['101'];
+    const F={...base,...sh,labels:base.labels,labelsN:base.labelsN,name:'검사한 파일',custom:true};
+    return {tpl:c.tpl,F,custom:true,title:c.name,sub:'검사한 파일 — 아직 쓰지 않았습니다',checked:true};
+  }
+  fvSrc='current';
+  const ov=formOv(), F=formDef();
+  return {tpl:await loadTemplate(),F,custom:!!ov,title:F.name,sub:ov?'우리 병동 양식 · '+(ov.name||''):'프로그램 기본 양식'};
+}
+async function openFormView(src){
+  fvSrc=src||'current'; fvMode='map'; fvSun=new Date(wkSunday); fvCache=null;
+  show('form');
+}
+function fvSet(k,v){
+  if(k==='mode') fvMode=v; else if(k==='zoom') fvZoom=v; else if(k==='grid') fvGrid=!fvGrid;
+  else if(k==='week'){ if(v===0){ const t=new Date(); t.setHours(0,0,0,0); fvSun=addDays(t,-t.getDay()); } else fvSun=addDays(fvSun,7*v); }
+  renderFormView();
+}
+async function renderFormView(){
+  const sheetBox=$('#fvSheet'), side=$('#fvSide'); if(!sheetBox) return;
+  let src;
+  try{ src=await fvSource(); }catch(e){ sheetBox.innerHTML=`<div class="tip"><b>양식을 읽지 못했습니다</b><span>${esc(e.message)}</span></div>`; return; }
+  if(!fvSun) fvSun=new Date(wkSunday);
+  const days=weekData(fvSun);
+  $('#fvTitle').textContent=src.title;
+  $('#fvSub').textContent=src.sub;
+  for(const b of document.querySelectorAll('#fvModeSeg button')) b.classList.toggle('on',b.dataset.m===fvMode);
+  for(const b of document.querySelectorAll('#fvZoomSeg button')) b.classList.toggle('on',b.dataset.z===fvZoom);
+  $('#fvGridBtn').classList.toggle('on',fvGrid);
+  $('#fvWeekNav').style.display=fvMode==='fill'?'':'none';
+  $('#fvWeekTitle').textContent=`${fmtMD(days[0].date)} ~ ${fmtMD(days[6].date)}`;
+  let xml=src.tpl.sheetXml, fillErr='';
+  const roles=formMapRoles(src.tpl,src.F);
+  if(fvMode==='fill'){
+    try{ xml=await fillWeekXml(src.tpl,src.F,days,src.custom); }catch(e){ fillErr=e.message; }
+  }
+  const book=await xlsxBook(src.tpl), M=xlsxSheetModel(xml,src.tpl.sst,book), imgs=await xlsxSheetImages(src.tpl);
+  const marks={};
+  if(fvMode==='map'){ Object.assign(marks,roles.marks); formLockMarks(src.tpl,src.F,marks); }
+  else for(const ref in roles.marks) marks[ref]={...roles.marks[ref],cls:roles.marks[ref].cls+' ol',tag:''};
+  const r=xlsxSheetHtml(M,book,{marks,imgs,grid:fvGrid});
+  fvCache={w:r.w,h:r.h};
+  sheetBox.innerHTML=r.html;
+  fitFormView();
+  // 오른쪽 열 — 무엇을 찾았나, 못 찾은 것, 색 설명
+  const cnt={}; for(const ref in roles.marks){ const k=roles.marks[ref].cls; cnt[k]=(cnt[k]||0)+1; }
+  const legend=Object.keys(FV_KIND).filter(k=>cnt[k]||(k==='lock'&&fvMode==='map'))
+    .map(k=>`<span class="fvLg"><i class="fvK ${k}"></i>${FV_KIND[k]}${cnt[k]?` <b>${cnt[k]}칸</b>`:''}</span>`).join('');
+  const noData=!Object.keys(store.cells||{}).length;
+  side.innerHTML=`<div class="dsH">${fvMode==='map'?'어디에 무엇이 들어가나':'이번 주로 채워 본 모습'}</div>`+
+    `<div class="dsNote">${fvMode==='map'
+      ?'색칠한 칸을 앱이 채웁니다. 칸에 마우스를 올리면 무엇이 들어가는지 나옵니다. 나머지 글자·선·그림은 양식 그대로 나갑니다.'
+      :'엑셀로 내보낼 때와 <b>같은 파일</b>을 그렸습니다. 테두리 친 칸이 앱이 채운 칸입니다.'+(noData?' 근무표가 아직 없어 날짜·교육·행사만 들어갑니다.':'')}</div>`+
+    (fillErr?`<div class="tip" style="margin-top:10px"><b>채우지 못했습니다</b><span>${esc(fillErr)}</span></div>`:'')+
+    `<div class="fvLegend">${legend}</div>`+
+    `<div class="dsF"><div class="dsL"><b>${roles.ok?'찾은 방법':'찾지 못했습니다'}</b>${esc(roles.how)}</div>`+
+    (roles.found.length?`<ul class="fvList">${roles.found.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'')+
+    (roles.missing.length?`<div class="dsL" style="margin-top:8px"><b style="color:var(--warn-ink,var(--err))">못 찾은 것</b></div><ul class="fvList miss">${roles.missing.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'')+`</div>`+
+    `<div class="dsBtns">`+(src.checked
+      ?`<button class="pri" onclick="useCheckedForm().then(()=>{ if(fvSrc==='checked'&&!window.__checkedForm) openFormView('current'); })">이 양식 쓰기</button>`
+      :`<button onclick="downloadWeekXlsx(fvSun)" title="이 주 배정표를 이 양식 그대로 엑셀로 받습니다">이 주 엑셀로 받기</button>`)+
+    `<button onclick="${src.checked?'downloadMarkedForm()':'downloadMarkedCurrent()'}" title="위 맵핑대로 {{이름:D.A}} {{방:D.A}} 같은 자리표시자를 꽂은 양식을 받습니다 — 엑셀에서 자리만 옮겨 다시 올리면 적힌 대로 채웁니다">자리표시자 넣어서 받기</button>`+
+    `</div>`;
+}
+/* 종이를 칸 폭에 맞춘다 — 하루 어싸인표 미리보기와 같이 zoom 으로 (맞춤) 또는 실제 크기(100%) */
+function fitFormView(){
+  const box=$('#fvSheet'), xs=box&&box.querySelector('.xs'); if(!xs||!fvCache) return;
+  const avail=box.clientWidth-4;
+  const z=fvZoom==='fit'&&avail>0?Math.min(1,Math.max(0.3,avail/fvCache.w)):1;
+  xs.style.zoom=String(z); xs.style.setProperty('--fvz',String(z));   // 표시 글자는 줄여도 12px 로 읽히게
+}
+window.addEventListener('resize',()=>{ if(curScr==='form') fitFormView(); });
+/* 지금 서식에 자리표시자를 꽂아 내려받기 — 검사한 파일용 downloadMarkedForm 과 같은 모양의 파일 */
+async function downloadMarkedCurrent(){
+  try{
+    const tpl=await loadTemplate(), F=formDef();
+    const am=hasPlaceholders(sheetCells(tpl))?{ok:true,xml:tpl.sheetXml}:autoMap(tpl,{kind:F.kind,noRooms:!!F.noRooms,dateText:!!F.dateText,unitSlot:F.unitSlot});
+    if(!am.ok){ toast(am.why,5000); return; }
+    const w=await applyWrapStyles(tpl,am.xml);
+    const parts={'xl/worksheets/sheet1.xml':w.xml}; if(w.styles) parts['xl/styles.xml']=w.styles;
+    const bytes=packXlsx(tpl,parts);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    a.download=`${F.name}_자리표시자.xlsx`; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    toast('자리표시자를 넣어 내려받았습니다 — 엑셀에서 자리를 옮겨 다시 올리면 적힌 대로 채웁니다',5000);
+  }catch(e){ toast('만들지 못했습니다: '+e.message,4000); }
+}
 /* 양식의 글자 칸을 HTML 안에서 고친다 — 앱이 채우는 칸과 자리표시자 칸은 빼고, 구조 인식에 쓰는 글자는 잠근다.
  * 고친 결과는 xlsx 로 다시 싸서 '우리 병동 양식'(store.forms[서식])으로 저장한다 — 데이터 파일에 함께 저장된다.
  * 칸을 늘리거나 합치는 구조 변경은 여기서 못 한다(엑셀에서 고쳐 올린다). */
@@ -5356,6 +5914,7 @@ async function checkFormFile(input){
         `<div class="dim" style="margin-top:8px">합친 칸 변화 — 추가 ${d.mergeAdded.length}, 해제 ${d.mergeRemoved.length}</div>`:''))+
       `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
         <button class="pri" onclick="useCheckedForm()">${mkWard?esc(w)+'병동 서식으로 쓰기':'이 양식으로 바꾸기'}</button>
+        <button onclick="openFormView('checked')" title="올린 파일을 그대로 띄워 자동 맵핑이 어느 칸에 무엇을 채우는지 봅니다 — 쓰기 전에 확인하세요">이 양식 보기 (어디에 무엇이)</button>
         <button onclick="downloadMarkedForm()">자리표시자 넣어서 내려받기</button>
       </div>
       <div class="dim" style="margin-top:10px;line-height:1.8">
@@ -5414,7 +5973,7 @@ function formShapeText(sh){
 }
 function useCheckedForm(){
   const c=window.__checkedForm;
-  if(!c){ toast('먼저 양식 파일을 검사하세요','',3000); return; }
+  if(!c){ toast('먼저 양식 파일을 검사하세요',3000); return; }
   const cells=sheetCells(c.tpl);
   const ph=hasPlaceholders(cells);
   const kb=Math.round(c.bytes.length/1024);
@@ -5461,7 +6020,7 @@ function resetForm(){
 /* 올린 양식에 자리표시자를 자동으로 꽂아 내려준다 — 엑셀에서 위치만 손보면 된다 */
 async function downloadMarkedForm(){
   const c=window.__checkedForm;
-  if(!c){ toast('먼저 양식 파일을 검사하세요','',3000); return; }
+  if(!c){ toast('먼저 양식 파일을 검사하세요',3000); return; }
   try{
     const am=autoMap(c.tpl,c.shape);
     if(!am.ok){ toast(am.why,6000); return; }
@@ -6202,31 +6761,16 @@ function eventLabelRef(cells,row){
   return Object.keys(cells).filter(ref=>{ const m=ref.match(/^([A-Z]+)(\d+)$/); return m&&+m[2]===row&&/교육/.test(cells[ref]); })
     .sort((a,b)=>colNum(a.match(/^[A-Z]+/)[0])-colNum(b.match(/^[A-Z]+/)[0]))[0]||null;
 }
-function fillByPlaceholders(tpl,cells,L,days,opt){
-  opt=opt||{};
-  let xml=tpl.sheetXml;
-  const slots=rowSlots(L);
+/* 자리표시자가 채우는 칸 — 첫 요일 칸에 적힌 것은 날짜 칸 간격만큼 7일로 복제, 그 밖은 한 번(그 칸이 든 요일).
+ * 채우기(fillByPlaceholders)와 양식 보기(formMapRoles)가 같이 쓴다 — 따로 세면 보기와 내보내기가 어긋난다.
+ * 돌려주는 것: [{tgt, txt, row, day, one, hidden}] (one = 복제하지 않은 칸) 또는 날짜 칸을 못 찾으면 null */
+function phTargets(cells,L,hid){
   const dayCols=L.dateCols||[];
-  if(dayCols.length<2) throw new Error('양식에서 날짜 칸을 찾지 못했습니다');
+  if(dayCols.length<2) return null;
   const stride=dayCols[1]-dayCols[0], firstCol=dayCols[0], lastFirstBlock=firstCol+stride;
-  const hid=hiddenCells(sheetMerges(tpl)), dateXf=opt.dateXf||new Set(), ctx={days,seats:{D:new Set(),E:new Set(),N:new Set()}};
-  // 양식에 자리가 있는 자리({{대체}} 는 이 밖의 사람) — 자리를 못 박은 표시자는 그 줄 자리로
-  for(const ref in cells){ const rr=+(ref.match(/\d+$/)||[0])[0];
-    for(const m of String(cells[ref]).matchAll(PH_RE)){ if(m[1]!=='이름'&&m[1]!=='방') continue;
-      const a=(m[2]||'').trim(), sl=/^[DEN]\./.test(a)?{P:a[0],label:a.slice(2)}:slots[rr];
-      if(sl&&ctx.seats[sl.P]) ctx.seats[sl.P].add(sl.label); } }
   // 첫 요일 칸 밖에 적힌 자리표시자는 그 칸이 든 요일로 한 번만 (요일 칸 밖이면 그 주 첫날)
   const blockOf=c=>{ for(let b=dayCols.length-1;b>=0;b--) if(c>=dayCols[b]) return (b<dayCols.length-1||c<dayCols[b]+stride)?b:0; return 0; };
-  // 첫 요일 칸에 표시자가 있는 줄은 요일 칸(첫 요일 ~ 마지막 요일 끝)을 먼저 비운다 — 표시자가 없는 칸에 지난주 방·메모가
-  // 남아 이번 주 이름 옆에 찍히면 안 된다(옛 표시자 양식은 122 이름 칸에만 꽂았다). 이름표 칸(요일 칸 왼쪽)·표 오른쪽은 그대로.
-  const lastCol=dayCols[dayCols.length-1]+stride-1, phRows=new Set();
-  for(const ref in cells){ const m=ref.match(/^([A-Z]+)([0-9]+)$/); PH_RE.lastIndex=0;
-    if(m&&PH_RE.test(cells[ref])){ const c=colNum(m[1]); if(c>=firstCol&&c<lastFirstBlock) phRows.add(+m[2]); } }
-  PH_RE.lastIndex=0;
-  const isPh=t=>{ PH_RE.lastIndex=0; const y=PH_RE.test(t); PH_RE.lastIndex=0; return y; };
-  for(const r of phRows) for(let c=firstCol;c<=lastCol;c++){ const ref=colName(c)+r;   // 표시자 칸 자체는 아래에서 조각 서식째 다시 쓴다
-    if(cells[ref]!=null&&!hid.has(ref)&&!isPh(cells[ref])) xml=clearCell(xml,ref); }
-  const styleOf=ref=>{ const s=cellAttrs(xml.match(cellRe(ref))).match(/s="(\d+)"/); return s?+s[1]:0; };
+  const out=[];
   for(const ref of Object.keys(cells)){
     const txt=cells[ref];
     PH_RE.lastIndex=0;
@@ -6235,26 +6779,59 @@ function fillByPlaceholders(tpl,cells,L,days,opt){
     const col=colNum(m[1]), row=+m[2];
     const inFirst=col>=firstCol&&col<lastFirstBlock;
     const nDays=inFirst?Math.min(7,dayCols.length):1;
-    const seat=cellSeat(txt)||slots[row]||null;
-    const bareDate=/^\{\{\s*날짜\s*\}\}$/.test(txt);
     for(let k=0;k<nDays;k++){
       const tgt=colName(inFirst?col+(dayCols[k]-dayCols[0]):col)+row;   // 요일 칸 간격이 고르지 않은 서식(122)도 그 칸 위치대로
-      if(hid.has(tgt)){ xml=clearCell(xml,tgt); continue; }             // 병합에 가린 칸 — 써도 안 보인다
-      const day=days[inFirst?k:blockOf(col)]||null;
-      if(bareDate&&day&&day.date&&dateXf.has(styleOf(tgt))){
-        const d=day.date; xml=setCellNum(xml,tgt,dateSerial(d.getFullYear(),d.getMonth()+1,d.getDate())); continue; }
-      // 조각 서식이 있는 칸(이름표 + {{교육:목록}}) — 조각마다 바꿔 글자 서식을 지킨다
-      const cur=tgt===ref?xml.match(cellRe(tgt)):null;
-      if(cur&&/<is>[\s\S]*<r>/.test(cur[3]||'')){
-        const runs=(cur[3].match(/<r>[\s\S]*?<\/r>/g)||[]).map(r=>r.replace(/(<t\b[^>]*>)([\s\S]*?)(<\/t>)/g,
-          (_,a,x,b)=>a+XESC(XUN(x).replace(PH_RE,(__,kind,arg)=>phValue(kind,arg,seat,day,ctx)))+b));
-        const {keep}=trimRunsEnd(runs);
-        xml=keep.some(r=>runText(r).trim())?putCell(xml,tgt,'<is>'+keep.join('')+'</is>','inlineStr'):clearCell(xml,tgt);
-        continue;
-      }
-      const out=txt.replace(PH_RE,(_,kind,arg)=>phValue(kind,arg,seat,day,ctx)).trim();
-      xml=out?setCellStr(xml,tgt,out):clearCell(xml,tgt);
+      out.push({tgt,src:ref,txt,row,day:inFirst?k:blockOf(col),one:!inFirst,hidden:!!(hid&&hid.has(tgt))});
     }
+  }
+  PH_RE.lastIndex=0;
+  return out;
+}
+/* 채우기 전에 비우는 칸 — 첫 요일 칸에 표시자가 있는 줄의 요일 칸(첫 요일 ~ 마지막 요일 끝) 중 표시자가 없는 칸.
+ * 표시자가 없는 칸에 지난주 방·메모가 남아 이번 주 이름 옆에 찍히면 안 된다(옛 표시자 양식은 122 이름 칸에만 꽂았다).
+ * 이름표 칸(요일 칸 왼쪽)·표 오른쪽·병합에 가린 칸은 그대로. 표시자 칸 자체는 채우기가 조각 서식째 다시 쓴다. */
+function phStaleCells(cells,L,hid){
+  const dayCols=L.dateCols||[]; if(dayCols.length<2) return [];
+  const stride=dayCols[1]-dayCols[0], firstCol=dayCols[0], lastFirstBlock=firstCol+stride, lastCol=dayCols[dayCols.length-1]+stride-1;
+  const isPh=t=>{ PH_RE.lastIndex=0; const y=PH_RE.test(t); PH_RE.lastIndex=0; return y; };
+  const rows=new Set();
+  for(const ref in cells){ const m=ref.match(/^([A-Z]+)([0-9]+)$/);
+    if(m&&isPh(cells[ref])){ const c=colNum(m[1]); if(c>=firstCol&&c<lastFirstBlock) rows.add(+m[2]); } }
+  const out=[];
+  for(const r of rows) for(let c=firstCol;c<=lastCol;c++){ const ref=colName(c)+r;
+    if(cells[ref]!=null&&!(hid&&hid.has(ref))&&!isPh(cells[ref])) out.push(ref); }
+  return out;
+}
+function fillByPlaceholders(tpl,cells,L,days,opt){
+  opt=opt||{};
+  let xml=tpl.sheetXml;
+  const slots=rowSlots(L), hid=hiddenCells(sheetMerges(tpl)), dateXf=opt.dateXf||new Set(), ctx={days,seats:{D:new Set(),E:new Set(),N:new Set()}};
+  const T=phTargets(cells,L,hid);
+  if(!T) throw new Error('양식에서 날짜 칸을 찾지 못했습니다');
+  // 양식에 자리가 있는 자리({{대체}} 는 이 밖의 사람) — 자리를 못 박은 표시자는 그 줄 자리로
+  for(const ref in cells){ const rr=+(ref.match(/\d+$/)||[0])[0];
+    for(const m of String(cells[ref]).matchAll(PH_RE)){ if(m[1]!=='이름'&&m[1]!=='방') continue;
+      const a=(m[2]||'').trim(), sl=/^[DEN]\./.test(a)?{P:a[0],label:a.slice(2)}:slots[rr];
+      if(sl&&ctx.seats[sl.P]) ctx.seats[sl.P].add(sl.label); } }
+  for(const ref of phStaleCells(cells,L,hid)) xml=clearCell(xml,ref);
+  const styleOf=ref=>{ const s=cellAttrs(xml.match(cellRe(ref))).match(/s="(\d+)"/); return s?+s[1]:0; };
+  for(const t of T){
+    if(t.hidden){ xml=clearCell(xml,t.tgt); continue; }             // 병합에 가린 칸 — 써도 안 보인다
+    const seat=cellSeat(t.txt)||slots[t.row]||null;
+    const day=days[t.day]||null;
+    if(/^\{\{\s*날짜\s*\}\}$/.test(t.txt)&&day&&day.date&&dateXf.has(styleOf(t.tgt))){
+      const d=day.date; xml=setCellNum(xml,t.tgt,dateSerial(d.getFullYear(),d.getMonth()+1,d.getDate())); continue; }
+    // 조각 서식이 있는 칸(이름표 + {{교육:목록}}) — 조각마다 바꿔 글자 서식을 지킨다
+    const cur=t.tgt===t.src?xml.match(cellRe(t.tgt)):null;
+    if(cur&&/<is>[\s\S]*<r>/.test(cur[3]||'')){
+      const runs=(cur[3].match(/<r>[\s\S]*?<\/r>/g)||[]).map(r=>r.replace(/(<t\b[^>]*>)([\s\S]*?)(<\/t>)/g,
+        (_,a,x,b)=>a+XESC(XUN(x).replace(PH_RE,(__,kind,arg)=>phValue(kind,arg,seat,day,ctx)))+b));
+      const {keep}=trimRunsEnd(runs);
+      xml=keep.some(r=>runText(r).trim())?putCell(xml,t.tgt,'<is>'+keep.join('')+'</is>','inlineStr'):clearCell(xml,t.tgt);
+      continue;
+    }
+    const out=t.txt.replace(PH_RE,(_,kind,arg)=>phValue(kind,arg,seat,day,ctx)).trim();
+    xml=out?setCellStr(xml,t.tgt,out):clearCell(xml,t.tgt);
   }
   return xml;
 }
@@ -6604,21 +7181,26 @@ function fillForm122(tpl,L,days){
  * 101 서식 → 내장 양식은 고정 위치(fillForm101), 올린 양식은 칸 위치가 다를 수 있어 자동 맵핑(autoMap)으로 */
 async function buildWeekXlsx(sun){
   const tpl=await loadTemplate();
-  const days=weekData(sun), F=formDef();
+  return {tpl,xml:await fillWeekXml(tpl,formDef(),weekData(sun),!!formOv())};
+}
+/* 양식 하나에 한 주를 채운 시트 XML — 엑셀 내보내기와 양식 보기(이번 주로 채워 보기)가 같이 쓴다.
+ * custom = 병동이 올린(또는 검사 중인) 양식 — 101 모양이면 고정 위치 대신 자동 맵핑으로 */
+async function fillWeekXml(tpl,F,days,custom){
   const cells=sheetCells(tpl), merges=sheetMerges(tpl);
   // 양식에 자리표시자가 있으면 그 지시대로 채운다 (병동마다 다른 양식을 그대로 지원)
-  if(hasPlaceholders(cells)) return {tpl,xml:fillByPlaceholders(tpl,cells,layoutOf(F,cells,merges),days,{dateXf:await dateStyleSet(tpl)})};
-  if(F.kind==='122') return {tpl,xml:fillForm122(tpl,findLayout122(cells,merges),days)};
-  if(F.kind==='102') return {tpl,xml:fillForm102(tpl,findLayout102(cells,merges),days)};
-  if(F.kind==='82'&&(F.noRooms!==false||!formOv())) return {tpl,xml:fillForm82(tpl,findLayout102(cells,merges),days)};
+  if(hasPlaceholders(cells)) return fillByPlaceholders(tpl,cells,layoutOf(F,cells,merges),days,{dateXf:await dateStyleSet(tpl)});
+  if(F.kind==='122') return fillForm122(tpl,findLayout122(cells,merges),days);
+  if(F.kind==='102') return fillForm102(tpl,findLayout102(cells,merges),days);
+  // 방 칸이 있는 82 모양(SU 자리가 있는 올린 양식)은 fillForm82 가 방 칸에 이름을 쓴다 — 자동 맵핑으로
+  if(F.kind==='82'&&(F.noRooms!==false||!custom)) return fillForm82(tpl,findLayout102(cells,merges),days);
   // 올린 101 모양 양식 — 줄·열 위치가 내장 양식과 다를 수 있다. 고정 위치로 쓰면 엉뚱한 칸에 들어간다 (2026-09-28)
-  if(formOv()){
+  if(custom){
     const am=autoMap(tpl,{kind:F.kind==='82'?'82':'101',noRooms:false,dateText:!!F.dateText,unitSlot:F.unitSlot});
     // 자리 줄을 하나라도 못 찾았으면 자동 맵핑을 믿지 않는다 — 예전처럼 고정 위치로
     if(am.ok&&!am.missing.some(m=>/ 자리$/.test(m))){ const t2={...tpl,sheetXml:am.xml}, c2=sheetCells(t2);
-      return {tpl,xml:fillByPlaceholders(t2,c2,layoutOf(F,c2,merges),days,{dateXf:await dateStyleSet(tpl)})}; }
+      return fillByPlaceholders(t2,c2,layoutOf(F,c2,merges),days,{dateXf:await dateStyleSet(tpl)}); }
   }
-  return {tpl,xml:fillForm101(tpl,days)};
+  return fillForm101(tpl,days);
 }
 /* 101 내장 양식 — 고정 위치(D~Q 열, 3~18행). 자동 맵핑(autoMap)이 이것과 같은 칸에 같은 값을 넣는지 test_assign_logic 이 대조한다 */
 function fillForm101(tpl,days){
@@ -8690,9 +9272,10 @@ const HELP=[
         '근무표에 기록이 있으면 그 기록이 우선입니다.'],
  tips:['차지(A(CN))였던 사람은 <b>없음</b>으로 두세요 — 차지는 매일 자동으로 정해집니다.']},
 
-{cat:'우리 병동 설정',id:'form',title:'배정표 양식 (서식 고르기·문구 고치기·양식 교체)',
+{cat:'우리 병동 설정',id:'form',title:'배정표 양식 (서식 고르기·양식 보기·문구 고치기·양식 교체)',
  lead:'인쇄·엑셀에 쓰는 병실 배정표 양식입니다. 101병동·122병동 서식 중 고르고, 글자는 여기서 바로 고치고, 칸 구조가 다른 양식은 엑셀 파일을 올려 교체합니다.',
  steps:['관리 &gt; 배정표 양식 &gt; <b>서식</b>에서 <b>101병동 서식</b>(요일마다 방·이름) 또는 <b>122병동 서식</b>(요일마다 이름·메모, 방은 일·월~금·토 열에 한 번씩)을 고릅니다. 배정표 화면의 자리 이름(A(CN)·B… / CN·A·B…)도 함께 바뀝니다.',
+        '<b>[양식 보기]</b> — 엑셀 양식을 그대로 띄워 앱이 채우는 칸(이름·방·날짜·교육·행사·중간번)을 색으로 보여 줍니다. <b>[이번 주로 채워 보기]</b>를 누르면 엑셀로 받을 모습이 그대로 나옵니다.',
         '<b>[양식 문구 고치기]</b> — 제목·물품체크·CPR·화재 등 글자 칸을 고쳐 [이대로 저장]. 고친 문구는 서식마다 따로 남아, 서식을 오가도 잃지 않습니다.',
         '요일·구역·자리 이름처럼 구조 인식에 쓰는 칸은 🔒 잠겨 있습니다(고치면 배정표를 못 채웁니다). 날짜·이름·방처럼 앱이 채우는 칸은 목록에 없습니다.',
         '칸 배치가 다른 양식은 <b>[양식 파일 검사 (xlsx 고르기)]</b>로 올리면 어디가 다른지, 어느 칸에 무엇을 채울지(<b>자동 맵핑</b>) 알려 줍니다. 우리 병동 서식이 아직 없으면 올린 양식이 그대로 우리 병동 서식이 됩니다.'],
@@ -8930,6 +9513,7 @@ const TOURS={
   ],cleanup:()=>{ if(connected()) show('week'); }},
   form:{steps:()=>[
     {before:()=>{ show('admin'); pickAdmin('form'); },sel:'#adminPanelBox .fmSeg',title:'서식 고르기',text:'101병동·122병동 서식 중 인쇄·엑셀에 쓸 것을 고릅니다. 배정표 화면의 자리 이름도 따라 바뀝니다.'},
+    {sel:'#btnFormView',title:'양식 보기',text:'엑셀 양식을 그대로 띄워 앱이 어느 칸에 무엇을 채우는지 색으로 보여 줍니다. 이번 주로 채운 모습도 미리 봅니다.'},
     {sel:'#adminPanelBox button[onclick="openFormText()"]',title:'양식 문구 고치기',text:'제목·물품체크·CPR·화재 같은 글자 칸을 여기서 바로 고칩니다. 구조 인식에 쓰는 칸은 🔒 잠겨 있습니다.'},
     {sel:'#adminPanelBox',title:'양식 파일 교체',text:'칸 배치가 다른 양식은 xlsx 를 올려 검사한 뒤 채택합니다.',after:()=>{ if(connected()) show('week'); }},
   ],cleanup:()=>{ if(connected()) show('week'); }},
@@ -9222,6 +9806,9 @@ document.addEventListener('keydown',e=>{
   if(curScr==='day'&&!(e.ctrlKey||e.metaKey||e.altKey)&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
     const t=e.target; if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
     e.preventDefault(); dayMove(e.key==='ArrowLeft'?-1:1); }
+  if(curScr==='form'&&fvMode==='fill'&&!(e.ctrlKey||e.metaKey||e.altKey)&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){
+    const t=e.target; if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    e.preventDefault(); fvSet('week',e.key==='ArrowLeft'?-1:1); }
 });
 $('#helpWrap').addEventListener('mousedown',e=>{ if(e.target.id==='helpWrap') closeHelp(); });
 
@@ -9258,7 +9845,8 @@ window.__app={get store(){return store},set store(v){store=v},
   get wkSunday(){return wkSunday},set wkSunday(v){wkSunday=v},show,
   startWizard,closeWizard,wizGo,wizPaste,wizResume,WIZ,get wizAt(){return wizAt},renderWizard,
   hideOnboard,showOnboard,onboardItems,uiGet:(k)=>uiGet(k),
-  secRows,slotsOf,groupUnits,unitOfName,formIds,formDefOf,formFor,detectFormShape,autoMap,fillByPlaceholders,fillForm101,dateStyleSet,hiddenCells,putCell,setCellStr,dateFmtOf,fmtDateTok,weekEventLines,tagRows,formShapeText,checkFormFile,downloadMarkedForm,bytesToB64,appendRich,cellRuns,eventListLines,eventsPerDay,packXlsx,unitWorker,unitSlotName,toggleUnit,fillForm82,formNoRooms,renderWardChip,addWorker,offCandidates,
+  secRows,slotsOf,groupUnits,unitOfName,formIds,formDefOf,formFor,detectFormShape,autoMap,fillByPlaceholders,fillForm101,dateStyleSet,hiddenCells,putCell,setCellStr,dateFmtOf,fmtDateTok,weekEventLines,tagRows,formShapeText,checkFormFile,downloadMarkedForm,bytesToB64,appendRich,cellRuns,eventListLines,eventsPerDay,packXlsx,phTargets,phStaleCells,fillWeekXml,formMapRoles,formLockMarks,phRole,openFormView,fvSet,renderFormView,fitFormView,downloadMarkedCurrent,
+  xlsxBook,xlsxSheetModel,xlsxSheetHtml,xlsxSheetImages,xlColor,xlTint,xlDateText,xlNumText,zipPath,get fvState(){return {src:fvSrc,mode:fvMode,sun:fvSun,zoom:fvZoom,grid:fvGrid}},unitWorker,unitSlotName,toggleUnit,fillForm82,formNoRooms,renderWardChip,addWorker,offCandidates,
   canPrint,exportWeekXlsx,saveMsg,get dirty(){return dirty},set dirty(v){dirty=v},sideMode,syncWeekTools,togglePickShifts,closePick,get pkShiftOpen(){return pkShiftOpen},
   seatsFor,cntTabs,clampCnt,reliefOn,reliefDay,addRelief,removeRelief,renameRelief,openEmptyPick,isRelief,
   traineeLast,traineeUntil,isNewOn,isTrainee,editNewUntil,newChip,
