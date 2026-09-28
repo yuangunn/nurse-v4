@@ -1453,6 +1453,53 @@ async function main() {
   eq('표시자가 없는 요일 칸의 지난주 값은 비운다', [rv27.지난주.F5, rv27.지난주.E5], ['', '김차지']);
   eq('82·102 모양 병동 양식의 자리 이름 = 그 모양의 내장 서식', rv27.자리이름, [true, true]);
 
+  // ── 27e. 화면 흐름 검토 (① 네 번째 갈래, 2026-09-28) ────────────────────────────
+  // 양식 검사·보기·글자 고치기는 자동 맵핑으로 '어디를 채우는지' 보이는데 올린 102·82 모양은 fillForm102 로 내보내 셋이 어긋났다.
+  step('27e 양식 화면 흐름 회귀');
+  const rv27e = await ev(`const A=window.__app; ${setupWeek}
+    const b64Of=id=>document.querySelector(id==='101'?'#tplB64':'#tplB64_'+id).textContent.replace(/[/][*][^*]*[*][/]/g,'').trim();
+    const sun=new Date(2026,8,6);
+    return (async()=>{ const out={};
+      // ① 82 양식의 SU 자리 이름을 병동 자리로 바꾼 파일 → 102 모양(글자 날짜·중간번 자리·인계사항 상자) 병동 양식으로 올린다
+      setup('101');
+      { const t82=await A.parseXlsx(A.b64ToBytes(b64Of('82')));
+        let x=t82.sheetXml; x=A.setCellStr(x,'B6','C'); x=A.setCellStr(x,'B10','C'); x=A.setCellStr(x,'B12','B');
+        const bytes=A.packXlsx(t82,{'xl/worksheets/sheet1.xml':x});
+        const s=A.store; s.ward='81'; s.wardPicked=true; s.formId='101'; s.forms={}; A.store=s; A.recompute();
+        A.show('admin'); A.pickAdmin('form');
+        await A.checkFormFile({files:[new File([bytes],'81병동.xlsx')],value:''});
+        A.useCheckedForm();
+        const r=await A.buildWeekXlsx(sun), c=A.sheetCells({...r.tpl,sheetXml:r.xml});
+        out.병동102={id:A.store.formId, kind:(A.store.forms['81']||{}).kind, D3:c.D3||'', 인계:String(c.F13||'').slice(0,6), 중간번:[c.D7||'',c.E7||'',c.F7||''],
+          일정:/간호부 교육/.test(c.A13||'')};
+        // 양식 보기의 '채우는 칸' 표시와 내보내기가 같은 칸을 쓴다 — 바뀐 칸은 모두 색칠돼 있다
+        const t0=await A.loadTemplate(), marks=A.formMapRoles(t0,A.formDef()).marks, base=A.sheetCells(t0);
+        out.표시밖=Object.keys(c).concat(Object.keys(base)).filter((k,i,a)=>a.indexOf(k)===i).filter(k=>(c[k]||'')!==(base[k]||'')&&!marks[k]); }
+      // ② 모양이 다른 파일을 내장 서식 자리에 쓰지 않는다 (101 서식에 102 모양 파일)
+      setup('101');
+      { A.store.forms={}; A.show('admin'); A.pickAdmin('form');
+        await A.checkFormFile({files:[new File([A.b64ToBytes(b64Of('102'))],'102.xlsx')],value:''});
+        const before=JSON.stringify(A.store.forms);
+        A.useCheckedForm();
+        const toast=[...document.querySelectorAll('.toast,#toast')].map(t=>t.textContent).join(' ');
+        out.모양다름={저장:JSON.stringify(A.store.forms)!==before, 알림:/쓸 수 없습니다/.test(toast)}; }
+      // ③ 102 '물품체크' 를 '대체 …' 로 고치면 구조(대체 줄)가 달라진다 — 글자 고치기가 저장하지 않고, 대체 줄 이름표는 잠근다
+      setup('102');
+      { const base=await A.loadBaseTemplate('102'), c=A.sheetCells(base), m=A.sheetMerges(base), F=A.formDefOf('102');
+        const L0=A.layoutOf(F,c,m), x2=A.setCellStr(base.sheetXml,'A18','대체 물품체크'), c2=A.sheetCells({...base,sheetXml:x2});
+        out.대체줄=A.formVerdict(L0,A.layoutOf(F,c2,m));
+        const t9={...base,sheetXml:A.setCellStr(base.sheetXml,'A9','대체')};
+        out.대체잠금=A.formCellRoles(t9,F).locked.has('A9'); }
+      // 뒤 절에 남기지 않는다 — 올린 양식·병동을 치운다
+      A.store.forms={}; A.store.ward='101'; A.store.formId='101'; A.recompute();
+      return out; })()`);
+  eq('올린 102 모양 병동 양식 — 글자 날짜·인계사항 그대로·중간번 줄에 중간번·일정은 이름표 상자에',
+    rv27e.병동102, {id: '81', kind: '102', D3: '9월 6일', 인계: '<인계사항>', 중간번: ['중간이', '', '중간이'], 일정: true});
+  eq('올린 양식 — 내보내기가 바꾸는 칸은 모두 양식 보기에 색칠돼 있다', rv27e.표시밖, []);
+  eq('모양이 다른 파일은 내장 서식 자리에 저장하지 않고 이유를 알린다', rv27e.모양다름, {저장: false, 알림: true});
+  eq("글자 고치기로 '대체' 줄이 생기면 구조가 달라진다고 본다", rv27e.대체줄, ['대체 줄']);
+  ok("'대체' 줄 이름표는 잠근다", rv27e.대체잠금 === true, String(rv27e.대체잠금));
+
   // ── 28. 양식 보기 (엑셀 화면 + 칸 색 + 이번 주로 채워 보기) ─────────────────────
   // 양식을 앱 안에 그리고 앱이 채우는 칸에 색을 칠한다. 색칠한 칸과 실제로 채워지는 칸이 어긋나면 화면이 거짓말을 한다 —
   // 내장 네 서식에서 '채우면 바뀌는 칸 ⊆ 색칠한 칸'을 칸마다 확인한다 (M11 ②, 2026-09-28).
@@ -1534,7 +1581,7 @@ async function main() {
       // 화요일 D 둘째 줄 방(H6) → 일요일 칸 D6 을 고친다
       out.누름=await clickEl('#fvSheet u[data-ref="H6"]'); out.창=modal();
       out.고름=await choose('C 방');
-      out.초안={D6:cellsOf(A.fvDraft.xml).D6, n:A.fvDraft.refs.size, 고침:A.fvDirty(), 겹침:/D6·D7/.test(document.querySelector('#fvSide').textContent)};
+      out.초안={D6:cellsOf(A.fvDraft.xml).D6, n:A.fvChangedCount(), 고침:A.fvDirty(), 겹침:/D6·D7/.test(document.querySelector('#fvSide').textContent)};
       { const tpl=await A.loadTemplate(), c=A.sheetCells({...tpl,sheetXml:await A.fillWeekXml({...tpl,sheetXml:A.fvDraft.xml},A.formDef(),A.weekData(sun),true)});
         out.채워보기=[c.D6===c.D7, !!c.D6, c.H6===c.H7]; }
       out.저장전내보내기=(A.sheetCells((r=>({...r.tpl,sheetXml:r.xml}))(await A.buildWeekXlsx(sun))).D6||'')!==(A.sheetCells((r=>({...r.tpl,sheetXml:r.xml}))(await A.buildWeekXlsx(sun))).D7||'');
@@ -1585,6 +1632,105 @@ async function main() {
     cm.m82, {t: 'D4 칸에 무엇을 채울까요?', 방: false, SU: true, 대체: true, 새자리: 3});
   eq('이름표 칸 — 조각 서식(빨간 제목)을 두고 표시자만 바꾸거나 지운다', cm.조각, {바꿈: '{{교육}}', 지움: true, 이름표: '<교육 및 행사 일정>'});
   eq('122 모양은 칸 맵핑을 고치지 않고 이유를 보인다', cm.m122, {편집: false, 안내: true, 창: ['ok', false]});
+
+  // ── 29b. 칸 눌러 맵핑 — 교차 검토에서 재현된 것 (2026-09-28) ────────────────────────
+  // 표 아래 상자(H20:K20)를 누르면 가려진 일요일 칸(D20)을 고친다고 하고 칸 글자를 통째로 바꿨다 · 82 인계사항(F13:J13)도 같았다 ·
+  // 저장을 되돌려도 종이가 옛 양식 · 82 선택지 '대체 이름' 셋 · 82 날짜 모양이 풀림 · 교육 이름표 칸(A13)을 못 누름 ·
+  // [이 양식 쓰기]가 오류 · 한 칸 되돌려도 고친 칸 수 그대로 · 투어가 떠나기 확인을 거듭 · 채워 보기의 받기 단추가 저장본인 줄 모름 ·
+  // 82 에 더한 자리가 종이엔 찍히는데 화면은 안 찍힌다고 함 · 가운데 자리 이름 칸을 지우면 그 사람이 조용히 빠짐
+  step('29b 칸 눌러 맵핑 — 교차 검토');
+  const cr = await ev(`const A=window.__app; ${setupWeek}
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms)), sun=new Date(2026,8,6);
+    const modal=()=>({on:document.querySelector('#modal').classList.contains('on'), t:(document.querySelector('#modalBox .mt')||{}).textContent||'',
+      cur:[...document.querySelectorAll('#modalBox button.cur')].map(b=>b.textContent), ops:[...document.querySelectorAll('#modalBox button[data-g]')].map(b=>b.textContent),
+      grp:[...document.querySelectorAll('#modalBox .mo')].map(g=>[...g.querySelectorAll('button[data-g]')].map(b=>b.textContent))});
+    const choose=async label=>{ const b=[...document.querySelectorAll('#modalBox button[data-g]')].find(x=>x.textContent===label); if(!b) return 'no '+label; b.click(); await sleep(150); return 'ok'; };
+    const cancel=async()=>{ const b=document.querySelector('#mdCancel'); if(b&&document.querySelector('#modal').classList.contains('on')) b.click(); await sleep(50); };
+    // 칸의 왼쪽 위 가까이를 누른다 — 병합 칸은 누른 자리가 병합 안 어디든 같은 칸이다
+    const clickRef=async ref=>{ const xs=document.querySelector('#fvSheet .xs'), M=A.fvCache.M, m=ref.match(/^([A-Z]+)([0-9]+)$/), c=A.colNum(m[1]), r=+m[2];
+      const rc=xs.getBoundingClientRect(), k=rc.width/A.fvCache.w;
+      xs.dispatchEvent(new MouseEvent('click',{clientX:rc.left+(M.X[c]+3)*k,clientY:rc.top+(M.Y[r]+3)*k,bubbles:true})); await sleep(200); };
+    const toastTxt=()=>(document.querySelector('#toast')||{}).textContent||'';
+    const cellsOf=x=>A.sheetCells({sheetXml:x,sst:[]});
+    const warns=()=>[...document.querySelectorAll('#wkWarn *')].filter(x=>x.children.length===0).map(x=>x.textContent).filter(t=>/인쇄에 나오지/.test(t));
+    return (async()=>{ const out={};
+      setup('101'); A.wkSunday=new Date(sun); A.show('admin'); A.pickAdmin('form');
+      await A.openFormView('current'); await A.renderFormView();
+      const base=await A.loadTemplate(), baseFill=A.sheetCells({...base,sheetXml:await A.fillWeekXml(base,A.formDef(),A.weekData(sun),false)});
+      // 표 아래 상자 H20:K20 — 그 칸 하나(화요일), 글자는 두고 뒤에 붙인다. 그 주 목록을 고를 수 있다
+      await clickRef('I20'); out.h20=modal(); const ok20=await choose('교육·행사 (그 주 목록)');
+      { const d=cellsOf(A.fvDraft.xml), f=A.sheetCells({...base,sheetXml:await A.fillWeekXml({...base,sheetXml:A.fvDraft.xml},A.formDef(),A.weekData(sun),true)});
+        out.h20결과={ok:ok20, 표시자:/[{][{]교육:목록[}][}]$/.test(d.H20||''), 글자남음:(d.H20||'').startsWith(String(A.sheetCells(base).H20||'').trim()),
+          D20:d.D20===undefined||d.D20===A.sheetCells(base).D20, 채움:/CPR/.test(f.H20||''), 이웃:['C20','L20','C21','H21'].every(k=>f[k]===baseFill[k])}; }
+      A.fvUndoCell(); await sleep(100);
+      // 표 아래 일요일 열(E26:I26) — 이레로 복제되고 줄 글자를 지우므로 막는다
+      await clickRef('F26'); out.e26=[modal().on, /E26 칸은 표 아래/.test(toastTxt())]; await cancel();
+      // 요일 칸 안에서는 그 주 목록을 고르지 않는다 (이레 모두에 찍힌다)
+      await clickRef('H6'); out.요일칸목록=modal().ops.includes('교육·행사 (그 주 목록)'); await cancel();
+      // 두 칸 고치고 한 칸 되돌리면 고친 칸 1곳
+      await clickRef('H6'); await choose('C 방'); await clickRef('E7'); await choose('B 이름');
+      out.칸수=[A.fvChangedCount()]; A.fvUndoCell(); await sleep(150);
+      out.칸수.push(A.fvChangedCount(), /고친 칸 1곳/.test(document.querySelector('#fvSide').textContent));
+      // 채워 보기 — 저장 안 한 맵핑이면 받기 단추가 저장본으로 받는다고 말한다
+      A.fvSet('mode','fill'); await sleep(300);
+      out.받기=[[...document.querySelectorAll('#fvSide button')].some(b=>b.textContent==='저장한 맵핑으로 엑셀 받기'), /저장한 맵핑/.test(document.querySelector('#fvSide').textContent)];
+      A.fvSet('mode','map'); await sleep(300);
+      // 투어 — 저장 안 한 맵핑이 있으면 한 번만 묻고, 취소하면 시작하지 않는다
+      let asked=0; window.confirm=()=>{ asked++; return false; };
+      out.투어=[A.startTopicTour('form'), asked, document.querySelector('#tourShield').classList.contains('on'), document.querySelector('#scrForm').style.display!=='none', A.fvDirty()];
+      window.confirm=()=>true;
+      // 저장 → 되돌리기: 종이도 되돌린 양식으로 다시 그린다
+      await A.fvSave(); await sleep(300);
+      const saved=document.querySelector('#fvSheet u[data-ref="D6"]').textContent;
+      A.undoAny(); await sleep(400);
+      out.되돌리기=[saved, document.querySelector('#fvSheet u[data-ref="D6"]').textContent, !!A.formOv('101')];
+      // 가운데 자리(B) 이름 칸을 지우면 옆 상자와 배정표 화면이 알린다
+      await clickRef('E6'); await choose('앱이 채우지 않음');
+      out.빈자리=[...document.querySelectorAll('#fvSide .fvList.miss li')].map(x=>x.textContent);
+      await A.fvSave(); await sleep(300); A.show('week'); await sleep(600);
+      out.빈자리화면=warns().filter(t=>/이름 칸이 없어/.test(t)).length;
+      A.undoAny(); await sleep(200);
+      // 82 — 자리 선택지는 겹치지 않고 새 자리는 하나, 날짜는 양식 모양 그대로, 인계사항·교육 이름표 칸
+      setup('82'); A.wkSunday=new Date(sun); A.show('admin'); A.pickAdmin('form'); await A.openFormView('current'); await A.renderFormView();
+      await clickRef('D5'); { const m=modal(); out.m82=m.grp.slice(1,4).map(g=>({같은이름:g.length!==new Set(g).size, 새자리:g.filter(o=>/새 자리/.test(o))})); } await cancel();
+      await clickRef('G3'); out.날짜=modal().cur; await choose(out.날짜[0]||'x'); out.날짜.push(A.fvDirty());
+      await clickRef('H13'); out.인계=[modal().t, modal().ops.includes('교육·행사 (그 주 목록)')]; await cancel();
+      await clickRef('B13'); out.교육칸=[modal().t, modal().cur]; await cancel();
+      // 82 에 자리를 하나 더한다(D7 = B) — 저장하면 배정표 화면도 그 자리를 종이에 찍히는 자리로 센다
+      A.show('week'); await sleep(400); const before=warns().join(' ');
+      A.show('admin'); A.pickAdmin('form'); await A.openFormView('current'); await A.renderFormView();
+      await clickRef('D7'); const nw=modal().ops.find(o=>/새 자리/.test(o)); await choose(nw);
+      await A.fvSave(); await sleep(300); await A.loadTemplate(); A.recompute(); A.show('week'); await sleep(600);
+      out.m82자리={자리:A.slotsOf('D').join(','), 전:/박비/.test(before), 후:/박비/.test(warns().join(' '))};
+      // 검사한 파일 보기 — [이 양식 쓰기]를 누르면 오류 없이 지금 서식 보기로 넘어가 칸을 고칠 수 있다
+      A.store.forms={}; setup('101');
+      const s=A.store; s.ward='55'; s.wardPicked=true; s.rooms=A.wardRooms('55').map(r=>[r,4]); A.store=s; A.migrateStore();
+      A.show('admin'); A.pickAdmin('form');
+      const b82=document.querySelector('#tplB64_82').textContent.replace(/[/][*][^*]*[*][/]/g,'').trim();
+      await A.checkFormFile({files:[new File([A.b64ToBytes(b82)],'55병동.xlsx')],value:''});
+      await A.openFormView('checked'); await A.renderFormView();
+      const e0=(window.__pageErrors||[]).length;
+      [...document.querySelectorAll('#fvSide button')].find(b=>b.textContent==='이 양식 쓰기').click(); await sleep(600);
+      out.쓰기={오류:(window.__pageErrors||[]).length-e0, src:A.fvState.src, 편집:!!document.querySelector('#fvSheet .xs.edit'), 저장:!!(A.store.forms||{})['55']};
+      A.store.forms={}; A.setWard('101'); A.setFormId('101'); setup('101'); A.show('week');
+      return out; })()`);
+  eq('표 아래 상자는 그 칸 하나만 — 가린 칸(D20)을 고치지 않고 칸 글자와 이웃 칸을 지킨다',
+    [cr.h20.t, cr.h20결과], ['H20 칸에 무엇을 채울까요?', {ok: 'ok', 표시자: true, 글자남음: true, D20: true, 채움: true, 이웃: true}]);
+  eq('표 아래 일요일 열 칸은 막는다 (이유를 알린다)', cr.e26, [false, true]);
+  eq('요일 칸에는 그 주 목록을 고르지 않는다', cr.요일칸목록, false);
+  eq('한 칸 되돌리면 고친 칸 수도 줄어든다', cr.칸수, [2, 1, true]);
+  eq('채워 보기 — 저장 안 한 맵핑이면 받기 단추가 저장본으로 받는다고 말한다', cr.받기, [true, true]);
+  eq('투어 — 저장 안 한 맵핑이 있으면 한 번만 묻고 취소하면 시작하지 않는다', cr.투어, [false, 1, false, true, true]);
+  eq('맵핑 저장을 되돌리면 종이도 되돌린다', cr.되돌리기, ['D C 방', 'D B 방', false]);
+  ok('가운데 자리 이름 칸을 지우면 옆 상자와 배정표 화면이 알린다',
+    cr.빈자리.some(t => /D B 자리 이름 칸이 없습니다/.test(t)) && cr.빈자리화면 > 0, JSON.stringify([cr.빈자리, cr.빈자리화면]));
+  eq('82 — 자리 선택지 이름이 겹치지 않고 새 자리는 근무마다 하나', cr.m82,
+    [{같은이름: false, 새자리: ['대체 이름 (새 자리)']}, {같은이름: false, 새자리: ['대체 이름 (새 자리)']}, {같은이름: false, 새자리: ['대체 이름 (새 자리)']}]);
+  eq('82 날짜 — 양식 모양이 지금 것으로 표시되고 골라도 바뀌지 않는다', cr.날짜, ['날짜 (M월 D일)', false]);
+  eq('82 인계사항 상자 — 가린 칸이 아니라 그 칸(F13), 그 주 목록을 고를 수 있다', cr.인계, ['F13 칸에 무엇을 채울까요?', true]);
+  eq('82 교육 이름표 칸(A13)은 표시자만 바꾼다', cr.교육칸, ['A13 칸에 무엇을 채울까요?', ['교육·행사 (그 주 목록)']]);
+  eq('82 에 더한 자리 — 배정표 화면도 종이에 찍히는 자리로 센다', cr.m82자리, {자리: '차지,A,B,SU,중간번', 전: true, 후: false});
+  eq('검사한 파일의 [이 양식 쓰기] — 오류 없이 지금 서식 보기로, 칸을 고칠 수 있다', cr.쓰기, {오류: 0, src: 'current', 편집: true, 저장: true});
 
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
