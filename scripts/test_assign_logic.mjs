@@ -1713,7 +1713,7 @@ async function main() {
       [...document.querySelectorAll('#fvSide button')].find(b=>b.textContent==='이 양식 쓰기').click(); await sleep(600);
       out.쓰기={오류:(window.__pageErrors||[]).length-e0, src:A.fvState.src, 편집:!!document.querySelector('#fvSheet .xs.edit'), 저장:!!(A.store.forms||{})['55']};
       A.store.forms={}; A.setWard('101'); A.setFormId('101'); setup('101'); A.show('week');
-      return out; })()`);
+      return out; })()`, 60000);
   eq('표 아래 상자는 그 칸 하나만 — 가린 칸(D20)을 고치지 않고 칸 글자와 이웃 칸을 지킨다',
     [cr.h20.t, cr.h20결과], ['H20 칸에 무엇을 채울까요?', {ok: 'ok', 표시자: true, 글자남음: true, D20: true, 채움: true, 이웃: true}]);
   eq('표 아래 일요일 열 칸은 막는다 (이유를 알린다)', cr.e26, [false, true]);
@@ -1731,6 +1731,56 @@ async function main() {
   eq('82 교육 이름표 칸(A13)은 표시자만 바꾼다', cr.교육칸, ['A13 칸에 무엇을 채울까요?', ['교육·행사 (그 주 목록)']]);
   eq('82 에 더한 자리 — 배정표 화면도 종이에 찍히는 자리로 센다', cr.m82자리, {자리: '차지,A,B,SU,중간번', 전: true, 후: false});
   eq('검사한 파일의 [이 양식 쓰기] — 오류 없이 지금 서식 보기로, 칸을 고칠 수 있다', cr.쓰기, {오류: 0, src: 'current', 편집: true, 저장: true});
+  // 저장 둘레 — 되돌리기 알림·옛 검사 결과·이름 꼬리. 따로 돌린다(하나가 멈춰도 나머지를 본다)
+  step('29c 맵핑 저장 둘레 — 저장 알림 되돌리기');
+  const cs1 = await ev(`const A=window.__app; ${setupWeek}
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+    const choose=async label=>{ const b=[...document.querySelectorAll('#modalBox button[data-g]')].find(x=>x.textContent===label); if(!b) return 'no '+label; b.click(); await sleep(150); return 'ok'; };
+    const clickRef=async ref=>{ const xs=document.querySelector('#fvSheet .xs'), M=A.fvCache.M, m=ref.match(/^([A-Z]+)([0-9]+)$/), c=A.colNum(m[1]), r=+m[2];
+      const rc=xs.getBoundingClientRect(), k=rc.width/A.fvCache.w;
+      xs.dispatchEvent(new MouseEvent('click',{clientX:rc.left+(M.X[c]+3)*k,clientY:rc.top+(M.Y[r]+3)*k,bubbles:true})); await sleep(200); };
+    const reset=()=>{ window.confirm=()=>true; A.fvDiscard(); A.store.forms={}; A.setWard('101'); A.setFormId('101'); setup('101'); A.show('week'); };
+    return (async()=>{ reset(); A.show('admin'); A.pickAdmin('form');
+      await A.openFormView('current'); await A.renderFormView();
+      await clickRef('D6'); await choose('C 방'); await A.fvSave(); await sleep(300);
+      await clickRef('D7'); await choose('D 방');
+      let asked=0; window.confirm=()=>{ asked++; return false; };
+      document.querySelector('#toast').click(); await sleep(200);
+      const r=[asked, !!A.formOv('101'), A.fvDirty()]; reset(); return r; })()`, 30000);
+  eq('저장 알림을 눌러 되돌릴 때 새로 고친 칸이 있으면 묻고, 취소하면 그대로', cs1, [1, true, true]);
+  step('29c 맵핑 저장 둘레 — 옛 양식 파일 검사 결과');
+  // 검사한 파일(바이트)을 통째로 돌려받으면 하네스가 멈춘다 — 있는지만 본다
+  const cs2 = await ev(`const A=window.__app; ${setupWeek}
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+    const choose=async label=>{ const b=[...document.querySelectorAll('#modalBox button[data-g]')].find(x=>x.textContent===label); if(!b) return 'no '+label; b.click(); await sleep(150); return 'ok'; };
+    const clickRef=async ref=>{ const xs=document.querySelector('#fvSheet .xs'), M=A.fvCache.M, m=ref.match(/^([A-Z]+)([0-9]+)$/), c=A.colNum(m[1]), r=+m[2];
+      const rc=xs.getBoundingClientRect(), k=rc.width/A.fvCache.w;
+      xs.dispatchEvent(new MouseEvent('click',{clientX:rc.left+(M.X[c]+3)*k,clientY:rc.top+(M.Y[r]+3)*k,bubbles:true})); await sleep(200); };
+    const reset=()=>{ window.confirm=()=>true; A.fvDiscard(); A.store.forms={}; A.setWard('101'); A.setFormId('101'); setup('101'); A.show('week'); };
+    return (async()=>{ reset(); A.show('admin'); A.pickAdmin('form');
+      const b101=document.querySelector('#tplB64').textContent.replace(/[/][*][^*]*[*][/]/g,'').trim();
+      await A.checkFormFile({files:[new File([A.b64ToBytes(b101)],'사본.xlsx')],value:''});
+      const had=!!window.__formReportHtml;
+      await A.openFormView('current'); await A.renderFormView(); await clickRef('D6'); await choose('C 방'); await A.fvSave(); await sleep(300);
+      A.show('admin'); await sleep(200);
+      const r=[had, !!window.__formReportHtml, !!window.__checkedForm, (document.querySelector('#formReport')||{}).textContent||'']; reset(); return r; })()`, 30000);
+  eq('양식을 저장하면 전의 양식 파일 검사 결과를 지운다', cs2, [true, false, false, '']);
+  step('29c 맵핑 저장 둘레 — 양식 이름 꼬리');
+  const cs3 = await ev(`const A=window.__app; ${setupWeek}
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+    const choose=async label=>{ const b=[...document.querySelectorAll('#modalBox button[data-g]')].find(x=>x.textContent===label); if(!b) return 'no '+label; b.click(); await sleep(150); return 'ok'; };
+    const clickRef=async ref=>{ const xs=document.querySelector('#fvSheet .xs'), M=A.fvCache.M, m=ref.match(/^([A-Z]+)([0-9]+)$/), c=A.colNum(m[1]), r=+m[2];
+      const rc=xs.getBoundingClientRect(), k=rc.width/A.fvCache.w;
+      xs.dispatchEvent(new MouseEvent('click',{clientX:rc.left+(M.X[c]+3)*k,clientY:rc.top+(M.Y[r]+3)*k,bubbles:true})); await sleep(200); };
+    const reset=()=>{ window.confirm=()=>true; A.fvDiscard(); A.store.forms={}; A.setWard('101'); A.setFormId('101'); setup('101'); A.show('week'); };
+    return (async()=>{ reset(); A.show('admin'); A.pickAdmin('form');
+      await A.openFormView('current'); await A.renderFormView(); await clickRef('D6'); await choose('C 방'); await A.fvSave(); await sleep(300);
+      A.show('admin'); await A.openFormText();
+      [...document.querySelectorAll('#formText textarea')].find(t=>t.dataset.ref==='A1').value='업무분담 (고침)'; await A.saveFormText();
+      const n1=A.formOv('101').name;
+      await A.openFormView('current'); await A.renderFormView(); await clickRef('D7'); await choose('D 방'); await A.fvSave(); await sleep(300);
+      const r=[n1, A.formOv('101').name]; reset(); return r; })()`, 30000);
+  eq('양식 이름 꼬리는 하나만 — 문구 고치기와 맵핑 저장을 번갈아 해도', cs3, ['병실 배정표 (고침)', '병실 배정표 (맵핑)']);
 
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');

@@ -1718,7 +1718,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260928r'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v260928t'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -4615,6 +4615,8 @@ renderLegend();
  * 배정표 화면에서 한 수정(근무 바꾸기·어싸인 교체·붙여넣기 확정)도 여기로 살아난다 */
 function undoAny(){
   if(!undoStack.length){ toast('되돌릴 것이 없습니다'); return; }
+  // 양식 보기에서 저장 알림을 눌러 되돌리면 저장 뒤 새로 고친 칸(초안)이 사라진다 — 떠날 때처럼 먼저 묻는다
+  if(curScr==='form'&&fvDirty()&&!confirm(`저장하지 않고 고친 칸(${fvChangedCount()}곳)이 양식 보기에 있습니다.\n되돌리면 이 칸들은 사라집니다. 되돌릴까요?`)) return;
   restoreSnapshot(JSON.parse(undoStack.pop())); sel={r:0,c:0,r2:0,c2:0};
   touch(); recompute();
   if(curScr==='edit') renderEditGrid();
@@ -5998,14 +6000,18 @@ async function fvSave(){
     const bytes=packXlsx(tpl,parts);
     const n=fvChangedCount();
     snapshot();
-    const base=(ov&&ov.name?ov.name:(F.file||F.name)).replace(/ \((고침|맵핑)\)$/,'');
+    const base=formBaseName(ov,F);
     const keep={}; for(const k of FORM_SHAPE_KEYS) if(ov&&ov[k]!=null) keep[k]=ov[k];
     (store.forms=store.forms||{})[id]={...keep,name:base+' (맵핑)',b64:bytesToB64(bytes),savedAt:Date.now(),ph:true};
-    TPL=null; fvDraft=null; touch();
+    TPL=null; fvDraft=null; formCheckReset(); touch();
     await renderFormView();
     toast(`칸 ${n}곳의 맵핑을 ${F.name}의 우리 병동 양식으로 저장했습니다 — 엑셀 내보내기에 바로 적용됩니다`,4200,true);
   }catch(e){ toast('저장 실패: '+e.message,4000); }
 }
+/* 저장한 양식 이름 — 올린 파일 이름에 '(고침)'·'(맵핑)' 꼬리를 하나만. 두 저장을 번갈아 하면 꼬리가 쌓이던 것 */
+const formBaseName=(ov,F)=>String(ov&&ov.name?ov.name:(F.file||F.name)).replace(/( \((?:고침|맵핑)\))+$/,'');
+/* 양식을 저장하면 전에 한 양식 파일 검사 결과는 옛 양식 기준이다 — [이 양식으로 바꾸기]가 방금 저장한 것을 말없이 덮지 않게 지운다 */
+function formCheckReset(){ window.__formReportHtml=null; window.__checkedForm=null; const fr=$('#formReport'); if(fr) fr.innerHTML=''; }
 /* 초안에서 눈여겨볼 것 — ① 같은 자리를 두 칸에 적었다(둘 다 채워지지만 대개 실수) ② 가운데 자리의 이름 칸이 없다(뒤 자리는 있는데
  * B 이름 칸을 지웠다 — 그 날 B 자리 간호사는 종이에 안 나온다. 배정표 화면도 '인쇄에 나오지 않습니다'로 알린다) */
 function fvDupHtml(src){
@@ -6091,11 +6097,11 @@ async function saveFormText(){
     const bad=formVerdict(layoutOf(F,ctx.cells,sheetMerges(ctx.tpl)),layoutOf(F,nc,sheetMerges(nt)));
     if(bad.length){ toast(`고친 글자 때문에 양식 구조(${bad.join(', ')})가 달라집니다 — 저장하지 않았습니다. 그 칸은 그대로 두세요`,6500); return; }
     snapshot();
-    const base=(ov&&ov.name?ov.name:(F.file||F.name)).replace(/ \(고침\)$/,'');
+    const base=formBaseName(ov,F);
     // 병동이 올린 양식은 올릴 때 읽어 둔 모양(자리 수·SU 칸·날짜 글자)을 그대로 둔다 — 빠뜨리면 101 모양으로 돌아간다 (2026-09-28)
     const keep={}; for(const k of FORM_SHAPE_KEYS) if(ov&&ov[k]!=null) keep[k]=ov[k];
     (store.forms=store.forms||{})[id]={...keep,name:base+' (고침)',b64:bytesToB64(bytes),savedAt:Date.now(),ph:hasPlaceholders(nc)};
-    TPL=null; touch(); renderAdmin();
+    TPL=null; formCheckReset(); touch(); renderAdmin();
     toast(`문구 ${changed.length}곳을 고쳐 ${F.name}의 우리 병동 양식으로 저장했습니다 — 인쇄·엑셀에 바로 적용됩니다`,4200);
   }catch(e){ toast('저장 실패: '+e.message,4000); }
 }
