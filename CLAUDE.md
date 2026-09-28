@@ -162,6 +162,7 @@ node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs \
   && node scripts/test_assign_logic.mjs   # standalone 로직 (헤드리스 크롬, $CHROME 로 경로 지정 가능)
+node scripts/test_assign_compat.mjs      # 옛 배포본이 저장한 데이터 파일을 지금 assign.html 로 열어 본다 (CI)
 # 화면(index.html)을 재배치했다면 — 핸들러 손실 0 확인 (REMOVED 는 전부 의도한 것이어야 한다)
 python3 scripts/handler_inventory.py <(git show origin/main:frontend/index.html) frontend/index.html
 # 리디자인 계약 검사 (design/handoff) — 1920×1080 으로 실제 앱을 열어 200+ 항목 getComputedStyle 검사, 불일치 0 이어야 한다
@@ -781,6 +782,12 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   브라우저는 자기 HTML 을 못 고쳐 쓰므로 담을 때마다 3MB 사본 + 손 덮어쓰기, 업데이트로 HTML 을 갈아 끼우면 사라짐, 병동이
   여럿이면 병동 수만큼 HTML 이 갈라짐. 인트라넷이라 리포에 설정 JSON 을 두는 것도 무의미(사용자). **exe 는 인트라넷에서 못 쓰므로
   범위 밖 — HTML 만 개발한다.** 초기 설정은 시작 안내 체크리스트(병동 고르기 → 병실 자동 생성)로 데이터 파일 안에서 끝낸다. 결정 2-22.
+  **데이터 파일 호환** (사용자 요청 2026-09-28): 병동은 assign.html 만 바꾸고 데이터 파일은 그대로 쓴다. `scripts/test_assign_compat.mjs`(CI)가
+  `tests/fixtures/assign-data/<버전>.js`(배포본이 저장한 가명 데이터)를 지금 HTML 옆에 두고 열어 근무표·명부·설정이 그대로인지, 교육·행사가 같은 날 나오는지,
+  관리 화면·엑셀·인쇄·하루 어싸인표가 돌아가는지, 다시 저장해 열어도 같은지, 저장 연결 기억 장소(IndexedDB `assignApp`·`handle`)가 그대로인지 본다.
+  어싸인 결과가 배포본과 다르면 실패가 아니라 '안내'로 칸 수를 알린다(원칙을 바꾼 것일 수 있다). **병동에 배포할 때마다**
+  `node scripts/test_assign_compat.mjs --make <배포 커밋>` 로 그 배포본의 고정 파일을 하나 더 만들어 커밋한다. 옛 칸 이름을 바꾸거나 빼면
+  `migrateStore` 에서 옮기고 이 검사의 `KEEP` 목록을 함께 고친다.
   동기화 `node scripts/build-assign-standalone.mjs` (코어 + 양식 + 폰트 + 버전 주입)
   — CI(`test.yml`)가 재빌드해 버전 줄 외 diff가 있으면 실패시키므로 `assign.html` 수정 후 반드시 실행.
 - ~~인트라넷용 ②·③ (Windows exe `standalone/app/` · Excel VBA `assign_vba.bas`)~~ — **삭제 (2026-09-20)**.
