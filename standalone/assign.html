@@ -1661,7 +1661,9 @@
           }
           if (assigned['차지']) chargeId = assigned['차지'].id;
         }
-        if (!extra) extra = place(assigned, taken, chargeId);
+        // 차지가 자리에 안 묶이는데 허락된 자리가 다 손으로 찼으면 차지도 보통 간호사처럼 다듬기에서 옮겨 앉힌다 —
+        // 차지를 다듬기에서 빼면 앞 단계가 앉힌 자리에 굳어 남이 주지 않을 방을 떠안았다 (2026-10-01 교차 검토)
+        if (!extra) extra = place(assigned, taken, floatSeats && floatSeats.length ? null : chargeId);
 
         const labelMap = {};
         for (const l in assigned) {
@@ -1923,7 +1925,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261001x'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261001af'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -2002,7 +2004,9 @@ function crnSeats(P){ const n=seatOv&&seatOv[P];   // 양식 보기 초안에서
  * 종이에 차지 자리가 따로 있으면(옛 102 의 D(CRN), A(CN) 줄) 거기가 차지 자리라 묶인다(tplCrnSeat).
  * 82 도 102 처럼 푼다 (2026-10-01 검증, 결정 2-45) — 차지를 첫 자리(A)에 묶었더니 선임이 쉬는 날마다 A·B 가 맞바뀌어 뒤가 안 이어졌고,
  * 종이에 CN 표기가 없어 누가 차지인지 화면 어디에도 안 나왔다. 화면엔 /CRN 을 보이고, 종이에 찍는 것은 서식이 정한다(crnMark — 102 만) */
-function crnFloat(P){ const F=formDef(); return !!(F&&(F.crnMark||F.noRooms)&&!(tplCrnSeat()||{})[P]); }
+/* 종이의 병동 자리가 하나뿐인 근무(82 N)는 옮겨 앉을 자리가 없으니 묶는다 — 풀어 두면 손으로 그 자리에 앉힌 사람이 차지가 아니고
+ * 차지는 종이 밖 자리로 밀려 화면 어디에도 /CRN 이 안 보였다 (2026-10-01 교차 검토) */
+function crnFloat(P){ const F=formDef(); return !!(F&&(F.crnMark||F.noRooms)&&!(tplCrnSeat()||{})[P]&&crnSeats(P).length>1); }
 /* 화면에서 바로 인쇄하는 서식은 101·122 모양뿐이다. 102·82 는 앱이 채운 엑셀을 엑셀에서 인쇄한다.
  * 예전엔 82 가 101 인쇄 틀로 빠져 방 칸이 있고 SU 줄이 없는 종이가 나왔다 (2026-09-27) */
 function canPrint(){ const k=formDef().kind, ov=formOv();
@@ -3794,9 +3798,9 @@ function openPick(name,iso,x,y){
   if(!info) return;
   pickCtx={name,iso,period:info.period,current:info.label||'',x,y};
   const day=result.byDay[iso]&&result.byDay[iso][info.period];
-  // 배정표 표기 순서(A(CN)·B·C·D·E)로 정렬 + 지금 그 자리인 사람 이름을 함께 —
-  // 누구와 맞바꾸는지 보이지 않으면 고를 수가 없다
-  const labels=day?LBL_ORDER.filter(l=>day.labels[l]):[];
+  // 배정표 줄 순서(종이의 위에서부터, weekSlots)로 정렬 + 지금 그 자리인 사람 이름을 함께 —
+  // 누구와 맞바꾸는지 보이지 않으면 고를 수가 없다. 앱 안쪽 순서로 두면 옛 102 양식(D(CRN) 이 맨 아래)에서 화면과 순서가 달랐다 (2026-10-01 교차 검토)
+  const labels=day?(o=>o.concat(LBL_ORDER.filter(l=>day.labels[l]&&!o.includes(l))))(weekSlots(info.period).filter(l=>LBL_ORDER.includes(l)&&day.labels[l])):[];
   const cnt=day?Object.keys(day.labels).length+day.extra.length:0;
   const dd=+iso.slice(8,10), P=info.period;
   const rel=isRelief(name,iso);                 // 대체간호사 — 근무표에 없으니 근무 바꾸기·신규 붙이기 대신 빼기·이름 고치기
@@ -6143,7 +6147,9 @@ function phRole(txt,seat,F){
   const main=toks.find(t=>t.k!=='차지')||toks[0];
   let P=seat&&seat.P, l=seat&&seat.label;
   if(/^[DEN]\./.test(main.a)){ P=main.a[0]; l=main.a.slice(2); }
-  const lb=(P==='N'&&F.labelsN||F.labels||{})[l]||l;
+  // 자리 이름은 그 양식 종이에 적힌 이름(F.__pl = tagLabels) — 서식 정의 이름만 쓰면 올린 양식 보기에서 칸 이름이
+  // 배정표 화면·엑셀과 달랐다(CN 표기 없는 101 양식의 첫 자리가 'A(CN)') (2026-10-01 교차 검토)
+  const lb=(F.__pl&&F.__pl[P]&&F.__pl[P][l])||(P==='N'&&F.labelsN||F.labels||{})[l]||l;
   const crn=toks.find(t=>t.k==='차지');
   switch(main.k){
     case '이름':
@@ -6163,6 +6169,8 @@ function phRole(txt,seat,F){
     default: return {cls:'name',tag:'차지 표시',title:`차지면 '${main.a||'/CN'}'`};
   }
 }
+/* phRole 에 넘길 서식 — 종이의 자리 이름(tagLabels)을 얹는다. 못 읽으면 서식 정의 그대로 */
+function withPaperLabels(F,cells,L){ let pl=null; try{ pl=tagLabels(cells,L); }catch(e){} return pl?{...F,__pl:pl}:F; }
 /* 양식 칸마다 앱이 채우는 것 — {marks:{ref:{cls,tag,title}}, found, missing, how, ok} */
 function formMapRoles(tpl,F){
   const cells=sheetCells(tpl), merges=sheetMerges(tpl), hid=hiddenCells(merges);
@@ -6201,10 +6209,10 @@ function formMapRoles(tpl,F){
       tagged=sheetCells({...tpl,sheetXml:am.xml}); }
   }
   if(!L) L=layoutOf(F,tagged,merges);
-  const T=phTargets(tagged,L,hid), slots=rowSlots(L);
+  const T=phTargets(tagged,L,hid), slots=rowSlots(L), Fp=withPaperLabels(F,tagged,L);
   if(!T) return {marks,found,missing:missing.concat('날짜 칸'),how,ok:false};
   for(const t of T){ if(t.hidden) continue;
-    put(t.tgt,phRole(t.txt,cellSeat(t.txt)||slots[t.row]||null,F),t.one?null:t.day); }
+    put(t.tgt,phRole(t.txt,cellSeat(t.txt)||slots[t.row]||null,Fp),t.one?null:t.day); }
   // 표시자 줄에 남은 글자(지난주 방·메모) — 채울 때 비운다 (fillByPlaceholders 와 같은 칸)
   for(const ref of phStaleCells(tagged,L,hid)) if(!marks[ref]) marks[ref]={cls:'clr',tag:'비움',title:'채울 때 비우는 칸 — 지난주 값이 이번 주 이름 옆에 남지 않게'};
   return {marks,found,missing,how,ok:true};
@@ -6485,7 +6493,7 @@ async function fvPickCell(ref){
   // 요일·구역·자리 이름 칸은 구조를 읽는 칸 — 여기에 적으면 채우는 자리가 달라진다.
   // 이름표 칸에 표시자가 함께 든 칸(82 의 '<교육 및 행사 일정>' + 그 주 목록)은 표시자만 바꾼다 — 이름표 글자는 그대로 남는다
   if(locked.has(sc.ref)&&!(cur&&!sc.inDays)){ toast(`${sc.ref} 칸은 요일·구역·자리 이름을 읽는 칸이라 고치지 않습니다 — 바꾸면 채우는 자리가 달라집니다`,4500); return; }
-  const role=cur?phRole(cur,cellSeat(cur)||rowSlots(L)[+sc.ref.match(/\d+$/)[0]]||null,src.F):null;
+  const role=cur?phRole(cur,cellSeat(cur)||rowSlots(L)[+sc.ref.match(/\d+$/)[0]]||null,withPaperLabels(src.F,cells,L)):null;
   // 요일 칸은 채울 때 글자가 바뀌므로 글자를 고치지 않는다 — 요일 칸 밖(이름표·표 밖 상자)만. 잠긴 이름표 칸은 표시자만
   const plain=String(curTxt).replace(PH_RE,'').replace(/\r\n?/g,'\n').replace(/\s+$/,'').replace(/^\s+/,''); PH_RE.lastIndex=0;
   const canText=!sc.inDays&&!locked.has(sc.ref);
@@ -6656,8 +6664,9 @@ function formCheckReset(){ window.__formReportHtml=null; window.__checkedForm=nu
 function fvDupHtml(src){
   const cells=sheetCells(src.tpl), at={}, items=[];
   for(const ref in cells) for(const m of String(cells[ref]).matchAll(/\{\{\s*(?:이름|방)\s*:\s*[DEN]\.[^}\s]+\s*\}\}/g)){ const k=m[0].replace(/\s+/g,''); (at[k]=at[k]||[]).push(ref); }
-  for(const [k,v] of Object.entries(at)) if(v.length>1){ const r=phRole(k,null,src.F); items.push(`${esc(r?r.tag:k)} — ${v.join('·')} 두 곳 이상`); }
   let L=null; try{ L=layoutOf(src.F,cells,sheetMerges(src.tpl)); }catch(e){}
+  const Fp=withPaperLabels(src.F,cells,L);
+  for(const [k,v] of Object.entries(at)) if(v.length>1){ const r=phRole(k,null,Fp); items.push(`${esc(r?r.tag:k)} — ${v.join('·')} 두 곳 이상`); }
   const pp=tagPaper(cells,L);
   if(pp) for(const P of ['D','E','N']){ const last=Math.max(-1,...[...pp[P].names].map(l=>LBL_ORDER.indexOf(l)));
     for(let i=0;i<last;i++){ const l=LBL_ORDER[i]; if(pp[P].names.has(l)) continue;
@@ -7963,9 +7972,14 @@ function fillByPlaceholders(tpl,cells,L,days,opt){
     // 조각 서식이 있는 칸(이름표 + {{교육:목록}}) — 조각마다 바꿔 글자 서식을 지킨다
     const cur=t.tgt===t.src?xml.match(cellRe(t.tgt)):null;
     if(cur&&/<is>[\s\S]*<r>/.test(cur[3]||'')){
+      // 신규 줄은 조각마다가 아니라 칸 전체의 맨 끝으로 — 조각마다 옮기면 {{이름}} 조각 뒤 {{차지: /CRN}} 조각이 신규 줄 뒤에 붙었다.
+      // 차지 표시가 없는 옛 맵핑 칸의 /CRN(crnFollow)도 같은 자리에 (2026-10-01 교차 검토)
+      const segs=[], strip=v=>String(v).replace(/\u0001([^\u0002]*)\u0002/g,(_,x)=>{ segs.push(x); return ''; });
       const runs=(cur[3].match(/<r>[\s\S]*?<\/r>/g)||[]).map(r=>r.replace(/(<t\b[^>]*>)([\s\S]*?)(<\/t>)/g,
-        (_,a,x,b)=>a+XESC(trLast(XUN(x).replace(PH_RE,(__,kind,arg)=>phValue(kind,arg,seat,day,ctx))))+b));
-      const {keep}=trimRunsEnd(runs);
+        (_,a,x,b)=>a+XESC(strip(XUN(x).replace(PH_RE,(__,kind,arg)=>phValue(kind,arg,seat,day,ctx))))+b));
+      const {keep}=trimRunsEnd(runs), tail=crnFollow(t.txt,seat,day)+segs.join('');
+      if(tail&&keep.length){ const last=keep[keep.length-1];
+        keep[keep.length-1]='<r>'+runProps(last)+'<t xml:space="preserve">'+XESC(runText(last)+tail)+'</t></r>'; }
       xml=keep.some(r=>runText(r).trim())?putCell(xml,t.tgt,'<is>'+keep.join('')+'</is>','inlineStr'):clearCell(xml,t.tgt);
       continue;
     }
@@ -9028,7 +9042,9 @@ async function buildDayDoc(iso){
     for(let i=lines.length;i<L.notices.length;i++) L.notices[i].remove();
     hwFitPage(doc,L,T.styles,h0);   // 공지가 양식보다 많으면 빈 줄을 걷어 A4 한 장에
   } else if(lines.length) warn.push('양식에 ★ 공지 줄이 없어 교육·행사를 넣지 못했습니다 — 한글에서 제목 아래에 ★ 로 시작하는 줄을 하나 넣어 올리세요');
-  // 자리 표 — 줄 i = 자리 LBL_ORDER[i]. 양식의 예시 글자가 섞이지 않게 사람이 없는 칸도 비운다
+  // 자리 표 — 줄 i = 자리 LBL_ORDER[i]. 양식의 예시 글자가 섞이지 않게 사람이 없는 칸도 비운다.
+  // 차지가 자리에 안 묶이는 서식(102·82)인데 양식 첫 줄이 CN 줄(CN(48455) 처럼 차지 번호가 붙은 줄)이면 그 줄에 차지를 세운다 —
+  // 차지 아닌 사람이 CN 줄·CN 번호 옆에 서고 /CRN 은 다른 줄에 붙었다. 방은 사람을 따라간다(그 사람 자리의 방) (2026-10-01 교차 검토)
   const info=dayInfo(iso), M=L.main;
   if(!info) warn.push('이 날 근무표가 없습니다 — 자리 칸이 비어 나갑니다');
   if(!M.rows.length) warn.push('양식 자리 표에서 자리 줄(첫 열에 CN·A방 …)을 찾지 못했습니다');
@@ -9036,14 +9052,16 @@ async function buildDayDoc(iso){
     const sc=M.shifts[P]; if(!sc) continue;
     const day=info&&info[P], labels=day?day.labels:{};
     const cnt=day?Object.keys(day.labels).length+day.extra.length:0;
+    const cl=crnFloat(P)&&day&&day.charge&&M.rows[0]&&isChgLbl(M.rows[0].label)?Object.keys(labels).find(l=>labels[l]===day.charge):null;
+    const ord=cl?[cl].concat(LBL_ORDER.filter(l=>l!==cl)):LBL_ORDER;
     M.rows.forEach((row,i)=>{
-      const lab=LBL_ORDER[i], nm=lab?labels[lab]:null;
+      const lab=ord[i], nm=lab?labels[lab]:null;
       const nc=M.m.at(row.r,sc.nurse), rc=sc.room!=null?M.m.at(row.r,sc.room):null;
       // 차지가 자리에 묶이지 않는 서식(102·82)은 배정표처럼 차지 이름 뒤에 /CRN — 첫 줄 사람이 차지가 아닐 수 있다
       if(nc) setCellText(nc,nm?nameWithTrainees(nm,iso,P,crnFloat(P)&&day&&nm===day.charge?' /CRN':''):'');
       if(rc) setCellText(rc,nm?roomsFor(P,cnt,lab,iso):'');
     });
-    const lost=LBL_ORDER.slice(M.rows.length).filter(l=>labels[l]).map(l=>labels[l]);
+    const lost=ord.slice(M.rows.length).filter(l=>labels[l]).map(l=>labels[l]);
     if(lost.length) warn.push(`${P} ${lost.join(', ')} — 양식의 자리 줄(${M.rows.length}줄)보다 많아 종이에 없습니다`);
     if(day&&day.extra.length) warn.push(`${P} ${day.extra.join(', ')} — 자리보다 사람이 많아 어싸인 없이 근무합니다(헬퍼, 종이에 없음)`);
   }
@@ -9485,7 +9503,9 @@ const hwTextPara=p=>[...p.getElementsByTagName('*')].every(e=>HW_TEXT_OK.has(e.l
 const hwCellEdText=cell=>hwKids(cell.sub,'p').filter(hwTextPara).map(hwText).join('\n');
 /* 비교용 — 줄 끝 공백·끝 빈 줄은 없는 것으로 (안 고친 칸을 '고쳤다'로 보지 않게) */
 const dfNorm=s=>String(s??'').replace(/\r\n?/g,'\n').split('\n').map(x=>x.replace(/\s+$/,'')).join('\n').replace(/\n+$/,'');
-const daySeatName=i=>i===0?'차지':(LBL_ORDER[i]||'')+' 자리';
+// 하루 어싸인표 양식 고치기의 자리 줄 이름 — 배정표 종이의 자리 이름으로(FORM_LBL). 앱 안쪽 이름(A·B…)을 쓰면 101 에서 둘째 줄이 'A 자리'인데
+// 배정표 종이는 B 다 (2026-10-01 교차 검토)
+const daySeatName=i=>i===0?'차지':(LBL_ORDER[i]?FORM_LBL(LBL_ORDER[i],'D')+' 자리':'');
 function dayEditItems(doc,L){
   const items=[], M=L.main, used=new Set();
   if(L.notices.length) items.push({g:'notice',id:'n',text:L.noticeDefs.map(dayNoteShow).join('\n')});
@@ -9528,7 +9548,7 @@ async function renderDayFormText(){
       <div class="dtySub">병동마다 다른 글자를 고쳐 <b>이 병동 양식</b>으로 저장합니다. 날짜·자리 칸·당직 칸은 날마다 채우는 자리라 여기 없습니다.</div>
       ${notice?`<div class="dfG"><div class="dfGH">기본 공지 <span class="dtySub">줄마다 ${esc(L.bullet.trim())} 가 붙어 매일 제목 아래에 들어갑니다 · 앞을 띄운 줄은 윗줄 공지에 이어집니다 · 그 날 교육·행사는 뒤에 붙습니다</span></div>${fld(notice,3)}</div>`
         :`<div class="dfG"><div class="dsWarn">이 양식에는 ★ 로 시작하는 공지 줄이 없어 기본 공지를 둘 수 없습니다 — 한글에서 제목 아래에 ★ 줄을 하나 넣어 올려 주세요.</div></div>`}
-      ${grp('seat','자리 이름','괄호 안 번호(내선)를 병동에 맞게 고치세요 · 위에서부터 차지·A·B·C 자리입니다',tbl('seat','자리',x=>daySeatName(x.seat)))}
+      ${grp('seat','자리 이름','괄호 안 번호(내선)를 병동에 맞게 고치세요 · 위에서부터 '+['차지',...LBL_ORDER.slice(1,4).map(l=>FORM_LBL(l,'D'))].join('·')+' 자리입니다',tbl('seat','자리',x=>daySeatName(x.seat)))}
       ${grp('duty','당직 칸 이름표','첫 줄이 칸 이름입니다 — 고치면 당직표·번호도 새 이름을 따라갑니다',
         items.filter(x=>x.g==='duty').map(x=>fld(x,3)).join(''))}
       ${grp('main','자리 표의 다른 글자','화재반 같은 칸',tbl('main','칸',x=>`${x.cell.r+1}줄 ${x.cell.c+1}칸`))}
