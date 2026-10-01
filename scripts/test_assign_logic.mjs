@@ -1979,6 +1979,84 @@ async function main() {
   eq('한 조각 서식 제목(굵은 빨강)은 글자를 고치거나 표시자를 붙여도 서식 그대로', tx.한조각,
     [[['R', 'B', '병실 배정표 (9월)']], [['R', 'B', '병실 배정표'], ['R', 'B', '\n{{날짜:M월 D일}}']]]);
 
+  // ── 31. 102 CRN — 방이 고정이 아니다 (2026-10-01) ─────────────────────
+  // CRN 은 A·B·C 어느 방이든 본다. 차지를 첫 자리(A)에 못 박았더니 CRN 이 바뀌는 날마다 새 CRN 이 A 로 끌려가고
+  // A 사람이 밀려 뒤가 하나도 이어지지 않았다. 손으로 CRN 을 B 로 옮겨도 다음 날 다시 A 로 돌아갔다.
+  step('31 102 CRN 자리');
+  const crnSetup = `const crnSetup=()=>{ A.setFormId('102'); A.setWard('102'); const s=A.store;
+      s.order=['김차지','이에이','박비','최씨','정새로']; s.cells={}; s.ovr={}; s.ovrPair={}; s.roomOv={}; s.presetDay={}; s.seedManual={};
+      s.unit={}; s.relief={}; s.trainee={}; s.trOv={}; s.evRules=[]; s.daily={}; s.banRooms={};
+      const plan={김차지:['D','OF','D','D','D'],이에이:['D','D','D','D','D'],박비:['D','D','D','D','D'],최씨:['D','D','D','D','D'],정새로:['OF','D','OF','OF','OF']};
+      const days=['2026-09-06','2026-09-07','2026-09-08','2026-09-09','2026-09-10'];
+      for(const n of s.order){ s.cells[n]={}; days.forEach((iso,i)=>{ s.cells[n][iso]=plan[n][i]; }); }
+      A.store=s; A.recompute();
+      A.openPick('김차지','2026-09-09',10,10); A.pickChoose('A'); };`;   // 9/9 — CRN 김차지가 실제로는 B 방을 봤다
+  const crn102 = await ev(`const A=window.__app; ${crnSetup} crnSetup();
+    return (async()=>{ const out={};
+      const r=await A.buildWeekXlsx(new Date(2026,8,6)); const c=A.sheetCells({...r.tpl,sheetXml:r.xml});
+      for(const k of ['D','F','H','J','L']) out[k]=[5,6,7,8].map(i=>c[k+i]||'');
+      A.wkSunday=new Date(2026,8,6); A.show('week');
+      out.scr=[...document.querySelectorAll('#wkTable tr')].map(tr=>[...tr.children].map(td=>(td.textContent||'').trim()))
+        .map(r=>r.filter(v=>/김차지|이에이|박비|최씨|정새로/.test(v))).filter(r=>r.length);   // 줄마다 일~목 다섯 칸
+      // 하루 어싸인표 — 첫 줄은 그 자리 사람, CRN 은 앉은 줄에 /CRN
+      A.DAYTPL=null;
+      { const d=await A.buildDayDoc('2026-09-07'), M=A.dayLayout(d.doc).main;
+        out.day=M.rows.slice(0,4).map(row=>{ const x=M.m.at(row.r,M.shifts.D.nurse); return x?x.text:null; }); }
+      // 자동 맵핑 — 자리마다 {{차지: /CRN}}, 채운 결과는 내장 채우기와 같다
+      const tpl=await A.loadBaseTemplate('102'), cells=A.sheetCells(tpl), merges=A.sheetMerges(tpl);
+      const days=A.weekData(new Date(2026,8,6)), L=A.layoutOf(A.formDefOf('102'),cells,merges);
+      const x1=A.fillForm102(tpl,L,days), sh=A.detectFormShape(cells,merges), am=A.autoMap(tpl,sh);
+      const t2={...tpl,sheetXml:am.xml}, c2=A.sheetCells(t2), xf=await A.dateStyleSet(tpl);
+      out.tags=['D5','D6','D7','D8','D14','D15','D16'].map(k=>/[{][{]차지: [/]CRN[}][}]$/.test(c2[k]||''));
+      out.same=x1===A.fillByPlaceholders(t2,c2,A.layoutOf({kind:sh.kind},c2,merges),days,{dateXf:xf});
+      // 그 전에 [맵핑 저장]한 양식 — {{차지}} 가 첫 자리에만 있어도 표시가 CRN 을 따라간다
+      let xml=am.xml; for(const k of ['D6','D7','D8','D15','D16']) xml=A.setCellStr(xml,k,c2[k].replace(/[{][{]차지: [/]CRN[}][}]/,''));
+      const t3={...tpl,sheetXml:xml}, c3=A.sheetCells(t3);
+      out.oldSame=x1===A.fillByPlaceholders(t3,c3,A.layoutOf({kind:sh.kind},c3,merges),days,{dateXf:xf});
+      // CRN 맡기기 — 자리는 그대로, 근무가 DC 로 (다른 DC 는 D 로)
+      A.openPick('박비','2026-09-10',10,10);
+      out.btn=[...document.querySelectorAll('#pick button')].some(b=>b.textContent==='CRN 맡기기');
+      out.who=[...document.querySelectorAll('#pick .who')].map(b=>b.textContent);
+      A.pickCrn();
+      out.cells=['김차지','이에이','박비','최씨'].map(n=>A.store.cells[n]['2026-09-10']);
+      { const r2=await A.buildWeekXlsx(new Date(2026,8,6)); const c4=A.sheetCells({...r2.tpl,sheetXml:r2.xml}); out.L2=[5,6,7,8].map(i=>c4['L'+i]||''); }
+      // 옛 102 양식처럼 종이에 CRN 자리(D(CRN))가 따로 있으면 차지는 그 자리에 묶인다
+      { const base=await A.loadBaseTemplate('102');
+        A.store.forms['102']={name:'옛 102.xlsx',b64:A.bytesToB64(A.packXlsx(base,{'xl/worksheets/sheet1.xml':A.setCellStr(base.sheetXml,'C8','D(CRN)')})),savedAt:7,ph:false};
+        await A.loadTemplate(); await new Promise(r=>setTimeout(r,50));
+        out.묶임=['D','E','N'].map(P=>A.crnFloat(P));
+        const r3=await A.buildWeekXlsx(new Date(2026,8,6)); const c5=A.sheetCells({...r3.tpl,sheetXml:r3.xml}); out.옛F=[5,6,7,8].map(i=>c5['F'+i]||'');
+        delete A.store.forms['102']; await A.loadTemplate(); await new Promise(r=>setTimeout(r,50));
+        out.풀림=['D','E','N'].map(P=>A.crnFloat(P)); }
+      // 지난 어싸인 직접 입력 — 첫 자리도 보통 자리라 고를 수 있다
+      A.show('admin'); A.pickAdmin('seed');
+      out.seed=[...document.querySelectorAll('#seedTable tr')].slice(1,2).map(tr=>[...tr.querySelectorAll('button')].map(b=>b.textContent).slice(0,5))[0];
+      out.seedNote=(document.querySelector('#seedTable td.note:last-child')||{}).textContent||'';
+      A.setFormId('101'); out.고정101=['D','E','N'].map(P=>A.crnFloat(P));
+      A.pickAdmin('seed'); out.seed101=[...document.querySelectorAll('#seedTable tr')].slice(1,2).map(tr=>[...tr.querySelectorAll('button')].map(b=>b.textContent).slice(0,5))[0];
+      A.show('week');
+      return out; })()`);
+  eq('9/6 — CRN 김차지는 첫 자리', crn102.D, ['김차지 /CRN', '이에이', '박비', '최씨']);
+  eq('9/7 — 김차지가 쉬어 CRN 이 이에이로 바뀌어도 이에이는 B 그대로, 빈 A 에 정새로', crn102.F, ['정새로', '이에이 /CRN', '박비', '최씨']);
+  eq('9/8 — 김차지가 돌아와 CRN, 제 자리 A 로 · 나머지 그대로', crn102.H, ['김차지 /CRN', '이에이', '박비', '최씨']);
+  eq('9/9 — 손으로 CRN 을 B 로 옮겼다 (/CRN 은 사람을 따라간다)', crn102.J, ['이에이', '김차지 /CRN', '박비', '최씨']);
+  eq('9/10 — 다음 날도 CRN 은 B, A 사람은 A (예전엔 둘이 다시 뒤바뀜)', crn102.L, ['이에이', '김차지 /CRN', '박비', '최씨']);
+  eq('화면이 엑셀과 같다 (자리 · /CRN)', crn102.scr, [0, 1, 2, 3].map(i => ['D', 'F', 'H', 'J', 'L'].map(k => crn102[k][i])));
+  eq('하루 어싸인표도 CRN 이 앉은 줄에 /CRN', crn102.day, ['정새로', '이에이 /CRN', '박비', '최씨']);
+  eq('자동 맵핑 — 102 는 자리마다 {{차지: /CRN}}', crn102.tags, [true, true, true, true, true, true, true]);
+  ok('자동 맵핑 채우기 = 내장 채우기 (CRN 이 B 에 앉은 주)', crn102.same);
+  ok('첫 자리에만 {{차지}} 가 있는 옛 자리표시자 양식도 같게 (표시가 CRN 을 따라간다)', crn102.oldSame);
+  ok('이름 클릭 창에 [CRN 맡기기]', crn102.btn);
+  eq('이름 클릭 창의 자리 목록에 누가 CRN 인지', crn102.who, ['이에이', '김차지 /CRN', '박비 (본인)', '최씨']);
+  eq('CRN 맡기기 — 근무가 DC 로 (다른 사람은 그대로 D)', crn102.cells, ['D', 'D', 'DC', 'D']);
+  eq('CRN 맡기기 — 자리는 그대로, /CRN 만 옮겨 간다', crn102.L2, ['이에이', '김차지', '박비 /CRN', '최씨']);
+  eq('종이에 D(CRN) 자리가 있는 옛 양식 — D 근무 차지는 그 자리에 묶인다', [crn102.묶임, crn102.옛F], [[false, true, true], ['정새로', '박비', '최씨', '이에이']]);
+  eq('양식을 되돌리면 다시 A·B·C 어디든', crn102.풀림, [true, true, true]);
+  eq('101 은 차지 자리(A(CN))가 따로 있어 묶인다', crn102.고정101, [false, false, false]);
+  eq('지난 어싸인 직접 입력 — 102 는 첫 자리 A 도 고른다', crn102.seed, ['A', 'B', 'C', 'D', '없음']);
+  ok('지난 어싸인 직접 입력 — 102 안내는 CRN 도 앉았던 자리를 고르라고', /CRN/.test(crn102.seedNote), crn102.seedNote);
+  eq('지난 어싸인 직접 입력 — 101 은 그대로 (차지 자리 빼고)', crn102.seed101, ['B', 'C', 'D', 'E', '없음']);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));

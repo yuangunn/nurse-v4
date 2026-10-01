@@ -23,6 +23,13 @@
  *
  * 자리 수 — 기본 5(차지·A·B·C·D). 양식에 D 가 6줄인 병동(122: 대체간호사가 오는 날)은
  *  opts.maxSeats 로 6번째 자리(E)를 연다. 자리보다 사람이 많으면 남는 사람은 헬퍼(extra).
+ *
+ * 차지 자리 — 기본은 차지가 '차지' 자리(차지 방)에 앉는다(101 의 A(CN), 122 의 CN).
+ *  opts.chargeSeats 가 자리 목록을 주면 그 근무의 차지는 **방이 정해져 있지 않다**: 사람은 똑같이
+ *  고르되 그 목록 중 한 자리에 앉고, 어느 자리인지는 연속성이 정한다. 102 병동은 CRN 이 A·B·C
+ *  어느 방이든 보는데, 차지를 첫 자리에 못 박으면 CRN 이 바뀌는 날마다 모두의 자리가 한 칸씩 밀려
+ *  뒤가 하나도 이어지지 않았다 (2026-10-01). 그때 '차지' 는 그냥 첫 자리 이름이다.
+ *  누가 차지인지는 결과의 byDay[dk][P].charge · byNurse[id][dk].charge 로 준다(자리가 고정이어도).
  * ─────────────────────────────────────────────────────────────────────────── */
 (function (root) {
   const PERIOD_CODES = { D: ['DC', 'D'], E: ['EC', 'E'], N: ['NC', 'N'] };
@@ -97,9 +104,10 @@
    *                  avoid:{dateKey:{P:{nurseId:[label]}}},  금지 방 등 회피 라벨 (소프트 —
    *                  대안 없으면 그대로 배정, 수동 오버라이드·DC/EC/NC 표시자는 회피 무시)
    *                  roomsFor:(P,cnt,label,dateKey)=>[방 토큰],  ← 주면 방 기준 연속성
-   *                  maxSeats: 숫자 또는 (P,cnt,dateKey)=>숫자  ← 자리 수(1~6, 기본 5)}
-   * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId]}}},
-   *           byNurse:{nurseId:{dk:{period,label}}}}
+   *                  maxSeats: 숫자 또는 (P,cnt,dateKey)=>숫자  ← 자리 수(1~6, 기본 5)
+   *                  chargeSeats:(P,cnt,dateKey)=>[라벨]|null  ← 주면 차지가 그 자리 중 한 곳에 (방이 고정이 아닌 차지)}
+   * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId], charge:nurseId}}},
+   *           byNurse:{nurseId:{dk:{period,label,charge?:true}}}}
    */
   function compute(nurses, schedule, dateKeys, opts) {
     opts = opts || {};
@@ -162,27 +170,97 @@
           }
         }
 
-        // 1) 차지: DC/EC/NC 표시자 → 차지가능 최선임 → 최선임
-        if (!assigned['차지']) {
-          let c = staff.find(function (n) {
-            return !taken[n.id] && CHARGE_CODES[(schedule[n.id] || {})[dk]];
-          });
-          if (!c) {
-            const pool = staff.filter(function (n) { return !taken[n.id] && chargeOk(n, P); });
-            const pref = pool.filter(function (n) { return avOk(n.id, '차지'); });
-            const base = pref.length ? pref : (pool.length ? pool : staff.filter(function (n) { return !taken[n.id]; }));
-            c = base.slice().sort(function (a, b) { return a.seniority - b.seniority; })[0];
-          }
-          if (c) { assigned['차지'] = c; taken[c.id] = true; }
-        }
-
-        // 2~4) 연속성 — 원칙 우선순위(1 > 2 > 3)는 그대로, 자리 배치만 함께 푼다
+        // 연속성 등급 — 원칙 우선순위(1 > 2 > 3)
         const tierOf = function (info) {
           if (rules.keepSameShift && info.idx === idx - 1 && info.period === P) return 0;   // 원칙1
           if (rules.keepAcrossShift && info.idx === idx - 1 && info.period !== P) return 1;  // 원칙2
           if (rules.keepAfterOff && info.idx < idx - 1) return 2;                            // 원칙3
           return -1;
         };
+        // 자리 점수 — 사전식: 앉는 사람 수(등급별) > 원칙1 겹침 합 > 원칙2 겹침 합 > 원칙3 겹침 합
+        // > 최근에 본 사람 > 선임. 등급이 자리뿐 아니라 **방 선택**에서도 앞선다: 예전엔 겹침을
+        // 등급 없이 합쳐서, 오프 복귀자가 4칸 겹치는 방을 잡으려고 전일 근무자를 2칸짜리 방으로
+        // 밀어내는(5~10 보던 사람이 6~9 대신 5,10,11) 일이 있었다. 자릿수는 2^53 안에 들도록
+        // 잡았다: 한 사람 겹침 ≤99, 자리마다 병실이 갈리므로 여럿의 겹침 합은 병동 병상 수(<500)를 넘지
+        // 않는다 → 원칙1 겹침 합 ×2e10 < 원칙3 자리 하나(1e13). 자리 합도 짝 ≤6 × 1e15 + … < 2^53(≈9.007e15).
+        const SEAT_W = [1e15, 1e14, 1e13], OV_W = [2e10, 4e7, 8e4];
+        const tieOf = function (n, info) {
+          const recency = Math.round((Math.max(-400, Math.min(400, info.idx)) + 400) / 8);   // 0~100
+          return recency * 100 + Math.max(0, 99 - n.seniority);                             // ≤ 10099
+        };
+        // 방 기준 점수 — 전에 본 병실과 이 자리 병실이 겹칠 때만 (0 = 이어지는 것이 없음)
+        const roomW = function (n, l) {
+          const info = lastSeen[n.id];
+          if (!roomsFor || !info || !avOk(n.id, l)) return 0;
+          const t = tierOf(info);
+          if (t < 0) return 0;
+          const o = Math.min(99, overlap(info.rooms, roomsByLabel[l], bedsOf));
+          if (!o) return 0;
+          return SEAT_W[t] + o * OV_W[t] + tieOf(n, info);
+        };
+        // 라벨 기준 점수 — (b) 라벨 유지 폴백과 같은 판단 (방 정보로 못 이을 때 같은 자리 이름)
+        const labelW = function (n, l) {
+          const info = lastSeen[n.id];
+          if (!info || info.label !== l || !avOk(n.id, l)) return 0;
+          const t = tierOf(info);
+          return t < 0 ? 0 : SEAT_W[t] + tieOf(n, info);
+        };
+
+        // 1) 차지: DC/EC/NC 표시자 → 차지가능 최선임 → 최선임
+        const floatSeats = opts.chargeSeats ? opts.chargeSeats(P, cnt, dk) : null;
+        let chargeId = null;
+        if (floatSeats && floatSeats.length) {
+          // 방이 고정이 아닌 차지 — 사람은 자리와 상관없이 고른다(손으로 자리를 옮긴 사람도 차지일 수 있다)
+          let c = staff.find(function (n) { return CHARGE_CODES[(schedule[n.id] || {})[dk]]; });
+          if (!c) {
+            const pool = staff.filter(function (n) { return chargeOk(n, P); });
+            c = (pool.length ? pool : staff).slice().sort(function (a, b) { return a.seniority - b.seniority; })[0];
+          }
+          chargeId = c.id;
+          if (!taken[c.id]) {
+            // 앉을 자리 — 허락된 빈 자리 중 '차지 자신의 연속성 + 나머지 사람의 연속성' 이 가장 큰 곳.
+            // 동점이면 앞 자리. 차지가 어제 B 를 봤으면 B 를 그대로 보고, 어제 D 를 봤으면(차지가 아니었던 날)
+            // 남들이 가장 덜 밀리는 자리로 간다. 그 다음 매칭(a)·폴백(b)은 차지를 뺀 나머지로 그대로 돈다.
+            const okL = floatSeats.filter(function (l) { return labels.indexOf(l) >= 0 && !assigned[l]; });
+            const prefL = okL.filter(function (l) { return avOk(c.id, l); });
+            const seatL = prefL.length ? prefL : okL;
+            if (seatL.length) {
+              const others = staff.filter(function (n) {
+                return !taken[n.id] && n.id !== c.id && lastSeen[n.id] && tierOf(lastSeen[n.id]) >= 0;
+              });
+              const wt = function (n, l) { return roomW(n, l) || labelW(n, l); };
+              let best = seatL[0], bestV = -1;
+              for (let s = 0; s < seatL.length && seatL.length > 1; s++) {
+                const l0 = seatL[s];
+                const free0 = freeLabels().filter(function (l) { return l !== l0; });
+                let v = wt(c, l0);
+                if (others.length && free0.length) {
+                  const W0 = others.map(function (n) { return free0.map(function (l) { return wt(n, l); }); });
+                  const pr = maxMatch(W0, free0.length);
+                  for (let k = 0; k < pr.length; k++) v += W0[pr[k][0]][pr[k][1]];
+                }
+                if (v > bestV) { bestV = v; best = l0; }
+              }
+              assigned[best] = c; taken[c.id] = true;
+            }
+          }
+        } else {
+          if (!assigned['차지']) {
+            let c = staff.find(function (n) {
+              return !taken[n.id] && CHARGE_CODES[(schedule[n.id] || {})[dk]];
+            });
+            if (!c) {
+              const pool = staff.filter(function (n) { return !taken[n.id] && chargeOk(n, P); });
+              const pref = pool.filter(function (n) { return avOk(n.id, '차지'); });
+              const base = pref.length ? pref : (pool.length ? pool : staff.filter(function (n) { return !taken[n.id]; }));
+              c = base.slice().sort(function (a, b) { return a.seniority - b.seniority; })[0];
+            }
+            if (c) { assigned['차지'] = c; taken[c.id] = true; }
+          }
+          if (assigned['차지']) chargeId = assigned['차지'].id;
+        }
+
+        // 2~4) 연속성 — 원칙 우선순위(1 > 2 > 3)는 그대로, 자리 배치만 함께 푼다
         const cand = staff.filter(function (n) {
           return !taken[n.id] && lastSeen[n.id] && tierOf(lastSeen[n.id]) >= 0;
         });
@@ -193,25 +271,10 @@
         //     한 번에 푸는 이유: 원칙1인 사람이 두 자리에 무차별할 때(양쪽 겹침 동일)
         //     오프 복귀자가 원래 보던 방을 되찾도록 자리를 비켜 줄 수 있다.
         if (roomsFor && cand.length) {
-          // 점수는 사전식 — 앉는 사람 수(등급별) > 원칙1 겹침 합 > 원칙2 겹침 합 > 원칙3 겹침 합
-          // > 최근에 본 사람 > 선임. 등급이 자리뿐 아니라 **방 선택**에서도 앞선다: 예전엔 겹침을
-          // 등급 없이 합쳐서, 오프 복귀자가 4칸 겹치는 방을 잡으려고 전일 근무자를 2칸짜리 방으로
-          // 밀어내는(5~10 보던 사람이 6~9 대신 5,10,11) 일이 있었다. 자릿수는 2^53 안에 들도록
-          // 잡았다: 차지는 이 매칭 전에 앉으므로 짝 ≤5(자리 6개일 때도), 겹침 ≤99 → 등급별 합 ≤495
-          // < 원칙3 자리 하나(1e13 / 2e10 = 500). 자리 합도 5×1e15 + … < 2^53(≈9.007e15).
-          const SEAT_W = [1e15, 1e14, 1e13], OV_W = [2e10, 4e7, 8e4];
           const free = freeLabels().filter(function (l) { return roomsByLabel[l].length; });
           if (free.length) {
             const W = cand.map(function (n) {
-              const info = lastSeen[n.id], t = tierOf(info);
-              const recency = Math.round((Math.max(-400, Math.min(400, info.idx)) + 400) / 8);   // 0~100
-              const tie = recency * 100 + Math.max(0, 99 - n.seniority);                          // ≤ 10099
-              return free.map(function (l) {
-                if (!avOk(n.id, l)) return 0;
-                const o = Math.min(99, overlap(info.rooms, roomsByLabel[l], bedsOf));
-                if (!o) return 0;
-                return SEAT_W[t] + o * OV_W[t] + tie;
-              });
+              return free.map(function (l) { return roomW(n, l); });
             });
             const pairs = maxMatch(W, free.length);
             for (let k = 0; k < pairs.length; k++) {
@@ -267,14 +330,15 @@
         const extra = leftover.map(function (n) { return n.id; });
 
         // 회피 라벨 복구: 회피 라벨에 배정된 간호사를 서로 문제 없는 상대와 맞교환.
-        // 연속성(원칙1~3)보다 회피(금지 방)가 우선 — 수동 오버라이드·차지는 건드리지 않음.
+        // 연속성(원칙1~3)보다 회피(금지 방)가 우선 — 수동 오버라이드·차지는 건드리지 않음
+        // (방이 고정이 아닌 차지도 — 맞바꾸면 허락되지 않은 자리로 갈 수 있다).
         for (const l in assigned) {
-          if (l === '차지') continue;
           const n = assigned[l];
+          if (n.id === chargeId) continue;
           if (avOk(n.id, l) || ovIds[n.id]) continue;
           for (const l2 in assigned) {
-            if (l2 === l || l2 === '차지') continue;
             const m = assigned[l2];
+            if (l2 === l || m.id === chargeId) continue;
             if (!ovIds[m.id] && avOk(n.id, l2) && avOk(m.id, l)) {
               assigned[l] = m; assigned[l2] = n; break;
             }
@@ -291,7 +355,8 @@
         for (let i = 0; i < extra.length; i++) {
           (byNurse[extra[i]] = byNurse[extra[i]] || {})[dk] = { period: P, label: null };
         }
-        (byDay[dk] = byDay[dk] || {})[P] = { labels: labelMap, extra: extra };
+        if (chargeId && byNurse[chargeId] && byNurse[chargeId][dk]) byNurse[chargeId][dk].charge = true;
+        (byDay[dk] = byDay[dk] || {})[P] = { labels: labelMap, extra: extra, charge: chargeId };
       }
     }
     return { byDay: byDay, byNurse: byNurse };

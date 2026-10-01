@@ -472,4 +472,118 @@ assert.equal(periodOf('OF'), null);
   assert.deepEqual(r5b.byDay.d2.D.labels, r5.byDay.d2.D.labels, 'bedsOf=1 과 같은 결과여야 한다');
 }
 
+/* ── 방이 고정이 아닌 차지 (opts.chargeSeats, 102 병동 CRN — 2026-10-01) ──
+ * 102 는 CRN 이 A·B·C 어느 방이든 본다. 차지를 첫 자리에 못 박으면 CRN 이 바뀌는 날마다 새 CRN 이
+ * 첫 자리로 끌려가고 그 자리 사람이 밀려 뒤가 하나도 이어지지 않았다. 여기서는 자리 넷(차지·A·B·C =
+ * 종이의 A·B·C·D), CRN 은 앞 세 자리 중 하나, 자리마다 병실이 고정. */
+{
+  const R4 = { 차지: ['1', '2', '3'], A: ['4', '5', '6'], B: ['7', '8', '9'], C: ['10', '11', '12'] };
+  const base = { maxSeats: 4, roomsFor: (P, cnt, l) => (R4[l] || []).slice(), chargeSeats: () => ['차지', 'A', 'B'] };
+  const seatOf = (r, dk, id) => Object.keys(r.byDay[dk].D.labels).find(l => r.byDay[dk].D.labels[l] === id);
+
+  // CRN 이 바뀌어도 아무도 자리를 옮기지 않는다 — 새 CRN(Y)은 어제 보던 A 를 그대로, 빈 첫 자리에는 복귀자
+  {
+    const NS = ['X', 'Y', 'Z', 'W', 'V'].map((id, i) => N(id, i));
+    const sch = { X: { d1: 'D', d2: 'OF', d3: 'D' }, Y: { d1: 'D', d2: 'D', d3: 'D' }, Z: { d1: 'D', d2: 'D', d3: 'D' },
+                  W: { d1: 'D', d2: 'D', d3: 'D' }, V: { d1: 'OF', d2: 'D', d3: 'OF' } };
+    const r = compute(NS, sch, ['d1', 'd2', 'd3'], base);
+    assert.deepEqual(r.byDay.d1.D.labels, { 차지: 'X', A: 'Y', B: 'Z', C: 'W' });
+    assert.equal(r.byDay.d1.D.charge, 'X');
+    assert.deepEqual(r.byDay.d2.D.labels, { 차지: 'V', A: 'Y', B: 'Z', C: 'W' }, 'CRN 이 Y 로 바뀌어도 Y 는 A 에 그대로');
+    assert.equal(r.byDay.d2.D.charge, 'Y');
+    assert.equal(r.byNurse.Y.d2.charge, true);
+    assert.ok(!r.byNurse.V.d2.charge, '첫 자리에 앉았다고 차지가 되지 않는다');
+    assert.deepEqual(r.byDay.d3.D.labels, { 차지: 'X', A: 'Y', B: 'Z', C: 'W' }, 'X 가 돌아와 CRN — 제 자리로, 나머지 그대로');
+    assert.equal(r.byDay.d3.D.charge, 'X');
+    // 자리가 고정이던 때(차지 = 첫 자리)는 d2 에 Y 가 첫 자리로 끌려갔다 — 그게 이 버그
+    const old = compute(NS, sch, ['d1', 'd2', 'd3'], { maxSeats: 4, roomsFor: base.roomsFor });
+    assert.equal(old.byDay.d2.D.labels['차지'], 'Y');
+  }
+
+  // 손으로 CRN 을 B 로 옮긴 다음 날 — CRN 은 B, 첫 자리 사람은 첫 자리 그대로 (예전엔 둘이 다시 뒤바뀜)
+  {
+    const NS = ['X', 'Y', 'Z', 'W'].map((id, i) => N(id, i));
+    const sch = { X: { d1: 'D', d2: 'D' }, Y: { d1: 'D', d2: 'D' }, Z: { d1: 'D', d2: 'D' }, W: { d1: 'D', d2: 'D' } };
+    const ov = { d1: { D: { X: 'A', Y: '차지' } } };
+    const r = compute(NS, sch, ['d1', 'd2'], Object.assign({ overrides: ov }, base));
+    assert.equal(r.byDay.d1.D.charge, 'X', '자리를 바꿔도 CRN 은 X');
+    assert.equal(seatOf(r, 'd2', 'X'), 'A', 'CRN 이 어제 본 B 방(A 자리)을 이어 본다');
+    assert.equal(seatOf(r, 'd2', 'Y'), '차지');
+    assert.equal(r.byDay.d2.D.charge, 'X');
+  }
+
+  // 어제 넷째 자리(차지 못 앉는 자리)를 본 사람이 오늘 CRN — 아무도 밀리지 않는 빈 자리로
+  {
+    const NS = ['X', 'W', 'Y', 'Z', 'V'].map((id, i) => N(id, i));
+    const sch = { X: { d1: 'D', d2: 'OF' }, W: { d1: 'D', d2: 'D' }, Y: { d1: 'D', d2: 'D' },
+                  Z: { d1: 'D', d2: 'D' }, V: { d1: 'OF', d2: 'D' } };
+    const ov = { d1: { D: { Y: 'A', Z: 'B', W: 'C' } } };
+    const r = compute(NS, sch, ['d1', 'd2'], Object.assign({ overrides: ov }, base));
+    assert.deepEqual(r.byDay.d2.D.labels, { 차지: 'W', A: 'Y', B: 'Z', C: 'V' });
+    assert.equal(r.byDay.d2.D.charge, 'W');
+  }
+
+  // 빈 자리가 없으면 CRN 은 그래도 앞 세 자리 — 밀리는 사람은 한 명, 넷째 자리로
+  {
+    const NS = ['W', 'X', 'Y', 'Z'].map((id, i) => N(id, i));
+    const sch = { W: { d1: 'D', d2: 'D' }, X: { d1: 'D', d2: 'D' }, Y: { d1: 'D', d2: 'D' }, Z: { d1: 'D', d2: 'D' } };
+    const ov = { d1: { D: { X: '차지', Y: 'A', Z: 'B', W: 'C' } } };
+    const r = compute(NS, sch, ['d1', 'd2'], Object.assign({ overrides: ov }, base));
+    assert.equal(r.byDay.d2.D.charge, 'W');
+    assert.ok(['차지', 'A', 'B'].includes(seatOf(r, 'd2', 'W')), 'CRN 은 넷째 자리에 남지 않는다');
+    assert.equal(Object.values(r.byDay.d2.D.labels).filter(id => seatOf(r, 'd1', id) !== seatOf(r, 'd2', id)).length, 2,
+      'CRN 과 밀린 한 사람만 자리가 바뀐다');
+  }
+
+  // DC 표시자 — 표시된 사람이 CRN, 자리는 제 자리 그대로
+  {
+    const NS = ['X', 'Y', 'Z', 'W'].map((id, i) => N(id, i));
+    const sch = { X: { d1: 'D', d2: 'D' }, Y: { d1: 'D', d2: 'D' }, Z: { d1: 'D', d2: 'DC' }, W: { d1: 'D', d2: 'D' } };
+    const r = compute(NS, sch, ['d1', 'd2'], base);
+    assert.equal(r.byDay.d2.D.charge, 'Z');
+    assert.deepEqual(r.byDay.d2.D.labels, r.byDay.d1.D.labels, '표시자가 바뀌어도 자리는 그대로');
+  }
+
+  // 병실 정보가 없을 때(방 구성 비어 있음) — 자리 이름으로 이어진다
+  {
+    const NS = ['X', 'Y', 'Z', 'W', 'V'].map((id, i) => N(id, i));
+    const sch = { X: { d1: 'D', d2: 'OF' }, Y: { d1: 'D', d2: 'D' }, Z: { d1: 'D', d2: 'D' },
+                  W: { d1: 'D', d2: 'D' }, V: { d1: 'OF', d2: 'D' } };
+    const r = compute(NS, sch, ['d1', 'd2'], { maxSeats: 4, chargeSeats: () => ['차지', 'A', 'B'] });
+    assert.deepEqual(r.byDay.d2.D.labels, { 차지: 'V', A: 'Y', B: 'Z', C: 'W' });
+    assert.equal(r.byDay.d2.D.charge, 'Y');
+  }
+
+  // 자리가 고정인 서식(chargeSeats 없음)도 누가 차지인지 준다 — 늘 첫 자리 사람
+  {
+    const NS = ['X', 'Y', 'Z'].map((id, i) => N(id, i));
+    const r = compute(NS, { X: { d1: 'D' }, Y: { d1: 'DC' }, Z: { d1: 'D' } }, ['d1']);
+    assert.equal(r.byDay.d1.D.charge, r.byDay.d1.D.labels['차지']);
+    assert.equal(r.byNurse.Y.d1.charge, true);
+  }
+
+  // 여러 날 무작위 — CRN 은 늘 앞 세 자리, 모두 한 번씩만 앉고, 자리는 비지 않는다
+  {
+    let seed = 7;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+    const NS = ids.map((id, i) => N(id, i, i < 4));
+    const days = Array.from({ length: 30 }, (_, i) => 'k' + String(i).padStart(2, '0'));
+    const sch = {};
+    for (const id of ids) { sch[id] = {}; for (const dk of days) sch[id][dk] = rnd() < 0.6 ? 'D' : 'OF'; }
+    const r = compute(NS, sch, days, base);
+    let checked = 0;
+    for (const dk of days) {
+      const day = r.byDay[dk] && r.byDay[dk].D; if (!day) continue;
+      const seated = Object.values(day.labels), on = ids.filter(id => sch[id][dk] === 'D');
+      assert.equal(seated.length + day.extra.length, on.length, dk + ' 모두 한 번씩');
+      assert.equal(new Set(seated).size, seated.length);
+      const cs = Object.keys(day.labels).find(l => day.labels[l] === day.charge);
+      assert.ok(['차지', 'A', 'B'].includes(cs), dk + ' CRN 자리 ' + cs);
+      checked++;
+    }
+    assert.ok(checked > 20);
+  }
+}
+
 console.log('assign-core: 모든 검증 통과');
