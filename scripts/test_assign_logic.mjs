@@ -1980,7 +1980,7 @@ async function main() {
     [[['R', 'B', '병실 배정표 (9월)']], [['R', 'B', '병실 배정표'], ['R', 'B', '\n{{날짜:M월 D일}}']]]);
 
   // ── 31. 102 CRN — 방이 고정이 아니다 (2026-10-01) ─────────────────────
-  // CRN 은 A·B·C 어느 방이든 본다. 차지를 첫 자리(A)에 못 박았더니 CRN 이 바뀌는 날마다 새 CRN 이 A 로 끌려가고
+  // CRN 은 어느 방이든 본다(A·B·C·D — /CRN 은 사람에 붙는다). 차지를 첫 자리(A)에 못 박았더니 CRN 이 바뀌는 날마다 새 CRN 이 A 로 끌려가고
   // A 사람이 밀려 뒤가 하나도 이어지지 않았다. 손으로 CRN 을 B 로 옮겨도 다음 날 다시 A 로 돌아갔다.
   step('31 102 CRN 자리');
   const crnSetup = `const crnSetup=()=>{ A.setFormId('102'); A.setWard('102'); const s=A.store;
@@ -2020,6 +2020,13 @@ async function main() {
       A.pickCrn();
       out.cells=['김차지','이에이','박비','최씨'].map(n=>A.store.cells[n]['2026-09-10']);
       { const r2=await A.buildWeekXlsx(new Date(2026,8,6)); const c4=A.sheetCells({...r2.tpl,sheetXml:r2.xml}); out.L2=[5,6,7,8].map(i=>c4['L'+i]||''); }
+      // 넷째 자리(D)를 보는 최씨에게 CRN — D 그대로 (예전엔 A·B·C 만 허락해 최씨가 앞으로 끌려갔다), 다음 날도 D
+      A.openPick('최씨','2026-09-10',10,10); A.pickCrn();
+      for(const [n,c] of [['김차지','D'],['이에이','D'],['박비','D'],['최씨','DC'],['정새로','OF']]) A.store.cells[n]['2026-09-11']=c;
+      A.recompute();
+      { const r2=await A.buildWeekXlsx(new Date(2026,8,6)); const c4=A.sheetCells({...r2.tpl,sheetXml:r2.xml});
+        out.L3=[5,6,7,8].map(i=>c4['L'+i]||''); out.N3=[5,6,7,8].map(i=>c4['N'+i]||''); }
+      out.seats=['D','E','N'].map(P=>A.crnSeats(P));
       // 옛 102 양식처럼 종이에 CRN 자리(D(CRN))가 따로 있으면 차지는 그 자리에 묶인다
       { const base=await A.loadBaseTemplate('102');
         A.store.forms['102']={name:'옛 102.xlsx',b64:A.bytesToB64(A.packXlsx(base,{'xl/worksheets/sheet1.xml':A.setCellStr(base.sheetXml,'C8','D(CRN)')})),savedAt:7,ph:false};
@@ -2050,8 +2057,12 @@ async function main() {
   eq('이름 클릭 창의 자리 목록에 누가 CRN 인지', crn102.who, ['이에이', '김차지 /CRN', '박비 (본인)', '최씨']);
   eq('CRN 맡기기 — 근무가 DC 로 (다른 사람은 그대로 D)', crn102.cells, ['D', 'D', 'DC', 'D']);
   eq('CRN 맡기기 — 자리는 그대로, /CRN 만 옮겨 간다', crn102.L2, ['이에이', '김차지', '박비 /CRN', '최씨']);
+  eq('CRN 은 D 방도 본다 — 넷째 자리 최씨가 CRN 이어도 D 그대로', crn102.L3, ['이에이', '김차지', '박비', '최씨 /CRN']);
+  eq('다음 날도 CRN 최씨는 D, 나머지 그대로', crn102.N3, ['이에이', '김차지', '박비', '최씨 /CRN']);
+  eq('102 CRN 이 앉을 수 있는 자리 = 종이의 자리 전부 (D·E 넷, N 셋)', crn102.seats,
+    [['차지', 'A', 'B', 'C'], ['차지', 'A', 'B', 'C'], ['차지', 'A', 'B']]);
   eq('종이에 D(CRN) 자리가 있는 옛 양식 — D 근무 차지는 그 자리에 묶인다', [crn102.묶임, crn102.옛F], [[false, true, true], ['정새로', '박비', '최씨', '이에이']]);
-  eq('양식을 되돌리면 다시 A·B·C 어디든', crn102.풀림, [true, true, true]);
+  eq('양식을 되돌리면 다시 어느 자리든', crn102.풀림, [true, true, true]);
   eq('101 은 차지 자리(A(CN))가 따로 있어 묶인다', crn102.고정101, [false, false, false]);
   eq('지난 어싸인 직접 입력 — 102 는 첫 자리 A 도 고른다', crn102.seed, ['A', 'B', 'C', 'D', '없음']);
   ok('지난 어싸인 직접 입력 — 102 안내는 CRN 도 앉았던 자리를 고르라고', /CRN/.test(crn102.seedNote), crn102.seedNote);

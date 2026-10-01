@@ -473,9 +473,10 @@ assert.equal(periodOf('OF'), null);
 }
 
 /* ── 방이 고정이 아닌 차지 (opts.chargeSeats, 102 병동 CRN — 2026-10-01) ──
- * 102 는 CRN 이 A·B·C 어느 방이든 본다. 차지를 첫 자리에 못 박으면 CRN 이 바뀌는 날마다 새 CRN 이
- * 첫 자리로 끌려가고 그 자리 사람이 밀려 뒤가 하나도 이어지지 않았다. 여기서는 자리 넷(차지·A·B·C =
- * 종이의 A·B·C·D), CRN 은 앞 세 자리 중 하나, 자리마다 병실이 고정. */
+ * 102 는 CRN 이 어느 방이든 본다(standalone crnSeats = 종이의 자리 전부). 차지를 첫 자리에 못 박으면 CRN 이
+ * 바뀌는 날마다 새 CRN 이 첫 자리로 끌려가고 그 자리 사람이 밀려 뒤가 하나도 이어지지 않았다. 여기서는 자리 넷
+ * (차지·A·B·C = 종이의 A·B·C·D), 자리마다 병실이 고정. 코어의 '허락 밖 자리' 처리도 보려고 대부분은 허락 자리를
+ * 앞 세 자리로 준다 — 102 실제처럼 넷 다 주는 경우는 바로 아래 묶음. */
 {
   const R4 = { 차지: ['1', '2', '3'], A: ['4', '5', '6'], B: ['7', '8', '9'], C: ['10', '11', '12'] };
   const base = { maxSeats: 4, roomsFor: (P, cnt, l) => (R4[l] || []).slice(), chargeSeats: () => ['차지', 'A', 'B'] };
@@ -498,6 +499,23 @@ assert.equal(periodOf('OF'), null);
     // 자리가 고정이던 때(차지 = 첫 자리)는 d2 에 Y 가 첫 자리로 끌려갔다 — 그게 이 버그
     const old = compute(NS, sch, ['d1', 'd2', 'd3'], { maxSeats: 4, roomsFor: base.roomsFor });
     assert.equal(old.byDay.d2.D.labels['차지'], 'Y');
+  }
+
+  // 102 실제 — CRN 은 넷째 자리(종이의 D)도 본다. 어제 D 를 본 사람이 오늘 CRN 이면 D 그대로, 아무도 안 밀린다
+  {
+    const all4 = Object.assign({}, base, { chargeSeats: () => ['차지', 'A', 'B', 'C'] });
+    const NS = ['X', 'W', 'Y', 'Z', 'V'].map((id, i) => N(id, i));
+    const sch = { X: { d1: 'D', d2: 'OF', d3: 'OF' }, W: { d1: 'D', d2: 'D', d3: 'D' }, Y: { d1: 'D', d2: 'D', d3: 'D' },
+                  Z: { d1: 'D', d2: 'D', d3: 'D' }, V: { d1: 'OF', d2: 'D', d3: 'D' } };
+    const ov = { d1: { D: { Y: 'A', Z: 'B', W: 'C' } } };
+    const r = compute(NS, sch, ['d1', 'd2', 'd3'], Object.assign({ overrides: ov }, all4));
+    assert.deepEqual(r.byDay.d2.D.labels, { 차지: 'V', A: 'Y', B: 'Z', C: 'W' }, 'CRN W 는 어제 본 넷째 자리 그대로');
+    assert.equal(r.byDay.d2.D.charge, 'W');
+    assert.deepEqual(r.byDay.d3.D.labels, r.byDay.d2.D.labels, '다음 날도 그대로');
+    assert.equal(r.byDay.d3.D.charge, 'W');
+    // 허락 자리가 앞 셋뿐이던 때는 W 가 넷째 자리를 떠나 첫 자리로 갔다 — 이번 고침
+    const r3 = compute(NS, sch, ['d1', 'd2'], Object.assign({ overrides: ov }, base));
+    assert.equal(seatOf(r3, 'd2', 'W'), '차지');
   }
 
   // 손으로 CRN 을 B 로 옮긴 다음 날 — CRN 은 B, 첫 자리 사람은 첫 자리 그대로 (예전엔 둘이 다시 뒤바뀜)
