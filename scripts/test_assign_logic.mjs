@@ -2175,6 +2175,129 @@ async function main() {
     ok(id + ' 손으로 금지 방 자리로 옮기면 카드는 "손으로 옮긴 자리입니다"', v32[id + 'hand']);
   }
 
+  // ── 33. 실시간 수정·칸 표기·설정 (2026-10-01, 결정 2-44) ───────────────────────────
+  // 맞바꾼 상대가 빠지면 남은 반쪽도 풀린다 · 근무 바꾸기로 DC 를 주면 다른 DC 는 D · 카드는 손으로 정한 자리 탓을 그대로 말한다 ·
+  // 칸의 D/A 는 배정표 종이의 자리 이름 · 새 간호사는 차지 없이 · 원칙 4 를 끄면 3 이 돌아온다 · '1호' 표기 · 그날 방 수정은 그 인원수일 때만
+  step('33 실시간 수정·칸 표기·설정');
+  const v33 = await ev(`const A=window.__app, D='2026-09-06';
+    const setup=(id,n)=>{ A.setFormId(id); A.setWard(id); const s=A.store;
+      s.order=['김차지','이에이','박비','최씨','정디','한막내'].slice(0,n||5); s.cells={}; s.ovr={}; s.ovrPair={}; s.roomOv={}; s.roomOvCnt={};
+      s.presetDay={}; s.seedManual={}; s.unit={}; s.relief={}; s.trainee={}; s.trOv={}; s.evRules=[]; s.daily={}; s.banRooms={}; s.caps={}; s.hidden={};
+      s.rules={keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false};
+      for(const nm of s.order) s.cells[nm]={[D]:'D'};
+      s.presets={}; s.presetPlan={}; A.store=s; A.resetSchemes(); A.recompute(); return A.store; };
+    const day=()=>A.dayInfo(D).D, seat=nm=>{ const L=day().labels; for(const l in L) if(L[l]===nm) return l; return null; };
+    // 카드를 다 펼쳐서 읽는다 — 좁은 화면에선 접혀 첫 줄만 보인다
+    const card=()=>{ A.wkSunday=new Date(2026,8,6); A.show('week');
+      for(let i=0;i<3;i++){ const f=document.querySelector('#wkWarn.shut .fold')||document.querySelector('#wkWarn .items.clip ~ .more')||document.querySelector('#wkWarn .more');
+        if(!f||!/자세히|더 보기/.test(f.textContent)) break; f.click(); }
+      return (document.querySelector('#wkWarn')||{}).textContent||''; };
+    const pick=(nm,fn)=>{ A.openPick(nm,D,10,10); fn(); };
+    const out={};
+    for(const id of ['101','122','82']){
+      // ① 최씨를 차지 자리로 맞바꾼 뒤 최씨가 OF — 김차지가 차지 자리로 돌아온다, [효력 없는 교체 정리]는 둘 다 지운다
+      let s=setup(id);
+      pick('최씨',()=>A.pickChoose('차지'));
+      out[id+'swap']=[day().charge,seat('김차지')!=='차지'];
+      pick('최씨',()=>A.pickShift('OF'));
+      out[id+'stale']=[day().charge,seat('김차지')];
+      out[id+'audit']=A.ovrAudit().bad.length;
+      A.pruneOvr(); out[id+'pruned']=Object.keys(A.store.ovr).length;
+      // ② 맞바꾼 사람을 명부에서 지우면 상대의 고정도 풀린다
+      s=setup(id);
+      pick('최씨',()=>A.pickChoose('차지'));
+      A.applyNurseName(A.store.order.indexOf('최씨'),null); A.recompute();
+      out[id+'del']=[day().charge,!!((A.store.ovr[D]||{}).D||{})['김차지']];
+      // ③ 김차지 DC 인 날 정디 → 근무 바꾸기 DC: 정디가 차지, 김차지는 D. 표시가 둘이면 카드
+      s=setup(id); s.cells['김차지'][D]='DC'; A.recompute();
+      pick('정디',()=>A.pickShift('DC'));
+      out[id+'dc']=[day().charge,seat('정디'),A.store.cells['김차지'][D]];
+      s.cells['김차지'][D]='DC'; A.recompute();
+      out[id+'dc2']=/차지 표시[(]DC[)]가 2명입니다 — 김차지, 정디[.] 김차지가 차지입니다/.test(card());
+      // ④ 차지 못 하는 박비를 손으로 차지 자리에 — 카드는 손으로 정한 자리 탓, 단추로 풀면 김차지
+      s=setup(id); s.caps={'박비':['D','E','N']}; A.recompute();
+      pick('박비',()=>A.pickChoose('차지'));
+      const c4=card();
+      out[id+'hand']=[day().charge,/박비 — 자격 없이 차지입니다[.] 배정표에서 손으로 차지 자리로 정해 두었기 때문입니다/.test(c4),/차지 가능한 사람이 없어/.test(c4),
+        !!document.querySelector('#wkWarn button.inl[onclick^="clearOvrDay"]')];
+      A.clearOvrDay(D,'D'); out[id+'cleared']=day().charge;
+      // ⑤ 근무표 칸의 D/x 는 배정표 종이의 자리 이름
+      s=setup(id);
+      const at=lb=>{ s.cells['정디'][D]=lb; A.recompute(); const l=seat('정디'); return l?A.FORM_LBL(l,'D'):null; };
+      out[id+'cellA']=at('D/A'); out[id+'cellB']=at('D/B');
+      out[id+'cellCN']=at('D/CN');
+      out[id+'cellF']=[at('D/F'),/정디 — 근무표 칸의 'D[/]F': 이 양식에 'F' 자리가 없습니다/.test(card())];
+      s.cells['정디'][D]='DC/B'; A.recompute();
+      out[id+'dcB']=[day().charge,seat('정디'),/정디 — 근무표 칸의 'DC[/]B': DC 는 차지 자리에 앉으므로/.test(card())];
+    }
+    // 122 야간은 A 가 차지 자리 — N/A 는 차지 자리, N/B 는 그다음
+    { const s=setup('122'); for(const nm of s.order) s.cells[nm][D]='N'; s.cells['정디'][D]='N/B'; A.recompute();
+      const L=A.dayInfo(D).N.labels; out.n122=Object.keys(L).find(l=>L[l]==='정디'); }
+    // 101: 4명인 날 D/E(다섯째 자리) — 그 날 자리가 없다고 알린다
+    { const s=setup('101',4); s.cells['정디']={[D]:'D'}; s.order=['김차지','이에이','박비','정디']; s.cells['정디'][D]='D/E'; A.recompute();
+      out.e4=/정디 — 근무표 칸에 적은 자리 'D[/]E' 에 앉지 못했습니다[.] 그 날 D 는 4자리라 E 자리가 없습니다/.test(card()); }
+    // 102: D/A 는 종이 A 자리(CRN 자리를 정하는 게 아니다), D/CN 은 없는 자리
+    { const s=setup('102'); s.cells['정디'][D]='D/A'; A.recompute();
+      out.a102=[A.FORM_LBL(seat('정디'),'D'),day().charge];
+      s.cells['정디'][D]='D/CN'; A.recompute(); out.cn102=/차지[(]CRN[)]는 자리가 아니라 근무를 DC 로 적습니다/.test(card()); }
+    // ⑥ 새 간호사 — 가능 근무를 정해 둔 병동이면 차지 없이, 근무표의 NC 는 켠다. 처음 시작(가능 근무 없음)은 전부
+    { let s=setup('101'); s.caps={'박비':['D','E','N']};
+      const was=window.prompt; window.prompt=()=>'새간호'; A.addNurse(); window.prompt=was;
+      out.newCaps=A.store.caps['새간호'];
+      s.order.push('새둘'); A.capsForNew('새둘',{'2026-09-07':'NC'}); out.newNC=A.store.caps['새둘'];
+      s=setup('101'); s.order.push('새셋'); out.fresh=[A.capsForNew('새셋',{}),A.store.caps['새셋']||null]; }
+    // ⑦ 원칙 4 를 켰다 끄면 3 이 돌아오고, 되돌리기가 된다. 파일의 원칙 값은 열 때 정리
+    { setup('101'); A.setRule('bounceAfterOff',true); const r1={...A.store.rules};
+      A.setRule('bounceAfterOff',false); const r2={...A.store.rules};
+      A.undoAny(); const r3={...A.store.rules};
+      out.rules=[r1.keepAfterOff,r1.bounceAfterOff,r2.keepAfterOff,r2.bounceAfterOff,r3.keepAfterOff,r3.bounceAfterOff];
+      A.store.rules={keepSameShift:true,keepAfterOff:true,bounceAfterOff:true}; A.migrateStore(); out.norm={...A.store.rules}; }
+    // 우리 병동 표기로 등록한 'D/E' 는 통째로 그 표기 — 자리로 쪼개지 않는다
+    { setup('101'); A.store.custom={'D/E':{p:'rest'}}; out.whole=(A.parseCellRaw('D/E')||{}).code; out.split=(A.parseCellRaw('N/E')||{}).label; A.store.custom={}; }
+    // ⑧ 방 표기 — '1호, 2호' 와 '1~2호' 는 '1, 2' 와 같다
+    out.ho=[A.roomTokens('1호, 2호'),A.roomTokens('1~2호'),A.roomTokens('1001호')];
+    // ⑨ 5명일 때 고친 차지 방은 4명인 날 쓰지 않고(카드), 5명으로 돌아오면 다시 쓴다
+    { const s=setup('101'); const base=A.roomsFor('D',5,'차지',D), base4=A.roomsFor('D',4,'차지',D);
+      A.openRoomPick({kind:'day',iso:D,P:'D',l:'차지'},10,10);
+      const add=A.store.rooms.map(r=>String(r[0])).find(r=>!A.roomTokens(base).map(A.roomFull).includes(r));
+      A.toggleRoom(add); const ed5=A.roomsFor('D',5,'차지',D);
+      s.cells['정디'][D]='OF'; A.recompute();
+      out.rov=[ed5!==base,A.store.roomOvCnt[D].D['차지'],A.roomsFor('D',4,'차지',D)===base4,
+        /그날 방 수정[(]A[(]CN[)] 자리[)]은 5명일 때 고친 것이라 지금 4명인 배정에는 쓰지 않았습니다/.test(card())];
+      s.cells['정디'][D]='D'; A.recompute(); out.rovBack=A.roomsFor('D',5,'차지',D)===ed5; }
+    A.show('week'); return out;`);
+  for (const id of ['101', '122', '82']) {
+    eq(id + ' 최씨를 차지 자리로 맞바꾸면 최씨가 차지', v33[id + 'swap'], ['최씨', true]);
+    eq(id + ' 그 뒤 최씨가 OF — 김차지가 차지 자리로 돌아온다', v33[id + 'stale'], ['김차지', '차지']);
+    eq(id + ' [효력 없는 교체 정리]가 세는 것 — 최씨와 남은 반쪽 김차지', v33[id + 'audit'], 2);
+    eq(id + ' 정리하면 그 날 교체가 하나도 안 남는다', v33[id + 'pruned'], 0);
+    eq(id + ' 맞바꾼 사람을 명부에서 지우면 상대 고정도 풀린다', v33[id + 'del'], ['김차지', false]);
+    eq(id + ' 근무 바꾸기로 정디를 DC — 정디가 차지 자리, 김차지는 D', v33[id + 'dc'], ['정디', '차지', 'D']);
+    ok(id + ' DC 가 둘인 날 카드가 알린다', v33[id + 'dc2']);
+    eq(id + ' 차지 못 하는 사람을 손으로 차지 자리에 — 카드는 손으로 정한 탓 + 풀기 단추', v33[id + 'hand'], ['박비', true, false, true]);
+    eq(id + ' [이 날 D 교체 풀기] 뒤에는 김차지가 차지', v33[id + 'cleared'], '김차지');
+    eq(id + ' D/B 는 종이 B 자리', v33[id + 'cellB'], 'B');
+    eq(id + ' D/CN 은 차지 자리', v33[id + 'cellCN'], { 101: 'A(CN)', 122: 'CN', 82: 'A' }[id]);
+    eq(id + ' D/F(없는 자리)는 고정 안 하고 카드가 알린다', v33[id + 'cellF'], [v33[id + 'cellF'][0], true]);
+    eq(id + ' DC/B — DC 가 이긴다(차지 자리), 카드가 알린다', v33[id + 'dcB'], ['정디', '차지', true]);
+  }
+  eq('101 D/A 는 A(CN) 자리', v33['101cellA'], 'A(CN)');
+  eq('122 D/A 는 A 자리', v33['122cellA'], 'A');
+  eq('82 D/A 는 A 자리', v33['82cellA'], 'A');
+  eq('122 야간 N/B 는 앱 자리 A(종이 B)', v33.n122, 'A');
+  ok('4명인 날 D/E — 그 자리가 없다고 카드가 알린다', v33.e4);
+  eq('102 D/A 는 종이 A 자리, CRN 은 사람대로(김차지)', v33.a102, ['A', '김차지']);
+  ok('102 D/CN — 차지는 근무를 DC 로 적는다고 알린다', v33.cn102);
+  eq('가능 근무를 정해 둔 병동의 새 간호사 — D·E·N', v33.newCaps, ['D', 'E', 'N']);
+  eq('근무표에 NC 가 있는 새 간호사 — NC 는 켠다', v33.newNC, ['D', 'E', 'NC', 'N']);
+  eq('처음 시작한 병동의 새 간호사 — 그대로 전부 가능', v33.fresh, [false, null]);
+  eq('원칙 4 켜기 → 3 꺼짐, 4 끄기 → 3 돌아옴, 되돌리기 → 4 켠 상태', v33.rules, [false, true, true, false, false, true]);
+  eq('파일의 원칙 값 정리 — 빠진 값은 기본, 3·4 둘 다면 3', v33.norm, { keepSameShift: true, keepAcrossShift: true, keepAfterOff: true, bounceAfterOff: false });
+  eq("우리 병동 표기로 등록한 'D/E' 는 통째로, 등록 안 한 'N/E' 는 N + 자리 E", [v33.whole, v33.split], ['D/E', 'E']);
+  eq("'1호, 2호'·'1~2호'·'1001호' 를 방으로 읽는다", v33.ho, [['1', '2'], ['1', '2'], ['1001']]);
+  eq('그날 방 수정은 그 인원수일 때만 — 4명인 날 안 쓰고 카드', v33.rov, [true, 5, true, true]);
+  ok('5명으로 돌아오면 그날 방 수정을 다시 쓴다', v33.rovBack);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));

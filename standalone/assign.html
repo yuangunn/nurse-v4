@@ -1733,9 +1733,12 @@ function parseCellRaw(s){
   }
   // 수면오프 — '수면8' 처럼 야간 누계 숫자가 붙어 나온다(122병동 번표) → 휴무(OF)
   if(/^수면\s*(오프|off)?\s*\d*$/i.test(raw)) return {code:'OF',label:''};
+  // 어싸인 고정 — 'D/A' 의 A 는 **배정표 종이의 자리 이름**이다(A(CN)·CN·A~F). 어느 앱 자리인지는 서식·근무마다 달라
+  // recompute 가 seatOfLabel 로 바꾼다. 예전엔 A~D 만 받고 앱 안쪽 이름으로 읽어 101 에선 한 칸씩 밀렸다 (2026-10-01, 결정 2-44)
+  // 병동이 '우리 병동 표기'로 등록한 글자(예: 'D/E' 를 휴무로)는 통째로 그 표기다 — 자리로 쪼개지 않는다
   let label='';
-  const m=raw.match(/^(.+?)\s*\/\s*([A-Da-d])$/);
-  if(m){ raw=m[1].trim(); label=m[2].toUpperCase(); }
+  const m=!(SH(raw)||(store&&store.alias&&store.alias[raw]))&&raw.match(/^(.+?)\s*\/\s*([A-Fa-f](?:\s*\(\s*[Cc][Rr]?[Nn]\s*\))?|[Cc][Rr]?[Nn]|차지)$/);
+  if(m){ raw=m[1].trim(); label=m[2].toUpperCase().replace(/\s+/g,''); }
   let code=null;
   if(SH(raw)) code=raw;
   else if(SH(raw.toUpperCase())) code=raw.toUpperCase();
@@ -1913,7 +1916,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261001l'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261001o'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -2017,8 +2020,18 @@ function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{}
   evRules:[],     // 교육·행사 일정 [{id,text,from,to,wds?,skip?}] — 이 날만(from=to)·기간·매주 요일 (2026-09-27, eventText)
   duty:{},        // 당직표·번호 {lines:{칸:{fmt}},book:{칸:[{name,phone,ext}]},roster:{칸:{날짜:글자}}} — 하루 어싸인표 당직 칸 (2026-09-27, dutyAuto)
   daily:{},       // 하루 어싸인표 {날짜:{notes?:공지,duty?:{칸:글자}}} — 이 날만 고친 공지·적은 당직. 양식은 store.dayForm {name,b64,savedAt} (2026-09-27)
+  roomOvCnt:{},   // 그날 방 수정을 한 인원수 {날짜:{근무:{자리:인원}}} — 인원이 바뀐 날엔 그 수정을 쓰지 않는다 (2026-10-01, roomOvOn)
   rules:{keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false}}; }
 const capsOf=n=>store.caps[n]||ALL_CAPS;
+/* 새로 들어온 간호사의 가능 근무 — 명부에 가능 근무를 정해 둔 병동이면 차지(DC·EC·NC)는 빼고 넣는다. 정해 둔 것이 없는 병동(처음 시작)은
+ * 지금처럼 전부 가능. 예전엔 새 사람이 늘 차지 가능이라 선임들의 차지를 끈 병동에서 막내가 차지가 됐다 (2026-10-01 검증).
+ * 근무표에 그 사람의 DC·EC·NC 가 적혀 있으면 그 차지는 켠다. 차지를 뺐으면 true */
+function capsForNew(nm,cells){
+  if(!store.order.some(n=>n!==nm&&store.caps[n])) return false;
+  const have=new Set(Object.values(cells||{}).map(v=>{ const pc=parseCellRaw(v); return pc&&pc.code; }));
+  store.caps[nm]=['D','E','N',...['DC','EC','NC'].filter(c=>have.has(c))].sort((a,b)=>ALL_CAPS.indexOf(a)-ALL_CAPS.indexOf(b));
+  return store.caps[nm].length<ALL_CAPS.length;
+}
 function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무 목록)
   if(store.charge&&!Object.keys(store.caps||{}).length){
     store.caps={};
@@ -2088,6 +2101,18 @@ function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무
     for(const iso of Object.keys(store.events).sort()){ const t=String(store.events[iso]||'').trim();
       if(t&&/^\d{4}-\d{2}-\d{2}$/.test(iso)) store.evRules.push({id:evId(),text:t,from:iso,to:iso}); }
   store.events={};
+  // 배정 원칙 — 값이 빠진 원칙은 기본값(배정 엔진과 같게), 원칙 3·4 가 둘 다 켜져 있으면 4 를 끈다(엔진은 3 만 쓴다).
+  // 예전엔 손으로 고친 파일·옛 파일에서 화면 스위치와 실제 배정이 달랐다 (2026-10-01 검증)
+  const R0={keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false};
+  const r0=store.rules&&typeof store.rules==='object'?store.rules:{};
+  store.rules={}; for(const k in R0) store.rules[k]=k in r0?!!r0[k]:R0[k];
+  if(store.rules.keepAfterOff&&store.rules.bounceAfterOff) store.rules.bounceAfterOff=false;
+  // 그날 방 수정을 한 인원수 {날짜:{근무:{자리:인원}}} — 인원이 바뀌면 그 수정은 쓰지 않는다 (roomOvOn). 수정이 없어진 칸은 걷어 낸다
+  if(!store.roomOvCnt||typeof store.roomOvCnt!=='object') store.roomOvCnt={};
+  for(const iso of Object.keys(store.roomOvCnt)){ for(const P of Object.keys(store.roomOvCnt[iso]||{})){
+      for(const l of Object.keys(store.roomOvCnt[iso][P]||{})) if(!((store.roomOv||{})[iso]&&store.roomOv[iso][P]&&l in store.roomOv[iso][P])) delete store.roomOvCnt[iso][P][l];
+      if(!Object.keys(store.roomOvCnt[iso][P]||{}).length) delete store.roomOvCnt[iso][P]; }
+    if(!Object.keys(store.roomOvCnt[iso]||{}).length) delete store.roomOvCnt[iso]; }
 }
 let store=emptyStore();
 let fileHandle=null, dirty=false, saveT=null;
@@ -2761,9 +2786,11 @@ function timelineRange(){
   }
   return min?{min,max}:null;
 }
+/* 근무표 칸에 적은 자리 {날짜:{근무:{이름:{lb,code,seat,why}}}} — 확인 카드가 '적은 자리에 못 앉은' 칸을 알린다 (recompute 가 채운다) */
+let cellPins={};
 function recompute(){
   const r=timelineRange();
-  result=null; tlKeys=[];
+  result=null; tlKeys=[]; cellPins={};
   rowsSig=seatSig();
   if(!r||!store.order.length){ return; }
   let start=new Date(r.min+'T00:00:00');
@@ -2791,18 +2818,26 @@ function recompute(){
       sc[iso]=pc.code;
       if(pc.label){
         const P=AssignCore.periodOf(pc.code);
-        if(P) ((cellOvr[iso]=cellOvr[iso]||{})[P]=cellOvr[iso][P]||{})[n]=pc.label;
+        if(!P) continue;
+        // 종이 자리 이름 → 앱 자리. 차지 자리가 고정인 서식에서 DC·EC·NC 는 차지 자리에 앉는다 — 다른 자리를 같이 적으면 표시를 따른다
+        let seat=seatOfLabel(pc.label,P), why=seat?'':'none';
+        if(seat&&/C$/.test(pc.code)&&!crnFloat(P)&&seat!=='차지'){ seat=null; why='chg'; }
+        ((cellPins[iso]=cellPins[iso]||{})[P]=cellPins[iso][P]||{})[n]={lb:pc.label,code:pc.code,seat,why};
+        if(seat) ((cellOvr[iso]=cellOvr[iso]||{})[P]=cellOvr[iso][P]||{})[n]=seat;
       }
     }
     schedule[n]=sc;
   }
   for(const nm in rel) schedule[nm]={...rel[nm]};
-  // 수동 교체(ovr)가 셀 선입력과 충돌하면 수동이 우선
+  // 수동 교체(ovr)가 셀 선입력과 충돌하면 수동이 우선.
+  // 맞바꿈의 남은 반쪽은 건너뛴다 — 맞바꾼 상대가 그 날 그 근무가 아니면(근무 바꾸기·고치기 화면·새 근무표) 이 사람이 그 자리에
+  // 묶일 이유가 없다. 남겨 두면 차지 자리에서 밀려난 선임이 계속 밀려나 후임·대체간호사가 차지가 됐다 (2026-10-01 검증)
   const merged={};
   for(const dk in cellOvr){ merged[dk]={}; for(const P in cellOvr[dk]) merged[dk][P]={...cellOvr[dk][P]}; }
   for(const dk in store.ovr) for(const P in store.ovr[dk]){
     const t=((merged[dk]=merged[dk]||{})[P]=merged[dk][P]||{});
     for(const nm in store.ovr[dk][P]){
+      if(ovrMateGone(dk,P,nm)) continue;
       const lb=store.ovr[dk][P][nm];
       for(const k in t) if(t[k]===lb||k===nm) delete t[k];
       t[nm]=lb;
@@ -2818,7 +2853,7 @@ function recompute(){
   // (시간대·인원수·라벨)로만 정해지므로 그 키로 캐시한다.
   const rfCache={};
   const roomsForCore=(P,cnt,label,dk)=>{
-    const ovd=store.roomOv[dk]&&store.roomOv[dk][P]&&(label in store.roomOv[dk][P]);
+    const ovd=roomOvOn(dk,P,label,cnt)!=null;
     const key=P+'|'+cnt+'|'+label+'|'+presetFor(P,cnt,dk).id+(ovd?'|'+dk:'');
     // 코어에는 늘 병상 키로 (방·병상 표기가 섞이면 같은 환자인데 겹침이 0이 된다)
     if(!rfCache[key]) rfCache[key]=expandBeds(roomTokens(roomsFor(P,cnt,label,dk)));
@@ -2949,6 +2984,19 @@ const cntTabs=()=>(['D','E','N'].some(P=>seatsFor(P)>=6)?[6,5,4,3,2]:[5,4,3,2]);
 /* 자리 이름 — 서식마다 다르다(FORMS.labels). P 를 주면 그 근무의 표기: 122 서식의 야간은 A·B·C */
 function FORM_LBL(l,P){ const F=formDef(), t=P&&tplLabels(); if(t&&t[P]&&t[P][l]) return t[P][l];   // 자리표시자 양식은 종이에 적힌 자리 이름
   const m=(P==='N'&&F.labelsN)||F.labels; return m[l]||l; }
+/* 근무표 칸에 적은 자리('D/A' 의 A) → 앱 자리. 적는 글자는 **배정표 종이의 자리 이름**이다 — 배정표·인쇄·이름 클릭 창이 모두
+ * 종이 이름(FORM_LBL)을 쓰므로 칸만 앱 안쪽 이름이면 101 에선 'D/A' 가 B 자리로 갔다 (2026-10-01 검증, 결정 2-44).
+ * 'A(CN)' 은 'A' 로도, 차지 자리가 고정인 서식의 차지 자리는 'CN'·'CRN'·'차지' 로도 적을 수 있다. 없는 자리면 null */
+function seatNameNorm(s){ return String(s||'').toUpperCase().replace(/\s+/g,''); }
+function seatNames(P){ return LBL_ORDER.slice(0,seatsFor(P)).map(l=>[l,seatNameNorm(FORM_LBL(l,P))]).filter(([,p])=>/^[A-F](\(C?R?N\))?$|^C?R?N$/.test(p)); }
+function seatOfLabel(lb,P){
+  const want=seatNameNorm(lb); if(!want) return null;
+  const names=seatNames(P);
+  const hit=names.find(([,p])=>p===want)||names.find(([,p])=>p.replace(/\(.*\)$/,'')===want);
+  if(hit) return hit[0];
+  if(/^(CR?N|차지)$/.test(want)&&!crnFloat(P)) return '차지';
+  return null;
+}
 let wkSunday=(()=>{const t=new Date();t.setHours(0,0,0,0);return addDays(t,-t.getDay())})();
 function moveWeek(n){ wkSunday=addDays(wkSunday,7*n); renderWeek(); }
 function goToday(){ const t=new Date();t.setHours(0,0,0,0); wkSunday=addDays(t,-t.getDay()); renderWeek(); }
@@ -2978,9 +3026,26 @@ function presetFor(P,cnt,iso){
   return {...presetsOf(cnt)[0],src:'default'};
 }
 const presetSrcLabel=pr=>pr.src==='day'?'오늘만 바꾼 상태':pr.src==='plan'?'요일 계획':'기본';
-function roomsFor(P,cnt,label,iso){
-  // 그날 하루 방 수정(roomOv)이 있으면 그 값 그대로 (예: 환자 빠져 차지가 12호 추가)
+/* 그날 하루 방 수정(roomOv) — **고친 그 인원수일 때만** 쓴다. 5명일 때 고친 차지 방을 4명이 된 날에도 들고 가면 4인 방 구성과
+ * 겹치거나 빈 방이 생겼다 (2026-10-01 검증). 인원수를 적어 두지 않은 옛 수정은 예전처럼 늘 쓴다 */
+function roomOvOn(iso,P,label,cnt){
   const ov=iso&&store.roomOv[iso]&&store.roomOv[iso][P]&&store.roomOv[iso][P][label];
+  if(ov==null) return null;
+  const at=(((store.roomOvCnt||{})[iso]||{})[P]||{})[label];
+  if(at!=null&&cnt&&clampCnt(cnt,P)!==at) return null;
+  return ov;
+}
+/* 그날 방 수정 쓰기·지우기 — 인원수(roomOvCnt)를 함께 적는다 */
+function setRoomOv(iso,P,l,val,cnt){
+  const ro=(store.roomOv[iso]=store.roomOv[iso]||{}), rc=(store.roomOvCnt=store.roomOvCnt||{});
+  if(val!=null&&val!==''){ (ro[P]=ro[P]||{})[l]=val; if(cnt) ((rc[iso]=rc[iso]||{})[P]=rc[iso][P]||{})[l]=clampCnt(cnt,P); }
+  else{ if(ro[P]){ delete ro[P][l]; if(!Object.keys(ro[P]).length) delete ro[P]; }
+    if(rc[iso]&&rc[iso][P]){ delete rc[iso][P][l]; if(!Object.keys(rc[iso][P]).length) delete rc[iso][P]; if(!Object.keys(rc[iso]).length) delete rc[iso]; } }
+  if(!Object.keys(ro).length) delete store.roomOv[iso];
+}
+function roomsFor(P,cnt,label,iso){
+  // 그날 하루 방 수정(roomOv)이 있으면 그 값 그대로 (예: 환자 빠져 차지가 12호 추가) — 고친 인원수일 때만
+  const ov=roomOvOn(iso,P,label,cnt);
   if(ov!=null) return ov;
   if(!cnt) return '';
   return abbrevRooms(presetFor(P,cnt,iso).rooms[label]);
@@ -3025,10 +3090,18 @@ function collapseBeds(keys){
   return out;
 }
 const roomsLabel=list=>{ const t=abbrevRooms(list); return t?(/:/.test(t)?t:t+'호'):''; };
+/* 방 입력칸에 적은 것 중 병실 목록에 없는 방 — '1-2' 처럼 방인지 병상인지 모르는 표기를 알린다 (저장은 적은 그대로) */
+function roomTextWarn(str){
+  const rs=new Set((store.rooms||[]).map(r=>String(r[0]))); if(!rs.size||!str) return;
+  const bad=roomTokens(str).filter(t=>!rs.has(splitBed(roomFull(t))[0]));
+  if(bad.length) toast(`${bad.join(', ')} — 병실 목록에 없는 방입니다. 방은 1, 2 또는 1~2, 병상은 1:2 처럼 적어 주세요`,5200);
+}
 function roomTokens(str){ // "1~3.11" → ['1','2','3','11'] · "1:1~3" → ['1:1','1:2','1:3'] (중복 검사용)
   if(!str) return [];
   const out=[];
-  for(const part of String(str).split(/[.,\s]+/)){
+  for(let part of String(str).split(/[.,\s]+/)){
+    // 화면 표기처럼 '1호, 2호'·'1~2호' 로 적어도 같은 방 — 예전엔 '1호' 를 다른 방으로 읽어 이어 보기·주지 않을 방에서 빠졌다 (2026-10-01)
+    part=part.replace(/호$/,'');
     if(!part) continue;
     // 병상 범위 — 1:1~3 또는 1:1~1:3 (같은 방 안에서만)
     let m=part.match(/^(\d+):(\d+)~(?:(\d+):)?(\d+)$/);
@@ -3267,9 +3340,9 @@ function renderWeek(){
              `<td class="${day?'emp':''}${tdCls(d)}"${ea}>${day?'<span class="plus">＋ 넣기</span>':''}</td>`; return; }
         const rl=isRelief(nm,iso);
         const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
-        const ov=store.ovr[iso]&&store.ovr[iso][P]&&(nm in store.ovr[iso][P]);
+        const ov=store.ovr[iso]&&store.ovr[iso][P]&&(nm in store.ovr[iso][P])&&!ovrMateGone(iso,P,nm);   // 맞바꾼 상대가 빠진 반쪽은 효력이 없다
         const rmStr=roomsFor(P,cnt,label,iso);
-        const isRov=store.roomOv[iso]&&store.roomOv[iso][P]&&(label in store.roomOv[iso][P]);
+        const isRov=roomOvOn(iso,P,label,cnt)!=null;
         const hasDup=dups[di]&&expandBeds(roomTokens(rmStr)).some(t=>dups[di][P].has(t));
         const pr=presetFor(P,cnt,iso), preOn=li===0&&pr.src!=='default';
         h+=(noRm?'':`<td class="rm${isRov?' rov':''}${hasDup?' rdup':''}${preOn?' rpre':''}${tdCls(d)}" data-iso="${iso}" data-p="${P}" data-l="${label}"`+
@@ -3358,8 +3431,42 @@ function renderWeekWarnings(days,infos){
         push('warn',`${md(iso)} ${P} ${day[P].extra.map(esc).join(', ')} — 자리(${seatsFor(P)}개)보다 사람이 많아 어싸인 없이 근무합니다(헬퍼).`);
       // 차지 자격 — 차지 표기(DC 등) 없이 자동으로 뽑힌 사람이 차지 가능이 아니면 (표기가 있으면 위 '가능 근무' 경고가 맡는다)
       const ch=day[P].charge;   // 자리가 아니라 사람 — 102 CRN 은 어느 자리든 앉는다
-      if(ch){ const pc=parseCellRaw((store.cells[ch]||{})[iso]||''); if(pc&&pc.code&&!/C$/.test(pc.code)&&!capsOf(ch).includes(P+'C')) chgMiss.push(`${md(iso)} ${P} ${esc(ch)}`);
-        else if(isRelief(ch,iso)) chgMiss.push(`${md(iso)} ${P} ${esc(ch)}(대체)`); }
+      const here=[...Object.values(day[P].labels),...day[P].extra];
+      if(ch){ const pc=parseCellRaw((store.cells[ch]||{})[iso]||''), rel=isRelief(ch,iso);
+        if(rel||(pc&&pc.code&&!/C$/.test(pc.code)&&!capsOf(ch).includes(P+'C'))){
+          const tag=esc(ch)+(rel?'(대체)':'');
+          // 왜 — 차지 자리가 고정인 서식은 손으로 정한 자리가 시니어리티보다 앞선다. 손으로 옮긴 탓이면 그렇게 말하고 그날 교체를 푸는 단추를 단다
+          // (예전엔 차지 가능한 사람이 그 근무에 있어도 '차지 가능한 사람이 없어'라며 간호사 관리로 보냈다 — 2026-10-01 검증)
+          const hand=!crnFloat(P)&&handSeat(ch,iso,P);
+          const held=crnFloat(P)?[]:here.filter(n=>n!==ch&&!isRelief(n,iso)&&capsOf(n).includes(P+'C')&&handSeat(n,iso,P));
+          const viaOvr=[ch,...held].some(n=>handSeat(n,iso,P)&&handSeat(n,iso,P).by==='ovr');
+          const btn=viaOvr?` <button class="inl" onclick="clearOvrDay('${iso}','${P}')" title="이 날 ${P} 근무에서 손으로 바꾼 자리를 모두 자동으로 되돌립니다 — Ctrl+Z 로 되돌릴 수 있습니다">이 날 ${P} 교체 풀기</button>`:'';
+          const by=ns=>{ const k=new Set(ns.map(n=>handSeat(n,iso,P).by)); return k.size>1?'손으로':k.has('ovr')?'배정표에서 손으로':'근무표 칸에'; };
+          if(hand&&hand.l==='차지') push('err',`${md(iso)} ${P} ${tag} — 자격 없이 차지입니다. ${by([ch])} 차지 자리로 정해 두었기 때문입니다.${btn}`);
+          else if(held.length) push('err',`${md(iso)} ${P} ${tag} — 자격 없이 차지가 됐습니다. 차지 가능한 ${held.map(esc).join(', ')}의 자리를 ${by(held)} 정해 두었기 때문입니다.${btn}`);
+          else chgMiss.push(`${md(iso)} ${P} ${tag}`);
+        } }
+      // 차지 표시가 둘 — 선임이 차지다. 근무 바꾸기로 다른 사람을 DC 로 고르면 나머지 표시는 D 로 바뀐다
+      const marks=here.filter(n=>{ const pc=parseCellRaw((store.cells[n]||{})[iso]||''); return pc&&pc.code===P+'C'; });
+      if(marks.length>1) push('warn',`${md(iso)} ${P} 차지 표시(${P}C)가 ${marks.length}명입니다 — ${marks.map(esc).join(', ')}. ${esc(josa(ch||marks[0],'이','가'))} 차지입니다. 다른 사람으로 바꾸려면 그 이름을 눌러 근무를 ${P}C 로 고르세요(나머지는 ${P} 로 바뀝니다).`);
+      // 근무표 칸에 적은 자리(D/A) — 글자는 배정표의 자리 이름이다. 없는 자리·차지 표시와 겹침·그 날 못 앉은 자리를 알린다
+      const cp=(cellPins[iso]||{})[P]||{};
+      for(const nm in cp){
+        const c=cp[nm], txt=esc(cellText({code:c.code,label:c.lb})), info=result&&result.byNurse[nm]&&result.byNurse[nm][iso];
+        if(!info) continue;
+        if(c.why==='none') push('err',`${md(iso)} ${P} ${esc(nm)} — 근무표 칸의 '${txt}': 이 양식에 '${esc(c.lb)}' 자리가 없습니다. `+
+          (/^(CR?N|차지)$/.test(c.lb)&&crnFloat(P)?`차지(CRN)는 자리가 아니라 근무를 ${P}C 로 적습니다.`:`배정표의 자리 이름(${seatNames(P).map(([l])=>esc(FORM_LBL(l,P))).join('·')})으로 적어 주세요.`));
+        else if(c.why==='chg') push('warn',`${md(iso)} ${P} ${esc(nm)} — 근무표 칸의 '${txt}': ${esc(c.code)} 는 차지 자리에 앉으므로 '/${esc(c.lb)}' 는 쓰지 않았습니다.`);
+        else if(info.label!==c.seat&&!(handSeat(nm,iso,P)&&handSeat(nm,iso,P).by==='ovr')){
+          const nSeat=Object.keys(day[P].labels).length;
+          const why=LBL_ORDER.indexOf(c.seat)>=nSeat?`그 날 ${P} 는 ${nSeat}자리라 ${esc(FORM_LBL(c.seat,P))} 자리가 없습니다.`:'다른 사람을 그 자리로 정해 두었습니다.';
+          push('warn',`${md(iso)} ${P} ${esc(nm)} — 근무표 칸에 적은 자리 '${txt}' 에 앉지 못했습니다. ${why}`);
+        }
+      }
+      // 그날 방 수정을 한 뒤 인원이 바뀌었으면 그 수정은 쓰지 않는다(roomOvOn) — 말없이 사라지지 않게 알린다
+      const rov=(store.roomOv[iso]||{})[P], rcn=(((store.roomOvCnt||{})[iso]||{})[P])||{};
+      if(rov&&cnt){ const stale=Object.keys(rov).filter(l=>rcn[l]!=null&&rcn[l]!==clampCnt(cnt,P));
+        if(stale.length) push('warn',`${md(iso)} ${P} 그날 방 수정(${stale.map(l=>esc(FORM_LBL(l,P))).join('·')} 자리)은 ${rcn[stale[0]]}명일 때 고친 것이라 지금 ${cnt}명인 배정에는 쓰지 않았습니다. 방 칸을 눌러 다시 고치세요.`); }
       // 인원은 재지 않는다 — 완성된 근무표를 받는다 (결정 2-28). 양식 칸을 넘는 것만 위에서 알린다(인쇄에서 사라지므로)
       for(const T of unattachedTrainees(iso,P,day)) (trMiss[T]=trMiss[T]||[]).push({iso,P,workers:[...Object.values(day[P].labels),...day[P].extra]});
       // 방 — 아무도 안 보는 방·두 자리가 겹치는 방 (같은 내용은 날짜·시간대를 묶어 한 줄)
@@ -3381,8 +3488,7 @@ function renderWeekWarnings(days,infos){
         if(!hit.length) continue;
         // 왜 피하지 못했는지 — 코어는 손으로 정한 자리·차지를 뺀 자리를 다 따져 본다(2026-10-01). 그러니 남은 것은
         // ① 손으로 옮긴 자리 ② 자리가 고정인 서식의 차지 자리(차지는 주지 않을 방과 상관없이 시니어리티) ③ 모두 피하는 배치가 없는 날
-        const pc=parseCellRaw((store.cells[nm]||{})[iso]||'');
-        const byHand=!!((((store.ovr||{})[iso]||{})[P]||{})[nm])||!!(pc&&pc.label);
+        const byHand=!!handSeat(nm,iso,P);   // 효력 있는 손 교체(맞바꾼 상대가 빠진 반쪽은 아님) 또는 근무표 칸의 자리
         const why=byHand?'손으로 옮긴 자리입니다 — 그 자리 이름을 눌러 바꿀 수 있습니다.'
           :(l==='차지'&&day[P].charge===nm&&!crnFloat(P))?'차지 자리의 방이라 차지가 봅니다 — 그날 방 수정이나 관리 > 방 구성에서 그 방을 다른 자리로 옮기세요.'
           :'모두 피하는 배치가 없습니다.';
@@ -3754,27 +3860,29 @@ function pickChoose(label){
  * 차지 자리가 종이에 따로 있는 양식(A(CN)·D(CRN))은 손으로 옮긴 자리가 표시보다 앞서므로, 그 자리에 고정된 사람과
  * 이 사람의 고정을 풀어야 이 사람이 차지 자리로 간다 — 예전엔 근무만 DC 로 바뀌고 차지는 그대로였다 (교차 검토).
  * 알림에는 바뀐 것을 그대로 적는다: 자리가 바뀐 사람, 종이에서 빠진 사람(확인 카드와 같은 기준 paperSeat). */
-function pickCrn(){
-  const {name,iso,period:P}=pickCtx; closePick();
-  snapshot();
+/* 차지 표시(DC·EC·NC)를 이 사람에게 줄 때 — 같은 날 같은 근무의 다른 표시는 보통 근무로 내리고(자리 표기는 그대로),
+ * 차지 자리가 고정인 서식은 손으로 옮긴 자리가 표시보다 앞서므로 이 사람과 차지 자리에 고정된 사람의 교체를 푼다.
+ * 이 사람의 칸은 부르는 쪽이 쓴다. 내린 사람 이름 목록을 돌려준다 */
+function giveChargeMark(name,iso,P){
   const was=[];
   for(const n of store.order){
     if(n===name) continue;
     const pc=parseCellRaw((store.cells[n]||{})[iso]||'');
     if(pc&&pc.code===P+'C'){ store.cells[n][iso]=cellText({code:P,label:pc.label}); was.push(n); }
   }
+  if(!crnFloat(P)){
+    freeOvr(iso,P,name);
+    const pv=store.ovr[iso]&&store.ovr[iso][P];
+    if(pv) for(const n of Object.keys(pv)) if(pv[n]==='차지') freeOvr(iso,P,n);
+  }
+  return was;
+}
+function pickCrn(){
+  const {name,iso,period:P}=pickCtx; closePick();
+  snapshot();
   const pc=parseCellRaw((store.cells[name]||{})[iso]||'');
   const pin=!crnFloat(P);
-  if(pin){
-    const pv=store.ovr[iso]&&store.ovr[iso][P], pr=store.ovrPair[iso]&&store.ovrPair[iso][P];
-    const free=n=>{ if(pv) delete pv[n]; if(pr){ const m=pr[n]; delete pr[n]; if(m&&pr[m]===n){ delete pr[m]; if(pv) delete pv[m]; } } };
-    free(name);
-    if(pv) for(const n of Object.keys(pv)) if(pv[n]==='차지') free(n);
-    if(pv&&!Object.keys(pv).length) delete store.ovr[iso][P];
-    if(store.ovr[iso]&&!Object.keys(store.ovr[iso]).length) delete store.ovr[iso];
-    if(pr&&!Object.keys(pr).length) delete store.ovrPair[iso][P];
-    if(store.ovrPair[iso]&&!Object.keys(store.ovrPair[iso]).length) delete store.ovrPair[iso];
-  }
+  const was=giveChargeMark(name,iso,P);
   // 그 날 그 근무에서 누가 어느 자리이고 종이에 찍히는지
   const seats=()=>{ const d=(dayInfo(iso)||{})[P], ps=paperSeat(P), m={};
     if(d){ for(const l in d.labels) m[d.labels[l]]={l,on:ps.on(l)}; for(const n of d.extra) m[n]={l:null,on:false}; }
@@ -3793,21 +3901,19 @@ function pickCrn(){
 }
 function pickClearDay(){ // 이 날 이 시간대의 수동 교체를 모두 푼다
   const {iso,period}=pickCtx; closePick();
-  if(!(store.ovr[iso]&&store.ovr[iso][period])){ toast('이 날 이 시간대에는 수동 교체가 없습니다'); return; }
-  snapshot();
-  delete store.ovr[iso][period]; if(!Object.keys(store.ovr[iso]).length) delete store.ovr[iso];
-  if(store.ovrPair[iso]){ delete store.ovrPair[iso][period]; if(!Object.keys(store.ovrPair[iso]).length) delete store.ovrPair[iso]; }
-  touch(); recompute(); if(curScr==='week') renderWeek();
-  toast(`${+iso.slice(8,10)}일 ${period} 수동 교체를 모두 풀었습니다`,2800,true);
+  clearOvrDay(iso,period);
 }
 function pickShift(code){
   const {name,iso}=pickCtx; closePick();
   snapshot();                                          // 근무를 덮어쓰는 유일한 화면 밖 경로 — 되돌릴 수 있어야 한다
+  // DC·EC·NC 로 바꾸면 이 사람이 차지다 — 같은 근무의 다른 표시는 보통 근무로 내린다. 예전엔 선임이 이미 DC 면 DC 가 둘이 되고
+  // 선임이 그대로 차지라 눌러도 아무 일이 없었다 (2026-10-01 검증, [CRN 맡기기]와 같은 규칙)
+  const was=/^(DC|EC|NC)$/.test(code)?giveChargeMark(name,iso,code[0]):[];
   store.cells[name]=store.cells[name]||{};
   if(code) store.cells[name][iso]=code; else delete store.cells[name][iso];
   touch(); recompute();
   if(curScr==='week') renderWeek();
-  toast(name+' '+(+iso.slice(8,10))+'일 근무 → '+(code||'지움'),2800,true);
+  toast(name+' '+(+iso.slice(8,10))+'일 근무 → '+(code||'지움')+(was.length?` · ${was.join(', ')} 은 ${code[0]}`:''),was.length?3600:2800,true);
 }
 function resetOv(){
   const n=Object.keys(store.ovr).length;
@@ -3815,31 +3921,60 @@ function resetOv(){
   if(!confirm('수동 교체 '+n+'일치를 모두 초기화할까요?')) return;
   store.ovr={}; store.ovrPair={}; touch(); recompute(); renderAdmin(); toast('초기화됨');
 }
-/* 수동 교체 중 근무표가 바뀌어 효력 없는 항목 — 그 사람이 그날 그 시간대 근무가 아님 (2026-09-17) */
+/* 받침에 맞는 조사 — josa('김간호','이','가') → '김간호가' */
+function josa(w,a,b){ w=String(w); const c=w.charCodeAt(w.length-1); return w+(c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28?a:b); }
+/* 그 사람이 그 날 그 근무인가 — 근무표 칸이나 대체간호사 */
+function worksP(nm,dk,P){
+  const pc=parseCellRaw((store.cells[nm]||{})[dk]||'');
+  return !!(pc&&pc.code&&AssignCore.periodOf(pc.code)===P)||reliefP(nm,dk)===P;
+}
+/* 맞바꿈의 남은 반쪽 — 맞바꾼 상대가 그 날 그 근무가 아니면(아파서 OF 등) 이 사람이 그 자리에 묶일 이유도 없다.
+ * 맞바꿈은 한 덩어리다: [자동으로 되돌리기]·대체간호사 빼기·[CRN 맡기기]도 상대를 함께 푼다 (2026-10-01 검증) */
+function ovrMateGone(dk,P,nm){ const m=((store.ovrPair[dk]||{})[P]||{})[nm]; return !!m&&!worksP(m,dk,P); }
+/* 그 날 그 근무에서 이 사람의 자리를 사람이 정했나 — 배정표에서 옮긴 자리(by:'ovr') 또는 근무표 칸의 D/B(by:'cell'). recompute 와 같은 판단 */
+function handSeat(nm,iso,P){
+  const v=((store.ovr[iso]||{})[P]||{})[nm];
+  if(v&&worksP(nm,iso,P)&&!ovrMateGone(iso,P,nm)) return {l:v,by:'ovr'};
+  const c=((cellPins[iso]||{})[P]||{})[nm];
+  return c&&c.seat?{l:c.seat,by:'cell',lb:c.lb,code:c.code}:null;
+}
+/* 한 사람의 수동 교체를 푼다 — 맞바꾼 상대가 이 사람과 짝이면 상대도. 빈 칸은 걷어 낸다 */
+function freeOvr(dk,P,nm){
+  const pv=store.ovr[dk]&&store.ovr[dk][P], pr=store.ovrPair[dk]&&store.ovrPair[dk][P];
+  if(pv) delete pv[nm];
+  if(pr){ const m=pr[nm]; delete pr[nm]; if(m&&pr[m]===nm){ delete pr[m]; if(pv) delete pv[m]; } }
+  if(pv&&!Object.keys(pv).length){ delete store.ovr[dk][P]; if(!Object.keys(store.ovr[dk]).length) delete store.ovr[dk]; }
+  if(pr&&!Object.keys(pr).length){ delete store.ovrPair[dk][P]; if(!Object.keys(store.ovrPair[dk]).length) delete store.ovrPair[dk]; }
+}
+/* 이 날 이 근무의 수동 교체를 모두 푼다 — 이름 클릭 창과 확인 카드의 단추가 같이 쓴다 */
+function clearOvrDay(iso,P,quiet){
+  if(!(store.ovr[iso]&&store.ovr[iso][P])){ if(!quiet) toast('이 날 이 시간대에는 수동 교체가 없습니다'); return false; }
+  snapshot();
+  delete store.ovr[iso][P]; if(!Object.keys(store.ovr[iso]).length) delete store.ovr[iso];
+  if(store.ovrPair[iso]){ delete store.ovrPair[iso][P]; if(!Object.keys(store.ovrPair[iso]).length) delete store.ovrPair[iso]; }
+  touch(); recompute(); if(curScr==='week') renderWeek();
+  toast(`${+iso.slice(8,10)}일 ${P} 수동 교체를 모두 풀었습니다`,2800,true);
+  return true;
+}
+/* 수동 교체 중 근무표가 바뀌어 효력 없는 항목 — 그 사람이 그날 그 시간대 근무가 아니거나, 맞바꾼 상대가 아님 (2026-09-17·10-01) */
 function ovrAudit(){
   let ok=0; const bad=[];
   for(const dk in store.ovr) for(const P in store.ovr[dk]) for(const nm in store.ovr[dk][P]){
-    const pc=parseCellRaw((store.cells[nm]||{})[dk]||'');
-    if(pc&&pc.code&&AssignCore.periodOf(pc.code)===P||reliefP(nm,dk)===P) ok++; else bad.push({dk,P,nm});
+    if(worksP(nm,dk,P)&&!ovrMateGone(dk,P,nm)) ok++; else bad.push({dk,P,nm});
   }
   return {ok,bad};
 }
 function pruneOvr(){
   const {bad}=ovrAudit(); if(!bad.length){ toast('효력 없는 교체가 없습니다'); return; }
   snapshot();
-  for(const {dk,P,nm} of bad){
-    const pv=store.ovr[dk]&&store.ovr[dk][P]; if(pv){ delete pv[nm]; if(!Object.keys(pv).length) delete store.ovr[dk][P]; if(!Object.keys(store.ovr[dk]).length) delete store.ovr[dk]; }
-    const pp=store.ovrPair[dk]&&store.ovrPair[dk][P];
-    if(pp){ delete pp[nm]; for(const k in pp) if(pp[k]===nm) delete pp[k];
-      if(!Object.keys(pp).length) delete store.ovrPair[dk][P]; if(!Object.keys(store.ovrPair[dk]).length) delete store.ovrPair[dk]; }
-  }
+  for(const {dk,P,nm} of bad) freeOvr(dk,P,nm);   // 상대가 남아 있으면 상대의 고정도 — 반쪽만 지우면 상대가 계속 그 자리에 묶였다
   touch(); recompute(); renderAdmin(); toast(`효력 없는 교체 ${bad.length}건을 지웠습니다`,2800,true);
 }
 function resetRoomOv(){
   const n=Object.keys(store.roomOv).length, m=Object.keys(store.presetDay||{}).length;
   if(!n&&!m){ toast('방 수정 없음'); return; }
   if(!confirm('일별 방 수정 '+n+'일치'+(m?' · 그날만 바꾼 프리셋 '+m+'일치':'')+'를 모두 초기화할까요?')) return;
-  store.roomOv={}; store.presetDay={}; touch(); recompute(); renderAdmin(); if(curScr==='week') renderWeek(); toast('초기화됨');
+  store.roomOv={}; store.roomOvCnt={}; store.presetDay={}; touch(); recompute(); renderAdmin(); if(curScr==='week') renderWeek(); toast('초기화됨');
 }
 document.addEventListener('mousedown',e=>{
   if($('#pick').style.display==='block'&&!e.target.closest('#pick')&&!e.target.closest('td.nm')&&!e.target.closest('td[data-empty]')) closePick();
@@ -3919,9 +4054,8 @@ function applyRoomSel(keys){
     touch(); recompute(); renderRoomPick();
     if(curScr==='week') renderWeek(); if(curScr==='admin') renderAdmin();
   }else{
-    const {iso,P,l}=rpCtx;
-    const ro=(store.roomOv[iso]=store.roomOv[iso]||{});
-    (ro[P]=ro[P]||{})[l]=abbrevRooms(sel);
+    const {iso,P,l}=rpCtx, day=dayInfo(iso);
+    setRoomOv(iso,P,l,abbrevRooms(sel),day?Object.keys(day[P].labels).length+day[P].extra.length:0);
     touch(); recompute(); renderWeek(); renderRoomPick();
   }
 }
@@ -3936,10 +4070,7 @@ function toggleBed(rm,no){
 }
 function roomPickAuto(){
   const {iso,P,l}=rpCtx; closeRoomPick();
-  const ro=store.roomOv[iso];
-  if(ro&&ro[P]){ delete ro[P][l];
-    if(!Object.keys(ro[P]).length) delete ro[P];
-    if(!Object.keys(ro).length) delete store.roomOv[iso]; }
+  setRoomOv(iso,P,l,null);
   touch(); recompute(); renderWeek();
 }
 function roomPickManual(){
@@ -3949,13 +4080,9 @@ function roomPickManual(){
   const v=prompt(`${+iso.slice(8,10)}일 ${P} ${FORM_LBL(l,P)} 방 — 이 날 하루만 적용 (예: ${roomHint()} · 비우면 자동으로)`,
     roomsFor(P,cnt,l,iso));
   if(v===null) return;
-  const ro=(store.roomOv[iso]=store.roomOv[iso]||{});
-  const pv=(ro[P]=ro[P]||{});
-  if(v.trim()) pv[l]=v.trim();
-  else{ delete pv[l];
-    if(!Object.keys(pv).length) delete ro[P];
-    if(!Object.keys(ro).length) delete store.roomOv[iso]; }
+  setRoomOv(iso,P,l,v.trim()||null,cnt);
   touch(); recompute(); renderWeek();
+  roomTextWarn(v);
 }
 function banClear(){
   delete store.banRooms[rpCtx.name];
@@ -4418,8 +4545,9 @@ function confirmPaste(){
   // 번표를 넣어도 유지된다 — 간호사 관리에서 고칠 수 있다.
   store.unit=store.unit||{};
   for(const nm in (pending.unitOf||{})) store.unit[nm]=pending.unitOf[nm];
+  const noChg=[];
   for(const nm of pending.names){
-    if(!store.order.includes(nm)) store.order.push(nm);
+    if(!store.order.includes(nm)){ store.order.push(nm); if(!(store.unit||{})[nm]&&capsForNew(nm,pending.byName[nm])) noChg.push(nm); }
     if(store.hidden&&store.hidden[nm]&&Object.values(pending.byName[nm]).some(Boolean)) delete store.hidden[nm];   // 전출자의 근무가 들어오면 복귀
     store.cells[nm]=store.cells[nm]||{};
     for(const iso in pending.byName[nm]){
@@ -4439,7 +4567,7 @@ function confirmPaste(){
   resetPaste();
   if(wizResume()) return;          // 마법사 중이면 다음 단계로 (전체 화면은 붙여넣기에만 빌려 준다)
   show('week');
-  toast('저장했습니다',2800,true);   // show() 뒤 — 화면 전환이 알림을 지우지 않게
+  toast('저장했습니다'+(noChg.length?` · 새 간호사 ${noChg.join(', ')} 은 차지(DC·EC·NC)를 꺼서 넣었습니다 — 관리 > 간호사 관리에서 켜세요`:''),noChg.length?6000:2800,true);   // show() 뒤 — 화면 전환이 알림을 지우지 않게
 }
 /* 엑셀이 클립보드에 넣는 글자를 격자로.
  * 탭으로 칸, 줄바꿈으로 줄을 나누지만 **칸 안에 줄바꿈·탭·따옴표가 있으면 그 칸을
@@ -4536,7 +4664,8 @@ function snapshot(){ // 이름 변경/삭제가 ovr·caps·금지방·시드까�
   undoStack.push(JSON.stringify({o:store.order,c:store.cells,v:store.ovr,rv:store.roomOv,
     ch:store.caps,br:store.banRooms,sd:store.seedManual,al:store.alias,cu:store.custom,fi:store.formId,fs:store.forms,rm:store.rooms,sc:store.schemes,ps:store.presets,
     ev:store.events,na:store.nameAlias,tr:store.trainee,to:store.trOv,pd:store.presetDay,op:store.ovrPair,hd:store.hidden,
-    pp:store.presetPlan,rl:store.relief,nu:store.newUntil,er:store.evRules,dy:store.daily,df:store.dayForm||null,du:store.duty}));
+    pp:store.presetPlan,rl:store.relief,nu:store.newUntil,er:store.evRules,dy:store.daily,df:store.dayForm||null,du:store.duty,
+    ru:store.rules,rc:store.roomOvCnt}));
   if(undoStack.length>40) undoStack.shift(); }
 function restoreSnapshot(s){
   store.order=s.o; store.cells=s.c;
@@ -4551,6 +4680,7 @@ function restoreSnapshot(s){
   if(s.fs!==undefined){ store.forms=s.fs; TPL=null; }
   if(s.dy) store.daily=s.dy;
   if(s.du) store.duty=s.du;
+  if(s.ru) store.rules=s.ru; if(s.rc) store.roomOvCnt=s.rc;
   if(s.df!==undefined){ if(s.df) store.dayForm=s.df; else delete store.dayForm; DAYTPL=null; }
   if(s.fi!==undefined){ store.formId=s.fi; TPL=null; }
 }
@@ -4687,7 +4817,7 @@ $('#wrap').addEventListener('dblclick',e=>{
   const td=e.target.closest('td.cell'); if(!td) return;
   openShiftModal(+td.dataset.r,+td.dataset.c);
 });
-/* 근무 입력 모달 — 더블클릭·우클릭·Space·F2. 목록에서 고르거나 [✏ 직접 입력]으로 D/A·경가 같은 값을 글자로.
+/* 근무 입력 모달 — 더블클릭·우클릭·Space·F2. 목록에서 고르거나 [✏ 직접 입력]으로 D/B·경가 같은 값을 글자로.
  * 여러 칸을 골라 둔 상태면 고른 칸 전부에 들어간다 (2026-09-17 사용자 요청) */
 async function openShiftModal(r,c){
   if(!edRows.length||!cellEls[r]||!cellEls[r][c]) return;
@@ -4701,8 +4831,8 @@ async function openShiftModal(r,c){
   if(mine.length) groups.push({name:'우리 병동 표기',options:mine.map(opt)});
   groups.push({name:'',options:[{label:'비우기',value:''}]});
   const v=await askModal({title:`${esc(n)} · ${+iso.slice(5,7)}/${+iso.slice(8,10)}${nCells>1?` 외 ${nCells-1}칸`:''}`,
-    sub:'누르면 바로 들어갑니다. 어싸인까지 정하려면(예: D/A) 또는 목록에 없는 표기는 [✏ 직접 입력].',
-    groups,current:cur,text:{placeholder:'예: D/A · 경가',initial:cur}});
+    sub:'누르면 바로 들어갑니다. 자리까지 정하려면 근무 뒤에 배정표의 자리 이름을(예: D/B), 목록에 없는 표기도 [✏ 직접 입력]으로.',
+    groups,current:cur,text:{placeholder:'예: D/B · 경가',initial:cur}});
   if(v===null) return;
   const t=String(v).trim();
   if(t&&parseCellRaw(t)===undefined){
@@ -4730,6 +4860,11 @@ function applyNurseName(r,nu){
   if(nu&&store.order.includes(nu)){ toast('이미 있는 이름입니다: '+nu,3600); return false; }   // 기존 간호사 근무표 덮어쓰기 방지
   snapshot();
   const migOv=(from,to)=>{ // 수동 교체(ovr)의 이름 키 이관/삭제 — 순회 목록을 먼저 고정
+    // 지우는 사람과 맞바꾼 상대의 고정도 함께 푼다 — 짝 기록만 지우면 상대가 짝 없는 고정으로 그 자리에 계속 묶였다 (2026-10-01)
+    if(!to) for(const dk of Object.keys(store.ovrPair||{})) for(const P of Object.keys(store.ovrPair[dk]||{})){
+      const pp=store.ovrPair[dk][P], pv=store.ovr[dk]&&store.ovr[dk][P];
+      if(pv) for(const k of Object.keys(pp)) if(pp[k]===from&&k!==from) delete pv[k];
+    }
     for(const dk of Object.keys(store.ovr)){
       const day=store.ovr[dk];
       for(const P of Object.keys(day)){
@@ -4776,8 +4911,9 @@ function addNurse(){
   const nu=v.trim(); if(!nu) return;
   if(store.order.includes(nu)){ toast('이미 있는 이름입니다: '+nu,3600); return; }
   snapshot(); store.order.push(nu); store.cells[nu]=store.cells[nu]||{};
+  const noChg=capsForNew(nu,store.cells[nu]);
   touch(); recompute(); renderAdmin();
-  toast(nu+' 추가 — 맨 아래(가장 후임)에 들어갔습니다. 순서는 끌어서 바꾸세요',3600,true);
+  toast(nu+' 추가 — 맨 아래(가장 후임)에 들어갔습니다. 순서는 끌어서 바꾸세요'+(noChg?' · 차지(DC·EC·NC)는 꺼 두었습니다 — 가능 근무에서 켜세요':''),noChg?5200:3600,true);
 }
 function renameNurseAdmin(i){
   const v=prompt('이름 수정',store.order[i]); if(v===null||!v.trim()) return;
@@ -4982,11 +5118,18 @@ function setFormId(id,fromWard){
   renderWardChip();
   toast(`배정표 서식을 ${F.name}으로 바꿨습니다 — 인쇄·엑셀·자리 이름에 적용됩니다`,3600,true);
 }
+/* 배정 원칙 켜고 끄기 — 원칙 3·4 는 반대라 하나를 켜면 다른 쪽이 꺼진다. 원칙 4 를 끄면 원칙 3(기본)을 되살린다 —
+ * 예전엔 4 를 켰다 끄면 3 도 꺼진 채 남아 쉬고 온 사람이 아무 원칙 없이 배정됐다. Ctrl+Z 로 되돌릴 수 있다 (2026-10-01 검증) */
 function setRule(k,checked){
+  snapshot();
+  const was3=!!store.rules.keepAfterOff;
   store.rules[k]=checked;
   if(k==='keepAfterOff'&&checked) store.rules.bounceAfterOff=false;
   if(k==='bounceAfterOff'&&checked) store.rules.keepAfterOff=false;
+  if(k==='bounceAfterOff'&&!checked) store.rules.keepAfterOff=true;
   touch(); recompute(); renderAdmin();
+  const back=k==='bounceAfterOff'&&!checked&&!was3, off3=k==='bounceAfterOff'&&checked&&was3, off4=k==='keepAfterOff'&&checked;
+  toast(`원칙을 ${checked?'켰습니다':'껐습니다'}`+(back?' · 원칙 3(쉬고 온 사람 방 유지)을 다시 켰습니다':off3?' · 원칙 3 은 꺼졌습니다':off4?' · 원칙 4 는 꺼졌습니다':''),3200,true);
 }
 function delBan(n,r){
   const b=(store.banRooms[n]||[]).filter(x=>x!==r);
@@ -5334,6 +5477,7 @@ function deletePreset(cnt,id){
 function setPresetRooms(cnt,id,l,str){
   const p=presetById(clampCnt(cnt),id); if(!p) return;
   p.rooms[l]=roomTokens(str).map(roomFull);      // '1~3, 12' 처럼 짧게 적어도 실제 호실로 저장 ('기본'은 store.schemes 를 직접 고친다)
+  roomTextWarn(str);
   touch(); recompute(); renderAdmin();
 }
 function setPlan(wd,P,cnt,id){
@@ -5357,11 +5501,13 @@ function applyPresetDay(weekly){
     const d=(store.presetDay[iso]=store.presetDay[iso]||{}); (d[P]=d[P]||{})[cnt]=id;
   }
   if(store.roomOv[iso]&&store.roomOv[iso][P]){ delete store.roomOv[iso][P]; if(!Object.keys(store.roomOv[iso]).length) delete store.roomOv[iso]; }
+  if(store.roomOvCnt&&store.roomOvCnt[iso]){ delete store.roomOvCnt[iso][P]; if(!Object.keys(store.roomOvCnt[iso]).length) delete store.roomOvCnt[iso]; }
   closeRoomPick(); touch(); recompute(); renderWeek();
   toast((weekly?`매주 ${WD_LBL[WD_KEY[new Date(iso+'T00:00:00').getDay()]]}요일 ${P} ${cnt}인은 `:`${+iso.slice(8,10)}일 ${P} 는 오늘만 `)+`'${p.name}' 프리셋으로`,3600,true);
 }
 function setScheme(cnt,l,str){
   store.schemes[cnt][l]=roomTokens(str).map(roomFull);   // '1~3, 12' 처럼 짧게 적어도 실제 호실로 저장
+  roomTextWarn(str);
   touch(); recompute();
 }
 function resetSchemes(){
@@ -10132,7 +10278,7 @@ const HELP=[
  lead:'맨 위 <b>근무표</b> 탭(배정표 화면의 [근무표 고치기]도 같은 곳)에서 월별 표로 근무를 직접 고칩니다. 엑셀과 비슷하게 씁니다.',
  steps:['칸을 클릭하고 <kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>O</kbd> 를 누르면 바로 입력됩니다.',
         '드래그하면 여러 칸을 한 번에 고를 수 있습니다.',
-        '더블클릭(또는 <kbd>Space</kbd>, 우클릭)하면 <b>근무 고르기</b> 창이 뜹니다 — 근무·휴무·트레이닝·우리 병동 표기 중에서 누르고, 목록에 없으면 [✏ 직접 입력]으로 <b>D/A</b>(어싸인 고정)나 새 표기를 적습니다. 여러 칸을 골라 두면 한꺼번에 들어갑니다.',
+        '더블클릭(또는 <kbd>Space</kbd>, 우클릭)하면 <b>근무 고르기</b> 창이 뜹니다 — 근무·휴무·트레이닝·우리 병동 표기 중에서 누르고, 목록에 없으면 [✏ 직접 입력]으로 <b>D/B</b>(배정표의 B 자리에 고정 — 글자는 배정표에 보이는 자리 이름)나 새 표기를 적습니다. 여러 칸을 골라 두면 한꺼번에 들어갑니다.',
         '이 달이면 <b>오늘 열</b>이 검정 머리칸과 파란 테두리로 표시되고, 처음 열 때 오늘 칸이 골라져 있습니다.',
         '<kbd>Ctrl+Z</kbd> 되돌리기. 맨 아래 줄은 그날 <b>D·E·N 근무자 수</b>입니다.'],
  tips:['이름을 클릭하면 이름 수정·삭제가 됩니다. 전출한 사람은 그 달에 근무가 없으면 줄이 빠집니다.']},
@@ -10378,7 +10524,7 @@ const TOURS={
   ],cleanup:()=>{ resetPaste(); if(connected()) show('week'); }},
   edit:{needData:true,steps:()=>[
     {before:()=>show('edit'),el:()=>document.querySelector('#scrEdit table tbody td'),title:'칸을 클릭하고 키를 누르세요',text:'<kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>O</kbd> 를 누르면 바로 입력됩니다. 드래그하면 여러 칸을 한 번에 고릅니다.'},
-    {el:()=>document.querySelector('#scrEdit table tbody td'),title:'더블클릭 = 직접 입력',text:'<b>D/A</b> 처럼 어싸인까지 정하거나 <b>/D</b> 로 트레이닝 근무를 적습니다.'},
+    {el:()=>document.querySelector('#scrEdit table tbody td'),title:'더블클릭 = 직접 입력',text:'<b>D/B</b> 처럼 배정표의 자리 이름까지 적어 그 자리에 고정하거나 <b>/D</b> 로 트레이닝 근무를 적습니다.'},
     {el:()=>document.querySelector('#scrEdit table tfoot')||document.querySelector('#scrEdit table'),title:'맨 아래 = 그날 근무자 수',text:'그날 D·E·N 이 몇 명인지 셉니다.',after:()=>show('week')},
   ],cleanup:()=>{ if(connected()) show('week'); }},
   empty:{needData:true,steps:()=>{ const td=document.querySelector('#wkTable td.emp[data-empty]:not(.rm)'); return [
@@ -10783,6 +10929,8 @@ window.__app={get store(){return store},set store(v){store=v},
   dutyFixed,dutyFixedOn,dutyNum,dutyNeedsBook,dutySetFixedOn,dutySetFixed,dayNotes,dayNotesDef,dayDutyName,dayDutyChange,dayDutyPick,dayDutySuggest,dayDutySetRoster,
   dayEditItems,renderDayFormText,openDayFormText,saveDayFormText,dutyRenameKeys,hwSetCellLines,hwSetNotices,
   hwKids,hwPage,hwTopH,hwBodyH,hwFitPage,hwBlankPara,hwPage1,hwParaVisible,dayNoteSplit,dayNoteShow,dayNoteParas,dutyPrefer,dutyPreferSet,dutySetPrefer,dutyNumStr,dutyNumOf,
+  seatOfLabel,seatNames,worksP,ovrMateGone,freeOvr,clearOvrDay,handSeat,ovrAudit,pruneOvr,giveChargeMark,capsForNew,setRule,roomOvOn,setRoomOv,roomTextWarn,josa,get cellPins(){return cellPins},
+  get pickCtx(){return pickCtx},set pickCtx(v){pickCtx=v},
   memoryMode(){window.__memoryMode=true;
     setFileLoc({kind:'none'});afterLoad();}};
 </script>
