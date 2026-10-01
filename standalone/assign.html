@@ -1330,9 +1330,6 @@
         const avOk = function (nid, label) { return (av[nid] || []).indexOf(label) < 0; };
         const assigned = {}; // label -> nurse
         const taken = {};    // nurseId -> true
-        const freeLabels = function () {
-          return labels.filter(function (l) { return !assigned[l]; });
-        };
         // 오늘 이 시간대의 라벨별 실제 병실 (인원수 cnt 기준 — 그날 방 구성 + 수기 수정 반영)
         const cnt = staff.length;
         const roomsByLabel = {};
@@ -1386,9 +1383,102 @@
           return t < 0 ? 0 : SEAT_W[t] + tieOf(n, info);
         };
 
+        // 2~4) 나머지 자리 — (a) 방 매칭 → (b) 라벨 폴백 → 잔여(선임 순) → 회피 복구. 함수로 둔 까닭은 아래 1)의
+        //  방이 고정이 아닌 차지(102 CRN): 앉을 수 있는 자리마다 이 과정을 **그대로 돌려 보고** 고른다.
+        const place = function (assigned, taken, chargeId) {
+          const freeLabels = function () {
+            return labels.filter(function (l) { return !assigned[l]; });
+          };
+          // 연속성 — 원칙 우선순위(1 > 2 > 3)는 그대로, 자리 배치만 함께 푼다
+          const cand = staff.filter(function (n) {
+            return !taken[n.id] && lastSeen[n.id] && tierOf(lastSeen[n.id]) >= 0;
+          });
+
+          // (a) 방 기준 매칭 — 세 원칙을 한 번에 푼다.
+          //     점수는 계층이 절대 우선(원칙1을 한 명이라도 더 앉히는 쪽이 언제나 이김),
+          //     그 다음 겹친 병실 수, 동점이면 최근에 본 사람 → 선임 순.
+          //     한 번에 푸는 이유: 원칙1인 사람이 두 자리에 무차별할 때(양쪽 겹침 동일)
+          //     오프 복귀자가 원래 보던 방을 되찾도록 자리를 비켜 줄 수 있다.
+          if (roomsFor && cand.length) {
+            const free = freeLabels().filter(function (l) { return roomsByLabel[l].length; });
+            if (free.length) {
+              const W = cand.map(function (n) {
+                return free.map(function (l) { return roomW(n, l); });
+              });
+              const pairs = maxMatch(W, free.length);
+              for (let k = 0; k < pairs.length; k++) {
+                const n = cand[pairs[k][0]], l = free[pairs[k][1]];
+                assigned[l] = n; taken[n.id] = true;
+              }
+            }
+          }
+
+          // (b) 라벨 유지 폴백 — 방 정보가 없거나 겹치는 방이 하나도 없을 때만.
+          //     여긴 원칙 순서대로(1→2→3) 훑는다.
+          for (let t = 0; t < 3; t++) {
+            const claims = {}; // label -> [{n, info}]
+            const free2 = freeLabels();
+            for (let s = 0; s < cand.length; s++) {
+              const n = cand[s];
+              if (taken[n.id]) continue;
+              const info = lastSeen[n.id];
+              if (tierOf(info) !== t) continue;
+              if (free2.indexOf(info.label) < 0 || !avOk(n.id, info.label)) continue;
+              (claims[info.label] = claims[info.label] || []).push({ n: n, info: info });
+            }
+            for (const label in claims) {
+              claims[label].sort(function (a, b) {
+                return b.info.idx - a.info.idx || a.n.seniority - b.n.seniority;
+              });
+              assigned[label] = claims[label][0].n; taken[claims[label][0].n.id] = true;
+            }
+          }
+
+          // 잔여: 선임 순으로 남은 라벨 채움
+          // 원칙4(튕기기): 오프 복귀자는 이전에 보던 방을 피해 배정 — 대안 없으면 그대로
+          const leftover = staff.filter(function (n) { return !taken[n.id]; })
+            .sort(function (a, b) { return a.seniority - b.seniority; });
+          const rem = freeLabels();
+          for (let i = 0; i < rem.length && leftover.length; i++) {
+            const bounceOk = function (n) {
+              if (!rules.bounceAfterOff) return true;
+              const info = lastSeen[n.id];
+              if (!info || !(info.idx < idx - 1)) return true;
+              if (roomsFor && info.rooms && info.rooms.length && roomsByLabel[rem[i]].length)
+                return !overlap(info.rooms, roomsByLabel[rem[i]]);
+              return info.label !== rem[i];
+            };
+            // 회피 라벨(금지 방)과 원칙4 둘 다 통과 → 회피만 통과 → 아무나 (미충원 방지)
+            let pick = leftover.findIndex(function (n) { return avOk(n.id, rem[i]) && bounceOk(n); });
+            if (pick < 0) pick = leftover.findIndex(function (n) { return avOk(n.id, rem[i]); });
+            if (pick < 0) pick = 0;
+            const n = leftover.splice(pick, 1)[0];
+            assigned[rem[i]] = n; taken[n.id] = true;
+          }
+          // 자리보다 사람이 많으면(보통 6인 이상): 라벨 소진 후 잔여 인원은 어싸인 없음(헬퍼)
+          const extra = leftover.map(function (n) { return n.id; });
+
+          // 회피 라벨 복구: 회피 라벨에 배정된 간호사를 서로 문제 없는 상대와 맞교환.
+          // 연속성(원칙1~3)보다 회피(금지 방)가 우선 — 수동 오버라이드·차지는 건드리지 않음
+          // (방이 고정이 아닌 차지도 — 그 자리는 이 복구까지 돌려 보고 고른 것이다).
+          for (const l in assigned) {
+            const n = assigned[l];
+            if (n.id === chargeId) continue;
+            if (avOk(n.id, l) || ovIds[n.id]) continue;
+            for (const l2 in assigned) {
+              const m = assigned[l2];
+              if (l2 === l || m.id === chargeId) continue;
+              if (!ovIds[m.id] && avOk(n.id, l2) && avOk(m.id, l)) {
+                assigned[l] = m; assigned[l2] = n; break;
+              }
+            }
+          }
+          return extra;
+        };
+
         // 1) 차지: DC/EC/NC 표시자 → 차지가능 최선임 → 최선임
         const floatSeats = opts.chargeSeats ? opts.chargeSeats(P, cnt, dk) : null;
-        let chargeId = null;
+        let chargeId = null, extra = null;
         if (floatSeats && floatSeats.length) {
           // 방이 고정이 아닌 차지 — 사람은 자리와 상관없이 고른다(손으로 자리를 옮긴 사람도 차지일 수 있다)
           let c = staff.find(function (n) { return CHARGE_CODES[(schedule[n.id] || {})[dk]]; });
@@ -1398,56 +1488,37 @@
           }
           chargeId = c.id;
           if (!taken[c.id]) {
-            // 앉을 자리 — 허락된 빈 자리 중 '차지 자신의 연속성 + 나머지 사람의 연속성' 이 가장 큰 곳.
-            // 동점이면 앞 자리. 차지가 어제 B 를 봤으면 B 를 그대로 보고, 어제 D 를 봤으면(차지가 아니었던 날)
-            // 남들이 가장 덜 밀리는 자리로 간다. 그 다음 매칭(a)·폴백(b)은 차지를 뺀 나머지로 그대로 돈다.
+            // 앉을 자리 — 허락된 빈 자리마다 차지를 앉혀 놓고 나머지 배정(place)을 **실제로** 돌려 본다. 그중
+            //  ① 금지 방(회피)에 앉는 사람이 가장 적고 ② 이어 보는 병실이 가장 많은(차지 자신 포함, 원칙 등급이 먼저) 자리.
+            // 예전엔 나머지가 이어 볼 몫을 따로 흉내 내 셌는데, 흉내가 실제 배정과 어긋나는 곳(금지 방·회피 복구·라벨 다툼)마다
+            // CRN 이 남의 방을 가져가거나 금지 방을 남에게 떠넘겼다 (2026-10-01 교차 검토). 자리는 많아야 6개라 여섯 번 돌려도 싸다.
             const okL = floatSeats.filter(function (l) { return labels.indexOf(l) >= 0 && !assigned[l]; });
             const prefL = okL.filter(function (l) { return avOk(c.id, l); });
             const seatL = prefL.length ? prefL : okL;
-            if (seatL.length) {
-              const others = staff.filter(function (n) {
-                return !taken[n.id] && n.id !== c.id && lastSeen[n.id] && tierOf(lastSeen[n.id]) >= 0;
-              });
-              // 나머지가 l0 를 뺀 자리에서 **실제 병실**을 얼마나 이어 보는지 — 아래 (a) 방 매칭 → (b) 라벨 폴백 순서 그대로 센다.
-              // 연속성은 자리 이름이 아니라 병실이다: 방을 아는 사람은 방 겹침만 치고, 같은 자리 이름은 방을 모르는 사람만.
-              // 예전엔 사람마다 roomW||labelW 를 섞어 매겨, 방이 옮겨 가 겹침이 0 인 자리에도 '같은 자리 이름'이 원칙 점수를
-              // 통째로 받았다 — 그래서 CRN 이 원칙 순위가 높은 사람의 방을 가져갔다(전일 근무자가 보던 방을 오프 복귀 CRN 이
-              // 차지). 2026-10-01 교차 검토.
+            if (seatL.length === 1) { assigned[seatL[0]] = c; taken[c.id] = true; }
+            else if (seatL.length) {
+              // 이어 보는 몫 — 연속성은 자리 이름이 아니라 병실이다: 방을 아는 사람은 방 겹침만, 같은 자리 이름은 방을 모르는 사람만.
+              // (방을 아는 사람에게 같은 이름 점수를 주면 방이 옮겨 가 겹침이 0 인 자리에도 원칙 점수가 통째로 붙는다.)
               const knowsRooms = function (info) { return !!(roomsFor && info && info.rooms && info.rooms.length); };
-              const restV = function (free0) {
-                let v = 0;
-                const seated = {}, usedL = {};
-                if (roomsFor && others.length) {
-                  const fr = free0.filter(function (l) { return roomsByLabel[l].length; });
-                  if (fr.length) {
-                    const W0 = others.map(function (n) { return fr.map(function (l) { return roomW(n, l); }); });
-                    const pr = maxMatch(W0, fr.length);
-                    for (let k = 0; k < pr.length; k++) {
-                      v += W0[pr[k][0]][pr[k][1]]; seated[others[pr[k][0]].id] = true; usedL[fr[pr[k][1]]] = true;
-                    }
-                  }
-                }
-                for (let t = 0; t < 3; t++) {
-                  const claims = {};
-                  for (let s = 0; s < others.length; s++) {
-                    const n = others[s], info = lastSeen[n.id];
-                    if (seated[n.id] || tierOf(info) !== t || (knowsRooms(info) && roomsByLabel[info.label] && roomsByLabel[info.label].length)) continue;
-                    if (free0.indexOf(info.label) < 0 || usedL[info.label] || !avOk(n.id, info.label)) continue;
-                    (claims[info.label] = claims[info.label] || []).push({ n: n, info: info });
-                  }
-                  for (const label in claims) {
-                    claims[label].sort(function (a, b) { return b.info.idx - a.info.idx || a.n.seniority - b.n.seniority; });
-                    const w = claims[label][0].n;
-                    v += labelW(w, label); seated[w.id] = true; usedL[label] = true;
-                  }
-                }
-                return v;
+              const seatV = function (n, l) {
+                return knowsRooms(lastSeen[n.id]) && roomsByLabel[l] && roomsByLabel[l].length ? roomW(n, l) : labelW(n, l);
               };
-              // 차지 자신도 같은 규칙 — 방을 알면 방 겹침, 모르면 같은 자리 이름
-              const cInfo = lastSeen[c.id];
-              const ownV = function (l) { return knowsRooms(cInfo) && roomsByLabel[l].length ? roomW(c, l) : labelW(c, l); };
+              const trial = function (l0) {
+                const a = Object.assign({}, assigned), t = Object.assign({}, taken);
+                if (l0) { a[l0] = c; t[c.id] = true; }
+                const ex = place(a, t, l0 ? c.id : null);
+                let viol = 0, v = 0;
+                for (const l in a) {
+                  if (!ovIds[a[l].id] && !avOk(a[l].id, l)) viol++;
+                  v += seatV(a[l], l);
+                }
+                return { l: l0, a: a, t: t, ex: ex, viol: viol, v: v };
+              };
               // 점수가 같으면: 원칙4(튕기기) — 오프 복귀 CRN 은 전에 보던 방을 피한다(남을 밀어내면서까지는 아니다).
               // 그다음 어제와 같은 자리 이름 — 방이 다 바뀌어 아무도 이어 보지 못하는 날 CRN 이 이유 없이 첫 자리로 가지 않게.
+              // 그다음 **차지가 아닐 때 앉았을 자리** — 이어 볼 것이 없는 날(첫날·[CRN 맡기기]) CRN 이 첫 자리로 가 모두를
+              // 한 칸씩 밀지 않게. /CRN 은 사람에 붙는다: CRN 을 바꿔도 자리는 그대로다.
+              const cInfo = lastSeen[c.id];
               const bounceC = !!(rules.bounceAfterOff && cInfo && cInfo.idx < idx - 1);
               const bounced = function (l) {
                 if (!bounceC) return false;
@@ -1456,15 +1527,26 @@
                 return cInfo.label !== l;
               };
               const sameL = function (l) { return !!(cInfo && cInfo.label === l && tierOf(cInfo) >= 0); };
-              let best = seatL[0], bestV = -1, bestB = false, bestS = false;
-              for (let s = 0; s < seatL.length && seatL.length > 1; s++) {
-                const l0 = seatL[s];
-                const v = ownV(l0) + restV(freeLabels().filter(function (l) { return l !== l0; }));
-                const bo = bounced(l0), sl = sameL(l0);
-                // 정수 합(< 2^53)이라 같음 비교가 정확하다 — 0.5 같은 덧셈 대신 사전식으로 (점수, 튕김, 같은 자리 이름)
-                if (v > bestV || (v === bestV && (bo !== bestB ? bo : sl && !bestS))) { bestV = v; best = l0; bestB = bo; bestS = sl; }
+              const nat = trial(null);
+              let natL = null;
+              for (const l in nat.a) if (nat.a[l] === c) natL = l;
+              // 정수 합(< 2^53)이라 같음 비교가 정확하다 — 사전식으로 (금지 방, 점수, 튕김, 같은 자리 이름, 차지가 아닐 때 자리)
+              const better = function (r, b) {
+                if (r.viol !== b.viol) return r.viol < b.viol;
+                if (r.v !== b.v) return r.v > b.v;
+                if (r.bo !== b.bo) return r.bo;
+                if (r.sl !== b.sl) return r.sl;
+                return r.nat && !b.nat;
+              };
+              let best = null;
+              for (let s = 0; s < seatL.length; s++) {
+                const r = trial(seatL[s]);
+                r.bo = bounced(r.l); r.sl = sameL(r.l); r.nat = r.l === natL;
+                if (!best || better(r, best)) best = r;
               }
-              assigned[best] = c; taken[c.id] = true;
+              for (const l in best.a) assigned[l] = best.a[l];
+              for (const id in best.t) taken[id] = best.t[id];
+              extra = best.ex;
             }
           }
         } else {
@@ -1482,91 +1564,7 @@
           }
           if (assigned['차지']) chargeId = assigned['차지'].id;
         }
-
-        // 2~4) 연속성 — 원칙 우선순위(1 > 2 > 3)는 그대로, 자리 배치만 함께 푼다
-        const cand = staff.filter(function (n) {
-          return !taken[n.id] && lastSeen[n.id] && tierOf(lastSeen[n.id]) >= 0;
-        });
-
-        // (a) 방 기준 매칭 — 세 원칙을 한 번에 푼다.
-        //     점수는 계층이 절대 우선(원칙1을 한 명이라도 더 앉히는 쪽이 언제나 이김),
-        //     그 다음 겹친 병실 수, 동점이면 최근에 본 사람 → 선임 순.
-        //     한 번에 푸는 이유: 원칙1인 사람이 두 자리에 무차별할 때(양쪽 겹침 동일)
-        //     오프 복귀자가 원래 보던 방을 되찾도록 자리를 비켜 줄 수 있다.
-        if (roomsFor && cand.length) {
-          const free = freeLabels().filter(function (l) { return roomsByLabel[l].length; });
-          if (free.length) {
-            const W = cand.map(function (n) {
-              return free.map(function (l) { return roomW(n, l); });
-            });
-            const pairs = maxMatch(W, free.length);
-            for (let k = 0; k < pairs.length; k++) {
-              const n = cand[pairs[k][0]], l = free[pairs[k][1]];
-              assigned[l] = n; taken[n.id] = true;
-            }
-          }
-        }
-
-        // (b) 라벨 유지 폴백 — 방 정보가 없거나 겹치는 방이 하나도 없을 때만.
-        //     여긴 원칙 순서대로(1→2→3) 훑는다.
-        for (let t = 0; t < 3; t++) {
-          const claims = {}; // label -> [{n, info}]
-          const free2 = freeLabels();
-          for (let s = 0; s < cand.length; s++) {
-            const n = cand[s];
-            if (taken[n.id]) continue;
-            const info = lastSeen[n.id];
-            if (tierOf(info) !== t) continue;
-            if (free2.indexOf(info.label) < 0 || !avOk(n.id, info.label)) continue;
-            (claims[info.label] = claims[info.label] || []).push({ n: n, info: info });
-          }
-          for (const label in claims) {
-            claims[label].sort(function (a, b) {
-              return b.info.idx - a.info.idx || a.n.seniority - b.n.seniority;
-            });
-            assigned[label] = claims[label][0].n; taken[claims[label][0].n.id] = true;
-          }
-        }
-
-        // 잔여: 선임 순으로 남은 라벨 채움
-        // 원칙4(튕기기): 오프 복귀자는 이전에 보던 방을 피해 배정 — 대안 없으면 그대로
-        const leftover = staff.filter(function (n) { return !taken[n.id]; })
-          .sort(function (a, b) { return a.seniority - b.seniority; });
-        const rem = freeLabels();
-        for (let i = 0; i < rem.length && leftover.length; i++) {
-          const bounceOk = function (n) {
-            if (!rules.bounceAfterOff) return true;
-            const info = lastSeen[n.id];
-            if (!info || !(info.idx < idx - 1)) return true;
-            if (roomsFor && info.rooms && info.rooms.length && roomsByLabel[rem[i]].length)
-              return !overlap(info.rooms, roomsByLabel[rem[i]]);
-            return info.label !== rem[i];
-          };
-          // 회피 라벨(금지 방)과 원칙4 둘 다 통과 → 회피만 통과 → 아무나 (미충원 방지)
-          let pick = leftover.findIndex(function (n) { return avOk(n.id, rem[i]) && bounceOk(n); });
-          if (pick < 0) pick = leftover.findIndex(function (n) { return avOk(n.id, rem[i]); });
-          if (pick < 0) pick = 0;
-          const n = leftover.splice(pick, 1)[0];
-          assigned[rem[i]] = n; taken[n.id] = true;
-        }
-        // 자리보다 사람이 많으면(보통 6인 이상): 라벨 소진 후 잔여 인원은 어싸인 없음(헬퍼)
-        const extra = leftover.map(function (n) { return n.id; });
-
-        // 회피 라벨 복구: 회피 라벨에 배정된 간호사를 서로 문제 없는 상대와 맞교환.
-        // 연속성(원칙1~3)보다 회피(금지 방)가 우선 — 수동 오버라이드·차지는 건드리지 않음
-        // (방이 고정이 아닌 차지도 — 맞바꾸면 허락되지 않은 자리로 갈 수 있다).
-        for (const l in assigned) {
-          const n = assigned[l];
-          if (n.id === chargeId) continue;
-          if (avOk(n.id, l) || ovIds[n.id]) continue;
-          for (const l2 in assigned) {
-            const m = assigned[l2];
-            if (l2 === l || m.id === chargeId) continue;
-            if (!ovIds[m.id] && avOk(n.id, l2) && avOk(m.id, l)) {
-              assigned[l] = m; assigned[l2] = n; break;
-            }
-          }
-        }
+        if (!extra) extra = place(assigned, taken, chargeId);
 
         const labelMap = {};
         for (const l in assigned) {
@@ -1825,7 +1823,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261001d'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261001g'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1898,7 +1896,8 @@ function formDef(){ return formDefOf(formId()); }
 /* 차지(CRN)가 앉을 수 있는 자리 — 방이 고정이 아닌 차지(102)는 **종이의 자리 전부**(102 D·E = A·B·C·D, 야간 A·B·C).
  * CRN 은 사람에 붙는다 — 어느 방이든 본다 (2026-10-01 사용자: "당연히 D방도 볼수있지 … /CRN은 사람에 붙는거야").
  * 종이 줄을 넘는 자리(대체 줄)는 뺀다 — 그날 사람이 양식 줄보다 많아 생긴 자리이지 CRN 이 보던 방이 아니다. */
-function crnSeats(P){ return slotsOf(P).filter(l=>LBL_ORDER.includes(l)); }
+function crnSeats(P){ const n=seatOv&&seatOv[P];   // 양식 보기 초안에서 자리 줄을 넣고 뺐으면 그 초안의 자리 수로 (draftFill) — 저장한 뒤와 같은 사람이 찍히게
+  return (n!=null?LBL_ORDER.slice(0,n):slotsOf(P)).filter(l=>LBL_ORDER.includes(l)); }
 /* 그 근무의 차지가 자리에 묶이지 않나 — 자리 이름이 차지를 안 알려 주는 서식(crnMark, 102 모양).
  * 옛 102 양식처럼 종이에 CRN 자리가 따로 있으면(D(CRN)) 거기가 차지 자리라 묶인다(tplCrnSeat) */
 function crnFloat(P){ const F=formDef(); return !!(F&&F.crnMark&&!(tplCrnSeat()||{})[P]); }
@@ -2809,6 +2808,19 @@ const tplPaper=()=>(typeof TPL!=='undefined'&&TPL&&TPL.__key===tplKey()&&TPL.__p
 const tplLabels=()=>(typeof TPL!=='undefined'&&TPL&&TPL.__key===tplKey()&&TPL.__labels)||null;
 /* 지금 양식에 CRN 자리가 따로 있는 구역 {D:true…} — 아직 안 읽었으면 null (그 사이엔 차지가 떠 있다) */
 const tplCrnSeat=()=>(typeof TPL!=='undefined'&&TPL&&TPL.__key===tplKey()&&TPL.__crnSeat)||null;
+/* 자리표시자 없는 102 모양 양식에 '대체' 줄이 있나 — 있으면 D 에서 양식 줄을 넘는 사람은 그 줄에 찍힌다(fillForm102·자동 맵핑 {{대체:D}}) */
+const tplSubD=()=>!!(typeof TPL!=='undefined'&&TPL&&TPL.__key===tplKey()&&TPL.__subD);
+/* 그 근무에서 종이에 이름이 찍히는 자리 — 확인 카드·[CRN 맡기기] 안내와 알림이 **같은 기준**을 쓴다 (2026-10-01 교차 검토:
+ * 알림은 A~D 줄만 세어 '대체' 줄에 찍히는 사람을 '인쇄 안 됨'이라 했고, 확인 카드도 자리표시자 없는 양식에선 그랬다).
+ * on(l) = 그 자리 사람이 종이에 나오나, n = 양식의 이름 칸 수, last = 마지막 이름 칸 자리의 순번 */
+function paperSeat(P){
+  const pp=tplPaper(), pq=pp&&pp[P];
+  // 자리표시자 양식은 이름 칸이 있는 자리만 찍힌다 — {{대체}} 칸이 있으면 A~D 남는 사람은 거기에
+  if(pq) return {on:l=>pq.names.has(l)||(pq.sub&&['A','B','C','D'].includes(l)&&!pq.used.has(l)),n:pq.names.size,
+    last:Math.max(-1,...[...pq.names].map(l=>LBL_ORDER.indexOf(l)))};
+  const wardSlots=slotsOf(P).filter(x=>x!=='SU'&&!/^중간번?$/.test(x)).length, sub=P==='D'&&tplSubD();
+  return {on:l=>LBL_ORDER.indexOf(l)<wardSlots||(sub&&LBL_ORDER.includes(l)),n:wardSlots,last:wardSlots-1};
+}
 /* 화면 자리 수 + 종이에 찍히는 자리 — 양식을 읽고 나서 이것이 달라지면 다시 계산해 그린다 */
 const seatSig=()=>['D','E','N'].map(secRows).join(',')+'|'+((p=>p?['D','E','N'].map(P=>[...p[P].names].sort().join('')+(p[P].sub?'+':'')).join('/'):'')(tplPaper()))+'|'+['D','E','N'].map(P=>crnFloat(P)?'f':'x').join('');
 /* 양식 구조에서 구역별 줄 수 — 못 찾으면 null (서식 정의로 돌아간다) */
@@ -3243,14 +3255,11 @@ function renderWeekWarnings(days,infos){
           .filter(n=>{ const c=(store.cells[n]||{})[iso]; return c&&AssignCore.periodOf(c)===P; });
         if(su.length>suN) push('err',`${md(iso)} ${P} SU 근무가 ${su.length}명(${su.map(esc).join(', ')})인데 양식의 SU 칸은 ${suN}개입니다 — ${esc(su[suN])} 부터는 인쇄에 나오지 않습니다.`);
       }
-      const wardSlots=slots.filter(x=>x!=='SU'&&!/^중간번?$/.test(x)).length;
-      // 자리표시자 양식은 이름 칸이 있는 자리만 찍힌다 — 가운데 자리 이름 칸을 지운 양식은 그 자리 사람이 빠진다 ({{대체}} 칸이 있으면 A~D 남는 사람은 거기에)
-      const pp=tplPaper(), pq=pp&&pp[P];
-      const onPaper=l=>pq?(pq.names.has(l)||(pq.sub&&['A','B','C','D'].includes(l)&&!pq.used.has(l))):LBL_ORDER.indexOf(l)<wardSlots;
-      const lastSeat=pq?Math.max(-1,...[...pq.names].map(l=>LBL_ORDER.indexOf(l))):wardSlots-1;
-      const off=LBL_ORDER.filter(l=>day[P].labels[l]&&!onPaper(l));
-      const over=off.filter(l=>LBL_ORDER.indexOf(l)>lastSeat), gap=off.filter(l=>LBL_ORDER.indexOf(l)<=lastSeat);
-      if(over.length) push('err',`${md(iso)} ${P} ${over.map(l=>esc(day[P].labels[l])).join(', ')} — 양식의 ${P}칸(${pq?pq.names.size:wardSlots}개)을 넘어 인쇄에 나오지 않습니다. 수기로 적어주세요.`);
+      // 자리표시자 양식은 이름 칸이 있는 자리만 찍힌다 — 가운데 자리 이름 칸을 지운 양식은 그 자리 사람이 빠진다. '대체' 줄이 있으면 D 의 남는 사람은 거기에
+      const ps=paperSeat(P);
+      const off=LBL_ORDER.filter(l=>day[P].labels[l]&&!ps.on(l));
+      const over=off.filter(l=>LBL_ORDER.indexOf(l)>ps.last), gap=off.filter(l=>LBL_ORDER.indexOf(l)<=ps.last);
+      if(over.length) push('err',`${md(iso)} ${P} ${over.map(l=>esc(day[P].labels[l])).join(', ')} — 양식의 ${P}칸(${ps.n}개)을 넘어 인쇄에 나오지 않습니다. 수기로 적어주세요.`);
       if(gap.length) push('err',`${md(iso)} ${P} ${gap.map(l=>esc(day[P].labels[l])+'('+esc(FORM_LBL(l,P))+')').join(', ')} — 양식에 이 자리 이름 칸이 없어 인쇄에 나오지 않습니다. 수기로 적거나 양식 보기에서 이름 칸을 정해 주세요.`);
     }
     for(const P of ['D','E','N']){
@@ -3274,7 +3283,9 @@ function renderWeekWarnings(days,infos){
           (roomIssue[key]=roomIssue[key]||[]).push(`${md(iso)} ${P}`); } }
       for(const l in day[P].labels){
         const nm=day[P].labels[l], bans=store.banRooms[nm];
-        if(!bans||!bans.length||formNoRooms()) continue;
+        // 방 칸이 없는 서식(102·82)도 묻는다 — 자리마다 보는 방은 방 구성대로 정해져 있고 주지 않을 방도 배정에 쓰인다.
+        // 예전엔 여기서 빠져, 102 에서 주지 않을 방이 지켜지지 않아도 아무 말이 없었다 (2026-10-01 교차 검토)
+        if(!bans||!bans.length) continue;
         const banKeys=expandBeds(bans);
         const hit=expandBeds(roomTokens(roomsFor(P,cnt,l,iso))).filter(t=>banKeys.includes(t));
         if(hit.length) push('err',`${md(iso)} ${P} ${esc(nm)} — ${roomsLabel(collapseBeds(hit))}는 주지 않을 방인데 배정됐습니다. 대안이 없습니다.`,'caps');
@@ -3553,8 +3564,10 @@ function openPick(name,iso,x,y){
    * 근무 코드 17개(가끔 쓰는 '근무 바꾸기')는 접어 둔다. 예전엔 코드 칩이 창의 절반을 차지해
    * 무엇을 누르는 창인지 흐려졌다 (2026-09-27, 브리프 문제 6). */
   pk.classList.toggle('shOpen',pkShiftOpen);
-  // 차지가 자리에 묶이지 않는 서식(102) — 자리를 맞바꿔도 CRN 은 그대로다. CRN 을 바꾸는 길은 [CRN 맡기기](근무를 DC·EC·NC 로)
+  // 차지가 자리에 묶이지 않는 서식(102) — 자리를 맞바꿔도 CRN 은 그대로다. CRN 을 바꾸는 길은 [CRN 맡기기](근무를 DC·EC·NC 로).
+  // 종이에 차지 자리가 따로 있는 102 모양 양식(A(CN)·D(CRN))은 그 자리에 앉은 사람이 CRN 이라 맞바꾸면 CRN 도 바뀐다
   const crnM=formDef().crnMark, chg=day&&day.charge, crnT=n=>crnM&&n&&n===chg?' /CRN':'';
+  const psP=paperSeat(P), onP=!!(info.label&&psP.on(info.label));
   pk.innerHTML=`<div class="pkHead"><span><b>${esc(name)}</b>${esc(crnT(name))}${rel?'<span class="rlfTag">대체</span>':''} · ${dd}일 ${P}</span>`+
       `<span class="dim">지금 ${info.label?FORM_LBL(info.label,P):'자리 없음'}</span>`+
       `<button class="pkX" onclick="closePick()" title="닫기 (Esc)">✕</button></div>`+
@@ -3571,7 +3584,9 @@ function openPick(name,iso,x,y){
     `<div class="pkRow"><button onclick="pickChoose(null)" title="손으로 바꾼 자리를 풀고 자동 배정으로 돌립니다 — 맞바꾼 상대도 함께 풀립니다">자동으로 되돌리기</button>`+
     (store.ovr[iso]&&store.ovr[iso][P]?`<button onclick="pickClearDay()" title="이 날 이 시간대의 수동 교체를 모두 풉니다">이 날 ${P} 교체 모두 풀기</button>`:'')+
     (crnM&&!rel&&chg!==name?`<button onclick="pickCrn()" title="이 날 ${P} 차지(CRN)를 ${escA(name)} 님으로 — 근무가 ${P}C 로 바뀌고 ${
-      !crnFloat(P)?'양식의 CRN 자리로 옮깁니다':info.label&&crnSeats(P).includes(info.label)?'앉은 자리는 그대로입니다':'양식 칸으로 올라가고, 대신 다른 한 사람이 칸 밖으로 밀릴 수 있습니다'}">CRN 맡기기</button>`:'')+`</div>`+
+      !crnFloat(P)?'양식의 CRN 자리로 옮깁니다 — 자리가 바뀌는 사람은 알림에 적습니다'
+      :info.label&&crnSeats(P).includes(info.label)?'앉은 자리는 그대로입니다 — 자리가 바뀌는 사람이 있으면 알림에 적습니다'
+      :`양식 줄로 올라가고, 대신 다른 한 사람이 ${onP?'대체 줄로':'양식 칸 밖으로'} 내려갑니다`}">CRN 맡기기</button>`:'')+`</div>`+
     (rel?`<div class="pkSec">대체간호사 <span class="dim">우리 근무표에 없는 사람 · 이 날만</span></div>`+
       `<div class="pkRow"><button onclick="renameRelief('${iso}','${P}','${jsq(name)}')" title="이름을 잘못 적었으면 고칩니다">이름 고치기</button>`+
       `<button class="danger" onclick="removeRelief('${iso}','${P}','${jsq(name)}')" title="이 날 ${P} 에서 뺍니다 — 인원이 줄어 방이 다시 나뉩니다">이 날 빼기</button></div>`:'')+
@@ -3637,7 +3652,10 @@ function pickChoose(label){
   toast(name+' '+(+iso.slice(8,10))+'일 어싸인 '+(label===null?'자동으로':'→ '+FORM_LBL(label,period)),2800,true);
 }
 /* CRN 맡기기 — 차지가 자리에 묶이지 않는 서식(102)에서 자리 대신 사람으로 차지를 정한다.
- * 차지는 근무표의 DC·EC·NC 표시가 정하므로 그 날 이 사람 근무를 ${P}C 로, 같은 근무의 다른 ${P}C 는 ${P} 로 (2026-10-01) */
+ * 차지는 근무표의 DC·EC·NC 표시가 정하므로 그 날 이 사람 근무를 ${P}C 로, 같은 근무의 다른 ${P}C 는 ${P} 로 (2026-10-01).
+ * 차지 자리가 종이에 따로 있는 양식(A(CN)·D(CRN))은 손으로 옮긴 자리가 표시보다 앞서므로, 그 자리에 고정된 사람과
+ * 이 사람의 고정을 풀어야 이 사람이 차지 자리로 간다 — 예전엔 근무만 DC 로 바뀌고 차지는 그대로였다 (교차 검토).
+ * 알림에는 바뀐 것을 그대로 적는다: 자리가 바뀐 사람, 종이에서 빠진 사람(확인 카드와 같은 기준 paperSeat). */
 function pickCrn(){
   const {name,iso,period:P}=pickCtx; closePick();
   snapshot();
@@ -3648,15 +3666,32 @@ function pickCrn(){
     if(pc&&pc.code===P+'C'){ store.cells[n][iso]=cellText({code:P,label:pc.label}); was.push(n); }
   }
   const pc=parseCellRaw((store.cells[name]||{})[iso]||'');
-  // 양식 칸에 찍히는 사람 — CRN 은 양식 칸에 앉으므로 칸 밖(대체)에 있던 사람이 맡으면 다른 한 사람이 칸 밖으로 밀린다
-  const onPaper=()=>{ const d=(dayInfo(iso)||{})[P]; return d?crnSeats(P).map(l=>d.labels[l]).filter(Boolean):[]; };
-  const before=onPaper();
-  (store.cells[name]=store.cells[name]||{})[iso]=cellText({code:P+'C',label:pc&&pc.label||''});
+  const pin=!crnFloat(P);
+  if(pin){
+    const pv=store.ovr[iso]&&store.ovr[iso][P], pr=store.ovrPair[iso]&&store.ovrPair[iso][P];
+    const free=n=>{ if(pv) delete pv[n]; if(pr){ const m=pr[n]; delete pr[n]; if(m&&pr[m]===n){ delete pr[m]; if(pv) delete pv[m]; } } };
+    free(name);
+    if(pv) for(const n of Object.keys(pv)) if(pv[n]==='차지') free(n);
+    if(pv&&!Object.keys(pv).length) delete store.ovr[iso][P];
+    if(store.ovr[iso]&&!Object.keys(store.ovr[iso]).length) delete store.ovr[iso];
+    if(pr&&!Object.keys(pr).length) delete store.ovrPair[iso][P];
+    if(store.ovrPair[iso]&&!Object.keys(store.ovrPair[iso]).length) delete store.ovrPair[iso];
+  }
+  // 그 날 그 근무에서 누가 어느 자리이고 종이에 찍히는지
+  const seats=()=>{ const d=(dayInfo(iso)||{})[P], ps=paperSeat(P), m={};
+    if(d){ for(const l in d.labels) m[d.labels[l]]={l,on:ps.on(l)}; for(const n of d.extra) m[n]={l:null,on:false}; }
+    return m; };
+  const before=seats();
+  // 근무표에 적힌 자리(D/B)는 차지 자리가 따로 있는 양식에선 지운다 — 남겨 두면 그 자리에 묶여 차지 자리로 못 간다
+  (store.cells[name]=store.cells[name]||{})[iso]=cellText({code:P+'C',label:pin?'':(pc&&pc.label||'')});
   touch(); recompute();
   if(curScr==='week') renderWeek();
-  const after=onPaper(), out=before.filter(n=>!after.includes(n));
+  const after=seats(), nm=l=>l?FORM_LBL(l,P):'자리 없음';
+  const moved=Object.keys(after).filter(n=>before[n]&&before[n].l!==after[n].l).map(n=>`${n} ${nm(before[n].l)}→${nm(after[n].l)}`);
+  const out=Object.keys(before).filter(n=>before[n].on&&!(after[n]&&after[n].on));
   toast(`${name} ${+iso.slice(8,10)}일 ${P} CRN — 근무 ${P}C`+(was.length?` · ${was.join(', ')} 은 ${P}`:'')+
-    (out.length?` · 양식 칸 밖으로(인쇄 안 됨): ${out.join(', ')}`:''),4200,true);
+    (moved.length?` · 자리 바뀜: ${moved.join(', ')}`:'')+
+    (out.length?` · 양식 칸 밖으로(인쇄 안 됨): ${out.join(', ')}`:''),moved.length||out.length?5200:3600,true);
 }
 function pickClearDay(){ // 이 날 이 시간대의 수동 교체를 모두 푼다
   const {iso,period}=pickCtx; closePick();
@@ -5011,7 +5046,7 @@ const ADMIN_PANELS={
   caps:{title:'간호사 관리',
     desc:'<b>위가 선임</b>입니다 — 그날 차지 가능한 사람 중 가장 위 사람이 차지를 맡습니다.',
     get more(){ return (crnFloat('D')?'차지(CRN)는 근무표의 DC·EC·NC 표시, 없으면 이 순서로 정해집니다. 앉는 자리는 정해져 있지 않습니다 — 어제 보던 방을 그대로 보고 이름 뒤에 <b>/CRN</b> 이 붙습니다. '+
-         'CRN 을 다른 사람으로 바꾸려면 배정표에서 그 사람 이름을 눌러 <b>[CRN 맡기기]</b>를 누르세요. ':'차지는 배정표의 첫 자리(A(CN) 또는 CN)입니다. ')+'줄을 끌어서(또는 ▲▼) 순서를 바꾸세요. 가능한 근무에서 <b>DC · EC · NC</b> 를 켜면 그 시간대에 차지로 뽑힐 수 있습니다. '+
+         'CRN 을 다른 사람으로 바꾸려면 배정표에서 그 사람 이름을 눌러 <b>[CRN 맡기기]</b>를 누르세요. ':'차지는 배정표의 차지 자리(A(CN)·CN·D(CRN) 처럼 이름에 CN 이 붙은 자리)에 앉습니다. ')+'줄을 끌어서(또는 ▲▼) 순서를 바꾸세요. 가능한 근무에서 <b>DC · EC · NC</b> 를 켜면 그 시간대에 차지로 뽑힐 수 있습니다. '+
          '이름 옆 <b>신규</b> 표시를 누르면 신규 기간을 고칩니다.<br>배정표에 다른 소속 칸이 있는 병동(82의 <span class="unitTag">SU</span>)은 이름 옆 소속 표시를 눌러 켜고 끕니다 — 켜면 병동 자리에 배정되지 않고 그 칸에만 나옵니다.'; },
     aux:`<button onclick="addNurse()">＋ 간호사 추가</button>`,
     body(){ return `<table id="capsTable" class="dt"></table>`; },
@@ -7275,8 +7310,8 @@ async function loadTemplate(){
     const lay=()=>{ try{ return layoutOf(Fd,cells,sheetMerges(TPL)); }catch(e){ return null; } };
     const ph=hasPlaceholders(cells), L=lay();
     TPL.__rows=ph?tagRows(cells,L):layoutRows(L); TPL.__fromTags=ph&&!!TPL.__rows; TPL.__paper=ph?tagPaper(cells,L):null; TPL.__labels=ph?tagLabels(cells,L):null;
-    TPL.__crnSeat=crnSeatOf(cells,L,ph); }
-  catch(e){ TPL.__rows=null; TPL.__fromTags=false; TPL.__paper=null; TPL.__labels=null; TPL.__crnSeat=null; }
+    TPL.__crnSeat=crnSeatOf(cells,L,ph); TPL.__subD=!ph&&!!(Fd&&Fd.kind==='102'&&L&&L.subRow); }
+  catch(e){ TPL.__rows=null; TPL.__fromTags=false; TPL.__paper=null; TPL.__labels=null; TPL.__crnSeat=null; TPL.__subD=false; }
   // 읽어 보니 자리 수가 달라졌으면(예전 5줄 양식을 쓰는 122 병동) 다시 계산해 그린다 — 화면과 인쇄가 어긋나지 않게
   if(store&&store.order&&store.order.length&&seatSig()!==rowsSig)
     setTimeout(()=>{ recompute(); if(curScr==='week') renderWeek(); else if(curScr==='admin') renderAdmin(); },0);
@@ -9893,7 +9928,7 @@ const HELP=[
  tips:['손으로 바꾼 칸은 이름 아래 <b>빨간 밑줄</b>이 생깁니다.',
        '같은 창 맨 아래 <b>[근무 바꾸기]</b>를 펼치면 그 날 근무 자체(D·E·N·OF·V·병가·생리휴가 등, 우리 병동 표기 포함)를 바꿀 수 있습니다 — 그러면 인원이 달라져 뒤의 어싸인이 자동으로 다시 맞춰집니다. 한 번 펼치면 창을 닫았다 열어도 펼친 채입니다.',
        '같은 창의 <b>＋ 쉬는 간호사 넣기 · ＋ 대체간호사 넣기</b>로 그 시간대에 사람을 더할 수 있습니다 — 자세한 것은 <b>빈 자리 채우기</b>.',
-       '102 처럼 이름 뒤에 <b>/CRN</b> 이 붙는 배정표는 자리를 맞바꿔도 <b>CRN 은 그 사람 그대로</b>입니다(CRN 은 어느 방이든 봅니다). CRN 을 다른 사람으로 바꾸려면 그 사람 이름을 눌러 <b>[CRN 맡기기]</b> — 그 날 근무가 DC·EC·NC 로 바뀝니다.',
+       '102 처럼 자리 이름에 CN 표기가 없는 배정표는 이름 뒤에 <b>/CRN</b> 이 붙고, 자리를 맞바꿔도 <b>CRN 은 그 사람 그대로</b>입니다(CRN 은 어느 방이든 봅니다). CRN 을 다른 사람으로 바꾸려면 그 사람 이름을 눌러 <b>[CRN 맡기기]</b> — 그 날 근무가 DC·EC·NC 로 바뀝니다. 종이에 차지 자리(A(CN)·D(CRN))가 따로 있는 양식은 그 자리에 앉은 사람이 차지라, 맞바꾸면 차지도 바뀝니다.',
        '<b>잘못 눌렀을 때</b>: 오른쪽 아래에 뜨는 <b>파란 알림을 누르면</b> 방금 한 것이 그대로 되돌아갑니다. <kbd>Ctrl+Z</kbd> 도 같습니다 — 근무 바꾸기·교육 입력·새 근무표 넣기 모두 됩니다.']},
 {cat:'이번 주 배정표',id:'empty',title:'빈 자리 채우기 (쉬는 간호사·대체간호사)',
  lead:'그날 근무자가 자리 수보다 적으면 배정표에 <b>빈 칸</b>이 생깁니다. 빈 칸을 누르면 그 자리에 사람을 넣을 수 있습니다.',
@@ -10051,8 +10086,8 @@ const HELP=[
  lead:'표에 지난 기록이 없을 때(처음 시작할 때) 이어짐의 시작점을 알려 주는 곳입니다.',
  steps:['관리 &gt; 지난 어싸인 직접 입력에서 사람마다 마지막 어싸인(B~E)과 근무를 고릅니다.',
         '근무표에 기록이 있으면 그 기록이 우선입니다.'],
- tips:['차지 자리가 따로 있는 서식(101 의 A(CN) · 122 의 CN)은 차지였던 사람을 <b>없음</b>으로 두세요 — 차지는 매일 자동으로 정해집니다.',
-       '102 처럼 이름 뒤에 <b>/CRN</b> 이 붙는 서식은 CRN 이 어느 방이든 봅니다 — CRN 이었던 사람도 <b>앉았던 자리</b>를 고르세요.']},
+ tips:['차지 자리가 따로 있는 서식(101 의 A(CN) · 122 의 CN · 자리 이름에 A(CN)·D(CRN) 이 있는 양식)은 차지였던 사람을 <b>없음</b>으로 두세요 — 차지는 매일 자동으로 정해집니다.',
+       '102 처럼 자리 이름에 CN 표기가 없고 이름 뒤에 <b>/CRN</b> 이 붙는 서식은 CRN 이 어느 방이든 봅니다 — CRN 이었던 사람도 <b>앉았던 자리</b>를 고르세요.']},
 
 {cat:'우리 병동 설정',id:'form',title:'배정표 양식 (서식 고르기·양식 보기·문구 고치기·양식 교체)',
  lead:'인쇄·엑셀에 쓰는 병실 배정표 양식입니다. 101병동·122병동 서식 중 고르고, 글자는 여기서 바로 고치고, 칸 구조가 다른 양식은 엑셀 파일을 올려 교체합니다.',
@@ -10623,7 +10658,7 @@ show('start');
 window.__app={get store(){return store},set store(v){store=v},
   get result(){return result},get tlKeys(){return tlKeys},
   ingestGrid,confirmPaste,recompute,renderWeek,weekData,downloadWeekXlsx,printWeek,
-  openPick,pickChoose,pickShift,pickCrn,crnFloat,crnSeatOf,crnSeats,setSeed,abbrevRooms,parseCellRaw,readXlsxGrid,loadTemplate,dayInfo,roomsFor,
+  openPick,pickChoose,pickShift,pickCrn,crnFloat,crnSeatOf,crnSeats,paperSeat,get seatOv(){return seatOv},set seatOv(v){seatOv=v},setSeed,abbrevRooms,parseCellRaw,readXlsxGrid,loadTemplate,dayInfo,roomsFor,
   openRoomPick,toggleRoom,toggleBed,toggleBedOpen,applyRoomSel,roomFull,roomShort,roomTokens,abbrevRooms,
   splitBed,bedTok,bedCount,bedKeys,expandBeds,collapseBeds,roomsLabel,presetAudit,dupRooms,buildPrintArea,loadSidecar,tryAutoOpen,reloadFromFile,connectSave,
   reattachHandle,setWard,wardRooms,wardOfRooms,roomsBase,roomPos,roomAtPos,setRoom,addRoom,delRoom,moveRoom,attachRoom,detachRoom,readOldLocalStore,clearOldLocalStore,migrateOldLocalData,

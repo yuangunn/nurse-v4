@@ -2018,7 +2018,7 @@ async function main() {
       out.btn=[...document.querySelectorAll('#pick button')].some(b=>b.textContent==='CRN 맡기기');
       out.btnTitle=([...document.querySelectorAll('#pick button')].find(b=>b.textContent==='CRN 맡기기')||{}).title||'';
       out.who=[...document.querySelectorAll('#pick .who')].map(b=>b.textContent);
-      A.pickCrn();
+      A.pickCrn(); out.crnToast=(document.querySelector('#toast')||{}).textContent||'';
       out.cells=['김차지','이에이','박비','최씨'].map(n=>A.store.cells[n]['2026-09-10']);
       { const r2=await A.buildWeekXlsx(new Date(2026,8,6)); const c4=A.sheetCells({...r2.tpl,sheetXml:r2.xml}); out.L2=[5,6,7,8].map(i=>c4['L'+i]||''); }
       // 넷째 자리(D)를 보는 최씨에게 CRN — D 그대로 (예전엔 A·B·C 만 허락해 최씨가 앞으로 끌려갔다), 다음 날도 D
@@ -2064,7 +2064,34 @@ async function main() {
         const r4=await A.buildWeekXlsx(new Date(2026,8,6)); const c6=A.sheetCells({...r4.tpl,sheetXml:r4.xml});
         out.cnF=[5,6,7,8].map(i=>c6['F'+i]||'');
         const am=A.autoMap(t2,sh), c7=A.sheetCells({...t2,sheetXml:am.xml}); out.cnTags=[c7.D5,c7.D6,/[{][{]차지: [/]CRN[}][}]/.test(am.xml)];
+        // 이 양식은 CN 줄에 앉은 사람이 차지 — 맞바꾸면 차지도 바뀐다. 그 뒤 [CRN 맡기기] 는 손으로 옮긴 자리를 풀고 그 사람을 CN 줄로
+        // (교차 검토: 예전엔 근무만 DC 로 바뀌고 차지는 그대로였다 — 손으로 옮긴 자리가 표시보다 앞서서)
+        const cur=()=>{ const d=A.dayInfo('2026-09-08').D; return {charge:d.charge,at:Object.keys(d.labels).find(l=>d.labels[l]===d.charge)}; };
+        const c0=cur().charge; A.openPick(c0,'2026-09-08',10,10); A.pickChoose('C'); out.pinSwap=[c0,cur()];
+        const z=['김차지','이에이','박비','최씨'].find(n=>n!==c0&&n!==out.pinSwap[1].charge);
+        A.openPick(z,'2026-09-08',10,10); A.pickCrn(); out.pinCrn=[z,cur(),(document.querySelector('#toast')||{}).textContent||''];
         delete A.store.forms['61']; A.setFormId('101'); A.setWard('101'); await A.loadTemplate(); A.recompute(); }
+      // 양식 보기 초안에서 자리 줄을 뺐으면 CRN 이 앉을 자리도 그 초안의 줄 수로 (예전엔 저장한 양식 줄 수라 미리보기에서 CRN 이 빠졌다)
+      A.setFormId('102'); A.seatOv={D:3,E:4,N:3}; out.draftSeats=A.crnSeats('D'); A.seatOv=null; out.savedSeats=A.crnSeats('D');
+      // '대체' 줄이 있는 102 양식 — 다섯째 사람은 대체 줄에 찍힌다. 그 사람에게 CRN 을 맡기면 다른 한 사람이 대체 줄로 내려갈 뿐
+      // 인쇄에서 빠지지 않는다 — 안내·알림·확인 카드가 모두 같은 기준(paperSeat) (교차 검토: 알림만 '인쇄 안 됨'이라 했다)
+      { crnSetup(); const s=A.store; for(const n of s.order) s.cells[n]['2026-09-08']='D'; A.recompute();
+        const base=await A.loadBaseTemplate('102');
+        s.forms['102']={name:'대체줄 102.xlsx',b64:A.bytesToB64(A.packXlsx(base,{'xl/worksheets/sheet1.xml':A.setCellStr(base.sheetXml,'A9','대체')})),savedAt:9,ph:false};
+        await A.loadTemplate(); await new Promise(r=>setTimeout(r,80)); A.recompute();
+        out.subOn=A.paperSeat('D').on('D');
+        const who=A.dayInfo('2026-09-08').D.labels['D'];
+        A.openPick(who,'2026-09-08',10,10);
+        out.subTitle=([...document.querySelectorAll('#pick button')].find(b=>b.textContent==='CRN 맡기기')||{}).title||'';
+        A.pickCrn(); out.subToast=(document.querySelector('#toast')||{}).textContent||'';
+        A.wkSunday=new Date(2026,8,6); A.show('week');
+        out.subWarn=((document.querySelector('#wkWarn')||{}).textContent||'').includes('인쇄에 나오지 않습니다');
+        delete s.forms['102']; await A.loadTemplate(); await new Promise(r=>setTimeout(r,50)); }
+      // 방 칸 없는 서식(102)도 주지 않을 방이 지켜지지 않으면 확인 카드에 (예전엔 102 만 조용했다)
+      { crnSetup(); const s=A.store; s.banRooms={'이에이':s.rooms.map(r=>String(r[0]))}; A.recompute();
+        A.wkSunday=new Date(2026,8,6); A.show('week');
+        out.banCard=/이에이 — .*주지 않을 방인데 배정됐습니다/.test((document.querySelector('#wkWarn')||{}).textContent||'');
+        s.banRooms={}; A.recompute(); }
       A.show('week');
       return out; })()`);
   eq('9/6 — CRN 김차지는 첫 자리', crn102.D, ['김차지 /CRN', '이에이', '박비', '최씨']);
@@ -2082,7 +2109,7 @@ async function main() {
   eq('CRN 맡기기 — 근무가 DC 로 (다른 사람은 그대로 D)', crn102.cells, ['D', 'D', 'DC', 'D']);
   eq('CRN 맡기기 — 자리는 그대로, /CRN 만 옮겨 간다', crn102.L2, ['이에이', '김차지', '박비 /CRN', '최씨']);
   ok('CRN 맡기기 안내 — 칸에 앉은 사람은 "앉은 자리는 그대로"', /앉은 자리는 그대로/.test(crn102.btnTitle), crn102.btnTitle);
-  ok('CRN 맡기기 안내 — 칸 밖 사람은 "칸으로 올라가고 … 밀릴 수 있습니다"', /칸으로 올라가고.*밀릴 수/.test(crn102.offTitle), crn102.offTitle);
+  ok('CRN 맡기기 안내 — 칸 밖 사람은 "양식 줄로 올라가고 … 양식 칸 밖으로 내려갑니다"', /양식 줄로 올라가고.*양식 칸 밖으로 내려갑니다/.test(crn102.offTitle), crn102.offTitle);
   ok('칸 밖 사람이 CRN 이 되면 칸에 앉고, 알림이 밀린 사람을 알려 준다', crn102.offSeated && /양식 칸 밖으로/.test(crn102.offToast), crn102.offToast);
   eq('CRN 은 D 방도 본다 — 넷째 자리 최씨가 CRN 이어도 D 그대로', crn102.L3, ['이에이', '김차지', '박비', '최씨 /CRN']);
   eq('다음 날도 CRN 최씨는 D, 나머지 그대로', crn102.N3, ['이에이', '김차지', '박비', '최씨 /CRN']);
@@ -2092,10 +2119,20 @@ async function main() {
   eq('양식을 되돌리면 다시 어느 자리든', crn102.풀림, [true, true, true]);
   eq('101 은 차지 자리(A(CN))가 따로 있어 묶인다', crn102.고정101, [false, false, false]);
   ok('간호사 관리 설명 — 102 는 CRN 자리가 정해져 있지 않고 [CRN 맡기기]', /정해져 있지 않습니다/.test(crn102.caps102) && /CRN 맡기기/.test(crn102.caps102), crn102.caps102);
-  ok('간호사 관리 설명 — 101 은 차지가 첫 자리', /첫 자리/.test(crn102.caps101) && !/CRN 맡기기/.test(crn102.caps101), crn102.caps101);
+  ok('간호사 관리 설명 — 101 은 차지가 차지 자리(A(CN))', /차지 자리\(A\(CN\)/.test(crn102.caps101) && !/CRN 맡기기/.test(crn102.caps101), crn102.caps101);
   eq('A(CN) 을 적은 방 칸 없는 병동 양식 — 102 모양이어도 차지는 CN 줄에 묶인다', [crn102.cnKind, crn102.cnFloat], ['102', [false, false, false]]);
   eq('그 양식의 9/7 — CRN 이에이가 A(CN) 줄, /CRN 은 붙이지 않는다(종이가 CN 이라 적었다)', crn102.cnF, ['이에이', '정새로', '박비', '최씨']);
   eq('그 양식의 자동 맵핑 — CN 줄이 차지, 자리마다 {{차지: /CRN}} 을 꽂지 않는다', crn102.cnTags, ['{{이름:D.차지}}', '{{이름:D.A}}', false]);
+  eq('A(CN) 양식 — 맞바꾸면 CN 줄에 앉은 사람이 차지', [crn102.pinSwap[1].at, crn102.pinSwap[1].charge !== crn102.pinSwap[0]], ['차지', true]);
+  eq('A(CN) 양식 — 맞바꾼 뒤에도 [CRN 맡기기] 한 사람이 CN 줄의 차지', [crn102.pinCrn[1].charge, crn102.pinCrn[1].at], [crn102.pinCrn[0], '차지']);
+  ok('A(CN) 양식 — 알림이 자리가 바뀐 사람을 적는다', /자리 바뀜/.test(crn102.pinCrn[2]), crn102.pinCrn[2]);
+  ok('CRN 맡기기 — 자리가 그대로면 알림에 "자리 바뀜" 이 없다', !/자리 바뀜/.test(crn102.crnToast), crn102.crnToast);
+  eq('양식 보기 초안에서 D 줄을 하나 빼면 CRN 자리도 셋 (저장한 양식은 넷)', [crn102.draftSeats, crn102.savedSeats], [['차지', 'A', 'B'], ['차지', 'A', 'B', 'C']]);
+  ok('대체 줄 있는 102 — 다섯째 자리는 종이에 찍힌다', crn102.subOn);
+  ok('대체 줄 있는 102 — 안내는 "대체 줄로 내려갑니다"', /대체 줄로 내려갑니다/.test(crn102.subTitle), crn102.subTitle);
+  ok('대체 줄 있는 102 — 알림에 "인쇄 안 됨" 이 없다', !/인쇄 안 됨/.test(crn102.subToast) && /CRN/.test(crn102.subToast), crn102.subToast);
+  ok('대체 줄 있는 102 — 확인 카드도 "인쇄에 나오지 않습니다" 라 하지 않는다', !crn102.subWarn);
+  ok('102 도 주지 않을 방이 지켜지지 않으면 확인 카드에', crn102.banCard);
   eq('지난 어싸인 직접 입력 — 102 는 첫 자리 A 도 고른다', crn102.seed, ['A', 'B', 'C', 'D', '없음']);
   ok('지난 어싸인 직접 입력 — 102 안내는 CRN 도 앉았던 자리를 고르라고', /CRN/.test(crn102.seedNote), crn102.seedNote);
   eq('지난 어싸인 직접 입력 — 101 은 그대로 (차지 자리 빼고)', crn102.seed101, ['B', 'C', 'D', 'E', '없음']);
