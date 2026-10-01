@@ -163,6 +163,7 @@ node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs \
   && node scripts/test_assign_logic.mjs   # standalone 로직 (헤드리스 크롬, $CHROME 로 경로 지정 가능)
 node scripts/test_assign_compat.mjs      # 옛 배포본이 저장한 데이터 파일을 지금 assign.html 로 열어 본다 (CI)
+node scripts/test_assign_principles.mjs  # 어싸인 원칙 — 배정 엔진을 '모든 배치를 다 따져 본 정답'과 견준다 (CI, 약 20초, docs/verification.md)
 # 화면(index.html)을 재배치했다면 — 핸들러 손실 0 확인 (REMOVED 는 전부 의도한 것이어야 한다)
 python3 scripts/handler_inventory.py <(git show origin/main:frontend/index.html) frontend/index.html
 # 리디자인 계약 검사 (design/handoff) — 1920×1080 으로 실제 앱을 열어 200+ 항목 getComputedStyle 검사, 불일치 0 이어야 한다
@@ -515,6 +516,10 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   아니라 방 선택에서도 사전식으로 앞선다** (2026-09-16): 예전엔 겹침 총합만 최대화해 오프 복귀자·
   근무 변경자가 전일 근무자를 겹침 적은 방으로 밀어냈다(5~10 보던 사람이 6~9 대신 5,10,11).
   가중치 `SEAT_W`/`OV_W` 는 2^53 안에 들도록 잡았다 — 회귀 `test_assign_core.mjs` 에 재현 시나리오 있음.
+  **마지막 다듬기 (2026-10-01, 결정 2-43)**: 방 매칭·라벨 폴백·남은 자리로 채운 뒤, 손으로 정한 자리·차지를 뺀 자리를 **다 따져 보고**(비트마스크 DP `polish`)
+  주지 않을 방 수 > 원칙 점수 > 헬퍼는 후임 > 원칙 4 튕김 > 같은 점수면 누가 잇는지 > 덜 옮기기 순으로 가장 나은 배치. 주지 않을 방을 둘씩 맞바꾸던 복구가
+  원칙 1 을 깼다. **원칙 4 는 헬퍼를 정하지 않는다**, 꺼져 있으면 아무 일도 안 한다. **차지는 주지 않을 방과 상관없이 시니어리티**(차지 방에 걸리면 카드로 알림).
+  원칙을 바꾸면 `scripts/test_assign_principles.mjs` 의 정답(`vec`·`cont`·`chargeOf`)부터 고칠 것 — 검증 절차는 `docs/verification.md`.
 - **병상 단위 배정 (2026-09-18, v260918i, 결정 2-26)**: 환자가 많으면 **한 병실을 둘이 나눠 본다**. 토큰은 **방**(`1001`) 또는 **병상**(`1001:1`)이고
   화면·인쇄는 `1` / `1:1`(한 자리). 병상 번호는 병실 목록의 **병상수로 1..n 자동** — 따로 적을 게 없다. 1인실·병상수 모르는 방은 나누지 않는다.
   **코어에는 늘 병상 키로 펼쳐서 넘긴다**(`roomsForCore` → `expandBeds`) — 방 표기와 병상 표기가 섞이면 같은 환자를 가리키는 두 토큰이 문자열로 달라

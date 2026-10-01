@@ -11,6 +11,13 @@
  *  3. 오프 복귀자 봤던 방 유지 (2항 다음).
  *  4. 오프 복귀자 튕기기 — 잔여 배정에서 이전 방 회피 (3과 동시 사용 불가,
  *     동시 켜지면 3이 우선). 대안이 없으면 그대로 배정 (라벨 미충원 방지).
+ *     꺼져 있으면 아무 일도 하지 않는다. 켜도 누가 헬퍼가 되는지는 정하지 않는다.
+ *
+ * 마지막 다듬기 — 위 단계(방 매칭 → 라벨 폴백 → 남은 자리)로 채운 뒤, 손으로 고정한 자리와 차지를 뺀
+ *  자리 전부를 **다 따져 보고** 가장 나은 배치로 바꾼다. 사전식으로
+ *  주지 않을 방에 앉는 사람 수(적게) > 이어 보기(원칙 1 > 2 > 3 사람 수, 그다음 겹친 병상) > 헬퍼는 후임
+ *  > 원칙 4 튕기기(켰을 때) > 같은 점수면 누가 잇는지(최근에 본 사람 → 선임) > 위 단계 배치에서 덜 움직이기. 예전엔 주지 않을 방을 피하려고 둘씩 맞바꿨는데,
+ *  상대가 어제 같은 근무로 이어 보던 사람이면 원칙 1 이 깨졌고 셋이 돌아가며 바꿔야 풀리는 날은 못 풀었다 (2026-10-01 검증).
  *
  * '방 유지'의 기준 — opts.roomsFor 제공 시 **실제 병실 기준** (라벨 기준 아님):
  *  A인 사람이 계속 A인 이유는 보는 병실(= 환자)이 같아서다. 인원이 바뀌는 날
@@ -32,6 +39,8 @@
  *  자리는 후보마다 나머지 배정을 실제로 돌려 보고 고른다 — 금지 방에 앉는 사람이 가장 적고, 그다음 모두가
  *  이어 보는 병실이 가장 많은 자리. 이어 볼 것이 없으면 차지가 아닐 때 앉았을 자리(CRN 을 바꿔도 아무도 안 밀린다).
  *  누가 차지인지는 결과의 byDay[dk][P].charge · byNurse[id][dk].charge 로 준다(자리가 고정이어도).
+ *  차지 사람은 주지 않을 방과 상관없이 고른다(시니어리티) — 자리가 고정인 서식에서 차지 방에 주지 않을 방이 있으면
+ *  차지가 그 방에 앉고 경고로 알린다. 예전엔 그 사람을 말없이 차지에서 빼, 인원이 바뀌는 날마다 차지가 오갔다.
  * ─────────────────────────────────────────────────────────────────────────── */
 (function (root) {
   const PERIOD_CODES = { D: ['DC', 'D'], E: ['EC', 'E'], N: ['NC', 'N'] };
@@ -187,8 +196,16 @@
           const recency = Math.round((Math.max(-400, Math.min(400, info.idx)) + 400) / 8);   // 0~100
           return recency * 100 + Math.max(0, 99 - n.seniority);                             // ≤ 10099
         };
+        // 한 시간대 안에서는 기록·방이 그대로라 사람×자리 값은 한 번만 센다 (CRN 자리를 고를 때 같은 값을 여러 번 묻는다)
+        const cached = function (f) {
+          const memo = {};
+          return function (n, l) {
+            const row = memo[n.id] || (memo[n.id] = {});
+            return l in row ? row[l] : (row[l] = f(n, l));
+          };
+        };
         // 방 기준 점수 — 전에 본 병실과 이 자리 병실이 겹칠 때만 (0 = 이어지는 것이 없음)
-        const roomW = function (n, l) {
+        const roomW = cached(function (n, l) {
           const info = lastSeen[n.id];
           if (!roomsFor || !info || !avOk(n.id, l)) return 0;
           const t = tierOf(info);
@@ -196,13 +213,123 @@
           const o = Math.min(99, overlap(info.rooms, roomsByLabel[l], bedsOf));
           if (!o) return 0;
           return SEAT_W[t] + o * OV_W[t] + tieOf(n, info);
-        };
+        });
         // 라벨 기준 점수 — (b) 라벨 유지 폴백과 같은 판단 (방 정보로 못 이을 때 같은 자리 이름)
         const labelW = function (n, l) {
           const info = lastSeen[n.id];
           if (!info || info.label !== l || !avOk(n.id, l)) return 0;
           const t = tierOf(info);
           return t < 0 ? 0 : SEAT_W[t] + tieOf(n, info);
+        };
+        // 이어 보는 몫 — 연속성은 자리 이름이 아니라 병실이다: 방을 아는 사람은 방 겹침만, 같은 자리 이름은 방을 모르는 사람만.
+        // (방을 아는 사람에게 같은 이름 점수를 주면 방이 옮겨 가 겹침이 0 인 자리에도 원칙 점수가 통째로 붙는다.)
+        const knowsRooms = function (info) { return !!(roomsFor && info && info.rooms && info.rooms.length); };
+        const seatV = cached(function (n, l) {
+          return knowsRooms(lastSeen[n.id]) && roomsByLabel[l] && roomsByLabel[l].length ? roomW(n, l) : labelW(n, l);
+        });
+        // 원칙4 — 쉬고 온 사람이 이 자리에 앉으면 전에 보던 방을 다시 보는가 (꺼져 있으면 늘 아니다)
+        const bounceHit = cached(function (n, l) {
+          if (!rules.bounceAfterOff) return false;
+          const info = lastSeen[n.id];
+          if (!info || !(info.idx < idx - 1)) return false;
+          if (roomsFor && info.rooms && info.rooms.length && roomsByLabel[l] && roomsByLabel[l].length)
+            return overlap(info.rooms, roomsByLabel[l]) > 0;
+          return info.label === l;
+        });
+        // 헬퍼 — 자리보다 사람이 많으면 후임이 헬퍼다. 선임이 헬퍼가 될수록 큰 값(2의 거듭제곱 합 = 선임부터 사전식)
+        const senRank = {};
+        staff.slice().sort(function (a, b) { return a.seniority - b.seniority; })
+          .forEach(function (n, i) { senRank[n.id] = i; });
+        const helperPen = function (id) { return Math.pow(2, Math.max(0, Math.min(52, staff.length - 1 - senRank[id]))); };
+
+        // 이어 보는 몫을 둘로 — 원칙 점수(등급별 사람 수·겹친 병상)와 같을 때 누가 잇는지 정하는 몫(최근 → 선임).
+        // 원칙 4 는 원칙 점수 다음, 이 몫보다 앞이다 (같은 점수에서 '선임이 이어 본다'가 튕기기를 이기지 않게)
+        const seatTie = cached(function (n, l) { return seatV(n, l) > 0 ? tieOf(n, lastSeen[n.id]) : 0; });
+
+        // 3) 다듬기 — 손으로 고정한 자리·차지를 뺀 자리 전부를 따져 보고 가장 나은 배치로 (자리 ≤6 이라 비트마스크로 정확히).
+        //  비용(작을수록 좋다, 사전식): 주지 않을 방 > -원칙 점수 > 헬퍼 선임 > 튕김 > -누가 잇는지 > 위 단계 배치에서 옮긴 사람 수.
+        //  뒤 셋은 한 수로 싼다: 튕김×1e8 + (-누가 잇는지)×100 + 옮김 — 누가 잇는지 ≤ 6×10099, 옮김 ≤ 99 라 자리가 섞이지 않는다
+        // 위 단계가 이미 가장 나은 날은 건너뛴다(속도 — 400일 × 시간대마다 돈다). 위 단계가 놓칠 수 있는 것은 넷뿐이다:
+        //  주지 않을 방 · 원칙 4 · 헬퍼(자리보다 사람이 많은 날) · 방 매칭이 못 보는 것(방을 모르는 기록, 방 구성이 빈 자리).
+        //  나머지는 방 매칭(정확한 최적)과 남은 자리 선임 순이 이미 같은 답을 낸다 — scripts/test_assign_principles.mjs 가 지킨다
+        const needPolish = (function () {
+          if (rules.bounceAfterOff || staff.length > labels.length) return true;
+          for (let i = 0; i < staff.length; i++) if ((av[staff[i].id] || []).length) return true;
+          if (!roomsFor) return false;
+          for (let i = 0; i < labels.length; i++) if (!roomsByLabel[labels[i]].length) return true;
+          for (let i = 0; i < staff.length; i++) {
+            const info = lastSeen[staff[i].id];
+            if (info && tierOf(info) >= 0 && !knowsRooms(info)) return true;
+          }
+          return false;
+        })();
+        const polish = function (assigned, rest, chargeId) {
+          if (!needPolish) return rest;
+          const seats = labels.filter(function (l) {
+            return assigned[l] && !ovIds[assigned[l].id] && assigned[l].id !== chargeId;
+          });
+          if (!seats.length) return rest;
+          const people = seats.map(function (l) { return assigned[l]; }).concat(rest);
+          const was = {};
+          for (let j = 0; j < seats.length; j++) was[assigned[seats[j]].id] = seats[j];
+          const nS = seats.length, full = 1 << nS;
+          let V = new Float64Array(full), C = new Float64Array(full), H = new Float64Array(full), L = new Float64Array(full);
+          let V2 = new Float64Array(full), C2 = new Float64Array(full), H2 = new Float64Array(full), L2 = new Float64Array(full);
+          V.fill(Infinity); V[0] = 0;
+          const sv = new Float64Array(nS), sc = new Float64Array(nS), sl = new Float64Array(nS);
+          const back = [];
+          for (let i = 0; i < people.length; i++) {
+            const n = people[i];
+            for (let j = 0; j < nS; j++) {
+              const l = seats[j], v = seatV(n, l), t = seatTie(n, l);
+              sv[j] = avOk(n.id, l) ? 0 : 1; sc[j] = t - v;
+              sl[j] = (bounceHit(n, l) ? 1e8 : 0) - t * 100 + (was[n.id] === l ? 0 : 1);
+            }
+            const hp = helperPen(n.id), hl = was[n.id] ? 1 : 0;   // 헬퍼로
+            V2.fill(Infinity);
+            const bk = new Int8Array(full).fill(-2);
+            for (let m = 0; m < full; m++) {
+              const v0 = V[m];
+              if (v0 === Infinity) continue;
+              const c0 = C[m], h0 = H[m], l0 = L[m];
+              // (v,c,h,l) 가 상태 k 보다 작으면 바꾼다
+              let h = h0 + hp, l = l0 + hl;
+              if (V2[m] === Infinity || v0 < V2[m] || (v0 === V2[m] && (c0 < C2[m] || (c0 === C2[m] && (h < H2[m] || (h === H2[m] && l < L2[m])))))) {
+                V2[m] = v0; C2[m] = c0; H2[m] = h; L2[m] = l; bk[m] = -1;
+              }
+              for (let j = 0; j < nS; j++) {
+                if (m & (1 << j)) continue;
+                const k = m | (1 << j), v = v0 + sv[j], c = c0 + sc[j];
+                l = l0 + sl[j];
+                if (V2[k] === Infinity || v < V2[k] || (v === V2[k] && (c < C2[k] || (c === C2[k] && (h0 < H2[k] || (h0 === H2[k] && l < L2[k])))))) {
+                  V2[k] = v; C2[k] = c; H2[k] = h0; L2[k] = l; bk[k] = j;
+                }
+              }
+            }
+            let t;
+            t = V; V = V2; V2 = t; t = C; C = C2; C2 = t; t = H; H = H2; H2 = t; t = L; L = L2; L2 = t;
+            back.push(bk);
+          }
+          const f = full - 1;
+          if (V[f] === Infinity) return rest;
+          // 고른 배치가 위 단계 배치와 같으면(옮김이 마지막 기준이라 더 나은 것이 없을 때) 그대로
+          let mask = f;
+          const out = [];
+          let moved = false;
+          const pickN = [];
+          for (let i = people.length - 1; i >= 0; i--) {
+            const j = back[i][mask];
+            pickN[i] = j;
+            if (j >= 0) { mask ^= (1 << j); if (was[people[i].id] !== seats[j]) moved = true; }
+            else if (was[people[i].id]) moved = true;
+          }
+          if (!moved) return rest;
+          for (let i = 0; i < people.length; i++) {
+            if (pickN[i] >= 0) assigned[seats[pickN[i]]] = people[i];
+            else out.push(people[i]);
+          }
+          // 헬퍼는 선임 순으로 (위 단계와 같은 순서)
+          return out.sort(function (a, b) { return a.seniority - b.seniority; });
         };
 
         // 2~4) 나머지 자리 — (a) 방 매칭 → (b) 라벨 폴백 → 잔여(선임 순) → 회피 복구. 함수로 둔 까닭은 아래 1)의
@@ -262,14 +389,7 @@
             .sort(function (a, b) { return a.seniority - b.seniority; });
           const rem = freeLabels();
           for (let i = 0; i < rem.length && leftover.length; i++) {
-            const bounceOk = function (n) {
-              if (!rules.bounceAfterOff) return true;
-              const info = lastSeen[n.id];
-              if (!info || !(info.idx < idx - 1)) return true;
-              if (roomsFor && info.rooms && info.rooms.length && roomsByLabel[rem[i]].length)
-                return !overlap(info.rooms, roomsByLabel[rem[i]]);
-              return info.label !== rem[i];
-            };
+            const bounceOk = function (n) { return !bounceHit(n, rem[i]); };
             // 회피 라벨(금지 방)과 원칙4 둘 다 통과 → 회피만 통과 → 아무나 (미충원 방지)
             let pick = leftover.findIndex(function (n) { return avOk(n.id, rem[i]) && bounceOk(n); });
             if (pick < 0) pick = leftover.findIndex(function (n) { return avOk(n.id, rem[i]); });
@@ -278,35 +398,22 @@
             assigned[rem[i]] = n; taken[n.id] = true;
           }
           // 자리보다 사람이 많으면(보통 6인 이상): 라벨 소진 후 잔여 인원은 어싸인 없음(헬퍼)
-          const extra = leftover.map(function (n) { return n.id; });
-
-          // 회피 라벨 복구: 회피 라벨에 배정된 간호사를 서로 문제 없는 상대와 맞교환.
-          // 연속성(원칙1~3)보다 회피(금지 방)가 우선 — 수동 오버라이드·차지는 건드리지 않음
-          // (방이 고정이 아닌 차지도 — 그 자리는 이 복구까지 돌려 보고 고른 것이다).
-          for (const l in assigned) {
-            const n = assigned[l];
-            if (n.id === chargeId) continue;
-            if (avOk(n.id, l) || ovIds[n.id]) continue;
-            for (const l2 in assigned) {
-              const m = assigned[l2];
-              if (l2 === l || m.id === chargeId) continue;
-              if (!ovIds[m.id] && avOk(n.id, l2) && avOk(m.id, l)) {
-                assigned[l] = m; assigned[l2] = n; break;
-              }
-            }
-          }
-          return extra;
+          // 3) 다듬기 — 주지 않을 방·원칙4 를 위 단계가 놓친 것까지 (손으로 고정한 자리·차지는 건드리지 않는다.
+          //  방이 고정이 아닌 차지도 — 그 자리는 이 다듬기까지 돌려 보고 고른 것이다)
+          return polish(assigned, leftover, chargeId).map(function (n) { return n.id; });
         };
 
-        // 1) 차지: DC/EC/NC 표시자 → 차지가능 최선임 → 최선임
+        // 1) 차지: DC/EC/NC 표시자 → 차지가능 최선임 → 최선임. 표시자가 둘 이상이면 그중 선임(명부 배열 순서가 아니라)
+        const bySen = function (a, b) { return a.seniority - b.seniority; };
+        const marked = function (n) { return CHARGE_CODES[(schedule[n.id] || {})[dk]]; };
         const floatSeats = opts.chargeSeats ? opts.chargeSeats(P, cnt, dk) : null;
         let chargeId = null, extra = null;
         if (floatSeats && floatSeats.length) {
           // 방이 고정이 아닌 차지 — 사람은 자리와 상관없이 고른다(손으로 자리를 옮긴 사람도 차지일 수 있다)
-          let c = staff.find(function (n) { return CHARGE_CODES[(schedule[n.id] || {})[dk]]; });
+          let c = staff.filter(marked).sort(bySen)[0];
           if (!c) {
             const pool = staff.filter(function (n) { return chargeOk(n, P); });
-            c = (pool.length ? pool : staff).slice().sort(function (a, b) { return a.seniority - b.seniority; })[0];
+            c = (pool.length ? pool : staff).slice().sort(bySen)[0];
           }
           chargeId = c.id;
           if (!taken[c.id]) {
@@ -314,56 +421,50 @@
             //  ① 금지 방(회피)에 앉는 사람이 가장 적고 ② 이어 보는 병실이 가장 많은(차지 자신 포함, 원칙 등급이 먼저) 자리.
             // 예전엔 나머지가 이어 볼 몫을 따로 흉내 내 셌는데, 흉내가 실제 배정과 어긋나는 곳(금지 방·회피 복구·라벨 다툼)마다
             // CRN 이 남의 방을 가져가거나 금지 방을 남에게 떠넘겼다 (2026-10-01 교차 검토). 자리는 많아야 6개라 여섯 번 돌려도 싸다.
-            const okL = floatSeats.filter(function (l) { return labels.indexOf(l) >= 0 && !assigned[l]; });
-            const prefL = okL.filter(function (l) { return avOk(c.id, l); });
-            const seatL = prefL.length ? prefL : okL;
+            // 앉을 수 있는 자리는 전부 돌려 본다 — CRN 이 제 금지 방만 먼저 피하면 그 방을 남이 떠안아 이어 보기만 잃는 날이 있다
+            // (금지 방에 앉는 사람 수가 같으면 이어 보기가 많은 쪽이다. 2026-10-01 검증)
+            const seatL = floatSeats.filter(function (l) { return labels.indexOf(l) >= 0 && !assigned[l]; });
             if (seatL.length === 1) { assigned[seatL[0]] = c; taken[c.id] = true; }
             else if (seatL.length) {
-              // 이어 보는 몫 — 연속성은 자리 이름이 아니라 병실이다: 방을 아는 사람은 방 겹침만, 같은 자리 이름은 방을 모르는 사람만.
-              // (방을 아는 사람에게 같은 이름 점수를 주면 방이 옮겨 가 겹침이 0 인 자리에도 원칙 점수가 통째로 붙는다.)
-              const knowsRooms = function (info) { return !!(roomsFor && info && info.rooms && info.rooms.length); };
-              const seatV = function (n, l) {
-                return knowsRooms(lastSeen[n.id]) && roomsByLabel[l] && roomsByLabel[l].length ? roomW(n, l) : labelW(n, l);
-              };
               const trial = function (l0) {
                 const a = Object.assign({}, assigned), t = Object.assign({}, taken);
                 if (l0) { a[l0] = c; t[c.id] = true; }
                 const ex = place(a, t, l0 ? c.id : null);
-                let viol = 0, v = 0;
+                let viol = 0, v = 0, ti = 0, bo = 0, hp = 0;
                 for (const l in a) {
                   if (!ovIds[a[l].id] && !avOk(a[l].id, l)) viol++;
-                  v += seatV(a[l], l);
+                  const w = seatTie(a[l], l);
+                  v += seatV(a[l], l) - w; ti += w;
+                  if (bounceHit(a[l], l)) bo++;
                 }
-                return { l: l0, a: a, t: t, ex: ex, viol: viol, v: v };
+                for (let i = 0; i < ex.length; i++) hp += helperPen(ex[i]);
+                return { l: l0, a: a, t: t, ex: ex, viol: viol, v: v, ti: ti, bo: bo, hp: hp };
               };
-              // 점수가 같으면: 원칙4(튕기기) — 오프 복귀 CRN 은 전에 보던 방을 피한다(남을 밀어내면서까지는 아니다).
+              // 원칙 점수가 같으면: 헬퍼는 후임 — 그다음 원칙4(튕기기, 켰을 때만) — CRN 도 다른 사람도 쉬고 와서 전에 보던 방을
+              // 다시 보는 사람이 적은 자리(남을 밀어내면서까지는 아니다) — 그다음 같은 점수에서 누가 잇는지(최근 → 선임).
               // 그다음 어제와 같은 자리 이름 — 방이 다 바뀌어 아무도 이어 보지 못하는 날 CRN 이 이유 없이 첫 자리로 가지 않게.
               // 그다음 **차지가 아닐 때 앉았을 자리** — 이어 볼 것이 없는 날(첫날·[CRN 맡기기]) CRN 이 첫 자리로 가 모두를
               // 한 칸씩 밀지 않게. /CRN 은 사람에 붙는다: CRN 을 바꿔도 자리는 그대로다.
               const cInfo = lastSeen[c.id];
-              const bounceC = !!(rules.bounceAfterOff && cInfo && cInfo.idx < idx - 1);
-              const bounced = function (l) {
-                if (!bounceC) return false;
-                if (roomsFor && cInfo.rooms && cInfo.rooms.length && roomsByLabel[l].length)
-                  return !overlap(cInfo.rooms, roomsByLabel[l]);
-                return cInfo.label !== l;
-              };
               const sameL = function (l) { return !!(cInfo && cInfo.label === l && tierOf(cInfo) >= 0); };
               const nat = trial(null);
               let natL = null;
               for (const l in nat.a) if (nat.a[l] === c) natL = l;
-              // 정수 합(< 2^53)이라 같음 비교가 정확하다 — 사전식으로 (금지 방, 점수, 튕김, 같은 자리 이름, 차지가 아닐 때 자리)
+              // 정수 합(< 2^53)이라 같음 비교가 정확하다 — 사전식으로
+              // (금지 방, 원칙 점수, 헬퍼, 튕김, 누가 잇는지, 같은 자리 이름, 차지가 아닐 때 자리)
               const better = function (r, b) {
                 if (r.viol !== b.viol) return r.viol < b.viol;
                 if (r.v !== b.v) return r.v > b.v;
-                if (r.bo !== b.bo) return r.bo;
+                if (r.hp !== b.hp) return r.hp < b.hp;
+                if (r.bo !== b.bo) return r.bo < b.bo;
+                if (r.ti !== b.ti) return r.ti > b.ti;
                 if (r.sl !== b.sl) return r.sl;
                 return r.nat && !b.nat;
               };
               let best = null;
               for (let s = 0; s < seatL.length; s++) {
                 const r = trial(seatL[s]);
-                r.bo = bounced(r.l); r.sl = sameL(r.l); r.nat = r.l === natL;
+                r.sl = sameL(r.l); r.nat = r.l === natL;
                 if (!best || better(r, best)) best = r;
               }
               for (const l in best.a) assigned[l] = best.a[l];
@@ -373,14 +474,12 @@
           }
         } else {
           if (!assigned['차지']) {
-            let c = staff.find(function (n) {
-              return !taken[n.id] && CHARGE_CODES[(schedule[n.id] || {})[dk]];
-            });
+            let c = staff.filter(function (n) { return !taken[n.id] && marked(n); }).sort(bySen)[0];
             if (!c) {
+              // 주지 않을 방과 상관없이 시니어리티로 — 차지 방에 주지 않을 방이 걸려도 차지는 그대로(경고로 알린다)
               const pool = staff.filter(function (n) { return !taken[n.id] && chargeOk(n, P); });
-              const pref = pool.filter(function (n) { return avOk(n.id, '차지'); });
-              const base = pref.length ? pref : (pool.length ? pool : staff.filter(function (n) { return !taken[n.id]; }));
-              c = base.slice().sort(function (a, b) { return a.seniority - b.seniority; })[0];
+              const base = pool.length ? pool : staff.filter(function (n) { return !taken[n.id]; });
+              c = base.slice().sort(bySen)[0];
             }
             if (c) { assigned['차지'] = c; taken[c.id] = true; }
           }

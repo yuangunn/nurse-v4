@@ -291,11 +291,12 @@ assert.equal(periodOf('OF'), null);
   // 소프트: 전원이 회피 대상이면 그래도 채운다 (미충원 방지)
   r = compute(nurses, sched, ['d1'], { avoid: { d1: { D: { a: ['차지'], b: ['A', 'B'], c: ['A', 'B'] } } } });
   assert.ok(r.byDay.d1.D.labels['A'] && r.byDay.d1.D.labels['B']);
-  // 차지 회피: a가 차지 회피면 다른 차지가능자 없어도 폴백은 유지하되,
-  // b가 차지 가능하면 b가 차지
+  // 차지 방에 주지 않을 방이 걸려도 차지는 시니어리티 — b가 차지 가능해도 a가 차지 (2026-10-01).
+  // 예전엔 a를 말없이 차지에서 빼, 인원이 바뀌어 차지 방이 달라지는 날마다 차지가 a↔b 로 오갔다. 경고는 화면이 낸다
   const n2 = nurses.map(n => n.id === 'b' ? { ...n, chargeCapable: true } : n);
   r = compute(n2, sched, ['d1'], { avoid: { d1: { D: { a: ['차지'] } } } });
-  assert.equal(r.byDay.d1.D.labels['차지'], 'b');
+  assert.equal(r.byDay.d1.D.labels['차지'], 'a');
+  assert.equal(r.byDay.d1.D.charge, 'a');
   // 원칙1(전일 유지)보다 회피 우선: b가 어제 A를 봤어도 A 회피면 유지 안 함
   const sched3 = { a: { d1: 'D', d2: 'D' }, b: { d1: 'D', d2: 'D' }, c: { d1: 'D', d2: 'D' } };
   r = compute(nurses, sched3, ['d1', 'd2'], { avoid: { d2: { D: { b: ['A'] } } } });
@@ -633,7 +634,9 @@ assert.equal(periodOf('OF'), null);
                   choi: { mon: 'OF', tue: 'D' }, jung: { mon: 'D', tue: 'OF' }, yoon: { mon: 'D', tue: 'OF' } };
     const seed = { kim: { label: 'B', period: 'D', idx: -1 }, lee: { label: 'A', period: 'D', idx: -1 }, park: { label: 'A', period: 'D', idx: -1 } };
     const r = compute(NS, sch, ['mon', 'tue'], { roomsFor: (P, cnt, l, dk) => (preset[dk][l] || []).slice(), seed, chargeSeats: () => ['차지', 'A', 'B', 'C'] });
-    assert.deepEqual(r.byDay.tue.D.labels, { 차지: 'kim', A: 'park', B: 'lee', C: 'choi' }, '이는 8~9호를 잇고 박은 A 를 받는다');
+    // 박은 어느 쪽이든 A 를 받는다(다듬기가 놓친 것을 잡는다). B(8~11호)는 김(어제 10~11호)과 이(어제 8~9호)가 겹침이 같아
+    // 둘 중 하나만 잇는다 — 같으면 선임(보통 간호사끼리와 같은 규칙). 예전엔 김이 B 에 앉으면 박이 A 를 못 받아 김이 차지 자리로 갔다
+    assert.deepEqual(r.byDay.tue.D.labels, { 차지: 'lee', A: 'park', B: 'kim', C: 'choi' }, '김은 10~11호를 잇고 박은 A 를 받는다');
     assert.equal(r.byDay.tue.D.charge, 'kim');
   }
 
@@ -707,6 +710,83 @@ assert.equal(periodOf('OF'), null);
       checked++;
     }
     assert.ok(checked > 20);
+  }
+}
+
+// ── 원칙·차지 검증 (2026-10-01) — 다듬기는 움직일 수 있는 자리 전부를 따져 본다 ──
+{
+  const R = (a, b) => { const o = []; for (let i = a; i <= b; i++) o.push(String(1000 + i)); return o; };
+  const S5 = { 차지: R(1, 2), A: R(3, 5), B: R(6, 8), C: R(9, 11), D: R(12, 14) };
+  const S4 = { 차지: R(1, 3), A: R(4, 7), B: R(8, 11), C: R(12, 14) };
+  const rf = (P, cnt, l) => ((cnt >= 5 ? S5 : S4)[l] || []).slice();
+  const seat = (r, dk, id, P = 'D') => Object.keys(r.byDay[dk][P].labels).find(l => r.byDay[dk][P].labels[l] === id) || null;
+  const ON4 = { keepSameShift: true, keepAcrossShift: true, keepAfterOff: false, bounceAfterOff: true };
+  const NS = ['가', '나', '다', '라', '마', '바', '사'].map((id, i) => N(id, i));
+
+  // 주지 않을 방을 피하려고 맞바꿀 때 원칙1 을 깨지 않는다 — 어제 같은 근무였던 나·마는 제자리, 새로 온 둘이 B·C 를 나눈다.
+  // (예전엔 금지 방에 앉은 사를 '처음 만난' 상대 — 이어 보던 마 — 와 맞바꿨다)
+  {
+    const sch = { 가: { d1: 'DC', d2: 'DC' }, 나: { d1: 'D', d2: 'D' }, 다: { d1: 'D', d2: 'OF' }, 라: { d1: 'D', d2: 'OF' },
+      마: { d1: 'D', d2: 'D' }, 바: { d1: 'OF', d2: 'D' }, 사: { d1: 'OF', d2: 'D' } };
+    const r = compute(NS, sch, ['d1', 'd2'], { roomsFor: rf, avoid: { d2: { D: { 사: ['C'] } } } });
+    assert.equal(seat(r, 'd2', '나'), seat(r, 'd1', '나'), '나 원칙1');
+    assert.equal(seat(r, 'd2', '마'), seat(r, 'd1', '마'), '마 원칙1');
+    assert.notEqual(seat(r, 'd2', '사'), 'C', '사는 금지 방을 피한다');
+  }
+  // 셋이 돌아가며 바꿔야 풀리는 금지 방 — 둘씩 맞바꾸기로는 못 풀었다('대안이 없습니다'가 거짓이었다)
+  {
+    const N5 = ['가', '나', '다', '라', '마'].map((id, i) => N(id, i, i === 0));
+    const sch = {}; for (const n of N5) sch[n.id] = { d: 'D' };
+    const av = { 나: ['C', 'D'], 다: ['B', 'C', 'D'] };
+    const r = compute(N5, sch, ['d'], { avoid: { d: { D: av } } });
+    const lab = r.byDay.d.D.labels;
+    assert.deepEqual(Object.entries(lab).filter(([l, id]) => (av[id] || []).includes(l)), [], '금지 방 0');
+    assert.equal(lab['차지'], '가');
+  }
+  // 원칙4 — 자리 고정(101·122): 어제 차지였던 가는 오늘 이어 볼 것이 없다. 쉬고 온 다가 전에 보던 방(B)으로 돌아가지 않는다
+  {
+    const sch = { 가: { d1: 'DC', d2: 'DC', d3: 'D' }, 나: { d1: 'D', d2: 'D', d3: 'DC' }, 다: { d1: 'D', d2: 'OF', d3: 'D' },
+      라: { d1: 'D', d2: 'D', d3: 'D' }, 마: { d1: 'D', d2: 'D', d3: 'D' }, 바: { d1: 'OF', d2: 'D', d3: 'OF' } };
+    const r = compute(NS.slice(0, 6), sch, ['d1', 'd2', 'd3'], { rules: ON4, roomsFor: rf });
+    assert.notEqual(seat(r, 'd3', '다'), seat(r, 'd1', '다'), '다는 튕긴다');
+    for (const id of ['라', '마']) assert.equal(seat(r, 'd3', id), seat(r, 'd2', id), id + ' 원칙1');
+    // 원칙4 를 끄면(원칙3 도 끈 채) 아무 차이 없음이 아니라 — 원칙3 을 켜면 다는 B 로 돌아간다
+    const r3 = compute(NS.slice(0, 6), sch, ['d1', 'd2', 'd3'], { roomsFor: rf });
+    assert.equal(seat(r3, 'd3', '다'), seat(r3, 'd1', '다'), '원칙3: 다는 B 그대로');
+  }
+  // 원칙4 — 자리가 고정이 아닌 CRN(102): CRN 자리를 고를 때 다른 사람의 튕김도 센다
+  {
+    const sch = { 가: { d1: 'OF', d2: 'OF', d3: 'DC' }, 나: { d1: 'DC', d2: 'DC', d3: 'OF' }, 다: { d1: 'D', d2: 'OF', d3: 'D' },
+      라: { d1: 'D', d2: 'D', d3: 'D' }, 마: { d1: 'D', d2: 'D', d3: 'D' }, 바: { d1: 'OF', d2: 'D', d3: 'OF' } };
+    const r = compute(NS.slice(0, 6), sch, ['d1', 'd2', 'd3'],
+      { rules: ON4, roomsFor: (P, cnt, l) => (S4[l] || []).slice(), maxSeats: 4, chargeSeats: () => ['차지', 'A', 'B', 'C'] });
+    const b = seat(r, 'd1', '다'), a = seat(r, 'd3', '다');
+    assert.equal(S4[b].filter(x => S4[a].includes(x)).length, 0, '다는 전에 보던 방을 피한다');
+    assert.equal(r.byDay.d3.D.charge, '가');
+  }
+  // 원칙4 는 헬퍼를 정하지 않는다 — 자리보다 사람이 많은 날 헬퍼는 늘 막내
+  {
+    const sch = { 가: { d1: 'DC', d2: 'DC', d3: 'DC' }, 나: { d1: 'D', d2: 'D', d3: 'D' }, 다: { d1: 'D', d2: 'OF', d3: 'D' },
+      라: { d1: 'D', d2: 'D', d3: 'D' }, 마: { d1: 'D', d2: 'D', d3: 'D' }, 바: { d1: 'OF', d2: 'OF', d3: 'D' } };
+    const r4 = compute(NS.slice(0, 6), sch, ['d1', 'd2', 'd3'], { rules: ON4, roomsFor: rf });
+    assert.deepEqual(r4.byDay.d3.D.extra, ['바']);
+  }
+  // 원칙3·4 를 둘 다 꺼 두면 쉬고 온 사람의 지난 기록은 결과를 바꾸지 않는다
+  {
+    const sch = {}; for (const n of NS.slice(0, 5)) sch[n.id] = { d: 'D' };
+    const off = { keepSameShift: true, keepAcrossShift: true, keepAfterOff: false, bounceAfterOff: false };
+    const seed = { 나: { label: 'A', period: 'D', idx: -1, rooms: S5.A }, 다: { label: 'B', period: 'D', idx: -3, rooms: S5.B } };
+    const a = compute(NS.slice(0, 5), sch, ['d'], { rules: off, roomsFor: rf, seed });
+    const b = compute(NS.slice(0, 5), sch, ['d'], { rules: off, roomsFor: rf, seed: { 나: seed.나 } });
+    assert.deepEqual(a.byDay.d, b.byDay.d);
+  }
+  // 차지 표시가 둘이면 명부 배열 순서가 아니라 선임
+  {
+    const N3 = [N('다', 2), N('나', 1), N('가', 0)];
+    for (const cs of [null, () => ['차지', 'A', 'B']]) {
+      const r = compute(N3, { 가: { d: 'D' }, 나: { d: 'DC' }, 다: { d: 'DC' } }, ['d'], cs ? { chargeSeats: cs } : {});
+      assert.equal(r.byDay.d.D.charge, '나');
+    }
   }
 }
 
