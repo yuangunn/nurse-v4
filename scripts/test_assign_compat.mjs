@@ -193,7 +193,8 @@ async function check(file, html) {
       const flat = (o, pre = '', out = {}) => { for (const k in o || {}) { const v = o[k];
         if (v && typeof v === 'object' && !Array.isArray(v)) flat(v, pre + k + '/', out); else out[pre + k] = JSON.stringify(v); } return out; };
       const a = flat(expect.result), b = flat(result);
-      const diff = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => a[k] !== b[k]);
+      // 누가 차지인지(…/charge)는 2026-10-01 부터 결과에 새로 실린다 — 자리(labels)가 같으면 같은 어싸인이다
+      const diff = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter(k => a[k] !== b[k] && !/[/]charge$/.test(k));
       if (diff.length) notes.push(`${tag}: 같은 근무표로 낸 어싸인이 배포본과 ${diff.length}칸 다릅니다 — 원칙을 바꾼 게 아니면 확인하세요 (예: ${diff.slice(0, 3).join(', ')})`);
     }
 
