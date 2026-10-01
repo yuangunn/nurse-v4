@@ -1782,7 +1782,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261001a'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261001b'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1811,14 +1811,15 @@ const FORMS={
   // 매일 칸에는 이름만 쓴다. "배정표에 어싸인이 나오지 않게" 라는 요구가 양식에 이미 들어 있다.
   // 차지는 **방이 고정이 아니다** (2026-09-20 병동 확인) — 그 근무의 최선임 이름 뒤에 ' /CRN' 을 붙인다.
   // 최선임은 코어가 고른다(DC/EC/NC 표시자 → 차지 가능 최선임 → 최선임, 명부 순서 = 시니어리티).
-  // CRN 은 **A·B·C 어느 방이든** 본다 (2026-10-01 사용자) — 첫 자리(A)에 못 박았더니 CRN 이 바뀌는 날마다
-  // 새 CRN 이 A 로 끌려가고 A 사람이 밀려 뒤가 하나도 이어지지 않았다. 어느 자리인지는 연속성이 정한다(crnFloat).
+  // CRN 은 **A·B·C·D 어느 방이든** 본다 — /CRN 은 사람에 붙는다 (2026-10-01 사용자). 첫 자리(A)에 못 박았더니
+  // CRN 이 바뀌는 날마다 새 CRN 이 A 로 끌려가고 A 사람이 밀려 뒤가 하나도 이어지지 않았다. 어느 자리인지는 연속성이 정한다(crnFloat·crnSeats).
+  // 처음엔 사용자 첫 문장대로 A·B·C 만 열었다가 같은 날 "당연히 D방도 볼수있지" — 종이의 자리 전부다.
   '102':{kind:'102',name:'102병동 서식',file:'병실 배정표_102',tplId:'tplB64_102',noRooms:true,
     rows:{D:4,E:4,N:3},   // 병동이 준 2026-09 양식에는 대체 줄이 없다 — 5번째는 확인 카드가 알려 준다
     crnMark:true,          // 자리 이름에 CN 표기가 없어 이름 뒤에 /CRN 을 찍는다 — 차지가 어느 자리에 앉든
     labels:{'차지':'A',A:'B',B:'C',C:'D',D:'대체',E:'대체'},
     labelsN:{'차지':'A',A:'B',B:'C',C:'대체',D:'대체',E:'대체'},
-    desc:'요일마다 이름 한 칸(방 칸 없음). 자리 이름은 A·B·C·D, 야간은 A·B·C. 차지(CRN)는 방이 고정이 아니라 A·B·C 중 이어 보던 자리에 앉고 이름 뒤에 /CRN 이 붙는다. 방 배정은 머리글에 고정으로 적혀 있고 배정표에는 나오지 않는다. 중간번과 물품체크·CPR·화재 안내가 있다.'},
+    desc:'요일마다 이름 한 칸(방 칸 없음). 자리 이름은 A·B·C·D, 야간은 A·B·C. 차지(CRN)는 방이 고정이 아니라 어느 자리든 이어 보던 자리에 앉고 이름 뒤에 /CRN 이 붙는다. 방 배정은 머리글에 고정으로 적혀 있고 배정표에는 나오지 않는다. 중간번과 물품체크·CPR·화재 안내가 있다.'},
   // 82 는 파트장이 병동과 **SU(Stroke unit)** 근무표를 함께 본다. 배정표에도 듀티마다
   // SU 칸이 따로 있어서, SU 간호사는 병동 자리에 들어가면 안 된다 (2026-09-21 파트장 확인).
   // 중간번도 별도 줄이 아니라 D 구역 안의 한 자리다. 날짜는 엑셀 날짜가 아니라 'M월 D일' 글자.
@@ -1851,9 +1852,10 @@ const formIds=()=>[...FORM_IDS,
 const formFor=code=>code&&formDefOf(String(code))?String(code):'';
 function formId(){ return store&&formDefOf(store.formId)?store.formId:'101'; }
 function formDef(){ return formDefOf(formId()); }
-/* 차지(CRN)가 앉을 수 있는 자리 — 방이 고정이 아닌 차지(102)는 A·B·C (앱 자리 이름으로 차지·A·B = 종이의 A·B·C).
- * 넷째 자리(D)는 CRN 이 보지 않는다 (2026-10-01 사용자: "CRN은 A B C방 다 볼수있어") */
-const CRN_SEATS=['차지','A','B'];
+/* 차지(CRN)가 앉을 수 있는 자리 — 방이 고정이 아닌 차지(102)는 **종이의 자리 전부**(102 D·E = A·B·C·D, 야간 A·B·C).
+ * CRN 은 사람에 붙는다 — 어느 방이든 본다 (2026-10-01 사용자: "당연히 D방도 볼수있지 … /CRN은 사람에 붙는거야").
+ * 종이 줄을 넘는 자리(대체 줄)는 뺀다 — 그날 사람이 양식 줄보다 많아 생긴 자리이지 CRN 이 보던 방이 아니다. */
+function crnSeats(P){ return slotsOf(P).filter(l=>LBL_ORDER.includes(l)); }
 /* 그 근무의 차지가 자리에 묶이지 않나 — 자리 이름이 차지를 안 알려 주는 서식(crnMark, 102 모양).
  * 옛 102 양식처럼 종이에 CRN 자리가 따로 있으면(D(CRN)) 거기가 차지 자리라 묶인다(tplCrnSeat) */
 function crnFloat(P){ const F=formDef(); return !!(F&&F.crnMark&&!(tplCrnSeat()||{})[P]); }
@@ -2717,8 +2719,8 @@ function recompute(){
   result=AssignCore.compute(nurses,schedule,tlKeys,
     {rules:store.rules,overrides:merged,seed:Object.keys(seed).length?seed:null,avoid,
      roomsFor:roomsForCore,maxSeats:P=>seatsFor(P),
-     // 102: CRN 은 방이 고정이 아니다 — A·B·C 중 이어 보던 자리에 앉는다 (차지를 첫 자리에 못 박으면 CRN 이 바뀔 때마다 모두 밀린다)
-     chargeSeats:P=>crnFloat(P)?CRN_SEATS:null,
+     // 102: CRN 은 방이 고정이 아니다 — 종이의 어느 자리든 이어 보던 자리에 앉는다 (차지를 첫 자리에 못 박으면 CRN 이 바뀔 때마다 모두 밀린다)
+     chargeSeats:P=>crnFloat(P)?crnSeats(P):null,
      // 겹침은 병실 개수가 아니라 병상수 합(같이 보던 환자 수) — 병상수를 모르는 방은 1
      // 겹침은 병실 개수가 아니라 병상수 합(같이 보던 환자 수). 병상 키 하나는 환자 한 명 = 1
      bedsOf:t=>{ const [room,no]=splitBed(roomFull(t)); return no!=null?1:(bedCount(room)||1); }});
@@ -2732,7 +2734,7 @@ function dayInfo(iso){
     if(!info) continue; has=true;
     if(info.label) day[info.period].labels[info.label]=n;
     else day[info.period].extra.push(n);
-    if(info.charge) day[info.period].charge=n;   // 차지는 자리가 아니라 사람 — 102 CRN 은 A·B·C 어디든 앉는다
+    if(info.charge) day[info.period].charge=n;   // 차지는 자리가 아니라 사람 — 102 CRN 은 어느 자리든 앉는다
   }
   return has?day:null;
 }
@@ -3100,7 +3102,7 @@ function renderWeek(){
       const other=(slot==='SU'||/^중간번?$/.test(slot))?slot:null;
       const label=other?null:slot, labTxt=other==='SU'?'<span class="unitTag">SU</span>':(other||FORM_LBL(slot,P));
       // 자리 이름이 차지를 안 알려 주는 서식(102)은 인쇄처럼 차지 이름 뒤에 /CRN 을 보인다 — 차지가 앉은 자리 어디서든
-      // (102 CRN 은 A·B·C 어느 방이든 본다). 화면에 표시가 없으면 누구를 차지로 두고 고치는지 모른 채 자리를 바꾸게 된다.
+      // (102 CRN 은 어느 방이든 본다). 화면에 표시가 없으면 누구를 차지로 두고 고치는지 모른 채 자리를 바꾸게 된다.
       // /CRN 을 보일지는 서식이 정한다 — 인쇄에 안 찍히는데 화면에만 보이면 어긋난다
       const crnOn=!other&&formDef().crnMark;
       h+='<tr style="height:34px">';
@@ -3213,7 +3215,7 @@ function renderWeekWarnings(days,infos){
       if(day[P].extra.length)
         push('warn',`${md(iso)} ${P} ${day[P].extra.map(esc).join(', ')} — 자리(${seatsFor(P)}개)보다 사람이 많아 어싸인 없이 근무합니다(헬퍼).`);
       // 차지 자격 — 차지 표기(DC 등) 없이 자동으로 뽑힌 사람이 차지 가능이 아니면 (표기가 있으면 위 '가능 근무' 경고가 맡는다)
-      const ch=day[P].charge;   // 자리가 아니라 사람 — 102 CRN 은 A·B·C 어디든 앉는다
+      const ch=day[P].charge;   // 자리가 아니라 사람 — 102 CRN 은 어느 자리든 앉는다
       if(ch){ const pc=parseCellRaw((store.cells[ch]||{})[iso]||''); if(pc&&pc.code&&!/C$/.test(pc.code)&&!capsOf(ch).includes(P+'C')) chgMiss.push(`${md(iso)} ${P} ${esc(ch)}`);
         else if(isRelief(ch,iso)) chgMiss.push(`${md(iso)} ${P} ${esc(ch)}(대체)`); }
       // 인원은 재지 않는다 — 완성된 근무표를 받는다 (결정 2-28). 양식 칸을 넘는 것만 위에서 알린다(인쇄에서 사라지므로)
@@ -7581,14 +7583,14 @@ function phValue(kind,arg,slot,day,ctx){
   const nm=sec.byLabel[label]; if(!nm) return '';
   if(kind==='이름') return nameWithTrainees(nm,iso,P);
   if(kind==='방') return roomsFor(P,sec.cnt,label,iso);
-  if(kind==='차지') return nm===sec.charge?(arg||'/CN'):'';   // 그 칸의 사람이 차지일 때 — 자리가 아니라 사람 (102 CRN 은 A·B·C 어디든)
+  if(kind==='차지') return nm===sec.charge?(arg||'/CN'):'';   // 그 칸의 사람이 차지일 때 — 자리가 아니라 사람 (102 CRN 은 어느 자리든)
   return '';
 }
 /* 자동 맵핑 — 양식 모양(detectFormShape)대로 첫 요일 칸에 자리표시자를 꽂는다. 채우기는 fillByPlaceholders.
  * 내장 서식 채우기(fillForm101·102·82)와 **같은 칸에 같은 값**이 들어가게 맞췄다 — test_assign_logic '자동 맵핑' 이 칸마다 대조한다.
  *   101 모양  요일마다 방·이름 두 칸 → {{방:D.A}} {{이름:D.A}}
  *   102 모양  이름 한 칸(방 없음) → {{이름:D.A}}, 차지 자리 이름(CRN)이 없으면 자리마다 + {{차지: /CRN}}
- *             (CRN 은 A·B·C 어느 자리든 앉으므로 표시는 앉은 자리에 찍힌다 — 2026-10-01)
+ *             (CRN 은 어느 자리든 앉으므로 표시는 앉은 자리에 찍힌다 — 2026-10-01)
  *   82 모양   자리 이름이 SU 면 {{이름:D.SU}}, 중간번이면 {{중간번}}, 날짜는 양식에 적힌 글자 모양
  * 교육·행사 줄의 요일 칸이 병합에 가려 있으면(82) 이름표 칸에 {{교육:목록}}.
  * 122 모양은 방을 일·월~금·토 세 열에 묶어 적는 규칙이 있어 옮기지 않는다 — fillForm122 가 그대로 채운다.
@@ -7788,7 +7790,7 @@ function fillForm102(tpl,L,days){
       const s2=day.secs[sec.P]; if(!s2) continue;
       // 그 구역의 자리 이름을 읽어, CRN 자리가 따로 있으면(옛 양식 D(CRN)) 차지를 거기에 놓는다.
       // 없으면 줄 = 자리 순서(화면과 같다) 그대로이고 차지 이름 뒤에 ' /CRN' 을 붙인다 — 차지가 앉은 자리 어디서든.
-      // 102 CRN 은 A·B·C 어느 방이든 본다 (2026-10-01) — 예전엔 차지를 첫 줄에 못 박았다.
+      // 102 CRN 은 어느 방이든 본다 (2026-10-01) — 예전엔 차지를 첫 줄에 못 박았다.
       const slots=[]; for(let k=0;k<sec.rows;k++) slots.push(normLabel(at102(cellsOf(tpl),sec.row+k,L.labelCol)));
       const crnAt=slots.findIndex(v=>/CRN/i.test(v));
       const charge=s2.charge||'';
@@ -10564,7 +10566,7 @@ show('start');
 window.__app={get store(){return store},set store(v){store=v},
   get result(){return result},get tlKeys(){return tlKeys},
   ingestGrid,confirmPaste,recompute,renderWeek,weekData,downloadWeekXlsx,printWeek,
-  openPick,pickChoose,pickShift,pickCrn,crnFloat,crnSeatOf,CRN_SEATS,setSeed,abbrevRooms,parseCellRaw,readXlsxGrid,loadTemplate,dayInfo,roomsFor,
+  openPick,pickChoose,pickShift,pickCrn,crnFloat,crnSeatOf,crnSeats,setSeed,abbrevRooms,parseCellRaw,readXlsxGrid,loadTemplate,dayInfo,roomsFor,
   openRoomPick,toggleRoom,toggleBed,toggleBedOpen,applyRoomSel,roomFull,roomShort,roomTokens,abbrevRooms,
   splitBed,bedTok,bedCount,bedKeys,expandBeds,collapseBeds,roomsLabel,presetAudit,dupRooms,buildPrintArea,loadSidecar,tryAutoOpen,reloadFromFile,connectSave,
   reattachHandle,setWard,wardRooms,wardOfRooms,roomsBase,roomPos,roomAtPos,setRoom,addRoom,delRoom,moveRoom,attachRoom,detachRoom,readOldLocalStore,clearOldLocalStore,migrateOldLocalData,
