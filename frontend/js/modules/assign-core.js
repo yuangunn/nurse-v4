@@ -492,7 +492,9 @@
           }
           if (assigned['차지']) chargeId = assigned['차지'].id;
         }
-        if (!extra) extra = place(assigned, taken, chargeId);
+        // 차지가 자리에 안 묶이는데 허락된 자리가 다 손으로 찼으면 차지도 보통 간호사처럼 다듬기에서 옮겨 앉힌다 —
+        // 차지를 다듬기에서 빼면 앞 단계가 앉힌 자리에 굳어 남이 주지 않을 방을 떠안았다 (2026-10-01 교차 검토)
+        if (!extra) extra = place(assigned, taken, floatSeats && floatSeats.length ? null : chargeId);
 
         const labelMap = {};
         for (const l in assigned) {

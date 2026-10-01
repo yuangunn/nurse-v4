@@ -1,22 +1,29 @@
-// 배정표 실시간 수정 검사 — node scripts/test_assign_live.mjs [--seed N] [--ops N] [--only 키]
+// 배정표 실시간 수정 검사 — node scripts/test_assign_live.mjs [--seed N 또는 1,2,3] [--ops N] [--only 키]
 //
 // 102 의 차지 자리 오류는 코드를 읽어서가 아니라 **배정표에서 사람을 실시간으로 바꿔 보다가** 드러났다
 // (차지를 바꿔도 자리가 그대로여야 하는데 모두 한 칸씩 밀렸다). 그래서 이 검사는 함수를 직접 부르지 않고
 // 사람이 하는 대로 배정표 화면의 이름 칸·빈 칸·이름 클릭 창의 단추를 **실제로 눌러** 바꾼다:
 //   근무 바꾸기(D·E·N·DC·EC·NC·OF·V) · 자리 맞바꾸기 · 자동으로 되돌리기 · CRN 맡기기 · 쉬는 간호사 넣기 ·
-//   대체간호사 넣기·빼기 · 이 날 교체 모두 풀기 · 효력 없는 교체 지우기 · 되돌리기(Ctrl+Z)
+//   대체간호사 넣기·빼기 · 이 날 교체 모두 풀기 · 효력 없는 교체 지우기 · 되돌리기(Ctrl+Z) ·
+//   근무표 고치기 화면에서 칸에 자리까지 적기('D/B' — 우클릭 → 직접 입력)
 // 병동 양식마다(내장 101·122·102·82, 올린 옛 102 D(CRN)·CN 이 둘째 줄인 101·자리표시자 102, 병동 양식 92(82 모양)·72(102 모양))
 // 정해진 씨앗으로 무작위 수정을 하고, 한 번 바꿀 때마다 두 주 전체를 다시 본다:
 //   E1 근무자가 모두 한 번씩 앉는다          E2 차지 표시가 정확히 한 사람         E3 자리가 앞에서부터 빈틈없이
 //   E4 손으로 옮긴 자리는 그대로            E5 차지 = 규칙(표시 → 차지 가능 최선임 → 최선임; 차지 자리가 고정이면 손으로 앉힌 사람)
-//   E6 차지 자리가 고정이면 차지는 그 자리   E7 이틀 연속 같은 사람이면 자리도 같다 (차지가 자리에 안 묶이면 차지가 바뀌어도)
+//   E6 차지 자리가 고정이면 차지는 그 자리   E6f 차지가 자리에 안 묶여도 종이에 찍히는 자리에 (손 안 탄 종이 자리가 남았으면)
+//   E7 이틀 연속 같은 사람이면 자리도 같다 (차지가 자리에 안 묶이면 차지가 바뀌어도)
 //   S  화면 줄 = 엔진 자리, /CRN 은 차지가 자리에 안 묶일 때 차지에게만
-//   X  엑셀 = 화면 (자리 이름 줄마다 같은 사람), 엑셀 /CRN 은 서식이 찍을 때(102 모양)만, 신규 줄은 /CRN 뒤
-//   H  하루 어싸인표(hwpx) 줄 = 엔진 자리, /CRN 은 화면과 같은 사람     P  인쇄(101 모양) = 화면
-//   O  누른 단추가 한 일 (맞바꾼 자리, CRN 맡기기 후 차지·자리 그대로 — 앞 CRN 이 차지가 아니면 종이 밖 자리였을 사람이면 그 사람은 제자리로, DC 로 바꾸면 차지, 되돌리기 = 바꾸기 전)
+//   X  엑셀 = 화면 (자리 이름 줄마다 같은 사람), 엑셀 /CRN 은 서식이 찍을 때(102 모양)만, 신규 줄은 /CRN 뒤,
+//      차지 자리가 고정이면 엑셀의 차지 표기 줄(CN·A(CN)·D(CRN))에 차지 — 화면과 엑셀이 같이 틀려도 잡는다
+//   H  하루 어싸인표(hwpx) 줄 = 엔진 자리(차지가 자리에 안 묶이면 CN 줄에 차지), /CRN 은 화면과 같은 사람     P  인쇄(101 모양) = 화면
+//   O  누른 단추가 한 일 (맞바꾼 자리, CRN 맡기기 후 차지·자리 그대로 — 앞 CRN 이 차지가 아니면 종이 밖 자리였을 사람이면 그 사람은 제자리로, DC 로 바꾸면 차지,
+//      CRN 맡기기·DC 는 다른 사람의 근무 시간대를 안 바꾼다, 칸에 적은 자리가 그대로 들어간다, 되돌리기 = 바꾸기 전)
+// 손 고정의 순서: 배정표에서 옮긴 자리 > 근무표 칸의 차지 표시(DC·EC·NC) > 근무표 칸에 적은 자리.
 // 엔진만 보는 검사(원칙 1~4 × 정답 대조)는 test_assign_principles.mjs, 정해진 장면 회귀는 test_assign_logic.mjs.
 //
-// 크롬 경로: $CHROME → google-chrome → chromium → macOS Google Chrome 순. 약 30초 (씨앗 하나, 양식마다 30번).
+// 크롬 경로: $CHROME → google-chrome → chromium → macOS Google Chrome 순. 씨앗 하나에 약 25초 (양식마다 30번) — CI 는 씨앗 셋.
+// 이 검사가 못 잡는 엔진 쪽 고장(차지 자리 고르기)은 test_assign_principles.mjs 의 E12 가, 정해진 장면은 test_assign_logic.mjs 가 잡는다 —
+// 일부러 넣은 고장 여섯으로 셋이 나눠 잡는지 확인했다 (docs/verification.md).
 import { spawn, execSync } from 'node:child_process';
 import { existsSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -25,7 +32,8 @@ import { dirname, resolve, join } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
-const SEED = +arg('--seed', 1), OPS = +arg('--ops', 30), ONLY = arg('--only', '');
+// --seed 1,2,3 — 씨앗 여럿을 한 크롬에서 차례로 (CI 는 셋)
+const SEEDS = String(arg('--seed', '1')).split(',').map(Number).filter(n => n > 0), OPS = +arg('--ops', 30), ONLY = arg('--only', '');
 // 리포 폴더에는 개발자의 assign-data.js 가 있을 수 있다 — 사이드카가 없는 빈 폴더에 사본을 두고 띄운다
 const WORK = mkdtempSync(join(tmpdir(), 'assign-live-'));
 copyFileSync(resolve(ROOT, 'standalone/assign.html'), join(WORK, 'assign.html'));
@@ -155,10 +163,25 @@ function LIB() {
   }
   function relOrder() { const out = []; for (const iso in S().relief) for (const P of P3) for (const n of A.reliefOn(iso, P)) if (!out.includes(n)) out.push(n); return out; }
   function sen(n) { const w = S().order.filter(x => !(S().unit || {})[x]), i = w.indexOf(n); return i >= 0 ? i : w.length + relOrder().indexOf(n); }
-  // 지켜지는 손 고정 — 근무표 칸의 'D/B' 는 이 검사에서 생기지 않는다(근무 바꾸기는 코드만 쓴다). 배정표에서 옮긴 자리(store.ovr)만
+  // 근무표 칸에 적은 자리 이름('D/B' 의 B) → 앱 자리. 적는 글자는 배정표 종이의 자리 이름 (괄호 표기는 빼고 적어도 된다)
+  const seatByPaper = (lb, P) => { const w = norm(lb).toUpperCase(), bare = x => x.replace(/[(].*[)]$/, '');
+    return LBL.find(x => norm(A.FORM_LBL(x, P)).toUpperCase() === w) || LBL.find(x => bare(norm(A.FORM_LBL(x, P)).toUpperCase()) === w)
+      || (!A.crnFloat(P) && /^(CR?N|차지)$/.test(w) ? '차지' : null); };
+  // 지켜지는 손 고정 — 배정표에서 옮긴 자리(store.ovr) > 근무표 칸의 차지 표시(DC·EC·NC) > 근무표 칸에 적은 자리('D/B')
   function pins(iso, P, Ws, labels) {
     const ov = (S().ovr[iso] || {})[P] || {}, pr = (S().ovrPair[iso] || {})[P] || {};
     let t = [];
+    // 근무표 칸의 자리 — 차지 자리가 고정이면 DC·EC·NC 칸은 차지 자리로 가고(다른 자리를 적어도), 차지 자리를 적은 보통 칸은
+    // 그 날 다른 사람이 DC·EC·NC 면 표시를 따른다
+    const fixed = !A.crnFloat(P), mark = S().order.some(n => !(S().unit || {})[n] && code(n, iso) === P + 'C');
+    for (const n of S().order) {
+      if (!Ws.has(n) || (S().unit || {})[n]) continue;
+      const pc = A.parseCellRaw(((S().cells[n] || {})[iso]) || ''); if (!pc || !pc.label) continue;
+      const seat = seatByPaper(pc.label, P); if (!seat) continue;
+      if (fixed && pc.code === P + 'C' && seat !== '차지') continue;
+      if (fixed && seat === '차지' && pc.code !== P + 'C' && mark) continue;
+      t.push([n, seat]);
+    }
     for (const nm in ov) {
       if (!Ws.has(nm)) continue;                     // 근무가 바뀌어 효력 없는 교체
       if (pr[nm] && !Ws.has(pr[nm])) continue;       // 맞바꾼 상대가 그 날 그 근무가 아니다
@@ -197,6 +220,10 @@ function LIB() {
       const want = expCharge(iso, P, W, pinned, float);
       if (d.charge !== want) out.push(`E5 ${iso} ${P} 차지 ${d.charge} — 규칙대로면 ${want} (${float ? '차지가 자리에 안 묶임' : '차지 자리 고정'}; ${fmtD(d)})`);
       if (!float && d.labels['차지'] !== d.charge) out.push(`E6 ${iso} ${P} 차지 ${d.charge} 가 차지 자리가 아니다 (${fmtD(d)})`);
+      // E6f — 차지가 자리에 안 묶여도 종이에는 찍혀야 한다: 손으로 앉힌 차지가 아니고 손 안 탄 종이 자리가 남아 있으면 그중 하나에
+      const ps = A.paperSeat(P);
+      if (float && d.charge && !(d.charge in pinned) && labels.some(l => ps.on(l) && !Object.values(pinned).includes(l)) && !ps.on(seatOf(d, d.charge)))
+        out.push(`E6f ${iso} ${P} CRN ${d.charge} 이 종이 밖 자리 ${seatOf(d, d.charge)} (${fmtD(d)})`);
       info[iso + P] = { W, d, pinned, labels };
     }
     // E7 — 102 오류가 깬 불변식: 이틀 연속 같은 사람이면(손 고정 없음, 방 구성 같음) 자리도 같다.
@@ -212,7 +239,7 @@ function LIB() {
       // 새 차지가 어제 종이 밖 자리(양식 줄을 넘는 자리)였으면 종이로 올라와야 한다 — 그 사람과 밀려나는 한 사람만 옮긴다
       const nc = b.d.charge, ncSeat = Object.keys(a.d.labels).find(l => a.d.labels[l] === nc);
       const moved = a.W.filter(n => seatOf(a.d, n) !== seatOf(b.d, n));
-      if (A.crnFloat(P) && a.d.charge !== nc && !(ncSeat && A.crnSeats(P).includes(ncSeat)) && moved.length <= 2 && moved.includes(nc)) continue;
+      if (A.crnFloat(P) && a.d.charge !== nc && !(ncSeat && A.crnSeats(P).includes(ncSeat)) && A.crnSeats(P).includes(seatOf(b.d, nc)) && moved.length <= 2 && moved.includes(nc)) continue;
       out.push(`E7 ${ISOS[i]}→${ISOS[i + 1]} ${P} 같은 사람인데 자리가 바뀜: ${fmtD(a.d)} → ${fmtD(b.d)}` +
         (a.d.charge !== nc ? ` (차지 ${a.d.charge}→${nc})` : ''));
     }
@@ -308,6 +335,9 @@ function LIB() {
         const r = rows.find(q => q.n === x.n);
         if (r && r.tr.join('|') !== x.tr.join('|')) out.push(`X4 ${iso} ${P} ${x.n} 신규 줄 — 화면 ${r.tr.join(',') || '없음'} · 엑셀 ${x.tr.join(',') || '없음'}`);
       }
+      // X5 — 차지 자리가 고정인 양식은 엑셀에서 이름표가 차지 표기(CN·A(CN)·D(CRN))인 줄에 차지가 — 화면과 엑셀이 같이 틀리면 X1 은 못 본다
+      if (!float && kind !== '122' && chg) { const cx = xr.find(x => /CRN|(^|[(])CN(?![A-Za-z])/i.test(norm(x.lab)));
+        if (cx && cx.n !== chg) out.push(`X5 ${iso} ${P} 엑셀 차지 줄 '${cx.lab}' 에 ${cx.n || '(빈칸)'} — 차지 ${chg}`); }
       // P — 인쇄 = 화면 (101 모양)
       if (pr) {
         const pp = pr[iso][P];
@@ -323,9 +353,14 @@ function LIB() {
       for (const P of P3) {
         const sc = M.shifts[P], d = res.byDay[dayIso] && res.byDay[dayIso][P]; if (!sc) continue;
         const float = A.crnFloat(P), L = d ? d.labels : {};
+        // 차지가 자리에 안 묶이면 CN 줄(첫 줄 이름표가 CN·CRN)에는 차지가 선다 — 나머지는 자리 순서
+        const cnRow = M.rows[0] && /CRN|(^|[(])CN(?![A-Za-z])/i.test(M.rows[0].label.replace(/\s+/g, ''));
+        const cs = float && cnRow && d && d.charge ? Object.keys(L).find(l => L[l] === d.charge) : null;
+        const ord = cs ? [cs, ...LBL.filter(l => l !== cs)] : LBL;
         M.rows.forEach((row, i) => {
-          const q = M.m.at(row.r, sc.nurse), h = splitName(q ? q.text : ''), want = L[LBL[i]] || '';
-          if (h.n !== want) out.push(`H1 ${dayIso} ${P} 하루 어싸인표 ${i + 1}째 줄 '${h.n}' — 엔진 ${LBL[i]} 자리 '${want}'`);
+          const q = M.m.at(row.r, sc.nurse), h = splitName(q ? q.text : ''), want = L[ord[i]] || '';
+          if (h.n !== want) out.push(`H1 ${dayIso} ${P} 하루 어싸인표 ${i + 1}째 줄 '${h.n}' — 엔진 ${ord[i]} 자리 '${want}'`);
+          if (i === 0 && cnRow && float && d && d.charge && h.n !== d.charge) out.push(`H4 ${dayIso} ${P} 하루 어싸인표 CN 줄 '${h.n}' — 차지 ${d.charge}`);
           if (h.n && h.crn !== (float && h.n === d.charge)) out.push(`H2 ${dayIso} ${P} 하루 어싸인표 ${h.n} 의 /CRN ${h.crn ? '있음' : '없음'} — 차지 ${d.charge}`);
           if (h.tr.some(t => /CRN/.test(t))) out.push(`H3 ${dayIso} ${P} 하루 어싸인표 '${h.raw.replace(/\n/g, '⏎')}' — /CRN 이 신규 줄 뒤`);
         });
@@ -354,8 +389,10 @@ function LIB() {
     A.wkSunday = dateAt(wk * 7); A.show('week');
     // 되돌리기는 40단계까지 — 꽉 차면 기록이 늘었는지 셀 수 없으니 비우고 다시 센다
     if (A.undoDepth >= 38) { A.undoClear(); model = []; }
-    const before = stateKey(), depth = A.undoDepth, res0 = byDayJson();
-    const kind = wpick([['shift', 22], ['swap', 24], ['auto', 6], ['crn', 12], ['addOff', 7], ['relief', 8], ['unrelief', 5], ['clearDay', 4], ['prune', 2], ['undo', 10]]);
+    const before = stateKey(), depth = A.undoDepth, res0 = byDayJson(), cells0 = JSON.parse(JSON.stringify(S().cells));
+    // CRN 맡기기 단추는 차지가 자리에 안 묶이는 근무에만 있다 — 그런 양식에서 더 자주 (102 오류가 드러난 수정이다)
+    const crnW = P3.some(P => A.crnFloat(P)) ? 20 : 2;
+    const kind = wpick([['shift', 22], ['swap', 24], ['auto', 6], ['crn', crnW], ['cellSeat', 8], ['addOff', 7], ['relief', 8], ['unrelief', 5], ['clearDay', 4], ['prune', 2], ['undo', 10]]);
     const fails = [], ctx = { kind, iso, wk };
     const all = cellsOn(iso);
     const openName = async td => { td.click(); await sleep(5); return pickOn(); };
@@ -366,7 +403,34 @@ function LIB() {
       return { desc: `되돌리기 (${iso})`, fails, ctx };
     }
     let desc = kind + ' ' + iso;
-    if (kind === 'prune') { A.show('admin'); A.pickAdmin('manual'); A.pruneOvr(); A.show('week'); desc = '효력 없는 교체 지우기'; }
+    if (kind === 'cellSeat') {
+      // 근무표 고치기 화면에서 칸에 자리까지 적는다 — 우클릭 → [✏ 직접 입력] → 'D/B' (자리 이름은 배정표 종이의 이름)
+      const td = pick(all.filter(t => WARD.includes(t.dataset.n)));
+      if (!td) return { desc: desc + ' (누를 칸 없음)', fails, ctx };
+      const name = td.dataset.n, P = rowP(td), cd = code(name, iso), d = A.result.byDay[iso][P];
+      const taken = new Set(S().order.filter(n => n !== name).map(n => { const pc = A.parseCellRaw(((S().cells[n] || {})[iso]) || '');
+        return pc && pc.label && CORE.periodOf(pc.code) === P ? seatByPaper(pc.label, P) : null; }).filter(Boolean));
+      // 칸에 적을 수 있는 자리 이름은 A~F·CN 꼴뿐이다 — 82 의 '대체'·'ward' 같은 종이 이름은 근무 표기로 안 읽힌다
+      const free = Object.keys(d.labels).filter(l => !taken.has(l) && /^([A-F]([(]C?R?N[)])?|C?R?N)$/i.test(norm(A.FORM_LBL(l, P))));
+      if (!cd || !free.length) return { desc: desc + ` ${P} ${name} (적을 자리 없음)`, fails, ctx };
+      const l = pick(free); let lb = A.FORM_LBL(l, P); if (R() < 0.3) lb = lb.replace(/[(].*[)]$/, '');
+      const txt = cd + '/' + lb;
+      Object.assign(ctx, { name, P, cellSeat: l });
+      desc += ` ${P} ${name} → 칸에 '${txt}'`;
+      A.show('edit'); await sleep(10);
+      const th = [...document.querySelectorAll('#wrap th.nm[data-nr]')].find(x => x.firstChild && x.firstChild.textContent === name);
+      const cell = th && document.querySelector('#wrap td.cell[data-r="' + th.dataset.nr + '"][data-c="' + (+iso.slice(8) - 1) + '"]');
+      if (!cell) { fails.push(`O0 고치기 화면에 ${name} ${iso} 칸이 없다`); A.show('week'); return { desc, fails, ctx }; }
+      cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })); window.dispatchEvent(new MouseEvent('mouseup'));
+      cell.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await sleep(15);
+      if (!modalOn()) { fails.push(`O0 ${name} ${iso} 칸을 우클릭했는데 근무 고르기 창이 안 열렸다`); A.show('week'); return { desc, fails, ctx }; }
+      document.querySelector('#mdTextBtn').click(); document.querySelector('#mdInput').value = txt; document.querySelector('#mdOk').click();
+      await sleep(15);
+      if (code(name, iso) !== cd || seatByPaper((A.parseCellRaw(S().cells[name][iso]) || {}).label, P) !== l) fails.push(`O9 칸에 '${txt}' 를 적었는데 칸은 '${S().cells[name][iso]}'`);
+      A.show('week');
+    }
+    else if (kind === 'prune') { A.show('admin'); A.pickAdmin('manual'); A.pruneOvr(); A.show('week'); desc = '효력 없는 교체 지우기'; }
     else if (kind === 'addOff' || kind === 'relief') {
       const emp = [...document.querySelectorAll('#wkTable td[data-empty][data-iso="' + iso + '"]')].filter(td => !td.classList.contains('rm'));
       let opened = false;
@@ -432,12 +496,18 @@ function LIB() {
         // 예외 하나: 앞 CRN 이 차지가 아니면 종이 밖 자리(양식 칸을 넘는 자리)였을 사람 — CRN 이라 종이에 앉혔던 것이니
         // CRN 을 넘기면 제자리(종이 밖)로 가고, 그 때문에 밀려났던 사람들이 제자리로 돌아온다(하나일 수도, 줄줄이일 수도 있다).
         // 그 날과 그 뒤 날들은 맞게 달라진다 — 달라진 배치가 '아무도 차지가 아닐 때의 배치'인지는 E12 가 엔진 쪽에서 본다
-        const db = (b[iso] || {})[P];
-        const back = !!db && !A.crnSeats(P).includes(seatOf(db, ctx.chg0));
-        const mv = Object.keys(a).filter(k => !(back && k >= iso) && P3.some(Q => a[k][Q] && b[k] && b[k][Q] && fmtD(a[k][Q]) !== fmtD(b[k][Q])));
-        if (mv.length) fails.push(`O4 CRN 을 ${ctx.chg0}→${ctx.name} 로 바꿨더니 자리가 바뀐 날: ${mv.map(k => k + ' ' + P3.filter(Q => a[k][Q] && b[k][Q] && fmtD(a[k][Q]) !== fmtD(b[k][Q])).map(Q => Q + ' ' + fmtD(a[k][Q]) + ' → ' + fmtD(b[k][Q])).join(' / ')).join(' ; ')}`);
+        // 예외는 앞 CRN 이 그 근무에 그대로 있고(근무가 바뀌었으면 O8 이 본다) 종이 밖으로 갔을 때만, 그 날은 그 근무만
+        const db = (b[iso] || {})[P], s0 = db ? seatOf(db, ctx.chg0) : '없음';
+        const back = s0 !== '없음' && !A.crnSeats(P).includes(s0);
+        const diff = (k, Q) => a[k][Q] && b[k] && b[k][Q] && fmtD(a[k][Q]) !== fmtD(b[k][Q]) && !(back && (k > iso || (k === iso && Q === P)));
+        const mv = Object.keys(a).filter(k => P3.some(Q => diff(k, Q)));
+        if (mv.length) fails.push(`O4 CRN 을 ${ctx.chg0}→${ctx.name} 로 바꿨더니 자리가 바뀐 날: ${mv.map(k => k + ' ' + P3.filter(Q => diff(k, Q)).map(Q => Q + ' ' + fmtD(a[k][Q]) + ' → ' + fmtD(b[k][Q])).join(' / ')).join(' ; ')}`);
       }
     }
+    // O8 — CRN 맡기기·DC 로 바꾸기는 다른 사람의 근무 시간대를 바꾸지 않는다 (앞 차지의 DC 는 D 로 — 시간대 그대로)
+    if ((kind === 'crn' && !ctx.none) || chgCode) for (const n in cells0) if (n !== ctx.name) for (const dk in cells0[n]) {
+      const a0 = CORE.periodOf((A.parseCellRaw(cells0[n][dk]) || {}).code), b0 = CORE.periodOf(code(n, dk));
+      if (a0 !== b0) fails.push(`O8 ${kind} 뒤 ${n} ${dk} 근무 ${cells0[n][dk]} → ${(S().cells[n] || {})[dk] || '없음'}`); }
     if (kind === 'auto' && !ctx.none && ((S().ovr[iso] || {})[ctx.P] || {})[ctx.name] !== undefined) fails.push(`O5 자동으로 되돌리기 뒤에도 ${ctx.name} 의 손 고정이 남았다`);
     if (kind === 'clearDay' && !ctx.none && (S().ovr[iso] || {})[ctx.P]) fails.push(`O6 이 날 교체 모두 풀기 뒤에도 ${ctx.P} 교체가 남았다`);
     if (ctx.relief && !A.reliefDay(iso).includes(ctx.relief)) fails.push(`O7 대체간호사 ${ctx.relief} 가 들어가지 않았다`);
@@ -493,15 +563,15 @@ async function main() {
 
   let bad = 0, total = 0;
   const specs = SPECS.filter(s => !ONLY || s.key.includes(ONLY));
-  for (let si = 0; si < specs.length; si++) {
+  for (const SEED of SEEDS) for (let si = 0; si < specs.length; si++) {
     const sp = specs[si];
-    STEP = `${sp.key} 준비`;
+    STEP = `씨앗 ${SEED} ${sp.key} 준비`;
     const info = await ev(`return window.__lt.setup(${JSON.stringify(sp)}, ${SEED * 1000 + si})`, 60000);
     const pre = await ev('return window.__lt.check(null)', 60000);
     const hist = [];
     let fails = pre.length ? pre.map(f => '(수정 전) ' + f) : [];
     for (let i = 0; i < OPS && !fails.length; i++) {
-      STEP = `${sp.key} 수정 ${i + 1}`;
+      STEP = `씨앗 ${SEED} ${sp.key} 수정 ${i + 1}`;
       const r = await ev(`return window.__lt.op(${i})`, 30000);
       hist.push(r.desc);
       const c = await ev(`return window.__lt.check(${JSON.stringify({ ctx: r.ctx })})`, 60000);
@@ -511,18 +581,19 @@ async function main() {
     const tag = `${sp.key} [${info.kind} 모양 · 차지 ${info.float.map((f, k) => 'DEN'[k] + (f ? ' 자리 안 묶임' : ' 자리 고정')).join(', ')}${info.crnMark ? ' · 종이에 /CRN' : ''}${info.canPrint ? ' · 화면 인쇄' : ''}]`;
     if (fails.length) {
       bad++;
-      console.log(`FAIL  ${tag} — ${hist.length}번째 수정 뒤`);
+      console.log(`FAIL  ${tag} — 씨앗 ${SEED}, ${hist.length}번째 수정 뒤`);
       for (const f of fails.slice(0, 8)) console.log('      ' + f);
       if (fails.length > 8) console.log(`      … 외 ${fails.length - 8}건`);
       console.log('      수정 순서: ' + hist.slice(-12).map((h, k) => `${hist.length - Math.min(12, hist.length) + k + 1}) ${h}`).join('\n                 '));
     } else {
-      console.log(`ok    ${tag} — ${hist.length}번 수정`);
+      console.log(`ok    ${tag} — 씨앗 ${SEED}, ${hist.length}번 수정`);
       if (process.env.VERBOSE) for (const h of hist) console.log('        ' + h);
     }
   }
   const errs = await ev('return window.__pageErrors||[]');
   if (errs.length) { bad++; console.log('FAIL  페이지 오류: ' + errs.slice(0, 5).join(' | ')); }
-  console.log(bad ? `assign 실시간 수정: 양식 ${specs.length}개 중 ${bad}곳 실패 (씨앗 ${SEED})` : `assign 실시간 수정: 양식 ${specs.length}개 × ${OPS}번 수정(${total}번) 모두 통과 (씨앗 ${SEED})`);
+  console.log(bad ? `assign 실시간 수정: 양식 ${specs.length}개 × 씨앗 ${SEEDS.length}개 중 ${bad}곳 실패 (씨앗 ${SEEDS.join(',')})`
+    : `assign 실시간 수정: 양식 ${specs.length}개 × 씨앗 ${SEEDS.length}개 × ${OPS}번 수정(${total}번) 모두 통과 (씨앗 ${SEEDS.join(',')})`);
   return bad;
 }
 

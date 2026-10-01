@@ -219,9 +219,15 @@ function genProblem(seed, opt) {
     if (r() < 0.2) inf.rooms = null;                        // 자리 이름만 아는 기록 (지난 어싸인 직접 입력)
     info[s.id] = inf;
   }
+  // 차지 자리가 자유인 서식은 허락된 자리도 여러 모양으로 — 102 앞 세 자리 · 차지 자리를 뺀 둘 · 한 자리(82 N 처럼).
+  // 손으로 정한 자리는 가끔 둘이고, 자유 서식이면 첫 자리('차지')에도 앉힌다 — 허락된 자리가 다 손으로 차는 날을 만들려고 (2026-10-01 교차 검토)
+  const mode = pick(r, ['pinned', 'pinned', 'float', 'floatPart']);
+  const chargeSeats = mode === 'pinned' ? null : mode === 'float' ? LABELS.slice() : pick(r, [['차지', 'A', 'B'], ['차지', 'A', 'B'], ['A', 'B'], [pick(r, labels)]]);
   const ovr = {};
-  if (r() < 0.15) {
-    const who = pick(r, staff.filter(s => s.code !== 'DC').slice(1)); const lab = pick(r, labels.slice(1));
+  const nOv = r() < 0.15 ? (r() < 0.3 ? 2 : 1) : 0;
+  for (let i = 0; i < nOv; i++) {
+    const who = pick(r, staff.filter(s => s.code !== 'DC' && !(s.id in ovr)).slice(1));
+    const lab = pick(r, (mode === 'pinned' ? labels.slice(1) : labels).filter(l => !Object.values(ovr).includes(l)));
     if (who && lab) ovr[who.id] = lab;
   }
   const avoid = {};
@@ -229,8 +235,6 @@ function genProblem(seed, opt) {
     const k = 1 + Math.floor(r() * 2);
     for (let i = 0; i < k; i++) avoid[pick(r, staff).id] = shuffle(r, labels).slice(0, 1 + Math.floor(r() * 2));
   }
-  const mode = pick(r, ['pinned', 'pinned', 'float', 'floatPart']);
-  const chargeSeats = mode === 'pinned' ? null : mode === 'float' ? LABELS.slice() : ['차지', 'A', 'B'];
   const mask = Math.floor(r() * 16);
   return { P, staff, labels, seats, rooms, bedsOf, info, ovr, avoid, chargeSeats, mask, mode, R: effRules(rulesOf(mask)) };
 }
@@ -346,7 +350,8 @@ function checkOne(pb, tag) {
   // '차지를 빼고 짠 배치' N 은 엔진 밖에서 셀 수 없으니 이렇게 찾는다: 손으로 자리를 정하지 않은 사람마다 CRN 을 맡겨(DC 표시, 모든 자리 허락)
   // 돌려 보면, N 에 앉아 있는 사람에게 맡긴 결과는 모두 N 이어야 한다 — 그런 배치('제 자리에 앉은 사람 누구에게 맡겨도 그대로')가 정확히 하나.
   // N 에서 헬퍼인 사람은 CRN 이 되면 앉아야 하니 다를 수 있다. 일부 자리만 허락하면(102 앞 세 자리처럼) N 의 그 사람 자리가 허락된 자리일 때만 N
-  if (pb.chargeSeats) {
+  // 손으로 정하지 않은 자리가 하나뿐이면 건너뛴다 — CRN 을 맡긴 헬퍼가 그 자리에 앉은 배치는 앉은 사람이 그 하나라 저절로 '그대로'가 된다
+  if (pb.chargeSeats && pb.labels.filter(l => !Object.values(pb.ovr).includes(l)).length >= 2) {
     const mk = pb.P + 'C', key = r => JSON.stringify([r.labels, r.extra]);
     const withChg = (p, X) => Object.assign({}, p, { staff: p.staff.map(n => Object.assign({}, n, { code: n.id === X ? mk : CHARGE[n.code] ? pb.P : n.code })) });
     const all = Object.assign({}, pb, { chargeSeats: LABELS.slice() });

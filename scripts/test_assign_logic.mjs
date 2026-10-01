@@ -2100,7 +2100,8 @@ async function main() {
   eq('9/9 — 손으로 CRN 을 B 로 옮겼다 (/CRN 은 사람을 따라간다)', crn102.J, ['이에이', '김차지 /CRN', '박비', '최씨']);
   eq('9/10 — 다음 날도 CRN 은 B, A 사람은 A (예전엔 둘이 다시 뒤바뀜)', crn102.L, ['이에이', '김차지 /CRN', '박비', '최씨']);
   eq('화면이 엑셀과 같다 (자리 · /CRN)', crn102.scr, [0, 1, 2, 3].map(i => ['D', 'F', 'H', 'J', 'L'].map(k => crn102[k][i])));
-  eq('하루 어싸인표도 CRN 이 앉은 줄에 /CRN', crn102.day, ['정새로', '이에이 /CRN', '박비', '최씨']);
+  // 하루 어싸인표 첫 줄은 CN(차지 번호) 줄 — 종이에서 CRN 이 어느 자리에 앉든 CN 줄에는 CRN 이 선다, 방은 사람을 따라간다 (2026-10-01 교차 검토)
+  eq('하루 어싸인표 — CN 줄에는 CRN, 나머지는 종이 자리 순서', crn102.day, ['이에이 /CRN', '정새로', '박비', '최씨']);
   eq('자동 맵핑 — 102 는 자리마다 {{차지: /CRN}}', crn102.tags, [true, true, true, true, true, true, true]);
   ok('자동 맵핑 채우기 = 내장 채우기 (CRN 이 B 에 앉은 주)', crn102.same);
   ok('첫 자리에만 {{차지}} 가 있는 옛 자리표시자 양식도 같게 (표시가 CRN 을 따라간다)', crn102.oldSame);
@@ -2350,12 +2351,17 @@ async function main() {
         const c=await xl();
         out.old102=[scr('D',D1),[5,6,7,8].map(i=>[c['C'+i]||'',c['D'+i]||''])];
         out.old102L=['차지','A','B','C'].map(l=>A.FORM_LBL(l,'D')); out.old102C=A.dayInfo(D1).D.charge;
+        // 이름 클릭 창의 자리 바꾸기 단추도 화면 줄 순서 (교차 검토: 앱 안쪽 순서라 D(CRN) 이 맨 위였다)
+        A.openPick('최씨',D1,10,10); out.old102Btn=[[...document.querySelectorAll('#pick .swapBtn .lb')].map(x=>x.textContent.trim()),scr('D',D1).map(r=>r[0])]; A.closePick();
         await drop('102'); }
       // ④ 올린 101 양식에서 CN 줄이 둘째 — 차지는 CN 줄, 화면과 엑셀이 같다
       { const s=base('101',5); allD(s,D1); const b=await A.loadBaseTemplate('101'); let x=b.sheetXml;
         const lab={5:'A',6:'CN',7:'B',8:'C',9:'D'}; for(const r in lab) x=A.setCellStr(x,'C'+r,lab[r]);
         await upload('101',b,x); week(); const c=await xl();
         out.cn101=[scr('D',D1),[5,6,7,8,9].map(i=>[c['C'+i]||'',c['E'+i]||''])]; out.cn101C=[A.dayInfo(D1).D.charge,A.crnFloat('D')];
+        // 양식 보기의 칸 이름도 종이 이름 (교차 검토: 서식 정의 이름이라 첫 줄이 'A(CN)', 둘째 줄이 'B' 였다)
+        { const mk=A.formMapRoles(await A.loadTemplate(),A.formDef()).marks;
+          out.cn101V=[[5,6,7,8,9].map(i=>((mk['E'+i]||{}).tag||'').replace(/^D (.+) 이름.*$/,'$1')),scr('D',D1).map(r=>r[0])]; }
         // 첫 줄 이름이 그냥 'A' (CN 표기 없음) — 화면도 'A', 차지는 첫 줄 그대로
         x=b.sheetXml; const lab2={5:'A',6:'B',7:'C',8:'D',9:'E'}; for(const r in lab2) x=A.setCellStr(x,'C'+r,lab2[r]);
         await upload('101',b,x); week(); const d=A.dayInfo(D1).D;
@@ -2370,7 +2376,13 @@ async function main() {
         out.trX=[5,6,7,8].map(i=>c['D'+i]||'').find(v=>/김차지/.test(v))||'';
         A.DAYTPL=null; const dd=await A.buildDayDoc(D1), M=A.dayLayout(dd.doc).main;
         out.trH=M.rows.map(row=>{ const q=M.m.at(row.r,M.shifts.D.nurse); return q?q.text:''; }).find(v=>/김차지/.test(v))||'';
-        week(); out.trS=(scr('D',D1).find(r=>/김차지/.test(r[1]))||[])[1]||''; }
+        week(); out.trS=(scr('D',D1).find(r=>/김차지/.test(r[1]))||[])[1]||'';
+        // 이름과 차지 표시가 다른 글자 서식(조각)인 칸 — 신규 줄은 칸 맨 끝 (교차 검토: 조각마다 옮겨 /CRN 이 신규 줄 뒤에 붙었다)
+        { const b=await A.loadBaseTemplate('102'), m=A.autoMap(b); let x=m.xml; const c0=A.sheetCells({...b,sheetXml:x}); out.trRich=0;
+          for(const ref of ['D5','D6','D7','D8']){ const q=String(c0[ref]||'').match(/^([{][{]이름:[^}]+[}][}])([{][{]차지:[^}]*[}][}])$/); if(!q) continue;
+            x=A.putCell(x,ref,'<is><r><t>'+q[1]+'</t></r><r><rPr><b/></rPr><t xml:space="preserve">'+q[2]+'</t></r></is>','inlineStr'); out.trRich++; }
+          await upload('102',b,x,{ph:true}); const c2=await xl();
+          out.trRichX=[5,6,7,8].map(i=>c2['D'+i]||'').find(v=>/김차지/.test(v))||''; await drop('102'); } }
       // ⑦ 대체 줄이 있는 102 — 다섯째 D 가 화면에도 '대체' 줄로
       { const s=base('102',5); allD(s,D1); const b=await A.loadBaseTemplate('102');
         await upload('102',b,A.setCellStr(b.sheetXml,'A9','대체')); week();
@@ -2401,7 +2413,8 @@ async function main() {
         const L=A.dayInfo(D1).D.labels; out.staleOvr=Object.keys(L).find(l=>L[l]==='박비'); }
       A.setFormId('101'); A.setWard('101'); await A.loadTemplate(); A.show('week');
       return out; })()`, 60000);
-  eq('82 — D·E·N 모두 차지가 자리에 묶이지 않는다', v34.f82, [true, true, true]);
+  // N 은 종이의 병동 자리가 ward 하나뿐이라 옮겨 앉을 자리가 없다 — 묶어야 맞바꾼 뒤에도 차지가 종이에 보인다 (2026-10-01 교차 검토)
+  eq('82 — D·E 는 차지가 자리에 묶이지 않고, 병동 자리가 하나뿐인 N 은 묶는다', v34.f82, [true, true, false]);
   eq('82 9/6 — 김차지 차지, 화면에 /CRN', v34.s82[0], [['A', '김차지 /CRN'], ['B', '이에이']]);
   eq('82 9/7 — 김차지가 쉬어 이에이가 차지여도 B 그대로, 빈 A 에 박비', v34.s82[1], [['A', '박비'], ['B', '이에이 /CRN']]);
   eq('82 엑셀에는 /CRN 을 찍지 않는다 (82 종이 원본대로)', v34.x82, 0);
@@ -2427,6 +2440,9 @@ async function main() {
   eq('그 날 정디에게 DC — 정디가 차지, 박비의 차지 자리 표기는 걷는다', v34.taken2, ['정디', 'D']);
   eq('82 — 병동 간호사에게 DC 를 줘도 SU 간호사의 DC 는 그대로', v34.su, ['DC', '박비']);
   eq('효력 없는 교체(정디 OF)는 박비의 D/B 를 지우지 않는다', v34.staleOvr, 'A');
+  eq('옛 102 양식 — 이름 클릭 창의 자리 단추 = 화면 줄 순서', v34.old102Btn[0], v34.old102Btn[1]);
+  eq('올린 101 양식(CN 이 둘째 줄) — 양식 보기 칸 이름 = 화면 줄 이름', v34.cn101V[0], v34.cn101V[1]);
+  ok('102 조각 서식 이름 칸 — /CRN 은 신규 줄 앞', v34.trRich === 4 && /^김차지 [/]CRN\n[/] 신규일$/.test(v34.trRichX), JSON.stringify([v34.trRich, v34.trRichX]));
 
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
