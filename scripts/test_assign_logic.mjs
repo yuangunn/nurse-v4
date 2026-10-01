@@ -2137,6 +2137,44 @@ async function main() {
   ok('지난 어싸인 직접 입력 — 102 안내는 CRN 도 앉았던 자리를 고르라고', /CRN/.test(crn102.seedNote), crn102.seedNote);
   eq('지난 어싸인 직접 입력 — 101 은 그대로 (차지 자리 빼고)', crn102.seed101, ['B', 'C', 'D', 'E', '없음']);
 
+  // ── 32. 원칙·차지 검증 (2026-10-01, 결정 2-43) ─────────────────────────────
+  // 차지 방에 주지 않을 방이 걸려도 차지는 선임(예전엔 말없이 차지에서 뺐다), 셋이 돌아가며 바꿔야 풀리는 금지 방도 푼다(예전엔 '대안이 없습니다'),
+  // 남은 위반은 카드가 이유를 적는다
+  step('32 원칙·차지 검증');
+  const v32 = await ev(`const A=window.__app;
+    const setup=(id)=>{ A.setFormId(id); A.setWard(id); const s=A.store;
+      s.order=['김차지','이에이','박비','최씨','정디']; s.cells={}; s.ovr={}; s.ovrPair={}; s.roomOv={}; s.presetDay={}; s.seedManual={};
+      s.unit={}; s.relief={}; s.trainee={}; s.trOv={}; s.evRules=[]; s.daily={}; s.banRooms={};
+      for(const n of s.order) s.cells[n]={'2026-09-06':'D'};
+      s.presets={}; s.presetPlan={}; A.store=s; A.resetSchemes(); return A.store; };   // 앞 검사가 바꾼 방 구성을 기본으로
+    const card=()=>{ A.wkSunday=new Date(2026,8,6); A.show('week'); return (document.querySelector('#wkWarn')||{}).textContent||''; };
+    const out={};
+    for(const id of ['101','122']){
+      const s=setup(id), R=l=>A.roomTokens(A.roomsFor('D',5,l,'2026-09-06'));
+      // ① 최선임 김차지의 주지 않을 방이 차지 방 — 그래도 김차지가 차지, 카드는 '차지 자리의 방'
+      s.banRooms={'김차지':[R('차지')[0]]}; A.recompute();
+      out[id+'charge']=A.dayInfo('2026-09-06').D.charge;
+      const c1=card(); out[id+'chargeCard']=/김차지 — .*주지 않을 방인데 배정됐습니다\\. 차지 자리의 방이라 차지가 봅니다/.test(c1);
+      out[id+'noFalse']=!/대안이 없습니다/.test(c1);
+      // ② 셋이 돌아가야 풀리는 금지 방 — 카드에 아무도 안 뜬다
+      s.banRooms={'이에이':[...R('C'),...R('D')],'박비':[...R('B'),...R('C'),...R('D')]}; A.recompute();
+      const L=A.dayInfo('2026-09-06').D.labels; out[id+'rot']=[L.A,L.B];
+      out[id+'rotCard']=/주지 않을 방인데/.test(card());
+      // ③ 손으로 금지 방 자리로 옮기면 — '손으로 옮긴 자리입니다'
+      s.banRooms={'최씨':[...R('A')]}; A.recompute();
+      A.openPick('최씨','2026-09-06',10,10); A.pickChoose('A');
+      out[id+'hand']=/최씨 — .*주지 않을 방인데 배정됐습니다\\. 손으로 옮긴 자리입니다/.test(card());
+    }
+    A.show('week'); return out;`);
+  for (const id of ['101', '122']) {
+    eq(id + ' 차지 방에 최선임의 주지 않을 방 — 그래도 최선임이 차지', v32[id + 'charge'], '김차지');
+    ok(id + ' 그 경우 카드는 "차지 자리의 방이라 차지가 봅니다"', v32[id + 'chargeCard']);
+    ok(id + ' 카드에 "대안이 없습니다" 가 없다', v32[id + 'noFalse']);
+    eq(id + ' 셋이 돌아가야 풀리는 금지 방 — 박비가 A, 이에이가 B', v32[id + 'rot'], ['박비', '이에이']);
+    ok(id + ' 그 날 주지 않을 방 카드가 뜨지 않는다', !v32[id + 'rotCard']);
+    ok(id + ' 손으로 금지 방 자리로 옮기면 카드는 "손으로 옮긴 자리입니다"', v32[id + 'hand']);
+  }
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));

@@ -107,6 +107,11 @@ jobs:
           node scripts/test_juhu_rotation.mjs
           node scripts/verify_holidays.mjs
 
+      # 어싸인 원칙 — 배정 엔진을 '모든 배치를 다 따져 본 정답'과 견준다 (원칙 ①~④ 켜고 끄기 16가지 ×
+      # 차지 자리 고정/자유 × 주지 않을 방·손 고정·헬퍼 날). 씨앗이 고정이라 늘 같은 결과. docs/verification.md
+      - name: 어싸인 원칙 검사 (정답 비교)
+        run: node scripts/test_assign_principles.mjs
+
       # assign.html 계산 로직 — 러너에 깔려 있는 크롬을 그대로 쓴다(설치 단계 없음).
       # 못 찾으면 테스트가 SKIP 으로 빠져나가므로 러너 이미지가 바뀌어도 CI 가 깨지지 않는다.
       - name: standalone 로직 회귀 (헤드리스 크롬)
