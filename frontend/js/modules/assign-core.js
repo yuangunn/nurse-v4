@@ -192,8 +192,10 @@
         // 잡았다: 한 사람 겹침 ≤99, 자리마다 병실이 갈리므로 여럿의 겹침 합은 병동 병상 수(<500)를 넘지
         // 않는다 → 원칙1 겹침 합 ×2e10 < 원칙3 자리 하나(1e13). 자리 합도 짝 ≤6 × 1e15 + … < 2^53(≈9.007e15).
         const SEAT_W = [1e15, 1e14, 1e13], OV_W = [2e10, 4e7, 8e4];
+        // 누가 잇는지 — 최근(며칠 전에 봤나, 하루 단위로 100일까지) → 선임. (b) 라벨 폴백의 순서와 같다.
+        //  예전엔 날짜 번호를 8일씩 묶어 '4일 전·5일 전'이 묶음 경계에 따라 같거나 달랐다 (2026-10-01 교차 검토)
         const tieOf = function (n, info) {
-          const recency = Math.round((Math.max(-400, Math.min(400, info.idx)) + 400) / 8);   // 0~100
+          const recency = 101 - Math.max(1, Math.min(101, idx - info.idx));                  // 0~100
           return recency * 100 + Math.max(0, 99 - n.seniority);                             // ≤ 10099
         };
         // 한 시간대 안에서는 기록·방이 그대로라 사람×자리 값은 한 번만 센다 (CRN 자리를 고를 때 같은 값을 여러 번 묻는다)
@@ -377,7 +379,7 @@
             }
             for (const label in claims) {
               claims[label].sort(function (a, b) {
-                return b.info.idx - a.info.idx || a.n.seniority - b.n.seniority;
+                return tieOf(b.n, b.info) - tieOf(a.n, a.info);   // 최근 → 선임 (다듬기·방 매칭과 같은 몫)
               });
               assigned[label] = claims[label][0].n; taken[claims[label][0].n.id] = true;
             }
@@ -424,8 +426,7 @@
             // 앉을 수 있는 자리는 전부 돌려 본다 — CRN 이 제 금지 방만 먼저 피하면 그 방을 남이 떠안아 이어 보기만 잃는 날이 있다
             // (금지 방에 앉는 사람 수가 같으면 이어 보기가 많은 쪽이다. 2026-10-01 검증)
             const seatL = floatSeats.filter(function (l) { return labels.indexOf(l) >= 0 && !assigned[l]; });
-            if (seatL.length === 1) { assigned[seatL[0]] = c; taken[c.id] = true; }
-            else if (seatL.length) {
+            if (seatL.length) {
               const trial = function (l0) {
                 const a = Object.assign({}, assigned), t = Object.assign({}, taken);
                 if (l0) { a[l0] = c; t[c.id] = true; }
@@ -462,7 +463,13 @@
                 return r.nat && !b.nat;
               };
               let best = null;
-              for (let s = 0; s < seatL.length; s++) {
+              // 차지가 아닐 때 앉았을 자리가 허락된 자리면 그 배치 그대로 — **누가 CRN 이든 자리는 같다**(/CRN 은 사람에 붙는다).
+              // 그 배치는 차지를 빼고 짠 가장 나은 배치라 허락된 자리 중에서도 가장 낫다. 예전엔 점수가 같은 자리가 여럿이면
+              // CRN 의 '어제 같은 자리 이름'을 먼저 따져서, CRN 을 바꾸면 두 사람이 맞바뀌고 다음 날까지 이어졌다 (2026-10-01 실시간 수정 검사)
+              // (빈 허락 자리가 하나뿐이어도 먼저 본다 — 그 자리에 바로 앉히고 나머지를 짜면 점수가 같은 배치 중 다른 것이 나올 수 있다)
+              if (natL && seatL.indexOf(natL) >= 0) best = nat;
+              // 차지가 아니면 종이 밖 자리(양식 줄을 넘는 자리·헬퍼)였을 사람 — 허락된 자리마다 돌려 보고 고른다
+              else for (let s = 0; s < seatL.length; s++) {
                 const r = trial(seatL[s]);
                 r.sl = sameL(r.l); r.nat = r.l === natL;
                 if (!best || better(r, best)) best = r;
