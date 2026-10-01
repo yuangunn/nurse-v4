@@ -228,18 +228,61 @@
               const others = staff.filter(function (n) {
                 return !taken[n.id] && n.id !== c.id && lastSeen[n.id] && tierOf(lastSeen[n.id]) >= 0;
               });
-              const wt = function (n, l) { return roomW(n, l) || labelW(n, l); };
-              let best = seatL[0], bestV = -1;
+              // 나머지가 l0 를 뺀 자리에서 **실제 병실**을 얼마나 이어 보는지 — 아래 (a) 방 매칭 → (b) 라벨 폴백 순서 그대로 센다.
+              // 연속성은 자리 이름이 아니라 병실이다: 방을 아는 사람은 방 겹침만 치고, 같은 자리 이름은 방을 모르는 사람만.
+              // 예전엔 사람마다 roomW||labelW 를 섞어 매겨, 방이 옮겨 가 겹침이 0 인 자리에도 '같은 자리 이름'이 원칙 점수를
+              // 통째로 받았다 — 그래서 CRN 이 원칙 순위가 높은 사람의 방을 가져갔다(전일 근무자가 보던 방을 오프 복귀 CRN 이
+              // 차지). 2026-10-01 교차 검토.
+              const knowsRooms = function (info) { return !!(roomsFor && info && info.rooms && info.rooms.length); };
+              const restV = function (free0) {
+                let v = 0;
+                const seated = {}, usedL = {};
+                if (roomsFor && others.length) {
+                  const fr = free0.filter(function (l) { return roomsByLabel[l].length; });
+                  if (fr.length) {
+                    const W0 = others.map(function (n) { return fr.map(function (l) { return roomW(n, l); }); });
+                    const pr = maxMatch(W0, fr.length);
+                    for (let k = 0; k < pr.length; k++) {
+                      v += W0[pr[k][0]][pr[k][1]]; seated[others[pr[k][0]].id] = true; usedL[fr[pr[k][1]]] = true;
+                    }
+                  }
+                }
+                for (let t = 0; t < 3; t++) {
+                  const claims = {};
+                  for (let s = 0; s < others.length; s++) {
+                    const n = others[s], info = lastSeen[n.id];
+                    if (seated[n.id] || tierOf(info) !== t || (knowsRooms(info) && roomsByLabel[info.label] && roomsByLabel[info.label].length)) continue;
+                    if (free0.indexOf(info.label) < 0 || usedL[info.label] || !avOk(n.id, info.label)) continue;
+                    (claims[info.label] = claims[info.label] || []).push({ n: n, info: info });
+                  }
+                  for (const label in claims) {
+                    claims[label].sort(function (a, b) { return b.info.idx - a.info.idx || a.n.seniority - b.n.seniority; });
+                    const w = claims[label][0].n;
+                    v += labelW(w, label); seated[w.id] = true; usedL[label] = true;
+                  }
+                }
+                return v;
+              };
+              // 차지 자신도 같은 규칙 — 방을 알면 방 겹침, 모르면 같은 자리 이름
+              const cInfo = lastSeen[c.id];
+              const ownV = function (l) { return knowsRooms(cInfo) && roomsByLabel[l].length ? roomW(c, l) : labelW(c, l); };
+              // 점수가 같으면: 원칙4(튕기기) — 오프 복귀 CRN 은 전에 보던 방을 피한다(남을 밀어내면서까지는 아니다).
+              // 그다음 어제와 같은 자리 이름 — 방이 다 바뀌어 아무도 이어 보지 못하는 날 CRN 이 이유 없이 첫 자리로 가지 않게.
+              const bounceC = !!(rules.bounceAfterOff && cInfo && cInfo.idx < idx - 1);
+              const bounced = function (l) {
+                if (!bounceC) return false;
+                if (roomsFor && cInfo.rooms && cInfo.rooms.length && roomsByLabel[l].length)
+                  return !overlap(cInfo.rooms, roomsByLabel[l]);
+                return cInfo.label !== l;
+              };
+              const sameL = function (l) { return !!(cInfo && cInfo.label === l && tierOf(cInfo) >= 0); };
+              let best = seatL[0], bestV = -1, bestB = false, bestS = false;
               for (let s = 0; s < seatL.length && seatL.length > 1; s++) {
                 const l0 = seatL[s];
-                const free0 = freeLabels().filter(function (l) { return l !== l0; });
-                let v = wt(c, l0);
-                if (others.length && free0.length) {
-                  const W0 = others.map(function (n) { return free0.map(function (l) { return wt(n, l); }); });
-                  const pr = maxMatch(W0, free0.length);
-                  for (let k = 0; k < pr.length; k++) v += W0[pr[k][0]][pr[k][1]];
-                }
-                if (v > bestV) { bestV = v; best = l0; }
+                const v = ownV(l0) + restV(freeLabels().filter(function (l) { return l !== l0; }));
+                const bo = bounced(l0), sl = sameL(l0);
+                // 정수 합(< 2^53)이라 같음 비교가 정확하다 — 0.5 같은 덧셈 대신 사전식으로 (점수, 튕김, 같은 자리 이름)
+                if (v > bestV || (v === bestV && (bo !== bestB ? bo : sl && !bestS))) { bestV = v; best = l0; bestB = bo; bestS = sl; }
               }
               assigned[best] = c; taken[c.id] = true;
             }

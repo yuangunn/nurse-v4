@@ -1408,18 +1408,61 @@
               const others = staff.filter(function (n) {
                 return !taken[n.id] && n.id !== c.id && lastSeen[n.id] && tierOf(lastSeen[n.id]) >= 0;
               });
-              const wt = function (n, l) { return roomW(n, l) || labelW(n, l); };
-              let best = seatL[0], bestV = -1;
+              // 나머지가 l0 를 뺀 자리에서 **실제 병실**을 얼마나 이어 보는지 — 아래 (a) 방 매칭 → (b) 라벨 폴백 순서 그대로 센다.
+              // 연속성은 자리 이름이 아니라 병실이다: 방을 아는 사람은 방 겹침만 치고, 같은 자리 이름은 방을 모르는 사람만.
+              // 예전엔 사람마다 roomW||labelW 를 섞어 매겨, 방이 옮겨 가 겹침이 0 인 자리에도 '같은 자리 이름'이 원칙 점수를
+              // 통째로 받았다 — 그래서 CRN 이 원칙 순위가 높은 사람의 방을 가져갔다(전일 근무자가 보던 방을 오프 복귀 CRN 이
+              // 차지). 2026-10-01 교차 검토.
+              const knowsRooms = function (info) { return !!(roomsFor && info && info.rooms && info.rooms.length); };
+              const restV = function (free0) {
+                let v = 0;
+                const seated = {}, usedL = {};
+                if (roomsFor && others.length) {
+                  const fr = free0.filter(function (l) { return roomsByLabel[l].length; });
+                  if (fr.length) {
+                    const W0 = others.map(function (n) { return fr.map(function (l) { return roomW(n, l); }); });
+                    const pr = maxMatch(W0, fr.length);
+                    for (let k = 0; k < pr.length; k++) {
+                      v += W0[pr[k][0]][pr[k][1]]; seated[others[pr[k][0]].id] = true; usedL[fr[pr[k][1]]] = true;
+                    }
+                  }
+                }
+                for (let t = 0; t < 3; t++) {
+                  const claims = {};
+                  for (let s = 0; s < others.length; s++) {
+                    const n = others[s], info = lastSeen[n.id];
+                    if (seated[n.id] || tierOf(info) !== t || (knowsRooms(info) && roomsByLabel[info.label] && roomsByLabel[info.label].length)) continue;
+                    if (free0.indexOf(info.label) < 0 || usedL[info.label] || !avOk(n.id, info.label)) continue;
+                    (claims[info.label] = claims[info.label] || []).push({ n: n, info: info });
+                  }
+                  for (const label in claims) {
+                    claims[label].sort(function (a, b) { return b.info.idx - a.info.idx || a.n.seniority - b.n.seniority; });
+                    const w = claims[label][0].n;
+                    v += labelW(w, label); seated[w.id] = true; usedL[label] = true;
+                  }
+                }
+                return v;
+              };
+              // 차지 자신도 같은 규칙 — 방을 알면 방 겹침, 모르면 같은 자리 이름
+              const cInfo = lastSeen[c.id];
+              const ownV = function (l) { return knowsRooms(cInfo) && roomsByLabel[l].length ? roomW(c, l) : labelW(c, l); };
+              // 점수가 같으면: 원칙4(튕기기) — 오프 복귀 CRN 은 전에 보던 방을 피한다(남을 밀어내면서까지는 아니다).
+              // 그다음 어제와 같은 자리 이름 — 방이 다 바뀌어 아무도 이어 보지 못하는 날 CRN 이 이유 없이 첫 자리로 가지 않게.
+              const bounceC = !!(rules.bounceAfterOff && cInfo && cInfo.idx < idx - 1);
+              const bounced = function (l) {
+                if (!bounceC) return false;
+                if (roomsFor && cInfo.rooms && cInfo.rooms.length && roomsByLabel[l].length)
+                  return !overlap(cInfo.rooms, roomsByLabel[l]);
+                return cInfo.label !== l;
+              };
+              const sameL = function (l) { return !!(cInfo && cInfo.label === l && tierOf(cInfo) >= 0); };
+              let best = seatL[0], bestV = -1, bestB = false, bestS = false;
               for (let s = 0; s < seatL.length && seatL.length > 1; s++) {
                 const l0 = seatL[s];
-                const free0 = freeLabels().filter(function (l) { return l !== l0; });
-                let v = wt(c, l0);
-                if (others.length && free0.length) {
-                  const W0 = others.map(function (n) { return free0.map(function (l) { return wt(n, l); }); });
-                  const pr = maxMatch(W0, free0.length);
-                  for (let k = 0; k < pr.length; k++) v += W0[pr[k][0]][pr[k][1]];
-                }
-                if (v > bestV) { bestV = v; best = l0; }
+                const v = ownV(l0) + restV(freeLabels().filter(function (l) { return l !== l0; }));
+                const bo = bounced(l0), sl = sameL(l0);
+                // 정수 합(< 2^53)이라 같음 비교가 정확하다 — 0.5 같은 덧셈 대신 사전식으로 (점수, 튕김, 같은 자리 이름)
+                if (v > bestV || (v === bestV && (bo !== bestB ? bo : sl && !bestS))) { bestV = v; best = l0; bestB = bo; bestS = sl; }
               }
               assigned[best] = c; taken[c.id] = true;
             }
@@ -1782,7 +1825,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261001b'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261001d'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -3527,7 +3570,8 @@ function openPick(name,iso,x,y){
     }).join('')+'</div>'+
     `<div class="pkRow"><button onclick="pickChoose(null)" title="손으로 바꾼 자리를 풀고 자동 배정으로 돌립니다 — 맞바꾼 상대도 함께 풀립니다">자동으로 되돌리기</button>`+
     (store.ovr[iso]&&store.ovr[iso][P]?`<button onclick="pickClearDay()" title="이 날 이 시간대의 수동 교체를 모두 풉니다">이 날 ${P} 교체 모두 풀기</button>`:'')+
-    (crnM&&!rel&&chg!==name?`<button onclick="pickCrn()" title="이 날 ${P} 차지(CRN)를 ${escA(name)} 님으로 — 근무가 ${P}C 로 바뀌고 앉은 자리는 그대로입니다">CRN 맡기기</button>`:'')+`</div>`+
+    (crnM&&!rel&&chg!==name?`<button onclick="pickCrn()" title="이 날 ${P} 차지(CRN)를 ${escA(name)} 님으로 — 근무가 ${P}C 로 바뀌고 ${
+      !crnFloat(P)?'양식의 CRN 자리로 옮깁니다':info.label&&crnSeats(P).includes(info.label)?'앉은 자리는 그대로입니다':'양식 칸으로 올라가고, 대신 다른 한 사람이 칸 밖으로 밀릴 수 있습니다'}">CRN 맡기기</button>`:'')+`</div>`+
     (rel?`<div class="pkSec">대체간호사 <span class="dim">우리 근무표에 없는 사람 · 이 날만</span></div>`+
       `<div class="pkRow"><button onclick="renameRelief('${iso}','${P}','${jsq(name)}')" title="이름을 잘못 적었으면 고칩니다">이름 고치기</button>`+
       `<button class="danger" onclick="removeRelief('${iso}','${P}','${jsq(name)}')" title="이 날 ${P} 에서 뺍니다 — 인원이 줄어 방이 다시 나뉩니다">이 날 빼기</button></div>`:'')+
@@ -3604,10 +3648,15 @@ function pickCrn(){
     if(pc&&pc.code===P+'C'){ store.cells[n][iso]=cellText({code:P,label:pc.label}); was.push(n); }
   }
   const pc=parseCellRaw((store.cells[name]||{})[iso]||'');
+  // 양식 칸에 찍히는 사람 — CRN 은 양식 칸에 앉으므로 칸 밖(대체)에 있던 사람이 맡으면 다른 한 사람이 칸 밖으로 밀린다
+  const onPaper=()=>{ const d=(dayInfo(iso)||{})[P]; return d?crnSeats(P).map(l=>d.labels[l]).filter(Boolean):[]; };
+  const before=onPaper();
   (store.cells[name]=store.cells[name]||{})[iso]=cellText({code:P+'C',label:pc&&pc.label||''});
   touch(); recompute();
   if(curScr==='week') renderWeek();
-  toast(`${name} ${+iso.slice(8,10)}일 ${P} CRN — 근무 ${P}C`+(was.length?` · ${was.join(', ')} 은 ${P}`:''),3200,true);
+  const after=onPaper(), out=before.filter(n=>!after.includes(n));
+  toast(`${name} ${+iso.slice(8,10)}일 ${P} CRN — 근무 ${P}C`+(was.length?` · ${was.join(', ')} 은 ${P}`:'')+
+    (out.length?` · 양식 칸 밖으로(인쇄 안 됨): ${out.join(', ')}`:''),4200,true);
 }
 function pickClearDay(){ // 이 날 이 시간대의 수동 교체를 모두 푼다
   const {iso,period}=pickCtx; closePick();
@@ -4961,8 +5010,9 @@ const ADMIN_PANELS={
     after(){ renderSchemes(); }},   // 계획표는 renderSchemes 가 함께 그린다(인원수 탭을 따라간다)
   caps:{title:'간호사 관리',
     desc:'<b>위가 선임</b>입니다 — 그날 차지 가능한 사람 중 가장 위 사람이 차지를 맡습니다.',
-    more:'차지는 배정표의 첫 자리(A(CN) 또는 CN)입니다. 줄을 끌어서(또는 ▲▼) 순서를 바꾸세요. 가능한 근무에서 <b>DC · EC · NC</b> 를 켜면 그 시간대에 차지로 뽑힐 수 있습니다. '+
-         '이름 옆 <b>신규</b> 표시를 누르면 신규 기간을 고칩니다.<br>배정표에 다른 소속 칸이 있는 병동(82의 <span class="unitTag">SU</span>)은 이름 옆 소속 표시를 눌러 켜고 끕니다 — 켜면 병동 자리에 배정되지 않고 그 칸에만 나옵니다.',
+    get more(){ return (crnFloat('D')?'차지(CRN)는 근무표의 DC·EC·NC 표시, 없으면 이 순서로 정해집니다. 앉는 자리는 정해져 있지 않습니다 — 어제 보던 방을 그대로 보고 이름 뒤에 <b>/CRN</b> 이 붙습니다. '+
+         'CRN 을 다른 사람으로 바꾸려면 배정표에서 그 사람 이름을 눌러 <b>[CRN 맡기기]</b>를 누르세요. ':'차지는 배정표의 첫 자리(A(CN) 또는 CN)입니다. ')+'줄을 끌어서(또는 ▲▼) 순서를 바꾸세요. 가능한 근무에서 <b>DC · EC · NC</b> 를 켜면 그 시간대에 차지로 뽑힐 수 있습니다. '+
+         '이름 옆 <b>신규</b> 표시를 누르면 신규 기간을 고칩니다.<br>배정표에 다른 소속 칸이 있는 병동(82의 <span class="unitTag">SU</span>)은 이름 옆 소속 표시를 눌러 켜고 끕니다 — 켜면 병동 자리에 배정되지 않고 그 칸에만 나옵니다.'; },
     aux:`<button onclick="addNurse()">＋ 간호사 추가</button>`,
     body(){ return `<table id="capsTable" class="dt"></table>`; },
     after(){
@@ -7232,14 +7282,19 @@ async function loadTemplate(){
     setTimeout(()=>{ recompute(); if(curScr==='week') renderWeek(); else if(curScr==='admin') renderAdmin(); },0);
   return TPL;
 }
-/* 양식의 구역마다 CRN 자리가 따로 있나 (옛 102 양식의 'D(CRN)') {D:bool,E:bool,N:bool}.
+/* 차지 자리 이름 — 'D(CRN)'(옛 102), 'A(CN)'(101), 'CN'·'CN방'(122) 처럼 자리 이름이 차지를 알려 주면 그 줄이 차지 자리다.
+ * 102 처럼 A·B·C·D 만 있으면 차지 자리가 없다(CRN 은 어느 자리든). 방 칸 없는 병동 양식이 'A(CN)' 을 쓰면
+ * 102 모양으로 읽혀도 차지는 그 줄에 앉아야 한다 — 예전엔 /CRN 만 찾아 차지가 CN 줄을 떠났다 (2026-10-01 교차 검토) */
+const CHG_LBL=/CRN|(^|[(])CN(?![A-Za-z])/i;
+const isChgLbl=v=>CHG_LBL.test(normLabel(v));
+/* 양식의 구역마다 차지 자리가 따로 있나 {D:bool,E:bool,N:bool}.
  * 자리표시자 양식은 차지 자리({{이름:D.차지}}) 줄의 자리 이름, 아니면 구역 줄마다 자리 이름 칸 */
 function crnSeatOf(cells,L,ph){
   const o={D:false,E:false,N:false};
-  if(ph){ const t=tagLabels(cells,L)||{}; for(const P in o) o[P]=/CRN/i.test((t[P]||{})['차지']||''); return o; }
+  if(ph){ const t=tagLabels(cells,L)||{}; for(const P in o) o[P]=isChgLbl((t[P]||{})['차지']||''); return o; }
   if(!L||!L.labelCol) return o;
   for(const sec of L.sections||[]) for(let k=0;k<(sec.rows||0);k++)
-    if(sec.P in o&&/CRN/i.test(normLabel(cells[colName(L.labelCol)+(sec.row+k)]||''))) o[sec.P]=true;
+    if(sec.P in o&&isChgLbl(cells[colName(L.labelCol)+(sec.row+k)]||'')) o[sec.P]=true;
   return o;
 }
 /* 프로그램 내장 양식(서식별 캐시) — 우리 병동 양식과 칸 구조를 비교하는 데 쓴다 */
@@ -7632,7 +7687,7 @@ function autoMap(tpl,shape){
       :(L.labelRows||[]).filter(r=>r>=sec.row&&(!sec.end||r<sec.end));
     const lbs=rows.map(labelAt), q=LBL_ORDER.slice();
     let crnAt=-1;
-    if(sh.kind==='102') crnAt=lbs.findIndex(v=>/CRN/i.test(v));   // 옛 102 양식: CRN 자리가 따로 있으면 거기가 차지
+    if(sh.kind==='102') crnAt=lbs.findIndex(isChgLbl);   // 옛 102 양식(D(CRN))·A(CN) 처럼 차지 자리가 따로 있으면 거기가 차지
     const seats=rows.map(()=>null);
     if(crnAt>=0){ seats[crnAt]='차지'; q.shift(); }
     // SU·중간번 자리는 방 칸이 있는 양식에서도 자리 이름으로 가른다 — 순서대로 세면 SU 줄에 병동 간호사가 들어간다
@@ -7792,7 +7847,7 @@ function fillForm102(tpl,L,days){
       // 없으면 줄 = 자리 순서(화면과 같다) 그대로이고 차지 이름 뒤에 ' /CRN' 을 붙인다 — 차지가 앉은 자리 어디서든.
       // 102 CRN 은 어느 방이든 본다 (2026-10-01) — 예전엔 차지를 첫 줄에 못 박았다.
       const slots=[]; for(let k=0;k<sec.rows;k++) slots.push(normLabel(at102(cellsOf(tpl),sec.row+k,L.labelCol)));
-      const crnAt=slots.findIndex(v=>/CRN/i.test(v));
+      const crnAt=slots.findIndex(isChgLbl);
       const charge=s2.charge||'';
       const order=LBL_ORDER.map(l=>s2.byLabel[l]).filter(Boolean);
       const put=new Array(sec.rows).fill('');
@@ -9838,6 +9893,7 @@ const HELP=[
  tips:['손으로 바꾼 칸은 이름 아래 <b>빨간 밑줄</b>이 생깁니다.',
        '같은 창 맨 아래 <b>[근무 바꾸기]</b>를 펼치면 그 날 근무 자체(D·E·N·OF·V·병가·생리휴가 등, 우리 병동 표기 포함)를 바꿀 수 있습니다 — 그러면 인원이 달라져 뒤의 어싸인이 자동으로 다시 맞춰집니다. 한 번 펼치면 창을 닫았다 열어도 펼친 채입니다.',
        '같은 창의 <b>＋ 쉬는 간호사 넣기 · ＋ 대체간호사 넣기</b>로 그 시간대에 사람을 더할 수 있습니다 — 자세한 것은 <b>빈 자리 채우기</b>.',
+       '102 처럼 이름 뒤에 <b>/CRN</b> 이 붙는 배정표는 자리를 맞바꿔도 <b>CRN 은 그 사람 그대로</b>입니다(CRN 은 어느 방이든 봅니다). CRN 을 다른 사람으로 바꾸려면 그 사람 이름을 눌러 <b>[CRN 맡기기]</b> — 그 날 근무가 DC·EC·NC 로 바뀝니다.',
        '<b>잘못 눌렀을 때</b>: 오른쪽 아래에 뜨는 <b>파란 알림을 누르면</b> 방금 한 것이 그대로 되돌아갑니다. <kbd>Ctrl+Z</kbd> 도 같습니다 — 근무 바꾸기·교육 입력·새 근무표 넣기 모두 됩니다.']},
 {cat:'이번 주 배정표',id:'empty',title:'빈 자리 채우기 (쉬는 간호사·대체간호사)',
  lead:'그날 근무자가 자리 수보다 적으면 배정표에 <b>빈 칸</b>이 생깁니다. 빈 칸을 누르면 그 자리에 사람을 넣을 수 있습니다.',
@@ -9995,7 +10051,8 @@ const HELP=[
  lead:'표에 지난 기록이 없을 때(처음 시작할 때) 이어짐의 시작점을 알려 주는 곳입니다.',
  steps:['관리 &gt; 지난 어싸인 직접 입력에서 사람마다 마지막 어싸인(B~E)과 근무를 고릅니다.',
         '근무표에 기록이 있으면 그 기록이 우선입니다.'],
- tips:['차지(A(CN))였던 사람은 <b>없음</b>으로 두세요 — 차지는 매일 자동으로 정해집니다.']},
+ tips:['차지 자리가 따로 있는 서식(101 의 A(CN) · 122 의 CN)은 차지였던 사람을 <b>없음</b>으로 두세요 — 차지는 매일 자동으로 정해집니다.',
+       '102 처럼 이름 뒤에 <b>/CRN</b> 이 붙는 서식은 CRN 이 어느 방이든 봅니다 — CRN 이었던 사람도 <b>앉았던 자리</b>를 고르세요.']},
 
 {cat:'우리 병동 설정',id:'form',title:'배정표 양식 (서식 고르기·양식 보기·문구 고치기·양식 교체)',
  lead:'인쇄·엑셀에 쓰는 병실 배정표 양식입니다. 101병동·122병동 서식 중 고르고, 글자는 여기서 바로 고치고, 칸 구조가 다른 양식은 엑셀 파일을 올려 교체합니다.',
