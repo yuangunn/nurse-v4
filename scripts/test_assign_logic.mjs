@@ -2016,6 +2016,7 @@ async function main() {
       // CRN 맡기기 — 자리는 그대로, 근무가 DC 로 (다른 DC 는 D 로)
       A.openPick('박비','2026-09-10',10,10);
       out.btn=[...document.querySelectorAll('#pick button')].some(b=>b.textContent==='CRN 맡기기');
+      out.btnTitle=([...document.querySelectorAll('#pick button')].find(b=>b.textContent==='CRN 맡기기')||{}).title||'';
       out.who=[...document.querySelectorAll('#pick .who')].map(b=>b.textContent);
       A.pickCrn();
       out.cells=['김차지','이에이','박비','최씨'].map(n=>A.store.cells[n]['2026-09-10']);
@@ -2027,6 +2028,14 @@ async function main() {
       { const r2=await A.buildWeekXlsx(new Date(2026,8,6)); const c4=A.sheetCells({...r2.tpl,sheetXml:r2.xml});
         out.L3=[5,6,7,8].map(i=>c4['L'+i]||''); out.N3=[5,6,7,8].map(i=>c4['N'+i]||''); }
       out.seats=['D','E','N'].map(P=>A.crnSeats(P));
+      // 다섯 명인 날 — 칸 밖(대체) 사람에게 CRN 을 맡기면 칸으로 올라오고 한 사람이 밀린다. 안내가 그렇게 말해야 한다 (교차 검토)
+      for(const n of ['김차지','이에이','박비','최씨','정새로']) A.store.cells[n]['2026-09-12']='D';
+      A.recompute();
+      { const d=A.dayInfo('2026-09-12').D, off=d.labels['D']||d.extra[0];
+        A.openPick(off,'2026-09-12',10,10);
+        out.offTitle=([...document.querySelectorAll('#pick button')].find(b=>b.textContent==='CRN 맡기기')||{}).title||'';
+        A.pickCrn(); out.offToast=(document.querySelector('#toast')||{}).textContent||'';
+        const d2=A.dayInfo('2026-09-12').D; out.offSeated=['차지','A','B','C'].some(l=>d2.labels[l]===off); }
       // 옛 102 양식처럼 종이에 CRN 자리(D(CRN))가 따로 있으면 차지는 그 자리에 묶인다
       { const base=await A.loadBaseTemplate('102');
         A.store.forms['102']={name:'옛 102.xlsx',b64:A.bytesToB64(A.packXlsx(base,{'xl/worksheets/sheet1.xml':A.setCellStr(base.sheetXml,'C8','D(CRN)')})),savedAt:7,ph:false};
@@ -2039,8 +2048,23 @@ async function main() {
       A.show('admin'); A.pickAdmin('seed');
       out.seed=[...document.querySelectorAll('#seedTable tr')].slice(1,2).map(tr=>[...tr.querySelectorAll('button')].map(b=>b.textContent).slice(0,5))[0];
       out.seedNote=(document.querySelector('#seedTable td.note:last-child')||{}).textContent||'';
+      // 간호사 관리 설명 — 102 는 'CRN 은 자리가 정해져 있지 않다', 101 은 '첫 자리' (교차 검토)
+      A.pickAdmin('caps'); { const b=document.querySelector('.apMoreBtn'); if(b&&b.textContent==='자세히') b.click(); }
+      out.caps102=(document.querySelector('.apMore')||{}).textContent||'';
       A.setFormId('101'); out.고정101=['D','E','N'].map(P=>A.crnFloat(P));
+      A.pickAdmin('caps'); out.caps101=(document.querySelector('.apMore')||{}).textContent||'';
       A.pickAdmin('seed'); out.seed101=[...document.querySelectorAll('#seedTable tr')].slice(1,2).map(tr=>[...tr.querySelectorAll('button')].map(b=>b.textContent).slice(0,5))[0];
+      // 방 칸 없는 병동 양식이 첫 자리를 'A(CN)' 으로 적었으면 차지 자리가 있는 것 — 차지는 그 줄 (교차 검토: 예전엔 /CRN 만 찾았다)
+      { const base=await A.loadBaseTemplate('102'); let xml=base.sheetXml;
+        for(const k of ['C5','C10','C14']) xml=A.setCellStr(xml,k,'A(CN)');
+        const t2={...base,sheetXml:xml}, cl=A.sheetCells(t2), mg=A.sheetMerges(t2), sh=A.detectFormShape(cl,mg);
+        A.setWard('61'); A.store.forms['61']=Object.assign({name:'61 배정표.xlsx',b64:A.bytesToB64(A.packXlsx(base,{'xl/worksheets/sheet1.xml':xml})),savedAt:7,ph:false},sh,{formName:'61병동 양식'});
+        A.setFormId('61'); await A.loadTemplate(); A.recompute(); await new Promise(r=>setTimeout(r,50));
+        out.cnKind=sh.kind; out.cnFloat=['D','E','N'].map(P=>A.crnFloat(P));
+        const r4=await A.buildWeekXlsx(new Date(2026,8,6)); const c6=A.sheetCells({...r4.tpl,sheetXml:r4.xml});
+        out.cnF=[5,6,7,8].map(i=>c6['F'+i]||'');
+        const am=A.autoMap(t2,sh), c7=A.sheetCells({...t2,sheetXml:am.xml}); out.cnTags=[c7.D5,c7.D6,/[{][{]차지: [/]CRN[}][}]/.test(am.xml)];
+        delete A.store.forms['61']; A.setFormId('101'); A.setWard('101'); await A.loadTemplate(); A.recompute(); }
       A.show('week');
       return out; })()`);
   eq('9/6 — CRN 김차지는 첫 자리', crn102.D, ['김차지 /CRN', '이에이', '박비', '최씨']);
@@ -2057,6 +2081,9 @@ async function main() {
   eq('이름 클릭 창의 자리 목록에 누가 CRN 인지', crn102.who, ['이에이', '김차지 /CRN', '박비 (본인)', '최씨']);
   eq('CRN 맡기기 — 근무가 DC 로 (다른 사람은 그대로 D)', crn102.cells, ['D', 'D', 'DC', 'D']);
   eq('CRN 맡기기 — 자리는 그대로, /CRN 만 옮겨 간다', crn102.L2, ['이에이', '김차지', '박비 /CRN', '최씨']);
+  ok('CRN 맡기기 안내 — 칸에 앉은 사람은 "앉은 자리는 그대로"', /앉은 자리는 그대로/.test(crn102.btnTitle), crn102.btnTitle);
+  ok('CRN 맡기기 안내 — 칸 밖 사람은 "칸으로 올라가고 … 밀릴 수 있습니다"', /칸으로 올라가고.*밀릴 수/.test(crn102.offTitle), crn102.offTitle);
+  ok('칸 밖 사람이 CRN 이 되면 칸에 앉고, 알림이 밀린 사람을 알려 준다', crn102.offSeated && /양식 칸 밖으로/.test(crn102.offToast), crn102.offToast);
   eq('CRN 은 D 방도 본다 — 넷째 자리 최씨가 CRN 이어도 D 그대로', crn102.L3, ['이에이', '김차지', '박비', '최씨 /CRN']);
   eq('다음 날도 CRN 최씨는 D, 나머지 그대로', crn102.N3, ['이에이', '김차지', '박비', '최씨 /CRN']);
   eq('102 CRN 이 앉을 수 있는 자리 = 종이의 자리 전부 (D·E 넷, N 셋)', crn102.seats,
@@ -2064,6 +2091,11 @@ async function main() {
   eq('종이에 D(CRN) 자리가 있는 옛 양식 — D 근무 차지는 그 자리에 묶인다', [crn102.묶임, crn102.옛F], [[false, true, true], ['정새로', '박비', '최씨', '이에이']]);
   eq('양식을 되돌리면 다시 어느 자리든', crn102.풀림, [true, true, true]);
   eq('101 은 차지 자리(A(CN))가 따로 있어 묶인다', crn102.고정101, [false, false, false]);
+  ok('간호사 관리 설명 — 102 는 CRN 자리가 정해져 있지 않고 [CRN 맡기기]', /정해져 있지 않습니다/.test(crn102.caps102) && /CRN 맡기기/.test(crn102.caps102), crn102.caps102);
+  ok('간호사 관리 설명 — 101 은 차지가 첫 자리', /첫 자리/.test(crn102.caps101) && !/CRN 맡기기/.test(crn102.caps101), crn102.caps101);
+  eq('A(CN) 을 적은 방 칸 없는 병동 양식 — 102 모양이어도 차지는 CN 줄에 묶인다', [crn102.cnKind, crn102.cnFloat], ['102', [false, false, false]]);
+  eq('그 양식의 9/7 — CRN 이에이가 A(CN) 줄, /CRN 은 붙이지 않는다(종이가 CN 이라 적었다)', crn102.cnF, ['이에이', '정새로', '박비', '최씨']);
+  eq('그 양식의 자동 맵핑 — CN 줄이 차지, 자리마다 {{차지: /CRN}} 을 꽂지 않는다', crn102.cnTags, ['{{이름:D.차지}}', '{{이름:D.A}}', false]);
   eq('지난 어싸인 직접 입력 — 102 는 첫 자리 A 도 고른다', crn102.seed, ['A', 'B', 'C', 'D', '없음']);
   ok('지난 어싸인 직접 입력 — 102 안내는 CRN 도 앉았던 자리를 고르라고', /CRN/.test(crn102.seedNote), crn102.seedNote);
   eq('지난 어싸인 직접 입력 — 101 은 그대로 (차지 자리 빼고)', crn102.seed101, ['B', 'C', 'D', 'E', '없음']);

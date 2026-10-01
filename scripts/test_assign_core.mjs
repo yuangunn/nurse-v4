@@ -580,6 +580,47 @@ assert.equal(periodOf('OF'), null);
     assert.equal(r.byNurse.Y.d1.charge, true);
   }
 
+  // 교차 검토 (2026-10-01) ① — 자리 이름만 같고 방이 옮겨 간 자리는 연속성이 아니다.
+  // 어제 같은 근무 A(4~7호)를 본 박은 오늘 차지 자리(1~7호)에 앉아야 방을 이어 본다. 오프 복귀 CRN 김이 1~3호를 보던
+  // 사람이라도 원칙 1 인 박이 앞선다. 예전엔 박에게 'A 그대로'를 원칙1 점수로 쳐 줘 김이 1~7호를 가져갔다.
+  {
+    const R = (a, b) => { const o = []; for (let i = a; i <= b; i++) o.push(String(i)); return o; };
+    const lay = { 차지: R(1, 7), A: R(8, 14) };
+    const NS = [{ id: '김', seniority: 0, chargeCapable: true }, { id: '박', seniority: 2, chargeCapable: false }];
+    const seed = { 김: { label: '차지', period: 'N', idx: -3, rooms: R(1, 3) }, 박: { label: 'A', period: 'N', idx: -1, rooms: R(4, 7) } };
+    const r = compute(NS, { 김: { d: 'N' }, 박: { d: 'N' } }, ['d'],
+      { roomsFor: (P, cnt, l) => (lay[l] || []).slice(), seed, chargeSeats: () => ['차지', 'A'] });
+    assert.deepEqual(r.byDay.d.N.labels, { 차지: '박', A: '김' }, '박이 보던 4~7호를 이어 본다');
+    assert.equal(r.byDay.d.N.charge, '김');
+  }
+
+  // 교차 검토 ② — 원칙4(오프 복귀 튕기기)는 CRN 에게도. 남을 밀어내지 않을 때만 전에 보던 방을 피한다
+  {
+    const R = (a, b) => { const o = []; for (let i = a; i <= b; i++) o.push(String(i)); return o; };
+    const lay = { 차지: R(1, 3), A: R(4, 7), B: R(8, 11), C: R(12, 14) };
+    const NS = ['김', '이', '박', '최'].map((id, i) => ({ id, seniority: i, chargeCapable: i < 2 }));
+    const sch = {}; for (const n of NS) sch[n.id] = { d: 'D' };
+    const rules = { keepSameShift: true, keepAcrossShift: true, keepAfterOff: false, bounceAfterOff: true };
+    const o = { roomsFor: (P, cnt, l) => (lay[l] || []).slice(), rules, chargeSeats: () => ['차지', 'A', 'B', 'C'] };
+    const r1 = compute(NS, sch, ['d'], Object.assign({ seed: { 김: { label: '차지', period: 'D', idx: -3, rooms: R(1, 3) } } }, o));
+    assert.notEqual(Object.keys(r1.byDay.d.D.labels).find(l => r1.byDay.d.D.labels[l] === '김'), '차지', 'CRN 도 쉬고 오면 1~3호를 피한다');
+    const r2 = compute(NS, sch, ['d'], Object.assign({ seed: {
+      김: { label: '차지', period: 'D', idx: -3, rooms: R(1, 3) }, 이: { label: 'A', period: 'D', idx: -1, rooms: R(4, 7) },
+      박: { label: 'B', period: 'D', idx: -1, rooms: R(8, 11) }, 최: { label: 'C', period: 'D', idx: -1, rooms: R(12, 14) } } }, o));
+    assert.deepEqual(r2.byDay.d.D.labels, { 차지: '김', A: '이', B: '박', C: '최' }, '어제 근무자를 밀어내면서까지 튕기지는 않는다');
+  }
+
+  // 방이 다 바뀌어 아무도 이어 보지 못하는 날 — CRN 은 어제 자리 이름 그대로 (이유 없이 첫 자리로 가지 않는다)
+  {
+    const NS = ['X', 'Y', 'Z'].map((id, i) => N(id, i));
+    const seed = { X: { label: 'B', period: 'D', idx: -1, rooms: ['90'] }, Y: { label: '차지', period: 'D', idx: -1, rooms: ['91'] },
+                   Z: { label: 'A', period: 'D', idx: -1, rooms: ['92'] } };
+    const r = compute(NS, { X: { d: 'D' }, Y: { d: 'D' }, Z: { d: 'D' } }, ['d'],
+      { maxSeats: 3, seed, roomsFor: (P, cnt, l) => ({ 차지: ['1'], A: ['2'], B: ['3'] }[l] || []), chargeSeats: () => ['차지', 'A', 'B'] });
+    assert.equal(r.byDay.d.D.charge, 'X');
+    assert.equal(seatOf(r, 'd', 'X'), 'B');
+  }
+
   // 여러 날 무작위 — CRN 은 늘 앞 세 자리, 모두 한 번씩만 앉고, 자리는 비지 않는다
   {
     let seed = 7;
