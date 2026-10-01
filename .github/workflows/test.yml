@@ -122,6 +122,12 @@ jobs:
       - name: standalone 끝에서 끝까지 (헤드리스 크롬)
         run: CHROME=google-chrome node scripts/test_assign_e2e.mjs
 
+      # 102 오류는 배정표에서 사람을 실시간으로 바꿔도 차지 자리가 안 바뀌는 것으로 드러났다 — 병동 양식 9가지에서
+      # 배정표를 실제로 눌러(근무 바꾸기·자리 맞바꾸기·CRN 맡기기·대체간호사·되돌리기…) 고칠 때마다 엔진 규칙과
+      # 화면·엑셀·인쇄·하루 어싸인표가 서로 맞는지 본다. 씨앗이 고정이라 늘 같은 순서. docs/verification.md
+      - name: standalone 실시간 수정 (병동 양식 9가지)
+        run: CHROME=google-chrome node scripts/test_assign_live.mjs
+
       # 병동은 assign.html 만 바꾸고 데이터 파일은 그대로 쓴다 — 배포했던 버전이 저장한
       # 데이터 파일(tests/fixtures/assign-data/)을 지금 assign.html 로 열어 그대로인지 본다.
       - name: standalone 데이터 파일 호환 (옛 배포본 파일을 새 버전으로)

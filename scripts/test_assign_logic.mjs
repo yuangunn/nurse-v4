@@ -2225,7 +2225,7 @@ async function main() {
       s=setup(id);
       const at=lb=>{ s.cells['정디'][D]=lb; A.recompute(); const l=seat('정디'); return l?A.FORM_LBL(l,'D'):null; };
       out[id+'cellA']=at('D/A'); out[id+'cellB']=at('D/B');
-      out[id+'cellCN']=at('D/CN');
+      out[id+'cellCN']=at('D/CN'); out[id+'cnCard']=/정디 — 근무표 칸의 'D[/]CN': .*차지[(]CRN[)]는 자리가 아니라 근무를 DC 로 적습니다/.test(card());
       out[id+'cellF']=[at('D/F'),/정디 — 근무표 칸의 'D[/]F': 이 양식에 'F' 자리가 없습니다/.test(card())];
       s.cells['정디'][D]='DC/B'; A.recompute();
       out[id+'dcB']=[day().charge,seat('정디'),/정디 — 근무표 칸의 'DC[/]B': DC 는 차지 자리에 앉으므로/.test(card())];
@@ -2266,20 +2266,24 @@ async function main() {
         /그날 방 수정[(]A[(]CN[)] 자리[)]은 5명일 때 고친 것이라 지금 4명인 배정에는 쓰지 않았습니다/.test(card())];
       s.cells['정디'][D]='D'; A.recompute(); out.rovBack=A.roomsFor('D',5,'차지',D)===ed5; }
     A.show('week'); return out;`);
+  // 82 는 차지가 자리에 묶이지 않는다(결정 2-45) — 차지 자리(종이 A)로 맞바꿔도 차지는 사람 그대로, D/CN 은 없는 자리, DC/B 는 B 에 앉은 차지
   for (const id of ['101', '122', '82']) {
-    eq(id + ' 최씨를 차지 자리로 맞바꾸면 최씨가 차지', v33[id + 'swap'], ['최씨', true]);
+    const fl = id === '82';
+    eq(id + (fl ? ' 최씨를 첫 자리로 맞바꿔도 차지는 김차지 (82 는 차지가 자리에 묶이지 않는다)' : ' 최씨를 차지 자리로 맞바꾸면 최씨가 차지'), v33[id + 'swap'], [fl ? '김차지' : '최씨', true]);
     eq(id + ' 그 뒤 최씨가 OF — 김차지가 차지 자리로 돌아온다', v33[id + 'stale'], ['김차지', '차지']);
     eq(id + ' [효력 없는 교체 정리]가 세는 것 — 최씨와 남은 반쪽 김차지', v33[id + 'audit'], 2);
     eq(id + ' 정리하면 그 날 교체가 하나도 안 남는다', v33[id + 'pruned'], 0);
     eq(id + ' 맞바꾼 사람을 명부에서 지우면 상대 고정도 풀린다', v33[id + 'del'], ['김차지', false]);
     eq(id + ' 근무 바꾸기로 정디를 DC — 정디가 차지 자리, 김차지는 D', v33[id + 'dc'], ['정디', '차지', 'D']);
     ok(id + ' DC 가 둘인 날 카드가 알린다', v33[id + 'dc2']);
-    eq(id + ' 차지 못 하는 사람을 손으로 차지 자리에 — 카드는 손으로 정한 탓 + 풀기 단추', v33[id + 'hand'], ['박비', true, false, true]);
+    eq(id + (fl ? ' 차지 못 하는 사람을 손으로 첫 자리에 — 차지는 김차지 그대로, 카드 없음' : ' 차지 못 하는 사람을 손으로 차지 자리에 — 카드는 손으로 정한 탓 + 풀기 단추'),
+      v33[id + 'hand'], fl ? ['김차지', false, false, false] : ['박비', true, false, true]);
     eq(id + ' [이 날 D 교체 풀기] 뒤에는 김차지가 차지', v33[id + 'cleared'], '김차지');
     eq(id + ' D/B 는 종이 B 자리', v33[id + 'cellB'], 'B');
-    eq(id + ' D/CN 은 차지 자리', v33[id + 'cellCN'], { 101: 'A(CN)', 122: 'CN', 82: 'A' }[id]);
+    if (fl) ok(id + ' D/CN — 차지가 자리에 묶이지 않아 없는 자리, 근무를 DC 로 적으라고 알린다', v33[id + 'cnCard']);
+    else eq(id + ' D/CN 은 차지 자리', v33[id + 'cellCN'], { 101: 'A(CN)', 122: 'CN' }[id]);
     eq(id + ' D/F(없는 자리)는 고정 안 하고 카드가 알린다', v33[id + 'cellF'], [v33[id + 'cellF'][0], true]);
-    eq(id + ' DC/B — DC 가 이긴다(차지 자리), 카드가 알린다', v33[id + 'dcB'], ['정디', '차지', true]);
+    eq(id + (fl ? ' DC/B — 차지가 B 자리에 앉는다(카드 없음)' : ' DC/B — DC 가 이긴다(차지 자리), 카드가 알린다'), v33[id + 'dcB'], fl ? ['정디', 'A', false] : ['정디', '차지', true]);
   }
   eq('101 D/A 는 A(CN) 자리', v33['101cellA'], 'A(CN)');
   eq('122 D/A 는 A 자리', v33['122cellA'], 'A');
@@ -2297,6 +2301,132 @@ async function main() {
   eq("'1호, 2호'·'1~2호'·'1001호' 를 방으로 읽는다", v33.ho, [['1', '2'], ['1', '2'], ['1001']]);
   eq('그날 방 수정은 그 인원수일 때만 — 4명인 날 안 쓰고 카드', v33.rov, [true, 5, true, true]);
   ok('5명으로 돌아오면 그날 방 수정을 다시 쓴다', v33.rovBack);
+
+  // ── 34. 양식의 자리 이름·82 차지·신규 줄 (2026-10-01, 결정 2-45) ─────────────────────────
+  // 화면 자리 이름·줄 순서는 종이에서(paperPlan) — 엑셀과 같은 사람 · 82 는 102 처럼 차지가 자리에 묶이지 않고 화면에만 /CRN ·
+  // /CRN 은 신규 줄 앞 · 지난 어싸인 직접 입력은 종이의 자리 · 6줄 101 은 화면 인쇄 대신 엑셀 · 대체 줄 · 122 여섯째 자리 이름 ·
+  // 교차 검토(PR #73·#74): 손 자리 탓 카드 · DC/CN 걷기 · 다른 사람이 DC 인 날의 D/A(CN) · SU 근무표 · 효력 없는 교체
+  step('34 양식 자리 이름·82 차지·신규 줄');
+  const v34 = await ev(`const A=window.__app, D1='2026-09-06', D2='2026-09-07', sun=new Date(2026,8,6);
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+    const base=(id,n)=>{ A.setFormId(id); A.setWard(id); const s=A.store;
+      s.order=['김차지','이에이','박비','최씨','정디','한막내'].slice(0,n||5); s.cells={}; s.ovr={}; s.ovrPair={}; s.roomOv={}; s.roomOvCnt={};
+      s.presetDay={}; s.seedManual={}; s.unit={}; s.relief={}; s.trainee={}; s.trOv={}; s.evRules=[]; s.daily={}; s.banRooms={}; s.caps={}; s.hidden={};
+      s.rules={keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false};
+      s.presets={}; s.presetPlan={}; A.store=s; A.resetSchemes(); return s; };
+    const allD=(s,iso)=>{ for(const n of s.order) (s.cells[n]=s.cells[n]||{})[iso]='D'; };
+    // 배정표 화면의 한 근무 줄들 — [자리 이름, 그 날 이름 칸]
+    const scr=(P,iso)=>{ const o=[]; let cur=null;
+      for(const tr of document.querySelectorAll('#wkTable tr')){ const sc=tr.querySelector('td.seccol'); if(sc) cur=sc.textContent.trim();
+        const lab=tr.querySelector('td.lab'); if(!lab||cur!==P) continue;
+        const nm=tr.querySelector('td.nm[data-iso="'+iso+'"]'); o.push([lab.textContent.trim(),nm?nm.textContent.trim():'']); }
+      return o; };
+    const week=()=>{ A.wkSunday=new Date(sun); A.show('week'); };
+    const card=()=>{ week();
+      for(let i=0;i<3;i++){ const f=document.querySelector('#wkWarn.shut .fold')||document.querySelector('#wkWarn .items.clip ~ .more')||document.querySelector('#wkWarn .more');
+        if(!f||!/자세히|더 보기/.test(f.textContent)) break; f.click(); }
+      return (document.querySelector('#wkWarn')||{}).textContent||''; };
+    const xl=async()=>{ const r=await A.buildWeekXlsx(new Date(sun)); return A.sheetCells({...r.tpl,sheetXml:r.xml}); };
+    let upN=900;   // savedAt 이 양식 캐시 열쇠다 — 올릴 때마다 달라야 한다
+    const upload=async(id,b,xml,extra)=>{ A.store.forms[id]=Object.assign({name:'올린.xlsx',b64:A.bytesToB64(A.packXlsx(b,{'xl/worksheets/sheet1.xml':xml})),savedAt:++upN,ph:false},extra||{});
+      await A.loadTemplate(); await sleep(60); A.recompute(); };
+    const drop=async id=>{ delete A.store.forms[id]; await A.loadTemplate(); await sleep(60); A.recompute(); };
+    return (async()=>{ const out={};
+      // ① 82 — 차지가 자리에 묶이지 않는다. 김차지가 쉬어 이에이가 차지가 돼도 이에이는 B 그대로, 화면에만 /CRN
+      { const s=base('82',3); s.cells={김차지:{[D1]:'D',[D2]:'OF'},이에이:{[D1]:'D',[D2]:'D'},박비:{[D1]:'OF',[D2]:'D'}};
+        await A.loadTemplate(); A.recompute(); week();
+        const w=iso=>scr('D',iso).filter(r=>!/SU|중간번/.test(r[0]));
+        out.f82=['D','E','N'].map(P=>A.crnFloat(P)); out.s82=[w(D1),w(D2)];
+        const r=await A.buildWeekXlsx(new Date(sun)), b=await A.loadBaseTemplate('82');
+        out.x82=(r.xml.match(/[/]CRN/g)||[]).length-(b.sheetXml.match(/[/]CRN/g)||[]).length;
+        A.show('admin'); A.pickAdmin('seed'); const tr=document.querySelectorAll('#seedTable tr')[1];
+        out.seed82=tr?[...tr.children[1].querySelectorAll('button')].map(x=>x.textContent):null; }
+      // ② 122 지난 어싸인 직접 입력 — D 여섯째 자리(E)까지
+      { const s=base('122',3); allD(s,D1); await A.loadTemplate(); A.recompute(); A.show('admin'); A.pickAdmin('seed');
+        const tr=document.querySelectorAll('#seedTable tr')[1]; out.seed122=tr?[...tr.children[1].querySelectorAll('button')].map(x=>x.textContent):null; }
+      // ③ 옛 102 양식(D(CRN) 이 맨 아래 줄) — 화면 줄 = 종이 줄, 같은 사람. 방 구성 자리 이름도 종이대로
+      { const s=base('102',4); allD(s,D1); const b=await A.loadBaseTemplate('102');
+        await upload('102',b,A.setCellStr(b.sheetXml,'C8','D(CRN)')); week();
+        const c=await xl();
+        out.old102=[scr('D',D1),[5,6,7,8].map(i=>[c['C'+i]||'',c['D'+i]||''])];
+        out.old102L=['차지','A','B','C'].map(l=>A.FORM_LBL(l,'D')); out.old102C=A.dayInfo(D1).D.charge;
+        await drop('102'); }
+      // ④ 올린 101 양식에서 CN 줄이 둘째 — 차지는 CN 줄, 화면과 엑셀이 같다
+      { const s=base('101',5); allD(s,D1); const b=await A.loadBaseTemplate('101'); let x=b.sheetXml;
+        const lab={5:'A',6:'CN',7:'B',8:'C',9:'D'}; for(const r in lab) x=A.setCellStr(x,'C'+r,lab[r]);
+        await upload('101',b,x); week(); const c=await xl();
+        out.cn101=[scr('D',D1),[5,6,7,8,9].map(i=>[c['C'+i]||'',c['E'+i]||''])]; out.cn101C=[A.dayInfo(D1).D.charge,A.crnFloat('D')];
+        // 첫 줄 이름이 그냥 'A' (CN 표기 없음) — 화면도 'A', 차지는 첫 줄 그대로
+        x=b.sheetXml; const lab2={5:'A',6:'B',7:'C',8:'D',9:'E'}; for(const r in lab2) x=A.setCellStr(x,'C'+r,lab2[r]);
+        await upload('101',b,x); week(); const d=A.dayInfo(D1).D;
+        out.a101=[scr('D',D1).map(r=>r[0]),d.labels['차지']===d.charge,A.crnFloat('D')];
+        await drop('101'); }
+      // ⑤ D 가 6줄인 올린 101 양식(자리표시자 없음) — 화면 인쇄 틀은 5줄이라 엑셀로
+      { base('101',5); const tpl=await A.loadBaseTemplate('101'), F=A.formDefOf('101'); const x=A.fvDraftStart(tpl,F), d=A.seatRowAdd(x,tpl,F,'D',{base:x});
+        await upload('101',tpl,d.xml); out.p6=[A.secRows('D'),A.canPrint()]; await drop('101'); out.p5=A.canPrint(); }
+      // ⑥ 102 CRN 에 신규가 붙어 있으면 /CRN 은 이름 바로 뒤 (신규 줄 앞) — 엑셀·하루 어싸인표
+      { const s=base('102',4); s.order.push('신규일'); allD(s,D1); s.cells['신규일']={[D1]:'/D'}; s.trainee={'신규일':{pre:'김차지'}};
+        await A.loadTemplate(); A.recompute(); const c=await xl();
+        out.trX=[5,6,7,8].map(i=>c['D'+i]||'').find(v=>/김차지/.test(v))||'';
+        A.DAYTPL=null; const dd=await A.buildDayDoc(D1), M=A.dayLayout(dd.doc).main;
+        out.trH=M.rows.map(row=>{ const q=M.m.at(row.r,M.shifts.D.nurse); return q?q.text:''; }).find(v=>/김차지/.test(v))||'';
+        week(); out.trS=(scr('D',D1).find(r=>/김차지/.test(r[1]))||[])[1]||''; }
+      // ⑦ 대체 줄이 있는 102 — 다섯째 D 가 화면에도 '대체' 줄로
+      { const s=base('102',5); allD(s,D1); const b=await A.loadBaseTemplate('102');
+        await upload('102',b,A.setCellStr(b.sheetXml,'A9','대체')); week();
+        const rows=scr('D',D1); out.sub=[rows.length,rows[rows.length-1]]; out.sub5=A.dayInfo(D1).D.labels['D'];
+        await drop('102'); }
+      // ⑧ 122 — 화요일에만 D 여섯(월요일은 다섯) — 월~금 방 열에 여섯째 자리 이름이 있다
+      { const s=base('122',6); for(const iso of ['2026-09-07','2026-09-08']) allD(s,iso); s.cells['한막내']['2026-09-07']='OF';
+        await A.loadTemplate(); A.recompute();
+        const t=await A.loadTemplate(), L=A.findLayout122(A.sheetCells(t),A.sheetMerges(t)), r6=L.sections.find(q=>q.P==='D').row+5;
+        const c=await xl(); out.e122=[c[A.colName(L.roomColOf[1])+r6]||'',c[A.colName(L.memoCols[2])+r6]||'']; }
+      // ⑨ 주지 않을 방 카드 — 칸에 적은 자리가 그 날 없으면(4명인 날 D/E) 손 탓이 아니다 (PR #73 교차 검토)
+      { const s=base('101',4); allD(s,D1); s.cells['최씨'][D1]='D/E'; A.recompute();
+        const rm=l=>A.roomTokens(A.roomsFor('D',4,l,D1)).map(A.roomFull);
+        s.banRooms={'최씨':[...rm('A'),...rm('B'),...rm('C')]}; A.recompute(); const t=card();
+        out.ban=[/최씨 — .*주지 않을 방인데 배정됐습니다[.] 모두 피하는 배치가 없습니다/.test(t),/최씨 — [^—]*손으로 옮긴 자리입니다/.test(t)]; }
+      // ⑩ PR #74 교차 검토 — DC/CN 인 날 다른 사람에게 DC: 옛 차지의 차지 자리 표기도 걷는다
+      { const s=base('101',5); allD(s,D1); s.cells['김차지'][D1]='DC/CN'; A.recompute();
+        A.openPick('정디',D1,10,10); A.pickShift('DC'); out.dcCN=[A.dayInfo(D1).D.charge,A.store.cells['김차지'][D1]]; }
+      // 다른 사람이 DC 인 날 D/A(CN) — 표시를 따르고 카드가 알린다 (옛 파일의 'D/A' 가 말없이 차지를 가져가지 않게)
+      { const s=base('101',5); allD(s,D1); s.cells['김차지'][D1]='DC'; s.cells['박비'][D1]='D/A'; A.recompute();
+        out.taken=[A.dayInfo(D1).D.charge,/박비 — 근무표 칸의 'D[/]A': 차지 자리인데 이 날 DC 표시가 다른 사람에게 있어 표시를 따랐습니다/.test(card())];
+        A.openPick('정디',D1,10,10); A.pickShift('DC'); out.taken2=[A.dayInfo(D1).D.charge,A.store.cells['박비'][D1]]; }
+      // 82 SU 간호사의 DC 는 병동 차지와 상관없다 — 건드리지 않는다
+      { const s=base('82',3); s.order.push('바에스유'); s.unit={'바에스유':'SU'}; allD(s,D1); s.cells['바에스유'][D1]='DC'; A.recompute();
+        A.openPick('박비',D1,10,10); A.pickShift('DC'); out.su=[A.store.cells['바에스유'][D1],A.dayInfo(D1).D.charge]; }
+      // 근무가 바뀌어 효력 없는 교체(정디 OF)가 남의 칸 자리(박비 D/B)를 지우지 않는다
+      { const s=base('101',5); allD(s,D1); s.cells['정디'][D1]='OF'; s.cells['박비'][D1]='D/B'; s.ovr={[D1]:{D:{'정디':'A'}}}; A.recompute();
+        const L=A.dayInfo(D1).D.labels; out.staleOvr=Object.keys(L).find(l=>L[l]==='박비'); }
+      A.setFormId('101'); A.setWard('101'); await A.loadTemplate(); A.show('week');
+      return out; })()`, 60000);
+  eq('82 — D·E·N 모두 차지가 자리에 묶이지 않는다', v34.f82, [true, true, true]);
+  eq('82 9/6 — 김차지 차지, 화면에 /CRN', v34.s82[0], [['A', '김차지 /CRN'], ['B', '이에이']]);
+  eq('82 9/7 — 김차지가 쉬어 이에이가 차지여도 B 그대로, 빈 A 에 박비', v34.s82[1], [['A', '박비'], ['B', '이에이 /CRN']]);
+  eq('82 엑셀에는 /CRN 을 찍지 않는다 (82 종이 원본대로)', v34.x82, 0);
+  eq('82 지난 어싸인 직접 입력 — 종이의 병동 자리 A·B', v34.seed82, ['A', 'B', '없음']);
+  eq('122 지난 어싸인 직접 입력 — D 여섯째 자리(E)까지', v34.seed122, ['A', 'B', 'C', 'D', 'E', '없음']);
+  eq('옛 102 양식(D(CRN) 맨 아래) — 화면 줄 = 엑셀 줄', v34.old102[0], v34.old102[1]);
+  eq('옛 102 양식 — 차지 김차지가 D(CRN) 줄', [v34.old102[0][3], v34.old102C], [['D(CRN)', '김차지'], '김차지']);
+  eq('옛 102 양식 — 방 구성 자리 이름도 종이대로', v34.old102L, ['D(CRN)', 'A', 'B', 'C']);
+  eq('올린 101 양식(CN 이 둘째 줄) — 화면 줄 = 엑셀 줄', v34.cn101[0], v34.cn101[1]);
+  eq('올린 101 양식(CN 이 둘째 줄) — 차지 김차지가 CN 줄, 자리에 묶인다', [v34.cn101[0][1], v34.cn101C], [['CN', '김차지'], ['김차지', false]]);
+  eq('올린 101 양식(첫 줄이 그냥 A) — 화면도 A, 차지는 첫 줄', v34.a101, [['A', 'B', 'C', 'D', 'E'], true, false]);
+  eq('D 6줄 올린 101 양식 — 화면 여섯 줄, 화면 인쇄 대신 엑셀', v34.p6, [6, false]);
+  ok('내장 101 은 화면 인쇄', v34.p5);
+  ok('102 엑셀 — /CRN 은 신규 줄 앞', /^김차지 [/]CRN/.test(v34.trX) && /[/] 신규일$/.test(v34.trX), v34.trX);
+  ok('102 하루 어싸인표 — /CRN 은 신규 줄 앞', /김차지 [/]CRN/.test(v34.trH) && v34.trH.indexOf('/CRN') < v34.trH.indexOf('/ 신규일'), v34.trH);
+  ok('102 화면 — /CRN 은 신규 줄 앞', v34.trS.indexOf('/CRN') >= 0 && v34.trS.indexOf('/CRN') < v34.trS.indexOf('/ 신규일'), v34.trS);
+  eq('대체 줄이 있는 102 — 화면 D 다섯째 줄이 대체', v34.sub, [5, ['대체', v34.sub5]]);
+  ok('122 — 월~금 방 열에 D 여섯째 자리 이름(E)', /^E/.test(v34.e122[0]), v34.e122[0]);
+  eq('122 — 그 자리 방은 방 열과 같아 메모 칸이 비어 있다', v34.e122[1], '');
+  eq('주지 않을 방 카드 — 그 날 없는 자리를 적었으면 손 탓이 아니라 "모두 피하는 배치가 없습니다"', v34.ban, [true, false]);
+  eq('DC/CN 인 날 정디에게 DC — 정디가 차지, 김차지는 D(차지 자리 표기도 걷음)', v34.dcCN, ['정디', 'D']);
+  eq('다른 사람이 DC 인 날 D/A(CN) — 표시대로 김차지가 차지, 카드', v34.taken, ['김차지', true]);
+  eq('그 날 정디에게 DC — 정디가 차지, 박비의 차지 자리 표기는 걷는다', v34.taken2, ['정디', 'D']);
+  eq('82 — 병동 간호사에게 DC 를 줘도 SU 간호사의 DC 는 그대로', v34.su, ['DC', '박비']);
+  eq('효력 없는 교체(정디 OF)는 박비의 D/B 를 지우지 않는다', v34.staleOvr, 'A');
 
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');

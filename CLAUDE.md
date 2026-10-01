@@ -163,6 +163,7 @@ node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs \
   && node scripts/test_assign_logic.mjs   # standalone 로직 (헤드리스 크롬, $CHROME 로 경로 지정 가능)
 node scripts/test_assign_compat.mjs      # 옛 배포본이 저장한 데이터 파일을 지금 assign.html 로 열어 본다 (CI)
+node scripts/test_assign_live.mjs        # 병동 양식 9가지에서 배정표를 실제로 눌러 고치고 화면·엑셀·인쇄·하루 어싸인표를 본다 (CI, 약 30초)
 node scripts/test_assign_principles.mjs  # 어싸인 원칙 — 배정 엔진을 '모든 배치를 다 따져 본 정답'과 견준다 (CI, 약 20초, docs/verification.md)
 # 화면(index.html)을 재배치했다면 — 핸들러 손실 0 확인 (REMOVED 는 전부 의도한 것이어야 한다)
 python3 scripts/handler_inventory.py <(git show origin/main:frontend/index.html) frontend/index.html
@@ -570,6 +571,9 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   모두 한 칸씩 밀려 뒤가 안 이어졌다. 코어 `opts.chargeSeats`(standalone `crnFloat`·`crnSeats` = 종이 자리 전부, CRN 이 보는 방을 좁히지 말 것)로 사람만 고르고 자리는 연속성,
   누가 차지인지는 결과의 `charge` — **'차지' 자리 = 차지라고 가정하지 말 것**(화면·엑셀·`{{차지}}`·하루 어싸인표·확인 카드 모두 `charge`).
   CRN 을 바꾸는 길은 이름 클릭 창 [CRN 맡기기](근무를 DC·EC·NC 로). 종이에 CRN 자리(D(CRN))가 따로 있는 옛 양식만 묶인다(`crnSeatOf`).
+  **82 도 102 처럼 차지가 자리에 안 묶인다**(2026-10-01, 결정 2-45 — `crnFloat` = crnMark 또는 방 칸 없는 서식) — 화면·하루 어싸인표엔 /CRN, 종이(엑셀)엔 안 찍는다.
+  **누가 CRN 이든 자리는 같다** — CRN 이 차지가 아닐 때 앉았을 자리가 허락된 자리면 그 배치 그대로(원칙 검사 E12). 종이의 자리 줄 → 앱 자리(이름·순서)는
+  `paperPlan` 하나를 화면(`TPL.__labels`·`weekSlots`)·엑셀·인쇄가 같이 쓴다 — 자리 이름이나 순서를 따로 정하는 곳을 새로 만들지 말 것. /CRN 은 이름 바로 뒤, 신규 줄은 맨 끝.
   CRN 자리는 **후보 자리마다 나머지 배정(`place`)을 실제로 돌려 보고** 고른다(주지 않을 방 위반 < 모두의 연속성 < 튕기기 < 어제 자리 이름 < 보통 간호사로 돌렸을 때의 자리) —
   점수를 따로 흉내 내면 실제 배치와 어긋난다. 종이에 찍히는 자리 판단은 `paperSeat(P)` 하나(대체 줄 포함, 저장 전 초안 자리 수 `seatOv` 도 `crnSeats` 가 본다).
   **양식을 갈아 끼우면 `python3 scripts/check_form_borders.py` 를 돌릴 것** (CI 에도 있다) —
