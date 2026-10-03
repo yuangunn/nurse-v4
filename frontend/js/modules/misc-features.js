@@ -253,6 +253,9 @@ window.MiscFeaturesModule = function() {
       const eveningCodes=this.shifts.filter(s=>s.period==='evening'||s.period==='middle').map(s=>s.code);
       const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
       const dayCodes=this.shifts.filter(s=>s.period==='day'||s.period==='day1').map(s=>s.code);
+      const middleSet=new Set(this.shifts.filter(s=>s.period==='middle').map(s=>s.code));
+      const day1Set=new Set(this.shifts.filter(s=>s.period==='day1').map(s=>s.code));
+      const softTr=(this.rules||{}).rareTransitionLastResort!==false;
       for(const nurse of this.nurses){
         const nid=nurse.id;
         for(let i=0;i<days.length-1;i++){
@@ -261,8 +264,12 @@ window.MiscFeaturesModule = function() {
           if(!s1||!s2)continue;
           const d1=days[i].getDate(),dn1=dayNames[days[i].getDay()];
           const d2=days[i+1].getDate(),dn2=dayNames[days[i+1].getDay()];
-          if(eveningCodes.includes(s1)&&dayCodes.includes(s2))
-            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (E→D)`});
+          if(eveningCodes.includes(s1)&&dayCodes.includes(s2)){
+            // E→D1·중→D 는 마지막 수단(제1원칙 13) — 위반 표시가 아니라 서랍 '주의'의 파트장 확인 필요로 알린다
+            const rule=`${middleSet.has(s1)?'중':'E'}→${day1Set.has(s2)?'D1':'D'}`;
+            if(softTr&&(rule==='E→D1'||rule==='중→D'))continue;
+            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (${rule})`});
+          }
           if(nightCodes.includes(s1)&&dayCodes.includes(s2))
             v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (N→D)`});
           if(nightCodes.includes(s1)&&eveningCodes.includes(s2))

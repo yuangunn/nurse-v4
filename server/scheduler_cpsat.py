@@ -17,7 +17,8 @@ from typing import Dict
 from ortools.sat.python import cp_model
 
 from .models import GenerateRequest
-from .scheduler_base import _SchedulerBase, WEEKDAY_KEYS, timeoff_class, _OFF_TEUKGEUN_PENALTY
+from .scheduler_base import (_SchedulerBase, WEEKDAY_KEYS, timeoff_class, _OFF_TEUKGEUN_PENALTY,
+                             _RARE_TRANSITION_PENALTY)
 
 
 class _CpSatProgress:
@@ -260,7 +261,7 @@ class CpSatScheduler(_SchedulerBase):
                         x[nid][d][s] = 0
                     continue
                 for s in self.ALL_SHIFTS:
-                    if s == "OF" and self._holiday_of_banned(nurse, is_holiday):
+                    if s == "OF" and self._holiday_of_banned(nurse, is_holiday, dt):
                         x[nid][d][s] = 0
                     elif self._preg_forbids(nurse, dt, s, pre):
                         x[nid][d][s] = 0   # 임산부 모성보호 (P1 구간 외/야간 제외/생 면제)
@@ -354,6 +355,10 @@ class CpSatScheduler(_SchedulerBase):
                 b = int(round(b * float(self.relax_boosts.get(nid, 1.0))))
             for v in flex_vars:
                 keep_terms.append(b * v)
+        # 파트장 확인 마지막 수단(제1원칙 13)도 1단계에서 원티드와 맞바꾼다 (HiGHS 패리티)
+        lr = self._last_resort_terms() if keep_terms else []
+        for pen, sl in lr:
+            keep_terms.append(-pen * sl)
         # ── 2단계 사전순 솔브 (HiGHS 완화 경로와 동일 정책) ───────────────────
         # 1단계: 유지 보너스만 최대화(gap 0) → 최소 침습 수준 확정.
         # 2단계: 그 수준을 하드로 고정하고 배점을 사용자 gap으로 최적화.
@@ -384,7 +389,7 @@ class CpSatScheduler(_SchedulerBase):
                 # 지배 분모는 보너스 조합 차의 최솟값인 gcd
                 import math
                 bonus_gcd = 0
-                for b in _BONUS.values():
+                for b in (*_BONUS.values(), *(pen for pen, _ in lr)):
                     if b > 0:
                         bonus_gcd = math.gcd(bonus_gcd, b)
                 dom = coarse // max(1, bonus_gcd) + 2
@@ -490,7 +495,7 @@ class CpSatScheduler(_SchedulerBase):
                         x[nid][d][s] = 0
                     continue
                 for s in self.ALL_SHIFTS:
-                    if s == "OF" and self._holiday_of_banned(nurse, is_holiday):
+                    if s == "OF" and self._holiday_of_banned(nurse, is_holiday, dt):
                         x[nid][d][s] = 0
                         continue
                     # 임산부 모성보호 게이팅 (P1 구간 외/야간 제외/생 면제 → 0 고정)
@@ -739,18 +744,10 @@ class CpSatScheduler(_SchedulerBase):
 
     # ── 조합/네이티브 하드 제약 (HiGHS _c_* 와 1:1) — 4b ─────────────────────
     def _cs_forbidden_transitions(self, model, x):
-        """9개 물리 불가 전환 금지 (인접일 v1+v2<=1)."""
-        forbidden = [
-            (self.EVENING_SHIFTS, self.DAY_SHIFTS),
-            (self.EVENING_SHIFTS, self.DAY1_SHIFTS),
-            (self.EVENING_SHIFTS, self.MIDDLE_SHIFTS),
-            (self.NIGHT_SHIFTS,   self.EVENING_SHIFTS),
-            (self.NIGHT_SHIFTS,   self.DAY_SHIFTS),
-            (self.NIGHT_SHIFTS,   self.DAY1_SHIFTS),
-            (self.NIGHT_SHIFTS,   self.MIDDLE_SHIFTS),
-            (self.MIDDLE_SHIFTS,  self.DAY_SHIFTS),
-            (self.MIDDLE_SHIFTS,  self.DAY1_SHIFTS),
-        ]
+        """역순 전환 9종 (_transition_rules). 하드 7종은 v1+v2<=1,
+        마지막 수단 2종(E→D1·중→D, 제1원칙 13)은 Σ앞+Σ뒤-t<=1 + 감점 (HiGHS 패리티)."""
+        rules = self._transition_rules()
+        self._rare_tr_slack = []      # [(감점, 슬랙)]
         first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
@@ -761,7 +758,20 @@ class CpSatScheduler(_SchedulerBase):
                 # 사실-클램프: 두 셀 모두 확정 = 사용자 사실 (HiGHS 패리티)
                 if self._pin.get((nid, d)) and self._pin.get((nid, d + 1)):
                     continue
-                for first_group, second_group in forbidden:
+                for ri, (label, first_group, second_group, soft) in enumerate(rules):
+                    if soft:
+                        a = [x[nid][d][s] for s in first_group
+                             if not isinstance(x[nid][d][s], int) or x[nid][d][s] == 1]
+                        b = [x[nid][d + 1][s] for s in second_group
+                             if not isinstance(x[nid][d + 1][s], int) or x[nid][d + 1][s] == 1]
+                        if not a or not b:
+                            continue
+                        if all(isinstance(v, int) for v in a + b):
+                            continue  # 둘 다 사용자 고정 — 사용자 입력 존중
+                        t = model.NewBoolVar(f"rare_tr_{nid}_{d}_{ri}")
+                        model.Add(sum(a) + sum(b) - t <= 1)
+                        self._rare_tr_slack.append((_RARE_TRANSITION_PENALTY, t))
+                        continue
                     for s1 in first_group:
                         v1 = x[nid][d][s1]
                         v1_const = isinstance(v1, int)
@@ -810,16 +820,34 @@ class CpSatScheduler(_SchedulerBase):
                             model.Add(vn + vr + vd <= 2)
 
     def _cs_max_consecutive_work(self, model, x, max_days: int):
+        """최대 연속 근무 — longRunLastResort 면 한도+1 은 슬랙+감점, 한도+2 윈도우에서
+        한도+1 하드 상한 (HiGHS _c_max_consecutive_work 패리티)."""
         first_of_month = date(self.year, self.month, 1)
+        soft = self._soft_long_run()
+        cap = max_days + 1 if soft else max_days
+        self._long_run_slack = []     # [(감점, 슬랙)]
         for nurse in self.nurses:
             nid = nurse["id"]
-            for start in range(self.T - max_days):
-                if self.all_dates[start + max_days] < first_of_month:
+            for start in range(self.T - cap):
+                if self.all_dates[start + cap] < first_of_month:
                     continue  # 전월 내부 완결 윈도우 제외 (역사 소급 금지)
-                window = range(start, start + max_days + 1)
+                window = range(start, start + cap + 1)
                 if all(self._pin.get((nid, d)) for d in window):
                     continue  # 사실-클램프
-                model.Add(sum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= max_days)
+                model.Add(sum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= cap)
+            if not soft:
+                continue
+            for start in range(self.T - max_days):
+                if self.all_dates[start + max_days] < first_of_month:
+                    continue
+                window = range(start, start + max_days + 1)
+                if all(self._pin.get((nid, d)) for d in window):
+                    continue
+                if self._window_has_pinned_rest(nid, window):
+                    continue
+                sl = model.NewBoolVar(f"long_run_{nid}_{start}")
+                model.Add(sum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) - sl <= max_days)
+                self._long_run_slack.append((self._long_run_penalty(window), sl))
 
     def _cs_max_consecutive_night(self, model, x, max_nights: int):
         first_of_month = date(self.year, self.month, 1)
@@ -1240,5 +1268,9 @@ class CpSatScheduler(_SchedulerBase):
         # ── 오프특근 페널티 (제1원칙 3, HiGHS 패리티) ────────────────────────
         for sl in getattr(self, "_off_slack", []):
             terms.append(-_OFF_TEUKGEUN_PENALTY * sl)
+
+        # ── 파트장 확인 마지막 수단 (제1원칙 13, HiGHS 패리티) ──────────────────
+        for pen, sl in self._last_resort_terms():
+            terms.append(-pen * sl)
 
         return terms

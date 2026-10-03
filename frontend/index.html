@@ -488,7 +488,15 @@
           <div class="with-num"><label class="rcheck" title="지난달과 이달 야간을 더해 한도를 둡니다. 야간전담 달의 야간은 더하지 않습니다."><input type="checkbox" x-model="rules.maxNightTwoMonth"/><span class="box"></span>두 달 합산 야간</label><div class="rnum rnum-sm"><button @click="bumpRule('maxNightTwoMonthCount',-1,1,20)" title="줄입니다.">−</button><input type="number" x-model.number="rules.maxNightTwoMonthCount" min="1" max="20" title="두 달 합산 야간 한도"/><button @click="bumpRule('maxNightTwoMonthCount',1,1,20)" title="늘립니다.">+</button></div><span>회 <small style="color:var(--ink-2)">(12회부터 수면오프)</small></span></div>
           <label class="rcheck" title="여성 간호사에게 한 달 1회까지 생리휴가를 자동으로 둡니다. 자리가 없으면 넣지 않습니다."><input type="checkbox" x-model="rules.autoMenstrualLeave"/><span class="box"></span>여성 생휴 자동</label>
           <div class="with-num"><span style="font-size:var(--fs-sub)">연차(V) 월 최대</span><div class="rnum rnum-sm"><button @click="bumpRule('maxVPerMonth',-1,0,10)" title="줄입니다.">−</button><input type="number" x-model.number="rules.maxVPerMonth" min="0" max="10" title="자동 배정이 한 달에 넣을 수 있는 연차 수"/><button @click="bumpRule('maxVPerMonth',1,0,10)" title="늘립니다.">+</button></div><span>회</span></div>
-          <div class="fixed">항상 지킴 (끌 수 없음): 저녁 → 낮, 야간 → 저녁, 야간 → 낮 같은 거꾸로 가는 전환은 사이 시간이 8시간이 안 돼 금지됩니다. 차지(DC/EC/NC)는 그 근무에서 가장 선임에게만 갑니다.</div>
+          <div class="rrules-fixed">항상 지킴 (끌 수 없음): 저녁 → 낮, 야간 → 저녁, 야간 → 낮 같은 거꾸로 가는 전환은 사이 시간이 8시간이 안 돼 금지됩니다. 차지(DC/EC/NC)는 그 근무에서 가장 선임에게만 갑니다.</div>
+        </div>
+      </div>
+      <div class="rcard" data-rd="last-resort">
+        <h4>파트장 확인 하에 (마지막 수단)</h4>
+        <div class="rsec-sub">근무표가 정말 안 나올 때만 씁니다. 쓴 곳은 근무표 아래 서랍의 ‘주의’에 ‘파트장 확인 필요’로 남습니다.</div>
+        <div class="rrules">
+          <label class="rcheck" title="최대 연속 근무보다 하루 더 일하게 할 수 있습니다. 주말·공휴일이 낀 연속을 먼저 고르고, 이틀 더는 안 됩니다."><input type="checkbox" x-model="rules.longRunLastResort" :disabled="!rules.maxConsecutiveWork"/><span class="box"></span>연속 근무 하루 더</label>
+          <label class="rcheck" title="저녁 다음 날 D1(교육·상근), 중간번 다음 날 낮 근무를 허용합니다. 다른 거꾸로 가는 전환은 그대로 금지됩니다."><input type="checkbox" x-model="rules.rareTransitionLastResort"/><span class="box"></span>저녁 → D1, 중간번 → 낮</label>
         </div>
       </div>
       <div class="rcard" data-rd="hospital-holidays">
@@ -1031,6 +1039,7 @@
         <!-- 주의 -->
                   <div x-show="reportTab==='warn'" x-cloak>
             <div class="intro" x-show="!scheduleWarnings.length&&!analysisWarnings.length">규칙 한도를 넘긴 배정이 없습니다.</div>
+            <div class="intro" x-show="(scheduleWarnings||[]).some(w=>w.type==='check')"><b>파트장 확인 필요</b>는 근무표가 이렇게만 나와서 연속 근무 한도를 하루 넘기거나 E→D1·중→D 로 잡은 곳입니다. 파트장님께 확인받고 쓰세요.</div>
             <template x-for="(w,i) in (scheduleWarnings||[])" :key="'sw'+i"><div><b x-text="w.nurse"></b>: <span x-text="w.msg"></span></div></template>
             <template x-for="w in analysisWarnings" :key="'aw'+w"><div style="color:var(--ink-2)" x-text="w"></div></template>
           </div>

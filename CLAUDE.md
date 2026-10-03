@@ -54,6 +54,10 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
 12. **병원 휴일** (101병동, 매년): 5/1 근로자의 날 · 5/9 의료원 설립일 · 7/17 제헌절 · 7/21 노조 설립일.
     법정공휴일처럼 '법'으로 쉰다. 병동마다 다를 수 있어 설정 → 규칙에서 고친다.
     번표 표기: 특V = 특별휴가(특) · 경가/조가 = 경사·조사 휴가 · 공가 = 공 · 산전 = 산전검진 · OFF = OF.
+13. **연속 근무 6일·E→D1·중→D 는 파트장 확인 하의 마지막 수단** (2026-10-03). 6일 연속은 가급적
+    안 되지만 파트장 확인 하에 제한적으로 가능하고, **주말이 끼면 업무 부담이 적어** 그쪽이 낫다.
+    E→D1·중→D 는 번표가 정 안 나올 때 그렇게 근무한다. → 엔진은 하드 금지 대신 큰 감점으로 두고
+    (7일 연속·나머지 7개 역순 전환은 그대로 금지), 쓴 곳을 '파트장 확인 필요'로 알린다.
 
 > ✅ **확인 완료 (2026-08-20 사용자 답변 — 반영됨)**:
 > ⓐ 토요일 인원 → DB 시드·문서·시뮬레이터 모두 **4/3/2**로 수정.
@@ -122,7 +126,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 167건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록)
+├── tests/                   # pytest 회귀 201건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -166,10 +170,11 @@ npm start
 ### 테스트
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 175건
+python3 -m pytest -q                  # 201건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_hospital_holidays.mjs \
+  && node scripts/test_manager_check.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs \
   && node scripts/test_assign_logic.mjs   # standalone 로직 (헤드리스 크롬, $CHROME 로 경로 지정 가능)
 node scripts/test_assign_compat.mjs      # 옛 배포본이 저장한 데이터 파일을 지금 assign.html 로 열어 본다 (CI)
@@ -251,14 +256,14 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | Charge 필수 | D/E/N 요구 있는 날 DC/EC/NC 각 정확히 1명 |
 | **Charge 시니어리티** | DC/EC/NC는 해당 듀티에서 seniority 가장 낮은(선임)에게만. 더 선임이 같은 듀티 일반 근무면 후임은 Charge 불가 |
 | 근무 자격 | capable_shifts에 없는 D/E/N period 근무 불가 (D1/중은 체크 안 함) |
-| **9개 금지 전환** | E→D, E→D1, E→중, N→E, N→D, N→D1, N→중, 중→D, 중→D1 (물리적 간격 < 8h) |
+| **역순 전환 금지** | E→D, E→중, N→E, N→D, N→D1, N→중, 중→D1 (물리적 간격 < 8h). **E→D1·중→D 는 마지막 수단**(`rareTransitionLastResort`, 기본 켬) — 하드 대신 슬랙 + `-2000`, 끄면 9개 모두 하드 (제1원칙 13). 목록은 `_transition_rules()` 한 곳 |
 | N→OF→D 금지 | `noNOD` 규칙 시 Night→Off→Day 패턴 금지 |
 | **공휴일 OF 금지** | 법정공휴일에는 OF 배정 불가 (일반/완화/진단 모두 적용). **일반 간호사만** — 나이트킵은 법을 못 받아 공휴일에도 OF (제1원칙 10, `_holiday_of_banned`) |
 | 법은 공휴일에만 | 법정공휴일 코드 `법`은 공휴일 날짜에만 **자유 배정** (사전입력 확정 셀은 사실로 수용) |
 | 야간전담 공휴일 제외 | 야간전담에게 법/생/V 공휴일 배정 차단 규칙 다름 |
 | 주휴(주) | **엔진이 배정하지 않는다** — 사전입력 전용(auto_assign ✗). 일반 모드엔 강제 없음(사람이 넣은 그대로), 주휴 재배치 완화(`allow_juhu_relax`)를 켰을 때만 주당 `<=1` |
 | OF 1회/주 | 완전한 주 `Σ OF + s == 1` (`s`=오프특근 슬랙), 부분 주는 `<=1`. **상한 1회는 하드**, 1회 의무는 목적함수에서 `-1,000,000×s`로 지킨다 — 어떤 배점보다 크므로 **그러지 않으면 근무표가 성립하지 않을 때만** OF를 반납한다(제1원칙 3). 반납한 주는 결과 `off_teukgeun`으로 보고 |
-| 최대 연속 근무 | 기본 5일 (설정 가능) |
+| 최대 연속 근무 | 기본 5일 (설정 가능). **한도+1일은 마지막 수단**(`longRunLastResort`, 기본 켬) — 한도+1 윈도우에 슬랙 + `-(3000 − 500×그 안의 토·일·공휴일 수)`(최소 1500), 한도+2 윈도우로 한도+1 하드 상한(7일 연속 금지). 확정 쉬는 칸이 낀 윈도우는 슬랙을 만들지 않는다. 쓴 곳은 결과 `manager_check`('파트장 확인 필요', 확정 칸만으로 된 것은 `pinned_notes`) (제1원칙 13) |
 | 최대 연속 야간 | 기본 3일 (설정 가능) |
 | 연속야간 후 휴무 | 2연속 이상 야간 후 2일 휴무 (기본값) |
 | V 월 최대 | 기본 월 1회 (hard, unlimited_v 모드 해제 가능) |
@@ -285,6 +290,9 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 - **주말·공휴일 근무 공정 배분** (토·일 ∪ 공휴일 근무일 range 최소화 + 직전 3개월 누적 오프셋, 기본 -30; 야간전담·당월 전입/전출 제외, 임산부 포함) — 결정 1-21
 - 희망 근무 반영 (+50)
 - V 사용 페널티 (-500) — 마지막 수단
+- **파트장 확인 마지막 수단** (제1원칙 13, 배점 규칙 아님 — 상수): 연속 근무 한도+1 `-3000 + 500×주말·공휴일 수`(최소 -1500) ·
+  E→D1·중→D `-2000`. **완화 1단계(원티드 유지 최대화)에도 같은 감점을 넣는다** — 근무 원티드(500) 하나를 지키려고
+  6일 연속을 만들지 않게 (`_last_resort_terms`, HiGHS·CP-SAT 양쪽). 오프특근 슬랙은 지금처럼 1단계에 넣지 않는다
 - 생 사용 (여성) 보상 (+80)
 - 법정공휴일 휴가 보상 (+30)
 - 공휴일 근무 보상 (+20)
@@ -505,7 +513,10 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
      화면 전용이고, Ctrl+P 로 바로 찍을 때도 `beforeprint` 가 `_printPlain` 을 켠다. **어싸인용 복사만 DC/EC/NC 그대로**
      — 배정표가 그것으로 차지를 안다. 검증 `node scripts/test_charge_plain.mjs`
    - 주의(⚡) 목록은 **규칙 한도를 넘긴 것만** (연속 근무·월 야간, 나이트킵 제외) — 주말 근무 횟수 같은
-     통계는 요약 표 열로 옮겼다 (정상 표에서도 병동 절반에게 매달 뜨던 노이즈)
+     통계는 요약 표 열로 옮겼다 (정상 표에서도 병동 절반에게 매달 뜨던 노이즈).
+     **'파트장 확인 필요'가 맨 위** — 한도+1 연속(주말·공휴일 수 포함)·E→D1·중→D (`scheduleWarnings` type `check`,
+     달을 넘는 연속도 센다). 생성 결과에 `manager_check` 가 있으면 서랍이 '주의' 탭으로 열린다. 표의 위반 표시
+     (`checkScheduleViolations`)에는 넣지 않는다. 검증 `node scripts/test_manager_check.mjs`
 
 > 엑셀 붙여넣기/파일 읽기의 날짜 해석은 **멀티월**: 날짜에 월이 있으면(5/26 등) 그대로,
 > 일자만 있으면 감소 지점을 월 경계로 해석해 당월 밖 날짜에도 모두 적용된다

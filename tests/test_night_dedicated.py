@@ -223,3 +223,37 @@ def test_locked_holiday_of_warning_skips_night_keeper():
     msg = _validate_locked_conflicts(req)
     assert msg and "*간호1" in msg, msg
     assert "*시니어A" not in msg, msg
+
+
+def test_last_month_holiday_of_is_history():
+    """지난달 칸은 기록이다 — 1월에만 나이트킵이던 사람의 설날(1/28) OF 를 2월 기준
+    (일반 간호사)으로 지우지 않는다 (2026-10-03 PR #79 검토)."""
+    from server.scheduler import NurseScheduler
+    from .conftest import _mini_nurses, _mini_requirements
+
+    nurses = _mini_nurses(6)
+    nurses[0].night_months = {"2025-01": True}
+    req = GenerateRequest(
+        year=2025, month=2, nurses=nurses, requirements=_mini_requirements(1, 1, 1),
+        rules=Rules(), holidays=["2025-01-28", "2025-01-29", "2025-01-30"],
+        prev_schedule={"a0": {"2025-01-28": "OF"}},
+    )
+    s = NurseScheduler(req)
+    assert s.all_dates[0] <= date(2025, 1, 28)
+    s._build_pin_index()
+    d = s.all_dates.index(date(2025, 1, 28))
+    assert s._pin.get(("a0", d)) == "OF"
+    a0 = next(n for n in s.nurses if n["id"] == "a0")
+    assert s._holiday_of_banned(a0, True, date(2025, 1, 28)) is False
+    assert s._holiday_of_banned(a0, True, date(2025, 2, 3)) is True     # 2월엔 일반 간호사
+
+
+def test_locked_holiday_off_alias_is_warned():
+    """번표 표기 OFF 도 엔진은 OF 로 읽는다 — 잠긴 공휴일 OFF 도 경고해야 한다."""
+    from server.api import _validate_locked_conflicts
+
+    req = _holiday_of_request()
+    req.prev_schedule = {"a1": {"2026-03-02": "OFF"}}
+    req.locked_cells = {"a1": {"2026-03-02": True}}
+    msg = _validate_locked_conflicts(req)
+    assert msg and "*간호1" in msg, msg

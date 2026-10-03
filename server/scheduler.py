@@ -87,7 +87,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                     continue
                 for s in self.ALL_SHIFTS:
                     # OF는 공휴일에 배정 불가 (하드 제약) — 일반 간호사만. 야간전담은 법 대신 OF
-                    if s == "OF" and self._holiday_of_banned(nurse, is_holiday):
+                    if s == "OF" and self._holiday_of_banned(nurse, is_holiday, dt):
                         x[nid][d][s] = 0
                         continue
                     # 임산부 모성보호 게이팅 (P1 구간 외/야간 제외/생 면제 → 0 고정)
@@ -299,7 +299,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                     continue
                 for s in self.ALL_SHIFTS:
                     # OF는 공휴일에 배정 불가 (하드 제약, 완화 모드 포함) — 일반 간호사만. 야간전담은 법 대신 OF
-                    if s == "OF" and self._holiday_of_banned(nurse, is_holiday):
+                    if s == "OF" and self._holiday_of_banned(nurse, is_holiday, dt):
                         x[nid][d][s] = 0
                         continue
                     # 임산부 모성보호 게이팅 (P1 구간 외/야간 제외/생 면제 → 0 고정)
@@ -433,6 +433,11 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             # → dom 가중 단일 솔브의 '거대 계수 + 상대 갭에 의한 보존 희생' 문제를
             #   모두 제거. 1단계가 시간 내 증명 안 되면 가중 방식(gap 0)으로 폴백.
             bonus_expr = pulp.lpSum(pre_bonus_terms)
+            lr = self._last_resort_terms()
+            if lr:
+                # 파트장 확인 마지막 수단(제1원칙 13)도 1단계에서 원티드와 맞바꾼다 —
+                # 근무 원티드(500) 하나를 지키려고 6일 연속(1500~3000)을 만들지 않게.
+                bonus_expr = bonus_expr - pulp.lpSum(pen * sl for pen, sl in lr)
             prob.setObjective(bonus_expr)
             stage1 = pulp.HiGHS(timeLimit=max(30, int(self.time_limit) // 3),
                                 mip_rel_gap=0.0, msg=False)
@@ -465,7 +470,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 # 주휴3+근무8(4900)의 차는 100.
                 import math
                 bonus_gcd = 0
-                for b in (PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK, PRE_BONUS_REST):
+                for b in (PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK, PRE_BONUS_REST,
+                          *(pen for pen, _ in lr)):
                     if b > 0:
                         bonus_gcd = math.gcd(bonus_gcd, int(b))
                 dom = int(scoring_bound // max(1, bonus_gcd)) + 2

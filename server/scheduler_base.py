@@ -38,6 +38,17 @@ _JUHU_CODE = "주"                                            # 주휴(고정)
 #   다른 어떤 배점 조합보다 크므로 s=1(오프특근)은 '그러지 않으면 근무표가 성립하지
 #   않을 때'만 켜진다. 켜진 주는 결과의 off_teukgeun 리포트로 보고한다.
 _OFF_TEUKGEUN_PENALTY = 1_000_000
+# 파트장 확인 하에 쓰는 마지막 수단 — 제1원칙 13(2026-10-03 101병동 확인).
+# "연속근무 6일은 가급적 만들어지면 안 되지만 파트장 컨펌 하 제한적으로 가능 — 주말이
+#  껴 있으면 업무 로딩이 준다" · "번표가 정 안 나오면 E→D1·중→D 로도 근무한다".
+# → 하드 금지를 슬랙 + 큰 감점으로 바꾼다. 감점은 연차(V -500)·근무 원티드(500)보다 크고
+#   휴가 원티드(5000)보다 작다. 완화 1단계(원티드 유지)에도 같은 감점을 넣어, 근무 원티드
+#   하나를 지키려고 6일 연속을 만들지 않게 한다. 상한은 한도+1(7일 연속은 여전히 금지).
+#   쓴 곳은 결과의 manager_check('파트장 확인 필요')로 보고한다.
+_LONG_RUN_PENALTY = 3000          # 연속 근무 한도를 하루 넘김
+_LONG_RUN_WEEKEND_RELIEF = 500    # 그 연속 안의 토·일·공휴일 하루마다 덜 깎는다
+_LONG_RUN_MIN_PENALTY = 1500
+_RARE_TRANSITION_PENALTY = 2000   # E→D1 · 중→D
 
 def timeoff_class(code: str) -> str:
     """사전입력 코드의 보호 등급: 'leave' | 'off' | 'juhu' | 'work'.
@@ -412,19 +423,65 @@ class _SchedulerBase:
     # 진단·분석기)에 사본으로 존재하면 한쪽만 수정되는 발산 버그가 생긴다 —
     # 실제로 발산했던 로직들을 여기 단일 구현으로 모은다.
 
-    @staticmethod
-    def _holiday_of_banned(nurse: dict, is_holiday: bool) -> bool:
+    def _holiday_of_banned(self, nurse: dict, is_holiday: bool, dt: date = None) -> bool:
         """공휴일 OF 금지는 일반 간호사에게만 — 일반은 공휴일에 '법'으로 쉰다.
         야간전담(나이트킵)은 법을 받지 못하므로 공휴일에도 OF로 쉰다
         (2026-10-03 병동 확인: 실제 번표의 공휴일 OF 15건이 모두 그 달 나이트킵).
         nurse['is_night_shift'] 는 __init__ 이 생성 월 기준으로 해석해 둔 값
-        (night_months + 임산부 해제) — 모든 변수 생성 경로가 이 함수를 써야 한다."""
+        (night_months + 임산부 해제) — 모든 변수 생성 경로가 이 함수를 써야 한다.
+        지난달 칸(dt < 1일)은 기록이라 막지 않는다 — 지난달 나이트킵의 설날 OF 같은
+        사실을 이번 달 기준으로 지우면 월 경계 N→OF→D·연속 근무 검사가 흐려진다."""
+        if dt is not None and dt < date(self.year, self.month, 1):
+            return False
         return bool(is_holiday) and not nurse.get("is_night_shift")
+
+    # ── 파트장 확인 하에 쓰는 마지막 수단 (제1원칙 13) ────────────────────────
+    def _soft_long_run(self) -> bool:
+        """연속 근무 한도 +1일을 마지막 수단으로 허용하는가 (규칙 longRunLastResort)."""
+        return bool(self.rules.maxConsecutiveWork
+                    and getattr(self.rules, "longRunLastResort", True))
+
+    def _transition_rules(self) -> list:
+        """역순 전환 9종 — (라벨, 앞 근무들, 뒤 근무들, 마지막 수단 여부).
+        E→D1·중→D 는 '번표가 정 안 나오면 그렇게 근무한다'(2026-10-03) — 규칙
+        rareTransitionLastResort 가 켜져 있으면 큰 감점으로만 막는다. 나머지 7개는 하드."""
+        soft = bool(getattr(self.rules, "rareTransitionLastResort", True))
+        return [
+            ("E→D",   self.EVENING_SHIFTS, self.DAY_SHIFTS,    False),  # 22:00→06:00 = 8h
+            ("E→D1",  self.EVENING_SHIFTS, self.DAY1_SHIFTS,   soft),   # 22:00→08:30 = 10.5h
+            ("E→중",  self.EVENING_SHIFTS, self.MIDDLE_SHIFTS, False),  # 22:00→11:00 = 13h
+            ("N→E",   self.NIGHT_SHIFTS,   self.EVENING_SHIFTS, False),
+            ("N→D",   self.NIGHT_SHIFTS,   self.DAY_SHIFTS,    False),
+            ("N→D1",  self.NIGHT_SHIFTS,   self.DAY1_SHIFTS,   False),
+            ("N→중",  self.NIGHT_SHIFTS,   self.MIDDLE_SHIFTS, False),
+            ("중→D",  self.MIDDLE_SHIFTS,  self.DAY_SHIFTS,    soft),   # 19:00→06:00 = 11h
+            ("중→D1", self.MIDDLE_SHIFTS,  self.DAY1_SHIFTS,   False),  # 19:00→08:30 = 13.5h
+        ]
+
+    def _long_run_penalty(self, window) -> int:
+        """한도+1 연속 근무 감점 — 그 안의 토·일·공휴일 하루마다 덜 깎는다
+        ('주말이 껴 있으면 업무 로딩이 준다', 2026-10-03)."""
+        k = sum(1 for d in window if self._is_weekend_or_holiday(self.all_dates[d]))
+        return max(_LONG_RUN_MIN_PENALTY, _LONG_RUN_PENALTY - _LONG_RUN_WEEKEND_RELIEF * k)
+
+    def _window_has_pinned_rest(self, nid, window) -> bool:
+        """윈도우 안에 확정된 쉬는 칸이 있으면 연속 근무 제약이 저절로 지켜진다 (변수 절약)."""
+        work = set(self.WORK_SHIFTS)
+        for d in window:
+            p = self._pin.get((nid, d))
+            if p and p not in work:
+                return True
+        return False
+
+    def _last_resort_terms(self) -> list:
+        """[(감점, 슬랙 변수)] — 목적함수와 완화 1단계가 같은 목록을 쓴다."""
+        return (list(getattr(self, "_long_run_slack", []))
+                + list(getattr(self, "_rare_tr_slack", [])))
 
     def _effective_pre(self, nurse: dict, dt: date, pre: str, is_holiday: bool):
         """변수 도메인 기준의 '유효 사전입력' — 공휴일 OF 드롭(일반 간호사) + 모성보호 드롭.
         모든 변수 생성 경로와 게이팅이 이 함수를 써야 의미가 일치한다."""
-        if pre == "OF" and self._holiday_of_banned(nurse, is_holiday):
+        if pre == "OF" and self._holiday_of_banned(nurse, is_holiday, dt):
             pre = None
         return self._preg_effective_pre(nurse, dt, pre)
 
@@ -854,11 +911,17 @@ class _SchedulerBase:
 
         # 월 단위 한도(V·생)는 그 달 사전입력으로 이미 쓴 만큼 차감
         max_v = 0 if self.unlimited_v else max(0, int(getattr(self.rules, "maxVPerMonth", 0) or 0))
+        def eff_pre(nurse, d):
+            """엔진이 보는 사전입력 — 일반 간호사의 공휴일 OF·모성보호로 지워지는 칸은 빈칸."""
+            dt = self.all_dates[d]
+            dk = dt.strftime("%Y-%m-%d")
+            raw = self.prev.get(nurse["id"], {}).get(dk)
+            return (self._effective_pre(nurse, dt, raw, dk in self.holidays) if raw else None) or ""
+
         used = {}
         for nurse in self.nurses:
             nid = nurse["id"]
-            cells = [self.prev.get(nid, {}).get(self.all_dates[d].strftime("%Y-%m-%d"), "")
-                     for d in month_idxs]
+            cells = [eff_pre(nurse, d) for d in month_idxs]
             used[nid] = {"V": cells.count("V"), "생": cells.count("생")}
 
         out = []
@@ -887,13 +950,13 @@ class _SchedulerBase:
                 if not act:
                     continue
                 # 야간전담은 OF 무제한이라 이 부족을 만들지 않는다 — 수급 양쪽에서 뺀다
-                if self._night_dedicated_in(nid, self.year, self.month):
+                # (__init__ 이 해석한 당월 값 — 임신 달 해제까지 엔진과 같게)
+                if nurse.get("is_night_shift"):
                     nd_cells += len(act)
                     continue
                 n_reg += 1
                 cells += len(act)
-                pins = [self.prev.get(nid, {}).get(self.all_dates[d].strftime("%Y-%m-%d"), "")
-                        for d in act]
+                pins = [eff_pre(nurse, d) for d in act]
                 pinned_rest = sum(1 for c in pins if c in rest_codes)
                 pinned_work = sum(1 for c in pins if c and c not in rest_codes)
                 free = len(act) - pinned_rest - pinned_work
@@ -978,6 +1041,71 @@ class _SchedulerBase:
                     "week": wi + 1,
                     "start": dks[0],
                     "end": dks[-1],
+                })
+        return out
+
+    def _manager_check_report(self, schedule: dict) -> list:
+        """파트장 확인 필요 — 마지막 수단(제1원칙 13)으로 놓인 연속 근무 한도 초과·E→D1·중→D.
+
+        엔진은 그러지 않으면 근무표가 안 나올 때만 이렇게 놓는다(큰 감점). 6일 연속은
+        파트장 확인 하에 제한적으로만 쓰는 것이라 **누가 언제인지 사람이 알아야 한다**.
+        확정(사전입력) 칸만으로 된 것은 pinned_notes 가 따로 알리므로 뺀다.
+        반환: [{"kind": "run"|"transition", "nurse_id", "name", "start", "end",
+                "days"?, "weekend_days"?, "rule"?, "text"}]
+        """
+        first_of_month = date(self.year, self.month, 1)
+        name_of = {n["id"]: n.get("name", n["id"]) for n in self.nurses}
+        work = set(self.WORK_SHIFTS)
+        ev, mid = set(self.EVENING_SHIFTS), set(self.MIDDLE_SHIFTS)
+        day, day1 = set(self.DAY_SHIFTS), set(self.DAY1_SHIFTS)
+
+        def md(i):
+            dt = self.all_dates[i]
+            return f"{dt.month}/{dt.day}"
+
+        def iso(i):
+            return self.all_dates[i].strftime("%Y-%m-%d")
+
+        out = []
+        limit = self.rules.maxConsecutiveWorkDays
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            name = name_of[nid]
+            days = schedule.get(nid, {})
+            codes = [days.get(iso(i)) for i in range(self.T)]
+            if self.rules.maxConsecutiveWork:
+                run = []
+                for i, c in enumerate(codes + [None]):
+                    if c in work:
+                        run.append(i)
+                        continue
+                    if (len(run) > limit and self.all_dates[run[-1]] >= first_of_month
+                            and not all(self._pin.get((nid, d)) for d in run)):
+                        k = sum(1 for d in run if self._is_weekend_or_holiday(self.all_dates[d]))
+                        out.append({
+                            "kind": "run", "nurse_id": nid, "name": name,
+                            "start": iso(run[0]), "end": iso(run[-1]),
+                            "days": len(run), "weekend_days": k,
+                            "text": (f"{name} {md(run[0])}~{md(run[-1])} 연속 근무 {len(run)}일"
+                                     + (f" (주말·공휴일 {k}일 포함)" if k else "")),
+                        })
+                    run = []
+            for i in range(self.T - 1):
+                if self.all_dates[i + 1] < first_of_month:
+                    continue
+                c1, c2 = codes[i], codes[i + 1]
+                if c1 in ev and c2 in day1:
+                    rule = "E→D1"
+                elif c1 in mid and c2 in day:
+                    rule = "중→D"
+                else:
+                    continue
+                if self._pin.get((nid, i)) and self._pin.get((nid, i + 1)):
+                    continue
+                out.append({
+                    "kind": "transition", "nurse_id": nid, "name": name,
+                    "start": iso(i), "end": iso(i + 1), "rule": rule,
+                    "text": f"{name} {md(i)} {c1} → {md(i + 1)} {c2} ({rule})",
                 })
         return out
 
@@ -1112,6 +1240,15 @@ class _SchedulerBase:
             result["message"] += (
                 f"\n\n⚠ 오프특근 {len(rows)}건 — 휴무 공급이 모자라 OF를 반납한 주가 "
                 f"있습니다 (주휴는 유지): {shown}{more}")
+        # 파트장 확인 필요 — 마지막 수단(제1원칙 13)으로 놓인 6일 연속·E→D1·중→D
+        mc = self._manager_check_report(result.get("schedule") or {})
+        if mc:
+            result["manager_check"] = mc
+            shown = ", ".join(r["text"] for r in mc[:6])
+            more = f" 외 {len(mc) - 6}건" if len(mc) > 6 else ""
+            result["message"] += (
+                f"\n\n⚠ 파트장 확인 필요 {len(mc)}건 — 근무표가 이렇게만 나와서 연속 근무 한도를 "
+                f"하루 넘기거나 E→D1·중→D 로 잡은 곳입니다: {shown}{more}")
         # 연차(V) 자동 배정 설명 — 제1원칙 8: V 자동 대량 사용은 이유와 줄이는 길을 같이 보여야 한다
         vr = self._v_report(result.get("schedule") or {})
         if vr:

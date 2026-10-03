@@ -75,6 +75,10 @@ class Rules(BaseModel):
     avoidDN: bool = True         # D→N 회피 (soft)
     maxConsecutiveWork: bool = True
     maxConsecutiveWorkDays: int = 5
+    # 파트장 확인 하에 쓰는 마지막 수단 (제1원칙 13, 2026-10-03) — 하드 금지 대신 큰 감점.
+    # 쓴 곳은 결과 manager_check 로 '파트장 확인 필요'를 알린다.
+    longRunLastResort: bool = True          # 연속 근무 한도 +1일 (주말·공휴일이 끼면 덜 깎는다)
+    rareTransitionLastResort: bool = True   # E→D1 · 중→D (나머지 7개 전환은 그대로 금지)
     maxConsecutiveNight: bool = True
     maxConsecutiveNightDays: int = 3
     restAfterNight: bool = True

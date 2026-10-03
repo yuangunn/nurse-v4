@@ -174,7 +174,8 @@ body.rd .rnum input { width: 52px; height: var(--target); border: 0; background:
 .rrules { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; }
 .rrules .rcheck { justify-content: flex-start; width: 100%; }
 .rrules .with-num { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; height: auto; min-height: var(--target); }
-.rrules .fixed { grid-column: 1 / -1; font-size: var(--fs-sub); color: var(--ink-2); padding: 8px 12px; border-radius: 10px; background: var(--paper); }
+/* 클래스 이름이 .fixed 면 Tailwind 가 position:fixed 를 붙여 스크롤하면 문장이 위 칸들을 덮는다 (2026-10-03) */
+.rrules .rrules-fixed { grid-column: 1 / -1; font-size: var(--fs-sub); color: var(--ink-2); padding: 8px 12px; border-radius: 10px; background: var(--paper); }
 @media (max-width: 1100px) { .rrules { grid-template-columns: 1fr; } }
 
 /* 우선순위·근무 정의 표 */
