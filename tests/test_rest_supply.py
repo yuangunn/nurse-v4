@@ -115,3 +115,14 @@ def test_신호등_주휴가_첫주만_있으면_남은_주를_짚는다():
     weeks = [w["week"] for w in res["rest_shortfall"]]
     assert 1 not in weeks, f"주휴가 있는 1주차는 빠져야 한다: {weeks}"
     assert weeks, res
+
+
+def test_공휴일_자유_칸은_법으로_쉴_수_있다():
+    """주 중간 공휴일(병원 휴일 등)의 자유 칸은 일반 간호사가 '법'으로 쉰다 —
+    공급에서 빼면 거짓 부족이 난다 (2026-10-03, 병원 휴일 4개 추가 때 발견)."""
+    hol = ["2026-03-02", "2026-03-03", "2026-03-04"]
+    s = LimitedScheduler(_req(holidays=hol), max_days=7)
+    assert s.rest_supply_shortfall() == [], s.rest_supply_shortfall()
+    # 공휴일이 하루면 그만큼만 는다: 16 + 6명×1 = 22 ≥ 21
+    s1 = LimitedScheduler(_req(holidays=["2026-03-04"]), max_days=7)
+    assert s1.rest_supply_shortfall() == []

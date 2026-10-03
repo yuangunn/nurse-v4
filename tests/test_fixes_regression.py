@@ -204,5 +204,44 @@ def test_pre_bonus_grades_are_ordered_and_exposed():
     assert timeoff_class("OF") == "off" and timeoff_class("P1") == "off"
     assert timeoff_class("V") == "leave" and timeoff_class("주") == "juhu"
     assert timeoff_class("D") == "work"
+    # 병동 휴가 코드(2026-10-03)도 휴가 등급 — 완화에서 근무처럼 먼저 뒤집히면 안 된다
+    for c in ("경가", "조가", "산전"):
+        assert timeoff_class(c) == "leave", c
     # 라운드트립: 모델 → dict → 모델 에서 값 보존 (rules 저장은 key-value)
     assert Rules(**r.model_dump()).preBonusOff == 3000
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_ward_leave_codes_and_off_alias(build_request, solver):
+    """병동 번표 표기 (2026-10-03): 사전입력 'OFF' 는 OF, '특V' 는 특으로 읽고,
+    경가·조가·산전은 사전입력 그대로 지킨다 (솔버가 스스로 놓지는 않는다)."""
+    from server.models import ShiftDef
+    from server.scheduler_base import _DEFAULT_SHIFTS
+    from tests.conftest import _mini_nurses, _mini_requirements, _juhu_prev, make_limited
+
+    nurses = _mini_nurses(6)
+    req = build_request(nurses=nurses, year=2026, month=3, days=7,
+                        requirements=_mini_requirements(1, 1, 1))
+    req.shifts = [ShiftDef(code=s["code"], name=s["code"], period=s["period"],
+                           is_charge=s["is_charge"], sort_order=i,
+                           auto_assign=s.get("auto_assign", True))
+                  for i, s in enumerate(_DEFAULT_SHIFTS)]
+    prev = _juhu_prev(nurses, 2026, 3, 7)
+    prev["a1"]["2026-03-03"] = "OFF"
+    prev["a2"]["2026-03-03"] = "특V"
+    prev["a3"]["2026-03-04"] = "경가"
+    prev["a4"]["2026-03-05"] = "산전"
+    req.prev_schedule = prev
+    sched = make_limited(req, days=7, solver=solver)
+    assert sched.prev["a1"]["2026-03-03"] == "OF"
+    assert sched.prev["a2"]["2026-03-03"] == "특"
+    assert "경가" not in sched.SOLVER_SHIFTS and "산전" not in sched.SOLVER_SHIFTS
+    result = sched.solve()
+    assert result["success"], result.get("message")
+    sc = result["schedule"]
+    assert sc["a1"]["2026-03-03"] == "OF" and sc["a2"]["2026-03-03"] == "특"
+    assert sc["a3"]["2026-03-04"] == "경가" and sc["a4"]["2026-03-05"] == "산전"
+    others = [c for nid, days in sc.items() for dk, c in days.items()
+              if c in ("경가", "조가", "산전") and (nid, dk) not in
+              {("a3", "2026-03-04"), ("a4", "2026-03-05")}]
+    assert not others, f"솔버가 병동 휴가 코드를 스스로 놓았다: {others}"

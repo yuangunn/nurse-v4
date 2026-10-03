@@ -61,7 +61,9 @@ window.PasteImportModule = function() {
         ['연차','V'],['휴가','V'],['연','V'],
         ['생휴','생'],['생리','생'],
         ['병가','병'],
-        ['특별','특'],['특가','특'],
+        ['특별','특'],['특가','특'],['특v','특'],['특휴','특'],['특별휴가','특'],
+        // 병동 번표 표기 (2026-10-03, 101병동) — 경가·조가·산전은 코드 그대로도 읽힌다
+        ['경사','경가'],['경사휴가','경가'],['조사','조가'],['조사휴가','조가'],['산전검진','산전'],
         ['공휴','공'],['공가','공'],
         ['법정','법'],['법가','법'],
       ];
@@ -613,7 +615,7 @@ window.PasteImportModule = function() {
         // 휴무/휴가 계열 코드는 'OFF 희망'으로 정규화 (배점 규칙의 OFF 위시 의미)
         const cells=diff.matched_all||[];
         if(!cells.length){this.toast('인식된 위시가 없습니다','warn');return}
-        const OFF_LIKE=['OF','주','P1','V','생','특','공','법','병'];
+        const OFF_LIKE=(this.shifts||[]).filter(s=>s.period==='rest'||s.period==='leave').map(s=>s.code);
         const updated=new Set();
         for(const it of cells){
           const nurse=this.nurses.find(n=>n.id===it.nid);if(!nurse)continue;

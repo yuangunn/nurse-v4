@@ -239,7 +239,7 @@ class CpSatScheduler(_SchedulerBase):
                 x[nid][d] = {}
                 is_holiday = dt_str in self.holidays
                 pre = self.prev.get(nid, {}).get(dt_str)
-                # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
+                # 유효 사전입력 (공휴일 OF 드롭[일반 간호사] + 모성보호 드롭 — 공용 헬퍼)
                 pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 active = self._nurse_active_on(nurse, dt)
                 # 잠긴 셀 + 전월(역사) 기록은 완화에서도 하드 고정 — 전월 기록을
@@ -260,7 +260,7 @@ class CpSatScheduler(_SchedulerBase):
                         x[nid][d][s] = 0
                     continue
                 for s in self.ALL_SHIFTS:
-                    if s == "OF" and is_holiday:
+                    if s == "OF" and self._holiday_of_banned(nurse, is_holiday):
                         x[nid][d][s] = 0
                     elif self._preg_forbids(nurse, dt, s, pre):
                         x[nid][d][s] = 0   # 임산부 모성보호 (P1 구간 외/야간 제외/생 면제)
@@ -479,7 +479,7 @@ class CpSatScheduler(_SchedulerBase):
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
-                # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
+                # 유효 사전입력 (공휴일 OF 드롭[일반 간호사] + 모성보호 드롭 — 공용 헬퍼)
                 pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 # 사실-클램프: 날 전체 확정이면 문자 그대로 (HiGHS 패리티)
@@ -490,7 +490,7 @@ class CpSatScheduler(_SchedulerBase):
                         x[nid][d][s] = 0
                     continue
                 for s in self.ALL_SHIFTS:
-                    if s == "OF" and is_holiday:
+                    if s == "OF" and self._holiday_of_banned(nurse, is_holiday):
                         x[nid][d][s] = 0
                         continue
                     # 임산부 모성보호 게이팅 (P1 구간 외/야간 제외/생 면제 → 0 고정)

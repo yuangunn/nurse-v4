@@ -97,3 +97,24 @@ assert.equal(fileY('번표_2025.xlsx'), 2025);
 assert.equal(fileY('번표.xlsx'), null);
 
 console.log('test_paste_dates: 모든 검증 통과');
+
+// ── _normalizeShiftCode: 병동 번표 표기 (2026-10-03, 101병동) ──
+mod.shifts = ['DC','D','D1','EC','E','중','NC','N','OF','주','P1','V','생','특','공','법','병','경가','조가','산전']
+  .map((code) => ({ code }));
+const norm = (s) => mod._normalizeShiftCode(s);
+assert.equal(norm('OFF'), 'OF');
+assert.equal(norm('Off'), 'OF');
+assert.equal(norm('off'), 'OF');
+assert.equal(norm('v'), 'V');
+assert.equal(norm('특V'), '특');
+assert.equal(norm('특v'), '특');
+assert.equal(norm('공가'), '공');
+assert.equal(norm('경가'), '경가');
+assert.equal(norm('조가'), '조가');
+assert.equal(norm('산전'), '산전');
+assert.equal(norm('경사휴가'), '경가');
+assert.equal(norm('조사휴가'), '조가');
+assert.equal(norm('산전검진'), '산전');
+mod.shifts = mod.shifts.filter((s) => s.code !== '경가');
+assert.equal(norm('경사휴가'), undefined);   // 근무 정의에 없으면 모르는 표기
+console.log('paste-dates: 병동 표기 정규화 통과');

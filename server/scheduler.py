@@ -17,29 +17,8 @@ from .scheduler_highs_diagnosis import _HighsDiagnosisMixin
 
 
 # ── 상수 ────────────────────────────────────────────────────────────────────
-
-WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
-
-# 기본 근무 16종 (DB 없이 fallback 시 사용)
-_DEFAULT_SHIFTS = [
-    {"code": "DC", "period": "day",     "is_charge": True},
-    {"code": "D",  "period": "day",     "is_charge": False},
-    {"code": "D1", "period": "day1",    "is_charge": False},
-    {"code": "EC", "period": "evening", "is_charge": True},
-    {"code": "E",  "period": "evening", "is_charge": False},
-    {"code": "중", "period": "middle",  "is_charge": False},
-    {"code": "NC", "period": "night",   "is_charge": True},
-    {"code": "N",  "period": "night",   "is_charge": False},
-    {"code": "OF", "period": "rest",    "is_charge": False},
-    {"code": "주", "period": "rest",    "is_charge": False},
-    {"code": "V",  "period": "leave",   "is_charge": False},
-    {"code": "생", "period": "leave",   "is_charge": False},
-    {"code": "특", "period": "leave",   "is_charge": False},
-    {"code": "공", "period": "leave",   "is_charge": False},
-    {"code": "법", "period": "leave",   "is_charge": False},
-    {"code": "병", "period": "leave",   "is_charge": False},
-]
-
+# 기본 근무 목록·요일 키는 scheduler_base 한 곳에 둔다 (여기 있던 사본은 쓰이지 않았다)
+from .scheduler_base import WEEKDAY_KEYS, _DEFAULT_SHIFTS  # noqa: E402,F401 (하위호환)
 
 
 class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBase):
@@ -94,7 +73,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
-                # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
+                # 유효 사전입력 (공휴일 OF 드롭[일반 간호사] + 모성보호 드롭 — 공용 헬퍼)
                 pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 # 사실-클램프: 날 전체가 확정이면 문자 그대로 (차지 승격 여지도 불필요 —
@@ -107,8 +86,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                         x[nid][d][s] = 0
                     continue
                 for s in self.ALL_SHIFTS:
-                    # OF는 공휴일에 배정 불가 (하드 제약)
-                    if s == "OF" and is_holiday:
+                    # OF는 공휴일에 배정 불가 (하드 제약) — 일반 간호사만. 야간전담은 법 대신 OF
+                    if s == "OF" and self._holiday_of_banned(nurse, is_holiday):
                         x[nid][d][s] = 0
                         continue
                     # 임산부 모성보호 게이팅 (P1 구간 외/야간 제외/생 면제 → 0 고정)
@@ -276,7 +255,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         pre_bonus_terms = []
         # 최소 침습 차등 보너스(높을수록 보호 → 늦게 완화). 휴무는 간호사 개인의 시간이라
         # 강하게 보호: 근무 < OFF < 연차류. 주휴(주)는 기본 하드 고정(allow_juhu_relax 시에만).
-        PRE_BONUS_LEAVE = getattr(self.rules, 'preBonusLeave', 5000)   # 연차/생리/특/공/법/병
+        PRE_BONUS_LEAVE = getattr(self.rules, 'preBonusLeave', 5000)   # 연차/생리/특/공/법/병/경가/조가/산전
         PRE_BONUS_OFF   = getattr(self.rules, 'preBonusOff', 3000)     # OFF 휴식 (보호)
         PRE_BONUS_WORK  = getattr(self.rules, 'preBonusWork', 500)     # 근무 (먼저 완화)
         PRE_BONUS_REST  = getattr(self.rules, 'preBonusRest', 300)     # 주휴 — allow_juhu_relax 시
@@ -303,7 +282,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
-                # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
+                # 유효 사전입력 (공휴일 OF 드롭[일반 간호사] + 모성보호 드롭 — 공용 헬퍼)
                 pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 # 전입/전출일 범위 밖: 모든 shift 0으로 고정
                 if not self._nurse_active_on(nurse, dt):
@@ -319,8 +298,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                         x[nid][d][s] = 1 if s == pre else 0
                     continue
                 for s in self.ALL_SHIFTS:
-                    # OF는 공휴일에 배정 불가 (하드 제약, 완화 모드 포함)
-                    if s == "OF" and is_holiday:
+                    # OF는 공휴일에 배정 불가 (하드 제약, 완화 모드 포함) — 일반 간호사만. 야간전담은 법 대신 OF
+                    if s == "OF" and self._holiday_of_banned(nurse, is_holiday):
                         x[nid][d][s] = 0
                         continue
                     # 임산부 모성보호 게이팅 (P1 구간 외/야간 제외/생 면제 → 0 고정)

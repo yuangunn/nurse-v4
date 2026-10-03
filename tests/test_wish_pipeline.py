@@ -73,6 +73,21 @@ def test_build_wish_report_counts_and_unmet():
     assert a0["unmet"] == [{"date": "2026-03-04", "wish": "D", "assigned": "E"}]
 
 
+def test_wish_off_granted_by_ward_leave_codes():
+    """OFF 위시 날에 경가·조가·산전으로 쉬면 반영(휴가로 채움)으로 센다 (2026-10-03)."""
+    from server.api import _build_wish_report
+    nurses = _mini_nurses(1)
+    nurses[0].wishes = {"3": "OFF", "4": "OFF", "5": "OFF"}
+    req = GenerateRequest(year=2026, month=3, nurses=nurses,
+                          requirements=_mini_requirements(),
+                          rules=Rules(), prev_schedule={})
+    result = {"success": True, "schedule": {
+        "a0": {"2026-03-03": "경가", "2026-03-04": "조가", "2026-03-05": "산전"},
+    }}
+    wr = _build_wish_report(req, result)
+    assert wr["total_granted"] == 3 and wr["total_leave_filled"] == 3, wr
+
+
 # ── 공정성 원장 / 전월N 자동 ─────────────────────────────────────────────────
 
 def test_fairness_ledger_and_prev_month_nights(tmp_path, monkeypatch):

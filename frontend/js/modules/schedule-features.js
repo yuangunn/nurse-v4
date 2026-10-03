@@ -33,6 +33,7 @@ window.ScheduleFeaturesModule = function() {
     },
 
     // 어싸인(standalone)에 붙여넣을 수 있는 표로 복사 — 이름 + 날짜 + 근무
+    // 차지(DC/EC/NC)는 그대로 — 배정표가 이것으로 차지를 안다. plainShift/displayShift 를 거치지 말 것.
     copyScheduleTsv(){
       if(!this.schedule||!Object.keys(this.schedule).length){ this.toast('근무표가 없습니다','error'); return }
       const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
@@ -54,10 +55,8 @@ window.ScheduleFeaturesModule = function() {
       csv+='이름,그룹,'+days.map(d=>`${d.getMonth()+1}/${d.getDate()}(${dayNames[d.getDay()]})`).join(',')+',D,E,N,휴무\n';
       // 데이터
       for(const nurse of this.nurses){
-        const shifts=days.map(d=>{
-          const s=this.schedule[nurse.id]?.[this.dayKey(d)]||'';
-          return this.hideCharge?s.replace('DC','D').replace('EC','E').replace('NC','N'):s;
-        });
+        // 병동 번표처럼 차지는 표시하지 않는다 (화면의 '차지 숨기기'와 상관없이 늘 D/E/N)
+        const shifts=days.map(d=>this.plainShift(this.schedule[nurse.id]?.[this.dayKey(d)]||''));
         const dCnt=this.countShifts(nurse.id,['DC','D']);
         const eCnt=this.countShifts(nurse.id,['EC','E']);
         const nCnt=this.countShifts(nurse.id,['NC','N']);

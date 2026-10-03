@@ -9,6 +9,8 @@
 """
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from ortools.sat.python import cp_model
 
@@ -159,3 +161,65 @@ def test_regular_prev_month_nights_still_capped():
     req = _two_month_request({}, {"a0": 6})
     sched = make_limited(req, days=7, solver="highs")
     assert sched._two_month_rhs("a0") == 5
+
+
+# ── 나이트킵 공휴일 OF (2026-10-03 병동 확인) ─────────────────────────────────
+# 야간전담은 '법'을 받지 못한다 → 공휴일에도 OF로 쉰다. 공휴일 OF 금지는 일반 간호사만.
+# 실제 101병동 번표의 공휴일 OF 15건이 모두 그 달 나이트킵이었다.
+
+def test_night_keeper_in_month_resolution():
+    from server.scheduler_base import night_keeper_in_month
+    assert night_keeper_in_month({"is_night_shift": True}, 2026, 3)
+    assert not night_keeper_in_month({"is_night_shift": False}, 2026, 3)
+    # night_months 가 있으면 그 달 키가 이긴다
+    nm = {"night_months": {"2026-03": True}, "is_night_shift": False}
+    assert night_keeper_in_month(nm, 2026, 3)
+    assert not night_keeper_in_month(nm, 2026, 4)
+    # 임신 중인 달은 야간전담이 아니다
+    preg = {"night_months": {"2026-03": True}, "is_pregnant": True,
+            "pregnancy": {"early": {"start": "2026-03-10", "end": "2026-04-20"}}}
+    assert not night_keeper_in_month(preg, 2026, 3)
+
+
+def _holiday_of_request():
+    """2026-03-01(일)~07(토) 한 주. 3/2 = 삼일절 대체공휴일.
+    a0 = 그 달 나이트킵, a1 = 일반. 둘 다 3/2 에 OF 사전입력."""
+    from .conftest import _mini_nurses, _mini_requirements
+    nurses = _mini_nurses(6)
+    nurses[0].night_months = {"2026-03": True}
+    nurses[0].capable_shifts = ["N", "NC"]
+    return GenerateRequest(
+        year=2026, month=3, nurses=nurses,
+        requirements=_mini_requirements(1, 1, 1),
+        rules=Rules(),
+        holidays=["2026-03-02"],
+        prev_schedule={"a0": {"2026-03-02": "OF"}, "a1": {"2026-03-02": "OF"}},
+    )
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_night_keeper_keeps_holiday_of(solver):
+    """나이트킵의 공휴일 OF 사전입력은 그대로, 일반 간호사의 공휴일 OF 는 종전대로 드롭."""
+    from .conftest import make_limited
+
+    sched = make_limited(_holiday_of_request(), days=7, solver=solver)
+    nk = next(n for n in sched.nurses if n["id"] == "a0")
+    reg = next(n for n in sched.nurses if n["id"] == "a1")
+    assert sched._effective_pre(nk, date(2026, 3, 2), "OF", True) == "OF"
+    assert sched._effective_pre(reg, date(2026, 3, 2), "OF", True) is None
+
+    result = sched.solve()
+    assert result["success"], result.get("message")
+    assert result["schedule"]["a0"]["2026-03-02"] == "OF", result["schedule"]["a0"]
+    assert result["schedule"]["a1"]["2026-03-02"] != "OF", result["schedule"]["a1"]
+
+
+def test_locked_holiday_of_warning_skips_night_keeper():
+    """잠금 경고 — 나이트킵의 공휴일 OF 는 정상이라 경고하지 않는다."""
+    from server.api import _validate_locked_conflicts
+
+    req = _holiday_of_request()
+    req.locked_cells = {"a0": {"2026-03-02": True}, "a1": {"2026-03-02": True}}
+    msg = _validate_locked_conflicts(req)
+    assert msg and "*간호1" in msg, msg
+    assert "*시니어A" not in msg, msg

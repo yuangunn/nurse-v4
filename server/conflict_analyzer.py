@@ -604,7 +604,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                 x[nid][d] = {}
                 is_holiday = dt_str in self.holidays
                 pre = self.prev.get(nid, {}).get(dt_str)
-                # 유효 사전입력 (공휴일 OF 드롭 + 모성보호 드롭 — 공용 헬퍼)
+                # 유효 사전입력 (공휴일 OF 드롭[일반 간호사] + 모성보호 드롭 — 공용 헬퍼)
                 pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 active = self._nurse_active_on(nurse, dt)
@@ -618,7 +618,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                 for s in self.ALL_SHIFTS:
                     if not active:
                         free_ok[s] = False
-                    elif s == "OF" and is_holiday:
+                    elif s == "OF" and self._holiday_of_banned(nurse, is_holiday):
                         free_ok[s] = False
                     elif self._preg_forbids(nurse, dt, s, pre):
                         free_ok[s] = False   # 임산부 모성보호 (P1 구간 외/야간 제외/생 면제)
@@ -692,7 +692,7 @@ class _ConflictAnalyzer(CpSatScheduler):
         cost_terms = []
         SHORT_COST = 10
         # 최소 침습(minimally invasive): 사전입력 제거 비용을 보호 등급별로 차등한다.
-        # 사전입력의 '휴무'(OFF·연차·생리·특·공·법·병)는 간호사 개인의 인생 시간 → 강하게 보호.
+        # 사전입력의 '휴무'(OFF·연차·생리·특·공·법·병·경가·조가·산전)는 간호사 개인의 인생 시간 → 강하게 보호.
         # 근무(1) < 인원부족 보고(10) < 휴무 OFF(30) < 연차류(60) < 주휴(100).
         # → 근무만 싸게 완화하고, 휴무를 뺄 바엔 '인원 추가/수요 감축'을 먼저 제시한다.
         _RM_COST = {"work": 1, "off": 30, "leave": 60, "juhu": 100}

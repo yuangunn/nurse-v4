@@ -147,7 +147,7 @@ def init_db():
         except Exception:
             pass
         # 사전입력 전용 근무 코드의 auto_assign=0 보장 (기존 시드 데이터 포함)
-        pre_input_only = ("D1", "중", "주", "특", "공", "법", "병")
+        pre_input_only = ("D1", "중", "주", "특", "공", "법", "병", "경가", "조가", "산전")
         conn.execute(
             f"UPDATE shifts SET auto_assign=0 WHERE code IN ({','.join('?'*len(pre_input_only))})",
             pre_input_only
@@ -210,12 +210,28 @@ def init_db():
             "VALUES (?,?,?,?,?,?,?,?,?)",
             ("P1", "임부휴무", "rest", 0, "-", "#E3F4F4", "#2C7A7B", 16, 1),
         )
+        # 병동 휴가 코드 마이그레이션 — 경가·조가·산전 (2026-10-03, 101병동 번표 표기)
+        conn.executemany(
+            "INSERT OR IGNORE INTO shifts "
+            "(code, name, period, is_charge, hours, color_bg, color_text, sort_order, auto_assign) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            _WARD_LEAVE_SHIFTS,
+        )
 
 
 # ── 근무 시드 데이터 ─────────────────────────────────────────────────────────
 
+# 병동 휴가 코드 — 사전입력 전용 (번표에 실제로 쓰는 표기, 2026-10-03)
+#   경가 = 경사휴가 (결혼 등) · 조가 = 조사휴가 (장례) · 산전 = 산전검진 (임산부)
+_WARD_LEAVE_SHIFTS = [
+    ("경가", "경사휴가", "leave", 0, "-", "#F1ECFB", "#6D4AC0", 17, 0),
+    ("조가", "조사휴가", "leave", 0, "-", "#EDEFF3", "#4A5160", 18, 0),
+    ("산전", "산전검진", "leave", 0, "-", "#E3F4F4", "#2C7A7B", 19, 0),
+]
+
+
 def _seed_shifts(conn: sqlite3.Connection):
-    """기본 근무 16종 삽입"""
+    """기본 근무 20종 삽입"""
     # auto_assign: 1=솔버 자동배정 가능, 0=사전입력 전용
     # YGinvest 팔레트: D=블루, E=레드, N=바이올렛, V=그린, 휴무=그레이
     shifts = [
@@ -237,7 +253,7 @@ def _seed_shifts(conn: sqlite3.Connection):
         ("공", "공적업무",        "leave",   0, "-",           "#E8F5EE", "#1F8A5B", 13, 0),
         ("법", "법정공휴일",      "leave",   0, "-",           "#FDEEE5", "#C2410C", 14, 0),
         ("병", "병가",           "leave",   0, "-",           "#FEEAEA", "#C7384A", 15, 0),
-    ]
+    ] + _WARD_LEAVE_SHIFTS
     conn.executemany(
         "INSERT OR IGNORE INTO shifts "
         "(code, name, period, is_charge, hours, color_bg, color_text, sort_order, auto_assign) "
@@ -398,7 +414,7 @@ def cleanup_orphan_nurse_refs() -> int:
 
 # 위시 판정용 표준 코드 집합 (저장본 기반 파생 계산 — 솔버 클래스와 독립)
 WISH_REST_LIKE = {"OF", "주", "P1"}
-WISH_LEAVE_LIKE = {"V", "생", "특", "공", "법", "병"}
+WISH_LEAVE_LIKE = {"V", "생", "특", "공", "법", "병", "경가", "조가", "산전"}
 _WORK_CODES = {"DC", "D", "D1", "EC", "E", "중", "NC", "N"}
 _NIGHT_CODES = {"N", "NC"}
 

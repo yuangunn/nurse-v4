@@ -360,7 +360,7 @@ class _HighsDiagnosisMixin:
                 f"재적 {w['nurses']}명): 휴무 필요 {w['demand']}칸 / "
                 f"놓을 수 있는 휴무 {w['supply']}칸 — 부족 {w['shortfall']}칸")
         block.append("    ※ 솔버가 놓을 수 있는 휴무는 OF(주1)·V(월1)·생(월1·여성)뿐입니다.")
-        block.append("       주휴(주)·특·공·법·병은 사전입력 전용이라 사람이 넣어야 합니다.")
+        block.append("       주휴(주)·특·공·법·병·경가·조가·산전은 사전입력 전용이라 사람이 넣어야 합니다.")
         block.append("  → 해결: 분석 탭 '주휴 추천 배분 → 사전입력에 적용' 후 다시 생성하세요.")
         block.append("     (인원을 늘리면 오히려 악화됩니다 — 쉴 사람이 늘어납니다.)")
         if any(t in msg for t in self._REST_SHADOW_PHASES):
@@ -426,8 +426,8 @@ class _HighsDiagnosisMixin:
                             xx[nid][d][s] = 0
                         continue
                     for s in self.ALL_SHIFTS:
-                        # OF는 공휴일에 배정 불가 (하드 제약)
-                        if s == "OF" and is_holiday:
+                        # OF는 공휴일에 배정 불가 (하드 제약) — 일반 간호사만 (_holiday_of_banned)
+                        if s == "OF" and self._holiday_of_banned(nurse, is_holiday):
                             xx[nid][d][s] = 0
                             continue
                         # 임산부 게이팅 (solve() 동일)
@@ -665,7 +665,7 @@ class _HighsDiagnosisMixin:
         if not _try(p):
             lines.append("  [원인] 주휴/OF 배정과 인원 요구사항이 충돌합니다.")
             if self.holidays:
-                lines.append(f"    ※ 법정공휴일 {len(self.holidays)}일 지정됨 — 공휴일에는 OF/생/V 배정이 차단됩니다.")
+                lines.append(f"    ※ 공휴일 {len(self.holidays)}일 지정됨 — 공휴일에 일반 간호사는 OF·생·V 대신 법으로 쉽니다 (야간전담은 OF).")
             DAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
 
             # ── 원인 1: 같은 주에 OF 또는 주휴 중복 사전입력 ─────────────────

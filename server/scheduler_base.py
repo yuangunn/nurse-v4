@@ -22,9 +22,10 @@ WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 # 사전입력은 간호사 개인의 인생 일정. 완화/처방으로 '빼는' 것도 수술처럼 최소 침습이어야
 # 한다. 등급(낮을수록 먼저 완화): 근무 < (인원부족 보고) < 휴무(OFF·연차류) < 주휴.
 #   · 주휴(주)  : 법정 주휴 — 고정. 사실상 완화하지 않음(allow_juhu_relax 시에만 별도).
-#   · 휴무      : OFF + 연차/생리/특/공/법/병 — 쉼·여행·성취·결혼 등 개인의 시간 → 강하게 보호.
+#   · 휴무      : OFF + 연차/생리/특/공/법/병/경가/조가/산전 — 쉼·여행·성취·결혼 등 개인의 시간 → 강하게 보호.
 #   · 근무      : 배정 의도 — 상대적으로 유연 → 필요 시 먼저 완화.
-_LEAVE_CODES = frozenset({"V", "생", "특", "공", "법", "병"})  # 연차류 휴가
+# 경가(경사휴가)·조가(조사휴가)·산전(산전검진) = 병동 번표에 실제로 쓰는 사전입력 전용 휴가 (2026-10-03)
+_LEAVE_CODES = frozenset({"V", "생", "특", "공", "법", "병", "경가", "조가", "산전"})  # 연차류 휴가
 _OFF_CODES = frozenset({"OF", "P1"})                          # 휴식(비번) + 임부휴무(모성보호)
 _OFF_CODE = "OF"                                              # 휴식(비번)
 _JUHU_CODE = "주"                                            # 주휴(고정)
@@ -53,7 +54,55 @@ def is_protected_timeoff(code: str) -> bool:
     """주휴를 제외한 모든 휴무(OFF·P1·연차류) = 보호 대상 여부."""
     return code in _LEAVE_CODES or code in _OFF_CODES
 
-# 기본 근무 16종 (DB 없이 fallback 시 사용)
+def parse_pregnancy(nurse: dict) -> Dict[str, object]:
+    """임신 구간을 date 튜플로 파싱.
+    Returns {"early": (start,end)|None, "late": (start,end)|None}.
+    is_pregnant=False거나 값이 잘못되면 해당 구간 None."""
+    out = {"early": None, "late": None}
+    if not nurse.get("is_pregnant"):
+        return out
+    preg = nurse.get("pregnancy") or {}
+    for key in ("early", "late"):
+        w = preg.get(key) or {}
+        s, e = w.get("start"), w.get("end")
+        try:
+            sd = date.fromisoformat(s) if s else None
+            ed = date.fromisoformat(e) if e else None
+        except (ValueError, TypeError):
+            sd = ed = None
+        if sd and ed and sd <= ed:
+            out[key] = (sd, ed)
+    return out
+
+
+def preg_overlaps_month(nurse: dict, year: int, month: int) -> bool:
+    """임신 구간 [early.start, late.end] 이 그 달과 겹치는가."""
+    w = parse_pregnancy(nurse)
+    bounds = [w[k] for k in ("early", "late") if w.get(k)]
+    if not bounds:
+        return False
+    import calendar as _cal
+    m_s = date(year, month, 1)
+    m_e = date(year, month, _cal.monthrange(year, month)[1])
+    return min(b[0] for b in bounds) <= m_e and max(b[1] for b in bounds) >= m_s
+
+
+def night_keeper_in_month(nurse: dict, year: int, month: int) -> bool:
+    """그 달 야간전담(나이트킵)인가.
+    night_months 에 하나라도 있으면 그 달 키로, 비었으면 is_night_shift 폴백.
+    임신 중인 달은 야간전담이 아니다(모성보호가 이긴다).
+    엔진(__init__)과 사전검증(api)이 같은 답을 내도록 이 함수 하나를 쓴다."""
+    nm = nurse.get("night_months") or {}
+    if nm:
+        nk = bool(nm.get(f"{year}-{month:02d}", False))
+    else:
+        nk = bool(nurse.get("is_night_shift"))
+    if nk and nurse.get("is_pregnant") and preg_overlaps_month(nurse, year, month):
+        return False
+    return nk
+
+
+# 기본 근무 20종 (DB 없이 fallback 시 사용)
 _DEFAULT_SHIFTS = [
     {"code": "DC", "period": "day",     "is_charge": True},
     {"code": "D",  "period": "day",     "is_charge": False},
@@ -72,7 +121,15 @@ _DEFAULT_SHIFTS = [
     {"code": "공", "period": "leave",   "is_charge": False},
     {"code": "법", "period": "leave",   "is_charge": False},
     {"code": "병", "period": "leave",   "is_charge": False},
+    # 병동 휴가 코드 — 사전입력 전용(솔버가 놓지 않는다). auto_assign 을 꼭 적는다:
+    # 빠지면 기본값 True 가 되어 폴백 경로에서 비용 없는 휴무 코드 3개가 생긴다.
+    {"code": "경가", "period": "leave",  "is_charge": False, "auto_assign": False},
+    {"code": "조가", "period": "leave",  "is_charge": False, "auto_assign": False},
+    {"code": "산전", "period": "leave",  "is_charge": False, "auto_assign": False},
 ]
+
+# 병동 번표 표기 → 앱 코드 (붙여넣기 프론트와 같은 뜻 — 옛 저장본·API 직접 호출 대비)
+_PRE_ALIAS = {"OFF": "OF", "Off": "OF", "off": "OF", "특V": "특", "특v": "특", "공가": "공"}
 
 
 class _SchedulerBase:
@@ -123,15 +180,9 @@ class _SchedulerBase:
                         pass
                 self._trainees.append(n)
         # 월별 야간전담: night_months에 설정이 있으면 해당 월만 사용, 없으면 is_night_shift 폴백
-        month_key = f"{self.year}-{self.month:02d}"
+        # 임산부(모성보호): 해당 월에 임신 중이면 야간전담 해제 — 야간 면제와 충돌 방지
         for nurse in self.nurses:
-            nm = nurse.get("night_months", {})
-            if nm:  # night_months에 하나라도 있으면 해당 월 기준
-                nurse["is_night_shift"] = bool(nm.get(month_key, False))
-            # nm이 비어있으면 기존 is_night_shift 유지
-            # 임산부(모성보호): 해당 월에 임신 중이면 야간전담 해제 — 야간 면제와 충돌 방지
-            if nurse.get("is_pregnant") and self._preg_active_in_month(nurse):
-                nurse["is_night_shift"] = False
+            nurse["is_night_shift"] = night_keeper_in_month(nurse, self.year, self.month)
         # 임신 구간 파싱 캐시 {nid: {"early":(s,e)|None, "late":(s,e)|None}}
         self._preg = {n["id"]: self._parse_pregnancy(n) for n in self.nurses}
         # 대상 월에 임신 중인 간호사 id 집합 (생리휴가 면제·야간전담 해제 대상)
@@ -165,7 +216,7 @@ class _SchedulerBase:
         # ── 근무 정의 → 카테고리 리스트 동적 구성 ─────────────────────────────
         shifts = [s.model_dump() for s in request.shifts] if request.shifts else []
         if not shifts:
-            # fallback: 기본 16종 (DB 없이 임포트 시)
+            # fallback: 기본 20종 (DB 없이 임포트 시)
             shifts = _DEFAULT_SHIFTS
 
         self.DAY_SHIFTS     = [s["code"] for s in shifts if s["period"] == "day"]
@@ -205,7 +256,7 @@ class _SchedulerBase:
                 return s
             if s.startswith("/"):
                 return ""
-            return s
+            return _PRE_ALIAS.get(s, s)
         self.prev = {
             nid: {dt: _normalize_pre(s) for dt, s in days.items()
                   if dt in valid_dates and _normalize_pre(s)}
@@ -294,24 +345,8 @@ class _SchedulerBase:
 
     # ── 임산부(모성보호) 유틸리티 ─────────────────────────────────────────────
     def _parse_pregnancy(self, nurse: dict) -> Dict[str, object]:
-        """임신 구간을 date 튜플로 파싱.
-        Returns {"early": (start,end)|None, "late": (start,end)|None}.
-        is_pregnant=False거나 값이 잘못되면 해당 구간 None."""
-        out = {"early": None, "late": None}
-        if not nurse.get("is_pregnant"):
-            return out
-        preg = nurse.get("pregnancy") or {}
-        for key in ("early", "late"):
-            w = preg.get(key) or {}
-            s, e = w.get("start"), w.get("end")
-            try:
-                sd = date.fromisoformat(s) if s else None
-                ed = date.fromisoformat(e) if e else None
-            except (ValueError, TypeError):
-                sd = ed = None
-            if sd and ed and sd <= ed:
-                out[key] = (sd, ed)
-        return out
+        """임신 구간을 date 튜플로 파싱 — 모듈 함수 parse_pregnancy 위임."""
+        return parse_pregnancy(nurse)
 
     def _preg_window_on(self, nid: str, dt: date) -> bool:
         """dt가 P1 구간(초기/말기) 내 — P1 허용·주1회 대상."""
@@ -337,19 +372,8 @@ class _SchedulerBase:
         return span_s <= dt <= span_e
 
     def _preg_active_in_month(self, nurse: dict) -> bool:
-        """임신 구간이 대상 월과 겹치는가 — 생리휴가 면제·야간전담 해제 대상.
-        (__init__ 단계에서도 호출되므로 self._preg 대신 직접 파싱한다.)"""
-        w = self._parse_pregnancy(nurse)
-        bounds = [w[k] for k in ("early", "late") if w.get(k)]
-        if not bounds:
-            return False
-        span_s = min(b[0] for b in bounds)
-        span_e = max(b[1] for b in bounds)
-        import calendar as _cal
-        mlast = _cal.monthrange(self.year, self.month)[1]
-        m_s = date(self.year, self.month, 1)
-        m_e = date(self.year, self.month, mlast)
-        return span_s <= m_e and span_e >= m_s  # 구간 겹침
+        """임신 구간이 대상 월과 겹치는가 — 생리휴가 면제·야간전담 해제 대상."""
+        return preg_overlaps_month(nurse, self.year, self.month)
 
     def _preg_forbids(self, nurse: dict, dt: date, s: str, pre: str = None) -> bool:
         """임산부 모성보호로 (날짜 dt, shift s)를 0으로 고정해야 하면 True.
@@ -388,10 +412,19 @@ class _SchedulerBase:
     # 진단·분석기)에 사본으로 존재하면 한쪽만 수정되는 발산 버그가 생긴다 —
     # 실제로 발산했던 로직들을 여기 단일 구현으로 모은다.
 
+    @staticmethod
+    def _holiday_of_banned(nurse: dict, is_holiday: bool) -> bool:
+        """공휴일 OF 금지는 일반 간호사에게만 — 일반은 공휴일에 '법'으로 쉰다.
+        야간전담(나이트킵)은 법을 받지 못하므로 공휴일에도 OF로 쉰다
+        (2026-10-03 병동 확인: 실제 번표의 공휴일 OF 15건이 모두 그 달 나이트킵).
+        nurse['is_night_shift'] 는 __init__ 이 생성 월 기준으로 해석해 둔 값
+        (night_months + 임산부 해제) — 모든 변수 생성 경로가 이 함수를 써야 한다."""
+        return bool(is_holiday) and not nurse.get("is_night_shift")
+
     def _effective_pre(self, nurse: dict, dt: date, pre: str, is_holiday: bool):
-        """변수 도메인 기준의 '유효 사전입력' — 공휴일 OF 드롭 + 모성보호 드롭.
+        """변수 도메인 기준의 '유효 사전입력' — 공휴일 OF 드롭(일반 간호사) + 모성보호 드롭.
         모든 변수 생성 경로와 게이팅이 이 함수를 써야 의미가 일치한다."""
-        if pre == "OF" and is_holiday:
+        if pre == "OF" and self._holiday_of_banned(nurse, is_holiday):
             pre = None
         return self._preg_effective_pre(nurse, dt, pre)
 
@@ -792,7 +825,7 @@ class _SchedulerBase:
 
         일별 인원이 '정확히 일치'라 남는 인력은 **반드시 휴무 칸**에 들어가야 한다.
         그런데 솔버가 놓을 수 있는 휴무는 OF(주1)·V(월1)·생(월1·여성)·P1(임산부)뿐이고
-        주휴(주)·특·공·법·병은 사전입력 전용이다. 주휴를 안 넣으면 채울 코드가 없어
+        주휴(주)·특·공·법·병·경가·조가·산전은 사전입력 전용이다. 주휴를 안 넣으면 채울 코드가 없어
         infeasible 이 되는데, 13단계 진단에서는 마지막 상한 단계에서야 터져
         '생리휴가(생) 제약 충돌'로 오진된다. 인원이 남을수록 심해지는 것도 이 때문.
 
@@ -865,7 +898,12 @@ class _SchedulerBase:
                 pinned_work = sum(1 for c in pins if c and c not in rest_codes)
                 free = len(act) - pinned_rest - pinned_work
                 # 자유 칸에 솔버가 놓을 수 있는 휴무 (상한)
+                # 공휴일 자유 칸은 '법'으로 쉴 수 있다 (사전입력 전용이지만 공휴일엔 솔버가 놓는다,
+                # 일반 간호사) — 빼면 병원 휴일처럼 주 중간 공휴일이 낀 주에 거짓 부족이 난다
                 slots = 0
+                if "법" in self.LEAVE_SHIFTS:
+                    slots += sum(1 for d, c in zip(act, pins) if not c and
+                                 self.all_dates[d].strftime("%Y-%m-%d") in self.holidays)
                 if "OF" in self.SOLVER_SHIFTS and "OF" not in pins:
                     slots += 1
                 if "V" in self.SOLVER_SHIFTS and (self.unlimited_v or used[nid]["V"] < max_v):
