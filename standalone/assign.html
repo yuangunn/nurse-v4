@@ -1925,7 +1925,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261003d'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261003e'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -2631,7 +2631,8 @@ async function tryAutoOpen(){
 function openSidecar(entry){
   if(!adoptStore(entry.data)) return false;
   fileHandle=null; window.__memoryMode=true; window.__autoRead=true; window.__autoReadName=entry.name;
-  window.__autoEdits=false;
+  window.__autoEdits=false; window.__reattachOther=false;
+  window.__autoReadSig={rev:entry.data.rev||0,saved:entry.data.saved||''};   // 기억해 둔 핸들이 이 파일인지 대조할 표식
   try{ localStorage.setItem('assignMode','file'); }catch(e){}
   setFileLoc({kind:'sidecar',name:entry.name,dir:htmlDirPath()});
   saveMsg('⚠ 저장 연결 안 됨 — 수정하려면 [저장 연결]');
@@ -2666,6 +2667,10 @@ async function reattachHandle(h){
   let j=null;
   try{ j=parseStoreText(await (await h.getFile()).text()); }catch(e){ return false; }
   if(!j||j.app!=='assign') return false;
+  // 기억해 둔 핸들은 이름만 같고 다른 폴더(예: 처음 만든 문서 폴더)의 파일일 수 있다 — 그 파일에 이어 쓰면 HTML 옆 파일은
+  // 옛 내용으로 남아 다음에 켤 때 고친 것이 사라진 것처럼 보인다. 방금 자동으로 읽은 내용과 같을 때만 잇는다.
+  const sig=window.__autoRead&&window.__autoReadSig;
+  if(sig&&((j.rev||0)!==sig.rev||(j.saved||'')!==sig.saved)){ window.__reattachOther=true; return false; }
   const edited=!!window.__autoEdits;
   let reloaded=false;
   if((j.rev||0)>(store.rev||0)){
@@ -2684,6 +2689,39 @@ async function reattachHandle(h){
   await locateHandle(h);
   return true;
 }
+/* ── 파일 창이 어디서 열리나 (2026-10-03 사용자: "같은 폴더부터 띄워주면") ─────────────────────────
+ * 브라우저는 파일 창을 경로로 열지 못한다 — 줄 수 있는 것은 이미 쥔 파일·폴더(핸들)나 바탕 화면·문서·다운로드뿐.
+ * ① 기억해 둔 데이터 파일이 있으면 그 파일의 폴더 ② 이 HTML 이 사용자 폴더의 바탕 화면·문서·다운로드 안에 있으면 그 폴더
+ * ③ 아니면 브라우저 기본(이 창에서 지난번 연 폴더 — id 로 따로 기억 — 처음이면 문서).
+ * 그래서 윈도에서는 이 HTML 옆 경로를 복사해 두고 '파일 이름 칸에 Ctrl+V' 를 알려 준다 — 윈도 파일 창은 전체 경로를 넣으면 그리로 간다. */
+const PICK_ID='assign-data';
+function wellKnownOf(href){
+  try{
+    const segs=decodeURIComponent(new URL(href||location.href).pathname).split('/').filter(Boolean);
+    const u=segs.findIndex(x=>/^users$/i.test(x)); if(u<0) return null;
+    const MAP={'desktop':'desktop','바탕 화면':'desktop','바탕화면':'desktop','documents':'documents','문서':'documents','내 문서':'documents','downloads':'downloads','다운로드':'downloads'};
+    for(const x of segs.slice(u+2,-1)){ const k=MAP[x.toLowerCase()]; if(k) return k; }   // Users\이름\ 아래, 파일 이름 앞 (OneDrive 안도)
+  }catch(e){}
+  return null;
+}
+async function pickerOpts(base){
+  let h=null;
+  if(!window.__reattachOther){ try{ h=await idbGet('handle'); }catch(e){} }   // 다른 폴더 파일로 판명난 핸들은 시작 폴더로도 안 쓴다
+  const startIn=(h&&h.kind==='file')?h:wellKnownOf();
+  return startIn?{...base,id:PICK_ID,startIn}:{...base,id:PICK_ID};
+}
+async function pickWith(fn,base){
+  const o=await pickerOpts(base);
+  try{ return await fn(o); }
+  catch(e){                                                     // 기억한 파일의 폴더가 없어졌거나 브라우저가 startIn 을 모를 때 — 그것만 빼고 한 번 더
+    if(e.name==='AbortError'||!o.startIn) throw e;
+    const {startIn,...rest}=o; return await fn(rest); }
+}
+/* 이 HTML 옆 경로(파일 이름까지)를 복사해 둔다 — 윈도 경로일 때만(맥 파일 창은 붙여넣기로 가지 않는다). 복사했으면 true */
+async function copyPathHint(name){
+  const dir=htmlDirPath(); if(!dir||!dir.includes('\\')) return false;
+  try{ await navigator.clipboard.writeText(joinPath(dir,name)); return true; }catch(e){ return false; }
+}
 /* 첫 편집이 사용자 클릭 안에서 일어나면 그 자리에서 '허용' 창 하나로 저장 연결 — 파일 창 없이 */
 async function tryReattachOnEdit(){
   let h=null; try{ h=await idbGet('handle'); }catch(e){}
@@ -2697,10 +2735,13 @@ async function tryReattachOnEdit(){
 async function connectSave(){
   try{
     let h0=null; try{ h0=await idbGet('handle'); }catch(e){}
-    if(h0&&!window.__reattachDenied&&(!window.__autoReadName||h0.name===window.__autoReadName)&&
+    if(h0&&!window.__reattachDenied&&!window.__reattachOther&&(!window.__autoReadName||h0.name===window.__autoReadName)&&
        await reattachHandle(h0)){
       toast('저장 연결 완료 — 이제 수정하면 자동으로 저장됩니다',3200); return; }
-    const [h]=await window.showOpenFilePicker({
+    const want=window.__autoReadName||SIDE_NAME;
+    if(window.__autoRead&&await copyPathHint(want))
+      toast(`파일 창의 '파일 이름' 칸에 Ctrl+V 를 누르고 Enter — 이 화면 옆의 ${want} 가 바로 골라집니다 (경로를 복사해 두었습니다)`,15000);
+    const [h]=await pickWith(o=>window.showOpenFilePicker(o),{
       types:[{description:'어싸인 데이터',accept:{'text/javascript':['.js'],'application/json':['.json']}}]});
     if(window.__autoReadName&&h.name!==window.__autoReadName&&
        !confirm(`지금 보고 있는 건 ${window.__autoReadName} 인데 ${h.name} 을 골랐습니다.\n그대로 진행할까요?`)) return;
@@ -2711,9 +2752,13 @@ async function connectSave(){
     if(newer||(sameRev&&edited)){
       store=keep; recompute(); if(curScr==='week') renderWeek(); dirty=true; await writeStore(); }
     else if(edited) toast('파일에 더 새로운 내용이 있어 그것을 불러왔습니다 — 방금 고친 것은 다시 해주세요',5200);
-    window.__autoRead=false; window.__autoEdits=false; window.__reattachDenied=false;
+    window.__autoRead=false; window.__autoEdits=false; window.__reattachDenied=false; window.__reattachOther=false;
     toast('저장 연결 완료 — 이제 수정하면 자동으로 저장됩니다',3200);
-  }catch(e){ if(e.name!=='AbortError') toast('연결 실패: '+e.message,4000); }
+  }catch(e){
+    if(e.name==='AbortError') return;
+    // '허용' 창을 거친 뒤라 브라우저가 이번 클릭으로는 파일 창을 열어 주지 않을 때 — 한 번 더 누르면 바로 파일 창이 뜬다
+    if(e.name==='SecurityError'||e.name==='NotAllowedError') toast('[저장 연결]을 한 번 더 눌러 주세요 — 이번에는 바로 파일 창이 열립니다',6000);
+    else toast('연결 실패: '+e.message,4000); }
 }
 function renderSign(){
   const el=$('#startSign'); if(!el) return;
@@ -2753,7 +2798,9 @@ async function initStart(){
  * 만들었으면 true, 파일 창을 닫았으면 false, 실패는 던진다. */
 async function newDataFile(){
   let h;
-  try{ h=await window.showSaveFilePicker({suggestedName:SIDE_NAME,
+  if(await copyPathHint(SIDE_NAME))
+    toast(`파일 창의 '파일 이름' 칸에 Ctrl+V 를 누르고 [저장] — ${htmlFileName()} 과 같은 폴더에 만들어집니다 (경로를 복사해 두었습니다)`,15000);
+  try{ h=await pickWith(o=>window.showSaveFilePicker(o),{suggestedName:SIDE_NAME,
       types:[{description:'어싸인 데이터 (자동 열림)',accept:{'text/javascript':['.js']}},
              {description:'어싸인 데이터',accept:{'application/json':['.json']}}]}); }
   catch(e){ if(e.name==='AbortError') return false; throw e; }
@@ -2772,7 +2819,7 @@ async function newDataFile(){
 /* 이미 만든 데이터 파일 하나 고르기 — 시작 화면·마법사 첫 단계 */
 async function openDataFile(){
   let h;
-  try{ [h]=await window.showOpenFilePicker({types:[{description:'어싸인 데이터 파일',accept:{'text/javascript':['.js'],'application/json':['.json']}}]}); }
+  try{ [h]=await pickWith(o=>window.showOpenFilePicker(o),{types:[{description:'어싸인 데이터 파일',accept:{'text/javascript':['.js'],'application/json':['.json']}}]}); }
   catch(e){ if(e.name==='AbortError') return false; throw e; }
   await useHandle(h);
   return true;
@@ -5765,7 +5812,7 @@ function toggleCap(name,code){
 }
 async function pickNewLocation(){
   try{
-    const h=await window.showSaveFilePicker({suggestedName:fileHandle?fileHandle.name:SIDE_NAME,
+    const h=await pickWith(o=>window.showSaveFilePicker(o),{suggestedName:fileHandle?fileHandle.name:SIDE_NAME,
       types:[{description:'어싸인 데이터 (자동 열림)',accept:{'text/javascript':['.js']}},
              {description:'어싸인 데이터',accept:{'application/json':['.json']}}]});
     fileHandle=h; await idbSet('handle',h); await writeStore();
