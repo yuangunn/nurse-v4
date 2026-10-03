@@ -446,7 +446,7 @@ window.RedesignModule = function() {
         if(kind==='none'){ this.schedule={}; this.extendedSchedule={}; this.relaxedCells={}; this.statusMessage=''; this.statusOk=true; this._originalSchedule=null; this.showReports=false; return; }
         this.schedule=JSON.parse(JSON.stringify(fx.sched)); this.extendedSchedule={}; this.nurseScores={}; this.nurseScoreDetails={};
         this.relaxedCells={}; this.statusOk=true; this.statusMessage='근무표 생성 완료'; this.rdDoneAt=new Date(2026,8,28,14,2); this.rdSaved=true;
-        this.offTeukgeun=[]; this.vReport=null; this.wishReport=null; this.generationReport=null; this.solverLogs=[];
+        this.offTeukgeun=[]; this.managerCheck=[]; this.vReport=null; this.wishReport=null; this.generationReport=null; this.solverLogs=[];
         this.trackEdits();
         for(const [nid,dk] of fx.edited){ this.schedule[nid][dk]= this.schedule[nid][dk]==='D' ? 'E' : 'D'; }
         this.lockedCells=fx.schedLocks;

@@ -18,20 +18,12 @@ class _HighsDiagnosisMixin:
     # "몇월 며칠의 어떤 사전입력 때문인지" 사용자에게 정확히 짚어주기 위한 스캐너들.
 
     def _scan_pre_forbidden_transitions(self) -> list:
-        """사전입력만으로 발생한 9개 금지 전환을 모두 찾아 반환.
+        """사전입력만으로 발생한 금지 전환(하드인 것)을 모두 찾아 반환.
         Returns: [{'nurse', 'd1','wk1','shift1','d2','wk2','shift2','rule'}, ...]
         """
-        rules = [
-            ("E→D",   set(self.EVENING_SHIFTS), set(self.DAY_SHIFTS)),
-            ("E→D1",  set(self.EVENING_SHIFTS), set(self.DAY1_SHIFTS)),
-            ("E→중",  set(self.EVENING_SHIFTS), set(self.MIDDLE_SHIFTS)),
-            ("N→E",   set(self.NIGHT_SHIFTS),   set(self.EVENING_SHIFTS)),
-            ("N→D",   set(self.NIGHT_SHIFTS),   set(self.DAY_SHIFTS)),
-            ("N→D1",  set(self.NIGHT_SHIFTS),   set(self.DAY1_SHIFTS)),
-            ("N→중",  set(self.NIGHT_SHIFTS),   set(self.MIDDLE_SHIFTS)),
-            ("중→D",  set(self.MIDDLE_SHIFTS),  set(self.DAY_SHIFTS)),
-            ("중→D1", set(self.MIDDLE_SHIFTS),  set(self.DAY1_SHIFTS)),
-        ]
+        # 마지막 수단(E→D1·중→D, 제1원칙 13)이 켜져 있으면 그 둘은 막히지 않으므로 뺀다
+        rules = [(label, set(g1), set(g2))
+                 for label, g1, g2, soft in self._transition_rules() if not soft]
         found = []
         for nurse in self.nurses:
             nid = nurse["id"]
@@ -69,7 +61,8 @@ class _HighsDiagnosisMixin:
         """
         work_set = set(self.WORK_SHIFTS)
         night_set = set(self.NIGHT_SHIFTS)
-        max_w = self.rules.maxConsecutiveWorkDays
+        # 마지막 수단(제1원칙 13)이 켜져 있으면 한도+1 까지는 막히지 않는다
+        max_w = self.rules.maxConsecutiveWorkDays + (1 if self._soft_long_run() else 0)
         max_n = self.rules.maxConsecutiveNightDays
         work_runs, night_runs = [], []
 
@@ -427,7 +420,7 @@ class _HighsDiagnosisMixin:
                         continue
                     for s in self.ALL_SHIFTS:
                         # OF는 공휴일에 배정 불가 (하드 제약) — 일반 간호사만 (_holiday_of_banned)
-                        if s == "OF" and self._holiday_of_banned(nurse, is_holiday):
+                        if s == "OF" and self._holiday_of_banned(nurse, is_holiday, dt):
                             xx[nid][d][s] = 0
                             continue
                         # 임산부 게이팅 (solve() 동일)
@@ -623,7 +616,8 @@ class _HighsDiagnosisMixin:
             transitions = self._scan_pre_forbidden_transitions()
             if transitions:
                 lines.append(f"  [원인] 사전입력에 물리적으로 불가능한 근무 전환 — 총 {len(transitions)}건")
-                lines.append("  (간격 < 8시간 — 9개 금지 전환: E→D/D1/중, N→E/D/D1/중, 중→D/D1)")
+                hard = ", ".join(lb for lb, _g1, _g2, soft in self._transition_rules() if not soft)
+                lines.append(f"  (간격이 짧아 금지된 전환: {hard})")
                 lines.append("  문제가 된 사전입력 항목:")
                 for t in transitions[:10]:
                     lines.append(
@@ -856,10 +850,12 @@ class _HighsDiagnosisMixin:
             runs = self._scan_pre_consecutive_runs()
             wruns = runs["work_runs"]
             nruns = runs["night_runs"]
+            extra = (" — 파트장 확인 하에 하루 더까지 허용해도"
+                     if self._soft_long_run() else "")
             lines.append(
                 f"  [원인] 연속 근무/야간 제한 충돌  "
                 f"(현재 설정: 연속 근무 ≤{self.rules.maxConsecutiveWorkDays}일, "
-                f"연속 야간 ≤{self.rules.maxConsecutiveNightDays}일)"
+                f"연속 야간 ≤{self.rules.maxConsecutiveNightDays}일{extra})"
             )
             if wruns:
                 lines.append("  사전입력만으로 이미 연속 근무 한도를 초과한 구간:")

@@ -387,18 +387,9 @@ class _ConflictAnalyzer(CpSatScheduler):
             #  아니라는 사용자 원칙. 솔버에서도 같은 강제를 제거함 — 패리티)
 
     def _g_forbidden(self, model, x, gate):
-        """9개 금지 전환 전체 (가장 흔한 사전입력 충돌). per (nurse, date-pair)."""
-        forbidden = [
-            ("E→D", self.EVENING_SHIFTS, self.DAY_SHIFTS),
-            ("E→D1", self.EVENING_SHIFTS, self.DAY1_SHIFTS),
-            ("E→중", self.EVENING_SHIFTS, self.MIDDLE_SHIFTS),
-            ("N→E", self.NIGHT_SHIFTS, self.EVENING_SHIFTS),
-            ("N→D", self.NIGHT_SHIFTS, self.DAY_SHIFTS),
-            ("N→D1", self.NIGHT_SHIFTS, self.DAY1_SHIFTS),
-            ("N→중", self.NIGHT_SHIFTS, self.MIDDLE_SHIFTS),
-            ("중→D", self.MIDDLE_SHIFTS, self.DAY_SHIFTS),
-            ("중→D1", self.MIDDLE_SHIFTS, self.DAY1_SHIFTS),
-        ]
+        """역순 전환 중 하드인 것 (가장 흔한 사전입력 충돌). per (nurse, date-pair).
+        E→D1·중→D 가 마지막 수단(제1원칙 13)이면 하드가 아니므로 게이팅하지 않는다."""
+        forbidden = [(tag, g1, g2) for tag, g1, g2, soft in self._transition_rules() if not soft]
         for nurse in self.nurses:
             nid = nurse["id"]
             for d in range(self.T - 1):
@@ -483,16 +474,20 @@ class _ConflictAnalyzer(CpSatScheduler):
                             model.Add(vn + vr + vd <= 2).OnlyEnforceIf(lit)
 
     def _g_consecutive_work(self, model, x, gate):
-        """최대 연속 근무 — per nurse 1 리터럴."""
+        """최대 연속 근무 — per nurse 1 리터럴. 마지막 수단(제1원칙 13)이 켜져 있으면
+        하드 상한은 한도+1 이다."""
         max_days = self.rules.maxConsecutiveWorkDays
+        cap = max_days + 1 if self._soft_long_run() else max_days
+        tag = (f"연속근무 ≤{cap}일 (한도 {max_days}일 + 파트장 확인 하루)" if cap > max_days
+               else f"연속근무 ≤{max_days}일")
         for nurse in self.nurses:
             nid = nurse["id"]
-            if self.T <= max_days:
+            if self.T <= cap:
                 continue
-            lit = gate(f"{self._fmt_nurse_label(nurse)} 연속근무 ≤{max_days}일", nid=nid)
-            for start in range(self.T - max_days):
-                window = range(start, start + max_days + 1)
-                model.Add(sum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= max_days).OnlyEnforceIf(lit)
+            lit = gate(f"{self._fmt_nurse_label(nurse)} {tag}", nid=nid)
+            for start in range(self.T - cap):
+                window = range(start, start + cap + 1)
+                model.Add(sum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= cap).OnlyEnforceIf(lit)
 
     def _g_consecutive_night(self, model, x, gate):
         """최대 연속 야간 — per nurse 1 리터럴."""
@@ -618,7 +613,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                 for s in self.ALL_SHIFTS:
                     if not active:
                         free_ok[s] = False
-                    elif s == "OF" and self._holiday_of_banned(nurse, is_holiday):
+                    elif s == "OF" and self._holiday_of_banned(nurse, is_holiday, dt):
                         free_ok[s] = False
                     elif self._preg_forbids(nurse, dt, s, pre):
                         free_ok[s] = False   # 임산부 모성보호 (P1 구간 외/야간 제외/생 면제)

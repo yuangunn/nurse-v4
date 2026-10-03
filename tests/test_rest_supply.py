@@ -126,3 +126,27 @@ def test_공휴일_자유_칸은_법으로_쉴_수_있다():
     # 공휴일이 하루면 그만큼만 는다: 16 + 6명×1 = 22 ≥ 21
     s1 = LimitedScheduler(_req(holidays=["2026-03-04"]), max_days=7)
     assert s1.rest_supply_shortfall() == []
+
+
+def test_일반_간호사의_공휴일_OF_확정은_빈칸으로_센다():
+    """엔진은 일반 간호사의 공휴일 OF 사전입력을 지우고(그 칸은 '법'으로 쉴 수 있다) 주 1회
+    OF 도 그대로 남긴다. 수급 산술이 원본 사전입력을 보면 그 칸을 '이미 쉰 칸'으로 세어
+    OF·법 자리를 둘 다 빼서 거짓 빨강을 냈다 (2026-10-03 PR #79 검토)."""
+    prev = {"a1": {"2026-03-04": "OF"}, "a2": {"2026-03-04": "OF"}}
+    s = LimitedScheduler(_req(prev=prev, holidays=["2026-03-04"]), max_days=7)
+    assert s.rest_supply_shortfall() == [], s.rest_supply_shortfall()
+
+
+def test_임신_달의_야간전담_표시는_일반으로_센다():
+    """임신 중인 달은 야간전담이 아니다(엔진 __init__). 수급 산술이 night_months 만 보면
+    그 사람을 수급에서 빼 거짓 빨강을 냈다 (2026-10-03 PR #79 검토)."""
+    req = _req(prev=_juhu_prev(_mini_nurses(6), YEAR, MONTH, 7))
+    req.nurses[1].night_months = {"2026-03": True}
+    req.nurses[1].is_pregnant = True
+    req.nurses[1].pregnancy = {"early": {"start": "2026-02-01", "end": "2026-04-30"},
+                               "late": {"start": "2026-08-01", "end": "2026-09-30"}}
+    s = LimitedScheduler(req, max_days=7)
+    a1 = next(n for n in s.nurses if n["id"] == "a1")
+    assert a1["is_night_shift"] is False
+    base = LimitedScheduler(_req(prev=_juhu_prev(_mini_nurses(6), YEAR, MONTH, 7)), max_days=7)
+    assert s.rest_supply_shortfall() == base.rest_supply_shortfall(), s.rest_supply_shortfall()

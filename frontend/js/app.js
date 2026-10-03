@@ -22,6 +22,8 @@ function app() {
     rules: {
       weeklyOff:true, noNOD:true, avoidDN:true,
       maxConsecutiveWork:true, maxConsecutiveWorkDays:5,
+      // 파트장 확인 하에 쓰는 마지막 수단 (제1원칙 13) — 연속 근무 한도+1 · E→D1 · 중→D
+      longRunLastResort:true, rareTransitionLastResort:true,
       maxConsecutiveNight:true, maxConsecutiveNightDays:3,
       restAfterNight:true, restAfterNightDays:2, restAfterNightMinConsec:2,
       maxNightPerMonth:true, maxNightPerMonthCount:6,
@@ -38,6 +40,7 @@ function app() {
     stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, juhuBlockLock:true, unlimitedV:false, relaxedCells:{},
     generationReport:null, showGenReport:false, wishReport:null, showWishReport:false,
     offTeukgeun:[], showOffTeukgeun:false,   // 오프특근(휴무 부족으로 OF 반납) 발생 목록
+    managerCheck:[],   // 파트장 확인 필요 — 마지막 수단(6일 연속·E→D1·중→D)으로 놓인 곳 (서버 manager_check)
     relaxBoosts:{},   // 완화 이력 보정 배수 {nid: ×} — 지난달 원티드가 뒤집힌 사람 (서버 산출)
     fairnessOffsets:null, weekendOffsets:null, showFairness:false,   // ⚖ 공정성 — 이번 생성에 주입된 원장 오프셋(서버 산출, M6 P3②). 요약 표에 흡수됨
     showGenAdvanced:false,   // ⚙ 고급 생성 옵션 패널 (오차·시간·솔버·주휴 무시·완화 설정·배점 조절) — M7-B
@@ -260,35 +263,58 @@ function app() {
     get scheduleWarnings(){
       if(!this.schedule||!Object.keys(this.schedule).length)return[];
       const warns=[];
-      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
+      const allDays=this.scheduleDays;   // 앞뒤 달 칸까지 센다 — 달을 넘는 연속도 엔진과 같게 (manager_check)
+      const firstKey=`${this.year}-${String(this.month).padStart(2,'0')}-01`;
+      const byPeriod=p=>new Set(this.shifts.filter(s=>s.period===p).map(s=>s.code));
       const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
       const workCodes=this.shifts.filter(s=>['day','day1','evening','middle','night'].includes(s.period)).map(s=>s.code);
-      const dayNames=['일','월','화','수','목','금','토'];
+      const evening=byPeriod('evening'),middle=byPeriod('middle'),dayD=byPeriod('day'),day1=byPeriod('day1');
+      const r=this.rules||{};
+      const holSet=new Set(this.holidays||[]);
+      const md=d=>`${d.getMonth()+1}/${d.getDate()}`;
+      // 연속 근무 한도 — 한도+1 은 '파트장 확인 필요'(마지막 수단, 제1원칙 13), 그 위는 손으로 고친 뒤에만 생긴다
+      const consecLimit=(r.maxConsecutiveWork&&r.maxConsecutiveWorkDays)||5;
+      const softRun=!!r.maxConsecutiveWork&&r.longRunLastResort!==false;
 
       for(const nurse of this.nurses){
         const nid=nurse.id;
-        // 연속 근무 체크
-        let consec=0,maxConsec=0;
-        for(const day of days){
-          const val=this.schedule[nid]?.[this.dayKey(day)];
-          if(val&&workCodes.includes(val)){consec++;maxConsec=Math.max(maxConsec,consec)}
-          else consec=0;
+        const sched=this.schedule[nid]||{};
+        let run=[];
+        const flush=()=>{
+          if(run.length>consecLimit&&this.dayKey(run[run.length-1])>=firstKey){
+            const k=run.filter(d=>d.getDay()===0||d.getDay()===6||holSet.has(this.dayKey(d))).length;
+            const span=`${md(run[0])}~${md(run[run.length-1])}`;
+            if(softRun&&run.length===consecLimit+1)
+              warns.push({type:'check',nurse:nurse.name,msg:`${span} 연속 ${run.length}일 근무${k?` (주말·공휴일 ${k}일 포함)`:''} — 파트장 확인 필요`});
+            else warns.push({type:'warn',nurse:nurse.name,msg:`${span} 연속 ${run.length}일 근무 (한도 ${consecLimit}일)`});
+          }
+          run=[];
+        };
+        for(const day of allDays){
+          const val=sched[this.dayKey(day)];
+          if(val&&workCodes.includes(val))run.push(day);else flush();
         }
-        // 연속 근무 — 규칙 한도를 넘긴 것만 (엔진 결과엔 없고, 손으로 고친 뒤에 생긴다) M7-C
-        const consecLimit=(this.rules.maxConsecutiveWork&&this.rules.maxConsecutiveWorkDays)||5;
-        if(maxConsec>consecLimit)warns.push({type:'warn',nurse:nurse.name,msg:`연속 ${maxConsec}일 근무 (한도 ${consecLimit}일)`});
+        flush();
+        // E→D1 · 중→D — 번표가 정 안 나올 때만 쓰는 전환 (파트장 확인)
+        for(let i=0;i+1<allDays.length;i++){
+          const k2=this.dayKey(allDays[i+1]);if(k2<firstKey)continue;
+          const c1=sched[this.dayKey(allDays[i])],c2=sched[k2];
+          const rule=evening.has(c1)&&day1.has(c2)?'E→D1':(middle.has(c1)&&dayD.has(c2)?'중→D':null);
+          if(rule)warns.push({type:'check',nurse:nurse.name,msg:`${md(allDays[i])} ${c1} → ${md(allDays[i+1])} ${c2} (${rule}) — 파트장 확인 필요`});
+        }
 
         // 야간 — 월 한도를 넘긴 것만. 야간전담(나이트킵) 달은 14회가 정상이라 제외
         const mk=`${this.year}-${String(this.month).padStart(2,'0')}`;
         const nm=nurse.night_months||{};
         const nightKeep=Object.keys(nm).length?!!nm[mk]:!!nurse.is_night_shift;
-        const nCount=Object.values(this.schedule[nid]||{}).filter(v=>nightCodes.includes(v)).length;
-        const nightLimit=(this.rules.maxNightPerMonth&&this.rules.maxNightPerMonthCount)||7;
+        const nCount=Object.values(sched).filter(v=>nightCodes.includes(v)).length;
+        const nightLimit=(r.maxNightPerMonth&&r.maxNightPerMonthCount)||7;
         if(!nightKeep&&nCount>nightLimit)warns.push({type:'warn',nurse:nurse.name,msg:`야간 ${nCount}회 (월 한도 ${nightLimit}회)`});
         // 주말 근무 횟수 경고는 뺐다 — 정상 근무표에서도 병동 절반에게 매달 뜨던 통계라
         // 요약 표의 '주말·공휴일' 열과 누적 합(편차 색)으로 옮겼다 (M7-C)
       }
-      return warns;
+      // 파트장 확인 항목을 위로
+      return warns.filter(w=>w.type==='check').concat(warns.filter(w=>w.type!=='check'));
     },
     get fairnessData(){
       if(!this.schedule||!Object.keys(this.schedule).length)return null;
@@ -583,16 +609,16 @@ function app() {
           this._recoverPoll=setInterval(async()=>{
             const pollRef=this._recoverPoll;
             try{const r=await this.api('GET','/api/generate/result');
-              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];this.vReport=result.v_report||null;this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':(this.vReport&&this.vReport.total?'v':'summary');this.rdDoneAt=new Date();this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
+              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];this.managerCheck=result.manager_check||[];this.vReport=result.v_report||null;this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.managerCheck||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':((this.managerCheck||[]).length?'warn':(this.vReport&&this.vReport.total?'v':'summary'));this.rdDoneAt=new Date();this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
             }catch(e){}
           },2000);
         }else if(res.status==='done'&&res.result){
           const result=res.result;this.statusOk=result.success;this.statusMessage=result.message+'\n(이전 생성 결과 복원됨)';
           this.generationReport=result.generation_report||null;
           this.wishReport=result.wish_report||null;
-          this.offTeukgeun=result.off_teukgeun||[];this.vReport=result.v_report||null;
+          this.offTeukgeun=result.off_teukgeun||[];this.managerCheck=result.manager_check||[];this.vReport=result.v_report||null;
           this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;
-          if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':(this.vReport&&this.vReport.total?'v':'summary');this.rdDoneAt=new Date();this.rdSaved=true;this.trackEdits();this.activeTab='schedule'}
+          if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.managerCheck||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':((this.managerCheck||[]).length?'warn':(this.vReport&&this.vReport.total?'v':'summary'));this.rdDoneAt=new Date();this.rdSaved=true;this.trackEdits();this.activeTab='schedule'}
         }
       }catch(e){}
     },

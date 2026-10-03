@@ -8,7 +8,7 @@ from datetime import date
 
 import pulp
 
-from .scheduler_base import WEEKDAY_KEYS, _OFF_TEUKGEUN_PENALTY
+from .scheduler_base import WEEKDAY_KEYS, _OFF_TEUKGEUN_PENALTY, _RARE_TRANSITION_PENALTY
 
 
 class _HighsConstraintsMixin:
@@ -202,21 +202,12 @@ class _HighsConstraintsMixin:
 
     def _c_forbidden_transitions(self, prob, x):
         """
-        물리적으로 불가능한 근무 전환 - 항상 금지 (토글 없음)
-        E→D, N→E, N→D
-        a + b <= 1  (두 변수 동시에 1이 될 수 없음)
+        물리적으로 불가능한 근무 전환 (_transition_rules 9종)
+        하드 7종: a + b <= 1  (두 변수 동시에 1이 될 수 없음)
+        마지막 수단 2종(E→D1·중→D, 제1원칙 13): Σ앞 + Σ뒤 - t <= 1, t 는 큰 감점 슬랙
         """
-        forbidden = [
-            (self.EVENING_SHIFTS, self.DAY_SHIFTS),     # E→D 금지 (22:00→06:00 = 8h)
-            (self.EVENING_SHIFTS, self.DAY1_SHIFTS),     # E→D1 금지
-            (self.EVENING_SHIFTS, self.MIDDLE_SHIFTS),   # E→중 금지 (22:00→11:00 = 13h)
-            (self.NIGHT_SHIFTS,   self.EVENING_SHIFTS),  # N→E 금지
-            (self.NIGHT_SHIFTS,   self.DAY_SHIFTS),      # N→D 금지
-            (self.NIGHT_SHIFTS,   self.DAY1_SHIFTS),     # N→D1 금지
-            (self.NIGHT_SHIFTS,   self.MIDDLE_SHIFTS),   # N→중 금지
-            (self.MIDDLE_SHIFTS,  self.DAY_SHIFTS),      # 중→D 금지 (19:00→06:00 = 11h)
-            (self.MIDDLE_SHIFTS,  self.DAY1_SHIFTS),     # 중→D1 금지 (19:00→08:30 = 13.5h)
-        ]
+        rules = self._transition_rules()
+        self._rare_tr_slack = []      # [(감점, 슬랙)] — 목적함수·완화 1단계에서 깎는다
         first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
@@ -228,7 +219,24 @@ class _HighsConstraintsMixin:
                 # 사실-클램프: 두 셀 모두 확정 = 사용자 사실 — 검증하지 않음
                 if self._pin.get((nid, d)) and self._pin.get((nid, d + 1)):
                     continue
-                for first_group, second_group in forbidden:
+                for ri, (label, first_group, second_group, soft) in enumerate(rules):
+                    if soft:
+                        # 상수 0은 빼고, 상수 1(잠금 고정)은 식에 남긴다
+                        a = [x[nid][d][s] for s in first_group
+                             if isinstance(x[nid][d][s], pulp.LpVariable) or x[nid][d][s] == 1]
+                        b = [x[nid][d + 1][s] for s in second_group
+                             if isinstance(x[nid][d + 1][s], pulp.LpVariable) or x[nid][d + 1][s] == 1]
+                        if not a or not b:
+                            continue
+                        if not any(isinstance(v, pulp.LpVariable) for v in a + b):
+                            continue  # 둘 다 사용자 고정 — 사용자 입력 존중
+                        t = pulp.LpVariable(f"rare_tr_{nid}_{d}_{ri}", cat="Binary")
+                        prob += (
+                            pulp.lpSum(a) + pulp.lpSum(b) - t <= 1,
+                            f"rare_tr_{nid}_{d}_{ri}"
+                        )
+                        self._rare_tr_slack.append((_RARE_TRANSITION_PENALTY, t))
+                        continue
                     for s1 in first_group:
                         v1 = x[nid][d][s1]
                         v1_const = not isinstance(v1, pulp.LpVariable)
@@ -358,20 +366,43 @@ class _HighsConstraintsMixin:
                     prob += pulp.lpSum(p1_vars) <= bound, f"preg_p1_{nid}_{ws}"
 
     def _c_max_consecutive_work(self, prob, x, max_days: int):
-        """최대 연속 근무일 제한 (전월 내부 완결 윈도우는 제외 — 역사 소급 금지)"""
+        """최대 연속 근무일 제한 (전월 내부 완결 윈도우는 제외 — 역사 소급 금지).
+
+        longRunLastResort(제1원칙 13)가 켜져 있으면 한도+1일까지는 슬랙 + 큰 감점
+        (주말·공휴일이 끼면 덜 깎는다), 한도+2일 윈도우에서 한도+1을 하드 상한으로 건다."""
         first_of_month = date(self.year, self.month, 1)
+        soft = self._soft_long_run()
+        cap = max_days + 1 if soft else max_days
+        self._long_run_slack = []     # [(감점, 슬랙)] — 목적함수·완화 1단계에서 깎는다
         for nurse in self.nurses:
             nid = nurse["id"]
+            for start in range(self.T - cap):
+                if self.all_dates[start + cap] < first_of_month:
+                    continue
+                window = range(start, start + cap + 1)
+                if all(self._pin.get((nid, d)) for d in window):
+                    continue  # 사실-클램프: 윈도우 전체 확정 = 사용자 사실
+                prob += (
+                    pulp.lpSum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= cap,
+                    f"consec_work_{nid}_{start}"
+                )
+            if not soft:
+                continue
+            # 한도를 하루 넘김 = 마지막 수단 (파트장 확인 필요)
             for start in range(self.T - max_days):
                 if self.all_dates[start + max_days] < first_of_month:
                     continue
                 window = range(start, start + max_days + 1)
                 if all(self._pin.get((nid, d)) for d in window):
-                    continue  # 사실-클램프: 윈도우 전체 확정 = 사용자 사실
+                    continue
+                if self._window_has_pinned_rest(nid, window):
+                    continue  # 확정된 쉬는 날이 끼어 있으면 저절로 지켜진다
+                sl = pulp.LpVariable(f"long_run_{nid}_{start}", cat="Binary")
                 prob += (
-                    pulp.lpSum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= max_days,
-                    f"consec_work_{nid}_{start}"
+                    pulp.lpSum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) - sl <= max_days,
+                    f"consec_work_soft_{nid}_{start}"
                 )
+                self._long_run_slack.append((self._long_run_penalty(window), sl))
 
     def _c_max_consecutive_night(self, prob, x, max_nights: int):
         """최대 연속 야간 근무 제한 (전월 내부 완결 윈도우는 제외)"""
@@ -908,5 +939,10 @@ class _HighsConstraintsMixin:
         # 것은 '그러지 않으면 근무표가 성립하지 않을 때'뿐이다.
         for sl in getattr(self, "_off_slack", []):
             terms.append(-_OFF_TEUKGEUN_PENALTY * sl)
+
+        # ── 파트장 확인 마지막 수단 (제1원칙 13) ───────────────────────────
+        # 연속 근무 한도+1 · E→D1 · 중→D — 그러지 않으면 근무표가 안 나올 때만 쓴다.
+        for pen, sl in self._last_resort_terms():
+            terms.append(-pen * sl)
 
         return pulp.lpSum(terms)

@@ -1313,8 +1313,9 @@ def _validate_locked_conflicts(request: GenerateRequest) -> Optional[str]:
     """잠긴 셀의 사전입력이 규칙에 의해 무효화(드롭)되는 충돌 검출.
     '잠금은 완화에서도 고정'이 약속이지만, 공휴일 OF 금지 같은 규칙이 사전입력
     자체를 드롭하면 잠금이 적용될 수 없다 — 조용히 무시하지 말고 경고한다."""
-    from .scheduler_base import night_keeper_in_month
+    from .scheduler_base import night_keeper_in_month, _PRE_ALIAS
     locked = request.locked_cells or {}
+    first_key = f"{request.year:04d}-{request.month:02d}-01"   # 지난달 칸은 기록이라 지우지 않는다
     prev = request.prev_schedule or {}
     holidays = set(request.holidays or [])
     name_by_id = {n.id: n.name for n in request.nurses}
@@ -1328,7 +1329,10 @@ def _validate_locked_conflicts(request: GenerateRequest) -> Optional[str]:
         for dt_str, flag in (cells or {}).items():
             if not flag:
                 continue
+            if dt_str < first_key:
+                continue
             pre = (prev.get(nid) or {}).get(dt_str)
+            pre = _PRE_ALIAS.get(pre, pre)          # 번표 표기 OFF → OF (엔진과 같게)
             if pre == "OF" and dt_str in holidays:
                 bad.append(f"  · {name_by_id.get(nid, nid)} {dt_str}: 공휴일 OF 잠금")
     if not bad:
@@ -1343,6 +1347,7 @@ def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts
     요구사항을 충족할 수 있는지 사전 검증.
     부족한 날이 있으면 경고 메시지 반환, 없으면 None.
     """
+    from .scheduler_base import _PRE_ALIAS   # 번표 표기 OFF·특V·공가 → 엔진 코드
     weekday_keys = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
     year, month = request.year, request.month
     first = _date(year, month, 1)
@@ -1365,7 +1370,8 @@ def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts
 
         unavailable = sum(
             1 for nurse in request.nurses
-            if prev.get(nurse.id, {}).get(dt_str, "") in off_shifts
+            if _PRE_ALIAS.get(prev.get(nurse.id, {}).get(dt_str, ""),
+                              prev.get(nurse.id, {}).get(dt_str, "")) in off_shifts
         )
         available = len(request.nurses) - unavailable
 
