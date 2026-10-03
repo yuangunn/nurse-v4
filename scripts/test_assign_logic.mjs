@@ -2502,6 +2502,76 @@ async function main() {
   ok('다른 폴더에 만든 assign-data.js — 바로 뜬다고 하지 않고 HTML 옆으로 옮기라고', !/다음부터는 켜면 바로/.test(v35.딴곳새파일) && /assign\.html 파일이 있는 폴더로 옮겨/.test(v35.딴곳새파일) && !/이름은/.test(v35.딴곳새파일), v35.딴곳새파일);
   ok('다른 폴더·다른 이름 — 옮기기에 이름까지', /폴더로 옮겨/.test(v35.딴곳딴이름) && /이름은 assign-data\.js/.test(v35.딴곳딴이름), v35.딴곳딴이름);
 
+  // ── 36. 파일 창이 어디서 열리나 (2026-10-03 사용자: "문서에서 시작한다 — 같은 폴더부터") ─────────────────────
+  // 브라우저는 파일 창을 경로로 열지 못한다: 기억한 파일의 폴더 > HTML 이 든 바탕 화면·문서·다운로드 > 브라우저 기본.
+  // 윈도 경로면 HTML 옆 경로를 복사해 두고 '파일 이름 칸에 Ctrl+V' 를 알린다. 실제 파일 창은 못 띄우므로 옵션을 받아 본다.
+  const v36 = await ev(`return (async()=>{ const A=window.__app; const keepStore=JSON.parse(JSON.stringify(A.store));
+    const wait=ms=>new Promise(r=>setTimeout(r,ms)), toastTxt=()=>document.querySelector('#toast').textContent;
+    const out={};
+    out.위치=['file:///C:/Users/kim/Desktop/%EC%96%B4%EC%8B%B8%EC%9D%B8/assign.html',
+      'file:///C:/Users/kim/OneDrive/%EB%B0%94%ED%83%95%20%ED%99%94%EB%A9%B4/assign.html',
+      'file:///C:/Users/kim/Documents/assign.html','file:///C:/Users/kim/Downloads/x/assign.html',
+      'file:///C:/Users/Desktop/assign.html','file:///D:/%EB%B3%91%EB%8F%99/assign.html','file://srv/share/assign.html'].map(u=>wellKnownOf(u));
+    const realIdb=idbGet, realWK=wellKnownOf, realDir=htmlDirPath, keepOpen=window.showOpenFilePicker;
+    const rem={name:'assign-data.js',kind:'file'};
+    let idbH=rem; window.idbGet=async k=> k==='handle'?idbH:realIdb(k);
+    let wk=null; window.wellKnownOf=()=>wk;
+    const pick=o=>({id:o.id||null, start:o.startIn===rem?'기억한 파일':(o.startIn||null), types:!!o.types});
+    window.__reattachOther=false; out.기억=pick(await pickerOpts({types:[1]}));
+    wk='desktop'; window.__reattachOther=true; out.딴파일=pick(await pickerOpts({types:[1]}));
+    idbH=null; wk=null; window.__reattachOther=false; out.없음=pick(await pickerOpts({}));
+    // 브라우저가 startIn 을 못 받으면 그것만 빼고 한 번 더 — 창을 닫은 것(AbortError)은 그대로
+    idbH=rem; const calls=[];
+    out.재시도=await pickWith(async o=>{ calls.push(!!o.startIn); if(o.startIn) throw new TypeError('x'); return 'ok'; },{});
+    out.재시도호출=calls;
+    try{ await pickWith(async()=>{ throw new DOMException('닫음','AbortError'); },{}); out.닫음='안 던짐'; }catch(e){ out.닫음=e.name; }
+    // 경로 복사 — 윈도 드라이브·UNC 는 복사, 맥·리눅스 경로는 안 함
+    let clip=null; Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>{ clip=t; }}});
+    window.htmlDirPath=()=>realDir('file:///D:/%EB%B3%91%EB%8F%99/assign.html'); out.복사=[await copyPathHint('assign-data.js'), clip];
+    clip=null; window.htmlDirPath=()=>realDir('file://srv/share/x/assign.html'); out.복사UNC=[await copyPathHint('assign-data.js'), clip];
+    clip=null; window.htmlDirPath=()=>realDir('file:///Users/kim/x/assign.html'); out.복사맥=[await copyPathHint('assign-data.js'), clip];
+    // 기억한 핸들이 다른 폴더의 같은 이름 파일 — 이어 쓰지 않고, 시작 폴더로도 안 쓰고, 파일 창에서 고르게 한다
+    const mk=(rev,saved)=>{ const h={name:'assign-data.js',kind:'file',asks:0,written:null,
+      queryPermission:async()=>'prompt', requestPermission:async()=>{ h.asks++; return 'granted'; },
+      getFile:async()=>new File([h.written||('window.__ASSIGN_DATA='+JSON.stringify({...keepStore,rev,saved})+';')],'assign-data.js'),
+      createWritable:async()=>({write:async d=>{ h.written=d; }, close:async()=>{}})}; return h; };
+    const side=()=>{ fileHandle=null; clearTimeout(saveT); A.dirty=false; window.__reattachTried=false; window.__autoReadWarned=false; window.__reattachDenied=false;
+      openSidecar({name:'assign-data.js', data:{...JSON.parse(JSON.stringify(keepStore)),rev:7,saved:'2026-10-03T01:00:00Z'}}); };
+    window.htmlDirPath=realDir;
+    side(); const other=mk(3,'2026-09-01T01:00:00Z'); idbH=other;
+    out.딴곳잇기=[await reattachHandle(other), !!fileHandle, !!window.__reattachOther, other.written];
+    const here=mk(7,'2026-10-03T01:00:00Z'); let seen=null;
+    window.showOpenFilePicker=async o=>{ seen=o; return [here]; };
+    window.htmlDirPath=()=>realDir('file:///D:/%EB%B3%91%EB%8F%99/assign.html'); clip=null;
+    const asks0=other.asks; await connectSave(); await wait(300); out.연결알림=toastTxt();
+    out.딴곳연결=[other.asks-asks0, seen&&seen.startIn===other, seen&&seen.id, fileHandle===here, clip, !!window.__reattachOther];
+    side(); idbH=mk(7,'2026-10-03T01:00:00Z');
+    out.같은파일잇기=[await reattachHandle(idbH), fileHandle===idbH];
+    // '허용' 창 뒤라 이번 클릭으로 파일 창이 안 열릴 때 — 한 번 더 누르라고
+    side(); idbH=null; window.htmlDirPath=realDir;
+    window.showOpenFilePicker=async()=>{ throw new DOMException('Must be handling a user gesture','SecurityError'); };
+    await connectSave(); out.몸짓=toastTxt();
+    delete navigator.clipboard;
+    window.idbGet=realIdb; window.wellKnownOf=realWK; window.htmlDirPath=realDir; window.showOpenFilePicker=keepOpen;
+    fileHandle=null; window.__autoRead=false; window.__autoEdits=false; window.__reattachOther=false; A.store=keepStore; A.memoryMode(); A.saveMsg('');
+    return out; })();`);
+  eq('HTML 위치 → 파일 창 시작 폴더 (바탕 화면·OneDrive 바탕 화면·문서·다운로드, 사용자 이름이 Desktop 이어도·다른 드라이브·공유 폴더는 없음)',
+    v36.위치, ['desktop', 'desktop', 'documents', 'downloads', null, null, null]);
+  eq('기억한 데이터 파일이 있으면 그 파일의 폴더에서, 같은 id 로', v36.기억, { id: 'assign-data', start: '기억한 파일', types: true });
+  eq('기억한 파일이 다른 폴더 것으로 판명나면 HTML 위치 폴더에서', v36.딴파일, { id: 'assign-data', start: 'desktop', types: true });
+  eq('아무것도 모르면 시작 폴더 없이 id 만 (브라우저가 이 창에서 지난번 연 폴더)', v36.없음, { id: 'assign-data', start: null, types: false });
+  eq('시작 폴더를 못 받으면 빼고 한 번 더', [v36.재시도, v36.재시도호출], ['ok', [true, false]]);
+  eq('파일 창을 닫은 것은 다시 열지 않는다', v36.닫음, 'AbortError');
+  eq('윈도 드라이브 경로는 HTML 옆 파일 경로를 복사', v36.복사, [true, 'D:\\병동\\assign-data.js']);
+  eq('공유 폴더(UNC) 경로도 복사', v36.복사UNC, [true, '\\\\srv\\share\\x\\assign-data.js']);
+  eq('맥 경로는 복사하지 않는다', v36.복사맥, [false, null]);
+  eq('기억한 핸들이 내용이 다른 같은 이름 파일이면 잇지 않는다 (쓰지도 않는다)', v36.딴곳잇기, [false, false, true, null]);
+  eq('그 뒤 [저장 연결] — 허용 창 다시 안 묻고, 그 폴더에서 열지 않고, 경로를 복사해 고른 파일로 연결',
+    v36.딴곳연결, [0, false, 'assign-data', true, 'D:\\병동\\assign-data.js', false]);
+  ok('그때 알림은 연결 완료 (경로 복사 안내는 파일 창 앞에)', /저장 연결 완료/.test(v36.연결알림), v36.연결알림);
+  eq('기억한 핸들이 방금 읽은 그 파일이면 허용 한 번으로 잇는다', v36.같은파일잇기, [true, true]);
+  ok('파일 창이 몸짓 오류로 안 열리면 한 번 더 누르라고 (영어 오류 문장 아님)', /한 번 더 눌러/.test(v36.몸짓) && !/gesture/.test(v36.몸짓), v36.몸짓);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
