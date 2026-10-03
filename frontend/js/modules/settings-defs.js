@@ -13,6 +13,35 @@ window.SettingsDefsModule = function() {
     },
     async saveRules(){await this.api('POST','/api/rules',this.rules);this.toast('규칙이 저장되었습니다','info')},
 
+    // ── 병원 휴일 (매년) — 설정 → 규칙. 저장은 위의 규칙 저장 버튼 ──
+    // 옛 저장본·템플릿을 불러와 rules 에 목록이 없으면 기본값(misc-features.js)을 보여 준다
+    get hospitalHolidayList(){ return this.rules?.hospitalHolidays ?? this._HOSPITAL_HOLIDAYS_DEFAULT; },
+    _ownHospitalHolidays(){
+      if(!Array.isArray(this.rules.hospitalHolidays))
+        this.rules.hospitalHolidays=this._HOSPITAL_HOLIDAYS_DEFAULT.map(h=>({...h}));
+      return this.rules.hospitalHolidays;
+    },
+    // '5/1'·'5-1'·'5월 1일'·'0501' → '05-01' (못 읽으면 null)
+    _normMD(v){
+      const t=String(v||'').trim();
+      let m=t.match(/^([0-9]{1,2})\s*[-/.월]\s*([0-9]{1,2})\s*일?$/)||t.match(/^([0-9]{2})([0-9]{2})$/);
+      if(!m)return null;
+      const mo=+m[1], d=+m[2];
+      const dt=new Date(Date.UTC(2024,mo-1,d));   // 윤년 — 2월 29일도 받는다
+      if(dt.getUTCMonth()!==mo-1||dt.getUTCDate()!==d)return null;
+      return `${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    },
+    setHospitalHoliday(i, key, v){
+      const list=this._ownHospitalHolidays(); if(!list[i])return;
+      if(key==='md'){
+        const md=this._normMD(v);
+        if(!md){this.toast('날짜는 월-일로 적어 주세요 (예: 05-01)','warn');list[i]={...list[i]};return}
+        list[i]={...list[i],md};
+      }else list[i]={...list[i],name:String(v||'').trim()};
+    },
+    addHospitalHoliday(){ this._ownHospitalHolidays().push({md:'',name:''}); },
+    removeHospitalHoliday(i){ this._ownHospitalHolidays().splice(i,1); },
+
     // ── 규칙 프리셋 ──────────────────────────────────────────
     rulePresets:JSON.parse(localStorage.getItem('ns_rule_presets')||'[]'),
     showRulePresets:false,
@@ -91,6 +120,9 @@ window.SettingsDefsModule = function() {
       '공':  ['--v-bg', '--v-ink', '600'],
       '법':  ['--v-bg', '--v-ink', '600'],
       '병':  ['--v-bg', '--v-ink', '600'],
+      '경가': ['--v-bg', '--v-ink', '600'],
+      '조가': ['--v-bg', '--v-ink', '600'],
+      '산전': ['--v-bg', '--v-ink', '600'],
     },
     getShiftStyle(code){
       // 트레이니 /D → D로 매핑
@@ -120,7 +152,9 @@ window.SettingsDefsModule = function() {
       return{background:s.color_bg,color:s.color_text};
     },
     // 스케줄 탭용 셀 스타일
-    hideCharge:true, colorByShift:true, showCompareMenu:false, showMobileMore:false,
+    // hideCharge = 화면 전용. 인쇄·CSV 는 늘 D/E/N (병동 번표에는 누가 차지인지 나오지 않는다 — 2026-10-03 병동 확인).
+    // _printPlain = Ctrl+P 로 화면을 바로 인쇄할 때 잠깐 켜진다 (redesign.js beforeprint).
+    hideCharge:true, _printPlain:false, colorByShift:true, showCompareMenu:false, showMobileMore:false,
     // 전입/전출 범위 체크
     isNurseInactive(nurse, day){
       if(!nurse)return false;
@@ -148,17 +182,26 @@ window.SettingsDefsModule = function() {
       if(s.period==='rest'||s.period==='leave')return 'g-cell-rest';
       return 'g-cell-work';
     },
+    // 차지 코드 → 일반 코드 (DC→D, EC→E, NC→N, 신규 /DC→/D). 그 밖의 코드는 그대로.
+    // 어싸인용 복사(copyScheduleTsv)는 이것을 거치지 않는다 — 배정표가 DC/EC/NC 로 차지를 안다.
+    plainShift(code){
+      if(!code)return code;
+      const pre=code.startsWith('/')?'/':'';
+      const base=pre?code.slice(1):code;
+      const plain={DC:'D',EC:'E',NC:'N'}[base];
+      return plain?pre+plain:code;
+    },
     getScheduleCellStyle(nurseId, day){
       if(!this.colorByShift)return {};
       let shift=this._getShift(nurseId,day);
       if(!shift||shift==='-')return {};
-      if(this.hideCharge){if(shift==='DC')shift='D';if(shift==='EC')shift='E';if(shift==='NC')shift='N'}
+      if(this.hideCharge||this._printPlain)shift=this.plainShift(shift);
       return this.getShiftStyle(shift);
     },
     displayShift(nurseId, day){
       let shift=this._getShift(nurseId,day);
       if(!shift||shift==='-')return '';
-      if(this.hideCharge){if(shift==='DC')shift='D';if(shift==='EC')shift='E';if(shift==='NC')shift='N'}
+      if(this.hideCharge||this._printPlain)shift=this.plainShift(shift);
       return shift;
     },
     _hexToHsl(hex){

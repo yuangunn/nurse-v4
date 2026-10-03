@@ -91,10 +91,18 @@ class Rules(BaseModel):
     #   휴가 5000 > 쉬는 날(OF·P1) 3000 > 근무 500 > 주휴 300(주휴 무시를 켰을 때만 변수)
     # 원티드(사전입력)에는 사연이 있다(제1원칙 8) — 쉬는 날은 근무보다 강하게 보호한다.
     # '절대 못 건드리는' 셀은 잠금(🔒, locked_cells)으로 — 그건 완화에서도 하드다.
-    preBonusLeave: int = 5000  # V/생/특/공/법/병 (휴가) — 간호사 요청 사항
+    preBonusLeave: int = 5000  # V/생/특/공/법/병/경가/조가/산전 (휴가) — 간호사 요청 사항
     preBonusOff: int = 3000    # OF/P1 (쉬는 날·임부휴무) — 개인의 시간, 강하게 보호
     preBonusWork: int = 500    # D/E/N/DC/EC/NC/중/D1 (근무) — 가장 먼저 교체
     preBonusRest: int = 300    # 주(주휴) — allow_juhu_relax 를 켰을 때만 변수가 된다
+    # 병원 휴일 (매년 MM-DD) — 프론트 '공휴일 채우기'가 법정공휴일과 함께 holidays 에 넣는다.
+    # 엔진은 이 목록을 직접 읽지 않는다 (holidays 하나만 본다 — 화면·검사·엔진이 같은 날짜를 보게).
+    hospitalHolidays: List[Dict[str, str]] = [
+        {"md": "05-01", "name": "근로자의 날"},
+        {"md": "05-09", "name": "의료원 설립일"},
+        {"md": "07-17", "name": "제헌절"},
+        {"md": "07-21", "name": "노조 설립일"},
+    ]
 
 
 class GenerateRequest(BaseModel):

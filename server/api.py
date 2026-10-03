@@ -1117,12 +1117,9 @@ def reorder_nurses(body: dict):
 
 @app.get("/api/rules")
 def get_rules():
-    rules = db.get_rules()
-    if not rules:
-        # 기본값 반환
-        from .models import Rules
-        return Rules().model_dump()
-    return rules
+    # 기본값 위에 저장값 — 새로 생긴 규칙 키(병원 휴일 등)도 옛 DB 에서 기본값으로 보인다
+    from .models import Rules
+    return {**Rules().model_dump(), **db.get_rules()}
 
 
 @app.post("/api/rules")
@@ -1316,12 +1313,18 @@ def _validate_locked_conflicts(request: GenerateRequest) -> Optional[str]:
     """잠긴 셀의 사전입력이 규칙에 의해 무효화(드롭)되는 충돌 검출.
     '잠금은 완화에서도 고정'이 약속이지만, 공휴일 OF 금지 같은 규칙이 사전입력
     자체를 드롭하면 잠금이 적용될 수 없다 — 조용히 무시하지 말고 경고한다."""
+    from .scheduler_base import night_keeper_in_month
     locked = request.locked_cells or {}
     prev = request.prev_schedule or {}
     holidays = set(request.holidays or [])
     name_by_id = {n.id: n.name for n in request.nurses}
+    # 야간전담(나이트킵)은 법을 받지 못해 공휴일에도 OF로 쉰다 — 그 사람의 공휴일 OF 는 정상
+    night_keepers = {n.id for n in request.nurses
+                     if night_keeper_in_month(n.model_dump(), request.year, request.month)}
     bad = []
     for nid, cells in locked.items():
+        if nid in night_keepers:
+            continue
         for dt_str, flag in (cells or {}).items():
             if not flag:
                 continue
@@ -1330,8 +1333,8 @@ def _validate_locked_conflicts(request: GenerateRequest) -> Optional[str]:
                 bad.append(f"  · {name_by_id.get(nid, nid)} {dt_str}: 공휴일 OF 잠금")
     if not bad:
         return None
-    return ("⚠ 공휴일에는 OF를 배정할 수 없어 아래 잠금이 적용되지 않습니다 "
-            "(법정공휴일 '법' 코드 사용 권장):\n" + "\n".join(bad[:8]))
+    return ("⚠ 공휴일에 일반 간호사는 OF 대신 '법'으로 쉬어서 아래 잠금이 적용되지 않습니다 "
+            "('법' 코드로 바꿔 주세요. 야간전담은 공휴일에도 OF):\n" + "\n".join(bad[:8]))
 
 
 def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts: list) -> Optional[str]:

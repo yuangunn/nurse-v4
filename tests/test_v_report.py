@@ -15,7 +15,8 @@ def _ward_shifts():
             ("NC","night",True,True),("N","night",False,True),("OF","rest",False,True),
             ("주","rest",False,False),("P1","rest",False,True),("V","leave",False,True),
             ("생","leave",False,True),("특","leave",False,False),("공","leave",False,False),
-            ("법","leave",False,False),("병","leave",False,False)]
+            ("법","leave",False,False),("병","leave",False,False),
+            ("경가","leave",False,False),("조가","leave",False,False),("산전","leave",False,False)]
     return [ShiftDef(code=c, name=c, period=p, is_charge=ch, sort_order=i, auto_assign=a)
             for i, (c, p, ch, a) in enumerate(rows)]
 

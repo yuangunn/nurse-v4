@@ -45,6 +45,15 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
    차지의 부담은 **어싸인에서 환자를 적게 보는 것**으로 이미 보상·균형이 맞춰져 있다
    (2026-08-20). 차지 횟수 균등 배점을 제안하지 말 것. 지켜야 할 사전입력의 보호 채널은
    **잠금(🔒)** 하나다 — 셀 메모는 기록용이지 보호 등급이 아니다.
+10. **나이트킵(야간전담)은 법(법정공휴일 휴가)을 받지 못한다 — 공휴일에도 OF로 쉰다**
+    (2026-10-03, 101병동 실제 번표의 공휴일 OF 15건이 모두 그 달 나이트킵). 공휴일 OF 금지는
+    일반 간호사에게만 건다.
+11. **병동 번표에는 누가 차지인지 나오지 않는다** (2026-10-03). 번표 아래 'D차지' 줄 숫자는 그날
+    **차지를 맡을 수 있는 사람 수**다. 앱 안에서는 DC/EC/NC 를 그대로 쓰고(어싸인용 복사도 그대로),
+    인쇄·엑셀(CSV)만 늘 D/E/N 으로 낸다.
+12. **병원 휴일** (101병동, 매년): 5/1 근로자의 날 · 5/9 의료원 설립일 · 7/17 제헌절 · 7/21 노조 설립일.
+    법정공휴일처럼 '법'으로 쉰다. 병동마다 다를 수 있어 설정 → 규칙에서 고친다.
+    번표 표기: 특V = 특별휴가(특) · 경가/조가 = 경사·조사 휴가 · 공가 = 공 · 산전 = 산전검진 · OFF = OF.
 
 > ✅ **확인 완료 (2026-08-20 사용자 답변 — 반영됨)**:
 > ⓐ 토요일 인원 → DB 시드·문서·시뮬레이터 모두 **4/3/2**로 수정.
@@ -157,9 +166,10 @@ npm start
 ### 테스트
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 167건
+python3 -m pytest -q                  # 175건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
+  && node scripts/test_charge_plain.mjs && node scripts/test_hospital_holidays.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs \
   && node scripts/test_assign_logic.mjs   # standalone 로직 (헤드리스 크롬, $CHROME 로 경로 지정 가능)
 node scripts/test_assign_compat.mjs      # 옛 배포본이 저장한 데이터 파일을 지금 assign.html 로 열어 본다 (CI)
@@ -185,7 +195,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 
 ---
 
-## 근무 유형 정의 (기본 17종)
+## 근무 유형 정의 (기본 20종)
 
 | 코드 | 이름 | 시간 | auto_assign | 비고 |
 |------|------|------|:--:|------|
@@ -206,6 +216,12 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | 공 | 공적업무 | — | ✗ | 사전입력 전용 |
 | 법 | 법정공휴일 | — | ✗ | 공휴일 날짜에만 배정 가능 |
 | 병 | 병가 | — | ✗ | 사전입력 전용 |
+| 경가 | 경사휴가 | — | ✗ | 사전입력 전용 (결혼 등, 2026-10-03 병동 표기) |
+| 조가 | 조사휴가 | — | ✗ | 사전입력 전용 (장례) |
+| 산전 | 산전검진 | — | ✗ | 사전입력 전용 (임산부) |
+
+> 병동 번표 표기 읽기 (붙여넣기 `_shiftAlias` + 엔진 `_PRE_ALIAS`): `OFF`→OF · `특V`→특 · `공가`→공.
+> 한글 자판 입력: ㅈ 주 · ㅂ 병 · ㅃ 법 · ㅅ 생 · ㅌ 특 · ㄱ 공 · **ㄲ 경가 · ㅉ 조가 · ㅆ 산전** (Shift 쌍자음).
 
 **트레이니 표시 코드** (출력 전용): `/D`, `/E`, `/N` — 프리셉터 근무에 `/` 접두어.
 사전입력으로 재로드 시 스케줄러가 자동 무시 (프리셉터 기반 복사 로직으로 위임).
@@ -219,7 +235,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 - **NIGHT_SHIFTS**: NC, N
 - **CHARGE_SHIFTS**: DC, EC, NC
 - **REST_SHIFTS**: OF, 주, P1 (휴무) — P1은 임부휴무(모성보호), `is_protected_timeoff`에서 OFF급 보호
-- **LEAVE_SHIFTS**: V, 생, 특, 공, 법, 병 (휴가)
+- **LEAVE_SHIFTS**: V, 생, 특, 공, 법, 병, 경가, 조가, 산전 (휴가 — 완화에서 휴가 등급으로 보호)
 - **SOLVER_SHIFTS**: auto_assign=True인 집합 (솔버 자유 배정 가능)
 
 ---
@@ -237,7 +253,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | 근무 자격 | capable_shifts에 없는 D/E/N period 근무 불가 (D1/중은 체크 안 함) |
 | **9개 금지 전환** | E→D, E→D1, E→중, N→E, N→D, N→D1, N→중, 중→D, 중→D1 (물리적 간격 < 8h) |
 | N→OF→D 금지 | `noNOD` 규칙 시 Night→Off→Day 패턴 금지 |
-| **공휴일 OF 금지** | 법정공휴일에는 OF 배정 불가 (일반/완화/진단 모두 적용) |
+| **공휴일 OF 금지** | 법정공휴일에는 OF 배정 불가 (일반/완화/진단 모두 적용). **일반 간호사만** — 나이트킵은 법을 못 받아 공휴일에도 OF (제1원칙 10, `_holiday_of_banned`) |
 | 법은 공휴일에만 | 법정공휴일 코드 `법`은 공휴일 날짜에만 **자유 배정** (사전입력 확정 셀은 사실로 수용) |
 | 야간전담 공휴일 제외 | 야간전담에게 법/생/V 공휴일 배정 차단 규칙 다름 |
 | 주휴(주) | **엔진이 배정하지 않는다** — 사전입력 전용(auto_assign ✗). 일반 모드엔 강제 없음(사람이 넣은 그대로), 주휴 재배치 완화(`allow_juhu_relax`)를 켰을 때만 주당 `<=1` |
@@ -485,6 +501,9 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
      코드 어디서든 `activeTab='saved'` 를 넣으면 별칭 워처가 이 서랍을 연다.
    - **📤 내보내기** 메뉴: CSV · 인쇄 · **📋 어싸인용 복사**(`copyScheduleTsv`: 이름 + 날짜 + 근무 표를
      클립보드로 → 어싸인 배정표(standalone)에 그대로 붙여넣는다)
+   - **인쇄·CSV 는 늘 D/E/N** (`plainShift` — 병동 번표에 차지 표시 없음, 제1원칙 11). 더보기의 '차지 숨기기'는
+     화면 전용이고, Ctrl+P 로 바로 찍을 때도 `beforeprint` 가 `_printPlain` 을 켠다. **어싸인용 복사만 DC/EC/NC 그대로**
+     — 배정표가 그것으로 차지를 안다. 검증 `node scripts/test_charge_plain.mjs`
    - 주의(⚡) 목록은 **규칙 한도를 넘긴 것만** (연속 근무·월 야간, 나이트킵 제외) — 주말 근무 횟수 같은
      통계는 요약 표 열로 옮겼다 (정상 표에서도 병동 절반에게 매달 뜨던 노이즈)
 
@@ -909,7 +928,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 
 ### 기본 시드
 - 간호사 18명: A/B/C 그룹, 각 여4+남2
-- 근무 17종: DC, D, D1, EC, E, 중, NC, N, OF, 주, P1, V, 생, 특, 공, 법, 병
+- 근무 20종: DC, D, D1, EC, E, 중, NC, N, OF, 주, P1, V, 생, 특, 공, 법, 병, 경가, 조가, 산전 (뒤 셋은 옛 DB 에도 `INSERT OR IGNORE` 로 들어간다)
 - 배점 규칙: 18종 (법정공휴일/주말/주말·공휴일 공평성 마이그레이션 포함)
 
 ---
@@ -1037,6 +1056,9 @@ self.cbLogging.subscribe(_on_log)
   패딩 날짜의 공휴일도 인정한다. 당월 프리픽스로 자르면 월경계 주에 걸린 신정·
   설날·삼일절을 못 봐서 그 날에 OF/V/생이 배정되고 오프특근 판정도 어긋난다.
   프론트 `autoFillHolidays`도 주기 범위를 채운다 — 한쪽만 고치면 다시 어긋난다
+- **병원 휴일**(설정 → 규칙, `rules.hospitalHolidays` MM-DD 목록, 기본 5/1·5/9·7/17·7/21)은 `autoFillHolidays` 가
+  법정공휴일과 합쳐 `holidays` 에 넣는다 — 엔진은 `holidays` 하나만 본다. `_computeKRHolidays` 에 넣지 말 것
+  (KASI 골든셋 비교 대상이 아니고 대체공휴일을 만들면 안 된다). 검증 `node scripts/test_hospital_holidays.mjs`
 - 간호사 삭제는 API 경유 — 저장본 캐스케이드 정리 자동 실행
 - **모듈 합성은 디스크립터** — `app()` 끝의 `Object.defineProperties(_app, getOwnPropertyDescriptors(mod()))`. `...spread` 로 되돌리면
   getter(`rd*` 계산 속성, `ruleScoreSummary`)가 값으로 굳어 화면이 안 바뀐다 (결정 2-20)

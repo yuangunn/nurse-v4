@@ -26,6 +26,27 @@ window.MiscFeaturesModule = function() {
     _HOLIDAY_SPECIAL:{
       2026:['2026-06-03'],   // 제9회 전국동시지방선거
     },
+    // 병원 휴일 — 매년 같은 날 쉬는 병원 자체 휴일 (2026-10-03 101병동 확인). 법정공휴일처럼 '법'으로 쉰다.
+    // 기본값은 여기, 병동이 고친 목록은 rules.hospitalHolidays (설정 → 규칙 → 병원 휴일).
+    // _computeKRHolidays 에 넣지 않는다 — KASI 골든셋 비교 대상이 아니고, 대체공휴일도 만들지 않는다.
+    _HOSPITAL_HOLIDAYS_DEFAULT:[
+      {md:'05-01',name:'근로자의 날'},{md:'05-09',name:'의료원 설립일'},
+      {md:'07-17',name:'제헌절'},{md:'07-21',name:'노조 설립일'},
+    ],
+    // 그 해 병원 휴일 ISO 배열 (MM-DD 형식이 아니거나 없는 날짜는 건너뜀). 빈 목록이면 병원 휴일 없음.
+    _hospitalHolidays(year){
+      const list=this.rules?.hospitalHolidays ?? this._HOSPITAL_HOLIDAYS_DEFAULT;
+      const out=[];
+      for(const h of list||[]){
+        const md=String(h?.md??'').trim();
+        if(!/^[0-9]{2}-[0-9]{2}$/.test(md))continue;
+        const m=+md.slice(0,2), d=+md.slice(3,5);
+        const dt=new Date(Date.UTC(year,m-1,d));
+        if(dt.getUTCMonth()!==m-1||dt.getUTCDate()!==d)continue;
+        out.push(`${year}-${md}`);
+      }
+      return [...new Set(out)].sort();
+    },
     _lunarRange(){ const ys=Object.keys(this._LUNAR).map(Number); return [Math.min(...ys),Math.max(...ys)]; },
     // 해당 연도 전체 공휴일(대체공휴일·특별공휴일 포함) 양력 ISO 배열. 범위 밖이면 null.
     _computeKRHolidays(year){
@@ -70,20 +91,25 @@ window.MiscFeaturesModule = function() {
       const days=this.scheduleDays;
       const years=[...new Set(days.map(d=>d.getFullYear()))];
       const table=[];let missing=false;
-      for(const y of years){const t=this._computeKRHolidays(y);if(t)table.push(...t);else missing=true}
+      const hosp=[];   // 병원 휴일 — 음력 데이터와 상관없이 매년 채운다
+      for(const y of years){const t=this._computeKRHolidays(y);if(t)table.push(...t);else missing=true;hosp.push(...this._hospitalHolidays(y))}
       if(!table.length){
         const [lo,hi]=this._lunarRange();
-        this.toast(`${years.join('·')}년 공휴일 자동계산 불가 — 내장 음력 데이터는 ${lo}~${hi}년만 지원합니다. 날짜 헤더 우클릭으로 직접 지정하세요`,'warn',6000);return;
+        this.toast(`${years.join('·')}년 공휴일 자동계산 불가 — 내장 음력 데이터는 ${lo}~${hi}년만 지원합니다. 날짜 헤더 우클릭으로 직접 지정하세요`,'warn',6000);
+        if(!hosp.length)return;
       }
       const inRange=new Set(days.map(d=>this.dayKey(d)));
-      const target=table.filter(h=>inRange.has(h)&&!this.holidays.includes(h));
+      const krSet=new Set(table);
+      const target=[...new Set([...table,...hosp])].sort().filter(h=>inRange.has(h)&&!this.holidays.includes(h));
       if(!target.length){this.toast('이 주기에 추가할 공휴일이 없습니다 (이미 모두 입력됨)','info');return}
+      const nHosp=target.filter(h=>!krSet.has(h)).length;
       this._pushUndo();
       this.holidays=[...this.holidays,...target];
       this._checkViolations&&this._checkViolations();
       const label=target.map(h=>+h.slice(5,7)+'/'+ +h.slice(8)).join(', ');
       const warn=missing?' (일부 연도는 음력 데이터 범위 밖 — 직접 확인하세요)':'';
-      this.toast(`🇰🇷 공휴일 ${target.length}일 입력: ${label} — 임시공휴일·변경은 직접 확인하세요${warn}`,'info',5000);
+      const hospNote=nHosp?` (병원 휴일 ${nHosp}일 포함)`:'';
+      this.toast(`🇰🇷 공휴일 ${target.length}일 입력${hospNote}: ${label} — 임시공휴일·변경은 직접 확인하세요${warn}`,'info',5000);
       this.rdUndoToast&&this.rdUndoToast(`공휴일 ${target.length}일을 채웠습니다.`);
     },
 

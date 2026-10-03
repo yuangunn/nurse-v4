@@ -28,6 +28,8 @@ function app() {
       maxNightTwoMonth:false, maxNightTwoMonthCount:11,
       patternOptimization:true, autoMenstrualLeave:true, maxVPerMonth:1,
       preBonusLeave:5000, preBonusOff:3000, preBonusWork:500, preBonusRest:300,
+      // 병원 휴일 (매년) — 공휴일 채우기가 법정공휴일과 함께 넣는다 (misc-features.js _hospitalHolidays)
+      hospitalHolidays:[{md:'05-01',name:'근로자의 날'},{md:'05-09',name:'의료원 설립일'},{md:'07-17',name:'제헌절'},{md:'07-21',name:'노조 설립일'}],
     },
     schedule:{}, extendedSchedule:{},
     generating:false, generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,

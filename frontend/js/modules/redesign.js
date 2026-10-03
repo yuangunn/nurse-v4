@@ -10,9 +10,10 @@
 window.RedesignModule = function() {
   const WD = ['일','월','화','수','목','금','토'];
   const CODE_NAME = {DC:'Day Charge', D:'Day', D1:'상근·교육', EC:'Evening Charge', E:'Evening', '중':'중간번', NC:'Night Charge', N:'Night',
-    OF:'오프', '주':'주휴', P1:'임부휴무', V:'연차', '생':'생리휴가', '특':'특별휴가', '공':'공적업무', '법':'법정공휴일', '병':'병가'};
+    OF:'오프', '주':'주휴', P1:'임부휴무', V:'연차', '생':'생리휴가', '특':'특별휴가', '공':'공적업무', '법':'법정공휴일', '병':'병가',
+    '경가':'경사휴가', '조가':'조사휴가', '산전':'산전검진'};
   const WORK_ORDER = ['D','DC','D1','E','EC','중','N','NC'];
-  const REST_ORDER = ['주','OF','V','생','특','공','법','병','P1'];
+  const REST_ORDER = ['주','OF','V','생','특','공','법','병','경가','조가','P1','산전'];
   const PERIOD_KO = {D:'낮', E:'저녁', N:'야간'};
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const fmtMD = dk => `${+dk.slice(5,7)}/${+dk.slice(8,10)}`;
@@ -44,8 +45,9 @@ window.RedesignModule = function() {
       this.setFontPref(this.fontPref, true);
       this._rdTipInit();
       if(!window._rdPrintBound){ window._rdPrintBound = true;
-        window.addEventListener('beforeprint', () => { if(this.showPrintPreview) document.body.classList.add('rd-printing'); });
-        window.addEventListener('afterprint', () => document.body.classList.remove('rd-printing'));
+        // 인쇄는 늘 차지 없이 D/E/N — 미리보기 없이 Ctrl+P 로 화면을 찍어도 같게
+        window.addEventListener('beforeprint', () => { this._printPlain = true; if(this.showPrintPreview) document.body.classList.add('rd-printing'); });
+        window.addEventListener('afterprint', () => { this._printPlain = false; document.body.classList.remove('rd-printing'); });
         document.addEventListener('scroll', () => { if(this.shiftEdit.open) this.rdPlacePopup(); }, true);
         document.addEventListener('mousedown', e => { if(!this.shiftEdit.open) return; const t=e.target; if(t.closest&&(t.closest('.rpop')||t.closest('[data-cell]')||t.closest('.modal-bg')||t.closest('.rmodal-bg'))) return; this.shiftEdit.open=false; }, true);
       }
@@ -66,7 +68,7 @@ window.RedesignModule = function() {
       const apply=code=>{ e.preventDefault(); this.applyShiftEditWithUndo(code); };
       if(e.key==='Delete'||e.key==='Backspace') return apply('__CLEAR__');
       const key=(e.key||'').toUpperCase();
-      const code={D:'D',E:'E',N:'N',V:'V',O:'OF',W:'주'}[key]||{'ㅈ':'주','ㅂ':'병','ㅃ':'법','ㅅ':'생','ㅌ':'특','ㄱ':'공'}[e.key]||(this.shifts.find(s=>s.code.toUpperCase()===key)||{}).code;
+      const code={D:'D',E:'E',N:'N',V:'V',O:'OF',W:'주'}[key]||{'ㅈ':'주','ㅂ':'병','ㅃ':'법','ㅅ':'생','ㅌ':'특','ㄱ':'공','ㄲ':'경가','ㅉ':'조가','ㅆ':'산전'}[e.key]||(this.shifts.find(s=>s.code.toUpperCase()===key)||{}).code;
       if(code) apply(code);
     },
 
@@ -377,7 +379,8 @@ window.RedesignModule = function() {
 
     // ── 인쇄 미리보기 ──
     get rdPrintDays(){ return (this.scheduleDays||[]).filter(d=>!this.isOverflow(d)); },
-    rdPrintCode(nurse, day){ return this.displayShift(nurse.id, day); },
+    // 병동 번표에는 누가 차지인지 나오지 않는다 (2026-10-03) — '차지 숨기기'와 상관없이 늘 D/E/N
+    rdPrintCode(nurse, day){ const s=this._getShift(nurse.id, day); return (!s||s==='-') ? '' : this.plainShift(s); },
     rdDoPrint(){ document.body.classList.add('rd-printing'); setTimeout(()=>{ this.printSchedule(); setTimeout(()=>document.body.classList.remove('rd-printing'), 1500); }, 60); },
     get rdPrintMeta(){
       const today=new Date(); const ds=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;

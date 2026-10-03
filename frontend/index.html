@@ -363,7 +363,7 @@
       <button class="rside-item" :class="{'is-active':settingsSection==='req'}" @click="settingsSection='req'" title="요일별로 낮·저녁·야간에 몇 명 있어야 하는지 정합니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M16 2v4 M8 2v4 M3 10h18"/></svg>요일별 필요 인원</button>
       <button class="rside-item" :class="{'is-active':settingsSection==='rules'}" @click="settingsSection='rules'" title="연속 근무 한도·야간 한도 같은 꼭 지킬 규칙을 켜고 끕니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>규칙</button>
       <div class="rside-h">거의 안 바꾸는 것</div>
-      <button class="rside-item rare" :class="{'is-active':settingsSection==='shifts'}" @click="settingsSection='shifts'" :data-count="shifts.length+'종'" title="17종 근무 코드의 이름·시간·색. 병동 표준이라 보통 그대로 둡니다.">근무 정의</button>
+      <button class="rside-item rare" :class="{'is-active':settingsSection==='shifts'}" @click="settingsSection='shifts'" :data-count="shifts.length+'종'" title="20종 근무 코드의 이름·시간·색. 병동 표준이라 보통 그대로 둡니다.">근무 정의</button>
       <button class="rside-item rare" :class="{'is-active':settingsSection==='scoring'}" @click="settingsSection='scoring'" title="자동 배정이 무엇을 더 중요하게 볼지(우선순위 규칙).">우선순위 (배점 규칙)</button>
       <button class="rside-item rare" :class="{'is-active':settingsSection==='misc'}" @click="settingsSection='misc'" title="개발자 설정 · 데이터 위치 · 글자 크기 · 글꼴">그 외 (개발자 설정)</button>
     </aside>
@@ -490,6 +490,21 @@
           <div class="with-num"><span style="font-size:var(--fs-sub)">연차(V) 월 최대</span><div class="rnum rnum-sm"><button @click="bumpRule('maxVPerMonth',-1,0,10)" title="줄입니다.">−</button><input type="number" x-model.number="rules.maxVPerMonth" min="0" max="10" title="자동 배정이 한 달에 넣을 수 있는 연차 수"/><button @click="bumpRule('maxVPerMonth',1,0,10)" title="늘립니다.">+</button></div><span>회</span></div>
           <div class="fixed">항상 지킴 (끌 수 없음): 저녁 → 낮, 야간 → 저녁, 야간 → 낮 같은 거꾸로 가는 전환은 사이 시간이 8시간이 안 돼 금지됩니다. 차지(DC/EC/NC)는 그 근무에서 가장 선임에게만 갑니다.</div>
         </div>
+      </div>
+      <div class="rcard" data-rd="hospital-holidays">
+        <h4>병원 휴일 (매년)</h4>
+        <div class="rsec-sub">법정공휴일이 아니어도 병원이 쉬는 날입니다. 사전입력의 ‘공휴일 채우기’가 법정공휴일과 함께 넣고, 그날 일반 간호사는 ‘법’으로 쉽니다. 고친 뒤 위의 저장을 누르세요.</div>
+        <div class="rhh-list">
+          <template x-for="(h,i) in hospitalHolidayList" :key="'hh'+i">
+            <div class="rhh-row">
+              <input type="text" class="rhh-md" :value="h.md" @change="setHospitalHoliday(i,'md',$event.target.value)" placeholder="05-01" title="월-일로 적습니다 (예: 05-01). 해마다 같은 날입니다."/>
+              <input type="text" class="rhh-name" :value="h.name" @change="setHospitalHoliday(i,'name',$event.target.value)" placeholder="휴일 이름" title="휴일 이름입니다 (예: 의료원 설립일)."/>
+              <button @click="removeHospitalHoliday(i)" class="rbtn rbtn-secondary" title="이 병원 휴일을 목록에서 뺍니다. 저장해야 반영됩니다.">빼기</button>
+            </div>
+          </template>
+          <div x-show="!hospitalHolidayList.length" class="rsec-sub">병원 휴일이 없습니다.</div>
+        </div>
+        <div><button @click="addHospitalHoliday()" class="rbtn rbtn-secondary" title="병원 휴일을 한 줄 더합니다. 월-일과 이름을 적고 저장하세요.">휴일 더하기</button></div>
       </div>
     </section>
 
@@ -671,7 +686,7 @@
       <div class="rmenu-host" x-data="{open:false}">
         <button @click="open=!open" class="rbtn rbtn-secondary" data-rd="btn-autofill" title="공휴일 채우기 · 전월 야간 수 계산 · 이 표대로 인원 고정. 채운 뒤 되돌릴 수 있습니다."><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>자동 채움<svg class="caret" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         <div x-show="open" x-cloak @click.outside="open=false" class="rmenu">
-          <button @click="autoFillHolidays();open=false" class="rmenu-item" title="이 달의 법정공휴일을 표에 표시하고 ‘법’을 넣습니다. 임시공휴일은 날짜 헤더를 오른쪽 클릭해 직접 지정하세요."><b>공휴일 채우기</b><small>법정공휴일에 ‘법’을 넣습니다</small></button>
+          <button @click="autoFillHolidays();open=false" class="rmenu-item" title="이 달의 법정공휴일과 병원 휴일(설정 → 규칙)을 표에 표시하고 ‘법’을 넣습니다. 임시공휴일은 날짜 헤더를 오른쪽 클릭해 직접 지정하세요."><b>공휴일 채우기</b><small>법정공휴일에 ‘법’을 넣습니다</small></button>
           <button @click="autoFillPrevMonthNights();open=false" class="rmenu-item" title="지난달 저장 근무표에서 사람별 야간 횟수를 세어 ‘전월 N’ 칸에 넣습니다. 홀짝월 합산 규칙에 쓰입니다."><b>전월 야간 수 계산</b><small>지난달 근무표에서 야간 횟수를 가져옵니다</small></button>
           <button @click="applyReqFromPrev();open=false" class="rmenu-item" title="이미 완성된 표를 넣었을 때: 설정의 요일별 인원 대신 지금 표의 실제 인원을 그날 필요 인원으로 씁니다."><b>이 표대로 인원 고정</b><small>지금 표의 일별 인원을 필요 인원으로 씁니다</small></button>
         </div>
@@ -799,7 +814,7 @@
           <button @click="showPreBonusSettings=!showPreBonusSettings" class="rbtn rbtn-quiet" title="완화할 때 무엇을 먼저 바꿀지(근무 → 쉬는 날 → 휴가) 유지 점수를 조절합니다. 사연 있는 칸은 잠금이 확실합니다."><span x-text="showPreBonusSettings?'완화 순서 조절 접기':'완화 순서 조절 펼치기'"></span></button>
           <div x-show="showPreBonusSettings" x-cloak style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
             <div class="sub">높을수록 늦게 바뀝니다. 휴가와 쉬는 날은 간호사 개인의 시간 — 낮추지 마세요. 절대 못 바꾸는 날은 사전입력에서 잠그세요.</div>
-            <div class="slider-row"><span>휴가 (V·생·특·공·법·병)</span><input type="range" min="0" max="10000" step="100" x-model.number="rules.preBonusLeave" title="휴가 유지 점수 (기본 5000)"/><b x-text="rules.preBonusLeave"></b><span class="sub">기본 5000</span></div>
+            <div class="slider-row"><span>휴가 (V·생·특·공·법·병·경가·조가·산전)</span><input type="range" min="0" max="10000" step="100" x-model.number="rules.preBonusLeave" title="휴가 유지 점수 (기본 5000)"/><b x-text="rules.preBonusLeave"></b><span class="sub">기본 5000</span></div>
             <div class="slider-row"><span>쉬는 날 (OF·P1)</span><input type="range" min="0" max="10000" step="100" x-model.number="rules.preBonusOff" title="쉬는 날 유지 점수 (기본 3000)"/><b x-text="rules.preBonusOff"></b><span class="sub">기본 3000</span></div>
             <div class="slider-row"><span>근무 (D·E·N…)</span><input type="range" min="0" max="5000" step="50" x-model.number="rules.preBonusWork" title="근무 유지 점수 (기본 500)"/><b x-text="rules.preBonusWork"></b><span class="sub">기본 500</span></div>
             <div class="slider-row"><span>주휴 (주휴 이동 허용 시)</span><input type="range" min="0" max="5000" step="50" x-model.number="rules.preBonusRest" title="주휴 유지 점수 (기본 300)"/><b x-text="rules.preBonusRest"></b><span class="sub">기본 300</span></div>
@@ -823,8 +838,8 @@
       <div class="rmenu-host" x-data="{open:false}">
         <button @click="open=!open" class="rbtn rbtn-secondary" :disabled="!rdSched" data-rd="btn-export" title="엑셀(CSV) 파일로 저장 · 어싸인 배정표에 붙일 표 복사"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12"/></svg>내보내기<svg class="caret" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         <div x-show="open" x-cloak @click.outside="open=false" class="rmenu right">
-          <button @click="exportToCSV();open=false" class="rmenu-item" title="엑셀에서 열 수 있는 파일(CSV)로 내려받습니다."><b>엑셀(CSV) 파일로 저장</b><small>다른 프로그램에서 열 수 있어요</small></button>
-          <button @click="copyScheduleTsv();open=false" class="rmenu-item" title="이름·날짜·근무 표를 복사합니다. 어싸인 배정표 프로그램에 붙여 넣으세요."><b>어싸인용으로 복사</b><small>배정표 프로그램에 붙일 표</small></button>
+          <button @click="exportToCSV();open=false" class="rmenu-item" title="엑셀에서 열 수 있는 파일(CSV)로 내려받습니다. 병동 번표처럼 차지는 D/E/N으로 나갑니다."><b>엑셀(CSV) 파일로 저장</b><small>다른 프로그램에서 열 수 있어요</small></button>
+          <button @click="copyScheduleTsv();open=false" class="rmenu-item" title="이름·날짜·근무 표를 복사합니다. 어싸인 배정표 프로그램에 붙여 넣으세요. 차지(DC/EC/NC)는 그대로 복사합니다 — 배정표가 차지를 알아봅니다."><b>어싸인용으로 복사</b><small>배정표 프로그램에 붙일 표</small></button>
         </div>
       </div>
       <button @click="showReports=!showReports" class="rbtn rbtn-secondary" :class="showReports?'is-open':''" :disabled="!rdSched&&!statusMessage" data-rd="btn-drawer" title="간호사별 야간·주말 수와 원티드 미반영·오프특근·주의 사항을 표 아래 서랍으로 엽니다."><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18 M18 17V9 M13 17V5 M8 17v-3"/></svg>요약·리포트<span x-show="rdRelaxedCount" class="rbadge err" x-text="rdRelaxedCount"></span></button>
@@ -843,7 +858,7 @@
           <button x-show="rdSched&&savedSchedules.length>0" @click="showCompareMenu=!showCompareMenu;open=false" class="rmenu-item" title="저장해 둔 근무표 하나를 골라 지금 표와 다른 칸을 봅니다."><b>저장본과 비교</b><small>저장한 표와 다른 칸을 찾습니다</small></button>
           <button x-show="hasNextMonthData()" @click="carryOverToNextMonth();open=false" class="rmenu-item" title="이 표의 다음 달 초 칸을 다음 달 사전입력으로 넘기고 다음 달로 이동합니다."><b>다음달로 이월</b><small>다음 달 초 근무를 사전입력으로 넘깁니다</small></button>
           <div class="rmenu-sep"></div>
-          <label class="rcheck" title="켜면 차지(DC/EC/NC)를 D/E/N으로만 보여 줍니다."><input type="checkbox" x-model="hideCharge"/><span class="box"></span>차지 숨기기</label>
+          <label class="rcheck" title="켜면 화면에서 차지(DC/EC/NC)를 D/E/N으로만 보여 줍니다. 인쇄·엑셀은 늘 D/E/N입니다."><input type="checkbox" x-model="hideCharge"/><span class="box"></span>차지 숨기기</label>
           <label class="rcheck" title="근무 코드별 색을 켜고 끕니다. 흑백으로 보고 싶을 때 끄세요."><input type="checkbox" x-model="colorByShift"/><span class="box"></span>색 켜기/끄기</label>
           <div style="padding:6px 12px"><div class="sub" style="font-size:var(--fs-min);color:var(--ink-2);margin-bottom:4px">그룹만 보기</div>
             <select x-model="groupFilter" title="한 그룹만 골라서 봅니다."><option value="all">전체 그룹</option><template x-for="g in nurseGroups" :key="g"><option :value="g" x-text="g+'그룹'"></option></template></select></div>
@@ -1436,7 +1451,7 @@
       <template x-if="scoringModal.data.rule_type==='consecutive_same'"><div class="card-sm"><label class="text-xs text-dim">연속 period</label><select x-model="scoringModal.data.params.period" class="w-full mt-1 text-xs"><template x-for="g in periodGroups" :key="g.value"><option :value="g.value" x-text="g.label"></option></template></select></div></template>
       <template x-if="scoringModal.data.rule_type==='specific_shift'"><div class="card-sm space-y-2"><div class="flex gap-3"><div class="flex-1"><label class="text-xs text-dim">코드</label><select x-model="scoringModal.data.params.shift_code" class="w-full mt-1 text-xs"><template x-for="s in shifts" :key="s.code"><option :value="s.code" x-text="`${s.code} (${s.name})`"></option></template></select></div><div class="flex-1"><label class="text-xs text-dim">조건</label><select x-model="scoringModal.data.params.condition" class="w-full mt-1 text-xs"><option value="all">전체</option><option value="female_only">여성만</option></select></div></div></div></template>
       <template x-if="scoringModal.data.rule_type==='holiday_work'"><div class="card-sm"><p class="text-xs text-dim">사전입력에서 지정한 법정공휴일에 근무(D/E/N)하는 간호사에게 가점을 부여합니다.</p></div></template>
-      <template x-if="scoringModal.data.rule_type==='holiday_off'"><div class="card-sm"><p class="text-xs text-dim">법정공휴일에 OF(휴무)가 배정되면 페널티를 부여합니다. 공휴일에는 법(법정공휴일 휴가)을 받는 것이 유리합니다.</p></div></template>
+      <template x-if="scoringModal.data.rule_type==='holiday_off'"><div class="card-sm"><p class="text-xs text-dim">법정공휴일에 OF(휴무)가 배정되면 페널티를 부여합니다. 공휴일에는 법(법정공휴일 휴가)을 받는 것이 유리합니다. 야간전담은 법을 받지 못해 공휴일에도 OF로 쉬므로 대상에서 빠집니다.</p></div></template>
       <template x-if="scoringModal.data.rule_type==='weekend_work'"><div class="card-sm"><p class="text-xs text-dim mb-2">업무 강도가 낮은 주말 시간대 근무에 가점을 부여합니다.</p><p class="text-xs text-dim">기본: 토요일 E/N, 일요일 D (입퇴원/수술/검사 없는 시간대)</p></div></template>
       <template x-if="scoringModal.data.rule_type==='night_fairness'"><div class="card-sm"><p class="text-xs text-dim">간호사 간 <strong>야간 횟수</strong>의 편차(최대−최소)에 페널티를 부여합니다. 직전 3개월 저장본의 누적 야간이 자동으로 더해져 <strong>누적 편차</strong>가 줄어듭니다. 야간전담·야간 불가·임산부는 대상에서 제외됩니다. 점수는 음수(페널티)로 두세요.</p></div></template>
       <template x-if="scoringModal.data.rule_type==='weekend_fairness'"><div class="card-sm"><p class="text-xs text-dim mb-1">간호사 간 <strong>주말(토·일)·법정공휴일 근무일 수</strong>의 편차(최대−최소)에 페널티를 부여합니다. 직전 3개월 저장본의 누적이 자동으로 더해져, 지난달 주말·공휴일을 많이 뛴 사람은 이번 달 적게 받습니다.</p><p class="text-xs text-dim">야간전담(14일 고정)과 당월 전입·전출자는 대상에서 제외됩니다. 점수는 음수(페널티)로 두세요. 결과는 근무표 탭의 간호사별 월간 요약 표에서 확인합니다.</p></div></template>
@@ -2236,7 +2251,7 @@
         </div>
         <div>
           <h4 class="font-semibold text-bright">❓ 사전입력 완화란? (최소 침습)</h4>
-          <p class="text-xs mt-1">생성이 안 될 때, 사전입력을 자동 배정이 바꿀 수 있게 허용합니다. <strong>꼭 필요한 만큼만</strong> 바꾸며 순서는 <strong>근무 → (인원 부족 보고) → 휴무</strong>입니다. 즉 근무 배정을 먼저 조정하고, <strong>휴무(OFF·V·생·특·공·법·병)는 간호사 개인의 시간이라 최후에만</strong> 건드립니다(주휴는 고정). 휴무가 바뀌면 ⚠로 알려주고, 처방 적용 시 확인을 받습니다. 두 계산 방식 모두 같습니다. "완화 설정"에서 보너스를 조절할 수 있습니다.</p>
+          <p class="text-xs mt-1">생성이 안 될 때, 사전입력을 자동 배정이 바꿀 수 있게 허용합니다. <strong>꼭 필요한 만큼만</strong> 바꾸며 순서는 <strong>근무 → (인원 부족 보고) → 휴무</strong>입니다. 즉 근무 배정을 먼저 조정하고, <strong>휴무(OFF·V·생·특·공·법·병·경가·조가·산전)는 간호사 개인의 시간이라 최후에만</strong> 건드립니다(주휴는 고정). 휴무가 바뀌면 ⚠로 알려주고, 처방 적용 시 확인을 받습니다. 두 계산 방식 모두 같습니다. "완화 설정"에서 보너스를 조절할 수 있습니다.</p>
         </div>
         <div>
           <h4 class="font-semibold text-bright">❓ 엑셀/구글시트에서 근무표를 붙여넣으려면?</h4>
@@ -2271,6 +2286,8 @@
             <tr><td class="font-mono text-xs"><kbd>?</kbd></td><td>단축키 도움말 토글</td></tr>
             <tr><td class="font-mono text-xs"><kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd></td><td>사전입력 셀 이동</td></tr>
             <tr><td class="font-mono text-xs"><kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>V</kbd> <kbd>O</kbd> <kbd>W</kbd></td><td>사전입력 직접 입력 (O=OF, W=주)</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>ㅈ</kbd> <kbd>ㅂ</kbd> <kbd>ㅃ</kbd> <kbd>ㅅ</kbd> <kbd>ㅌ</kbd> <kbd>ㄱ</kbd></td><td>한글 자판: 주 · 병 · 법 · 생 · 특 · 공</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>ㄲ</kbd> <kbd>ㅉ</kbd> <kbd>ㅆ</kbd></td><td>한글 자판 Shift: 경가 · 조가 · 산전</td></tr>
             <tr><td class="font-mono text-xs"><kbd>Del</kbd></td><td>사전입력 셀 삭제</td></tr>
             <tr><td class="font-mono text-xs"><kbd>Ctrl+Z</kbd></td><td>되돌리기</td></tr>
             <tr><td class="font-mono text-xs"><kbd>Ctrl+Shift+Z</kbd></td><td>다시 실행</td></tr>
@@ -2317,6 +2334,7 @@
       <tbody>
         <tr><td class="font-mono text-blue">← → ↑ ↓</td><td>셀 이동 (사전입력)</td></tr>
         <tr><td class="font-mono text-blue">D E N V</td><td>근무 직접 입력</td></tr>
+        <tr><td class="font-mono text-blue">ㄲ ㅉ ㅆ</td><td>경가 · 조가 · 산전 (한글 Shift)</td></tr>
         <tr><td class="font-mono text-blue">Del / Backspace</td><td>셀 삭제</td></tr>
         <tr><td class="font-mono text-blue">Ctrl+Z</td><td>되돌리기</td></tr>
         <tr><td class="font-mono text-blue">Ctrl+Shift+Z</td><td>다시 실행</td></tr>
@@ -2347,7 +2365,7 @@
       <thead><tr><th style="text-align:left;padding:0 6px">이름</th><template x-for="d in rdPrintDays" :key="'ph'+d"><th :class="(d.getDay()===0||d.getDay()===6||isHoliday(d))?'wk':''"><span x-text="d.getDate()"></span><br><span x-text="isHoliday(d)?'법':rdWeekday(d.getDay())"></span></th></template><th>D</th><th>E</th><th>N</th></tr></thead>
       <tbody><template x-for="nurse in nurses" :key="'pr'+nurse.id"><tr><td class="name" x-text="nurse.name"></td><template x-for="d in rdPrintDays" :key="'pc'+nurse.id+d"><td :data-shift="rdPrintCode(nurse,d)||null" x-text="isNurseInactive(nurse,d)?'':rdPrintCode(nurse,d)"></td></template><td x-text="countShifts(nurse.id,['DC','D'])"></td><td x-text="countShifts(nurse.id,['EC','E'])"></td><td x-text="countShifts(nurse.id,['NC','N'])"></td></tr></template></tbody>
     </table>
-    <div class="legend"><span>■ 진한 칸 = 야간(N)</span><span>▨ 빗금 칸 = 주휴·오프</span><span>굵은 글자 = 차지(DC/EC/NC)</span><span class="r">NurseScheduler v4</span></div>
+    <div class="legend"><span>■ 진한 칸 = 야간(N)</span><span>▨ 빗금 칸 = 주휴·오프</span><span>차지는 표시하지 않습니다 (병동 번표와 같음)</span><span class="r">NurseScheduler v4</span></div>
   </div>
 </div>
 </template>

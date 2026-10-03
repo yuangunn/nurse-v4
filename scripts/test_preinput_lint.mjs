@@ -18,6 +18,7 @@ const SHIFTS = [
   { code: 'OF', period: 'rest' }, { code: '주', period: 'rest' }, { code: 'P1', period: 'rest' },
   { code: 'V', period: 'leave' }, { code: '생', period: 'leave' }, { code: '특', period: 'leave' },
   { code: '공', period: 'leave' }, { code: '법', period: 'leave' }, { code: '병', period: 'leave' },
+  { code: '경가', period: 'leave' }, { code: '조가', period: 'leave' }, { code: '산전', period: 'leave' },
 ];
 
 function makeCtx({ nurses, prev = {}, rules = {}, holidays = [], dayReqs = {}, prevMonthNights = {} } = {}) {
@@ -69,6 +70,12 @@ assert.ok(has(m.n, 'N→휴무→D'), m.n.join('\n'));
 // 5. 공휴일 OF — 위반이 아니라 '무시됨' 경고 (솔버 _effective_pre 대응)
 m = run({ nurses: [nurse('a')], holidays: ['2026-03-05'], prev: { a: { '2026-03-05': 'OF' } } });
 assert.ok(has(m.n, '공휴일 OF'), m.n.join('\n'));
+// 5a. 병동 휴가 코드(경가·조가·산전)는 아는 코드 — 막히지 않는다
+m = run({ nurses: [nurse('a')], prev: { a: { '2026-03-02': '경가', '2026-03-03': '조가', '2026-03-04': '산전' } } });
+assert.ok(!m.v.length && !has(m.n, '알 수 없는'), [...m.v, ...m.n].join('\n'));
+// 5b. 야간전담(나이트킵)의 공휴일 OF 는 정상 — 법을 받지 못해 OF로 쉰다 (2026-10-03 병동 확인)
+m = run({ nurses: [nurse('a', { night_months: { '2026-03': true } })], holidays: ['2026-03-05'], prev: { a: { '2026-03-05': 'OF' } } });
+assert.ok(!has(m.n, '공휴일 OF'), m.n.join('\n'));
 
 // 6. 일별 사전배정 초과 (요구 정확히 일치)
 m = run({ nurses: [nurse('a'), nurse('b')], dayReqs: { '2026-03-03': { D: 1 } }, prev: { a: { '2026-03-03': 'D' }, b: { '2026-03-03': 'DC' } } });

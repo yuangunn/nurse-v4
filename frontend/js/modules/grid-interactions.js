@@ -117,7 +117,7 @@ window.GridInteractionsModule = function() {
           if(code.startsWith('/'))continue; // 트레이니 표시 코드 — 솔버가 스트립
           const def=defByCode[code];
           if(!def){v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} '${code}' 알 수 없는 근무 코드`});continue}
-          if(code==='OF'&&holidaySet.has(dk)){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 공휴일 OF — 생성 시 무시되고 재배치됩니다`});continue}
+          if(code==='OF'&&holidaySet.has(dk)&&!nightDed){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 공휴일 OF — 생성 시 무시되고 재배치됩니다`});continue}
           if(span&&nightSet.has(code)&&dk>=span[0]&&dk<=span[1]){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 임신 구간 야간 — 생성 시 무시됩니다 (모성보호)`});continue}
           if(pregMonth&&code==='생'){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 임신 달 생리휴가 — 생성 시 무시됩니다`});continue}
           eff[dk]=code;
@@ -277,9 +277,10 @@ window.GridInteractionsModule = function() {
       else{
         // 근무코드 직접 입력 (ㅂ=병가, ㅃ(Shift+ㅂ)=법정공휴일 — 객체 리터럴 중복 키로
         // '병' 입력이 불가능하고 ㅂ가 '법'을 입력하던 버그 수정)
+        // 쌍자음 = Shift: ㄲ 경가 · ㅉ 조가 · ㅆ 산전 (redesign.js rdPopupKey 와 같은 표)
         const key=event.key.toUpperCase();
         const shiftMap={'D':'D','E':'E','N':'N','V':'V','O':'OF','W':'주'};
-        const hangulMap={'ㅈ':'주','ㅂ':'병','ㅃ':'법','ㅅ':'생','ㅌ':'특','ㄱ':'공'};
+        const hangulMap={'ㅈ':'주','ㅂ':'병','ㅃ':'법','ㅅ':'생','ㅌ':'특','ㄱ':'공','ㄲ':'경가','ㅉ':'조가','ㅆ':'산전'};
         let code=shiftMap[key]||hangulMap[event.key];
         if(!code){
           const match=this.shifts.find(s=>s.code.toUpperCase()===key);
