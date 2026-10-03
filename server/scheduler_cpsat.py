@@ -249,6 +249,11 @@ class CpSatScheduler(_SchedulerBase):
                     or dt < date(self.year, self.month, 1)
                 fixed_to = None
                 if active and pre and locked:
+                    keep = self._locked_domain(nurse, dt, pre)   # 잠긴 D·E·N 은 차지로 올릴 수 있다
+                    if len(keep) > 1:
+                        for s in self.ALL_SHIFTS:
+                            x[nid][d][s] = model.NewBoolVar(f"rx_{nid}_{d}_{s}") if s in keep else 0
+                        continue
                     fixed_to = pre
                 elif active and pre == "주" and not self.allow_juhu_relax:
                     fixed_to = "주"

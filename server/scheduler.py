@@ -299,8 +299,14 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 is_locked = bool(self.locked_cells.get(nid, {}).get(dt_str)) \
                     or dt < first_of_month
                 if is_locked and pre:
+                    keep = self._locked_domain(nurse, dt, pre)   # 잠긴 D·E·N 은 차지로 올릴 수 있다
                     for s in self.ALL_SHIFTS:
-                        x[nid][d][s] = 1 if s == pre else 0
+                        if s in keep and len(keep) > 1:
+                            v = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
+                            x[nid][d][s] = v
+                            _free_vars_r.append(v)
+                        else:
+                            x[nid][d][s] = 1 if s == pre else 0
                     continue
                 for s in self.ALL_SHIFTS:
                     # OF는 공휴일에 배정 불가 (하드 제약, 완화 모드 포함) — 일반 간호사만. 야간전담은 법 대신 OF
