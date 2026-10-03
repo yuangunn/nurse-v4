@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Tuple
 import pulp
 
 from .models import GenerateRequest, Nurse, Requirements, Rules, ScoringRule
-from .scheduler_base import _SchedulerBase, timeoff_class
+from .scheduler_base import _SchedulerBase, timeoff_class, _FIXED_DATE_LEAVE
 from .scheduler_highs_constraints import _HighsConstraintsMixin
 from .scheduler_highs_diagnosis import _HighsDiagnosisMixin
 
@@ -264,8 +264,12 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         PRE_BONUS_OFF   = getattr(self.rules, 'preBonusOff', 3000)     # OFF 휴식 (보호)
         PRE_BONUS_WORK  = getattr(self.rules, 'preBonusWork', 500)     # 근무 (먼저 완화)
         PRE_BONUS_REST  = getattr(self.rules, 'preBonusRest', 300)     # 주휴 — allow_juhu_relax 시
+        # 날이 정해진 휴가(경가·조가·공·특·병·산전)는 오프특근보다 먼저 지킨다 (결정 1-35)
+        PRE_BONUS_FIXED = self._relax_fixed_leave_bonus(PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK)
 
         def _pre_bonus_for(code: str, nid: str = "") -> int:
+            if code in _FIXED_DATE_LEAVE:
+                return PRE_BONUS_FIXED
             cls = timeoff_class(code)
             if cls == "juhu":
                 return PRE_BONUS_REST      # 주휴는 개인 요청이 아니라 법정 요일 — 보정 없음
@@ -492,7 +496,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 import math
                 bonus_gcd = 0
                 for b in (PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK, PRE_BONUS_REST,
-                          *(pen for pen, _ in lr)):
+                          PRE_BONUS_FIXED, *(pen for pen, _ in lr)):
                     if b > 0:
                         bonus_gcd = math.gcd(bonus_gcd, int(b))
                 dom = int(scoring_bound // max(1, bonus_gcd)) + 2
