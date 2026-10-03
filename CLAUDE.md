@@ -47,7 +47,9 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
    **잠금(🔒)** 하나다 — 셀 메모는 기록용이지 보호 등급이 아니다.
 10. **나이트킵(야간전담)은 법(법정공휴일 휴가)을 받지 못한다 — 공휴일에도 OF로 쉰다**
     (2026-10-03, 101병동 실제 번표의 공휴일 OF 15건이 모두 그 달 나이트킵). 공휴일 OF 금지는
-    일반 간호사에게만 건다.
+    일반 간호사에게만 건다. **나이트킵에게 주는 것은 N·V·생·OF 뿐** (원근, 같은 날 — 미리 넣은 주휴는 그대로).
+    **나이트킵은 달력 달로 맡는다** (실제 번표 5~10월 경계 모두: 9월 나이트킵은 10/1~10/3 에 D·E, 10월 나이트킵은 그 사흘에 N)
+    — 근무표 끝에 붙은 다음 달 며칠은 그 달 나이트킵 기준 (결정 1-33).
 11. **병동 번표에는 누가 차지인지 나오지 않는다** (2026-10-03). 번표 아래 'D차지' 줄 숫자는 그날
     **차지를 맡을 수 있는 사람 수**다. 앱 안에서는 DC/EC/NC 를 그대로 쓰고(어싸인용 복사도 그대로),
     인쇄·엑셀(CSV)만 늘 D/E/N 으로 낸다.
@@ -130,7 +132,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 228건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드)
+├── tests/                   # pytest 회귀 236건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -174,7 +176,7 @@ npm start
 ### 테스트
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 228건
+python3 -m pytest -q                  # 236건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_hospital_holidays.mjs \
@@ -278,7 +280,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | **사전입력 사실-클램프** | 확정(사전입력) 셀은 검증 대상이 아니라 **주어진 사실** — 제약에 걸리는 셀이 전부 확정이면 그 제약은 스킵(일 전체·인접 쌍·윈도우·주 전체 확정, 완전 확정 날은 변수 리터럴화), 확정+자유 혼합 카운트 제약은 상한을 `max(규칙, 확정분)`으로 클램프(자유 셀이 위반을 더 늘리는 건 금지). 부분 확정("2주차까지만 꽉 채움")도 동일 작동. 규칙 차이는 성공 결과에 `pinned_notes` 안내만. 완화(allow_pre_relax) 명시 시엔 클램프 OFF(완화 우선). 완전 확정 표 폴백(`pinned_confirmed`)은 타임아웃 안전망으로 유지. 결정 1-15 |
 | 월 최대 야간 | 기본 월 6회 (수면OFF 임계) |
 | 홀짝월 합산 야간 | 전월+당월 ≤ 11회 (선택적). **나이트킵 달의 야간은 합산 제외** (제1원칙 7) — 전월N 자동 인수인계(`compute_prev_month_nights`)와 엔진 `_two_month_rhs` 양쪽에서 뺀다 |
-| **야간전담 규칙** | N/NC만 배정, 5일 윈도우 내 ≤3 야간, 당월 정확히 14일 근무 (생휴 강제 없음 — 월 ≤1 상한만) |
+| **야간전담 규칙** | N/NC만 배정, 5일 윈도우 내 ≤3 야간, 당월 정확히 14일 근무 (생휴 강제 없음 — 월 ≤1 상한만). **나이트킵인지는 날짜가 속한 달로**(`_keeper_on`) — 생성 범위 끝의 다음 달 며칠은 그 달 나이트킵에게 N/NC·쉬는 것만(`_keeper_forbids`, 사전입력은 사실), 이번 달 나이트킵은 그 며칠 일반 간호사 (결정 1-33) |
 | **임산부 모성보호** | `is_pregnant`+`pregnancy`{early,late} 설정 시: ①P1 구간 완전 포함 주마다 P1 정확히 1회(부분 주 ≤1) ②임신 전 구간 `[early.start~late.end]` N/NC 금지 ③임신-중-달 생(生) 면제(배정 금지) ④임산부 달엔 야간전담 자동 해제. P1은 임산부+구간 또는 사전입력 P1에서만 허용(그 외 변수 0). HiGHS·CP-SAT·conflict_analyzer 패리티. 헬퍼: `_preg_window_on`/`_preg_span_on`/`_preg_active_in_month`/`_preg_forbids`/`_preg_effective_pre` (scheduler_base) |
 | 전입/전출 재적 | start_date ≤ d ≤ end_date 범위에서만 배정 |
 | **셀 잠금** | `locked_cells[nurse][date]=true`인 셀은 완화 모드에서도 사전입력 고정 |
@@ -299,7 +301,8 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 - V 사용 페널티 (-500) — 마지막 수단
 - **파트장 확인 마지막 수단** (제1원칙 13, 배점 규칙 아님 — 상수): 연속 근무 한도+1 `-3000 + 500×주말·공휴일 수`(최소 -1500) ·
   E→D1·중→D `-2000`. **완화 1단계(원티드 유지 최대화)에도 같은 감점을 넣는다** — 근무 원티드(500) 하나를 지키려고
-  6일 연속을 만들지 않게 (`_last_resort_terms`, HiGHS·CP-SAT 양쪽). 오프특근 슬랙은 지금처럼 1단계에 넣지 않는다
+  6일 연속을 만들지 않게 (`_last_resort_terms`, HiGHS·CP-SAT 양쪽). 오프특근도 1단계에 넣되 **가장 나중** — 감점이 원티드 한 칸(휴가 원티드 × 완화 이력 보정)보다 크다
+  (기본 5100, `_relax_off_teukgeun_terms`, 결정 1-32 원근 답)
 - 생 사용 (여성) 보상 (+80)
 - 법정공휴일 휴가 보상 (+30)
 - 공휴일 근무 보상 (+20)

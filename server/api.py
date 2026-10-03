@@ -1319,17 +1319,22 @@ def _validate_locked_conflicts(request: GenerateRequest) -> Optional[str]:
     prev = request.prev_schedule or {}
     holidays = set(request.holidays or [])
     name_by_id = {n.id: n.name for n in request.nurses}
-    # 야간전담(나이트킵)은 법을 받지 못해 공휴일에도 OF로 쉰다 — 그 사람의 공휴일 OF 는 정상
-    night_keepers = {n.id for n in request.nurses
-                     if night_keeper_in_month(n.model_dump(), request.year, request.month)}
+    # 야간전담(나이트킵)은 법을 받지 못해 공휴일에도 OF로 쉰다 — 그 사람의 공휴일 OF 는 정상.
+    # 나이트킵인지는 그 칸의 달로 본다 (생성 범위 끝의 다음 달 며칠 — 엔진 _keeper_on 과 같게)
+    by_id = {n.id: n.model_dump() for n in request.nurses}
     bad = []
     for nid, cells in locked.items():
-        if nid in night_keepers:
-            continue
         for dt_str, flag in (cells or {}).items():
             if not flag:
                 continue
             if dt_str < first_key:
+                continue
+            nd = by_id.get(nid)
+            try:
+                ky, km = int(dt_str[:4]), int(dt_str[5:7])
+            except ValueError:
+                ky, km = request.year, request.month
+            if nd and night_keeper_in_month(nd, ky, km):
                 continue
             pre = (prev.get(nid) or {}).get(dt_str)
             pre = _PRE_ALIAS.get(pre, pre)          # 번표 표기 OFF → OF (엔진과 같게)

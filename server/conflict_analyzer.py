@@ -591,13 +591,13 @@ class _ConflictAnalyzer(CpSatScheduler):
         for nurse in self.nurses:
             nid = nurse["id"]
             x[nid] = {}
-            is_night = nurse.get("is_night_shift")
             is_male = nurse.get("gender") != "female"
             for d in range(self.T):
                 dt = self.all_dates[d]
                 dt_str = dt.strftime("%Y-%m-%d")
                 x[nid][d] = {}
                 is_holiday = dt_str in self.holidays
+                is_night = self._keeper_on(nurse, dt)   # 날짜가 속한 달의 나이트킵 (다음 달 며칠 포함)
                 pre = self.prev.get(nid, {}).get(dt_str)
                 # 유효 사전입력 (공휴일 OF 드롭[일반 간호사] + 모성보호 드롭 — 공용 헬퍼)
                 pre = self._effective_pre(nurse, dt, pre, is_holiday)
@@ -617,6 +617,8 @@ class _ConflictAnalyzer(CpSatScheduler):
                         free_ok[s] = False
                     elif self._preg_forbids(nurse, dt, s, pre):
                         free_ok[s] = False   # 임산부 모성보호 (P1 구간 외/야간 제외/생 면제)
+                    elif self._keeper_forbids(nurse, dt, s):
+                        free_ok[s] = False   # 다음 달 나이트킵 (원티드는 keep 리터럴로)
                     elif s == "법":
                         free_ok[s] = (is_holiday and not is_night)
                     elif s in ("생", "V") and is_holiday and not is_night:

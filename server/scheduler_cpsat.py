@@ -232,13 +232,13 @@ class CpSatScheduler(_SchedulerBase):
         for nurse in self.nurses:
             nid = nurse["id"]
             x[nid] = {}
-            is_night = nurse.get("is_night_shift")
             is_male = nurse.get("gender") != "female"
             for d in range(self.T):
                 dt = self.all_dates[d]
                 dt_str = dt.strftime("%Y-%m-%d")
                 x[nid][d] = {}
                 is_holiday = dt_str in self.holidays
+                is_night = self._keeper_on(nurse, dt)   # 날짜가 속한 달의 나이트킵 (다음 달 며칠 포함)
                 pre = self.prev.get(nid, {}).get(dt_str)
                 # 유효 사전입력 (공휴일 OF 드롭[일반 간호사] + 모성보호 드롭 — 공용 헬퍼)
                 pre = self._effective_pre(nurse, dt, pre, is_holiday)
@@ -265,6 +265,8 @@ class CpSatScheduler(_SchedulerBase):
                         x[nid][d][s] = 0
                     elif self._preg_forbids(nurse, dt, s, pre):
                         x[nid][d][s] = 0   # 임산부 모성보호 (P1 구간 외/야간 제외/생 면제)
+                    elif self._keeper_forbids(nurse, dt, s):
+                        x[nid][d][s] = 0   # 다음 달 나이트킵 — 원티드도 (HiGHS 패리티)
                     elif pre == "주" and self.allow_juhu_relax:
                         # 주휴 무시(HiGHS 패리티): 주 유지 or 근무 전환 허용,
                         # 단 주→OF 금지(무의미) + 일반 게이팅 동일 적용
@@ -358,7 +360,8 @@ class CpSatScheduler(_SchedulerBase):
             for v in flex_vars:
                 keep_terms.append(b * v)
         # 파트장 확인 마지막 수단(제1원칙 13)·오프특근도 1단계에서 원티드와 맞바꾼다 (HiGHS 패리티)
-        lr = (self._last_resort_terms() + self._relax_off_teukgeun_terms(_BONUS["off"])
+        lr = (self._last_resort_terms()
+              + self._relax_off_teukgeun_terms(_BONUS["leave"], _BONUS["off"], _BONUS["work"])
               if keep_terms else [])
         for pen, sl in lr:
             keep_terms.append(-pen * sl)
@@ -480,7 +483,6 @@ class CpSatScheduler(_SchedulerBase):
         for nurse in self.nurses:
             nid = nurse["id"]
             x[nid] = {}
-            is_night = nurse.get("is_night_shift")
             is_male = nurse.get("gender") != "female"
             for d in range(self.T):
                 dt = self.all_dates[d]
@@ -488,6 +490,7 @@ class CpSatScheduler(_SchedulerBase):
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
+                is_night = self._keeper_on(nurse, dt)   # 날짜가 속한 달의 나이트킵 (다음 달 며칠 포함)
                 # 유효 사전입력 (공휴일 OF 드롭[일반 간호사] + 모성보호 드롭 — 공용 헬퍼)
                 pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
@@ -504,6 +507,10 @@ class CpSatScheduler(_SchedulerBase):
                         continue
                     # 임산부 모성보호 게이팅 (P1 구간 외/야간 제외/생 면제 → 0 고정)
                     if self._preg_forbids(nurse, dt, s, pre):
+                        x[nid][d][s] = 0
+                        continue
+                    # 다음 달 나이트킵: 생성 달 뒤 며칠에도 야간 외 근무 금지 (HiGHS 패리티)
+                    if self._keeper_forbids(nurse, dt, s, pre):
                         x[nid][d][s] = 0
                         continue
                     if pre:

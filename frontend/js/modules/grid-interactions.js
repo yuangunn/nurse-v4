@@ -106,6 +106,13 @@ window.GridInteractionsModule = function() {
         const nm=nurse.night_months||{};
         let nightDed=Object.keys(nm).length?!!nm[monthKey]:!!nurse.is_night_shift;
         if(pregMonth)nightDed=false; // 임산부 달엔 야간전담 자동 해제 (솔버 동일)
+        // 그 날짜가 속한 달의 나이트킵인가 — 생성 범위 끝의 다음 달 며칠은 그 달 기준 (엔진 _keeper_on)
+        const dedOn=(dk)=>{
+          const mk=dk.slice(0,7);if(mk===monthKey)return nightDed;
+          let on=Object.keys(nm).length?!!nm[mk]:!!nurse.is_night_shift;
+          if(on&&span){const[y,mo]=mk.split('-').map(Number);if(span[0]<=this.dayKey(new Date(y,mo,0))&&span[1]>=`${mk}-01`)on=false}
+          return on;
+        };
         const capable=new Set(nurse.capable_shifts!==undefined?nurse.capable_shifts:workCodes);
         const eff={};effByNurse[nid]=eff; // dk → 유효 사전입력 (무시분 제외)
         const vDays=[],mDays=[],nDays=[];
@@ -118,13 +125,13 @@ window.GridInteractionsModule = function() {
           if(this.isFlexWish(code))continue; // 원티드 둘 중 하나·N 빼고 — 생성이 고른다 (확정 칸 아님)
           const def=defByCode[code];
           if(!def){v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} '${code}' 알 수 없는 근무 코드`});continue}
-          if(code==='OF'&&holidaySet.has(dk)&&!nightDed){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 공휴일 OF — 생성 시 무시되고 재배치됩니다`});continue}
+          if(code==='OF'&&holidaySet.has(dk)&&dk>=firstKey&&!dedOn(dk)){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 공휴일 OF — 생성 시 무시되고 재배치됩니다`});continue}
           if(span&&nightSet.has(code)&&dk>=span[0]&&dk<=span[1]){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 임신 구간 야간 — 생성 시 무시됩니다 (모성보호)`});continue}
           if(pregMonth&&code==='생'){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 임신 달 생리휴가 — 생성 시 무시됩니다`});continue}
           eff[dk]=code;
           if(['day','evening','night'].includes(def.period)&&!(flexMap[code]||[code]).some(c=>capable.has(c)))
             notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} ${code} — 가능 근무에 없음 (자격 미달, 확정으로 수용)`});
-          if(nightDed&&workSet.has(code)&&def.period!=='night')
+          if(dedOn(dk)&&workSet.has(code)&&def.period!=='night')
             notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} ${code} — 야간전담의 야간 외 근무 (확정으로 수용)`});
           if(code==='생'&&nurse.gender!=='female')
             notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 생리휴가는 여성 전용 (확정으로 수용)`});

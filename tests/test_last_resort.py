@@ -205,6 +205,32 @@ def test_relax_prefers_last_resort_over_off_teukgeun(solver, relax):
     assert [c["kind"] for c in r.get("manager_check") or []] == ["run"], r.get("manager_check")
 
 
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_relax_moves_leave_wish_before_off_teukgeun(solver):
+    """오프특근은 가장 나중 (2026-10-03 원근 결정) — 원티드를 풀어야 하는 달엔 휴가 원티드까지
+    먼저 푼다. 3/1~3/7 · 2명 · 낮만. a1 의 3/3 V 원티드를 지키면 누군가 그 주 OF 를 반납해야
+    한다(오프특근). a1 의 3/6 OF 원티드(낮 2명 필요한 날)가 strict 를 실패시키는 장치다."""
+    d = [1, 2, 1, 1, 2, 2, 1]
+    per_day = {f"2026-03-0{i + 1}": {"D": n, "E": 0, "N": 0} for i, n in enumerate(d)}
+    pre = {"a0": {"2026-03-04": "주"},
+           "a1": {"2026-03-01": "주", "2026-03-03": "V", "2026-03-06": "OF"}}
+    req = _request(2, pre, per_day=per_day, longRunLastResort=False)
+    req.allow_pre_relax = True
+    r = make_limited(req, days=7, solver=solver).solve()
+    assert r["success"], r["message"]
+    assert not r.get("off_teukgeun"), r.get("off_teukgeun")
+    assert r["schedule"]["a1"]["2026-03-03"] != "V", r["schedule"]["a1"]
+
+
+def test_relax_off_teukgeun_penalty_tops_boosted_leave_wish():
+    """완화 이력 보정으로 커진 휴가 원티드(5000×1.5)보다도 오프특근 한 번이 더 비싸다."""
+    s = NurseScheduler(_six_run_request())
+    s._off_slack = ["s"]
+    assert s._relax_off_teukgeun_terms(5000, 3000, 500) == [(5100, "s")]
+    s.relax_boosts = {"a0": 1.5}
+    assert s._relax_off_teukgeun_terms(5000, 3000, 500) == [(7600, "s")]
+
+
 def test_manager_check_skips_user_entered_cells_in_relax_mode():
     """2차 집중 검토: 완화 모드에선 _pin 이 비어 사람이 넣은 6일 연속·E→D1 까지 '파트장 확인'으로
     셌다. 사전입력과 직접 견준다 (화면 scheduleWarnings 와 같은 기준)."""

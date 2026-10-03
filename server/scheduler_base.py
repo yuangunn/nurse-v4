@@ -203,6 +203,9 @@ class _SchedulerBase:
                 self._trainees.append(n)
         # 월별 야간전담: night_months에 설정이 있으면 해당 월만 사용, 없으면 is_night_shift 폴백
         # 임산부(모성보호): 해당 월에 임신 중이면 야간전담 해제 — 야간 면제와 충돌 방지
+        # 덮어쓰기 전 원래 값 — 생성 범위 끝에 붙은 다음 달 며칠을 그 달 기준으로 볼 때 쓴다 (_keeper_on)
+        self._night_base = {n["id"]: bool(n.get("is_night_shift")) for n in self.nurses}
+        self._keeper_cache = {}
         for nurse in self.nurses:
             nurse["is_night_shift"] = night_keeper_in_month(nurse, self.year, self.month)
         # 임신 구간 파싱 캐시 {nid: {"early":(s,e)|None, "late":(s,e)|None}}
@@ -441,17 +444,53 @@ class _SchedulerBase:
     # 진단·분석기)에 사본으로 존재하면 한쪽만 수정되는 발산 버그가 생긴다 —
     # 실제로 발산했던 로직들을 여기 단일 구현으로 모은다.
 
+    def _keeper_on(self, nurse: dict, dt: date = None) -> bool:
+        """그 날짜에 나이트킵(야간전담)인가 — **날짜가 속한 달** 기준 (2026-10-03).
+
+        병동은 나이트킵을 달력 달로 맡긴다: 실제 번표에서 9월 나이트킵은 10/1~10/3 에 D·E,
+        10월 나이트킵은 같은 사흘에 N·OF·주였다. 생성 범위는 주 단위라 끝에 다음 달 며칠이
+        붙는데, 거기서 생성 달 판정을 그대로 쓰면 다음 달 나이트킵에게 D·E 가 들어가고
+        (나이트킵은 N·V·생·OF 만 — 제1원칙 10), 이번 달 나이트킵은 다음 달에도 법을 못 받는다.
+        생성 달 안은 __init__ 이 해석해 둔 nurse['is_night_shift'] (night_months + 임산부 해제)."""
+        if dt is None or (dt.year == self.year and dt.month == self.month):
+            return bool(nurse.get("is_night_shift"))
+        cache = getattr(self, "_keeper_cache", None)
+        if cache is None:
+            cache = self._keeper_cache = {}
+        key = (nurse["id"], dt.year, dt.month)
+        if key not in cache:
+            base = getattr(self, "_night_base", {}).get(nurse["id"], nurse.get("is_night_shift"))
+            cache[key] = night_keeper_in_month(dict(nurse, is_night_shift=base), dt.year, dt.month)
+        return cache[key]
+
+    def _keeper_forbids(self, nurse: dict, dt: date, s: str, pre: str = None) -> bool:
+        """생성 달 뒤에 붙은 다음 달 며칠에서, 그 달 나이트킵에게 야간 외 근무를 막는다.
+
+        생성 달 안은 _c_night_shift_nurses / _cs_night_shift_nurses 가 맡는다 (14회·5일 윈도우와 함께).
+        사전입력 pre 의 근무는 그대로 둔다 — strict 에서 사전입력은 사실이다. 완화 경로는
+        잠긴 칸을 이 게이트 전에 상수로 묶으므로 pre=None 으로 불러 원티드도 함께 막는다."""
+        if s not in self.WORK_SHIFTS or s in self.NIGHT_SHIFTS:
+            return False
+        if dt <= self._month_last_day():
+            return False   # 생성 달 안(달 규칙이 맡음)이거나 지난달 기록
+        if not self._keeper_on(nurse, dt):
+            return False
+        return not (pre and s in self._PRE_FLEX.get(pre, {pre}))
+
+    def _month_last_day(self) -> date:
+        import calendar as _cal
+        return date(self.year, self.month, _cal.monthrange(self.year, self.month)[1])
+
     def _holiday_of_banned(self, nurse: dict, is_holiday: bool, dt: date = None) -> bool:
         """공휴일 OF 금지는 일반 간호사에게만 — 일반은 공휴일에 '법'으로 쉰다.
         야간전담(나이트킵)은 법을 받지 못하므로 공휴일에도 OF로 쉰다
         (2026-10-03 병동 확인: 실제 번표의 공휴일 OF 15건이 모두 그 달 나이트킵).
-        nurse['is_night_shift'] 는 __init__ 이 생성 월 기준으로 해석해 둔 값
-        (night_months + 임산부 해제) — 모든 변수 생성 경로가 이 함수를 써야 한다.
+        나이트킵인지는 날짜가 속한 달로 본다(_keeper_on) — 모든 변수 생성 경로가 이 함수를 써야 한다.
         지난달 칸(dt < 1일)은 기록이라 막지 않는다 — 지난달 나이트킵의 설날 OF 같은
         사실을 이번 달 기준으로 지우면 월 경계 N→OF→D·연속 근무 검사가 흐려진다."""
         if dt is not None and dt < date(self.year, self.month, 1):
             return False
-        return bool(is_holiday) and not nurse.get("is_night_shift")
+        return bool(is_holiday) and not self._keeper_on(nurse, dt)
 
     # ── 파트장 확인 하에 쓰는 마지막 수단 (제1원칙 13) ────────────────────────
     def _soft_long_run(self) -> bool:
@@ -496,16 +535,21 @@ class _SchedulerBase:
         return (list(getattr(self, "_long_run_slack", []))
                 + list(getattr(self, "_rare_tr_slack", [])))
 
-    def _relax_off_teukgeun_terms(self, off_bonus: int) -> list:
+    def _relax_off_teukgeun_terms(self, *bonuses: int) -> list:
         """완화 1단계에 넣는 오프특근 [(감점, 슬랙)] — 2단계 목적함수의 1,000,000 과는 따로.
 
         1단계에 마지막 수단(6일 연속·E→D1)만 있고 오프특근이 없으면, 원티드를 풀어야 하는 달엔
         6일 연속 대신 오프특근(+V)을 공짜로 골라 버린다 — strict(오프특근 ≫ 6일 연속)와 거꾸로다.
-        감점은 OF 원티드·마지막 수단보다 크고 휴가 원티드보다 작게: 근무 원티드를 풀거나 OF 원티드를
-        다른 날로 옮겨서 되면 오프특근을 쓰지 않고, 휴가 원티드(V·경가 등)는 오프특근보다 지킨다.
-        (OF 원티드는 깨도 그 주 OF 가 옮겨질 뿐이지만 오프특근은 그 주 OF 가 없어진다.)
-        100 단위로 맞춰 완화 폴백의 보너스 gcd 를 깨지 않는다."""
-        pen = max(int(off_bonus), _LONG_RUN_PENALTY, _RARE_TRANSITION_PENALTY) + 100
+        **오프특근은 가장 나중** (2026-10-03 원근 결정): 감점을 원티드 한 칸의 유지 보너스 중
+        가장 큰 것(휴가 원티드, 완화 이력 보정 포함)과 마지막 수단보다 크게 둔다 — 근무·OF·휴가
+        원티드를 풀어서 되면 오프특근을 쓰지 않는다. 견주는 단위는 한 칸 대 한 번이다.
+        bonuses = 엔진의 원티드 유지 보너스(휴가·쉬는 날·근무). 100 단위로 맞춰 완화 폴백의
+        보너스 gcd 를 깨지 않는다."""
+        boosts = getattr(self, "relax_boosts", None) or {}
+        boost = max([1.0] + [float(b) for b in boosts.values()])
+        top = max([int(round(int(b) * boost)) for b in bonuses]
+                  + [_LONG_RUN_PENALTY, _RARE_TRANSITION_PENALTY])
+        pen = -(-top // 100) * 100 + 100
         return [(pen, sl) for sl in getattr(self, "_off_slack", [])]
 
     def _effective_pre(self, nurse: dict, dt: date, pre: str, is_holiday: bool):
