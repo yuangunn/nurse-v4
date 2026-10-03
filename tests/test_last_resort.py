@@ -10,6 +10,7 @@ import pytest
 
 from server.conflict_analyzer import analyze_conflicts
 from server.models import DayRequirement, GenerateRequest, Nurse, Requirements, Rules
+from server.scheduler import NurseScheduler
 
 from .conftest import _juhu_prev, make_limited
 from .test_exact_fit_characterization import PROD_SHIFTS
@@ -176,6 +177,48 @@ def test_relax_does_not_buy_work_wish_with_last_resort(solver):
     assert a0["2026-03-02"] not in ("E", "EC"), a0     # 근무 원티드를 내려놓는다
     assert a1["2026-03-02"] == "EC"
     assert not r.get("manager_check"), r.get("manager_check")
+
+
+def _teukgeun_vs_run_request(relax: bool):
+    """2명 · 3/1~3/14 · 낮만. a0 은 3/3~3/8 6일 연속이 아니면 a1 이 오프특근을 해야 한다.
+    relax=True 면 a1 의 3/8 OF 원티드(낮 2명 필요한 날)가 strict 를 실패시킨다."""
+    d = [1, 1, 2, 1, 2, 1, 2, 2, 0, 2, 1, 2, 2, 1]
+    per_day = {f"2026-03-{i + 1:02d}": {"D": n, "E": 0, "N": 0} for i, n in enumerate(d)}
+    pre = {"a0": {"2026-03-01": "주", "2026-03-14": "주", "2026-03-10": "D"},
+           "a1": {"2026-03-04": "주", "2026-03-11": "주", "2026-03-02": "DC"}}
+    if relax:
+        pre["a1"]["2026-03-08"] = "OF"
+    req = _request(2, pre, per_day=per_day)
+    req.locked_cells = {"a1": {"2026-03-02": True}}
+    req.allow_pre_relax = relax
+    return req
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+@pytest.mark.parametrize("relax", [False, True])
+def test_relax_prefers_last_resort_over_off_teukgeun(solver, relax):
+    """2차 집중 검토: 완화 1단계에 오프특근이 없어, 원티드를 풀어야 하는 달엔 6일 연속 대신
+    오프특근 + V 를 골랐다(strict 는 반대). 두 경로 모두 6일 연속(파트장 확인)이 먼저다."""
+    r = make_limited(_teukgeun_vs_run_request(relax), days=14, solver=solver).solve()
+    assert r["success"], r["message"]
+    assert not r.get("off_teukgeun"), r.get("off_teukgeun")
+    assert [c["kind"] for c in r.get("manager_check") or []] == ["run"], r.get("manager_check")
+
+
+def test_manager_check_skips_user_entered_cells_in_relax_mode():
+    """2차 집중 검토: 완화 모드에선 _pin 이 비어 사람이 넣은 6일 연속·E→D1 까지 '파트장 확인'으로
+    셌다. 사전입력과 직접 견준다 (화면 scheduleWarnings 와 같은 기준)."""
+    run = {f"2026-03-0{i}": "D" for i in range(2, 8)}
+    s = NurseScheduler(_request(2, {"a0": dict(run), "a1": {"2026-03-02": "E", "2026-03-03": "D1"}}))
+    s._pin = {}                                           # 완화 모드 — 사실-클램프 인덱스가 비어 있다
+    sched = {"a0": {"2026-03-01": "주", **run, "2026-03-08": "OF"},
+             "a1": {"2026-03-02": "E", "2026-03-03": "D1", "2026-03-04": "OF"}}
+    assert s._manager_check_report(sched) == []
+    sched["a0"]["2026-03-07"] = "DC"                      # D 원티드의 차지 승격도 지킨 것
+    assert s._manager_check_report(sched) == []
+    del s.prev["a0"]["2026-03-04"]                        # 한 칸이라도 엔진이 놓았으면 센다
+    del s.prev["a1"]["2026-03-02"]
+    assert sorted(c["kind"] for c in s._manager_check_report(sched)) == ["run", "transition"]
 
 
 # ── 충돌 분석 (신호등·원인 설명) ───────────────────────────────────────────────

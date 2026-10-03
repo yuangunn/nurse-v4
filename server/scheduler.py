@@ -438,10 +438,11 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             # → dom 가중 단일 솔브의 '거대 계수 + 상대 갭에 의한 보존 희생' 문제를
             #   모두 제거. 1단계가 시간 내 증명 안 되면 가중 방식(gap 0)으로 폴백.
             bonus_expr = pulp.lpSum(pre_bonus_terms)
-            lr = self._last_resort_terms()
+            # 파트장 확인 마지막 수단(제1원칙 13)도 1단계에서 원티드와 맞바꾼다 —
+            # 근무 원티드(500) 하나를 지키려고 6일 연속(1500~3000)을 만들지 않게.
+            # 오프특근도 같이 넣는다 — 빠지면 6일 연속 대신 오프특근을 공짜로 고른다.
+            lr = self._last_resort_terms() + self._relax_off_teukgeun_terms(PRE_BONUS_OFF)
             if lr:
-                # 파트장 확인 마지막 수단(제1원칙 13)도 1단계에서 원티드와 맞바꾼다 —
-                # 근무 원티드(500) 하나를 지키려고 6일 연속(1500~3000)을 만들지 않게.
                 bonus_expr = bonus_expr - pulp.lpSum(pen * sl for pen, sl in lr)
             prob.setObjective(bonus_expr)
             stage1 = pulp.HiGHS(timeLimit=max(30, int(self.time_limit) // 3),

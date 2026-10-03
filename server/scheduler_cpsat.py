@@ -357,8 +357,9 @@ class CpSatScheduler(_SchedulerBase):
                 b = int(round(b * float(self.relax_boosts.get(nid, 1.0))))
             for v in flex_vars:
                 keep_terms.append(b * v)
-        # 파트장 확인 마지막 수단(제1원칙 13)도 1단계에서 원티드와 맞바꾼다 (HiGHS 패리티)
-        lr = self._last_resort_terms() if keep_terms else []
+        # 파트장 확인 마지막 수단(제1원칙 13)·오프특근도 1단계에서 원티드와 맞바꾼다 (HiGHS 패리티)
+        lr = (self._last_resort_terms() + self._relax_off_teukgeun_terms(_BONUS["off"])
+              if keep_terms else [])
         for pen, sl in lr:
             keep_terms.append(-pen * sl)
         # ── 2단계 사전순 솔브 (HiGHS 완화 경로와 동일 정책) ───────────────────

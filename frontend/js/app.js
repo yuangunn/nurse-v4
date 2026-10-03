@@ -275,13 +275,17 @@ function app() {
       // 연속 근무 한도 — 한도+1 은 '파트장 확인 필요'(마지막 수단, 제1원칙 13), 그 위는 손으로 고친 뒤에만 생긴다
       const consecLimit=(r.maxConsecutiveWork&&r.maxConsecutiveWorkDays)||5;
       const softRun=!!r.maxConsecutiveWork&&r.longRunLastResort!==false;
+      const softTr=r.rareTransitionLastResort!==false;
+      // 사전입력으로 정해 둔 칸(그대로 지켜진 것)만으로 된 연속·전환은 사람이 넣은 사실 — 엔진도 manager_check 에서 뺀다.
+      // 원티드 D/E·N제외 칸은 확정이 아니라 엔진이 고른 것이라 세지 않는다.
+      const kept=(nid,day)=>{const p=this.prevSchedule?.[nid]?.[this.dayKey(day)];return !!p&&!this.isFlexWish(p)&&this.isPrevMatched(nid,day)==='match'};
 
       for(const nurse of this.nurses){
         const nid=nurse.id;
         const sched=this.schedule[nid]||{};
         let run=[];
         const flush=()=>{
-          if(run.length>consecLimit&&this.dayKey(run[run.length-1])>=firstKey){
+          if(run.length>consecLimit&&this.dayKey(run[run.length-1])>=firstKey&&!run.every(d=>kept(nid,d))){
             const k=run.filter(d=>d.getDay()===0||d.getDay()===6||holSet.has(this.dayKey(d))).length;
             const span=`${md(run[0])}~${md(run[run.length-1])}`;
             if(softRun&&run.length===consecLimit+1)
@@ -300,7 +304,8 @@ function app() {
           const k2=this.dayKey(allDays[i+1]);if(k2<firstKey)continue;
           const c1=sched[this.dayKey(allDays[i])],c2=sched[k2];
           const rule=evening.has(c1)&&day1.has(c2)?'E→D1':(middle.has(c1)&&dayD.has(c2)?'중→D':null);
-          if(rule)warns.push({type:'check',nurse:nurse.name,msg:`${md(allDays[i])} ${c1} → ${md(allDays[i+1])} ${c2} (${rule}) — 파트장 확인 필요`});
+          // 끄면 표의 위반 표시(checkScheduleViolations)가 맡는다
+          if(rule&&softTr&&!(kept(nid,allDays[i])&&kept(nid,allDays[i+1])))warns.push({type:'check',nurse:nurse.name,msg:`${md(allDays[i])} ${c1} → ${md(allDays[i+1])} ${c2} (${rule}) — 파트장 확인 필요`});
         }
 
         // 야간 — 월 한도를 넘긴 것만. 야간전담(나이트킵) 달은 14회가 정상이라 제외
