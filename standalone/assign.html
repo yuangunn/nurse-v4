@@ -1925,7 +1925,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261003b'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261003d'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -2231,6 +2231,9 @@ async function useHandle(h,{create=false}={}){
   try{ localStorage.setItem('assignMode','file'); }catch(e){}
   try{ await idbSet('handle',h); }catch(e){}
   try{ localStorage.setItem('assignLastFile',h.name); localStorage.setItem('assignLastAt',Date.now()); }catch(e){}
+  // 연결 전에 남은 저장 문장('⚠ 저장 연결 안 됨'·'⚠ 파일 미연결'·다른 파일의 실패)은 이 파일 얘기가 아니다 — 지운다.
+  // 안 지우면 옆 파일을 자동으로 읽고 [저장 연결]로 파일을 고른 뒤에도 알약이 빨강 '저장 연결 안 됨'이었다 (2026-10-03 사용자 제보)
+  saveState='';
   setFileLoc({kind:'file',name:h.name});
   if(create) await writeStore();
   await locateHandle(h);
@@ -2261,6 +2264,10 @@ function htmlDirPath(href){
     }
     return u.origin+decodeURIComponent(dirPart);                           // http(s)://
   }catch(e){ return ''; }
+}
+/* 지금 연 화면 파일의 이름 — 병동이 assign.html 이름을 바꿔 쓸 수도 있어 안내문에 박지 않는다 */
+function htmlFileName(href){
+  try{ return decodeURIComponent(new URL(href||location.href).pathname.split('/').pop())||'assign.html'; }catch(e){ return 'assign.html'; }
 }
 function dirOfPath(p){ return String(p||'').replace(/[^\\/]*$/,''); }
 function joinPath(dir,name){ if(!dir) return name||''; const sep=dir.includes('\\')?'\\':'/'; return dir.endsWith(sep)?dir+name:dir+sep+name; }
@@ -2306,7 +2313,9 @@ function renderFileInfo(){
     title='이 브라우저는 파일 저장을 지원하지 않습니다 — Edge 또는 Chrome(103+)에서 여세요'; }
   else{
     name=L.name||''; dir=L.dir||'';
-    if(L.kind==='sidecar'){ cls='warn'; txt='읽기 전용';
+    if(L.kind==='sidecar'&&window.__autoEdits){ cls='off'; txt='고친 것 저장 안 됨';   // 읽기만 하는 중에 고쳤다 — 화면에만 있다
+      title='고친 내용이 아직 파일에 없습니다 — 옆의 [저장 연결]을 누르면 지금 화면 내용이 '+name+' 에 저장됩니다'; }
+    else if(L.kind==='sidecar'){ cls='warn'; txt='읽기 전용';
       title='이 HTML 옆의 '+name+' 를 자동으로 읽었습니다. 수정하려면 [저장 연결]을 눌러 같은 파일을 한 번 골라 주세요'; }
     else if(L.kind==='native'&&L.writable===false){ cls='warn'; txt='쓰기 불가 폴더';
       title='이 폴더에는 파일을 쓸 수 없습니다 — 고친 내용이 저장되지 않습니다'; }
@@ -2416,7 +2425,7 @@ function touch(){
     window.__autoEdits=true;                        // 읽기 전용 중 고친 것 — 저장 연결되면 그대로 살린다
     if(!window.__reattachTried){ window.__reattachTried=true; tryReattachOnEdit(); }
     else if(!window.__autoReadWarned){ window.__autoReadWarned=true;
-      toast('읽기 전용입니다 — 위 [저장 연결]을 눌러 파일을 한 번 골라야 저장됩니다',6000); }
+      toast('고친 내용이 아직 저장되지 않았습니다 — 위 [저장 연결]을 누르면 그대로 저장됩니다',6000); }
   }
   dirty=true; saveMsg('저장 중…');
   try{ renderOnboard(); }catch(e){}
@@ -2427,7 +2436,9 @@ function flushSave(){ if(dirty&&(fileHandle||nativeInfo)){ clearTimeout(saveT); 
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushSave(); });
 window.addEventListener('pagehide',flushSave);
 window.addEventListener('beforeunload',e=>{
-  if(dirty&&(fileHandle||nativeInfo)){ flushSave(); e.preventDefault(); e.returnValue=''; }});
+  if(dirty&&(fileHandle||nativeInfo)){ flushSave(); e.preventDefault(); e.returnValue=''; }
+  // 읽기만 하는 중에 고친 것 — 파일에 쓸 길이 없어 닫으면 사라진다. 브라우저의 '나가시겠습니까?'로 한 번 붙잡는다
+  else if(window.__autoRead&&window.__autoEdits&&!fileHandle){ e.preventDefault(); e.returnValue=''; }});
 
 /* 시작 화면 배선 — 폴더 연결 시 폴더 안 데이터 파일(.js/.json) 자동 감지 */
 function startWarnMsg(t){ const el=$('#startWarn'); el.textContent=t; el.style.display=t?'flex':'none'; }
@@ -2680,7 +2691,7 @@ async function tryReattachOnEdit(){
   if(h&&h.name===window.__autoReadName&&active&&await reattachHandle(h)){
     toast('저장 연결됨 — 고친 내용이 저장됩니다',3200); return; }
   if(!window.__autoReadWarned){ window.__autoReadWarned=true;
-    toast('읽기 전용입니다 — 위 [저장 연결]을 눌러 파일을 한 번 골라야 저장됩니다',6000); }
+    toast('고친 내용이 아직 저장되지 않았습니다 — 위 [저장 연결]을 누르면 그대로 저장됩니다',6000); }
 }
 /* 자동으로 읽은 상태에서 같은 파일에 쓰기 권한 연결 — 기억한 핸들이 있으면 '허용'만, 없으면 파일 하나 고르기 */
 async function connectSave(){
@@ -2747,9 +2758,14 @@ async function newDataFile(){
              {description:'어싸인 데이터',accept:{'application/json':['.json']}}]}); }
   catch(e){ if(e.name==='AbortError') return false; throw e; }
   await useHandle(h,{create:true});
-  toast(h.name===SIDE_NAME
-    ? '만들었습니다 — 이 폴더에서는 다음부터 켜자마자 배정표가 뜹니다'
-    : '새 데이터 파일을 만들었습니다 (이름을 '+SIDE_NAME+' 로 하면 다음부터 자동으로 열립니다)',5200);
+  // 켜자마자 뜨는 것은 assign.html 과 같은 폴더의 정해진 이름 파일뿐이다. 같은 폴더인지는 locateHandle 이
+  // HTML 옆 같은 이름 파일과 내용을 대조해 안다(fileLoc.verified) — 이름만 보고 '다음부터 뜬다'고 하면
+  // 문서 폴더에 만든 파일에도 그렇게 말하게 된다 (2026-10-03 사용자 확인)
+  const here=fileLoc.kind==='file'&&fileLoc.name===h.name&&!!fileLoc.verified, sideName=SIDE_NAMES.includes(h.name);
+  toast(here&&sideName ? '만들었습니다 — 다음부터는 켜면 바로 배정표가 뜹니다'
+    : here ? '만들었습니다 — 파일 이름을 '+SIDE_NAME+' 로 바꿔 두면 다음부터 켜면 바로 배정표가 뜹니다'
+    : '만들었습니다 — 다음부터 켜면 바로 뜨게 하려면 이 파일을 '+htmlFileName()+' 파일이 있는 폴더로 옮겨 두세요'+(sideName?'':' (이름은 '+SIDE_NAME+')'),
+    here&&sideName?5200:9000);
   try{ await migrateOldLocalData(); }catch(e){}
   return true;
 }
@@ -10464,7 +10480,7 @@ const HELP=[
 {cat:'그 밖에',id:'trouble',title:'안 될 때',
  lead:'자주 나오는 상황과 해결법입니다.',
  steps:['<b>켰는데 시작 화면만 나온다</b> — 데이터 파일(assign-data.js)이 이 프로그램과 같은 폴더에 있는지, 이름이 맞는지 확인하세요.',
-        '<b>고쳤는데 저장이 안 된다</b> — 맨 위 오른쪽 저장 상태가 노랑 "읽기 전용"이면 옆의 [저장 연결]을 한 번 누르세요. 초록 "저장됨 · 시각"이면 저장된 것입니다.',
+        '<b>고쳤는데 저장이 안 된다</b> — 맨 위 오른쪽 저장 상태가 노랑 "읽기 전용"이나 빨강 "고친 것 저장 안 됨"이면 옆의 [저장 연결]을 한 번 누르세요 — 고친 내용은 그대로 저장됩니다. 초록 "저장됨 · 시각"이면 저장된 것입니다.',
         '<b>인쇄가 백지로 나온다</b> — 배정표 화면에서 인쇄하세요(다른 화면에서는 그 주 내용이 준비되지 않습니다).',
         '<b>붙여넣었는데 칸이 비어 있다</b> — 모르는 표기일 수 있습니다. 미리보기의 노란 카드에서 정해 주세요.',
         '<b>어느 파일에 저장되는지 모르겠다</b> — 맨 위 오른쪽 저장 상태에 마우스를 올리면 파일 이름이 나옵니다(프로그램 옆 폴더면 경로까지). 관리 &gt; 데이터 보관에도 나옵니다. 노랑이면 아직 읽기 전용입니다.'],

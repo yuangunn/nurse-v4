@@ -2455,6 +2455,53 @@ async function main() {
   eq('올린 101 양식(CN 이 둘째 줄) — 양식 보기 칸 이름 = 화면 줄 이름', v34.cn101V[0], v34.cn101V[1]);
   ok('102 조각 서식 이름 칸 — /CRN 은 신규 줄 앞', v34.trRich === 4 && /^김차지 [/]CRN\n[/] 신규일$/.test(v34.trRichX), JSON.stringify([v34.trRich, v34.trRichX]));
 
+  // ── 35. 옆 파일 자동 열림 → 저장 연결 (2026-10-03 사용자 제보) ─────────────────────
+  // 같은 폴더의 assign-data.js 를 읽고 [저장 연결]로 파일을 고르면 연결됐는데도 알약이 빨강 '저장 연결 안 됨'이었다 —
+  // 자동으로 읽을 때 적어 둔 저장 문장이 연결 뒤에도 남았다. 실제 파일 창은 못 띄우므로 같은 모양의 가짜 핸들을 쓴다.
+  const v35 = await ev(`return (async()=>{ const A=window.__app; const keepStore=JSON.parse(JSON.stringify(A.store));
+    const el=document.querySelector('#fileInfo'), pill=()=>[el.textContent.trim(), el.className];
+    const toastTxt=()=>document.querySelector('#toast').textContent;
+    const wait=ms=>new Promise(r=>setTimeout(r,ms));
+    const txt0='window.__ASSIGN_DATA='+JSON.stringify({...keepStore,rev:7})+';';
+    const mk=(name,body)=>{ const h={name,kind:'file',written:null,
+      queryPermission:async()=>'prompt', requestPermission:async()=>'granted',
+      getFile:async()=>new File([h.written||body||''],name),
+      createWritable:async()=>({write:async d=>{ h.written=d; }, close:async()=>{}})}; return h; };
+    const side=()=>{ fileHandle=null; clearTimeout(saveT); A.dirty=false; window.__reattachTried=false; window.__autoReadWarned=false; window.__reattachDenied=false;
+      openSidecar({name:'assign-data.js', data:{...JSON.parse(JSON.stringify(keepStore)),rev:7}}); };
+    const unload=()=>{ const e=new Event('beforeunload',{cancelable:true}); window.dispatchEvent(e); return e.defaultPrevented; };
+    const realIdb=idbGet, realProbe=probeSidecar, keepOpen=window.showOpenFilePicker, keepSave=window.showSaveFilePicker;
+    window.idbGet=async k=> k==='handle'?null:realIdb(k);          // 기억된 핸들 없음 — 처음 쓰는 PC·사이트 데이터를 지우는 PC
+    const out={};
+    side(); out.처음=pill(); out.처음닫기=unload();
+    // 고치지 않고 바로 [저장 연결] → 파일 창에서 같은 파일
+    const h1=mk('assign-data.js',txt0); window.showOpenFilePicker=async()=>[h1];
+    await connectSave(); await wait(300); out.연결=pill(); out.연결닫기=unload();
+    // 읽기만 하는 중에 고침 → 화면에만 있다는 것을 알약과 닫기 확인으로 알린다 → [저장 연결]이면 그대로 저장
+    side(); touch(); await wait(1100); out.고친뒤=pill(); out.고친뒤닫기=unload(); out.고친뒤알림=toastTxt();
+    const h2=mk('assign-data.js',txt0); window.showOpenFilePicker=async()=>[h2];
+    await connectSave(); await wait(300); out.고친뒤연결=[pill()[1], !!h2.written, unload()];
+    // 새 파일 — HTML 옆인지(내용 대조)에 따라 안내가 다르다
+    const h3=mk('assign-data.js'); window.showSaveFilePicker=async()=>h3;
+    window.probeSidecar=async n=>({exists:true,data:h3.written?JSON.parse(h3.written.slice(h3.written.indexOf('=')+1,h3.written.lastIndexOf(';'))):null});
+    await newDataFile(); out.옆새파일=toastTxt();
+    const h4=mk('assign-data.js'); window.showSaveFilePicker=async()=>h4; window.probeSidecar=async()=>({exists:false,data:null});
+    await newDataFile(); out.딴곳새파일=toastTxt();
+    const h5=mk('근무.js'); window.showSaveFilePicker=async()=>h5;
+    await newDataFile(); out.딴곳딴이름=toastTxt();
+    window.idbGet=realIdb; window.probeSidecar=realProbe; window.showOpenFilePicker=keepOpen; window.showSaveFilePicker=keepSave;
+    fileHandle=null; window.__autoRead=false; window.__autoEdits=false; A.store=keepStore; A.memoryMode(); A.saveMsg('');
+    return out; })();`);
+  eq('옆 파일을 읽은 처음 — 노랑 읽기 전용, 닫아도 묻지 않는다', [v35.처음, v35.처음닫기], [['읽기 전용', 'warn'], false]);
+  ok('[저장 연결]로 파일을 고르면 알약이 저장됨 — 옛 \'저장 연결 안 됨\'이 남지 않는다',
+    /^저장됨/.test(v35.연결[0]) && v35.연결[1] === 'ok' && !v35.연결닫기, JSON.stringify(v35.연결));
+  eq('읽기만 하는 중에 고치면 빨강 \'고친 것 저장 안 됨\' + 닫을 때 확인', [v35.고친뒤, v35.고친뒤닫기], [['고친 것 저장 안 됨', 'off'], true]);
+  ok('그 알림은 \'읽기 전용\'이라 하지 않고 [저장 연결]을 가리킨다', !/읽기 전용/.test(v35.고친뒤알림) && /저장 연결/.test(v35.고친뒤알림), v35.고친뒤알림);
+  eq('고친 뒤 [저장 연결] — 고친 것이 파일에 써지고 닫기 확인은 풀린다', v35.고친뒤연결, ['ok', true, false]);
+  ok('HTML 옆에 만든 새 파일 — 다음부터 바로 뜬다', /다음부터는 켜면 바로/.test(v35.옆새파일), v35.옆새파일);
+  ok('다른 폴더에 만든 assign-data.js — 바로 뜬다고 하지 않고 HTML 옆으로 옮기라고', !/다음부터는 켜면 바로/.test(v35.딴곳새파일) && /assign\.html 파일이 있는 폴더로 옮겨/.test(v35.딴곳새파일) && !/이름은/.test(v35.딴곳새파일), v35.딴곳새파일);
+  ok('다른 폴더·다른 이름 — 옮기기에 이름까지', /폴더로 옮겨/.test(v35.딴곳딴이름) && /이름은 assign-data\.js/.test(v35.딴곳딴이름), v35.딴곳딴이름);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
