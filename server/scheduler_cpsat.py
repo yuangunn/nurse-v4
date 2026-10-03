@@ -18,7 +18,7 @@ from ortools.sat.python import cp_model
 
 from .models import GenerateRequest
 from .scheduler_base import (_SchedulerBase, WEEKDAY_KEYS, timeoff_class, _OFF_TEUKGEUN_PENALTY,
-                             _RARE_TRANSITION_PENALTY)
+                             _RARE_TRANSITION_PENALTY, _FIXED_DATE_LEAVE)
 
 
 class _CpSatProgress:
@@ -357,11 +357,16 @@ class CpSatScheduler(_SchedulerBase):
             "leave": int(getattr(self.rules, "preBonusLeave", 5000) or 0),
             "juhu": int(getattr(self.rules, "preBonusRest", 300) or 0),
         }
+        # 날이 정해진 휴가(경가·조가·공·특·병·산전)는 오프특근보다 먼저 지킨다 (결정 1-35, HiGHS 패리티)
+        _BONUS["fixed"] = self._relax_fixed_leave_bonus(_BONUS["leave"], _BONUS["off"], _BONUS["work"])
         keep_terms = []
         for nid, d, pre, flex_vars in pre_keeps:
-            b = _BONUS[timeoff_class(pre)]
-            if timeoff_class(pre) != "juhu":      # 완화 이력 보정 (HiGHS 패리티)
-                b = int(round(b * float(self.relax_boosts.get(nid, 1.0))))
+            if pre in _FIXED_DATE_LEAVE:
+                b = _BONUS["fixed"]
+            else:
+                b = _BONUS[timeoff_class(pre)]
+                if timeoff_class(pre) != "juhu":      # 완화 이력 보정 (HiGHS 패리티)
+                    b = int(round(b * float(self.relax_boosts.get(nid, 1.0))))
             for v in flex_vars:
                 keep_terms.append(b * v)
         # 파트장 확인 마지막 수단(제1원칙 13)·오프특근도 1단계에서 원티드와 맞바꾼다 (HiGHS 패리티)
