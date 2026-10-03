@@ -496,6 +496,18 @@ class _SchedulerBase:
         return (list(getattr(self, "_long_run_slack", []))
                 + list(getattr(self, "_rare_tr_slack", [])))
 
+    def _relax_off_teukgeun_terms(self, off_bonus: int) -> list:
+        """완화 1단계에 넣는 오프특근 [(감점, 슬랙)] — 2단계 목적함수의 1,000,000 과는 따로.
+
+        1단계에 마지막 수단(6일 연속·E→D1)만 있고 오프특근이 없으면, 원티드를 풀어야 하는 달엔
+        6일 연속 대신 오프특근(+V)을 공짜로 골라 버린다 — strict(오프특근 ≫ 6일 연속)와 거꾸로다.
+        감점은 OF 원티드·마지막 수단보다 크고 휴가 원티드보다 작게: 근무 원티드를 풀거나 OF 원티드를
+        다른 날로 옮겨서 되면 오프특근을 쓰지 않고, 휴가 원티드(V·경가 등)는 오프특근보다 지킨다.
+        (OF 원티드는 깨도 그 주 OF 가 옮겨질 뿐이지만 오프특근은 그 주 OF 가 없어진다.)
+        100 단위로 맞춰 완화 폴백의 보너스 gcd 를 깨지 않는다."""
+        pen = max(int(off_bonus), _LONG_RUN_PENALTY, _RARE_TRANSITION_PENALTY) + 100
+        return [(pen, sl) for sl in getattr(self, "_off_slack", [])]
+
     def _effective_pre(self, nurse: dict, dt: date, pre: str, is_holiday: bool):
         """변수 도메인 기준의 '유효 사전입력' — 공휴일 OF 드롭(일반 간호사) + 모성보호 드롭.
         모든 변수 생성 경로와 게이팅이 이 함수를 써야 의미가 일치한다."""
@@ -1135,7 +1147,9 @@ class _SchedulerBase:
 
         엔진은 그러지 않으면 근무표가 안 나올 때만 이렇게 놓는다(큰 감점). 6일 연속은
         파트장 확인 하에 제한적으로만 쓰는 것이라 **누가 언제인지 사람이 알아야 한다**.
-        확정(사전입력) 칸만으로 된 것은 pinned_notes 가 따로 알리므로 뺀다.
+        확정(사전입력) 칸을 그대로 지킨 것만으로 된 것은 사람이 넣은 사실이라 뺀다 (strict 는 pinned_notes
+        가 따로 알린다). 완화 모드에선 사실-클램프 인덱스(_pin)가 비므로 사전입력과 직접 견준다 — 화면
+        scheduleWarnings 와 같은 기준. 원티드 D/E·N제외 칸(flex_pre)은 엔진이 고른 것이라 센다.
         반환: [{"kind": "run"|"transition", "nurse_id", "name", "start", "end",
                 "days"?, "weekend_days"?, "rule"?, "text"}]
         """
@@ -1152,6 +1166,10 @@ class _SchedulerBase:
         def iso(i):
             return self.all_dates[i].strftime("%Y-%m-%d")
 
+        def kept(nid, i, code):
+            pre = self.prev.get(nid, {}).get(iso(i))
+            return bool(pre) and code in self._PRE_FLEX.get(pre, {pre})
+
         out = []
         limit = self.rules.maxConsecutiveWorkDays
         for nurse in self.nurses:
@@ -1166,7 +1184,7 @@ class _SchedulerBase:
                         run.append(i)
                         continue
                     if (len(run) > limit and self.all_dates[run[-1]] >= first_of_month
-                            and not all(self._pin.get((nid, d)) for d in run)):
+                            and not all(kept(nid, d, codes[d]) for d in run)):
                         k = sum(1 for d in run if self._is_weekend_or_holiday(self.all_dates[d]))
                         out.append({
                             "kind": "run", "nurse_id": nid, "name": name,
@@ -1186,7 +1204,7 @@ class _SchedulerBase:
                     rule = "중→D"
                 else:
                     continue
-                if self._pin.get((nid, i)) and self._pin.get((nid, i + 1)):
+                if kept(nid, i, c1) and kept(nid, i + 1, c2):
                     continue
                 out.append({
                     "kind": "transition", "nurse_id": nid, "name": name,

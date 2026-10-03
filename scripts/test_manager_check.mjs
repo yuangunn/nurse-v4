@@ -70,4 +70,22 @@ a.rules.rareTransitionLastResort = false;
 a.checkScheduleViolations();
 assert.deepEqual(a.scheduleViolations.map((v) => v.dk), ['2026-03-02', '2026-03-05', '2026-03-07']);
 
+// 사전입력으로 정해 둔 칸만으로 된 것은 사람이 넣은 사실 — 파트장 확인으로 세지 않는다 (2차 집중 검토, 엔진 manager_check 와 같게)
+a = make({ '02': ['주', 'E', 'D1', 'OF'], '03': ['주', 'D', 'D', 'D', 'D', 'D', 'D', 'OF'] });
+a.prevSchedule = { '02': { '2026-03-02': 'E', '2026-03-03': 'D1' },
+                   '03': Object.fromEntries([2, 3, 4, 5, 6, 7].map((d) => [`2026-03-0${d}`, 'D'])) };
+assert.deepEqual(a.scheduleWarnings, [], JSON.stringify(a.scheduleWarnings));
+//  · 한 칸이라도 엔진이 놓은 것이면 센다 (E 를 엔진이 놓음 · 3/7 을 엔진이 DC 로 — D 원티드의 차지 승격은 지킨 것)
+delete a.prevSchedule['02']['2026-03-02'];
+a.schedule['03']['2026-03-07'] = 'DC';
+w = a.scheduleWarnings;
+assert.deepEqual(w.map((x) => x.type), ['check'], JSON.stringify(w));
+assert.match(w[0].msg, /E→D1/);
+//  · 원티드 D/E 칸은 확정이 아니다 — 엔진이 고른 칸이라 센다
+a.prevSchedule['03']['2026-03-04'] = 'D/E';
+assert.equal(a.scheduleWarnings.length, 2, JSON.stringify(a.scheduleWarnings));
+//  · E→D1 을 끄면 '확인'이 아니라 표의 위반 표시가 맡는다
+a = make({ '02': ['주', 'E', 'D1', 'OF'] }, { rareTransitionLastResort: false });
+assert.deepEqual(a.scheduleWarnings, [], JSON.stringify(a.scheduleWarnings));
+
 console.log('test_manager_check: OK');
