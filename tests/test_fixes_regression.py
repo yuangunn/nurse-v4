@@ -123,7 +123,7 @@ def test_locked_evening_blocks_next_day_morning_in_relax(build_request, solver):
     prev = _juhu_prev(nurses, year, month, days)
     # a1: 3/3 E 잠금 + 3/4 D 사전입력 — E→D 자체가 strict infeasible 트리거이며,
     # 완화에서 잠긴 E는 유지되고 D는 옮겨져야 한다.
-    # (E=2 필요: E=1이면 그 슬롯이 차지(EC) 전용이라 일반 E 잠금이 풀 수 없는 모순)
+    # (E=2 — 잠긴 E 는 EC 로 올라갈 수 있어(결정 1-34) E=1 이어도 되지만, 원래 검사 그대로 둔다)
     prev.setdefault("a1", {})["2026-03-03"] = "E"
     prev["a1"]["2026-03-04"] = "D"
 
@@ -136,7 +136,7 @@ def test_locked_evening_blocks_next_day_morning_in_relax(build_request, solver):
     result = make_limited(req, days=days, solver=solver).solve()
     assert result["success"], result.get("message")
     sched = result["schedule"]
-    assert sched["a1"]["2026-03-03"] == "E", "잠긴 셀은 완화에서도 고정"
+    assert sched["a1"]["2026-03-03"] in ("E", "EC"), "잠긴 셀은 완화에서도 그 시간대 근무 (차지 승격만 허용)"
     assert sched["a1"]["2026-03-04"] not in FORBIDDEN_AFTER_E, (
         f"잠긴 E 다음날 금지 전환 위반: {sched['a1']['2026-03-04']}")
 

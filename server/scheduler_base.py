@@ -475,7 +475,26 @@ class _SchedulerBase:
             return False   # 생성 달 안(달 규칙이 맡음)이거나 지난달 기록
         if not self._keeper_on(nurse, dt):
             return False
-        return not (pre and s in self._PRE_FLEX.get(pre, {pre}))
+        # 완화를 켰으면 사전입력도 규칙 앞에서 풀린다 — 생성 달 안의 나이트킵 규칙(_pin 이 빈다)과 같게
+        return not (pre and not self.allow_pre_relax and s in self._PRE_FLEX.get(pre, {pre}))
+
+    def _locked_domain(self, nurse: dict, dt: date, pre: str) -> set:
+        """완화에서 잠긴 칸(🔒)·지난달 기록이 가질 수 있는 근무.
+
+        병동 번표엔 누가 차지인지 없다 (제1원칙 11) — 잠긴 D·E·N 은 '그 시간대 근무'가 사실이고
+        차지는 앱이 정한다. 그래서 같은 시간대 차지(DC·EC·NC)로 올릴 수 있다. 문자 그대로 두지 않으면
+        잠긴 칸으로 꽉 찬 날(붙여 넣은 실제 번표의 첫 며칠)은 차지 1명을 못 채워 완화가 늘 실패한다.
+        그대로 두는 것: 지난달 기록(과거), 사람이 고른 차지 코드, 자격 없는 근무, 나이트킵의 야간 외 근무
+        (달 규칙이 그 변수를 0 으로 묶는다)."""
+        if dt < date(self.year, self.month, 1) or pre in self.CHARGE_SHIFTS:
+            return {pre}
+        flex = self._PRE_FLEX.get(pre)
+        capable = set(nurse.get("capable_shifts") or self.WORK_SHIFTS)
+        if not flex or pre not in capable:
+            return {pre}
+        if self._keeper_on(nurse, dt) and pre not in self.NIGHT_SHIFTS:
+            return {pre}
+        return {s for s in flex if s in capable}
 
     def _month_last_day(self) -> date:
         import calendar as _cal
@@ -633,6 +652,14 @@ class _SchedulerBase:
         if getattr(self, "_pre_soft", False) \
                 and not self.locked_cells.get(nurse_j["id"], {}).get(dt_str):
             j_fixed = None
+        # 잠긴 D·E·N 이 차지로 올라갈 수 있으면(결정 1-34) 누가 차지인지는 앱이 정한다 — 시니어리티대로.
+        # 그 날 그 차지를 사람이 잠가 정해 뒀으면 그 사람이 차지 (선임의 잠긴 D 는 D 그대로)
+        if j_fixed and getattr(self, "_pre_soft", False):
+            up = self._locked_domain(nurse_j, dt, j_fixed) - {j_fixed}
+            if up and not any(self.locked_cells.get(n["id"], {}).get(dt_str)
+                              and self.prev.get(n["id"], {}).get(dt_str) in up
+                              for n in self.nurses):
+                j_fixed = None
         return j_fixed
 
     def _night_dedicated_in(self, nid: str, year: int, month: int) -> bool:

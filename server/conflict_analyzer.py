@@ -606,8 +606,12 @@ class _ConflictAnalyzer(CpSatScheduler):
                 # 잠긴 셀: 완화·진단 경로와 동일하게 절대 고정 — keep 리터럴을 만들지
                 # 않아 '잠긴 셀 제거'가 처방으로 제시되는 일을 차단한다.
                 if active and pre and self.locked_cells.get(nid, {}).get(dt_str):
+                    keep = self._locked_domain(nurse, dt, pre)   # 잠긴 D·E·N 은 차지로 올릴 수 있다 (완화 패리티)
                     for s in self.ALL_SHIFTS:
-                        x[nid][d][s] = 1 if s == pre else 0
+                        if s in keep and len(keep) > 1:
+                            x[nid][d][s] = model.NewBoolVar(f"m_{nid}_{d}_{s}")
+                        else:
+                            x[nid][d][s] = 1 if s == pre else 0
                     continue
                 free_ok = {}
                 for s in self.ALL_SHIFTS:

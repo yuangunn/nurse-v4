@@ -132,7 +132,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 236건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드)
+├── tests/                   # pytest 회귀 247건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -176,7 +176,7 @@ npm start
 ### 테스트
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 236건
+python3 -m pytest -q                  # 247건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_hospital_holidays.mjs \
@@ -283,7 +283,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | **야간전담 규칙** | N/NC만 배정, 5일 윈도우 내 ≤3 야간, 당월 정확히 14일 근무 (생휴 강제 없음 — 월 ≤1 상한만). **나이트킵인지는 날짜가 속한 달로**(`_keeper_on`) — 생성 범위 끝의 다음 달 며칠은 그 달 나이트킵에게 N/NC·쉬는 것만(`_keeper_forbids`, 사전입력은 사실), 이번 달 나이트킵은 그 며칠 일반 간호사 (결정 1-33) |
 | **임산부 모성보호** | `is_pregnant`+`pregnancy`{early,late} 설정 시: ①P1 구간 완전 포함 주마다 P1 정확히 1회(부분 주 ≤1) ②임신 전 구간 `[early.start~late.end]` N/NC 금지 ③임신-중-달 생(生) 면제(배정 금지) ④임산부 달엔 야간전담 자동 해제. P1은 임산부+구간 또는 사전입력 P1에서만 허용(그 외 변수 0). HiGHS·CP-SAT·conflict_analyzer 패리티. 헬퍼: `_preg_window_on`/`_preg_span_on`/`_preg_active_in_month`/`_preg_forbids`/`_preg_effective_pre` (scheduler_base) |
 | 전입/전출 재적 | start_date ≤ d ≤ end_date 범위에서만 배정 |
-| **셀 잠금** | `locked_cells[nurse][date]=true`인 셀은 완화 모드에서도 사전입력 고정 |
+| **셀 잠금** | `locked_cells[nurse][date]=true`인 셀은 완화 모드에서도 사전입력 고정. 단 잠긴 D·E·N 은 같은 시간대 차지(DC·EC·NC)로 올릴 수 있다 — 번표엔 차지 표시가 없다(제1원칙 11, `_locked_domain`, 결정 1-34). 사람이 고른 차지·지난달 기록·나이트킵의 야간 외 근무는 글자 그대로. 승격되는 잠긴 칸끼리는 시니어리티대로(선임이 차지) |
 
 > **허용 전환 (순방향)**: D→E→N (8h+ 간격). 중간번(19:00) → 익일 N(22:00) = 27h 순방향 정상.
 
