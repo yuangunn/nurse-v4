@@ -140,7 +140,16 @@ _DEFAULT_SHIFTS = [
 ]
 
 # 병동 번표 표기 → 앱 코드 (붙여넣기 프론트와 같은 뜻 — 옛 저장본·API 직접 호출 대비)
-_PRE_ALIAS = {"OFF": "OF", "Off": "OF", "off": "OF", "특V": "특", "특v": "특", "공가": "공"}
+_PRE_ALIAS = {"OFF": "OF", "Off": "OF", "off": "OF", "특V": "특", "특v": "특", "공가": "공",
+              # 원티드 '둘 중 하나'·'N 빼고' 표기 (제1원칙 14)
+              "E/D": "D/E", "DE": "D/E", "ED": "D/E", "N/E": "E/N", "EN": "E/N", "NE": "E/N",
+              "DN": "D/N", "ND": "D/N", "N/D": "D/N", "N 제외": "N제외", "N빼고": "N제외"}
+
+# 원티드 '둘 중 하나' — 그 날 두 근무 중 아무거나 (차지 포함, D1·중 제외) (제1원칙 14, 2026-10-03)
+_FLEX_ONE_OF = {"D/E": ("day", "evening"), "E/N": ("evening", "night"), "D/N": ("day", "night")}
+# 원티드 'N 빼고' — 야간(N·NC)만 아니면 쉬어도 된다
+_FLEX_NOT = {"N제외": ("night",)}
+FLEX_WISH_CODES = frozenset(_FLEX_ONE_OF) | frozenset(_FLEX_NOT)
 
 
 class _SchedulerBase:
@@ -162,6 +171,8 @@ class _SchedulerBase:
     # 사전입력 사실(fact) 인덱스 — strict 솔브 시작 시 _build_pin_index()가 채운다.
     # (클래스 기본값은 읽기 전용 폴백 — 제약 메서드를 단독 호출하는 테스트 대비)
     _pin: Dict = {}
+    # 원티드 '둘 중 하나'·'N 빼고' 칸 {nid: {날짜: 코드}} — __init__ 이 prev 에서 떼어 채운다
+    flex_pre: Dict = {}
 
     _DAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
 
@@ -274,6 +285,13 @@ class _SchedulerBase:
             for nid, days in self.prev.items()
             if nid in valid_nurse_ids
         }
+        # 원티드 '둘 중 하나'(D/E·E/N·D/N)·'N 빼고'(N제외)는 한 근무로 정해진 칸이 아니다 —
+        # 사전입력(확정 사실)에서 떼어 따로 둔다. 그 칸은 빈칸처럼 자유롭되 허용 근무만 쓴다
+        # (_apply_flex_wishes). prev 에 두면 사실-클램프·완전 확정 표가 'D/E'를 한 코드로 센다.
+        self.flex_pre: Dict[str, Dict[str, str]] = {}
+        for nid, days in self.prev.items():
+            for dt in [k for k, v in days.items() if v in FLEX_WISH_CODES]:
+                self.flex_pre.setdefault(nid, {})[dt] = days.pop(dt)
         # locked_cells도 동일하게 정규화 (유령 + 범위 밖 날짜 제거)
         self.locked_cells = {
             nid: {dt: v for dt, v in cells.items() if dt in valid_dates and v}
@@ -484,6 +502,70 @@ class _SchedulerBase:
         if pre == "OF" and self._holiday_of_banned(nurse, is_holiday, dt):
             pre = None
         return self._preg_effective_pre(nurse, dt, pre)
+
+    # ── 원티드 '둘 중 하나'·'N 빼고' (제1원칙 14) ─────────────────────────────
+
+    def _has_pre(self) -> bool:
+        """완화 재시도할 사전입력이 있는가 — 확정 칸 또는 원티드 D/E·N제외 칸."""
+        return bool(self.prev) or bool(self.flex_pre)
+
+    def _flex_allowed(self, code: str) -> set:
+        """원티드 D/E·E/N·D/N·N제외 칸에 놓을 수 있는 근무 집합.
+        '둘 중 하나'는 두 시간대의 근무(차지 포함 — D1·중은 아님), 'N 빼고'는 야간만 뺀 전부
+        (쉬는 코드 포함 — 쉬는 코드의 일반 규칙[법은 공휴일만 등]은 변수 도메인이 따로 건다)."""
+        if code in _FLEX_ONE_OF:
+            per = {"day": self.DAY_SHIFTS, "evening": self.EVENING_SHIFTS,
+                   "night": self.NIGHT_SHIFTS}
+            return {s for p in _FLEX_ONE_OF[code] for s in per[p]}
+        if code in _FLEX_NOT:
+            return set(self.ALL_SHIFTS) - set(self.NIGHT_SHIFTS)
+        return set(self.ALL_SHIFTS)
+
+    def _apply_flex_wishes(self, x, soft: bool = False) -> list:
+        """변수 생성 직후 원티드 D/E·N제외 칸에 허용 근무만 남긴다 (모든 엔진·진단 공통).
+
+        strict(soft=False): 허용 밖 근무를 상수 0 — 사전입력처럼 하드 도메인.
+        완화(soft=True): 잠긴 칸·지난달 기록만 하드, 나머지는 손대지 않고
+        [(nid, d, code, [허용 변수])] 를 돌려준다 — 엔진이 근무 원티드 유지 보너스를 붙인다.
+        x 값은 변수 또는 상수(int) — 두 엔진 모두 상수는 int 다."""
+        keeps = []
+        if not self.flex_pre:
+            return keeps
+        idx = {dt.strftime("%Y-%m-%d"): d for d, dt in enumerate(self.all_dates)}
+        first = date(self.year, self.month, 1)
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            for dt_str, code in self.flex_pre.get(nid, {}).items():
+                d = idx.get(dt_str)
+                if d is None or nid not in x or not self._nurse_active_on(nurse, self.all_dates[d]):
+                    continue
+                allowed = self._flex_allowed(code)
+                cell = x[nid][d]
+                hard = (not soft or bool(self.locked_cells.get(nid, {}).get(dt_str))
+                        or self.all_dates[d] < first)
+                if hard:
+                    for s in list(cell):
+                        if s not in allowed:
+                            cell[s] = 0
+                    continue
+                terms = [cell[s] for s in allowed if s in cell and not isinstance(cell[s], int)]
+                if terms:
+                    keeps.append((nid, d, code, terms))
+        return keeps
+
+    def _flex_relaxed(self, schedule: Dict, relaxed_cells: Dict) -> int:
+        """완화 결과에서 못 지킨 원티드 D/E·N제외 칸을 relaxed_cells 에 더한다 (근무 원티드).
+        더한 칸 수를 돌려준다."""
+        added = 0
+        for nid, days in self.flex_pre.items():
+            for dt_str, code in days.items():
+                assigned = schedule.get(nid, {}).get(dt_str)
+                if assigned and assigned not in self._flex_allowed(code):
+                    relaxed_cells.setdefault(nid, {})[dt_str] = {
+                        "original": code, "assigned": assigned, "is_timeoff": False,
+                    }
+                    added += 1
+        return added
 
     def _seniority_jfixed(self, nurse_j: dict, dt: date, dt_str: str,
                           is_holiday: bool):
@@ -916,7 +998,11 @@ class _SchedulerBase:
             dt = self.all_dates[d]
             dk = dt.strftime("%Y-%m-%d")
             raw = self.prev.get(nurse["id"], {}).get(dk)
-            return (self._effective_pre(nurse, dt, raw, dk in self.holidays) if raw else None) or ""
+            if not raw:
+                # 원티드 '둘 중 하나'는 어느 쪽이든 근무 칸 — 'N 빼고'는 쉴 수도 있어 빈칸
+                fx = self.flex_pre.get(nurse["id"], {}).get(dk)
+                return fx if fx in _FLEX_ONE_OF else ""
+            return self._effective_pre(nurse, dt, raw, dk in self.holidays) or ""
 
         used = {}
         for nurse in self.nurses:

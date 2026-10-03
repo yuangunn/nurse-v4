@@ -58,6 +58,10 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
     안 되지만 파트장 확인 하에 제한적으로 가능하고, **주말이 끼면 업무 부담이 적어** 그쪽이 낫다.
     E→D1·중→D 는 번표가 정 안 나올 때 그렇게 근무한다. → 엔진은 하드 금지 대신 큰 감점으로 두고
     (7일 연속·나머지 7개 역순 전환은 그대로 금지), 쓴 곳을 '파트장 확인 필요'로 알린다.
+14. **원티드 D/E·E/N·DN 은 '둘 중 하나', N제외는 'N 만 아니면 됨'** (2026-10-03, 101병동 원티드). 한 근무로
+    정해진 칸이 아니다 — 엔진은 사전입력(확정 사실)에서 떼어 `flex_pre` 로 두고 그 칸에 허용 근무만 쓴다
+    (둘 중 하나 = 두 시간대 근무, 차지 포함·D1·중 아님 / N제외 = 야간만 빼고 쉬어도 됨). 완화에선 근무 원티드(500)처럼 지키고,
+    못 지키면 '원티드 미반영'에 원래 표기 그대로 알린다.
 
 > ✅ **확인 완료 (2026-08-20 사용자 답변 — 반영됨)**:
 > ⓐ 토요일 인원 → DB 시드·문서·시뮬레이터 모두 **4/3/2**로 수정.
@@ -126,7 +130,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 201건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단)
+├── tests/                   # pytest 회귀 223건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -170,7 +174,7 @@ npm start
 ### 테스트
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 201건
+python3 -m pytest -q                  # 223건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_hospital_holidays.mjs \
@@ -226,6 +230,9 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | 산전 | 산전검진 | — | ✗ | 사전입력 전용 (임산부) |
 
 > 병동 번표 표기 읽기 (붙여넣기 `_shiftAlias` + 엔진 `_PRE_ALIAS`): `OFF`→OF · `특V`→특 · `공가`→공.
+> **원티드 표기 (사전입력 전용, 근무 정의 아님 — 제1원칙 14)**: `D/E`(낮·저녁) · `E/N`(저녁·야간) · `D/N`(낮·야간, `DN`) · `N제외`(야간만 빼고).
+> `E/D`·`DE`·`N/E`·`EN`·`ND`·`N 제외`·`N빼고` 도 같은 뜻으로 읽는다 (붙여넣기 `_normalizeShiftCode` = 엔진 `_PRE_ALIAS`). 칸 팝업 맨 아래 줄,
+> '이대로 근무표로'·'이 표대로 인원'은 이 칸이 있으면 막는다 (한 근무가 아니므로). 검증 `tests/test_flex_wish.py`
 > 한글 자판 입력: ㅈ 주 · ㅂ 병 · ㅃ 법 · ㅅ 생 · ㅌ 특 · ㄱ 공 · **ㄲ 경가 · ㅉ 조가 · ㅆ 산전** (Shift 쌍자음).
 
 **트레이니 표시 코드** (출력 전용): `/D`, `/E`, `/N` — 프리셉터 근무에 `/` 접두어.

@@ -8,8 +8,11 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 global.window = {};
+global.localStorage = { getItem: () => null, setItem() {} };
 require('../frontend/js/modules/grid-interactions.js');
+require('../frontend/js/modules/settings-defs.js');
 const mod = global.window.GridInteractionsModule();
+const defs = global.window.SettingsDefsModule();
 
 const SHIFTS = [
   { code: 'DC', period: 'day' }, { code: 'D', period: 'day' }, { code: 'D1', period: 'day1' },
@@ -40,6 +43,7 @@ function makeCtx({ nurses, prev = {}, rules = {}, holidays = [], dayReqs = {}, p
     isOverflow(d) { return d.getMonth() !== 2; },
     isHoliday(d) { return holidays.includes(this.dayKey(d)); },
     isNurseInactive() { return false; },
+    flexWishCodes: defs.flexWishCodes, isFlexWish: defs.isFlexWish,
     ...mod,
   };
 }
@@ -128,5 +132,15 @@ assert.ok(has(m.n, 'OF 2회'), m.n.join('\n'));
 m = run({ nurses: [nurse('a')], prev: { a: { '2026-03-02': 'E', '2026-03-03': 'D', '2026-03-09': 'V', '2026-03-10': 'V' } } });
 assert.equal(m.v.length, 0, m.v.join('\n'));
 assert.ok(m.n.length >= 2, m.n.join('\n'));
+
+// 16. 원티드 '둘 중 하나'·'N 빼고'(제1원칙 14)는 알 수 없는 코드가 아니다 — 생성이 그 안에서 고른다.
+//     N 다음 날 D/E 도 역순 전환으로 세지 않는다 (확정 칸이 아니다)
+m = run({ nurses: [nurse('a')], prev: { a: { '2026-03-02': 'N', '2026-03-03': 'D/E', '2026-03-04': 'E/N',
+                                             '2026-03-05': 'D/N', '2026-03-06': 'N제외' } } });
+assert.equal(m.v.length, 0, m.v.join('\n'));
+assert.equal(m.n.length, 0, m.n.join('\n'));
+//  · 비슷해 보여도 모르는 표기는 여전히 막는다
+m = run({ nurses: [nurse('a')], prev: { a: { '2026-03-02': 'D/X' } } });
+assert.ok(has(m.v, '알 수 없는'), m.v.join('\n'));
 
 console.log('preinput-lint: 모든 검증 통과');

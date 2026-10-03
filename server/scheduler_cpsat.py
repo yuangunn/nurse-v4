@@ -161,7 +161,7 @@ class CpSatScheduler(_SchedulerBase):
             # 취소(사용자 중지·레이스 패자)면 후속 솔브를 시작하지 않는다.
             cancelled_now = (prog.cancelled or solver_progress.is_cancelled()
                              or solver_progress.was_cancel_all())
-            if self.allow_pre_relax and self.prev and not cancelled_now:
+            if self.allow_pre_relax and self._has_pre() and not cancelled_now:
                 relaxed = self._solve_relaxed()
                 if relaxed:
                     return relaxed
@@ -183,7 +183,7 @@ class CpSatScheduler(_SchedulerBase):
             return {"success": False, "schedule": {}, "extended_schedule": {}, "message": msg}
         # UNKNOWN(타임아웃·중단) — HiGHS의 'Not Solved' 완화 재시도와 패리티.
         # 사용자 중지·레이스 패자 취소면 제외 (취소 무시하고 새 솔브를 도는 셈).
-        if (self.allow_pre_relax and self.prev
+        if (self.allow_pre_relax and self._has_pre()
                 and not solver_progress.is_cancelled() and not prog.cancelled
                 and not solver_progress.was_cancel_all()):
             relaxed = self._solve_relaxed()
@@ -308,6 +308,8 @@ class CpSatScheduler(_SchedulerBase):
                     flex_vars = [x[nid][d][s] for s in flex if not isinstance(x[nid][d][s], int)]
                     if flex_vars:
                         pre_keeps.append((nid, d, pre, flex_vars))
+        # 원티드 D/E·N제외: 허용 근무 중 하나면 지킨 것 (잠긴 칸·지난달은 하드, HiGHS 패리티)
+        pre_keeps.extend(self._apply_flex_wishes(x, soft=True))
         return x, pre_keeps
 
     def _solve_relaxed(self):
@@ -444,6 +446,7 @@ class CpSatScheduler(_SchedulerBase):
                         }
                     else:
                         charge_promotions += 1  # D→DC 등 차지 자동승격 (HiGHS 패리티)
+        self._flex_relaxed(schedule, relaxed_cells)    # 못 지킨 원티드 D/E·N제외 (근무)
         relax_count = sum(len(v) for v in relaxed_cells.values())
         work_changed = relax_count - timeoff_changed
         if relax_count == 0:
@@ -521,6 +524,7 @@ class CpSatScheduler(_SchedulerBase):
                         x[nid][d][s] = 0
                     else:
                         x[nid][d][s] = model.NewBoolVar(f"x_{nid}_{d}_{s}")
+        self._apply_flex_wishes(x)       # 원티드 D/E·N제외 — 허용 근무만 (HiGHS 패리티)
         return x
 
     def _cs_juhu_block_dow(self, model, x):

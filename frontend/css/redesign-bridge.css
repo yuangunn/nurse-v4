@@ -70,6 +70,11 @@ body.rd .rt-foot input.is-default { color: var(--ink-2); font-weight: var(--fw-b
 [data-shift="경가"] { background: var(--sh-특-bg) !important; color: var(--sh-특-fg) !important; }
 [data-shift="조가"] { background: var(--sh-주-bg) !important; color: var(--sh-주-fg) !important; }
 [data-shift="산전"] { background: var(--sh-P1-bg) !important; color: var(--sh-P1-fg) !important; }
+/* 원티드 '둘 중 하나'·'N 빼고' (제1원칙 14) — 두 근무 색을 반씩, N제외는 오프 바탕에 야간 글자색. 사전입력에만 나온다 */
+[data-shift="D/E"] { background: linear-gradient(135deg, var(--sh-D-bg) 50%, var(--sh-E-bg) 50%) !important; color: var(--ink) !important; }
+[data-shift="E/N"] { background: linear-gradient(135deg, var(--sh-E-bg) 50%, var(--sh-N-bg) 50%) !important; color: var(--ink) !important; }
+[data-shift="D/N"] { background: linear-gradient(135deg, var(--sh-D-bg) 50%, var(--sh-N-bg) 50%) !important; color: var(--ink) !important; }
+[data-shift="N제외"] { background: var(--sh-OF-bg) !important; color: var(--sh-N-fg) !important; letter-spacing: -0.04em; }
 
 /* 셀 팝업 — 희망(★) 줄 */
 .rpop-wish { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--rule); }

@@ -11,7 +11,8 @@ window.RedesignModule = function() {
   const WD = ['일','월','화','수','목','금','토'];
   const CODE_NAME = {DC:'Day Charge', D:'Day', D1:'상근·교육', EC:'Evening Charge', E:'Evening', '중':'중간번', NC:'Night Charge', N:'Night',
     OF:'오프', '주':'주휴', P1:'임부휴무', V:'연차', '생':'생리휴가', '특':'특별휴가', '공':'공적업무', '법':'법정공휴일', '병':'병가',
-    '경가':'경사휴가', '조가':'조사휴가', '산전':'산전검진'};
+    '경가':'경사휴가', '조가':'조사휴가', '산전':'산전검진',
+    'D/E':'낮·저녁', 'E/N':'저녁·야간', 'D/N':'낮·야간', 'N제외':'야간만 빼고'};
   const WORK_ORDER = ['D','DC','D1','E','EC','중','N','NC'];
   const REST_ORDER = ['주','OF','V','생','특','공','법','병','경가','조가','P1','산전'];
   const PERIOD_KO = {D:'낮', E:'저녁', N:'야간'};
@@ -297,12 +298,15 @@ window.RedesignModule = function() {
       const mode=this.shiftEdit.mode;
       let codes=this.getEditShifts();
       if(mode==='prev') codes=this.allShifts.filter(c=>!c.startsWith('/'));
-      if(this.shiftEdit.mode==='prev' && this.shiftEdit.nurse && this.isTraineeInTraining(this.shiftEdit.nurse, this.shiftEdit.day)) codes=this.traineeShifts;
+      const trainee=this.shiftEdit.mode==='prev' && this.shiftEdit.nurse && this.isTraineeInTraining(this.shiftEdit.nurse, this.shiftEdit.day);
+      if(trainee) codes=this.traineeShifts;
       const bare=c=>c.replace(/^\//,'');
       const work=[], rest=[];
       for(const c of codes){ const s=this.shiftMap.get(bare(c)); const p=s?s.period:''; (['day','day1','evening','middle','night'].includes(p)?work:rest).push(c); }
       const ord=(arr,order)=>arr.sort((a,b)=>{ const ia=order.indexOf(bare(a)), ib=order.indexOf(bare(b)); return (ia<0?99:ia)-(ib<0?99:ib); });
-      return {work:ord(work,WORK_ORDER), rest:ord(rest,REST_ORDER)};
+      // 원티드 '둘 중 하나'·'N 빼고'는 사전입력에만 (근무표 칸은 한 근무여야 한다 · 신규는 프리셉터를 따른다)
+      const flex=(mode==='prev'||mode==='prev_multi') && !trainee ? [...this.flexWishCodes] : [];
+      return {work:ord(work,WORK_ORDER), rest:ord(rest,REST_ORDER), flex};
     },
     get rdPopCurrent(){
       const n=this.shiftEdit.nurse, d=this.shiftEdit.day; if(!n||!d||this.shiftEdit.mode==='prev_multi') return '';
@@ -315,7 +319,9 @@ window.RedesignModule = function() {
         const el=document.querySelector(`.rd-screen:not([style*="display: none"]) [data-cell="${nid}|${iso}"]`)||document.querySelector(`[data-cell="${nid}|${iso}"]`);
         if(!el){ this.cellPop={left:24, top:96}; return; }
         // 팝업은 position:fixed — 칸의 뷰포트 좌표 기준 오른쪽에, 안 들어가면 왼쪽에, 아래가 모자라면 위로 올린다
-        const r=el.getBoundingClientRect(), W=372, H=Math.min(470, window.innerHeight-16);
+        // 높이는 실제 팝업에서 잰다 — 사전입력 팝업은 원티드 줄이 더 있어 근무표 팝업보다 길다
+        const pop=document.querySelector('[data-rd=cell-popup]');
+        const r=el.getBoundingClientRect(), W=372, H=Math.min(Math.max(pop?.offsetHeight||0, 470), window.innerHeight-16);
         let left=r.right+8, top=r.top-8;
         if(left+W>window.innerWidth-8) left=r.left-W-8;
         if(left<8) left=8;

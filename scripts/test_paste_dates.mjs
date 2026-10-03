@@ -117,4 +117,9 @@ assert.equal(norm('조사휴가'), '조가');
 assert.equal(norm('산전검진'), '산전');
 mod.shifts = mod.shifts.filter((s) => s.code !== '경가');
 assert.equal(norm('경사휴가'), undefined);   // 근무 정의에 없으면 모르는 표기
+// 원티드 '둘 중 하나'·'N 빼고' (제1원칙 14) — 엔진 _PRE_ALIAS 와 같은 표기
+for (const [raw, code] of [['D/E', 'D/E'], ['E/D', 'D/E'], ['de', 'D/E'], ['E/N', 'E/N'], ['N/E', 'E/N'],
+  ['EN', 'E/N'], ['DN', 'D/N'], ['N/D', 'D/N'], ['d/n', 'D/N'], ['N제외', 'N제외'], ['N 제외', 'N제외'], ['N빼고', 'N제외']])
+  assert.equal(norm(raw), code, raw);
+assert.equal(norm('D/X'), undefined);
 console.log('paste-dates: 병동 표기 정규화 통과');
