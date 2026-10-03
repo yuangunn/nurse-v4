@@ -807,7 +807,7 @@
   .name{--mk:#059669;--mk-bg:#D1FAE5} .room{--mk:#2563EB;--mk-bg:#DBEAFE}
   .date{--mk:#7C3AED;--mk-bg:#EDE9FE} .event{--mk:#D97706;--mk-bg:#FEF3C7}
   .mid{--mk:#0D9488;--mk-bg:#CCFBF1} .unit{--mk:#DB2777;--mk-bg:#FCE7F3}
-  .memo{--mk:#93C5FD;--mk-bg:#EFF6FF} .clr{--mk:#6B7280;--mk-bg:#F3F4F6} .fvK.lock{--mk:#8A93A1;--mk-bg:transparent}
+  .clr{--mk:#6B7280;--mk-bg:#F3F4F6} .fvK.lock{--mk:#8A93A1;--mk-bg:transparent}
   .xs.edit{cursor:cell}
   #fvHov{position:absolute;display:none;pointer-events:none;box-shadow:inset 0 0 0 2px #0F1115;background:rgba(15,17,21,.06);z-index:2}
   .fvEdit{margin:10px 0 4px;padding:10px 12px;border-radius:10px;background:var(--subtle);font-size:13px;line-height:1.55;color:var(--ink-2)}
@@ -1925,7 +1925,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261001af'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261003b'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -1937,7 +1937,7 @@ const ALL_CAPS=['DC','D','EC','E','NC','N'];
  * 근무표를 짤 때 이미 정해졌고, 여기서 다시 재면 병동마다 기본값과 달라 '인원이 다릅니다'만 매주 뜬다 (2026-09-27, 결정 2-28) */
 /* ── 배정표 서식 (2026-09-17, 사용자 요청: 101병동·122병동 서식 중 고르고 각각 문구를 고칠 수 있게) ──
  * 프로그램에 두 벌이 들어 있다 — 101(병실 배정표.xlsx: 요일마다 방·이름 두 칸)·122(병실 배정표_122.xlsx: 요일마다
- * 이름·메모 두 칸, 방 열은 일·월~금·토 세 곳). 어느 것을 쓰는지 = store.formId, 서식마다 고친 문구·올린 파일 =
+ * 이름·싸인 두 칸, 방 열은 일·월~금·토 세 곳). 어느 것을 쓰는지 = store.formId, 서식마다 고친 문구·올린 파일 =
  * store.forms[id] (서식을 바꿔도 고친 것이 남는다). 배정표 화면·픽커의 자리 이름도 서식을 따른다 —
  * 101 은 A(CN)·B·C·D·E, 122 는 CN·A·B·C·D (야간은 A·B·C). kind 가 xlsx 채우기·인쇄·구조 인식 분기의 키다. */
 const FORMS={
@@ -1949,7 +1949,7 @@ const FORMS={
   '122':{kind:'122',name:'122병동 서식',file:'병실 배정표_122',tplId:'tplB64_122',
     rows:{D:6,E:5,N:3},
     labels:{'차지':'CN',A:'A',B:'B',C:'C',D:'D',E:'E'},labelsN:{'차지':'A',A:'B',B:'C',C:'D',D:'E',E:'F'},
-    desc:'요일마다 이름·메모 두 칸, 방은 일·월~금·토 세 열에 한 번씩. 자리 이름 CN·A·B·C·D·E(D 는 6줄 — 대체간호사가 오는 날, 야간은 A·B·C). 교육·행사 칸이 크고 아래에 물품체크·CPR·화재 안내.'},
+    desc:'요일마다 이름·싸인 두 칸, 방은 일·월~금·토 세 열에 한 번씩. 자리 이름 CN·A·B·C·D·E(D 는 6줄 — 대체간호사가 오는 날, 야간은 A·B·C). 교육·행사 칸이 크고 아래에 물품체크·CPR·화재 안내.'},
   // 102 는 **방 칸이 없다** — 자리(A·B·C·D)마다 보는 방이 고정이라 머리글에 한 번 적고,
   // 매일 칸에는 이름만 쓴다. "배정표에 어싸인이 나오지 않게" 라는 요구가 양식에 이미 들어 있다.
   // 차지는 **방이 고정이 아니다** (2026-09-20 병동 확인) — 그 근무의 최선임 이름 뒤에 ' /CRN' 을 붙인다.
@@ -6129,7 +6129,7 @@ async function xlsxSheetImages(tpl){
 /* ── 양식 보기 화면 (M11 ②) — 어디에 무엇이 들어가는지 · 이번 주로 채워 보기 ─────────────
  * 맵핑 표시는 채우기와 **같은 규칙**에서 뽑는다: 자리표시자 양식 = 적힌 자리표시자, 101·102·82 모양 = autoMap,
  * 122 모양 = findLayout122 의 칸(fillForm122 가 쓰는 칸 그대로). 채운 모습은 fillWeekXml — 엑셀 내보내기와 같은 XML. */
-const FV_KIND={name:'이름',room:'방',date:'날짜·요일',event:'교육·행사',mid:'중간번',unit:'다른 소속',memo:'방 (다른 날만)',clr:'채울 때 비우는 칸',lock:'구조를 읽는 칸'};
+const FV_KIND={name:'이름',room:'방',date:'날짜·요일',event:'교육·행사',mid:'중간번',unit:'다른 소속',clr:'채울 때 비우는 칸',lock:'구조를 읽는 칸'};
 let fvSrc='current', fvMode='map', fvSun=null, fvZoom='fit', fvGrid=true, fvCache=null;
 /* 101 내장 양식의 고정 위치(fillForm101)를 자리표시자 모양으로 — 올린 101 양식에서 자동 맵핑이 자리 줄을 못 찾을 때 */
 function fixed101Tags(){
@@ -6187,7 +6187,8 @@ function formMapRoles(tpl,F){
       for(const sec of L.sections) for(let k=0;k<sec.rows&&k<LBL_ORDER.length;k++){
         const l=LBL_ORDER[k], r=sec.row+k;
         put(colName(c)+r,{cls:'name',tag:`${sec.P} ${lb(sec.P,l)} 이름`,title:`${sec.P} 근무 ${lb(sec.P,l)} 자리 간호사 이름`},i);
-        put(colName(L.memoCols[i])+r,{cls:'memo',tag:'방',title:`${sec.P} 근무 ${lb(sec.P,l)} 자리 — 방 열과 다른 날만 그 날 병실`},i);
+        // 이름 옆 칸은 싸인 칸 — 앱은 쓰지 않고, 무엇이 적혀 있으면 채울 때 비운다
+        const sg=colName(L.memoCols[i])+r; if(String(cells[sg]||'').trim()) put(sg,{cls:'clr',tag:'비움',title:'싸인 칸 — 채울 때 비운다'},i);
       }
     });
     const grpName={}; L.roomColOf.forEach((rc,i)=>{ if(rc!=null) (grpName[rc]=grpName[rc]||[]).push(WD[i]); });
@@ -6857,7 +6858,7 @@ function detectFormShape(cells,merges){
 /* 양식 모양을 한 줄로 — 검사 결과·병동 양식 설명에 쓴다 */
 function formShapeText(sh){
   if(!sh) return '모양 모름';
-  if(sh.kind==='122') return '요일마다 이름·메모, 방은 일·월~금·토 세 열 (122 모양)';
+  if(sh.kind==='122') return '요일마다 이름·싸인, 방은 일·월~금·토 세 열 (122 모양)';
   const r=sh.rows?` · 자리 D ${sh.rows.D||0} · E ${sh.rows.E||0} · N ${sh.rows.N||0}`:'';
   return (sh.noRooms?'요일마다 이름 한 칸, 방 칸 없음':'요일마다 방·이름 두 칸')+(sh.unitSlot?` · ${sh.unitSlot} 칸 있음`:'')
     +(sh.dateText?' · 날짜는 글자':'')+r+` (${sh.kind} 모양)`;
@@ -7591,7 +7592,7 @@ function embeddedFormB64(id){
   if(!b64) throw new Error(`${F.name}이 내장되지 않았습니다 — build-assign-standalone.mjs 를 실행하세요`);
   return b64;
 }
-/* 서식별 구조 인식 — 101 은 findLayout(요일마다 방·이름), 122 는 findLayout122(요일마다 이름·메모 + 방 열 세 곳) */
+/* 서식별 구조 인식 — 101 은 findLayout(요일마다 방·이름), 122 는 findLayout122(요일마다 이름·싸인 + 방 열 세 곳) */
 function layoutOf(F,cells,merges){ return (F&&F.kind==='122')?findLayout122(cells,merges)
   :(F&&/^(102|82)$/.test(F&&F.kind))?findLayout102(cells,merges):findLayout(cells,merges); }
 async function loadTemplate(){
@@ -8097,8 +8098,8 @@ function autoMap(tpl,shape){
   } else missing.push('교육·행사 줄');
   return {ok:true,xml,found,missing,kind:sh.kind};
 }
-/* 122병동 서식의 구조 — 요일 줄(일~토 7칸)·그 아래 날짜 줄·그 아래 교육행사 줄, 요일마다 이름·메모 두 칸(요일 칸 = 이름 칸,
- * 메모 = 그 오른쪽). 방 열은 요일 칸 사이의 빈 열(C=일, F=월~금, Q=토)로, 각 요일은 자기 앞의 가장 가까운 방 열을 쓴다.
+/* 122병동 서식의 구조 — 요일 줄(일~토 7칸)·그 아래 날짜 줄·그 아래 교육행사 줄, 요일마다 이름·싸인 두 칸(요일 칸 = 이름 칸,
+ * 싸인 = 그 오른쪽, memoCols). 방 열은 요일 칸 사이의 빈 열(C=일, F=월~금, Q=토)로, 각 요일은 자기 앞의 가장 가까운 방 열을 쓴다.
  * 구역은 A열의 D/E/N('구분' 줄 위), 줄 수는 A열 병합 높이(A5:B9 → 5줄), 중간번은 A열 '중간번' 줄.
  * findLayout(101) 과 같은 필드명을 써서 검사·비교·요약·자리표시자가 같은 코드로 돈다. */
 /* 102 서식 구조 — 방 칸이 없다. 자리(A·B·C·D)마다 보는 방이 고정이라 머리글에 한 번 적는다.
@@ -8256,7 +8257,7 @@ function findLayout122(cells,merges){
   if(!L.wdRow) return L;
   L.dateRow=L.wdRow+1; L.dateCols=L.wdCols.slice(); L.eventRow=L.wdRow+2;
   L.memoCols=L.wdCols.map(c=>c+1);
-  // 방 열 — 요일 칸(이름·메모)이 아닌 열 (첫 요일 칸 앞부터 마지막 메모 칸까지, 왼쪽 라벨 두 열은 제외)
+  // 방 열 — 요일 칸(이름·싸인)이 아닌 열 (첫 요일 칸 앞부터 마지막 싸인 칸까지, 왼쪽 라벨 두 열은 제외)
   const used=new Set([...L.wdCols,...L.memoCols]);
   const first=L.wdCols[0], last=L.memoCols[L.memoCols.length-1];
   L.roomCols=[]; for(let c=Math.max(3,first-1);c<=last;c++) if(!used.has(c)) L.roomCols.push(c);
@@ -8295,13 +8296,14 @@ function groupRooms122(days,roomColOf,secRows){
         if(s.byLabel[l]&&!(l in o[P])) o[P][l]=roomsFor(P,s.cnt,l,isoOfD(day.date)); } } });
   return grp;
 }
-/* 122병동 서식 채우기 — 요일 칸은 이름·메모, 방은 일(C)·월~금(F)·토(Q) 열에 '자리⏎방' 으로 한 번씩.
- * 방 열은 그 묶음의 첫 근무 있는 날 기준이고, 그 날만 방이 다르면(요일 프리셋·그날 방 수정·인원 변동) 그 날의 메모 칸에 방을 적는다.
- * 신규(트레이니)는 101 과 같이 이름 칸에 '/ 이름' 줄로, 중간번은 중간번 줄의 이름 칸에. 나머지 메모 칸은 손으로 적게 비워 둔다. */
+/* 122병동 서식 채우기 — 요일 칸은 이름·싸인, 방은 일(C)·월~금(F)·토(Q) 열에 '자리⏎방' 으로 한 번씩.
+ * 방 열은 그 묶음의 첫 근무 있는 날 기준이다. 이름 옆 칸은 근무자가 싸인하는 칸이라 늘 비운다 — 예전엔 그 날만 방이 다르면
+ * 거기에 방을 적었는데 병동에서는 뜻 모를 호실로 읽혔다(2026-10-03 병동 확인: 방은 일·월~금·토 세 열만 본다).
+ * 신규(트레이니)는 101 과 같이 이름 칸에 '/ 이름' 줄로, 중간번은 중간번 줄의 이름 칸에. */
 function fillForm122(tpl,L,days){
   let xml=tpl.sheetXml;
   if(!L||!L.dateCols||L.dateCols.length<7||!L.sections.length) throw new Error('122병동 서식의 요일 칸·구역을 찾지 못했습니다');
-  const NC=L.dateCols, MC=L.memoCols, RC=L.roomColOf;
+  const NC=L.dateCols, RC=L.roomColOf;
   const secRow={}, secRows={}; for(const sec of L.sections){ secRow[sec.P]=sec.row; secRows[sec.P]=sec.rows; }
   const [c1,c2]=L.fillCols, rEnd=Math.max(...L.sections.map(x=>x.row+x.rows-1),L.midRow||0);
   for(let c=c1;c<=c2;c++) for(let r=L.dateRow;r<=rEnd;r++) xml=clearCell(xml,colName(c)+r);
@@ -8311,17 +8313,13 @@ function fillForm122(tpl,L,days){
     xml=setCellStr(xml,colName(+rc)+row,FORM_LBL(l,P)+'\n'+grp[rc][P][l]);
   }
   days.forEach((day,i)=>{
-    const cn=colName(NC[i]), cm=colName(MC[i]), d=day.date, iso=isoOfD(d);
+    const cn=colName(NC[i]), d=day.date, iso=isoOfD(d);
     xml=setCellNum(xml,cn+L.dateRow,dateSerial(d.getFullYear(),d.getMonth()+1,d.getDate()));
     const evt=eventText(iso); if(evt&&L.eventRow) xml=setCellStr(xml,cn+L.eventRow,evt);
     if(day.blank) return;
-    const o=RC[i]!=null?grp[RC[i]]:null;
     for(const P of ['D','E','N']){ const s=day.secs[P], n=secRows[P]||0;
       for(let li=0;li<n&&li<LBL_ORDER.length;li++){ const l=LBL_ORDER[li], nm=s.byLabel[l]; if(!nm) continue;
-        const row=secRow[P]+li;
-        xml=setCellStr(xml,cn+row,nameWithTrainees(nm,iso,P));
-        const rm=roomsFor(P,s.cnt,l,iso), base=o&&o[P][l];
-        if(rm&&rm!==base) xml=setCellStr(xml,cm+row,rm);   // 방 열에 적힌 것과 다른 날만 메모 칸에
+        xml=setCellStr(xml,cn+(secRow[P]+li),nameWithTrainees(nm,iso,P));
       } }
     if(day.mids.length&&L.midRow) xml=setCellStr(xml,cn+L.midRow,day.mids.join(', '));
   });
@@ -8633,10 +8631,8 @@ async function buildPrintArea122(wholeMonth){
     const nameCell=(i,P,li)=>{ const day=days[i]; const l=LBL_ORDER[li];
       if(day.blank||!day.secs[P].byLabel[l]) return td('','')+td('','');
       const nm=day.secs[P].byLabel[l], iso=isoOfD(day.date), ptr=traineesUnder(iso,P,nm);
-      const rm=roomsFor(P,day.secs[P].cnt,l,iso), base=grp[roomColOf[i]]&&grp[roomColOf[i]][P][l];
-      const t=rm?rm.replace(/,\s+/g,','):'';
-      return td(`${esc(nm)}${ptr.map(T=>`<span class="ptr">/ ${esc(T)}</span>`).join('')}`,`font-size:8pt;font-weight:800;line-height:1.1;padding:0 0.5mm`,`class="pnm${ptr.length?' two':''}"`)+
-        td(rm&&rm!==base?`<span class="prm" style="font-size:${rmPt(t)}pt">${rmWrap(t)}</span>`:'','color:#4A5160'); };
+      // 이름 옆 칸은 싸인 칸 — 엑셀(fillForm122)과 같이 비운다
+      return td(`${esc(nm)}${ptr.map(T=>`<span class="ptr">/ ${esc(T)}</span>`).join('')}`,`font-size:8pt;font-weight:800;line-height:1.1;padding:0 0.5mm`,`class="pnm${ptr.length?' two':''}"`)+td('',''); };
     for(const P of ['D','E','N']){
       const n=secRows[P]||(P==='N'?3:5);
       for(let li=0;li<n;li++){
@@ -10443,7 +10439,7 @@ const HELP=[
 
 {cat:'우리 병동 설정',id:'form',title:'배정표 양식 (서식 고르기·양식 보기·문구 고치기·양식 교체)',
  lead:'인쇄·엑셀에 쓰는 병실 배정표 양식입니다. 101병동·122병동 서식 중 고르고, 글자는 여기서 바로 고치고, 칸 구조가 다른 양식은 엑셀 파일을 올려 교체합니다.',
- steps:['관리 &gt; 배정표 양식 &gt; <b>서식</b>에서 <b>101병동 서식</b>(요일마다 방·이름) 또는 <b>122병동 서식</b>(요일마다 이름·메모, 방은 일·월~금·토 열에 한 번씩)을 고릅니다. 배정표 화면의 자리 이름(A(CN)·B… / CN·A·B…)도 함께 바뀝니다.',
+ steps:['관리 &gt; 배정표 양식 &gt; <b>서식</b>에서 <b>101병동 서식</b>(요일마다 방·이름) 또는 <b>122병동 서식</b>(요일마다 이름·싸인, 방은 일·월~금·토 열에 한 번씩)을 고릅니다. 배정표 화면의 자리 이름(A(CN)·B… / CN·A·B…)도 함께 바뀝니다.',
         '<b>[양식 보기]</b> — 엑셀 양식을 그대로 띄워 앱이 채우는 칸(이름·방·날짜·교육·행사·중간번)을 색으로 보여 줍니다. <b>[이번 주로 채워 보기]</b>를 누르면 엑셀로 받을 모습이 그대로 나옵니다.',
         '양식 보기에서 <b>칸을 누르면</b> 그 칸에 무엇을 채울지(날짜·D A 이름·D A 방·중간번·교육·행사…) 고릅니다. 요일 칸은 일요일 칸에 고른 것이 이레에 같은 자리로 들어갑니다. [이번 주로 채워 보기]로 확인하고 <b>[맵핑 저장]</b>.',
         '<b>[양식 문구 고치기]</b> — 제목·물품체크·CPR·화재 등 글자 칸을 고쳐 [이대로 저장]. 고친 문구는 서식마다 따로 남아, 서식을 오가도 잃지 않습니다.',

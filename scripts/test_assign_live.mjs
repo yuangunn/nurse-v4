@@ -276,7 +276,8 @@ function LIB() {
       for (const sec of L.sections) {
         const rows = kind === '101' && L.labelRows ? L.labelRows.filter(r => r >= sec.row && (!sec.end || r < sec.end))
           : [...Array(sec.rows)].map((_, k) => sec.row + k);
-        o[iso][sec.P] = rows.map(r => Object.assign({ lab: kind === '122' ? '' : String(cells[A.colName(L.labelCol || 3) + r] || '').trim(), r },
+        o[iso][sec.P] = rows.map(r => Object.assign({ lab: kind === '122' ? '' : String(cells[A.colName(L.labelCol || 3) + r] || '').trim(), r,
+          sg: kind === '122' && L.memoCols ? String(cells[A.colName(L.memoCols[di]) + r] || '') : '' },
           splitName(cells[A.colName(nc) + r])));
       }
     });
@@ -318,6 +319,8 @@ function LIB() {
       if (kind === '122') {
         rows.forEach((r, k) => { const x = xr[k]; if (!x) return;
           if (x.n !== (r.n || '')) out.push(`X1 ${iso} ${P} 엑셀 ${k + 1}째 줄 '${x.n}' — 화면 ${r.lab} 줄 '${r.n}'`); });
+        // 이름 옆 칸은 근무자가 싸인하는 칸 — 방은 일·월~금·토 세 열에만 (2026-10-03 병동 확인)
+        for (const x of xr) if (x.sg) out.push(`X6 ${iso} ${P} 엑셀 ${x.r}행 싸인 칸에 '${x.sg}' — 비어 있어야 한다`);
       } else {
         for (const x of xr) {
           if (/^SU$/i.test(norm(x.lab))) { const su = A.unitWorker(iso, P, 'SU'); if (x.n !== su) out.push(`X1 ${iso} ${P} 엑셀 SU 줄 '${x.n}' — SU 근무 '${su}'`); continue; }

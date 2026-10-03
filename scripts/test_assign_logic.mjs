@@ -2392,7 +2392,16 @@ async function main() {
       { const s=base('122',6); for(const iso of ['2026-09-07','2026-09-08']) allD(s,iso); s.cells['한막내']['2026-09-07']='OF';
         await A.loadTemplate(); A.recompute();
         const t=await A.loadTemplate(), L=A.findLayout122(A.sheetCells(t),A.sheetMerges(t)), r6=L.sections.find(q=>q.P==='D').row+5;
-        const c=await xl(); out.e122=[c[A.colName(L.roomColOf[1])+r6]||'',c[A.colName(L.memoCols[2])+r6]||'']; }
+        const c=await xl(); out.e122=[c[A.colName(L.roomColOf[1])+r6]||'',c[A.colName(L.memoCols[2])+r6]||''];
+        // 이름 옆 칸은 싸인 칸 — 그 날 방이 방 열과 달라도 비운다. 인쇄도 같이 (2026-10-03 병동 확인)
+        //   화요일 차지 방을 그 날만 바꿔(그날 방 수정) 방 열(월요일 기준)과 다르게 만든다 — 예전엔 이런 날 싸인 칸에 방을 적었다
+        A.store.roomOv['2026-09-08']={D:{'차지':A.roomsFor('D',5,'A','2026-09-07')}}; A.recompute();
+        const c2=await xl(), sg=[]; for(const sec of L.sections) for(let k=0;k<sec.rows;k++) L.memoCols.forEach(mc=>{ const v=c2[A.colName(mc)+(sec.row+k)]; if(v) sg.push(A.colName(mc)+(sec.row+k)+'='+v); });
+        const tue=A.dayInfo('2026-09-08').D, mon=A.dayInfo('2026-09-07').D;
+        out.sg122=[sg, A.roomsFor('D',tue.cnt,'차지','2026-09-08')!==A.roomsFor('D',mon.cnt,'차지','2026-09-07')];
+        await A.buildPrintArea(false);
+        out.sg122p=[...document.querySelectorAll('#printArea td.pnm')].map(td=>td.nextElementSibling).filter(td=>td&&td.textContent.trim()).map(td=>td.textContent.trim());
+        out.sg122n=document.querySelectorAll('#printArea td.pnm').length; }
       // ⑨ 주지 않을 방 카드 — 칸에 적은 자리가 그 날 없으면(4명인 날 D/E) 손 탓이 아니다 (PR #73 교차 검토)
       { const s=base('101',4); allD(s,D1); s.cells['최씨'][D1]='D/E'; A.recompute();
         const rm=l=>A.roomTokens(A.roomsFor('D',4,l,D1)).map(A.roomFull);
@@ -2433,7 +2442,9 @@ async function main() {
   ok('102 화면 — /CRN 은 신규 줄 앞', v34.trS.indexOf('/CRN') >= 0 && v34.trS.indexOf('/CRN') < v34.trS.indexOf('/ 신규일'), v34.trS);
   eq('대체 줄이 있는 102 — 화면 D 다섯째 줄이 대체', v34.sub, [5, ['대체', v34.sub5]]);
   ok('122 — 월~금 방 열에 D 여섯째 자리 이름(E)', /^E/.test(v34.e122[0]), v34.e122[0]);
-  eq('122 — 그 자리 방은 방 열과 같아 메모 칸이 비어 있다', v34.e122[1], '');
+  eq('122 — 그 자리 방은 방 열과 같아 싸인 칸이 비어 있다', v34.e122[1], '');
+  eq('122 — 그 날 방이 방 열과 달라도 엑셀의 이름 옆 싸인 칸은 모두 비어 있다', v34.sg122, [[], true]);
+  ok('122 — 인쇄의 이름 옆 싸인 칸도 비어 있다', v34.sg122n > 0 && v34.sg122p.length === 0, JSON.stringify(v34.sg122p.slice(0, 4)));
   eq('주지 않을 방 카드 — 그 날 없는 자리를 적었으면 손 탓이 아니라 "모두 피하는 배치가 없습니다"', v34.ban, [true, false]);
   eq('DC/CN 인 날 정디에게 DC — 정디가 차지, 김차지는 D(차지 자리 표기도 걷음)', v34.dcCN, ['정디', 'D']);
   eq('다른 사람이 DC 인 날 D/A(CN) — 표시대로 김차지가 차지, 카드', v34.taken, ['김차지', true]);
