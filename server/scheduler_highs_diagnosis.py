@@ -401,13 +401,13 @@ class _HighsDiagnosisMixin:
             for nurse in self.nurses:
                 nid = nurse["id"]
                 xx[nid] = {}
-                is_night = nurse.get("is_night_shift")
                 is_male = nurse.get("gender") != "female"
                 for d in range(self.T):
                     dt = self.all_dates[d]
                     dt_str = dt.strftime("%Y-%m-%d")
                     pre = self.prev.get(nid, {}).get(dt_str)
                     is_holiday = dt_str in self.holidays
+                    is_night = self._keeper_on(nurse, dt)   # 날짜가 속한 달의 나이트킵 (solve() 동일)
                     # 유효 사전입력 — solve()와 동일 (공용 헬퍼)
                     pre = self._effective_pre(nurse, dt, pre, is_holiday)
                     pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
@@ -425,6 +425,10 @@ class _HighsDiagnosisMixin:
                             continue
                         # 임산부 게이팅 (solve() 동일)
                         if self._preg_forbids(nurse, dt, s, pre):
+                            xx[nid][d][s] = 0
+                            continue
+                        # 다음 달 나이트킵 게이팅 (solve() 동일)
+                        if self._keeper_forbids(nurse, dt, s, pre):
                             xx[nid][d][s] = 0
                             continue
                         if pre:

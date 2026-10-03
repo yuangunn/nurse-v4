@@ -80,6 +80,21 @@ assert.ok(!m.v.length && !has(m.n, '알 수 없는'), [...m.v, ...m.n].join('\n'
 // 5b. 야간전담(나이트킵)의 공휴일 OF 는 정상 — 법을 받지 못해 OF로 쉰다 (2026-10-03 병동 확인)
 m = run({ nurses: [nurse('a', { night_months: { '2026-03': true } })], holidays: ['2026-03-05'], prev: { a: { '2026-03-05': 'OF' } } });
 assert.ok(!has(m.n, '공휴일 OF'), m.n.join('\n'));
+// 5c. 나이트킵은 날짜가 속한 달로 — 생성 범위 끝에 붙은 다음 달 며칠 (엔진 _keeper_on, 2026-10-03)
+{
+  const c = makeCtx({
+    nurses: [nurse('a', { night_months: { '2026-04': true } }), nurse('b', { night_months: { '2026-03': true } })],
+    holidays: ['2026-04-01'],
+    prev: { a: { '2026-04-01': 'OF', '2026-04-02': 'D' }, b: { '2026-04-01': 'OF', '2026-04-02': 'D' } },
+  });
+  c.scheduleDays = [...c.scheduleDays, ...[29, 30, 31].map(d => new Date(2026, 2, d)), new Date(2026, 3, 1), new Date(2026, 3, 2)];
+  c._checkViolations();
+  const n = c.prevPinNotes.map(x => x.msg);
+  assert.ok(!n.some(x => x.startsWith('a:') && x.includes('공휴일 OF')), n.join('\n'));  // 4월 나이트킵 — 4/1 OF 정상
+  assert.ok(n.some(x => x.startsWith('a:') && x.includes('야간전담')), n.join('\n'));     // 4/2 D 는 나이트킵의 낮 근무
+  assert.ok(n.some(x => x.startsWith('b:') && x.includes('공휴일 OF')), n.join('\n'));    // 3월 나이트킵도 4월엔 일반
+  assert.ok(!n.some(x => x.startsWith('b:') && x.includes('야간전담')), n.join('\n'));
+}
 
 // 6. 일별 사전배정 초과 (요구 정확히 일치)
 m = run({ nurses: [nurse('a'), nurse('b')], dayReqs: { '2026-03-03': { D: 1 } }, prev: { a: { '2026-03-03': 'D' }, b: { '2026-03-03': 'DC' } } });

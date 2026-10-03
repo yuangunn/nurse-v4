@@ -65,7 +65,6 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         for nurse in self.nurses:
             nid = nurse["id"]
             x[nid] = {}
-            is_night = nurse.get("is_night_shift")
             is_male = nurse.get("gender") != "female"
             for d in range(self.T):
                 dt = self.all_dates[d]
@@ -73,6 +72,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
+                is_night = self._keeper_on(nurse, dt)   # 날짜가 속한 달의 나이트킵 (다음 달 며칠 포함)
                 # 유효 사전입력 (공휴일 OF 드롭[일반 간호사] + 모성보호 드롭 — 공용 헬퍼)
                 pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
@@ -92,6 +92,10 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                         continue
                     # 임산부 모성보호 게이팅 (P1 구간 외/야간 제외/생 면제 → 0 고정)
                     if self._preg_forbids(nurse, dt, s, pre):
+                        x[nid][d][s] = 0
+                        continue
+                    # 다음 달 나이트킵: 생성 달 뒤 며칠에도 야간 외 근무 금지 (사전입력은 사실)
+                    if self._keeper_forbids(nurse, dt, s, pre):
                         x[nid][d][s] = 0
                         continue
                     if pre:
@@ -275,7 +279,6 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         for nurse in self.nurses:
             nid = nurse["id"]
             x[nid] = {}
-            is_night = nurse.get("is_night_shift")
             is_male = nurse.get("gender") != "female"
             for d in range(self.T):
                 dt = self.all_dates[d]
@@ -283,6 +286,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 x[nid][d] = {}
                 pre = self.prev.get(nid, {}).get(dt_str)
                 is_holiday = dt_str in self.holidays
+                is_night = self._keeper_on(nurse, dt)   # 날짜가 속한 달의 나이트킵 (다음 달 며칠 포함)
                 # 유효 사전입력 (공휴일 OF 드롭[일반 간호사] + 모성보호 드롭 — 공용 헬퍼)
                 pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 # 전입/전출일 범위 밖: 모든 shift 0으로 고정
@@ -305,6 +309,10 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                         continue
                     # 임산부 모성보호 게이팅 (P1 구간 외/야간 제외/생 면제 → 0 고정)
                     if self._preg_forbids(nurse, dt, s, pre):
+                        x[nid][d][s] = 0
+                        continue
+                    # 다음 달 나이트킵: 생성 달 뒤 며칠에도 야간 외 근무 금지 (원티드도 — 잠긴 칸은 위에서 고정)
+                    if self._keeper_forbids(nurse, dt, s):
                         x[nid][d][s] = 0
                         continue
                     # 주휴 처리
@@ -440,8 +448,9 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             bonus_expr = pulp.lpSum(pre_bonus_terms)
             # 파트장 확인 마지막 수단(제1원칙 13)도 1단계에서 원티드와 맞바꾼다 —
             # 근무 원티드(500) 하나를 지키려고 6일 연속(1500~3000)을 만들지 않게.
-            # 오프특근도 같이 넣는다 — 빠지면 6일 연속 대신 오프특근을 공짜로 고른다.
-            lr = self._last_resort_terms() + self._relax_off_teukgeun_terms(PRE_BONUS_OFF)
+            # 오프특근도 같이 넣는다 — 빠지면 6일 연속 대신 오프특근을 공짜로 고른다 (원티드보다 나중).
+            lr = self._last_resort_terms() + self._relax_off_teukgeun_terms(
+                PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK)
             if lr:
                 bonus_expr = bonus_expr - pulp.lpSum(pen * sl for pen, sl in lr)
             prob.setObjective(bonus_expr)
