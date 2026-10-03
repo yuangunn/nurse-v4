@@ -61,7 +61,7 @@ window.AnalysisModule = function() {
         let preWork=0,preRest=0,preLeave=0,preJuhu=0,preOF=0;
         for(const nurse of activeNurses){
           const val=(this.prevSchedule[nurse.id]||{})[dk];
-          if(!val)continue;
+          if(!val||val==='N제외')continue;   // N 빼고 = 쉬어도 되는 빈칸 · D/E 같은 '둘 중 하나'는 근무로 센다
           if(val==='주')preJuhu++;
           else if(val==='OF')preOF++;
           else if(restCodes.includes(val))preRest++;

@@ -323,6 +323,7 @@ window.MiscFeaturesModule = function() {
       const sched=(this.schedule[nurseId]||{})[dk];
       if(!pre||!sched)return null;
       if(pre===sched)return'match';
+      if(this.isFlexWish(pre))return this.flexAllows(pre,sched)?'match':'changed';
       const flex=this._getPreFlex(pre);
       if(flex.includes(sched))return'match';
       return'changed';

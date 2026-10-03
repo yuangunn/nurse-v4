@@ -115,6 +115,7 @@ window.GridInteractionsModule = function() {
           const code=pre[dk];
           if(!code)continue;
           if(code.startsWith('/'))continue; // 트레이니 표시 코드 — 솔버가 스트립
+          if(this.isFlexWish(code))continue; // 원티드 둘 중 하나·N 빼고 — 생성이 고른다 (확정 칸 아님)
           const def=defByCode[code];
           if(!def){v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} '${code}' 알 수 없는 근무 코드`});continue}
           if(code==='OF'&&holidaySet.has(dk)&&!nightDed){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 공휴일 OF — 생성 시 무시되고 재배치됩니다`});continue}

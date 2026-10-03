@@ -182,6 +182,15 @@ window.SettingsDefsModule = function() {
       if(s.period==='rest'||s.period==='leave')return 'g-cell-rest';
       return 'g-cell-work';
     },
+    // 원티드 '둘 중 하나'(D/E·E/N·D/N)·'N 빼고'(N제외) — 한 근무가 아니라 허용 근무 묶음 (제1원칙 14).
+    // 엔진 _FLEX_ONE_OF·_FLEX_NOT 와 같은 뜻: 둘 중 하나 = 두 시간대 근무(차지 포함, D1·중 아님), N제외 = 야간만 아니면 됨.
+    flexWishCodes:['D/E','E/N','D/N','N제외'],
+    isFlexWish(code){return this.flexWishCodes.includes(code)},
+    flexAllows(code, shift){
+      const p=this.shiftMap.get(shift)?.period||'';
+      if(code==='N제외')return !!shift&&p!=='night';
+      return ({'D/E':['day','evening'],'E/N':['evening','night'],'D/N':['day','night']}[code]||[]).includes(p);
+    },
     // 차지 코드 → 일반 코드 (DC→D, EC→E, NC→N, 신규 /DC→/D). 그 밖의 코드는 그대로.
     // 어싸인용 복사(copyScheduleTsv)는 이것을 거치지 않는다 — 배정표가 DC/EC/NC 로 차지를 안다.
     plainShift(code){

@@ -643,6 +643,13 @@ class _ConflictAnalyzer(CpSatScheduler):
                             if not isinstance(v, int) and not free_ok[s]:
                                 model.Add(v == 0).OnlyEnforceIf(keep.Not())
                         pre_keeps.append((keep, nurse, d, pre))
+        # 원티드 D/E·N제외: 지키면 허용 근무 중 하나, 빼면(¬keep) 자유 (근무 원티드 비용).
+        # 잠긴 칸은 하드 — _apply_flex_wishes(soft=True) 가 바로 0 으로 묶는다.
+        by_id = {n["id"]: n for n in self.nurses}
+        for nid, d, code, terms in self._apply_flex_wishes(x, soft=True):
+            keep = model.NewBoolVar(f"keepf_{nid}_{d}")
+            model.Add(sum(terms) == 1).OnlyEnforceIf(keep)
+            pre_keeps.append((keep, by_id[nid], d, code))
         return x, pre_keeps
 
     def suggest_correction(self) -> Dict:

@@ -448,6 +448,7 @@ class _HighsDiagnosisMixin:
                             xx[nid][d][s] = 0
                         else:
                             xx[nid][d][s] = pulp.LpVariable(f"{pfx}_{nid}_{d}_{s}", cat="Binary")
+            self._apply_flex_wishes(xx)   # 원티드 D/E·N제외 — solve() 동일
             return xx
 
         lines = ["근무표 생성 실패 - 원인 진단 결과:"]

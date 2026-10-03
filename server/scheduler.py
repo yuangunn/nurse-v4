@@ -119,6 +119,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                         v = pulp.LpVariable(f"x_{nid}_{d}_{s}", cat="Binary")
                         x[nid][d][s] = v
                         _free_vars.append(v)
+        self._apply_flex_wishes(x)                     # 원티드 D/E·N제외 — 허용 근무만
 
         # ── Hard Constraints ─────────────────────────────────────────────────
 
@@ -194,7 +195,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             })
         elif status_str == "Infeasible":
             # ── 사전입력 완화 재시도 ────────────────────────────────────
-            if self.allow_pre_relax and self.prev:
+            if self.allow_pre_relax and self._has_pre():
                 relax_result = self._solve_with_relaxed_pre()
                 if relax_result:
                     return relax_result
@@ -217,7 +218,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             # 시작하지 않는다 — 취소를 무시하고 최대 time_limit짜리 새 솔브를
             # (등록 불가 상태로) 도는 셈이 된다.
             from . import solver_progress
-            if (self.allow_pre_relax and self.prev
+            if (self.allow_pre_relax and self._has_pre()
                     and not solver_progress.is_cancelled()
                     and not solver_progress.was_cancel_all()):
                 relax_result = self._solve_with_relaxed_pre()
@@ -368,6 +369,10 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                         v = x[nid][d].get(s)
                         if isinstance(v, pulp.LpVariable):
                             pre_bonus_terms.append(bonus_amount * v)
+        # 원티드 D/E·N제외: 허용 근무 중 하나면 근무 원티드를 지킨 것 (잠긴 칸·지난달은 하드)
+        for nid, d, code, terms in self._apply_flex_wishes(x, soft=True):
+            bonus_amount = _pre_bonus_for(code, nid)
+            pre_bonus_terms.extend(bonus_amount * v for v in terms)
 
         # 제약 (동일)
         self._c_one_shift_per_day(prob, x)
@@ -524,6 +529,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                             # D→DC, E→EC 차지 자동승격 — 변경은 아니지만 표가
                             # 입력과 달라지므로 별도 집계해 사용자에게 알린다
                             charge_promotions += 1
+            self._flex_relaxed(schedule, relaxed_cells)    # 못 지킨 원티드 D/E·N제외 (근무)
 
             label = "중지" if status_str not in ("Optimal", "Feasible") else status_str
             relax_count = sum(len(v) for v in relaxed_cells.values())

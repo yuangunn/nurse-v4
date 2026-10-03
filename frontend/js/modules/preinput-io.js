@@ -44,6 +44,9 @@ window.PreinputIoModule = function() {
     // 이미 완성된 표를 붙여넣었을 때 설정된 요일별 기본값 대신 이 표가 기준이 되게.
     applyReqFromPrev(){
       const P={DC:'D',D:'D',EC:'E',E:'E',NC:'N',N:'N'};
+      // 원티드 D/E·N제외 칸은 어느 근무가 될지 모른다 — 세면 인원이 모자라게 고정된다
+      const flexN=Object.values(this.prevSchedule||{}).reduce((a,days)=>a+Object.values(days||{}).filter(c=>this.isFlexWish(c)).length,0);
+      if(flexN){this.toast(`원티드 ${flexN}칸(D/E·N제외 등)은 한 근무로 정해지지 않아 인원을 셀 수 없습니다 — 완성된 표에서 쓰세요`,'error',6000);return}
       const counts={};
       for(const days of Object.values(this.prevSchedule||{}))
         for(const[dk,code]of Object.entries(days||{})){

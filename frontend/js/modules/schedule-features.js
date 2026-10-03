@@ -10,13 +10,17 @@ window.ScheduleFeaturesModule = function() {
     // 사전입력에 붙여넣은 표를 그대로 스케줄로 옮긴다 (검증 없음 — 사람이 짠 게 정답).
     usePrevAsSchedule(){
       const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
-      let filled=0, holes=[];
+      let filled=0, holes=[], flex=[];
       for(const n of this.nurses){
         for(const d of days){
-          if(this.prevSchedule[n.id]?.[this.dayKey(d)]) filled++;
+          const c=this.prevSchedule[n.id]?.[this.dayKey(d)];
+          if(c&&this.isFlexWish(c)) flex.push(`${n.name} ${d.getMonth()+1}/${d.getDate()} ${c}`);
+          else if(c) filled++;
           else holes.push(`${n.name} ${d.getMonth()+1}/${d.getDate()}`);
         }
       }
+      // D/E·N제외 같은 원티드는 한 근무가 아니다 — 근무표 칸에 그대로 옮기면 안 된다
+      if(flex.length){ this.toast(`원티드 ${flex.length}칸이 한 근무로 정해지지 않았습니다 (예: ${flex.slice(0,2).join(', ')}). 근무표 만들기로 정하세요`,'error',6000); return }
       if(!filled){ this.toast('사전입력이 비어 있습니다','error'); return }
       const msg=holes.length
         ? `빈 칸이 ${holes.length}개 있습니다 (예: ${holes.slice(0,3).join(', ')}).\n`

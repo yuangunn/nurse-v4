@@ -75,6 +75,10 @@ window.PasteImportModule = function() {
       // 빈값/공백/하이픈 등 → 빈 코드 (해당 셀 비움 의미)
       const raw=(s||'').trim();
       if(!raw||['-','—','x','X','·','/','none','없음'].includes(raw))return null;
+      // 원티드 '둘 중 하나'·'N 빼고' (엔진 _PRE_ALIAS 와 같은 표기)
+      const flex={'D/E':'D/E','E/D':'D/E','DE':'D/E','ED':'D/E','E/N':'E/N','N/E':'E/N','EN':'E/N','NE':'E/N',
+        'D/N':'D/N','N/D':'D/N','DN':'D/N','ND':'D/N','N제외':'N제외','N빼고':'N제외'}[raw.replace(/\s+/g,'').toUpperCase()];
+      if(flex)return flex;
       // 정확한 코드 일치 (대소문자 무시)
       const exact=this.shifts.find(sh=>sh.code===raw)||this.shifts.find(sh=>sh.code.toLowerCase()===raw.toLowerCase());
       if(exact)return exact.code;
