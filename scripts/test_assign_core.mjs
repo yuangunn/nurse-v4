@@ -274,6 +274,20 @@ assert.equal(periodOf('OF'), null);
   // boolean 하위호환
   const r3 = compute(nurses.map(n => ({ ...n, chargeCapable: true })), sched, ['d1']);
   assert.equal(r3.byDay.d1.N.labels['차지'], 'a');
+  // 함수 (P, 날짜) — 날마다 묻는다 (그룹의 가능 근무는 고친 날부터, 2026-10-09). a 는 d2 부터 차지를 못 한다
+  const asked = [];
+  const fn = (id, from) => (P, dk) => { asked.push(id + P + dk); return !(id === 'a' && dk >= from); };
+  const r4 = compute([{ id: 'a', seniority: 0, chargeCapable: fn('a', 'd2') }, { id: 'b', seniority: 1, chargeCapable: fn('b', 'zz') }],
+    { a: { d1: 'D', d2: 'D', d3: 'E' }, b: { d1: 'D', d2: 'D', d3: 'E' } }, ['d1', 'd2', 'd3']);
+  assert.deepEqual(['d1', 'd2', 'd3'].map(d => r4.byDay[d][d === 'd3' ? 'E' : 'D'].charge), ['a', 'b', 'b']);
+  assert.ok(asked.includes('aDd2') && asked.includes('aEd3'), '근무와 날짜를 함께 넘긴다 ' + asked.join(','));
+  // 표시자(DC)는 자격보다 앞선다 — 함수가 아니라고 해도 DC 가 차지
+  const r5 = compute([{ id: 'a', seniority: 0, chargeCapable: () => false }, { id: 'b', seniority: 1, chargeCapable: () => true }],
+    { a: { d1: 'D' }, b: { d1: 'DC' } }, ['d1']);
+  assert.equal(r5.byDay.d1.D.charge, 'b');
+  const r6 = compute([{ id: 'a', seniority: 0, chargeCapable: () => true }, { id: 'b', seniority: 1, chargeCapable: () => false }],
+    { a: { d1: 'D' }, b: { d1: 'DC' } }, ['d1']);
+  assert.equal(r6.byDay.d1.D.charge, 'b');
 }
 
 // ── 회피 라벨 (opts.avoid — 금지 방) ──

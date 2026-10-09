@@ -67,9 +67,11 @@
     return null;
   }
 
-  // chargeCapable: boolean(전 시간대) 또는 {D,E,N} 시간대별 — 하위호환
-  function chargeOk(n, P) {
+  // chargeCapable: boolean(전 시간대) 또는 {D,E,N} 시간대별 — 하위호환.
+  // 함수 (P, dateKey)=>bool 이면 날마다 묻는다 — 그룹의 가능 근무처럼 고친 날부터 바뀌는 자격 (2026-10-09)
+  function chargeOk(n, P, dk) {
     const c = n.chargeCapable;
+    if (typeof c === 'function') return !!c(P, dk);
     return c && typeof c === 'object' ? !!c[P] : !!c;
   }
 
@@ -117,7 +119,7 @@
   }
 
   /**
-   * @param nurses   [{id, seniority(작을수록 선임), chargeCapable: bool|{D,E,N}}]
+   * @param nurses   [{id, seniority(작을수록 선임), chargeCapable: bool|{D,E,N}|(P,dateKey)=>bool}]
    * @param schedule {nurseId: {dateKey: code}}
    * @param dateKeys 시간순 날짜키 배열 (연속성 위해 전월 이월일 포함 가능)
    * @param opts     {rules:{keepSameShift,keepAcrossShift,keepAfterOff,bounceAfterOff},
@@ -480,7 +482,7 @@
           // 방이 고정이 아닌 차지 — 사람은 자리와 상관없이 고른다(손으로 자리를 옮긴 사람도 차지일 수 있다)
           let c = staff.filter(marked).sort(bySen)[0];
           if (!c) {
-            const pool = staff.filter(function (n) { return chargeOk(n, P); });
+            const pool = staff.filter(function (n) { return chargeOk(n, P, dk); });
             c = (pool.length ? pool : staff).slice().sort(bySen)[0];
           }
           chargeId = c.id;
@@ -552,7 +554,7 @@
             let c = staff.filter(function (n) { return !taken[n.id] && marked(n); }).sort(bySen)[0];
             if (!c) {
               // 주지 않을 방과 상관없이 시니어리티로 — 차지 방에 주지 않을 방이 걸려도 차지는 그대로(경고로 알린다)
-              const pool = staff.filter(function (n) { return !taken[n.id] && chargeOk(n, P); });
+              const pool = staff.filter(function (n) { return !taken[n.id] && chargeOk(n, P, dk); });
               const base = pool.length ? pool : staff.filter(function (n) { return !taken[n.id]; });
               c = base.slice().sort(bySen)[0];
             }
