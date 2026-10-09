@@ -1041,6 +1041,19 @@ assert.equal(periodOf('OF'), null);
     assert.ok(['차지', 'A'].includes(seatOf(onX, 'd1', 'E', '라')), 'CRN 은 허락된 다른 자리로');
     assert.equal(onX.byDay.d1.E.charge, '라');
     assert.equal(onX.byDay.d1.E.handover, undefined);
+
+    // CRN 자리 고르기도 '주지 않을 방 > 같은 그룹 인계' 순서 — CRN C 가 앉을 수 있는 자리는 차지(1·2호, Y 가 D 에서 본 병상)와
+    // A(주지 않을 방)뿐이다. 인계를 피하려고 주지 않을 방에 앉지 않는다: 차지에 앉고 인계를 알린다 (교차 검토 2026-10-09)
+    const NY = [N('Y', 0), N('C', 1), N('P2', 2, false), N('P3', 3, false)];
+    const LY = { D: { 차지: ['1', '2'] }, E: { 차지: ['1', '2'], A: ['3', '4'], B: ['5', '6'] } };
+    const shY = { Y: { x: 'DC' }, C: { x: 'EC' }, P2: { x: 'E' }, P3: { x: 'E' } };
+    const oY = { roomsFor: (P, cnt, l) => ((LY[P] || {})[l] || []).slice(), maxSeats: 3,
+                 chargeSeats: (P) => (P === 'E' ? ['차지', 'A'] : null), avoid: { x: { E: { C: ['A'] } } },
+                 seed: { C: { label: 'B', period: 'E', idx: -1, rooms: ['5', '6'] } } };
+    const rY = compute(NY, shY, ['x'], Object.assign({ handoverGroups: { Y: ['g'], C: ['g'] } }, oY));
+    assert.equal(rY.byDay.x.E.charge, 'C');
+    assert.equal(rY.byDay.x.E.labels['차지'], 'C', '주지 않을 방(A)보다 인계가 낫다');
+    assert.deepEqual(rY.byDay.x.E.handover, [{ from: 'Y', to: 'C', rooms: ['1', '2'] }]);
   }
 }
 

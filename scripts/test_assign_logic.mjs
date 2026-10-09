@@ -2667,6 +2667,11 @@ async function main() {
     { const cell=n=>{ const d=document.createElement('div'); d.innerHTML=A.groupCellHtml(n); return [...d.querySelectorAll('.grpChip')].map(b=>b.textContent+(b.classList.contains('on')?'+':'')).join(',')||d.textContent; };
       const st=document.createElement('div'); st.innerHTML=A.groupStripHtml();
       out.su=[cell('자신규'), cell('바간호'), (st.querySelector('.grpN')||{}).textContent, A.handoverGroupsOf()['자신규']||null]; }
+    // 다른 소속 간호사의 이름을 바꾸면 소속도 새 이름으로 — 옛 이름에 남으면 새 이름이 병동 자리로 들어왔다. Ctrl+Z 로 돌아온다
+    A.applyNurseName(A.store.order.indexOf('바간호'),'바에스'); A.recompute();
+    out.suRen=[A.store.unit['바에스']||null, A.store.unit['바간호']||null];
+    A.undoAny(); out.suUndo=[A.store.unit['바간호']||null, A.store.order.includes('바간호')];
+    A.applyNurseName(A.store.order.indexOf('바간호'),''); out.suDel=A.store.unit['바간호']||null; A.undoAny();
     A.store.unit={};
     // 그룹 이름 바꾸기·지우기 (지우기는 확인창 → Ctrl+Z)
     A.pickAdmin('caps');
@@ -2683,7 +2688,7 @@ async function main() {
     // 옛 파일(그룹 없음)·손으로 고친 파일
     const t=JSON.parse(JSON.stringify(A.store)); delete t.groups;
     A.store=t; A.migrateStore(); out.migOld=A.store.groups;
-    A.store.groups=[{name:'  신규 ',members:['자신규','자신규','없는사람',3]},{id:'g1',name:'',members:'x',noHandover:false},null,{id:'g1',name:'겹침',members:[]}];
+    A.store.groups=[{name:'  신규 ',members:['자신규','자신규','없는사람',3]},{id:'g1',name:'',members:'x',noHandover:false},null,{id:'g1',name:'겹침',members:[]},{name:'신규',members:[],noHandover:'false'}];
     A.migrateStore(); out.migBad=A.store.groups.map(x=>[x.id==='g1'?'g1':/^g[a-z0-9]+$/.test(x.id)?'새 id':x.id, x.name, x.members, x.noHandover]);
     // 저장 → 다시 열기 · 파일 안 스냅샷
     A.store.groups=[{id:'g7',name:'신규 독립',members:['자신규','차신규'],noHandover:true}]; A.recompute();
@@ -2721,6 +2726,9 @@ async function main() {
   ok('그룹을 끄면 카드에 같은 그룹 인계가 없다', !v37.offCard);
   eq('다른 소속 그룹원 — 그 그룹 칩만(뺄 수 있게) · 그룹 없는 다른 소속은 — · 띠 인원·엔진에서 빠진다', v37.su, ['신규 독립+', '—', '1명', null]);
   eq('간호사 이름을 바꾸면 그룹원도 새 이름', v37.rename, ['자신규', '차독립']);
+  eq('다른 소속 간호사 이름 바꾸기 — 소속도 새 이름으로', v37.suRen, ['SU', null]);
+  eq('Ctrl+Z — 소속도 옛 이름으로 돌아온다', v37.suUndo, ['SU', true]);
+  eq('다른 소속 간호사를 지우면 소속 표시도 지운다', v37.suDel, null);
   eq('간호사를 지우면 그룹에서 빠진다', v37.del, ['차독립']);
   eq('Ctrl+Z — 지운 간호사가 그룹에 돌아온다', v37.undoDel, ['자신규', '차독립']);
   eq('Ctrl+Z — 이름도 돌아온다', v37.undoRen, ['자신규', '차신규']);
@@ -2731,8 +2739,9 @@ async function main() {
   eq('Ctrl+Z — 지운 그룹이 돌아온다', v37.undoG, ['새내기', '야간']);
   eq('마법사 간호사 단계 — 그룹 띠와 칩, 상태는 단추가 아니라 글자', v37.wiz, [true, 10, false]);
   eq('옛 파일(그룹 없음) — 빈 목록', v37.migOld, []);
+  // 이름도 그룹원도 없는 항목은 버린다 · 같은 이름은 번호를 붙인다 · 'false' 글자는 끔
   eq('손으로 고친 파일 — 이름·그룹원·id·인계 피하기 정리', v37.migBad,
-    [['새 id', '신규', ['자신규'], true], ['g1', '그룹', [], false], ['새 id', '겹침', [], true]]);
+    [['새 id', '신규', ['자신규'], true], ['g1', '겹침', [], true], ['새 id', '신규2', [], false]]);
   eq('저장 → 다시 열기 — 그룹·배정 그대로', v37.trip, [true, true]);
   ok('파일 안 스냅샷(이전 상태로 되돌리기)에 그룹이 든다', v37.hist);
 
