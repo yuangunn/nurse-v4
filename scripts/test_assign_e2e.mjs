@@ -483,6 +483,43 @@ try {
   await tap('← 배정표');
   await sleep(300);
 
+  step('11c 간호사 그룹 — 그룹 만들기 · 그룹원 칩 · 배정 원칙 스위치');
+  // 관리 > 간호사 관리 → [＋ 그룹 만들기] → 공용 창에 이름 → 그룹 칸의 칩을 눌러 막내 둘을 넣는다 → 배정 원칙의 그룹 스위치
+  await tap('관리', '.topbar');
+  await sleep(300);
+  await tapSel(`#adminNav .anItem[onclick="pickAdmin('caps')"]`);
+  await sleep(300);
+  ok('그룹이 없으면 그룹 칸이 없다', !(await ev(`return [...document.querySelectorAll('#capsTable th')].some(t=>t.textContent==='그룹')`)));
+  await tap('그룹 만들기', '#adminPanelBox');
+  await sleep(250);
+  eq('이름을 묻는 창이 뜬다', await ev(`return document.querySelector('#modal.on #modalBox .mt').textContent`), '그룹 만들기');
+  await tapSel('#mdInput');
+  await send('Input.insertText', { text: '신규 독립' });
+  await tap('만들기', '#modalBox');
+  await sleep(300);
+  eq('그룹이 생겼다 — 인계 피하기 켬, 그룹원 없음', await ev(`return window.__app.store.groups.map(g=>[g.name,g.noHandover,g.members.length])`), [['신규 독립', true, 0]]);
+  const grpUi = await ev(`return {띠:(document.querySelector('#adminPanelBox .grpStrip')||{}).textContent||'',
+    칸:[...document.querySelectorAll('#capsTable th')].some(t=>t.textContent==='그룹'), 칩:document.querySelectorAll('#capsTable .grpChip').length,
+    폭:document.documentElement.scrollWidth<=innerWidth};`);
+  ok('표 위에 그룹 띠, 표에 그룹 칸과 사람마다 칩', /신규 독립/.test(grpUi.띠) && grpUi.칸 && grpUi.칩 === 16, JSON.stringify(grpUi));
+  ok('1920 에서 옆으로 밀리지 않는다', grpUi.폭, JSON.stringify(grpUi));
+  const two = await ev(`return window.__app.store.order.slice(-2)`);
+  for (const n of two) { await tapSel(`#capsTable .grpChip[onclick*="'${n}'"]`); await sleep(250); }
+  eq('칩 두 번으로 그룹원 둘', await ev(`return window.__app.store.groups[0].members`), two);
+  ok('누른 칩이 켜져 있다', await ev(`return ${JSON.stringify(two)}.every(n=>[...document.querySelectorAll('#capsTable .grpChip.on')].some(b=>(b.getAttribute('onclick')||'').includes("'"+n+"'")))`));
+  eq('엔진에 그룹이 넘어간다', await ev(`return Object.keys(handoverGroupsOf()).sort()`), two.slice().sort());
+  await tapSel(`#adminNav .anItem[onclick="pickAdmin('rules')"]`);
+  await sleep(300);
+  ok('배정 원칙에 그룹 줄 — 이름과 그룹원', await ev(`const r=document.querySelector('#adminPanelBox .grpRules .rulRow[data-g]'); return !!r&&r.textContent.includes('신규 독립')&&${JSON.stringify(two)}.every(n=>r.textContent.includes(n))`));
+  await tapSel('#adminPanelBox .grpRules .rulRow[data-g] .sw input');
+  await sleep(300);
+  eq('스위치를 누르면 인계 피하기가 꺼진다', await ev(`return [window.__app.store.groups[0].noHandover, document.querySelector('#adminPanelBox .grpRules .rulRow[data-g] .sw input').checked]`), [false, false]);
+  await tapSel('#adminPanelBox .grpRules .rulRow[data-g] .sw input');
+  await sleep(300);
+  eq('다시 누르면 켜진다', await ev(`return window.__app.store.groups[0].noHandover`), true);
+  await tap('배정표', '.topbar');
+  await sleep(400);
+
   step('12 화면에서 난 오류');
   eq('콘솔 오류 없음', await ev('return window.__errs.slice(0,5)'), []);
 

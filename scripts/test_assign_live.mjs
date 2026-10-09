@@ -5,13 +5,16 @@
 // 사람이 하는 대로 배정표 화면의 이름 칸·빈 칸·이름 클릭 창의 단추를 **실제로 눌러** 바꾼다:
 //   근무 바꾸기(D·E·N·DC·EC·NC·OF·V) · 자리 맞바꾸기 · 자동으로 되돌리기 · CRN 맡기기 · 쉬는 간호사 넣기 ·
 //   대체간호사 넣기·빼기 · 이 날 교체 모두 풀기 · 효력 없는 교체 지우기 · 되돌리기(Ctrl+Z) ·
-//   근무표 고치기 화면에서 칸에 자리까지 적기('D/B' — 우클릭 → 직접 입력)
+//   근무표 고치기 화면에서 칸에 자리까지 적기('D/B' — 우클릭 → 직접 입력) ·
+//   간호사 그룹(그룹이 있는 양식만): 배정 원칙의 '그룹원끼리 인계 피하기' 스위치 · 간호사 관리의 그룹 칩
 // 병동 양식마다(내장 101·122·102·82, 올린 옛 102 D(CRN)·CN 이 둘째 줄인 101·자리표시자 102, 병동 양식 92(82 모양)·72(102 모양))
 // 정해진 씨앗으로 무작위 수정을 하고, 한 번 바꿀 때마다 두 주 전체를 다시 본다:
 //   E1 근무자가 모두 한 번씩 앉는다          E2 차지 표시가 정확히 한 사람         E3 자리가 앞에서부터 빈틈없이
 //   E4 손으로 옮긴 자리는 그대로            E5 차지 = 규칙(표시 → 차지 가능 최선임 → 최선임; 차지 자리가 고정이면 손으로 앉힌 사람)
 //   E6 차지 자리가 고정이면 차지는 그 자리   E6f 차지가 자리에 안 묶여도 종이에 찍히는 자리에 (손 안 탄 종이 자리가 남았으면)
-//   E7 이틀 연속 같은 사람이면 자리도 같다 (차지가 자리에 안 묶이면 차지가 바뀌어도)
+//   E7 이틀 연속 같은 사람이면 자리도 같다 (차지가 자리에 안 묶이면 차지가 바뀌어도; 어제 배치가 오늘 같은 그룹 인계를 더 늘리면 예외)
+//   E8 같은 그룹 인계 보고(byDay.handover) = 앞 근무(D ← 전날 N, E ← D, N ← E)의 병상을 같은 그룹이 넘겨받은 것 — 근무표에서 따로 세어 견준다
+//   V1 확인 카드의 '같은 그룹 인계' 줄 = 엔진이 알린 인계 (사람 짝·날 수)
 //   S  화면 줄 = 엔진 자리, /CRN 은 차지가 자리에 안 묶일 때 차지에게만
 //   X  엑셀 = 화면 (자리 이름 줄마다 같은 사람), 엑셀 /CRN 은 서식이 찍을 때(102 모양)만, 신규 줄은 /CRN 뒤,
 //      차지 자리가 고정이면 엑셀의 차지 표기 줄(CN·A(CN)·D(CRN))에 차지 — 화면과 엑셀이 같이 틀려도 잡는다
@@ -104,7 +107,7 @@ function LIB() {
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = ri(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const S = () => A.store;
   const code = (n, iso) => { const pc = A.parseCellRaw(((S().cells[n] || {})[iso]) || ''); return pc && pc.code || ''; };
-  const stateKey = () => JSON.stringify([S().cells, S().ovr, S().ovrPair, S().relief, S().trOv, S().trainee]);
+  const stateKey = () => JSON.stringify([S().cells, S().ovr, S().ovrPair, S().relief, S().trOv, S().trainee, S().groups]);
 
   /* ── 장면 만들기 ── */
   async function setup(spec, seed) {
@@ -112,7 +115,7 @@ function LIB() {
     const s = S();
     Object.assign(s, { formId: '101', order: WARD.concat(spec.su ? SU : [], [TR]), cells: {}, ovr: {}, ovrPair: {}, roomOv: {}, roomOvCnt: {},
       presetDay: {}, presetPlan: {}, presets: {}, seedManual: {}, unit: {}, relief: {}, trainee: {}, trOv: {}, evRules: [], daily: {},
-      banRooms: {}, caps: {}, hidden: {}, newUntil: {}, forms: {} });
+      banRooms: {}, caps: {}, hidden: {}, newUntil: {}, forms: {}, groups: [] });
     s.rules = { keepSameShift: true, keepAcrossShift: true, keepAfterOff: true, bounceAfterOff: false };
     A.store = s;
     if (spec.ward) A.setWard(spec.ward); else { A.setFormId(spec.form); A.setWard(spec.form); }
@@ -131,6 +134,8 @@ function LIB() {
       await A.loadTemplate(); await sleep(20);
     }
     for (const n of NOCHG) s.caps[n] = ['D', 'E', 'N'];
+    // 간호사 그룹 — [이름, 그룹원, 인계 피하기] (갓 독립한 신규끼리 인계하지 않게. 꺼진 그룹·두 그룹에 든 사람도 섞는다)
+    if (spec.groups) s.groups = spec.groups.map(([name, members, on], k) => ({ id: 'g' + (k + 1), name, members: members.slice(), noHandover: on }));
     // 근무표 — 사흘씩 같은 사람이 같은 근무 (실제 근무표처럼 이어지는 날이 있어야 E7 이 볼 것이 있다)
     for (let b = 0; b * 3 < DAYS; b++) {
       const perm = shuffle(WARD.slice()), blk = {}; let k = 0;
@@ -151,7 +156,8 @@ function LIB() {
       ISOS.forEach((iso, i) => { (s.cells[SU[0]] = s.cells[SU[0]] || {})[iso] = i % 3 === 2 ? 'OF' : 'D'; (s.cells[SU[1]] = s.cells[SU[1]] || {})[iso] = i % 2 ? 'E' : 'N'; });
     }
     A.recompute(); A.undoClear(); A.wkSunday = dateAt(0); A.show('week');
-    return { form: A.formId(), kind: A.formDef().kind, float: P3.map(P => A.crnFloat(P)), crnMark: !!A.formDef().crnMark, canPrint: A.canPrint() };
+    return { form: A.formId(), kind: A.formDef().kind, float: P3.map(P => A.crnFloat(P)), crnMark: !!A.formDef().crnMark, canPrint: A.canPrint(),
+      groups: (s.groups || []).filter(A.groupActive).length };
   }
 
   /* ── 근무자·차지 규칙 (엔진을 보지 않고 근무표에서 바로) ── */
@@ -200,6 +206,24 @@ function LIB() {
   const seatOf = (d, n) => Object.keys(d.labels).find(l => d.labels[l] === n) || (d.extra.includes(n) ? '헬퍼' : '없음');
   const fmtD = d => LBL.filter(l => d.labels[l]).map(l => l + ':' + d.labels[l]).join(' ') + (d.extra.length ? ' +' + d.extra.join(',') : '');
 
+  /* ── 같은 그룹 인계 — 엔진을 보지 않고 근무표·방 구성에서 바로 센다 ──
+   * 앞 근무: D ← 전날 N, E ← 같은 날 D, N ← 같은 날 E. 앞 근무의 자리에 앉은 사람이 본 병상을 같은 그룹(인계 피하기 켬) 사람이 받으면 인계 */
+  const bedRooms = (P, cnt, l, iso) => A.expandBeds(A.roomTokens(A.roomsFor(P, cnt, l, iso)));
+  const bedW = t => { const [r, no] = A.splitBed(A.roomFull(t)); return no != null ? 1 : (A.bedCount(r) || 1); };
+  const prevShiftOf = (iso, P) => P === 'E' ? [iso, 'D'] : P === 'N' ? [iso, 'E'] : (ISOS.indexOf(iso) > 0 ? [ISOS[ISOS.indexOf(iso) - 1], 'N'] : null);
+  // {보낸 사람 → 받은 사람: [병상]} — labels 를 iso·P 에 앉혔을 때 (labels 를 바꿔 '어제 배치를 오늘에' 도 센다)
+  function handovers(info, HG, labels, iso, P) {
+    const out = {}, pv = prevShiftOf(iso, P), pi = pv && info[pv[0] + pv[1]], me = info[iso + P];
+    if (!pi || !me) return out;
+    const same = (a, b) => a !== b && (HG[a] || []).some(g => (HG[b] || []).includes(g));
+    const hold = {};
+    for (const l in pi.d.labels) for (const t of bedRooms(pv[1], pi.W.length, l, pv[0])) (hold[t] = hold[t] || []).push(pi.d.labels[l]);
+    for (const l in labels) { const n = labels[l]; if (!HG[n]) continue;
+      for (const t of bedRooms(P, me.W.length, l, iso)) for (const h of hold[t] || []) if (same(h, n)) (out[h + '→' + n] = out[h + '→' + n] || []).push(t); }
+    return out;
+  }
+  const handCost = (info, HG, labels, iso, P) => Object.values(handovers(info, HG, labels, iso, P)).reduce((s, ts) => s + ts.reduce((a, t) => a + bedW(t), 0), 0);
+
   function checkEngine(out) {
     const res = A.result;
     if (!res) { out.push('E0 계산 결과가 없다'); return; }
@@ -226,6 +250,15 @@ function LIB() {
         out.push(`E6f ${iso} ${P} CRN ${d.charge} 이 종이 밖 자리 ${seatOf(d, d.charge)} (${fmtD(d)})`);
       info[iso + P] = { W, d, pinned, labels };
     }
+    // E8 — 엔진이 알린 같은 그룹 인계 = 근무표에서 센 인계 (켠 그룹, 병동 간호사만 — 대체간호사·다른 소속은 그룹에 들지 않는다)
+    const HG = A.handoverGroupsOf(S().order.filter(n => !(S().unit || {})[n]));
+    for (const k in info) {
+      const iso = k.slice(0, 10), P = k.slice(10), d = info[k].d;
+      const want = handovers(info, HG, d.labels, iso, P), got = {};
+      for (const h of d.handover || []) (got[h.from + '→' + h.to] = got[h.from + '→' + h.to] || []).push(...h.rooms);
+      const fmt = o => Object.keys(o).sort().map(x => x + ':' + o[x].slice().sort().join(',')).join(' ; ');
+      if (fmt(want) !== fmt(got)) out.push(`E8 ${iso} ${P} 같은 그룹 인계 — 엔진 ${fmt(got) || '없음'} · 근무표로 센 것 ${fmt(want) || '없음'} (${fmtD(d)})`);
+    }
     // E7 — 102 오류가 깬 불변식: 이틀 연속 같은 사람이면(손 고정 없음, 방 구성 같음) 자리도 같다.
     // 차지가 자리에 안 묶이는 서식은 차지가 바뀌어도 (/CRN 은 사람에 붙는다). 원칙 1(같은 근무 유지)이 켜져 있을 때
     if (S().rules.keepSameShift) for (let i = 0; i + 1 < DAYS; i++) for (const P of P3) {
@@ -236,6 +269,8 @@ function LIB() {
       const cnt = a.W.length;
       if (a.labels.some(l => A.roomsFor(P, cnt, l, ISOS[i]) !== A.roomsFor(P, cnt, l, ISOS[i + 1]))) continue;
       if (fmtD(a.d) === fmtD(b.d)) continue;
+      // 그룹원끼리 인계 피하기는 방 유지(원칙 1~3)보다 먼저다 — 어제 배치를 오늘 그대로 두면 같은 그룹 인계가 늘어나는 날은 옮겨도 맞다
+      if (handCost(info, HG, a.d.labels, ISOS[i + 1], P) > handCost(info, HG, b.d.labels, ISOS[i + 1], P)) continue;
       // 새 차지가 어제 종이 밖 자리(양식 줄을 넘는 자리)였으면 종이로 올라와야 한다 — 그 사람과 밀려나는 한 사람만 옮긴다
       const nc = b.d.charge, ncSeat = Object.keys(a.d.labels).find(l => a.d.labels[l] === nc);
       const moved = a.W.filter(n => seatOf(a.d, n) !== seatOf(b.d, n));
@@ -349,6 +384,22 @@ function LIB() {
         pp.forEach((q, k) => { const r = rows[k]; if (r && q.n !== (r.n || '')) out.push(`P2 ${iso} ${P} 인쇄 '${q.lab}' 줄 '${q.n}' — 화면 '${r.n}'`); });
       }
     }
+    // V1 — 확인 카드의 '같은 그룹 인계' 줄 = 엔진이 알린 인계 (사람 짝마다 날 수). 옆 열일 때만 — 표 위 카드는 접혀 줄을 숨긴다
+    const wb = document.querySelector('#wkWarn');
+    if (wb && wb.classList.contains('side')) {
+      const want = {}, got = {};
+      for (const iso of isos) for (const P of P3) for (const h of ((res.byDay[iso] || {})[P] || {}).handover || [])
+        if (A.groupsBetween(h.from, h.to).length) want[h.from + '→' + h.to] = (want[h.from + '→' + h.to] || 0) + 1;
+      // 그룹마다 한 줄 — 인계 하나가 span.hv 하나(넘겨준 사람·받은 사람), 접힌 나머지도 센다. 줄 머리의 건수도 맞아야 한다
+      for (const div of wb.querySelectorAll('.items > div.warn')) {
+        const m = div.textContent.match(/^같은 그룹[(][^)]*[)] 인계 ([0-9]+)건 — /); if (!m) continue;
+        const hv = div.querySelectorAll('span.hv');
+        if (+m[1] !== hv.length) out.push(`V1 ${isos[0]} 주 확인 카드 — 머리 ${m[1]}건 · 적힌 인계 ${hv.length}개`);
+        for (const sp of hv) { const k = sp.dataset.from + '→' + sp.dataset.to; got[k] = (got[k] || 0) + 1; }
+      }
+      const fmt = o => Object.keys(o).sort().map(x => x + '×' + o[x]).join(', ');
+      if (fmt(want) !== fmt(got)) out.push(`V1 ${isos[0]} 주 확인 카드의 같은 그룹 인계 ${fmt(got) || '없음'} — 엔진 ${fmt(want) || '없음'}`);
+    }
     // H — 하루 어싸인표 (그 날)
     if (dayIso) {
       A.DAYTPL = null;
@@ -395,7 +446,8 @@ function LIB() {
     const before = stateKey(), depth = A.undoDepth, res0 = byDayJson(), cells0 = JSON.parse(JSON.stringify(S().cells));
     // CRN 맡기기 단추는 차지가 자리에 안 묶이는 근무에만 있다 — 그런 양식에서 더 자주 (102 오류가 드러난 수정이다)
     const crnW = P3.some(P => A.crnFloat(P)) ? 20 : 2;
-    const kind = wpick([['shift', 22], ['swap', 24], ['auto', 6], ['crn', crnW], ['cellSeat', 8], ['addOff', 7], ['relief', 8], ['unrelief', 5], ['clearDay', 4], ['prune', 2], ['undo', 10]]);
+    const kind = wpick([['shift', 22], ['swap', 24], ['auto', 6], ['crn', crnW], ['cellSeat', 8], ['addOff', 7], ['relief', 8], ['unrelief', 5], ['clearDay', 4], ['prune', 2], ['undo', 10],
+      ['grp', (S().groups || []).length ? 8 : 0]]);
     const fails = [], ctx = { kind, iso, wk };
     const all = cellsOn(iso);
     const openName = async td => { td.click(); await sleep(5); return pickOn(); };
@@ -434,6 +486,30 @@ function LIB() {
       A.show('week');
     }
     else if (kind === 'prune') { A.show('admin'); A.pickAdmin('manual'); A.pruneOvr(); A.show('week'); desc = '효력 없는 교체 지우기'; }
+    else if (kind === 'grp') {
+      // 간호사 그룹 — 배정 원칙의 스위치를 누르거나(인계 피하기 켜고 끄기) 간호사 관리의 그룹 칩을 누른다(그룹원 넣고 빼기)
+      const g0 = JSON.stringify(S().groups);
+      if (R() < 0.5) {
+        A.show('admin'); A.pickAdmin('rules'); await sleep(5);
+        const inp = pick([...document.querySelectorAll('#adminPanelBox .grpRules .rulRow[data-g] .sw input')]);
+        if (!inp) { fails.push('O0 배정 원칙에 그룹 스위치가 없다'); A.show('week'); return { desc: '그룹 스위치 (없음)', fails, ctx }; }
+        const id = inp.closest('.rulRow').dataset.g, on0 = !!A.groupById(id).noHandover;
+        inp.click(); await sleep(10);
+        desc = `그룹 ${A.groupById(id).name} 인계 피하기 ${on0 ? '끄기' : '켜기'}`;
+        if (!!A.groupById(id).noHandover === on0) fails.push(`O10 ${desc} 스위치를 눌렀는데 그대로`);
+      } else {
+        A.show('admin'); A.pickAdmin('caps'); await sleep(5);
+        const b = pick([...document.querySelectorAll('#capsTable .grpChip')]);
+        const m = b && (b.getAttribute('onclick') || '').match(/toggleGroupMember[(]'([^']+)','([^']+)'[)]/);
+        if (!m) { fails.push('O0 간호사 관리에 그룹 칩이 없다'); A.show('week'); return { desc: '그룹 칩 (없음)', fails, ctx }; }
+        const was = A.groupById(m[1]).members.includes(m[2]);
+        b.click(); await sleep(10);
+        desc = `그룹 ${A.groupById(m[1]).name}에 ${m[2]} ${was ? '빼기' : '넣기'}`;
+        if (A.groupById(m[1]).members.includes(m[2]) === was) fails.push(`O10 ${desc} 칩을 눌렀는데 그대로`);
+      }
+      if (JSON.stringify(S().groups) === g0) fails.push(`O10 ${desc} — 그룹이 그대로`);
+      A.show('week');
+    }
     else if (kind === 'addOff' || kind === 'relief') {
       const emp = [...document.querySelectorAll('#wkTable td[data-empty][data-iso="' + iso + '"]')].filter(td => !td.classList.contains('rm'));
       let opened = false;
@@ -531,9 +607,11 @@ function LIB() {
 
 /* ── 병동 양식 ── */
 const SPECS = [
-  { key: '101', form: '101', cnt: { D: [4, 5], E: [4, 5], N: [2, 3] } },
+  // groups — 간호사 그룹 [이름, 그룹원, 인계 피하기]. 그룹이 있으면 수정에 그룹 스위치·칩 누르기가 섞이고 E7 은 그룹 인계 예외를 본다
+  { key: '101', form: '101', cnt: { D: [4, 5], E: [4, 5], N: [2, 3] }, groups: [['신규 독립', ['아간호', '자간호', '차간호', '카간호'], true]] },
   { key: '122', form: '122', cnt: { D: [5, 6], E: [4, 5], N: [2, 3] } },
-  { key: '102', form: '102', cnt: { D: [3, 5], E: [3, 4], N: [2, 3] } },
+  { key: '102', form: '102', cnt: { D: [3, 5], E: [3, 4], N: [2, 3] },
+    groups: [['신규 독립', ['바간호', '아간호', '자간호', '타간호'], true], ['야간 전담', ['다간호', '라간호'], false], ['복직', ['타간호', '카간호'], true]] },
   { key: '82', form: '82', su: true, cnt: { D: [2, 3], E: [2, 3], N: [1, 2] } },
   { key: '102 옛 양식(D(CRN) 맨 아래)', form: '102', up: 'oldCrn', cnt: { D: [3, 5], E: [3, 4], N: [2, 3] } },
   { key: '101 올린 양식(CN 이 둘째 줄)', form: '101', up: 'cn2', cnt: { D: [4, 5], E: [4, 5], N: [2, 3] } },
@@ -581,7 +659,7 @@ async function main() {
       fails = r.fails.concat(c);
       total++;
     }
-    const tag = `${sp.key} [${info.kind} 모양 · 차지 ${info.float.map((f, k) => 'DEN'[k] + (f ? ' 자리 안 묶임' : ' 자리 고정')).join(', ')}${info.crnMark ? ' · 종이에 /CRN' : ''}${info.canPrint ? ' · 화면 인쇄' : ''}]`;
+    const tag = `${sp.key} [${info.kind} 모양 · 차지 ${info.float.map((f, k) => 'DEN'[k] + (f ? ' 자리 안 묶임' : ' 자리 고정')).join(', ')}${info.crnMark ? ' · 종이에 /CRN' : ''}${info.canPrint ? ' · 화면 인쇄' : ''}${info.groups ? ' · 인계 피하는 그룹 ' + info.groups : ''}]`;
     if (fails.length) {
       bad++;
       console.log(`FAIL  ${tag} — 씨앗 ${SEED}, ${hist.length}번째 수정 뒤`);
