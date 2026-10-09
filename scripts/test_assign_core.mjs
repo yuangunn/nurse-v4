@@ -790,4 +790,383 @@ assert.equal(periodOf('OF'), null);
   }
 }
 
+/* ── 같은 그룹끼리 인계 피하기 (opts.handoverGroups — 2026-10-09) ────────────────
+ * 갓 독립한 신규끼리 D→E, E→N, N→D 로 같은 환자를 주고받지 않게 한다. 앞 근무(D ← 전날 N, E ← D, N ← E)는
+ * 이미 정해진 것으로 보고 뒤 근무가 피한다. 잣대는 넘겨받는 병상 수(bedsOf). 사전식으로
+ * 주지 않을 방 > 같은 그룹 인계 > 원칙 1~3 > 헬퍼는 후임 > … — 누가 차지인지는 바꾸지 않고 손으로 고정한 자리도 그대로.
+ * 피하지 못한 인계는 byDay[dk][P].handover = [{from, to, rooms}]. */
+{
+  const R = (a, b) => { const o = []; for (let i = a; i <= b; i++) o.push(String(i)); return o; };
+  // 셋 근무 방 구성 — 모든 근무가 같다: 차지 1~4 · A 5~9 · B 10~14
+  const L3 = { 차지: R(1, 4), A: R(5, 9), B: R(10, 14) };
+  const rf3 = (P, cnt, l) => (L3[l] || []).slice();
+  const seatOf = (r, dk, P, id) => Object.keys(r.byDay[dk][P].labels).find(l => r.byDay[dk][P].labels[l] === id) || null;
+  const NEW = { 신1: ['신규'], 신2: ['신규'] };
+  // 가·나·다·라 = 차지 가능한 선배, 신1·신2 = 갓 독립한 신규(가장 후임)
+  const NS = [N('가', 0), N('나', 1), N('다', 2), N('라', 3), N('신1', 8, false), N('신2', 9, false)];
+  const every = (days, rows) => {
+    const s = {};
+    for (const [id, code] of rows) { s[id] = {}; for (const dk of days) s[id][dk] = code; }
+    return s;
+  };
+  const sortHv = (hv) => (hv || []).map(h => ({ from: h.from, to: h.to, rooms: h.rooms.slice().sort((a, b) => a - b) }))
+    .sort((a, b) => (a.from + a.to).localeCompare(b.from + b.to));
+
+  // ① D→E — 신1(D)과 신2(E)가 어제까지 둘 다 B(10~14)를 봤다: 매일 신1 이 신2 에게 같은 환자를 넘기던 자리.
+  //   그룹을 켜면 신2 가 첫날 한 번 A 로 옮기고, 그 뒤로는 이어 보기(원칙 1)가 둘을 떼어 둔다. 앞 근무 신1 은 그대로.
+  const days4 = ['d1', 'd2', 'd3', 'd4'];
+  const sch1 = every(days4, [['가', 'DC'], ['나', 'D'], ['신1', 'D'], ['다', 'EC'], ['라', 'E'], ['신2', 'E']]);
+  const seed1 = {
+    가: { label: '차지', period: 'D', idx: -1, rooms: L3.차지 }, 나: { label: 'A', period: 'D', idx: -1, rooms: L3.A },
+    신1: { label: 'B', period: 'D', idx: -1, rooms: L3.B },
+    다: { label: '차지', period: 'E', idx: -1, rooms: L3.차지 }, 라: { label: 'A', period: 'E', idx: -1, rooms: L3.A },
+    신2: { label: 'B', period: 'E', idx: -1, rooms: L3.B },
+  };
+  const o1 = { roomsFor: rf3, seed: seed1 };
+  {
+    const off = compute(NS, sch1, days4, o1);
+    assert.deepEqual(days4.map(dk => seatOf(off, dk, 'E', '신2')), ['B', 'B', 'B', 'B'], '그룹 없이는 오늘과 같다 — 신2 는 매일 B');
+    for (const dk of days4) assert.equal(off.byDay[dk].E.handover, undefined, '그룹이 없으면 인계 보고도 없다');
+
+    const on = compute(NS, sch1, days4, Object.assign({ handoverGroups: NEW }, o1));
+    for (const dk of days4) assert.deepEqual(on.byDay[dk].D, off.byDay[dk].D, dk + ' 앞 근무(D)는 그룹과 상관없이 그대로');
+    assert.deepEqual(days4.map(dk => seatOf(on, dk, 'E', '신2')), ['A', 'A', 'A', 'A'], '신2 는 첫날 한 번 옮기고 그 뒤로 A 를 이어 본다');
+    assert.deepEqual(days4.map(dk => seatOf(on, dk, 'E', '라')), ['B', 'B', 'B', 'B'], '라가 B 를 맡아 이어 본다');
+    for (const dk of days4) {
+      assert.equal(on.byDay[dk].E.handover, undefined, dk + ' 신규끼리 넘기는 병상 없음');
+      assert.equal(on.byDay[dk].E.charge, '다');
+    }
+
+    // 그룹을 켜도 짝이 없거나(한 사람뿐), 빈 그룹이거나, 방 정보(roomsFor)가 없으면 오늘과 똑같다
+    assert.deepEqual(compute(NS, sch1, days4, Object.assign({ handoverGroups: { 신1: ['신규'] } }, o1)), off, '그룹에 한 사람뿐');
+    assert.deepEqual(compute(NS, sch1, days4, Object.assign({ handoverGroups: { 신1: [], 신2: [''] } }, o1)), off, '빈 그룹');
+    assert.deepEqual(compute(NS, sch1, days4, Object.assign({ handoverGroups: {} }, o1)), off, '그룹 목록이 비었다');
+    assert.deepEqual(compute(NS, sch1, days4, { seed: seed1, handoverGroups: NEW }), compute(NS, sch1, days4, { seed: seed1 }),
+      '방 정보가 없으면 아무 일도 하지 않는다');
+  }
+
+  // ② 주지 않을 방 > 같은 그룹 인계 > 원칙 1 — ① 의 첫날 신2 에게 A 가 주지 않을 방이면 신2 는 B 에 남고 인계를 알린다.
+  //   주지 않을 방이 풀린 다음 날 신2 가 옮긴다 (어제 B 를 이어 보는 원칙 1 보다 인계 피하기가 먼저).
+  {
+    const r = compute(NS, sch1, days4, Object.assign({ handoverGroups: NEW, avoid: { d1: { E: { 신2: ['A'] } } } }, o1));
+    assert.equal(seatOf(r, 'd1', 'E', '신2'), 'B', '주지 않을 방이 먼저');
+    assert.deepEqual(r.byDay.d1.E.handover, [{ from: '신1', to: '신2', rooms: R(10, 14) }], '피하지 못한 인계는 알린다');
+    assert.equal(seatOf(r, 'd2', 'E', '신2'), 'A', '다음 날 원칙 1(B 이어 보기)을 버리고 옮긴다');
+    assert.equal(seatOf(r, 'd2', 'E', '라'), 'B', '라도 원칙 1(A)을 버리고 B 로');
+    assert.equal(r.byDay.d2.E.handover, undefined);
+    // 다른 사람의 주지 않을 방도 먼저다 — 라가 B 를 못 받으면 신2 는 B 에 남는다
+    const r2 = compute(NS, sch1, days4, Object.assign({ handoverGroups: NEW, avoid: { d1: { E: { 라: ['B'] } } } }, o1));
+    assert.equal(seatOf(r2, 'd1', 'E', '라'), 'A');
+    assert.equal(seatOf(r2, 'd1', 'E', '신2'), 'B');
+    assert.deepEqual(r2.byDay.d1.E.handover, [{ from: '신1', to: '신2', rooms: R(10, 14) }]);
+  }
+
+  // ③ 손으로 고정한 자리는 그대로 — 신2 를 d1 E 의 B 에 못 박으면 B 그대로, 인계를 알린다. 다음 날은 옮긴다
+  {
+    const r = compute(NS, sch1, days4, Object.assign({ handoverGroups: NEW, overrides: { d1: { E: { 신2: 'B' } } } }, o1));
+    assert.equal(seatOf(r, 'd1', 'E', '신2'), 'B');
+    assert.deepEqual(r.byDay.d1.E.handover, [{ from: '신1', to: '신2', rooms: R(10, 14) }]);
+    assert.equal(seatOf(r, 'd2', 'E', '신2'), 'A');
+    // 앞 근무 신1 을 손으로 A 에 고정하면 신2 는 B 를 이어 볼 수 있다 — 피할 것은 신1 이 실제로 본 병상
+    const r2 = compute(NS, sch1, ['d1'], Object.assign({ handoverGroups: NEW, overrides: { d1: { D: { 신1: 'A' } } } }, o1));
+    assert.equal(seatOf(r2, 'd1', 'D', '신1'), 'A');
+    assert.equal(seatOf(r2, 'd1', 'E', '신2'), 'B', '신1 이 안 본 B 는 그대로 이어 본다');
+    assert.equal(r2.byDay.d1.E.handover, undefined);
+  }
+
+  // ④ E→N (같은 날) · N→D (전날 밤 → 오늘 아침)
+  {
+    // E→N: 신1 이 E 의 B 를 본 날, N 의 신2 는 B 대신 A — 그룹 밖의 나는 B 를 넘겨받아도 된다
+    const en = { 다: { d1: 'EC' }, 라: { d1: 'E' }, 신1: { d1: 'E' }, 가: { d1: 'NC' }, 나: { d1: 'N' }, 신2: { d1: 'N' } };
+    const off = compute(NS, en, ['d1'], { roomsFor: rf3 });
+    assert.equal(seatOf(off, 'd1', 'E', '신1'), 'B');
+    assert.equal(seatOf(off, 'd1', 'N', '신2'), 'B', '그룹 없이는 신2 가 신1 의 B 를 받는다');
+    const on = compute(NS, en, ['d1'], { roomsFor: rf3, handoverGroups: NEW });
+    assert.deepEqual(on.byDay.d1.E, off.byDay.d1.E);
+    assert.deepEqual(on.byDay.d1.N.labels, { 차지: '가', A: '신2', B: '나' });
+    assert.equal(on.byDay.d1.N.handover, undefined, '그룹 밖 사람(나)이 받는 것은 인계로 치지 않는다');
+
+    // N→D: d1 밤 신1 이 B — d2 낮 신2 는 B 를 피한다. 같은 날(d2) 의 E·N 은 D 보다 뒤라 상관없다
+    const nd = { 가: { d1: 'NC', d2: 'NC' }, 나: { d1: 'N', d2: 'N' }, 신1: { d1: 'N', d2: 'N' },
+                 다: { d2: 'DC' }, 라: { d2: 'D' }, 신2: { d2: 'D' } };
+    const off2 = compute(NS, nd, ['d1', 'd2'], { roomsFor: rf3 });
+    assert.equal(seatOf(off2, 'd2', 'D', '신2'), 'B');
+    const on2 = compute(NS, nd, ['d1', 'd2'], { roomsFor: rf3, handoverGroups: NEW });
+    assert.equal(seatOf(on2, 'd1', 'N', '신1'), 'B');
+    assert.deepEqual(on2.byDay.d2.D.labels, { 차지: '다', A: '신2', B: '라' }, '전날 밤 신1 의 병상을 피한다');
+    assert.equal(seatOf(on2, 'd2', 'N', '신1'), 'B', '신1 은 밤에 B 를 이어 본다 (d2 E 가 비어 N 의 앞 근무가 없다)');
+  }
+
+  // ⑤ 그룹 맞추기 — 그룹이 여럿이면 하나라도 같을 때만 같은 그룹. 다른 그룹끼리·그룹 없는 사람은 피하지 않는다
+  {
+    const en = { 다: { d1: 'EC' }, 라: { d1: 'E' }, 신1: { d1: 'E' }, 가: { d1: 'NC' }, 나: { d1: 'N' }, 신2: { d1: 'N' } };
+    const o = { roomsFor: rf3 };
+    const base = compute(NS, en, ['d1'], o);
+    const n2 = (g) => seatOf(compute(NS, en, ['d1'], Object.assign({ handoverGroups: g }, o)), 'd1', 'N', '신2');
+    assert.equal(n2({ 신1: ['신규', '2025입사'], 신2: ['2025입사'] }), 'A', '겹치는 그룹(2025입사)이 하나라도 있으면 피한다');
+    assert.equal(n2({ 신1: ['신규', '2025입사'], 신2: ['2025입사', '야간'] }), 'A');
+    assert.equal(n2({ 신1: ['신규'], 신2: ['2025입사'] }), 'B', '다른 그룹끼리는 피하지 않는다');
+    assert.equal(n2({ 신1: ['신규'] }), 'B', '그룹 없는 사람(신2)은 피하지 않는다');
+    assert.equal(n2({ 신2: ['신규'] }), 'B', '넘기는 사람(신1)이 그룹 밖이면 피하지 않는다');
+    assert.deepEqual(compute(NS, en, ['d1'], Object.assign({ handoverGroups: { 신1: ['가조'], 신2: ['나조'] } }, o)), base,
+      '겹치는 그룹이 없으면 결과가 오늘과 같다');
+  }
+
+  // ⑥ 앞 근무에 아무도 없으면 인계도 없다 · 헬퍼는 병상을 넘기지 않는다
+  {
+    // d1 E 가 비었다 — D(신1, B) 다음 N(신2) 은 인계가 아니다 (16시간 뒤)
+    const dn = { 가: { d1: 'DC' }, 나: { d1: 'D' }, 신1: { d1: 'D' }, 다: { d1: 'NC' }, 라: { d1: 'N' }, 신2: { d1: 'N' } };
+    const r = compute(NS, dn, ['d1'], { roomsFor: rf3, handoverGroups: NEW });
+    assert.equal(seatOf(r, 'd1', 'D', '신1'), 'B');
+    assert.equal(seatOf(r, 'd1', 'N', '신2'), 'B', 'E 가 빈 날 N 은 D 를 피하지 않는다');
+    assert.equal(r.byDay.d1.N.handover, undefined);
+    // d1 N 이 비었다 — d1 E(신1, B) 다음 d2 D(신2) 는 인계가 아니다
+    const ed = { 가: { d1: 'EC' }, 나: { d1: 'E' }, 신1: { d1: 'E' }, 다: { d2: 'DC' }, 라: { d2: 'D' }, 신2: { d2: 'D' } };
+    const r2 = compute(NS, ed, ['d1', 'd2'], { roomsFor: rf3, handoverGroups: NEW });
+    assert.equal(seatOf(r2, 'd1', 'E', '신1'), 'B');
+    assert.equal(seatOf(r2, 'd2', 'D', '신2'), 'B', '밤 근무가 빈 다음 날 D 는 전날 E 를 피하지 않는다');
+    // 하루가 통째로 빈 다음 날도 — 전날 밤이 없으면 그 전 밤을 보지 않는다
+    const gap = { 가: { d1: 'NC' }, 나: { d1: 'N' }, 신1: { d1: 'N' }, 다: { d3: 'DC' }, 라: { d3: 'D' }, 신2: { d3: 'D' } };
+    const r3 = compute(NS, gap, ['d1', 'd2', 'd3'], { roomsFor: rf3, handoverGroups: NEW });
+    assert.equal(seatOf(r3, 'd3', 'D', '신2'), 'B', '이틀 전 밤은 인계가 아니다');
+
+    // 헬퍼: D 6명 · 자리 5 — 막내 신1 은 헬퍼라 넘길 병상이 없다 → E 의 신2 는 그대로 B
+    const L5 = { 차지: R(1, 2), A: R(3, 5), B: R(6, 8), C: R(9, 11), D: R(12, 14) };
+    const L6 = { 차지: R(1, 2), A: R(3, 4), B: R(5, 7), C: R(8, 10), D: R(11, 12), E: R(13, 14) };
+    const rf = (P, cnt, l) => ((P === 'D' ? (cnt >= 6 ? L6 : L5) : L3)[l] || []).slice();
+    const N8 = ['가', '나', '다', '라', '마', '바', '사'].map((id, i) => N(id, i)).concat([N('신1', 8, false), N('신2', 9, false)]);
+    const sh = { 가: { d1: 'DC' }, 나: { d1: 'D' }, 다: { d1: 'D' }, 라: { d1: 'D' }, 마: { d1: 'D' }, 신1: { d1: 'D' },
+                 바: { d1: 'EC' }, 사: { d1: 'E' }, 신2: { d1: 'E' } };
+    const h5 = compute(N8, sh, ['d1'], { roomsFor: rf, handoverGroups: NEW });
+    assert.deepEqual(h5.byDay.d1.D.extra, ['신1'], '신1 은 헬퍼');
+    assert.equal(seatOf(h5, 'd1', 'E', '신2'), 'B', '헬퍼는 병상을 보지 않으니 피할 것이 없다');
+    assert.equal(h5.byDay.d1.E.handover, undefined);
+    // 대조 — 자리가 6개라 신1 이 E(13·14호)에 앉으면 신2 는 그 병상이 든 B 를 피한다
+    const h6 = compute(N8, sh, ['d1'], { roomsFor: rf, maxSeats: 6, handoverGroups: NEW });
+    assert.equal(seatOf(h6, 'd1', 'D', '신1'), 'E');
+    assert.equal(seatOf(h6, 'd1', 'E', '신2'), 'A');
+  }
+
+  // ⑦ 병상 수로 잰다 — 어느 자리든 조금씩 넘겨받을 때 넘겨받는 병상이 적은 자리
+  {
+    // D 의 B(신1) = 6·7·11~14호. 오늘 E 의 A 는 그중 6호 하나, B 는 7·11~14호 다섯 방과 겹친다
+    const LD = { 차지: R(1, 4), A: ['5', '8', '9', '10'], B: ['6', '7', '11', '12', '13', '14'] };
+    const LE = { 차지: R(1, 4), A: ['5', '6', '8', '9'], B: ['7', '10', '11', '12', '13', '14'] };
+    const rf = (P, cnt, l) => ((P === 'D' ? LD : LE)[l] || []).slice();
+    const sh = { 가: { d1: 'DC' }, 나: { d1: 'D' }, 신1: { d1: 'D' }, 다: { d1: 'EC' }, 라: { d1: 'E' }, 신2: { d1: 'E' } };
+    const off = compute(NS, sh, ['d1'], { roomsFor: rf });
+    assert.equal(seatOf(off, 'd1', 'D', '신1'), 'B');
+    assert.equal(seatOf(off, 'd1', 'E', '신2'), 'B');
+    // 방 개수로는(병상수 모름) A 가 1, B 가 5 → A
+    const byRoom = compute(NS, sh, ['d1'], { roomsFor: rf, handoverGroups: NEW });
+    assert.equal(seatOf(byRoom, 'd1', 'E', '신2'), 'A');
+    assert.deepEqual(byRoom.byDay.d1.E.handover, [{ from: '신1', to: '신2', rooms: ['6'] }], '피하지 못한 1병상을 알린다');
+    // 6호가 6인실이면 A 는 6병상, B 는 5병상 → B
+    const big6 = compute(NS, sh, ['d1'], { roomsFor: rf, handoverGroups: NEW, bedsOf: t => (t === '6' ? 6 : 1) });
+    assert.equal(seatOf(big6, 'd1', 'E', '신2'), 'B', '넘겨받는 병상이 적은 자리');
+    assert.deepEqual(big6.byDay.d1.E.handover, [{ from: '신1', to: '신2', rooms: ['7', '11', '12', '13', '14'] }]);
+    // 6호가 4인실이면 A 4병상 < B 5병상 → A
+    const four6 = compute(NS, sh, ['d1'], { roomsFor: rf, handoverGroups: NEW, bedsOf: t => (t === '6' ? 4 : 1) });
+    assert.equal(seatOf(four6, 'd1', 'E', '신2'), 'A');
+
+    // 같은 병상을 같은 그룹 둘이 봤어도(방 구성에서 두 자리가 10호를 겹쳐 가짐) 한 번만 센다
+    const LD2 = { 차지: R(1, 4), A: R(5, 10), B: R(10, 14) };
+    const LE2 = { 차지: R(1, 4).concat(['14']), A: R(5, 9), B: R(10, 13) };
+    const rf2 = (P, cnt, l) => ((P === 'D' ? LD2 : LE2)[l] || []).slice();
+    const N3 = NS.concat([N('신3', 7, false)]);
+    const sh2 = { 가: { d1: 'DC' }, 신3: { d1: 'D' }, 신1: { d1: 'D' }, 다: { d1: 'EC' }, 라: { d1: 'E' }, 신2: { d1: 'E' } };
+    // 신2 는 어제 E 의 A(5~9)를 봤다 — A 는 신3 의 5병상, B 는 10호(신3·신1) + 11~13호(신1) = 4병상
+    const seed = { 신2: { label: 'A', period: 'E', idx: -1, rooms: R(5, 9) } };
+    const r = compute(N3, sh2, ['d1'], { roomsFor: rf2, seed, handoverGroups: { 신1: ['신규'], 신2: ['신규'], 신3: ['신규'] } });
+    assert.equal(seatOf(r, 'd1', 'D', '신3'), 'A');
+    assert.equal(seatOf(r, 'd1', 'D', '신1'), 'B');
+    assert.equal(seatOf(r, 'd1', 'E', '신2'), 'B', '4병상 < 5병상 (10호를 두 번 세면 5 = 5 라 어제 A 를 이어 봤을 것)');
+    assert.deepEqual(sortHv(r.byDay.d1.E.handover),
+      sortHv([{ from: '신3', to: '신2', rooms: ['10'] }, { from: '신1', to: '신2', rooms: ['10', '11', '12', '13'] }]),
+      '받은 사람·준 사람마다 병상을 알린다');
+  }
+
+  // ⑧ 누가 차지인지는 그룹이 바꾸지 않는다
+  {
+    // 자리가 고정인 차지(101·122) — E 차지 다는 신1 과 같은 그룹. 차지 방(1~4호)이 신1 의 D 병상이어도
+    // 차지 가능한 라에게 차지를 넘기지 않는다. 피하지 못한 인계로 알린다
+    const LD = { 차지: R(10, 14), A: R(5, 9), B: R(1, 4) };
+    const rf = (P, cnt, l) => ((P === 'D' ? LD : L3)[l] || []).slice();
+    const sh = { 가: { d1: 'DC' }, 나: { d1: 'D' }, 신1: { d1: 'D' }, 다: { d1: 'E' }, 라: { d1: 'E' }, 신2: { d1: 'E' } };
+    const g = { 신1: ['g'], 다: ['g'] };
+    const off = compute(NS, sh, ['d1'], { roomsFor: rf });
+    const on = compute(NS, sh, ['d1'], { roomsFor: rf, handoverGroups: g });
+    assert.equal(seatOf(on, 'd1', 'D', '신1'), 'B');
+    assert.equal(on.byDay.d1.E.charge, '다');
+    assert.equal(on.byDay.d1.E.labels['차지'], '다');
+    assert.deepEqual(on.byDay.d1.E, Object.assign({}, off.byDay.d1.E, { handover: [{ from: '신1', to: '다', rooms: R(1, 4) }] }));
+    // EC 표시자도 그대로
+    const sh2 = Object.assign({}, sh, { 다: { d1: 'EC' } });
+    assert.equal(compute(NS, sh2, ['d1'], { roomsFor: rf, handoverGroups: g }).byDay.d1.E.labels['차지'], '다');
+
+    // 방이 고정이 아닌 차지(102 CRN) — CRN 은 자리를 옮겨 피하지만 CRN 은 그대로
+    const L4 = { 차지: R(1, 3), A: R(4, 7), B: R(8, 11), C: R(12, 14) };
+    const rf4 = (P, cnt, l) => (L4[l] || []).slice();
+    const N4 = ['가', '나', '다', '라', '마', '바', '사'].map((id, i) => N(id, i)).concat([N('신1', 8, false), N('신2', 9, false)]);
+    const sh4 = { 가: { d1: 'DC' }, 나: { d1: 'D' }, 다: { d1: 'D' }, 신1: { d1: 'D' },
+                  라: { d1: 'EC' }, 마: { d1: 'E' }, 바: { d1: 'E' }, 사: { d1: 'E' } };
+    const crn = { roomsFor: rf4, maxSeats: 4, chargeSeats: () => ['차지', 'A', 'B', 'C'],
+                  overrides: { d1: { D: { 신1: 'B' } } }, seed: { 라: { label: 'B', period: 'E', idx: -1, rooms: L4.B } } };
+    const offC = compute(N4, sh4, ['d1'], crn);
+    assert.equal(seatOf(offC, 'd1', 'E', '라'), 'B', '그룹 없이는 CRN 라가 어제 B 를 이어 본다');
+    const onC = compute(N4, sh4, ['d1'], Object.assign({ handoverGroups: { 신1: ['g'], 라: ['g'] } }, crn));
+    assert.notEqual(seatOf(onC, 'd1', 'E', '라'), 'B', 'CRN 도 같은 그룹이면 신1 의 병상을 피한다');
+    assert.equal(onC.byDay.d1.E.charge, '라', 'CRN 은 그대로');
+    assert.equal(onC.byDay.d1.E.handover, undefined);
+    // CRN 을 손으로 B 에 고정하면 B 그대로, 인계를 알린다
+    const pinC = compute(N4, sh4, ['d1'], Object.assign({}, crn, {
+      handoverGroups: { 신1: ['g'], 라: ['g'] }, overrides: { d1: { D: { 신1: 'B' }, E: { 라: 'B' } } } }));
+    assert.equal(seatOf(pinC, 'd1', 'E', '라'), 'B');
+    assert.equal(pinC.byDay.d1.E.charge, '라');
+    assert.deepEqual(pinC.byDay.d1.E.handover, [{ from: '신1', to: '라', rooms: L4.B }]);
+
+    // CRN 자리를 고를 때 다른 사람의 인계도 센다 — CRN 라는 어제 'B' 자리 이름(그때 방 구성은 12~14호)이라
+    // 그룹 없이는 B 에 앉는다. 신1 이 D 에서 1·4·12호를 봤으면 신2 가 받을 수 있는 자리는 B 뿐 → CRN 은 B 를 비킨다
+    const LDx = { 차지: ['2', '3'], A: ['5', '6', '7'], B: ['1', '4', '12'], C: R(8, 11).concat(['13', '14']) };
+    const rfx = (P, cnt, l) => ((P === 'D' ? LDx : L4)[l] || []).slice();
+    const shx = { 가: { d1: 'DC' }, 나: { d1: 'D' }, 다: { d1: 'D' }, 신1: { d1: 'D' },
+                  라: { d1: 'EC' }, 마: { d1: 'E' }, 바: { d1: 'E' }, 신2: { d1: 'E' } };
+    const ox = { roomsFor: rfx, maxSeats: 4, chargeSeats: () => ['차지', 'A', 'B'], overrides: { d1: { D: { 신1: 'B' } } },
+                 seed: { 라: { label: 'B', period: 'E', idx: -1, rooms: R(12, 14) } } };
+    const offX = compute(N4, shx, ['d1'], ox);
+    assert.equal(seatOf(offX, 'd1', 'E', '라'), 'B', '그룹 없이는 어제 자리 이름 B');
+    assert.equal(offX.byDay.d1.E.charge, '라');
+    const onX = compute(N4, shx, ['d1'], Object.assign({ handoverGroups: NEW }, ox));
+    assert.equal(seatOf(onX, 'd1', 'E', '신2'), 'B', '신2 는 신1 의 병상이 없는 B');
+    assert.ok(['차지', 'A'].includes(seatOf(onX, 'd1', 'E', '라')), 'CRN 은 허락된 다른 자리로');
+    assert.equal(onX.byDay.d1.E.charge, '라');
+    assert.equal(onX.byDay.d1.E.handover, undefined);
+  }
+}
+
+// ── 같은 그룹 인계 — 무작위 대조: 손으로 고정한 자리·차지 말고 앉힐 수 있는 배치를 **전부** 따져 본 최소와 같은가 ──
+//  (주지 않을 방에 앉는 사람 수, 넘겨받는 병상 수) 가 사전식 최소 · 차지와 손 고정은 그룹이 없을 때와 같다 ·
+//  handover 보고는 결과 배치에서 다시 센 것과 같다 · 겹치는 그룹이 하나도 없으면 결과가 그룹 없을 때와 똑같다
+{
+  let sd = 20261009;
+  const rnd = () => (sd = (sd * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const ri = (n) => Math.floor(rnd() * n);
+  const PREV = { D: 'N', E: 'D', N: 'E' };
+  const ids = Array.from({ length: 12 }, (_, i) => 'n' + i);
+  let shifts = 0, withHolders = 0, moved = 0, reported = 0;
+  for (let trial = 0; trial < 80; trial++) {
+    const NS = ids.map((id, i) => N(id, i, i < 5 || rnd() < 0.2));
+    const days = ['k0', 'k1', 'k2', 'k3', 'k4'];
+    const sch = {};
+    for (const id of ids) {
+      sch[id] = {};
+      for (const dk of days) {
+        const c = ['D', 'D', 'E', 'E', 'N', 'OF', 'OF'][ri(7)];
+        sch[id][dk] = c !== 'OF' && rnd() < 0.08 ? c + 'C' : c;
+      }
+    }
+    // 그룹: 없음 · g1 · g2 · 둘 다 — 신규가 많은 병동처럼 절반쯤
+    const groups = {};
+    for (const id of ids) { const k = ri(5); if (k === 1 || k === 2) groups[id] = ['g1']; else if (k === 3) groups[id] = ['g2']; else if (k === 4) groups[id] = ['g1', 'g2']; }
+    // 방 구성: 근무·인원·날마다 1~14호를 자리 수만큼 자른다 (자리 경계가 근무마다 달라 조금씩 겹친다)
+    const lay = {};
+    const roomsFor = (P, cnt, l, dk) => {
+      const key = P + cnt + dk;
+      if (!lay[key]) {
+        const ns = Math.min(cnt, 5), cuts = new Set();
+        while (cuts.size < ns - 1) cuts.add(1 + ri(13));
+        const cs = [0].concat([...cuts].sort((a, b) => a - b), [14]), m = {};
+        LABELS.slice(0, ns).forEach((lb, i) => { m[lb] = []; for (let x = cs[i] + 1; x <= cs[i + 1]; x++) m[lb].push(String(x)); });
+        lay[key] = m;
+      }
+      return (lay[key][l] || []).slice();
+    };
+    const beds = {}; for (let x = 1; x <= 14; x++) beds[String(x)] = 1 + ri(4);
+    const bedsOf = (t) => beds[t];
+    const avoid = {}, overrides = {};
+    for (const dk of days) for (const P of ['D', 'E', 'N']) {
+      if (rnd() < 0.25) ((avoid[dk] = avoid[dk] || {})[P] = {})[ids[ri(12)]] = [LABELS[ri(5)]];
+      if (rnd() < 0.15) ((overrides[dk] = overrides[dk] || {})[P] = {})[ids[ri(12)]] = LABELS[ri(5)];
+    }
+    const floating = trial % 2 ? (trial % 4 === 1 ? () => ['차지', 'A', 'B', 'C', 'D'] : () => ['차지', 'A', 'B']) : null;
+    const base = { roomsFor, bedsOf, avoid, overrides, seed: {} };
+    if (floating) base.chargeSeats = floating;
+    const off = compute(NS, sch, days, base);
+    const r = compute(NS, sch, days, Object.assign({ handoverGroups: groups }, base));
+    const solo = {}; ids.forEach(id => (solo[id] = ['혼자' + id]));
+    assert.deepEqual(compute(NS, sch, days, Object.assign({ handoverGroups: solo }, base)), off, '겹치는 그룹이 없으면 그대로');
+    const same = (a, b) => a !== b && groups[a] && groups[b] && groups[a].some(g => groups[b].includes(g));
+
+    days.forEach((dk, di) => {
+      for (const P of ['D', 'E', 'N']) {
+        const staff = NS.filter(n => periodOf(sch[n.id][dk]) === P);
+        if (!staff.length) continue;
+        shifts++;
+        const day = r.byDay[dk][P], cnt = staff.length;
+        const labels = LABELS.slice(0, Math.min(cnt, 5));
+        assert.deepEqual(Object.values(day.labels).concat(day.extra).sort(), staff.map(n => n.id).sort(), dk + P + ' 모두 한 번씩');
+        assert.equal(day.charge, off.byDay[dk][P].charge, dk + P + ' 그룹은 차지를 바꾸지 않는다');
+        if (!floating) assert.equal(day.labels['차지'], day.charge);
+        // 손으로 고정한 자리
+        const ov = (overrides[dk] || {})[P] || {}, pin = {}, pinId = {};
+        for (const nid in ov) if (staff.some(n => n.id === nid) && labels.includes(ov[nid]) && !pin[ov[nid]]) { pin[ov[nid]] = nid; pinId[nid] = 1; }
+        for (const l in pin) assert.equal(day.labels[l], pin[l], dk + P + ' 손 고정 그대로');
+        // 앞 근무에서 병상마다 본 사람 — 엔진 결과에서 다시 만든다 (자리에 앉은 사람만)
+        const pdk = P === 'D' ? days[di - 1] : dk, pP = PREV[P];
+        const prev = pdk && r.byDay[pdk] && r.byDay[pdk][pP];
+        const hold = {};
+        if (prev) {
+          const pc = NS.filter(n => periodOf(sch[n.id][pdk]) === pP).length;
+          for (const l in prev.labels) for (const t of roomsFor(pP, pc, l, pdk)) (hold[t] = hold[t] || []).push(prev.labels[l]);
+          withHolders++;
+        }
+        const hw = (id, l) => roomsFor(P, cnt, l, dk).reduce((s, t) => s + ((hold[t] || []).some(h => same(h, id)) ? bedsOf(t) : 0), 0);
+        const av = (avoid[dk] || {})[P] || {};
+        const cost = (asg) => {   // asg: {label: id}
+          let v = 0, g = 0;
+          for (const l in asg) { if (!pinId[asg[l]] && (av[asg[l]] || []).includes(l)) v++; g += hw(asg[l], l); }
+          return [v, g];
+        };
+        // 앉힐 수 있는 배치 전부 — 손 고정 자리 · (자리가 고정인 차지는 차지 자리) · (방이 고정이 아닌 차지는 허락된 자리 중 하나)
+        const fixed = Object.assign({}, pin);
+        let chargeAt = null;
+        if (!floating) fixed['차지'] = day.charge;
+        else if (!pinId[day.charge]) {
+          const ok = floating().filter(l => labels.includes(l) && !pin[l]);
+          if (ok.length) chargeAt = ok;
+        }
+        const seats = labels.filter(l => !fixed[l]);
+        const ppl = staff.map(n => n.id).filter(id => !Object.values(fixed).includes(id));
+        let best = null;
+        const walk = (i, asg, used) => {
+          if (i === seats.length) {
+            if (chargeAt && !chargeAt.some(l => asg[l] === day.charge)) return;
+            const c = cost(Object.assign({}, fixed, asg));
+            if (!best || c[0] < best[0] || (c[0] === best[0] && c[1] < best[1])) best = c;
+            return;
+          }
+          for (const id of ppl) if (!used[id]) { used[id] = 1; asg[seats[i]] = id; walk(i + 1, asg, used); used[id] = 0; }
+          delete asg[seats[i]];
+        };
+        walk(0, {}, {});
+        assert.deepEqual(cost(day.labels), best, dk + P + ' (주지 않을 방, 인계 병상) 가 가장 작은 배치 — trial ' + trial);
+        if (JSON.stringify(day.labels) !== JSON.stringify(off.byDay[dk][P].labels)) moved++;
+        // 보고 — 결과 배치에서 다시 센다
+        const want = [];
+        for (const l in day.labels) {
+          const to = day.labels[l], by = {};
+          for (const t of roomsFor(P, cnt, l, dk)) for (const h of hold[t] || []) if (same(h, to)) (by[h] = by[h] || []).push(t);
+          for (const h in by) want.push({ from: h, to, rooms: by[h] });
+        }
+        const key = (x) => x.from + '>' + x.to;
+        assert.deepEqual((day.handover || []).slice().sort((a, b) => key(a).localeCompare(key(b))),
+          want.sort((a, b) => key(a).localeCompare(key(b))), dk + P + ' handover 보고');
+        if (day.handover) reported++;
+      }
+    });
+  }
+  assert.ok(shifts > 900 && withHolders > 600, '충분히 돌았다 ' + shifts + '/' + withHolders);
+  assert.ok(moved > 30 && reported > 30, '그룹이 실제로 자리를 바꾸고 · 피하지 못한 인계도 나온다 ' + moved + '/' + reported);
+}
+
 console.log('assign-core: 모든 검증 통과');

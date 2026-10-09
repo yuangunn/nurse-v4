@@ -2572,6 +2572,170 @@ async function main() {
   eq('기억한 핸들이 방금 읽은 그 파일이면 허용 한 번으로 잇는다', v36.같은파일잇기, [true, true]);
   ok('파일 창이 몸짓 오류로 안 열리면 한 번 더 누르라고 (영어 오류 문장 아님)', /한 번 더 눌러/.test(v36.몸짓) && !/gesture/.test(v36.몸짓), v36.몸짓);
 
+  // ── 37. 간호사 그룹 · 그룹원끼리 인계 피하기 (2026-10-09 사용자: "갓 독립한 신규끼리 인계하지 않게") ─────────────────────
+  // 관리 > 간호사 관리에서 그룹을 만들고(공용 창) 그룹 칸 칩으로 그룹원을 넣는다 → 배정 엔진에 handoverGroups 로 넘어가
+  // 신규 → 신규 인계(D → E)가 사라진다 → 배정 원칙 스위치를 끄면 처음 배정 그대로 → 손으로 같은 방에 앉히면 확인 카드 '같은 그룹 인계'.
+  // 이름 바꾸기·삭제가 그룹원을 따라가고, Ctrl+Z·옛 파일·저장 → 다시 열기·파일 안 스냅샷·마법사에서도 그대로
+  step('37 간호사 그룹');
+  const v37 = await ev(`return (async()=>{ const A=window.__app, out={}, D1='2026-09-06', D2='2026-09-07';
+    const wait=ms=>new Promise(r=>setTimeout(r,ms));
+    const keepStore=JSON.parse(JSON.stringify(A.store));
+    A.setFormId('101'); A.setWard('101'); const s=A.store;
+    s.order=['가선임','나선임','다선임','라선임','마선임','바간호','사간호','아간호','자신규','차신규'];
+    Object.assign(s,{cells:{},ovr:{},ovrPair:{},roomOv:{},roomOvCnt:{},presetDay:{},presetPlan:{},presets:{},seedManual:{},unit:{},relief:{},
+      trainee:{},trOv:{},evRules:[],daily:{},banRooms:{},caps:{},hidden:{},newUntil:{},groups:[]});
+    s.rules={keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false};
+    // D1 — D: 가·나·다·라·자신규, E: 마·바·사·아·차신규 (둘 다 다섯, 같은 방 구성)
+    s.order.forEach((n,i)=>{ s.cells[n]={[D1]: (i<4||n==='자신규')?'D':'E'}; });
+    A.store=s; A.resetSchemes(); A.undoClear(); A.recompute();
+    const toks=(P,cnt,l,iso)=>A.expandBeds(A.roomTokens(A.roomsFor(P,cnt,l,iso)));
+    const seat=(iso,P,n)=>{ const L=A.result.byDay[iso][P].labels; return Object.keys(L).find(l=>L[l]===n)||null; };
+    const lap=()=>{ const a=toks('D',5,seat(D1,'D','자신규'),D1), b=toks('E',5,seat(D1,'E','차신규'),D1); return b.filter(t=>a.includes(t)).length; };
+    // 엔진에 실제로 무엇이 넘어가나 — compute 를 잠깐 감싸 본다
+    const sent=()=>{ const orig=AssignCore.compute; let got='없음'; AssignCore.compute=(...a)=>{ got=('handoverGroups' in (a[3]||{}))?a[3].handoverGroups:'없음'; return orig(...a); };
+      try{ A.recompute(); } finally{ AssignCore.compute=orig; } return got; };
+    out.pre=[lap()>0, !!A.result.byDay[D1].E.handover, sent()];
+    const base=JSON.stringify(A.result.byDay), seat0=seat(D1,'E','차신규');
+    // 그룹 만들기 — 공용 창에 이름을 적고 [만들기]
+    const fill=async(v,btn)=>{ await wait(30); const i=document.querySelector('#mdInput'); if(!i) return false; i.value=v; document.querySelector(btn||'#mdOk').click(); return true; };
+    A.show('admin'); A.pickAdmin('caps');
+    out.noCol=[!!document.querySelector('#adminPanelBox .grpStrip'), [...document.querySelectorAll('#capsTable th')].some(t=>t.textContent==='그룹')];
+    { const p=A.addGroup(); out.modal=document.querySelector('#modalBox .mt').textContent; await fill('  신규   독립 '); await p; }
+    const g=A.store.groups[0]||{};
+    out.made=[A.store.groups.length, g.name, g.noHandover, g.members, /^[A-Za-z0-9_-]+$/.test(g.id||'')];
+    // 빈 이름·겹치는 이름은 알리고 다시 묻는다 — [취소]로 닫으면 아무것도 안 생긴다
+    { const p=A.addGroup(); await fill('   '); await wait(30); out.emptyToast=document.querySelector('#toast').textContent; out.reask=!!document.querySelector('#modal.on #mdInput');
+      await fill('신규 독립'); await wait(30); out.dupToast=document.querySelector('#toast').textContent;
+      await fill('', '#mdCancel'); await p; out.afterCancel=A.store.groups.length; }
+    // 간호사 관리 — 그룹 띠와 그룹 칸, 칩으로 그룹원 넣기
+    A.pickAdmin('caps');
+    out.strip=(document.querySelector('#adminPanelBox .grpStrip')||{}).textContent||'';
+    out.col=[[...document.querySelectorAll('#capsTable th')].some(t=>t.textContent==='그룹'), document.querySelectorAll('#capsTable .grpChip').length];
+    const chip=n=>[...document.querySelectorAll('#capsTable .grpChip')].find(b=>(b.getAttribute('onclick')||'').includes("'"+n+"'"));
+    const d0=A.undoDepth;
+    chip('차신규').click(); chip('자신규').click();
+    out.members=[A.store.groups[0].members, chip('자신규').classList.contains('on'), chip('가선임').classList.contains('on'), A.undoDepth-d0];
+    out.sent=sent();
+    out.badge=A.adminBadge('rules');
+    out.after=[lap(), !!A.result.byDay[D1].E.handover, seat(D1,'E','차신규')!==seat0, A.result.byDay[D1].E.charge];
+    const grouped=JSON.stringify(A.result.byDay);
+    // 배정 원칙 — 그룹 스위치를 끄면 처음 배정 그대로, Ctrl+Z 로 다시 켜진다
+    A.pickAdmin('rules');
+    const row=document.querySelector('#adminPanelBox .grpRules .rulRow[data-g="'+g.id+'"]');
+    out.ruleRow=row?row.textContent.replace(/[ ]+/g,' ').trim():'';
+    const sw=row&&row.querySelector('input[type=checkbox]'); out.swOn=!!(sw&&sw.checked);
+    sw.click(); await wait(20);
+    out.off=[A.store.groups[0].noHandover, JSON.stringify(A.result.byDay)===base, sent(), A.adminBadge('rules'), /껐습니다/.test(document.querySelector('#toast').textContent)];
+    A.undoAny();
+    out.undoOn=[A.store.groups[0].noHandover, JSON.stringify(A.result.byDay)===grouped];
+    // 피할 수 없는 인계 — 차신규를 손으로 자신규와 같은 자리(D → E)에 앉히면 엔진이 알리고 확인 카드에 안내 줄
+    const sJa=seat(D1,'D','자신규');
+    A.store.ovr={[D1]:{E:{'차신규':sJa}}}; A.recompute();
+    out.forced=[(A.result.byDay[D1].E.handover||[]).map(h=>h.from+'>'+h.to+':'+(h.rooms.length>0)), seat(D1,'E','차신규')===sJa];
+    const card=()=>{ A.wkSunday=new Date(2026,8,6); A.show('week');
+      for(let i=0;i<3;i++){ const f=document.querySelector('#wkWarn.shut .fold')||document.querySelector('#wkWarn .items.clip ~ .more');
+        if(!f||!/자세히|더 보기/.test(f.textContent)) break; f.click(); }
+      const w=document.querySelector('#wkWarn'); return w?w.textContent:''; };
+    const c1=card();
+    out.line=(c1.match(/같은 그룹[^!]*?바꿀 수 있습니다[.]/)||[''])[0];
+    // 고칠 곳이 이름 클릭뿐이면 단추를 달지 않는다(그룹 스위치는 고치는 길이 아니다)
+    const gl=[...document.querySelectorAll('#wkWarn .items > div.warn')].find(d=>/^같은 그룹/.test(d.textContent));
+    out.lineFix=gl?[!!gl.querySelector('button.fix'), gl.querySelectorAll('span.hv').length]:null;
+    // 전날 N → 오늘 D — 날짜를 둘 다 적는다
+    A.store.ovr={};
+    s.cells['바간호'][D1]='N'; s.cells['자신규'][D1]='N';
+    for(const n of s.order) s.cells[n][D2]=(['가선임','나선임','다선임','라선임','차신규'].includes(n))?'D':'OF';
+    A.recompute();
+    const nSeat=seat(D1,'N','자신규'), nT=toks('N',2,nSeat,D1);
+    const over=['차지','A','B','C','D'].find(l=>l!=='차지'&&toks('D',5,l,D2).some(t=>nT.includes(t)));
+    A.store.ovr={[D2]:{D:{'차신규':over}}}; A.recompute();
+    out.nd=[(A.result.byDay[D2].D.handover||[]).map(h=>h.from+'>'+h.to), card()];
+    // 그룹이 꺼져 있으면 카드에도 없다
+    setGroupHandover(g.id,false); out.offCard=/같은 그룹/.test(card()); A.undoAny();
+    A.store.ovr={};
+    // 간호사 이름 바꾸기·삭제가 그룹원을 따라간다, Ctrl+Z 로 돌아온다
+    A.applyNurseName(A.store.order.indexOf('차신규'),'차독립'); A.recompute();
+    out.rename=A.store.groups[0].members;
+    A.applyNurseName(A.store.order.indexOf('자신규'),''); A.recompute();
+    out.del=A.store.groups[0].members;
+    A.undoAny(); out.undoDel=A.store.groups[0].members;
+    A.undoAny(); out.undoRen=A.store.groups[0].members;
+    // 전출(숨김)이어도 그룹원으로 남는다
+    A.store.hidden={'자신규':true}; out.hidden=[A.store.groups[0].members.includes('자신규'), A.handoverGroupsOf()['자신규']||null]; A.store.hidden={};
+    // 다른 소속이 된 그룹원 — 인원·엔진에서는 빠지고, 그 그룹 칩만 남아 뺄 수 있다. 그룹이 없는 다른 소속은 '—'
+    A.store.unit={'자신규':'SU','바간호':'SU'};
+    { const cell=n=>{ const d=document.createElement('div'); d.innerHTML=A.groupCellHtml(n); return [...d.querySelectorAll('.grpChip')].map(b=>b.textContent+(b.classList.contains('on')?'+':'')).join(',')||d.textContent; };
+      const st=document.createElement('div'); st.innerHTML=A.groupStripHtml();
+      out.su=[cell('자신규'), cell('바간호'), (st.querySelector('.grpN')||{}).textContent, A.handoverGroupsOf()['자신규']||null]; }
+    A.store.unit={};
+    // 그룹 이름 바꾸기·지우기 (지우기는 확인창 → Ctrl+Z)
+    A.pickAdmin('caps');
+    { const p=A.renameGroup(g.id); await fill('새내기'); await p; out.renamed=A.store.groups[0].name; }
+    A.store.groups.push({id:'gx',name:'야간',members:['가선임'],noHandover:true}); A.pickAdmin('caps');
+    out.two=[document.querySelectorAll('#adminPanelBox .grpCard').length, document.querySelectorAll('#capsTable .grpChip').length, A.adminBadge('rules')];
+    A.deleteGroup('gx'); out.delG=A.store.groups.map(x=>x.name);
+    A.undoAny(); out.undoG=A.store.groups.map(x=>x.name);
+    A.store.groups=A.store.groups.filter(x=>x.id!=='gx');
+    // 마법사 간호사 단계도 같은 패널 — 그룹 띠와 칩이 그려진다
+    A.startWizard(A.WIZ.findIndex(w=>w.id==='caps'));
+    out.wiz=[!!document.querySelector('#wizBody .grpStrip'), document.querySelectorAll('#wizBody .grpChip').length, !!document.querySelector('#wizBody .grpStrip button[onclick^="pickAdmin"]')];
+    A.closeWizard();
+    // 옛 파일(그룹 없음)·손으로 고친 파일
+    const t=JSON.parse(JSON.stringify(A.store)); delete t.groups;
+    A.store=t; A.migrateStore(); out.migOld=A.store.groups;
+    A.store.groups=[{name:'  신규 ',members:['자신규','자신규','없는사람',3]},{id:'g1',name:'',members:'x',noHandover:false},null,{id:'g1',name:'겹침',members:[]}];
+    A.migrateStore(); out.migBad=A.store.groups.map(x=>[x.id==='g1'?'g1':/^g[a-z0-9]+$/.test(x.id)?'새 id':x.id, x.name, x.members, x.noHandover]);
+    // 저장 → 다시 열기 · 파일 안 스냅샷
+    A.store.groups=[{id:'g7',name:'신규 독립',members:['자신규','차신규'],noHandover:true}]; A.recompute();
+    const want=JSON.stringify(A.store.groups), res0=JSON.stringify(A.result.byDay);
+    adoptStore(parseStoreText(serializeStore(A.store))); A.recompute();
+    out.trip=[JSON.stringify(A.store.groups)===want, JSON.stringify(A.result.byDay)===res0];
+    A.keepHistory('검사'); out.hist=JSON.stringify(JSON.parse(A.store.history[0].data).groups)===want;
+    A.store=keepStore; A.migrateStore(); A.undoClear(); A.recompute(); A.show('week');
+    return out; })()`, 60000);
+  eq('그룹 없이 — 자신규(D) → 차신규(E) 같은 병상 인계가 있고, 엔진에 그룹을 넘기지 않는다', v37.pre, [true, false, '없음']);
+  eq('그룹이 없으면 간호사 관리에 그룹 띠·그룹 칸이 없다', v37.noCol, [false, false]);
+  eq('[＋ 그룹 만들기] — 공용 창 제목', v37.modal, '그룹 만들기');
+  eq('그룹 만들기 — 이름 다듬기, 인계 피하기 켬, 그룹원 없음', v37.made, [1, '신규 독립', true, [], true]);
+  ok('빈 이름은 알리고 다시 묻는다', /그룹 이름을 적어/.test(v37.emptyToast) && v37.reask, v37.emptyToast);
+  ok('겹치는 이름은 알린다', /이미 있는 그룹 이름입니다: 신규 독립/.test(v37.dupToast), v37.dupToast);
+  eq('[취소]로 닫으면 그룹이 늘지 않는다', v37.afterCancel, 1);
+  ok('그룹 띠 — 이름 · 인원 · 인계 피하기', /신규 독립/.test(v37.strip) && /0명/.test(v37.strip) && /인계 피하기/.test(v37.strip), v37.strip);
+  eq('그룹 칸 — 머리줄 + 사람마다 칩 하나', v37.col, [true, 10]);
+  eq('칩을 누르면 그룹원 (명부 순서) · 칩 켜짐 · 되돌리기 기록', v37.members, [['자신규', '차신규'], true, false, 2]);
+  eq('엔진에 그룹이 넘어간다 — 그룹원 둘만 {이름:[그룹]}', Object.keys(v37.sent || {}).sort(), ['자신규', '차신규']);
+  ok('넘긴 그룹은 둘 다 만든 그룹 하나', JSON.stringify(v37.sent['자신규']) === JSON.stringify(v37.sent['차신규']) && (v37.sent['자신규'] || []).length === 1, JSON.stringify(v37.sent));
+  eq('배정 원칙 배지 — 켠 그룹 수', v37.badge, '3켬 · 그룹 1');
+  eq('그룹을 켜면 신규 → 신규 인계가 사라진다 (병상 겹침 0, 안내 없음, 차신규 자리 바뀜, 차지 그대로)', v37.after, [0, false, true, '마선임']);
+  ok('배정 원칙의 그룹 줄 — 이름 · 인원 · 그룹원', /신규 독립/.test(v37.ruleRow) && /2명/.test(v37.ruleRow) && /자신규 · 차신규/.test(v37.ruleRow), v37.ruleRow);
+  ok('그룹 스위치는 켜져 있다', v37.swOn);
+  eq('스위치를 끄면 처음 배정 그대로 · 엔진에 안 넘긴다 · 배지 · 알림', v37.off, [false, true, '없음', '3켬', true]);
+  eq('Ctrl+Z — 다시 켜지고 그룹 배정으로', v37.undoOn, [true, true]);
+  eq('손으로 같은 자리에 앉히면 엔진이 피하지 못한 인계로 알린다', v37.forced, [['자신규>차신규:true'], true]);
+  ok('확인 카드 — 같은 그룹 인계 줄 (D → E, 손으로 정한 자리)',
+    /^같은 그룹[(]신규 독립[)] 인계 1건 — 09[/]06 D 자신규 → E 차신규 [(][0-9]/.test(v37.line) && /차신규의 자리는 손으로 정해 두었습니다/.test(v37.line), v37.line);
+  eq('그 줄은 그룹마다 한 줄 · 고치러 가는 단추 없음(이름을 눌러 바꾼다)', v37.lineFix, [false, 1]);
+  eq('전날 N → 오늘 D — 엔진이 알린다', v37.nd[0], ['자신규>차신규']);
+  ok('전날 N → 오늘 D — 날짜를 둘 다 적는다', /09[/]06 N 자신규 → 09[/]07 D 차신규 [(]/.test(v37.nd[1]), v37.nd[1]);
+  ok('같은 날 E → N 도 같은 줄 (2인 N 은 차지 아닌 자리가 하나라 피할 수 없다)', /같은 그룹[(]신규 독립[)] 인계 2건 — [^]*09[/]06 E 차신규 → N 자신규 [(]/.test(v37.nd[1]), v37.nd[1]);
+  ok('그룹을 끄면 카드에 같은 그룹 인계가 없다', !v37.offCard);
+  eq('다른 소속 그룹원 — 그 그룹 칩만(뺄 수 있게) · 그룹 없는 다른 소속은 — · 띠 인원·엔진에서 빠진다', v37.su, ['신규 독립+', '—', '1명', null]);
+  eq('간호사 이름을 바꾸면 그룹원도 새 이름', v37.rename, ['자신규', '차독립']);
+  eq('간호사를 지우면 그룹에서 빠진다', v37.del, ['차독립']);
+  eq('Ctrl+Z — 지운 간호사가 그룹에 돌아온다', v37.undoDel, ['자신규', '차독립']);
+  eq('Ctrl+Z — 이름도 돌아온다', v37.undoRen, ['자신규', '차신규']);
+  ok('전출(숨김)이어도 그룹원 · 엔진에도 넘긴다', v37.hidden[0] && Array.isArray(v37.hidden[1]), JSON.stringify(v37.hidden));
+  eq('그룹 이름 바꾸기', v37.renamed, '새내기');
+  eq('그룹 둘 — 띠 카드 둘, 사람마다 칩 둘, 배지는 그룹원 둘 이상인 켠 그룹만', v37.two, [2, 20, '3켬 · 그룹 1']);
+  eq('그룹 지우기 (확인창)', v37.delG, ['새내기']);
+  eq('Ctrl+Z — 지운 그룹이 돌아온다', v37.undoG, ['새내기', '야간']);
+  eq('마법사 간호사 단계 — 그룹 띠와 칩, 상태는 단추가 아니라 글자', v37.wiz, [true, 10, false]);
+  eq('옛 파일(그룹 없음) — 빈 목록', v37.migOld, []);
+  eq('손으로 고친 파일 — 이름·그룹원·id·인계 피하기 정리', v37.migBad,
+    [['새 id', '신규', ['자신규'], true], ['g1', '그룹', [], false], ['새 id', '겹침', [], true]]);
+  eq('저장 → 다시 열기 — 그룹·배정 그대로', v37.trip, [true, true]);
+  ok('파일 안 스냅샷(이전 상태로 되돌리기)에 그룹이 든다', v37.hist);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));

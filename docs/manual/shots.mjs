@@ -1,4 +1,4 @@
-// 설명서용 실제 화면 캡처 — 예시 데이터(홍길동 등) (2026-09-18, 2026-09-27·09-28 다시 찍음)
+// 설명서용 실제 화면 캡처 — 예시 데이터(홍길동 등) (2026-09-18, 2026-09-27·09-28·10-09 다시 찍음)
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -37,6 +37,8 @@ await page.evaluate(({names,plan})=>{
   const iso=k=>isoOfD(addDays(t,k));
   for(let k=-7;k<21;k++){ const d=iso(k); names.forEach((n,i)=>{ (store.cells[n]=store.cells[n]||{})[d]=plan[(i+k+14)%plan.length]; }); }
   store.cells['홍길동'][iso(2)]='중';
+  // 그룹 — 갓 독립한 신규 둘. 서로 인계하지 않게(인계 피하기 켬)
+  store.groups=[{id:'g1',name:'신규 독립',members:['장영실','허준'],noHandover:true}];
   // 교육·행사 — 이 날만 하나, 매주 목요일 하나
   store.evRules=[{id:'e1',text:'신규 간호사 교육 14:00',from:iso(1),to:iso(1)},
                  {id:'e2',text:'물품 점검',from:iso(-7),to:'',wds:[4]}];
@@ -56,6 +58,30 @@ await shot('02-rooms',ADMIN(700));
 // ── 3. 간호사 관리 ──
 await page.evaluate(()=>{ pickAdmin('caps'); window.scrollTo(0,0); });
 await shot('03-nurses',ADMIN(700));
+
+// ── 21. 그룹 — 간호사 관리 위쪽(그룹 만들기 · 그룹 띠 · 표 머리) + 그룹원 두 줄(그룹 칸이 켜진 장영실·허준) ──
+// 창을 길게 늘려 표 전체가 스크롤 없이 보이게 한 뒤 두 곳을 잘라 낸다 (설명서는 두 그림 사이를 줄였다고 적는다)
+await page.setViewportSize({width:1920,height:2000});
+await page.evaluate(()=>window.scrollTo(0,0));
+{ const b=await page.evaluate(()=>{ const p=document.querySelector('#adminPanelBox').getBoundingClientRect();
+    const hd=document.querySelector('#capsTable tr.hd').getBoundingClientRect();
+    const rows=[...document.querySelectorAll('#capsTable tr.nrow')].filter(tr=>/장영실|허준/.test(tr.querySelector('td.nm2').textContent));
+    const a=rows[0].getBoundingClientRect(), z=rows[rows.length-1].getBoundingClientRect();
+    return {top:{x:p.x,y:p.y,width:p.width,height:hd.bottom-p.y+2},
+            rows:{x:p.x,y:a.top-2,width:p.width,height:z.bottom-a.top+6}}; });
+  await shot('21-groups',b.top);
+  await shot('21-members',b.rows); }
+await page.setViewportSize({width:1920,height:1080});
+
+// ── 22. 배정 원칙 — 원칙 4 아래 '그룹원끼리 인계 피하기' ──
+// 1920 에서는 줄이 1200px 로 늘어나 A4 에서 글자가 너무 작다 — 이 그림만 창 폭 1280 으로 찍는다
+await page.setViewportSize({width:1280,height:1080});
+await page.evaluate(()=>{ pickAdmin('rules'); window.scrollTo(0,0); });
+{ const b=await page.evaluate(()=>{ const p=document.querySelector('#adminPanelBox').getBoundingClientRect();
+    const r4=document.querySelectorAll('#adminPanelBox .rulRow')[3].getBoundingClientRect();
+    return {x:p.x,y:r4.top-14,width:p.width,height:p.bottom-r4.top+14}; });
+  await shot('22-rules',b); }
+await page.setViewportSize({width:1920,height:1080});
 
 // ── 4. 근무표 넣기 (붙여넣기 화면 빈 상태) ──
 await page.evaluate(()=>{ show('paste'); window.scrollTo(0,0); });
@@ -166,16 +192,27 @@ await shot('13-schemes',ADMIN(740));
 // ── 14. 도움말 ──
 await page.evaluate(()=>{ show('week'); openHelp(); });
 await page.waitForTimeout(500);
-await shot('14-help',{x:220,y:60,width:1480,height:760});
+{ const b=await page.evaluate(()=>{ const r=document.querySelector('#helpPanel').getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:680}; });
+  await shot('14-help',b); }   // 도움말 창만 (예전엔 화면에서 잘라 창 머리가 잘렸다)
 
-// ── 15. 확인 필요 카드 — 차지 자격 없음 · 아무도 안 보는 방 · 자리보다 많은 사람(안내) ──
+// ── 15. 확인 필요 카드 — 차지 자격 없음 · 아무도 안 보는 방 · 자리보다 많은 사람(안내) · 같은 그룹 인계(안내) ──
 await page.evaluate(()=>{ closeHelp(); show('week');
   store.order.forEach(n=>{ if(n!=='홍길동'&&n!=='김영숙') store.caps[n]=['DC','D','EC','E','N']; });   // NC 는 두 사람만
   store.schemes[4].C=store.schemes[4].C.filter(r=>r!=='1010');                                      // 4인 방 구성에서 10호가 빠짐
   store.cells['임태균']['2026-09-17']='D';                                                             // 쉬는 날에 D — 17일 D 여섯 명
-  touch(); recompute(); renderWeek(); });
+  touch(); recompute(); renderWeek();
+  // 19일 E — 허준을 손으로 장영실(D)이 보던 방의 자리로 옮긴다 → 같은 그룹 인계 안내
+  const d='2026-09-19', D=result.byDay[d].D, E=result.byDay[d].E;
+  const dl=Object.keys(D.labels).find(l=>D.labels[l]==='장영실'), nD=Object.keys(D.labels).length, nE=Object.keys(E.labels).length;
+  const held=new Set(expandBeds(roomTokens(roomsFor('D',nD,dl,d))));
+  const el=Object.keys(E.labels).find(l=>l!=='차지'&&expandBeds(roomTokens(roomsFor('E',nE,l,d))).some(t=>held.has(t)));
+  openPick('허준',d,700,320); pickChoose(el); renderWeek(); });
 await page.waitForTimeout(400);
 await el('15-warn','#wkWarn');
+// ── 23. 그 카드의 '같은 그룹 인계' 한 줄만 ──
+{ const h=await page.evaluateHandle(()=>[...document.querySelectorAll('#wkWarn .warn')].find(x=>x.textContent.includes('같은 그룹')));
+  if(h&&await h.evaluate(x=>!!x)){ await page.waitForTimeout(200); await h.asElement().screenshot({path:OUT+'23-handover.png'}); console.log('  23-handover'); }
+  else console.log('  !! 같은 그룹 인계 줄이 없다'); }
 
 console.log('오류:',errs.length?errs:'없음');
 await browser.close();

@@ -185,7 +185,7 @@ node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_assign_logic.mjs   # standalone 로직 (헤드리스 크롬, $CHROME 로 경로 지정 가능)
 node scripts/test_assign_compat.mjs      # 옛 배포본이 저장한 데이터 파일을 지금 assign.html 로 열어 본다 (CI)
 node scripts/test_assign_live.mjs        # 병동 양식 9가지에서 배정표를 실제로 눌러 고치고 화면·엑셀·인쇄·하루 어싸인표를 본다 (CI, 약 30초)
-node scripts/test_assign_principles.mjs  # 어싸인 원칙 — 배정 엔진을 '모든 배치를 다 따져 본 정답'과 견준다 (CI, 약 20초, docs/verification.md)
+node scripts/test_assign_principles.mjs  # 어싸인 원칙 — 배정 엔진을 '모든 배치를 다 따져 본 정답'과 견준다 (CI, 약 40초, docs/verification.md)
 # 화면(index.html)을 재배치했다면 — 핸들러 손실 0 확인 (REMOVED 는 전부 의도한 것이어야 한다)
 python3 scripts/handler_inventory.py <(git show origin/main:frontend/index.html) frontend/index.html
 # 리디자인 계약 검사 (design/handoff) — 1920×1080 으로 실제 앱을 열어 200+ 항목 getComputedStyle 검사, 불일치 0 이어야 한다
@@ -565,6 +565,12 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   지울 때도 상대까지(`freeOvr`). 근무 바꾸기로 DC·EC·NC 를 주면 같은 근무의 다른 표시는 내린다(`giveChargeMark`). 근무표 칸의 `D/A` 의 A 는
   **배정표 종이의 자리 이름**(`seatOfLabel` — 앱 안쪽 이름으로 읽지 말 것). 새 간호사는 명부에 가능 근무가 정해져 있으면 차지 없이(`capsForNew`).
   원칙 4 를 끄면 3 이 돌아오고 원칙 켜고 끄기도 Ctrl+Z. 방 입력의 끝 '호' 는 뗀다. 그날 방 수정은 **고친 인원수일 때만**(`roomOvOn`, `store.roomOvCnt`).
+  **간호사 그룹 · 그룹원끼리 인계 피하기 (2026-10-09, 결정 2-46)**: 갓 독립한 신규끼리 인계하지 않게. 간호사 관리 [＋ 그룹 만들기] + 표의 그룹 칸 칩,
+  배정 원칙 맨 아래 그룹마다 스위치(`store.groups=[{id,name,members:[이름],noHandover}]`, 켠 그룹에 병동 간호사 둘 이상일 때만 `handoverGroupsOf` → 코어 `opts.handoverGroups`).
+  앞 근무 = D ← 전날 N · E ← D · N ← E, 앞 근무에서 **자리에 앉은** 같은 그룹 사람이 본 병상을 넘겨받으면 인계(병상수 합). 순서는 **주지 않을 방 다음, 이어 보기(원칙 1~3)보다 먼저**
+  — 마지막 다듬기와 CRN 자리 고르기 둘 다. 손으로 정한 자리·고정 차지는 안 움직이고 **누가 차지인지는 그룹과 상관없다**. 피하지 못한 것은 `byDay[날][근무].handover` →
+  확인 카드 노란 안내 **그룹마다 한 줄**(넷 넘으면 [n건 더 보기], 까닭은 끝에 한 번: 손으로 정한 자리·차지 자리·피할 배치 없음). 다른 소속(SU) 그룹원은 세지 않고 칩만 남아 뺄 수 있다.
+  원칙 검사 E13~E16·S0, 실시간 수정 E8·V1. 그룹을 켜면 자리가 조금 더 자주 바뀌고(이어 보기보다 먼저라) 6명 이상인 날 선임 신규가 헬퍼가 될 수 있다.
 - **병상 단위 배정 (2026-09-18, v260918i, 결정 2-26)**: 환자가 많으면 **한 병실을 둘이 나눠 본다**. 토큰은 **방**(`1001`) 또는 **병상**(`1001:1`)이고
   화면·인쇄는 `1` / `1:1`(한 자리). 병상 번호는 병실 목록의 **병상수로 1..n 자동** — 따로 적을 게 없다. 1인실·병상수 모르는 방은 나누지 않는다.
   **코어에는 늘 병상 키로 펼쳐서 넘긴다**(`roomsForCore` → `expandBeds`) — 방 표기와 병상 표기가 섞이면 같은 환자를 가리키는 두 토큰이 문자열로 달라
@@ -887,7 +893,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   결정 2-22(exe 는 인트라넷에서 못 쓰므로 범위 밖)를 리포에도 반영했다. 실행 경로는 **HTML 더블클릭 하나뿐**이라
   런처 `assign_app.cmd`·구형 `standalone.xlsm`·`사용법.txt`(NAS 공유 전제)도 함께 지웠다.
   필요하면 git 이력에서 꺼낸다 (마지막 커밋 `2c79c7b`).
-- **인쇄용 설명서**: `docs/manual/` — 병동에 나눠 줄 A4 22쪽 PDF(`어싸인_배정표_사용설명서.pdf`).
+- **인쇄용 설명서**: `docs/manual/` — 병동에 나눠 줄 A4 24쪽 PDF(`어싸인_배정표_사용설명서.pdf`).
   원본 `manual.html`, 캡처 `shots.mjs`(예시 데이터 홍길동 등 12명으로 실제 화면을 띄워 찍는다), 출력 `build.mjs`
   (쪽 넘침·쪽 번호 겹침을 먼저 검사하고 걸리면 PDF 를 쓰지 않는다). 화면을 바꿨으면 **캡처부터 다시 찍는다** —
   옛 화면이 실린 설명서는 거짓말이 된다. `shots/` 는 커밋하지 않는다.
