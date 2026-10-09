@@ -2020,7 +2020,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261009i'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261009k'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -2301,6 +2301,7 @@ function adoptStore(j){
   overwriteOk=false;
   if(!j||j.app!=='assign') return false;
   store={...emptyStore(),...j}; migrateStore();
+  undoStack.length=0;   // 앞 데이터의 되돌리기 기록을 새 데이터 위에 덮지 않게 (2026-10-09 교차 검토)
   return true;
 }
 async function useHandle(h,{create=false}={}){
@@ -3674,12 +3675,20 @@ function renderWeekWarnings(days,infos){
         if(stale.length) push('warn',`${md(iso)} ${P} 그날 방 수정(${stale.map(l=>esc(FORM_LBL(l,P))).join('·')} 자리)은 ${rcn[stale[0]]}명일 때 고친 것이라 지금 ${cnt}명인 배정에는 쓰지 않았습니다. 방 칸을 눌러 다시 고치세요.`); }
       // 같은 그룹 인계 — 엔진이 피하지 못한 것(손으로 정한 자리·차지 자리·모두 겹치는 날). 그룹마다 한 줄로 묶는다
       // (짝마다 한 줄이던 때 2인 N 의 E → N 처럼 피할 수 없는 인계가 주마다 여러 줄 쌓여 카드가 길었다)
-      // 왜 못 피했나 — 받은 사람의 자리가 손으로 정한 자리 / 자리가 고정인 서식의 차지 자리 / 그 밖(모두 피하는 배치가 없다)
+      // 왜 못 피했나 — 받은 사람의 자리가 손으로 정한 자리(hand) / 자리가 고정인 서식의 차지 자리라 방 구성으로 옮길 수 있음(chg) /
+      // 그 근무에 손으로 정한 다른 자리가 있음(held) / 받은 사람의 주지 않을 방을 먼저 지킴(ban) / 그 밖(뒤 근무 자리만으로는 못 피함, none).
+      // 엔진은 앞 근무를 그대로 두고 뒤 근무 자리만 고르므로 none 은 '넘겨준 사람 자리를 바꾸면 피할 수 있을 때가 있다'고 알린다 (2026-10-09 교차 검토)
       for(const h of ((((result&&result.byDay[iso])||{})[P]||{}).handover)||[]){
         const gs=groupsBetween(h.from,h.to); if(!gs.length) continue;
-        const seat=Object.keys(day[P].labels).find(l=>day[P].labels[l]===h.to), hs=handSeat(h.to,iso,P);
-        const why=hs&&hs.l===seat?'hand':(seat==='차지'&&!crnFloat(P))?'chg':'none';
+        const labs=day[P].labels, seat=Object.keys(labs).find(l=>labs[l]===h.to), hs=handSeat(h.to,iso,P);
         const pv=P==='D'?isoOfD(addDays(new Date(iso+'T00:00:00'),-1)):iso, pP={D:'N',E:'D',N:'E'}[P];
+        // 차지 자리 방을 옮겨 고칠 수 있을 때만 chg — 자리가 하나뿐인 근무(82 N)나 차지 → 차지(두 근무 차지 자리가 같은 방)는 방 구성으로 못 고친다
+        const pvCharge=((((result&&result.byDay[pv])||{})[pP])||{}).charge;
+        const bk=expandBeds(store.banRooms[h.to]||[]);
+        const why=hs&&hs.l===seat?'hand'
+          :(seat==='차지'&&!crnFloat(P)&&Object.keys(labs).length>1&&pvCharge!==h.from)?'chg'
+          :Object.keys(labs).some(l=>{ const x=labs[l]!==h.to&&handSeat(labs[l],iso,P); return x&&x.l===l; })?'held'
+          :bk.length&&Object.keys(labs).some(l=>expandBeds(roomTokens(roomsFor(P,cnt,l,iso))).some(t=>bk.includes(t)))?'ban':'none';
         const gk=gs.map(g=>g.name).join('·');
         (hand[gk]=hand[gk]||[]).push({from:h.from,to:h.to,why,
           txt:`${md(pv)} ${pP} ${esc(h.from)} → ${P==='D'?md(iso)+' ':''}${P} ${esc(h.to)} (${esc(roomsLabel(collapseBeds(h.rooms)))})`});
@@ -3727,16 +3736,18 @@ function renderWeekWarnings(days,infos){
     const list=head.map(sp).join(' · ')+(rest.length?`<span class="hvMore" hidden> · ${rest.map(sp).join(' · ')}</span>`:'');
     const more=rest.length?` <button class="inl" title="이번 주 같은 그룹 인계를 모두 봅니다" onclick="this.parentElement.querySelector('.hvMore').hidden=false;this.remove()">${rest.length}건 더 보기</button>`:'';
     const who=k=>[...new Set(at.filter(a=>a.why===k).map(a=>a.to))].map(esc).join('·');
-    const hn=who('hand'), cn=who('chg'), nn=at.some(a=>a.why==='none');
+    const hn=who('hand'), cn=who('chg'), bn=who('ban'), ld=at.some(a=>a.why==='held'), nn=at.some(a=>a.why==='none');
     const why=[hn&&`${hn}의 자리는 손으로 정해 두었습니다.`,
-      cn&&`${josa(cn,'은','는')} 차지라 차지 자리의 방을 봅니다 — 그 방을 다른 자리로 옮기려면 관리 > 방 구성.`,
-      nn&&`${hn||cn?'나머지는':'모두'} 피하는 배치가 없던 날입니다.`,
-      (hn||nn)&&'이름을 눌러 자리를 바꿀 수 있습니다.'].filter(Boolean).join(' ');
+      cn&&`${josa(cn,'은','는')} 차지라 차지 자리의 방을 봅니다 — 그날 방 수정이나 관리 > 방 구성에서 그 방을 다른 자리로 옮기세요.`,
+      ld&&'손으로 정한 다른 사람 자리가 있는 날은 그 자리를 풀면 피할 수 있을 때가 있습니다.',
+      bn&&`${bn}의 주지 않을 방을 먼저 지키느라 피하지 못한 날이 있습니다.`,
+      nn&&`${hn||cn||ld||bn?'나머지는':'모두'} 뒤 근무 자리만으로는 피할 수 없던 날입니다 — 넘겨준 사람(앞 근무)의 자리를 바꾸면 피할 수 있을 때가 있습니다.`,
+      (hn||ld||bn||nn)&&'배정표에서 이름을 눌러 자리를 바꿀 수 있습니다.'].filter(Boolean).join(' ');
     push('warn',`같은 그룹(${esc(gk)}) 인계 ${at.length}건 — ${list}. ${why}${more}`,cn?'schemes':null); }   // 차지 자리 탓이면 글이 가리키는 방 구성으로
   for(const T in trMiss){
     const cand=store.order.filter(x=>x!==T&&!isNewOn(x,trMiss[T][0].iso)&&!(store.hidden&&store.hidden[x]));
-    push('warn',`신규 ${esc(T)} — 붙일 간호사가 없습니다: `+trMiss[T].map(x=>`<span class="trs">${md(x.iso)} ${x.P} <select title="이 날만 붙일 간호사" onchange="if(this.value)attachTrainee('${jsq(T)}','${x.iso}',this.value,false)"><option value="">붙일 사람…</option>${x.workers.map(y=>`<option value="${escA(y)}">${esc(y)}</option>`).join('')}</select></span>`).join(' ')+
-      ` <select title="앞으로 계속 함께 다닐 간호사(프리셉터)" onchange="if(this.value)attachTrainee('${jsq(T)}','${trMiss[T][0].iso}',this.value,true)"><option value="">계속 붙일 사람(프리셉터)…</option>${cand.map(y=>`<option value="${escA(y)}">${esc(y)}</option>`).join('')}</select>`);
+    push('warn',`신규 ${esc(T)} — 붙일 간호사가 없습니다: `+trMiss[T].map(x=>`<span class="trs">${md(x.iso)} ${x.P} <select title="이 날만 붙일 간호사" onchange="if(this.value)attachTrainee('${escA(jsq(T))}','${x.iso}',this.value,false)"><option value="">붙일 사람…</option>${x.workers.map(y=>`<option value="${escA(y)}">${esc(y)}</option>`).join('')}</select></span>`).join(' ')+
+      ` <select title="앞으로 계속 함께 다닐 간호사(프리셉터)" onchange="if(this.value)attachTrainee('${escA(jsq(T))}','${trMiss[T][0].iso}',this.value,true)"><option value="">계속 붙일 사람(프리셉터)…</option>${cand.map(y=>`<option value="${escA(y)}">${esc(y)}</option>`).join('')}</select>`);
   }
   w.sort((a,b)=>(a.lv==='err'?0:1)-(b.lv==='err'?0:1));
   const side=sideMode();
@@ -3776,12 +3787,13 @@ function renderWeekWarnings(days,infos){
     // 접힘 — 심각한 것이 있으면 첫 줄만 보여 준다(있는 줄 모르고 지나치지 않게).
     // 안내만 있으면 건수만. 배정표를 가리지 않는 것이 이 카드의 기본값이다.
     const first=nErr?w.find(x=>x.lv==='err'):null;
-    wb.innerHTML=head+`<div class="peek">${first?first.html:`${w.length}건 — 눌러서 확인하세요`}</div>`+fold;
+    wb.innerHTML=head+`<div class="peek">${first?first.html:`안내 ${w.length}줄 — 눌러서 확인하세요`}</div>`+fold;   // '건'은 줄 안의 인계 건수와 헷갈린다
     return;
   }
   wb.innerHTML=head+
     `<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px"><div class="items${clip?' clip':''}">${w.map(item).join('')}</div>`+
-    (w.length>LIM?`<button class="more" onclick="wkWarnAll=!wkWarnAll;renderWeek()">${clip?`더 보기 (${w.length-LIM}건 더)`:'접기'}</button>`:'')+`</div>`+fold;
+    // 목록은 높이(150px)로 자르므로 몇 줄이 가려졌는지는 줄 수로 셀 수 없다 — 모두 몇 줄인지만 말한다 (줄 높이가 제각각, 2026-10-09 교차 검토)
+    (w.length>LIM?`<button class="more" onclick="wkWarnAll=!wkWarnAll;renderWeek()">${clip?`모두 보기 (${w.length}줄)`:'접기'}</button>`:'')+`</div>`+fold;
 }
 /* ── 교육·행사 일정 (2026-09-27, 사용자: "일정 추가처럼 — 해당일만 · 기간(0월 0일 ~ 0월 0일) · 매주 O요일(여러 요일)") ──
  * store.evRules=[{id,text,from,to,wds?,skip?}] — 이 날만은 from=to, 기간은 from~to 매일, 매주는 wds(0=일…6=토)의
@@ -4024,8 +4036,8 @@ function openPick(name,iso,x,y){
       :info.label&&crnSeats(P).includes(info.label)?'앉은 자리는 그대로입니다 — 자리가 바뀌는 사람이 있으면 알림에 적습니다'
       :`양식 줄로 올라가고, 대신 다른 한 사람이 ${onP?'대체 줄로':'양식 칸 밖으로'} 내려갑니다`}">CRN 맡기기</button>`:'')+`</div>`+
     (rel?`<div class="pkSec">대체간호사 <span class="dim">우리 근무표에 없는 사람 · 이 날만</span></div>`+
-      `<div class="pkRow"><button onclick="renameRelief('${iso}','${P}','${jsq(name)}')" title="이름을 잘못 적었으면 고칩니다">이름 고치기</button>`+
-      `<button class="danger" onclick="removeRelief('${iso}','${P}','${jsq(name)}')" title="이 날 ${P} 에서 뺍니다 — 인원이 줄어 방이 다시 나뉩니다">이 날 빼기</button></div>`:'')+
+      `<div class="pkRow"><button onclick="renameRelief('${iso}','${P}','${escA(jsq(name))}')" title="이름을 잘못 적었으면 고칩니다">이름 고치기</button>`+
+      `<button class="danger" onclick="removeRelief('${iso}','${P}','${escA(jsq(name))}')" title="이 날 ${P} 에서 뺍니다 — 인원이 줄어 방이 다시 나뉩니다">이 날 빼기</button></div>`:'')+
     (()=>{ const n=offCandidates(iso,P).length;
       return `<div class="pkSec">이 근무에 사람 넣기 <span class="dim">${dd}일 ${P}</span></div>`+
         `<div class="pkRow"><button ${n?'':'disabled'} onclick="closePick();addWorker('${iso}','${P}')" title="그 날 쉬는 사람 목록에서 골라 ${P} 근무로 올립니다">＋ 쉬는 간호사 넣기${n?` (${n}명 쉬는 중)`:' — 쉬는 사람 없음'}</button>`+
@@ -4033,14 +4045,14 @@ function openPick(name,iso,x,y){
     (trs.length?`<div class="pkSec">신규 간호사 붙이기 <span class="dim">이 날 ${P} 에 /${P} 인 신규</span></div>`+
       trs.map(T=>{ const cur=preceptorOf(T,iso), mine=cur===name, b='style="font-size:13px;padding:8px 12px;margin:0"';
         return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:3px 0"><span style="font-weight:700;min-width:5.5em">/ ${esc(T)}</span>`+
-          (mine?`<span class="dim">지금 ${esc(name)} 뒤</span><button ${b} onclick="attachTrainee('${jsq(T)}','${iso}','',false)">오늘만 떼기</button><button ${b} onclick="attachTrainee('${jsq(T)}','${iso}','',true)">계속 떼기</button>`
-               :`${cur?`<span class="dim">지금 ${esc(cur)} 뒤</span>`:''}<button ${b} onclick="attachTrainee('${jsq(T)}','${iso}','${jsq(name)}',false)">오늘만 붙이기</button><button ${b} onclick="attachTrainee('${jsq(T)}','${iso}','${jsq(name)}',true)">계속 붙이기</button>`)+
+          (mine?`<span class="dim">지금 ${esc(name)} 뒤</span><button ${b} onclick="attachTrainee('${escA(jsq(T))}','${iso}','',false)">오늘만 떼기</button><button ${b} onclick="attachTrainee('${escA(jsq(T))}','${iso}','',true)">계속 떼기</button>`
+               :`${cur?`<span class="dim">지금 ${esc(cur)} 뒤</span>`:''}<button ${b} onclick="attachTrainee('${escA(jsq(T))}','${iso}','${escA(jsq(name))}',false)">오늘만 붙이기</button><button ${b} onclick="attachTrainee('${escA(jsq(T))}','${iso}','${escA(jsq(name))}',true)">계속 붙이기</button>`)+
           `</div>`; }).join(''):'')+
     (rel?'':`<button class="pkFold" onclick="togglePickShifts()" aria-expanded="${pkShiftOpen}" title="그 날 근무 자체(D·E·N·OF·연차 등)를 바꿉니다 — 인원이 달라져 어싸인이 다시 맞춰집니다">`+
       `<span>근무 바꾸기 <span class="dim">이 날만 · 지금 ${esc((store.cells[name]||{})[iso]||'없음')}</span></span><span class="pkCar">${pkShiftOpen?'접기 ▴':'펼치기 ▾'}</span></button>`+
     `<div class="shl">`+[...['D','DC','D1','중','E','EC','N','NC','OF','주','P1','V','생','특','공','법','병'],...Object.keys(store.custom||{})].map(c=>{
       const d=SH(c)||{bg:'var(--rule-soft)',fg:'var(--ink-3)'};
-      return `<button style="font-size:14px;padding:8px 12px;background:${d.bg};color:${d.fg};box-shadow:none" onclick="pickShift('${jsq(c)}')">${esc(c)}</button>`; }).join('')+
+      return `<button style="font-size:14px;padding:8px 12px;background:${d.bg};color:${d.fg};box-shadow:none" onclick="pickShift('${escA(jsq(c))}')">${esc(c)}</button>`; }).join('')+
     `<button style="font-size:14px;padding:8px 12px" onclick="pickShift('')">지움</button></div>`);
   placePopup(pk,x,y);
 }
@@ -4902,7 +4914,7 @@ function snapshot(){ // 이름 변경/삭제가 ovr·caps·금지방·시드까�
     ch:store.caps,br:store.banRooms,sd:store.seedManual,al:store.alias,cu:store.custom,fi:store.formId,fs:store.forms,rm:store.rooms,sc:store.schemes,ps:store.presets,
     ev:store.events,na:store.nameAlias,tr:store.trainee,to:store.trOv,pd:store.presetDay,op:store.ovrPair,hd:store.hidden,
     pp:store.presetPlan,rl:store.relief,nu:store.newUntil,er:store.evRules,dy:store.daily,df:store.dayForm||null,du:store.duty,
-    ru:store.rules,rc:store.roomOvCnt,gr:store.groups}));
+    ru:store.rules,rc:store.roomOvCnt,gr:store.groups,un:store.unit||{}}));
   if(undoStack.length>40) undoStack.shift(); }
 function restoreSnapshot(s){
   store.order=s.o; store.cells=s.c;
@@ -4919,7 +4931,7 @@ function restoreSnapshot(s){
   if(s.dy) store.daily=s.dy;
   if(s.du) store.duty=s.du;
   if(s.ru) store.rules=s.ru; if(s.rc) store.roomOvCnt=s.rc;
-  if(s.gr) store.groups=s.gr;
+  if(s.gr) store.groups=s.gr; if(s.un) store.unit=s.un;
   if(s.df!==undefined){ if(s.df) store.dayForm=s.df; else delete store.dayForm; DAYTPL=null; }
   if(s.fi!==undefined){ if(store.formId!==s.fi) TPL=null; store.formId=s.fi; }
 }
@@ -5132,7 +5144,8 @@ function applyNurseName(r,nu){
     }};
   if(!nu){ store.order.splice(r,1); delete store.cells[old]; delete store.hidden[old];
     delete store.caps[old]; delete store.banRooms[old]; delete store.seedManual[old]; delete store.newUntil[old]; migOv(old,null); migTr(old,null);
-    for(const g of store.groups||[]) g.members=g.members.filter(m=>m!==old); }
+    for(const g of store.groups||[]) g.members=g.members.filter(m=>m!==old);
+    if(store.unit) delete store.unit[old]; }
   else{
     store.order[r]=nu;
     store.cells[nu]=store.cells[old]||{}; delete store.cells[old];
@@ -5142,6 +5155,7 @@ function applyNurseName(r,nu){
     if(old in store.seedManual){ store.seedManual[nu]=store.seedManual[old]; delete store.seedManual[old]; }
     if(old in store.newUntil){ store.newUntil[nu]=store.newUntil[old]; delete store.newUntil[old]; }
     for(const g of store.groups||[]) g.members=[...new Set(g.members.map(m=>m===old?nu:m))];   // 그룹원도 새 이름으로
+    if(store.unit&&old in store.unit){ store.unit[nu]=store.unit[old]; delete store.unit[old]; }   // 다른 소속(82 SU)도 — 안 옮기면 새 이름이 병동 자리로 들어왔다
     migOv(old,nu); migTr(old,nu);
   }
   return true;
@@ -5409,7 +5423,7 @@ const ADMIN_PANELS={
       const rows=store.order.filter(n=>!(store.hidden&&store.hidden[n])).map(n=>{
         const sd=store.seedManual[n]||{};
         const seg=(vals,cur,attr)=>vals.map(v=>
-          `<button class="segbtn${cur===v?' on':''}" onclick="setSeed('${esc(n)}','${attr}','${v}')">${v==='없음'?'없음':attr==='label'?FORM_LBL(v,sd.period||'D'):v}</button>`).join('');
+          `<button class="segbtn${cur===v?' on':''}" onclick="setSeed('${escA(jsq(n))}','${attr}','${v}')">${v==='없음'?'없음':attr==='label'?FORM_LBL(v,sd.period||'D'):v}</button>`).join('');
         return `<tr><td class="nm2">${esc(n)}</td>
           <td>${seg([...seedLs,'없음'],sd.label||'없음','label')}</td>
           <td>${seg(['D','E','N'],sd.period||'D','period')}</td></tr>`;
@@ -5531,35 +5545,38 @@ const ADMIN_PANELS={
     get more(){ return (crnFloat('D')?'차지(CRN)는 근무표의 DC·EC·NC 표시, 없으면 이 순서로 정해집니다. 앉는 자리는 정해져 있지 않습니다 — 어제 보던 방을 그대로 보고 이름 뒤에 <b>/CRN</b> 이 붙습니다. '+
          'CRN 을 다른 사람으로 바꾸려면 배정표에서 그 사람 이름을 눌러 <b>[CRN 맡기기]</b>를 누르세요. ':'차지는 배정표의 차지 자리(A(CN)·CN·D(CRN) 처럼 이름에 CN 이 붙은 자리)에 앉습니다. ')+'줄을 끌어서(또는 ▲▼) 순서를 바꾸세요. 가능한 근무에서 <b>DC · EC · NC</b> 를 켜면 그 시간대에 차지로 뽑힐 수 있습니다. '+
          '이름 옆 <b>신규</b> 표시를 누르면 신규 기간을 고칩니다.<br>배정표에 다른 소속 칸이 있는 병동(82의 <span class="unitTag">SU</span>)은 이름 옆 소속 표시를 눌러 켜고 끕니다 — 켜면 병동 자리에 배정되지 않고 그 칸에만 나옵니다.<br>'+
-         '<b>[＋ 그룹 만들기]</b>로 그룹을 만들고 <b>그룹</b> 칸의 이름을 눌러 그룹원을 넣고 빼세요 — 갓 독립한 신규끼리처럼 서로 인계하지 않게 하려면 관리 &gt; 배정 원칙에서 그 그룹의 <b>인계 피하기</b>를 켭니다.'; },
+         '<b>[＋ 그룹 만들기]</b>로 그룹을 만들고 <b>그룹</b> 칸의 이름을 눌러 그룹원을 넣고 빼세요 — 갓 독립한 신규끼리처럼 서로 인계하지 않게 합니다. 새 그룹은 <b>인계 피하기</b>가 켜진 채로 시작하고, 끄고 켜는 곳은 관리 &gt; 배정 원칙입니다.'; },
     aux:`<button onclick="addGroup()" title="서로 인계하지 않을 간호사들(갓 독립한 신규 등)을 묶을 그룹을 만듭니다">＋ 그룹 만들기</button><button onclick="addNurse()">＋ 간호사 추가</button>`,
     body(){ return groupStripHtml()+`<table id="capsTable" class="dt"></table>`; },
     after(){
       const last=store.order.length-1, G=store.groups||[], hasG=!!G.length;
       // 그룹이 있으면 그룹 칸을 연다 — 칩 길이만큼(두 줄까지), 그만큼 이름·가능 근무 칸을 조금 줄여 1920 에서 옆으로 밀리지 않게.
       // 칸 너비는 최소 너비로 쓰이므로 좁은 창(1280·1366)에서는 표가 옆으로 밀렸다 — 남는 폭에 맞춰 그룹 칸(칩 하나 폭까지)·가능 근무·이름 칸 순으로 줄인다
-      const chipW=g=>26+13*g.name.length, avail=(($('#capsTable')||{}).parentElement||{}).clientWidth||1200;
-      let gW=hasG?Math.max(110,Math.min(300,G.reduce((a,g)=>a+chipW(g),0))):0, nmW=hasG?220:250, capW=hasG?288:300;
-      let over=(hasG?64:72)+nmW+capW+gW+190+140-avail;
+      // 남는 폭 = 표가 실제로 쓰는 폭(부모 안쪽 여백 뺌), 칸마다 오른쪽 여백 12px 도 더한다 — 빼먹으면 주지 않을 방 칸이 50px 로 눌려
+      // 방 칩이 세로로 쌓였다(1920 에서도, 2026-10-09 교차 검토). 그룹 칸은 칩이 실제로 차지하는 폭(칩 사이 4px)만
+      const chipW=g=>26+13*g.name.length, tb=$('#capsTable'), par=tb&&tb.parentElement;
+      const avail=par?par.clientWidth-(parseFloat(getComputedStyle(par).paddingLeft)||0)-(parseFloat(getComputedStyle(par).paddingRight)||0):1150;
+      let gW=hasG?Math.max(110,Math.min(300,G.reduce((a,g)=>a+chipW(g)+4,0)+12)):0, nmW=hasG?220:250, capW=hasG?288:300;
+      let over=(hasG?64:72)+nmW+capW+gW+190+180+12*(hasG?6:5)-avail;
       const take=(cur,min)=>{ const d=Math.max(0,Math.min(over,cur-min)); over-=d; return cur-d; };
       if(hasG) gW=take(gW,Math.max(110,...G.map(chipW)));
       capW=take(capW,210); nmW=take(nmW,180);
       const nCol=hasG?6:5;
       $('#capsTable').innerHTML=`<tr class="hd"><th style="width:${hasG?64:72}px">순위</th><th style="width:${nmW}px">간호사</th><th style="width:${capW}px">가능 근무</th>`+
-        (hasG?`<th style="width:${gW}px" title="그룹 이름을 눌러 그룹원을 넣고 뺍니다">그룹</th>`:'')+`<th>주지 않을 방</th><th class="end" style="width:190px"></th></tr>`+
+        (hasG?`<th style="width:${gW}px" title="그룹 이름을 눌러 그룹원을 넣고 뺍니다">그룹</th>`:'')+`<th style="min-width:140px">주지 않을 방</th><th class="end" style="width:190px"></th></tr>`+
         (store.order.map((n,i)=>{
           const cp=capsOf(n), bans=store.banRooms[n]||[], gone=!!(store.hidden&&store.hidden[n]);
           const hd=hasUnits()&&(i===0||unitOfName(n)!==unitOfName(store.order[i-1]))?unitHeadHtml(n,nCol):'';
           return hd+`<tr class="nrow${gone?' gone':''}${unitOfName(n)?' unitRow':''}" draggable="true" ondragstart="rowDragStart(event,${i},'nurse')" ondragover="rowDragOver(event,${i},'nurse')" ondragleave="rowDragLeave(event)" ondrop="rowDrop(event,${i},'nurse')" ondragend="rowDragEnd(event,'nurse')">
             <td class="grip" title="끌어서 순서 바꾸기 — 위가 선임"><span class="gripIco">⋮⋮</span><b>${i+1}</b></td>
             <td class="nm2">${esc(n)}${newChip(n)}${gone?' <span class="trChip" title="전출·퇴사 — 명부에서 접어 두었습니다. 근무표 기록은 그대로입니다">전출</span>':''}${
-              (unitSlotName()||unitOfName(n))?`<button class="unitTag${unitOfName(n)?'':' off'}" title="${esc(unitOfName(n)||unitSlotName())} 소속 — ${unitOfName(n)?'지금 켜져 있습니다: 병동 자리에 배정되지 않고 배정표의 그 칸에만 나옵니다. 누르면 병동 간호사로 돌아옵니다':'누르면 켜집니다: 병동 자리에 배정되지 않고 배정표의 그 칸에만 나옵니다'}" onclick="toggleUnit('${esc(n)}')">${esc(unitOfName(n)||unitSlotName())}</button>`:''} <button class="segbtn" style="min-width:0;padding:4px 8px" title="이름 수정" onclick="renameNurseAdmin(${i})">✎</button></td>
+              (unitSlotName()||unitOfName(n))?`<button class="unitTag${unitOfName(n)?'':' off'}" title="${esc(unitOfName(n)||unitSlotName())} 소속 — ${unitOfName(n)?'지금 켜져 있습니다: 병동 자리에 배정되지 않고 배정표의 그 칸에만 나옵니다. 누르면 병동 간호사로 돌아옵니다':'누르면 켜집니다: 병동 자리에 배정되지 않고 배정표의 그 칸에만 나옵니다'}" onclick="toggleUnit('${escA(jsq(n))}')">${esc(unitOfName(n)||unitSlotName())}</button>`:''} <button class="segbtn" style="min-width:0;padding:4px 8px" title="이름 수정" onclick="renameNurseAdmin(${i})">✎</button></td>
             <td><div style="display:flex;gap:4px;flex-wrap:wrap">${ALL_CAPS.map(c=>
-              `<span class="capChip${cp.includes(c)?' on':''}" onclick="toggleCap('${esc(n)}','${c}')">${c}</span>`).join('')}</div></td>
+              `<span class="capChip${cp.includes(c)?' on':''}" onclick="toggleCap('${escA(jsq(n))}','${c}')">${c}</span>`).join('')}</div></td>
             ${hasG?`<td>${groupCellHtml(n)}</td>`:''}
             <td><div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">${
-              bans.map(r=>`<span class="banChip">${esc(roomShort(r))}${splitBed(String(r))[1]==null?'호':''}<span class="x" onclick="delBan('${esc(n)}','${esc(r)}')">×</span></span>`).join('')}
-              <span class="addChip banBtn" title="주지 않을 방 고르기" onclick="openRoomPick({kind:'nurse',name:'${esc(n)}'},event.pageX,event.pageY)">＋</span></div></td>
+              bans.map(r=>`<span class="banChip">${esc(roomShort(r))}${splitBed(String(r))[1]==null?'호':''}<span class="x" onclick="delBan('${escA(jsq(n))}','${escA(jsq(r))}')">×</span></span>`).join('')}
+              <span class="addChip banBtn" title="주지 않을 방 고르기" onclick="openRoomPick({kind:'nurse',name:'${escA(jsq(n))}'},event.pageX,event.pageY)">＋</span></div></td>
             <td class="end"><button class="segbtn" title="한 칸 위로 (선임 쪽)" ${i===0?'disabled':''} onclick="moveNurse(${i},${i-1})">▲</button>`+
             `<button class="segbtn" title="한 칸 아래로" ${i===last?'disabled':''} onclick="moveNurse(${i},${i+1})">▼</button>`+
             `<button class="segbtn" title="${gone?'전출을 풀고 명부에 다시 올립니다':'전출·퇴사 — 명부에서 접어 둡니다. 근무표 기록은 그대로 남고 나중에 복귀할 수 있습니다'}" onclick="toggleHidden(${i})">${gone?'복귀':'전출'}</button>`+
@@ -5938,8 +5955,11 @@ function unitHeadHtml(name,span,first){
 const hasUnits=()=>store.order.some(n=>unitOfName(n));
 function toggleUnit(name){
   store.unit=store.unit||{};
+  const u=store.unit[name]?'':unitSlotName();
+  if(!store.unit[name]&&!u) return;
+  snapshot();
   if(store.unit[name]) delete store.unit[name];          // 붙어 있으면 뗀다 (서식에 소속 칸이 없어도)
-  else{ const u=unitSlotName(); if(!u) return; store.unit[name]=u; }
+  else store.unit[name]=u;
   groupUnits();
   touch(); recompute(); renderAdmin();
   if(curScr==='week') renderWeek();
@@ -5962,10 +5982,15 @@ const GROUP_NAME_MAX=12;
 function grpId(){ return 'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function normGroups(list,order){
   const names=new Set(Array.isArray(order)?order.map(String):[]), ids=new Set();
-  return (Array.isArray(list)?list:[]).filter(g=>g&&typeof g==='object').map(g=>{
+  // 만들기·이름 바꾸기 창과 같은 규칙으로 — 12자까지, 겹치면 뒤에 번호(확인 카드는 그룹 이름으로 줄을 묶는다), 'false' 글자는 끔
+  const nms=new Set();
+  return (Array.isArray(list)?list:[]).filter(g=>g&&typeof g==='object'&&(String(g.name||'').trim()||(Array.isArray(g.members)&&g.members.length))).map(g=>{
     let id=String(g.id||''); if(!/^[A-Za-z0-9_-]+$/.test(id)||ids.has(id)) id=grpId(); ids.add(id);
     const members=[...new Set((Array.isArray(g.members)?g.members:[]).map(String).filter(m=>names.has(m)))];
-    return {id,name:String(g.name||'').trim()||'그룹',members,noHandover:g.noHandover==null?true:!!g.noHandover};
+    const base=(String(g.name||'').trim().replace(/\s+/g,' ')||'그룹').slice(0,GROUP_NAME_MAX);
+    let name=base; for(let k=2;nms.has(name);k++) name=base.slice(0,GROUP_NAME_MAX-String(k).length)+k; nms.add(name);
+    const off=g.noHandover===false||g.noHandover===0||/^(false|0|off)$/i.test(String(g.noHandover));
+    return {id,name,members,noHandover:g.noHandover==null?true:!off};
   });
 }
 const groupById=id=>(store.groups||[]).find(g=>g.id===id);
@@ -5985,7 +6010,7 @@ async function askGroupName(title,initial,selfId,okLabel){
   let cur=initial||'';
   for(;;){
     const v=await askModal({title,
-      sub:selfId?'배정 원칙·확인 카드에 이 이름으로 나옵니다.':'만든 뒤 표의 <b>그룹</b> 칸에서 그룹원을 눌러 넣습니다. 새 그룹은 <b>인계 피하기</b>가 켜진 채로 시작합니다.',
+      sub:selfId?'배정 원칙·확인 카드에 이 이름으로 나옵니다.':'만든 뒤 표의 <b>그룹</b> 칸에서 넣을 사람 줄의 그룹 이름을 누릅니다. 새 그룹은 <b>인계 피하기</b>가 켜진 채로 시작합니다.',
       text:{label:'그룹 이름',placeholder:'예: 신규 독립',initial:cur,only:true},okLabel});
     if(v==null) return null;
     cur=String(v); const nm=cur.trim().replace(/\s+/g,' ');
@@ -6001,7 +6026,7 @@ async function addGroup(){
   store.groups=store.groups||[];
   store.groups.push({id:grpId(),name:nm,members:[],noHandover:true});
   touch(); recompute(); renderAdmin();
-  toast(`'${nm}' 그룹을 만들었습니다 — 표의 그룹 칸에서 그룹원을 눌러 넣으세요`,4200,true);
+  toast(`'${nm}' 그룹을 만들었습니다 — 표의 그룹 칸에서 넣을 사람 줄의 그룹 이름을 누르세요`,4200,true);
 }
 async function renameGroup(id){
   const g=groupById(id); if(!g) return;
@@ -6056,7 +6081,7 @@ function groupRulesHtml(){
     const who=all.length?all.map(m=>esc(m)+(w.includes(m)?(store.hidden&&store.hidden[m]?' (전출)':''):' (다른 소속)')).join(' · '):'';
     const note=!all.length?'그룹원이 없습니다 — 간호사 관리의 그룹 칸에서 넣으세요.'
       :w.length<2?`${who} — 그룹원이 둘 이상이어야 쓰입니다.`:who;
-    return `<div class="rulRow" data-g="${g.id}"><div style="flex:1;min-width:0"><div class="rt">${esc(g.name)} <span class="grpCnt">${all.length}명</span></div><div class="rd">${note}</div></div>`+
+    return `<div class="rulRow" data-g="${g.id}"><div style="flex:1;min-width:0"><div class="rt">${esc(g.name)} <span class="grpCnt">${w.length}명</span></div><div class="rd">${note}</div></div>`+   // 간호사 관리 띠와 같은 수(다른 소속은 세지 않는다)
       `<label class="sw" title="${escA(g.name)} 그룹원끼리 인계 피하기 — ${g.noHandover?'켜져 있습니다':'꺼져 있습니다'}"><input type="checkbox" ${g.noHandover?'checked':''} onchange="setGroupHandover('${g.id}',this.checked)"><i></i></label></div>`;
   }).join('')+`</div>`;
 }
@@ -7271,6 +7296,7 @@ async function restoreBackup(file){
     const rev=Math.max(store.rev||0,j.rev||0);          // 파일 rev 보다 뒤로 가지 않게 — 자동 저장이 '다른 창이 먼저 저장' 으로 오해하지 않는다
     keepHistory('백업 불러오기 전'); const hist=store.history;  // 되돌릴 수 있게 지금 상태를 남긴다
     store={...emptyStore(),...j,rev,history:hist}; migrateStore();
+    undoStack.length=0;                                  // Ctrl+Z 가 앞 데이터를 되살린 내용 위에 섞지 않게 — 되돌리기는 데이터 보관의 이전 상태로
     touch();                                             // 자동 저장 예약 (읽기 전용이면 저장 연결 안내)
     afterLoad();
     toast(f.name+' 의 내용을 불러왔습니다'+((fileHandle||nativeInfo)?' — 지금 데이터 파일에 저장됩니다':''),4200);
@@ -11013,12 +11039,12 @@ const TOURS={
     {before:()=>{ show('admin'); pickAdmin('rules'); },sel:'#adminPanelBox',title:'배정 원칙',text:'<b>보던 병실을 이어서 보게</b> 하는 것이 핵심입니다. 원칙 1(전일 같은 근무) &gt; 2(근무 변경) &gt; 3(오프 복귀) 순이고, 4는 3과 반대라 하나만 켜집니다.'},
     {sel:'#adminPanelBox .grpRules',title:'그룹원끼리 인계 피하기',text:'켠 그룹의 그룹원끼리는 D→E·E→N·N→D 에서 같은 병상을 넘겨받지 않게 합니다 — 원칙 1~3 보다 먼저 봅니다. 그룹은 간호사 관리에서 만듭니다.',after:()=>{ if(connected()) show('week'); }},
   ],cleanup:()=>{ if(connected()) show('week'); }},
-  groups:{steps:()=>[
+  groups:{steps:()=>{ const has=(store.groups||[]).length>0; return [
     {before:()=>{ show('admin'); pickAdmin('caps'); },el:()=>document.querySelector('#adminPanelBox .grpStrip')||document.querySelector('#adminPanelBox button[onclick="addGroup()"]'),title:'그룹 만들기',
      text:'<b>[＋ 그룹 만들기]</b>로 그룹을 만듭니다. 만든 그룹은 표 위에 이름·인원·인계 피하기와 함께 보이고, ✎ 로 이름을 고치고 ✕ 로 지웁니다.'},
-    {el:()=>document.querySelector('#capsTable .grpChips')||document.querySelector('#adminPanelBox'),title:'그룹원 넣고 빼기',text:'표의 <b>그룹</b> 칸에서 그룹 이름을 누르면 그 사람이 그룹에 들어가고, 한 번 더 누르면 빠집니다.'},
+    {el:()=>document.querySelector('#capsTable .grpChips')||document.querySelector('#adminPanelBox'),title:'그룹원 넣고 빼기',text:has?'표의 <b>그룹</b> 칸에서 그룹 이름을 누르면 그 사람이 그룹에 들어가고, 한 번 더 누르면 빠집니다.':'그룹을 만들면 이 표에 <b>그룹</b> 칸이 생깁니다. 그 칸에서 그룹 이름을 누르면 그 사람이 그룹에 들어가고, 한 번 더 누르면 빠집니다.'},
     {before:()=>pickAdmin('rules'),sel:'#adminPanelBox .grpRules',title:'인계 피하기 켜고 끄기',text:'배정 원칙 아래에서 그룹마다 켜고 끕니다. 켠 그룹의 그룹원끼리는 D→E·E→N·N→D 에서 같은 병상을 넘겨받지 않게 자리를 고릅니다.',after:()=>{ if(connected()) show('week'); }},
-  ],cleanup:()=>{ if(connected()) show('week'); }},
+  ]; },cleanup:()=>{ if(connected()) show('week'); }},
   seed:{steps:()=>[
     {before:()=>{ show('admin'); pickAdmin('seed'); },sel:'#adminPanelBox',title:'지난 어싸인 직접 입력',text:'표에 지난 기록이 없을 때 이어짐의 <b>시작점</b>을 알려 주는 곳입니다. 기록이 있으면 기록이 우선입니다.',after:()=>{ if(connected()) show('week'); }},
   ],cleanup:()=>{ if(connected()) show('week'); }},

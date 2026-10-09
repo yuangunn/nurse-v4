@@ -107,6 +107,7 @@ function LIB() {
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = ri(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const S = () => A.store;
   const code = (n, iso) => { const pc = A.parseCellRaw(((S().cells[n] || {})[iso]) || ''); return pc && pc.code || ''; };
+  let FIXEDG = new Set();
   const stateKey = () => JSON.stringify([S().cells, S().ovr, S().ovrPair, S().relief, S().trOv, S().trainee, S().groups]);
 
   /* ── 장면 만들기 ── */
@@ -135,7 +136,9 @@ function LIB() {
     }
     for (const n of NOCHG) s.caps[n] = ['D', 'E', 'N'];
     // 간호사 그룹 — [이름, 그룹원, 인계 피하기] (갓 독립한 신규끼리 인계하지 않게. 꺼진 그룹·두 그룹에 든 사람도 섞는다)
+    // 넷째 값이 참인 그룹은 수정이 건드리지 않는다 — 무작위 수정이 그룹을 다 꺼도 E8·V1 이 볼 인계가 남게
     if (spec.groups) s.groups = spec.groups.map(([name, members, on], k) => ({ id: 'g' + (k + 1), name, members: members.slice(), noHandover: on }));
+    FIXEDG = new Set((spec.groups || []).map((g, k) => g[3] ? 'g' + (k + 1) : null).filter(Boolean));
     // 근무표 — 사흘씩 같은 사람이 같은 근무 (실제 근무표처럼 이어지는 날이 있어야 E7 이 볼 것이 있다)
     for (let b = 0; b * 3 < DAYS; b++) {
       const perm = shuffle(WARD.slice()), blk = {}; let k = 0;
@@ -251,7 +254,12 @@ function LIB() {
       info[iso + P] = { W, d, pinned, labels };
     }
     // E8 — 엔진이 알린 같은 그룹 인계 = 근무표에서 센 인계 (켠 그룹, 병동 간호사만 — 대체간호사·다른 소속은 그룹에 들지 않는다)
-    const HG = A.handoverGroupsOf(S().order.filter(n => !(S().unit || {})[n]));
+    // 앱의 handoverGroupsOf 를 쓰지 않고 따로 짠다 — 켠 그룹 중 병동 간호사(다른 소속 아님)가 둘 이상인 그룹의 그룹원
+    const HG = {}, wardNow = new Set(S().order.filter(n => !(S().unit || {})[n]));
+    for (const g of S().groups || []) {
+      const ms = g.members.filter(m => wardNow.has(m));
+      if (g.noHandover === true && ms.length >= 2) for (const m of ms) (HG[m] = HG[m] || []).push(g.id);
+    }
     for (const k in info) {
       const iso = k.slice(0, 10), P = k.slice(10), d = info[k].d;
       const want = handovers(info, HG, d.labels, iso, P), got = {};
@@ -386,10 +394,11 @@ function LIB() {
     }
     // V1 — 확인 카드의 '같은 그룹 인계' 줄 = 엔진이 알린 인계 (사람 짝마다 날 수). 옆 열일 때만 — 표 위 카드는 접혀 줄을 숨긴다
     const wb = document.querySelector('#wkWarn');
-    if (wb && wb.classList.contains('side')) {
+    if (!wb || !wb.classList.contains('side')) out.push(`V1 ${isos[0]} 주 — 1920 에서 확인 카드가 표 오른쪽 열에 서지 않았다`);
+    else {
       const want = {}, got = {};
       for (const iso of isos) for (const P of P3) for (const h of ((res.byDay[iso] || {})[P] || {}).handover || [])
-        if (A.groupsBetween(h.from, h.to).length) want[h.from + '→' + h.to] = (want[h.from + '→' + h.to] || 0) + 1;
+        want[h.from + '→' + h.to] = (want[h.from + '→' + h.to] || 0) + 1;
       // 그룹마다 한 줄 — 인계 하나가 span.hv 하나(넘겨준 사람·받은 사람), 접힌 나머지도 센다. 줄 머리의 건수도 맞아야 한다
       for (const div of wb.querySelectorAll('.items > div.warn')) {
         const m = div.textContent.match(/^같은 그룹[(][^)]*[)] 인계 ([0-9]+)건 — /); if (!m) continue;
@@ -447,7 +456,7 @@ function LIB() {
     // CRN 맡기기 단추는 차지가 자리에 안 묶이는 근무에만 있다 — 그런 양식에서 더 자주 (102 오류가 드러난 수정이다)
     const crnW = P3.some(P => A.crnFloat(P)) ? 20 : 2;
     const kind = wpick([['shift', 22], ['swap', 24], ['auto', 6], ['crn', crnW], ['cellSeat', 8], ['addOff', 7], ['relief', 8], ['unrelief', 5], ['clearDay', 4], ['prune', 2], ['undo', 10],
-      ['grp', (S().groups || []).length ? 8 : 0]]);
+      ['grp', (S().groups || []).some(g => !FIXEDG.has(g.id)) ? 8 : 0]]);
     const fails = [], ctx = { kind, iso, wk };
     const all = cellsOn(iso);
     const openName = async td => { td.click(); await sleep(5); return pickOn(); };
@@ -491,7 +500,7 @@ function LIB() {
       const g0 = JSON.stringify(S().groups);
       if (R() < 0.5) {
         A.show('admin'); A.pickAdmin('rules'); await sleep(5);
-        const inp = pick([...document.querySelectorAll('#adminPanelBox .grpRules .rulRow[data-g] .sw input')]);
+        const inp = pick([...document.querySelectorAll('#adminPanelBox .grpRules .rulRow[data-g] .sw input')].filter(x => !FIXEDG.has(x.closest('.rulRow').dataset.g)));
         if (!inp) { fails.push('O0 배정 원칙에 그룹 스위치가 없다'); A.show('week'); return { desc: '그룹 스위치 (없음)', fails, ctx }; }
         const id = inp.closest('.rulRow').dataset.g, on0 = !!A.groupById(id).noHandover;
         inp.click(); await sleep(10);
@@ -499,8 +508,9 @@ function LIB() {
         if (!!A.groupById(id).noHandover === on0) fails.push(`O10 ${desc} 스위치를 눌렀는데 그대로`);
       } else {
         A.show('admin'); A.pickAdmin('caps'); await sleep(5);
-        const b = pick([...document.querySelectorAll('#capsTable .grpChip')]);
-        const m = b && (b.getAttribute('onclick') || '').match(/toggleGroupMember[(]'([^']+)','([^']+)'[)]/);
+        const chipOf = x => (x.getAttribute('onclick') || '').match(/toggleGroupMember[(]'([^']+)','([^']+)'[)]/);
+        const b = pick([...document.querySelectorAll('#capsTable .grpChip')].filter(x => { const mm = chipOf(x); return mm && !FIXEDG.has(mm[1]); }));
+        const m = b && chipOf(b);
         if (!m) { fails.push('O0 간호사 관리에 그룹 칩이 없다'); A.show('week'); return { desc: '그룹 칩 (없음)', fails, ctx }; }
         const was = A.groupById(m[1]).members.includes(m[2]);
         b.click(); await sleep(10);
@@ -607,11 +617,13 @@ function LIB() {
 
 /* ── 병동 양식 ── */
 const SPECS = [
-  // groups — 간호사 그룹 [이름, 그룹원, 인계 피하기]. 그룹이 있으면 수정에 그룹 스위치·칩 누르기가 섞이고 E7 은 그룹 인계 예외를 본다
-  { key: '101', form: '101', cnt: { D: [4, 5], E: [4, 5], N: [2, 3] }, groups: [['신규 독립', ['아간호', '자간호', '차간호', '카간호'], true]] },
+  // groups — 간호사 그룹 [이름, 그룹원, 인계 피하기, 고정]. 그룹이 있으면 수정에 그룹 스위치·칩 누르기가 섞이고 E7 은 그룹 인계 예외를 본다.
+  // 고정(넷째 값)인 그룹은 수정이 건드리지 않는다 — 켠 그룹이 늘 하나는 남아 E8·V1 이 볼 인계가 있다
+  { key: '101', form: '101', cnt: { D: [4, 5], E: [4, 5], N: [2, 3] },
+    groups: [['신규 독립', ['아간호', '자간호', '차간호', '카간호'], true, true], ['복직', ['나간호', '타간호'], true]] },
   { key: '122', form: '122', cnt: { D: [5, 6], E: [4, 5], N: [2, 3] } },
   { key: '102', form: '102', cnt: { D: [3, 5], E: [3, 4], N: [2, 3] },
-    groups: [['신규 독립', ['바간호', '아간호', '자간호', '타간호'], true], ['야간 전담', ['다간호', '라간호'], false], ['복직', ['타간호', '카간호'], true]] },
+    groups: [['신규 독립', ['바간호', '아간호', '자간호', '타간호'], true], ['야간 전담', ['다간호', '라간호'], false], ['복직', ['타간호', '카간호'], true, true]] },
   { key: '82', form: '82', su: true, cnt: { D: [2, 3], E: [2, 3], N: [1, 2] } },
   { key: '102 옛 양식(D(CRN) 맨 아래)', form: '102', up: 'oldCrn', cnt: { D: [3, 5], E: [3, 4], N: [2, 3] } },
   { key: '101 올린 양식(CN 이 둘째 줄)', form: '101', up: 'cn2', cnt: { D: [4, 5], E: [4, 5], N: [2, 3] } },
