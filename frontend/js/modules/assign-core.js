@@ -41,6 +41,14 @@
  *  누가 차지인지는 결과의 byDay[dk][P].charge · byNurse[id][dk].charge 로 준다(자리가 고정이어도).
  *  차지 사람은 주지 않을 방과 상관없이 고른다(시니어리티) — 자리가 고정인 서식에서 차지 방에 주지 않을 방이 있으면
  *  차지가 그 방에 앉고 경고로 알린다. 예전엔 그 사람을 말없이 차지에서 빼, 인원이 바뀌는 날마다 차지가 오갔다.
+ *
+ * 그룹 인계 피하기 — opts.handoverGroups 가 {간호사: [그룹]} 를 주면 **같은 그룹 사람끼리** 바로 앞 근무에서 본 병상을
+ *  넘겨받지 않게 자리를 고른다(갓 독립한 신규끼리 인계하지 않게, 2026-10-09 사용자). 앞 근무 = D 는 전날 N, E 는 같은 날 D,
+ *  N 은 같은 날 E — 앞 근무는 이미 정해진 것으로 보고 뒤 근무가 피한다. 잣대는 넘겨받는 병상 수 합(같은 그룹 사람이 본 병상을
+ *  같은 그룹 사람이 받으면 그 병상 수). 사전식으로 **주지 않을 방 다음, 이어 보기(원칙 1~3)보다 먼저** — 이어 보기가 먼저면
+ *  어제 방을 그대로 잇는 두 사람이 매일 같은 환자를 주고받아 거의 효과가 없다. 대신 겹치던 사람이 한 번 방을 옮기고, 그 뒤로는
+ *  이어 보기가 둘을 떼어 둔다. 누가 차지인지는 바꾸지 않는다. 방 정보(roomsFor)가 없으면 아무 일도 하지 않는다.
+ *  피하지 못한 인계는 결과의 byDay[dk][P].handover = [{from, to, rooms}] 로 알린다.
  * ─────────────────────────────────────────────────────────────────────────── */
 (function (root) {
   const PERIOD_CODES = { D: ['DC', 'D'], E: ['EC', 'E'], N: ['NC', 'N'] };
@@ -116,8 +124,10 @@
    *                  대안 없으면 그대로 배정, 수동 오버라이드·DC/EC/NC 표시자는 회피 무시)
    *                  roomsFor:(P,cnt,label,dateKey)=>[방 토큰],  ← 주면 방 기준 연속성
    *                  maxSeats: 숫자 또는 (P,cnt,dateKey)=>숫자  ← 자리 수(1~6, 기본 5)
-   *                  chargeSeats:(P,cnt,dateKey)=>[라벨]|null  ← 주면 차지가 그 자리 중 한 곳에 (방이 고정이 아닌 차지)}
-   * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId], charge:nurseId}}},
+   *                  chargeSeats:(P,cnt,dateKey)=>[라벨]|null  ← 주면 차지가 그 자리 중 한 곳에 (방이 고정이 아닌 차지)
+   *                  handoverGroups:{nurseId:[그룹]}  ← 주면 같은 그룹끼리 앞 근무의 병상을 넘겨받지 않게 (주지 않을 방 다음, 원칙 1~3 보다 먼저)}
+   * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId], charge:nurseId,
+   *                        handover?:[{from:nurseId, to:nurseId, rooms:[방 토큰]}]}}},  ← 피하지 못한 같은 그룹 인계
    *           byNurse:{nurseId:{dk:{period,label,charge?:true}}}}
    */
   function compute(nurses, schedule, dateKeys, opts) {
@@ -138,6 +148,21 @@
     };
     const byDay = {}, byNurse = {};
     const lastSeen = {}; // nurseId -> {label, idx, period, rooms}
+    // 그룹 인계 피하기 — 같은 그룹(하나라도 겹치면) 다른 사람끼리만. 그룹이 없으면 아무 일도 하지 않는다
+    const hGroups = {};
+    let hOn = false;
+    if (opts.handoverGroups && roomsFor) for (const nid in opts.handoverGroups) {
+      const g = [].concat(opts.handoverGroups[nid] || []).map(String).filter(Boolean);
+      if (g.length) { hGroups[nid] = g; hOn = true; }
+    }
+    const sameGroup = function (a, b) {
+      if (a === b || !hGroups[a] || !hGroups[b]) return false;
+      for (let i = 0; i < hGroups[a].length; i++) if (hGroups[b].indexOf(hGroups[a][i]) >= 0) return true;
+      return false;
+    };
+    // 바로 앞 근무(D ← 전날 N, E ← D, N ← E)에서 병상마다 누가 봤나 — {idx, P, holders:{토큰:[nurseId]}}
+    let prevShift = null;
+    const PREV_OF = { D: 'N', E: 'D', N: 'E' };
     // 전월 연속성 시드 — 전월에 마지막으로 본 방을 상대 idx로 주입하면 원칙1~4가 월 경계를 넘어 작동.
     // idx는 dateKeys[0] 기준 상대값: 음수 = dateKeys 이전, 0 이상 = 이월(오버플로) 구간과 겹침
     // (겹치는 날에 현재 데이터로 배정이 일어나면 자연히 덮어써진다).
@@ -166,6 +191,23 @@
         const roomsByLabel = {};
         if (roomsFor) for (let i = 0; i < labels.length; i++)
           roomsByLabel[labels[i]] = roomsFor(P, cnt, labels[i], dk) || [];
+
+        // 그룹 인계 — 바로 앞 근무가 정해져 있을 때만 (D 는 전날 N, E·N 은 같은 날 앞 근무. 그 근무에 아무도 없었으면 인계도 없다)
+        const holders = hOn && prevShift && prevShift.P === PREV_OF[P] &&
+          prevShift.idx === (P === 'D' ? idx - 1 : idx) ? prevShift.holders : null;
+        // 이 사람이 이 자리에 앉으면 같은 그룹 사람이 앞 근무에서 본 병상을 몇 개 넘겨받나 (병상수 합 — 겹침과 같은 잣대)
+        const handW = function (n, l) {
+          if (!holders || !hGroups[n.id]) return 0;
+          const rs = roomsByLabel[l] || [];
+          let w = 0;
+          for (let i = 0; i < rs.length; i++) {
+            const hs = holders[rs[i]];
+            if (!hs) continue;
+            for (let k = 0; k < hs.length; k++)
+              if (sameGroup(hs[k], n.id)) { w += bedsOf ? Math.max(1, +bedsOf(rs[i]) || 1) : 1; break; }
+          }
+          return w;
+        };
 
         // 0) 수동 오버라이드 최우선 (회피 라벨보다도 우선 — 복구 패스에서 건드리지 않음)
         const ov = (overrides[dk] || {})[P] || {};
@@ -249,13 +291,16 @@
         const seatTie = cached(function (n, l) { return seatV(n, l) > 0 ? tieOf(n, lastSeen[n.id]) : 0; });
 
         // 3) 다듬기 — 손으로 고정한 자리·차지를 뺀 자리 전부를 따져 보고 가장 나은 배치로 (자리 ≤6 이라 비트마스크로 정확히).
-        //  비용(작을수록 좋다, 사전식): 주지 않을 방 > -원칙 점수 > 헬퍼 선임 > 튕김 > -누가 잇는지 > 위 단계 배치에서 옮긴 사람 수.
+        //  비용(작을수록 좋다, 사전식): 주지 않을 방 > 같은 그룹 인계(병상) > -원칙 점수 > 헬퍼 선임 > 튕김 > -누가 잇는지 > 위 단계 배치에서 옮긴 사람 수.
         //  뒤 셋은 한 수로 싼다: 튕김×1e8 + (-누가 잇는지)×100 + 옮김 — 누가 잇는지 ≤ 6×10099, 옮김 ≤ 99 라 자리가 섞이지 않는다
         // 위 단계가 이미 가장 나은 날은 건너뛴다(속도 — 400일 × 시간대마다 돈다). 위 단계가 놓칠 수 있는 것은 넷뿐이다:
         //  주지 않을 방 · 원칙 4 · 헬퍼(자리보다 사람이 많은 날) · 방 매칭이 못 보는 것(방을 모르는 기록, 방 구성이 빈 자리).
-        //  나머지는 방 매칭(정확한 최적)과 남은 자리 선임 순이 이미 같은 답을 낸다 — scripts/test_assign_principles.mjs 가 지킨다
+        //  나머지는 방 매칭(정확한 최적)과 남은 자리 선임 순이 이미 같은 답을 낸다 — scripts/test_assign_principles.mjs 가 지킨다.
+        //  그룹 인계도 위 단계는 보지 않으므로 넘겨받을 병상이 하나라도 있으면 다듬는다
         const needPolish = (function () {
           if (rules.bounceAfterOff || staff.length > labels.length) return true;
+          if (holders) for (let i = 0; i < staff.length; i++)
+            for (let j = 0; j < labels.length; j++) if (handW(staff[i], labels[j])) return true;
           for (let i = 0; i < staff.length; i++) if ((av[staff[i].id] || []).length) return true;
           if (!roomsFor) return false;
           for (let i = 0; i < labels.length; i++) if (!roomsByLabel[labels[i]].length) return true;
@@ -275,16 +320,24 @@
           const was = {};
           for (let j = 0; j < seats.length; j++) was[assigned[seats[j]].id] = seats[j];
           const nS = seats.length, full = 1 << nS;
-          let V = new Float64Array(full), C = new Float64Array(full), H = new Float64Array(full), L = new Float64Array(full);
-          let V2 = new Float64Array(full), C2 = new Float64Array(full), H2 = new Float64Array(full), L2 = new Float64Array(full);
+          let V = new Float64Array(full), G = new Float64Array(full), C = new Float64Array(full), H = new Float64Array(full), L = new Float64Array(full);
+          let V2 = new Float64Array(full), G2 = new Float64Array(full), C2 = new Float64Array(full), H2 = new Float64Array(full), L2 = new Float64Array(full);
           V.fill(Infinity); V[0] = 0;
-          const sv = new Float64Array(nS), sc = new Float64Array(nS), sl = new Float64Array(nS);
+          const sv = new Float64Array(nS), sg = new Float64Array(nS), sc = new Float64Array(nS), sl = new Float64Array(nS);
+          // (v,g,c,h,l) 가 상태 k 보다 작으면 — 같으면 먼저 찾은 것을 둔다
+          const beats = function (k, v, g, c, h, l) {
+            if (V2[k] === Infinity || v !== V2[k]) return v < V2[k];
+            if (g !== G2[k]) return g < G2[k];
+            if (c !== C2[k]) return c < C2[k];
+            if (h !== H2[k]) return h < H2[k];
+            return l < L2[k];
+          };
           const back = [];
           for (let i = 0; i < people.length; i++) {
             const n = people[i];
             for (let j = 0; j < nS; j++) {
               const l = seats[j], v = seatV(n, l), t = seatTie(n, l);
-              sv[j] = avOk(n.id, l) ? 0 : 1; sc[j] = t - v;
+              sv[j] = avOk(n.id, l) ? 0 : 1; sg[j] = handW(n, l); sc[j] = t - v;
               sl[j] = (bounceHit(n, l) ? 1e8 : 0) - t * 100 + (was[n.id] === l ? 0 : 1);
             }
             const hp = helperPen(n.id), hl = was[n.id] ? 1 : 0;   // 헬퍼로
@@ -293,23 +346,22 @@
             for (let m = 0; m < full; m++) {
               const v0 = V[m];
               if (v0 === Infinity) continue;
-              const c0 = C[m], h0 = H[m], l0 = L[m];
-              // (v,c,h,l) 가 상태 k 보다 작으면 바꾼다
+              const g0 = G[m], c0 = C[m], h0 = H[m], l0 = L[m];
               let h = h0 + hp, l = l0 + hl;
-              if (V2[m] === Infinity || v0 < V2[m] || (v0 === V2[m] && (c0 < C2[m] || (c0 === C2[m] && (h < H2[m] || (h === H2[m] && l < L2[m])))))) {
-                V2[m] = v0; C2[m] = c0; H2[m] = h; L2[m] = l; bk[m] = -1;
+              if (beats(m, v0, g0, c0, h, l)) {
+                V2[m] = v0; G2[m] = g0; C2[m] = c0; H2[m] = h; L2[m] = l; bk[m] = -1;
               }
               for (let j = 0; j < nS; j++) {
                 if (m & (1 << j)) continue;
-                const k = m | (1 << j), v = v0 + sv[j], c = c0 + sc[j];
+                const k = m | (1 << j), v = v0 + sv[j], g = g0 + sg[j], c = c0 + sc[j];
                 l = l0 + sl[j];
-                if (V2[k] === Infinity || v < V2[k] || (v === V2[k] && (c < C2[k] || (c === C2[k] && (h0 < H2[k] || (h0 === H2[k] && l < L2[k])))))) {
-                  V2[k] = v; C2[k] = c; H2[k] = h0; L2[k] = l; bk[k] = j;
+                if (beats(k, v, g, c, h0, l)) {
+                  V2[k] = v; G2[k] = g; C2[k] = c; H2[k] = h0; L2[k] = l; bk[k] = j;
                 }
               }
             }
             let t;
-            t = V; V = V2; V2 = t; t = C; C = C2; C2 = t; t = H; H = H2; H2 = t; t = L; L = L2; L2 = t;
+            t = V; V = V2; V2 = t; t = G; G = G2; G2 = t; t = C; C = C2; C2 = t; t = H; H = H2; H2 = t; t = L; L = L2; L2 = t;
             back.push(bk);
           }
           const f = full - 1;
@@ -431,15 +483,16 @@
                 const a = Object.assign({}, assigned), t = Object.assign({}, taken);
                 if (l0) { a[l0] = c; t[c.id] = true; }
                 const ex = place(a, t, l0 ? c.id : null);
-                let viol = 0, v = 0, ti = 0, bo = 0, hp = 0;
+                let viol = 0, g = 0, v = 0, ti = 0, bo = 0, hp = 0;
                 for (const l in a) {
                   if (!ovIds[a[l].id] && !avOk(a[l].id, l)) viol++;
+                  g += handW(a[l], l);
                   const w = seatTie(a[l], l);
                   v += seatV(a[l], l) - w; ti += w;
                   if (bounceHit(a[l], l)) bo++;
                 }
                 for (let i = 0; i < ex.length; i++) hp += helperPen(ex[i]);
-                return { l: l0, a: a, t: t, ex: ex, viol: viol, v: v, ti: ti, bo: bo, hp: hp };
+                return { l: l0, a: a, t: t, ex: ex, viol: viol, g: g, v: v, ti: ti, bo: bo, hp: hp };
               };
               // 원칙 점수가 같으면: 헬퍼는 후임 — 그다음 원칙4(튕기기, 켰을 때만) — CRN 도 다른 사람도 쉬고 와서 전에 보던 방을
               // 다시 보는 사람이 적은 자리(남을 밀어내면서까지는 아니다) — 그다음 같은 점수에서 누가 잇는지(최근 → 선임).
@@ -452,9 +505,10 @@
               let natL = null;
               for (const l in nat.a) if (nat.a[l] === c) natL = l;
               // 정수 합(< 2^53)이라 같음 비교가 정확하다 — 사전식으로
-              // (금지 방, 원칙 점수, 헬퍼, 튕김, 누가 잇는지, 같은 자리 이름, 차지가 아닐 때 자리)
+              // (금지 방, 같은 그룹 인계, 원칙 점수, 헬퍼, 튕김, 누가 잇는지, 같은 자리 이름, 차지가 아닐 때 자리)
               const better = function (r, b) {
                 if (r.viol !== b.viol) return r.viol < b.viol;
+                if (r.g !== b.g) return r.g < b.g;
                 if (r.v !== b.v) return r.v > b.v;
                 if (r.hp !== b.hp) return r.hp < b.hp;
                 if (r.bo !== b.bo) return r.bo < b.bo;
@@ -507,7 +561,31 @@
           (byNurse[extra[i]] = byNurse[extra[i]] || {})[dk] = { period: P, label: null };
         }
         if (chargeId && byNurse[chargeId] && byNurse[chargeId][dk]) byNurse[chargeId][dk].charge = true;
-        (byDay[dk] = byDay[dk] || {})[P] = { labels: labelMap, extra: extra, charge: chargeId };
+        const out = { labels: labelMap, extra: extra, charge: chargeId };
+        // 피하지 못한 같은 그룹 인계 — 받은 사람·준 사람마다 병상 토큰
+        if (holders) {
+          const hv = [];
+          for (const l in assigned) {
+            const n = assigned[l];
+            if (!hGroups[n.id]) continue;
+            const by = {};
+            const rs = roomsByLabel[l] || [];
+            for (let i = 0; i < rs.length; i++)
+              (holders[rs[i]] || []).forEach(function (h) { if (sameGroup(h, n.id)) (by[h] = by[h] || []).push(rs[i]); });
+            for (const h in by) hv.push({ from: h, to: n.id, rooms: by[h] });
+          }
+          if (hv.length) out.handover = hv;
+        }
+        (byDay[dk] = byDay[dk] || {})[P] = out;
+        // 다음 근무의 '앞 근무' — 자리에 앉은 사람만 병상을 본다(헬퍼는 넘길 병상이 없다)
+        if (hOn) {
+          const hs = {};
+          for (const l in assigned) {
+            const rs = roomsByLabel[l] || [];
+            for (let i = 0; i < rs.length; i++) (hs[rs[i]] = hs[rs[i]] || []).push(assigned[l].id);
+          }
+          prevShift = { idx: idx, P: P, holders: hs };
+        }
       }
     }
     return { byDay: byDay, byNurse: byNurse };
