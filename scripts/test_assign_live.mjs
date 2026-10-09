@@ -139,7 +139,10 @@ function LIB() {
     for (const n of NOCHG) s.caps[n] = ['D', 'E', 'N'];
     // 간호사 그룹 — [이름, 그룹원, 인계 피하기] (갓 독립한 신규끼리 인계하지 않게. 꺼진 그룹·두 그룹에 든 사람도 섞는다)
     // 넷째 값이 참인 그룹은 수정이 건드리지 않는다 — 무작위 수정이 그룹을 다 꺼도 E8·V1 이 볼 인계가 남게
-    if (spec.groups) s.groups = spec.groups.map(([name, members, on], k) => ({ id: 'g' + (k + 1), name, members: members.slice(), noHandover: on }));
+    // 다섯째 값 {caps, bans} — 그룹원 가능 근무·주지 않을 방 (방은 병동마다 번호가 달라 자리 번호로 적고 병동을 정한 뒤 호실로)
+    if (spec.groups) s.groups = spec.groups.map(([name, members, on, , lim], k) => { const g = { id: 'g' + (k + 1), name, members: members.slice(), noHandover: on };
+      if (lim && lim.caps) g.caps = lim.caps.slice(); if (lim && lim.bans) g.bans = lim.bans.map(p => A.roomAtPos(p)).filter(Boolean); return g; });
+    if (spec.bans) for (const n in spec.bans) s.banRooms[n] = spec.bans[n].map(p => A.roomAtPos(p)).filter(Boolean);
     FIXEDG = new Set((spec.groups || []).map((g, k) => g[3] ? 'g' + (k + 1) : null).filter(Boolean));
     // 근무표 — 사흘씩 같은 사람이 같은 근무 (실제 근무표처럼 이어지는 날이 있어야 E7 이 볼 것이 있다)
     for (let b = 0; b * 3 < DAYS; b++) {
@@ -202,11 +205,21 @@ function LIB() {
     for (const [nm, lb] of t) if (labels.includes(lb) && !used.has(lb)) { out[nm] = lb; used.add(lb); }
     return out;
   }
+  /* 그 날의 그룹 — 고친 날 기록(groupLog): 그 날 이하의 마지막 기록, 마지막 기록 날부터는 지금 그룹. 앱의 groupsAt 을 쓰지 않고 따로 짠다 */
+  const GAt = iso => { const L = S().groupLog || []; let G = S().groups || [];
+    if (L.length && iso < L[L.length - 1].from) { G = L[0].groups; for (const x of L) if (x.from <= iso) G = x.groups; } return G; };
+  const ALL6 = ['DC', 'D', 'EC', 'E', 'NC', 'N'], isSU = n => !!(S().unit || {})[n];
+  // 그 날 가능 근무 = 개인 ∩ 그 날 든 그룹마다의 가능 근무 (다른 소속은 그룹을 쓰지 않는다)
+  const capsAtX = (n, iso) => { let c = S().caps[n] || ALL6; if (isSU(n)) return c;
+    for (const g of GAt(iso)) if (g.members.includes(n) && Array.isArray(g.caps)) c = c.filter(x => g.caps.includes(x)); return c; };
+  // 그 날 주지 않을 방(병상 키) = 개인 ∪ 그 날 든 그룹들
+  const bansAtX = (n, iso) => { const o = new Set(A.expandBeds((S().banRooms || {})[n] || []));
+    if (!isSU(n)) for (const g of GAt(iso)) if (g.members.includes(n)) for (const t of A.expandBeds(g.bans || [])) o.add(t); return [...o].sort(); };
   function expCharge(iso, P, W, pinned, float) {
     if (!float) { const h = Object.keys(pinned).find(n => pinned[n] === '차지'); if (h) return h; }
     const pool = float ? W : W.filter(n => !(n in pinned)), bySen = (a, b) => sen(a) - sen(b);
     const f = g => pool.filter(g).sort(bySen)[0];
-    return f(n => !isRel(n) && code(n, iso) === P + 'C') || f(n => !isRel(n) && A.capsOf(n).includes(P + 'C')) || pool.slice().sort(bySen)[0] || null;
+    return f(n => !isRel(n) && code(n, iso) === P + 'C') || f(n => !isRel(n) && capsAtX(n, iso).includes(P + 'C')) || pool.slice().sort(bySen)[0] || null;
   }
   const seatOf = (d, n) => Object.keys(d.labels).find(l => d.labels[l] === n) || (d.extra.includes(n) ? '헬퍼' : '없음');
   const fmtD = d => LBL.filter(l => d.labels[l]).map(l => l + ':' + d.labels[l]).join(' ') + (d.extra.length ? ' +' + d.extra.join(',') : '');
@@ -261,10 +274,7 @@ function LIB() {
     const wardNow = new Set(S().order.filter(n => !(S().unit || {})[n])), hgMemo = {};
     const HGat = iso => {
       if (hgMemo[iso]) return hgMemo[iso];
-      const L = S().groupLog || [];
-      let G = S().groups || [];
-      if (L.length && iso < L[L.length - 1].from) { G = L[0].groups; for (const x of L) if (x.from <= iso) G = x.groups; }
-      const HG = {};
+      const G = GAt(iso), HG = {};
       for (const g of G) {
         const ms = g.members.filter(m => wardNow.has(m));
         if (g.noHandover === true && ms.length >= 2) for (const m of ms) (HG[m] = HG[m] || []).push(g.id);
@@ -291,6 +301,8 @@ function LIB() {
       // 그룹원끼리 인계 피하기는 방 유지(원칙 1~3)보다 먼저다 — 어제 배치를 오늘 그대로 두면 같은 그룹 인계가 늘어나는 날은 옮겨도 맞다
       const HG1 = HGat(ISOS[i + 1]);
       if (handCost(info, HG1, a.d.labels, ISOS[i + 1], P) > handCost(info, HG1, b.d.labels, ISOS[i + 1], P)) continue;
+      // 주지 않을 방은 날마다(그룹을 고친 날부터) — 둘째 날 주지 않을 방이 다르면 자리를 옮겨도 맞다
+      if (a.W.some(n => bansAtX(n, ISOS[i]).join() !== bansAtX(n, ISOS[i + 1]).join())) continue;
       // 새 차지가 어제 종이 밖 자리(양식 줄을 넘는 자리)였으면 종이로 올라와야 한다 — 그 사람과 밀려나는 한 사람만 옮긴다
       const nc = b.d.charge, ncSeat = Object.keys(a.d.labels).find(l => a.d.labels[l] === nc);
       const moved = a.W.filter(n => seatOf(a.d, n) !== seatOf(b.d, n));
@@ -512,7 +524,31 @@ function LIB() {
       // 고친 날 = 수정을 고른 날 — 그 날부터 바뀌고 앞 날 배정은 그대로여야 한다(E8 이 날마다 그 날 그룹으로 견준다, 아래 O11)
       const g0 = JSON.stringify(S().groups), past = ISOS.filter(x => x < iso), pastRes = JSON.stringify(past.map(x => A.result.byDay[x]));
       A.setToday(iso);
-      if (R() < 0.5) {
+      const gk = R();
+      if (gk >= 0.7) {
+        // 그룹 표 — 그룹원 가능 근무 칩(0.7~0.85) 또는 그룹원 주지 않을 방 ＋ → 방 고르기 창에서 방 하나(0.85~)
+        A.show('admin'); A.pickAdmin('caps'); await sleep(5);
+        if (gk < 0.85) {
+          const b = pick([...document.querySelectorAll('#adminPanelBox .grpTable .gcap')]);
+          const m = b && (b.getAttribute('onclick') || '').match(/toggleGroupCap[(]'([^']+)','([^']+)'[)]/);
+          if (!m) { fails.push('O0 그룹 표에 가능 근무 칩이 없다'); A.show('week'); return { desc: '그룹 가능 근무 (없음)', fails, ctx }; }
+          const was = (A.groupById(m[1]).caps || ALL6).includes(m[2]);
+          b.click(); await sleep(10);
+          desc = `그룹 ${A.groupById(m[1]).name} 가능 근무 ${m[2]} ${was ? '끄기' : '켜기'}`;
+          if ((A.groupById(m[1]).caps || ALL6).includes(m[2]) === was) fails.push(`O10 ${desc} 칩을 눌렀는데 그대로`);
+        } else {
+          const add = pick([...document.querySelectorAll('#adminPanelBox .grpTable .gBans .addChip.banBtn')]);
+          const id = add && ((add.getAttribute('onclick') || '').match(/id:'([^']+)'/) || [])[1];
+          if (!id) { fails.push('O0 그룹 표에 주지 않을 방 ＋ 가 없다'); A.show('week'); return { desc: '그룹 주지 않을 방 (없음)', fails, ctx }; }
+          add.click(); await sleep(5);
+          const rb = pick([...document.querySelectorAll('#rpick .rpRoom > button:first-child')]);
+          const was = JSON.stringify(A.groupById(id).bans || []);
+          if (rb) { rb.click(); await sleep(10); }
+          A.closeRoomPick();
+          desc = `그룹 ${A.groupById(id).name} 주지 않을 방 ${rb ? rb.textContent : '?'} (${was} → ${JSON.stringify(A.groupById(id).bans || [])})`;
+          if (!rb || JSON.stringify(A.groupById(id).bans || []) === was) fails.push(`O10 ${desc} 방을 눌렀는데 그대로`);
+        }
+      } else if (gk < 0.35) {
         A.show('admin'); A.pickAdmin('rules'); await sleep(5);
         const inp = pick([...document.querySelectorAll('#adminPanelBox .grpRules .rulRow[data-g] .sw input')].filter(x => !FIXEDG.has(x.closest('.rulRow').dataset.g)));
         if (!inp) { fails.push('O0 배정 원칙에 그룹 스위치가 없다'); A.show('week'); return { desc: '그룹 스위치 (없음)', fails, ctx }; }
@@ -618,11 +654,29 @@ function LIB() {
     return { desc, fails, ctx };
   }
 
+  /* E9 — 엔진에 넘긴 주지 않을 방(opts.avoid) = 근무표·방 구성에서 따로 센 것: 그 날 근무자마다 개인 ∪ 그 날 그룹의 주지 않을 방이
+   * 든 자리. 앱의 bansAt 을 쓰지 않는다 (그룹을 고친 날부터 — 지난 날은 그때 그룹) */
+  function checkAvoid(out) {
+    const orig = CORE.compute; let got = null;
+    CORE.compute = (...a) => { got = (a[3] || {}).avoid || null; return orig(...a); };
+    try { A.recompute(); } finally { CORE.compute = orig; }
+    for (const iso of ISOS) for (const P of P3) {
+      const W = workers(iso, P); if (!W.length) continue;
+      const labels = LBL.slice(0, Math.min(W.length, A.seatsFor(P)));
+      for (const n of W) {
+        const bk = bansAtX(n, iso);
+        const want = bk.length ? labels.filter(l => bedRooms(P, W.length, l, iso).some(t => bk.includes(t))) : [];
+        const have = ((((got || {})[iso] || {})[P] || {})[n] || []).slice();
+        if (want.slice().sort().join() !== have.sort().join()) out.push(`E9 ${iso} ${P} ${n} 주지 않을 방 자리 — 엔진에 ${have.join(',') || '없음'} · 따로 센 것 ${want.join(',') || '없음'}`);
+      }
+    }
+  }
   async function check(r) {
     const out = [];
     // 양식을 읽는 중이면 다 읽고 다시 계산·그린 뒤에 본다 (loadTemplate 이 자리 이름·차지 자리를 알면 setTimeout 으로 다시 그린다)
     await A.loadTemplate(); await sleep(10);
     checkEngine(out);
+    checkAvoid(out);
     const wk = r && r.ctx ? r.ctx.wk : 0, dayIso = r && r.ctx ? r.ctx.iso : ISOS[0];
     await checkViews(out, wk, dayIso);
     return out;
@@ -635,10 +689,11 @@ const SPECS = [
   // groups — 간호사 그룹 [이름, 그룹원, 인계 피하기, 고정]. 그룹이 있으면 수정에 그룹 스위치·칩 누르기가 섞이고 E7 은 그룹 인계 예외를 본다.
   // 고정(넷째 값)인 그룹은 수정이 건드리지 않는다 — 켠 그룹이 늘 하나는 남아 E8·V1 이 볼 인계가 있다
   { key: '101', form: '101', cnt: { D: [4, 5], E: [4, 5], N: [2, 3] },
-    groups: [['신규 독립', ['아간호', '자간호', '차간호', '카간호'], true, true], ['복직', ['나간호', '타간호'], true]] },
+    groups: [['신규 독립', ['아간호', '자간호', '차간호', '카간호'], true, true, { caps: ['D', 'E', 'N'], bans: [1] }], ['복직', ['나간호', '타간호'], true]],
+    bans: { '가간호': [3] } },
   { key: '122', form: '122', cnt: { D: [5, 6], E: [4, 5], N: [2, 3] } },
   { key: '102', form: '102', cnt: { D: [3, 5], E: [3, 4], N: [2, 3] },
-    groups: [['신규 독립', ['바간호', '아간호', '자간호', '타간호'], true], ['야간 전담', ['다간호', '라간호'], false], ['복직', ['타간호', '카간호'], true, true]] },
+    groups: [['신규 독립', ['바간호', '아간호', '자간호', '타간호'], true], ['야간 전담', ['다간호', '라간호'], false, false, { caps: ['NC', 'N'] }], ['복직', ['타간호', '카간호'], true, true, { bans: [2] }]] },
   { key: '82', form: '82', su: true, cnt: { D: [2, 3], E: [2, 3], N: [1, 2] } },
   { key: '102 옛 양식(D(CRN) 맨 아래)', form: '102', up: 'oldCrn', cnt: { D: [3, 5], E: [3, 4], N: [2, 3] } },
   { key: '101 올린 양식(CN 이 둘째 줄)', form: '101', up: 'cn2', cnt: { D: [4, 5], E: [4, 5], N: [2, 3] } },
