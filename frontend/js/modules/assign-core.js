@@ -51,6 +51,8 @@
  *  피하지 못한 인계는 결과의 byDay[dk][P].handover = [{from, to, rooms}] 로 알린다.
  *  '전날' 은 dateKeys 의 바로 앞 칸이다(원칙 1 과 같다) — dateKeys 는 하루씩 이어져야 하고, 빈 날이 있으면 그 앞 날 N 을 전날로 본다.
  *  dateKeys[0] 의 D 에는 앞 근무가 없다 — opts.seed(전월 이월)는 이어 보기의 시작점일 뿐 앞 근무 인계로 치지 않는다.
+ *  (dateKey)=>{간호사: [그룹]} 함수로 주면 날마다 그 날의 그룹을 쓴다 — 그룹원을 넣고 뺀 날부터 바뀌고 지난 날 배정은 그대로
+ *  (2026-10-09 사용자 '고친 날부터'). 인계는 **받는 근무의 날** 그룹으로 잰다(N→D 면 다음 날 아침의 그룹).
  * ─────────────────────────────────────────────────────────────────────────── */
 (function (root) {
   const PERIOD_CODES = { D: ['DC', 'D'], E: ['EC', 'E'], N: ['NC', 'N'] };
@@ -127,7 +129,8 @@
    *                  roomsFor:(P,cnt,label,dateKey)=>[방 토큰],  ← 주면 방 기준 연속성
    *                  maxSeats: 숫자 또는 (P,cnt,dateKey)=>숫자  ← 자리 수(1~6, 기본 5)
    *                  chargeSeats:(P,cnt,dateKey)=>[라벨]|null  ← 주면 차지가 그 자리 중 한 곳에 (방이 고정이 아닌 차지)
-   *                  handoverGroups:{nurseId:[그룹]}  ← 주면 같은 그룹끼리 앞 근무의 병상을 넘겨받지 않게 (주지 않을 방 다음, 원칙 1~3 보다 먼저)}
+   *                  handoverGroups:{nurseId:[그룹]} 또는 (dateKey)=>{nurseId:[그룹]}  ← 주면 같은 그룹끼리 앞 근무의 병상을 넘겨받지 않게
+   *                                  (주지 않을 방 다음, 원칙 1~3 보다 먼저. 함수면 받는 근무의 날 그룹)}
    * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId], charge:nurseId,
    *                        handover?:[{from:nurseId, to:nurseId, rooms:[방 토큰]}]}}},  ← 피하지 못한 같은 그룹 인계
    *           byNurse:{nurseId:{dk:{period,label,charge?:true}}}}
@@ -150,13 +153,21 @@
     };
     const byDay = {}, byNurse = {};
     const lastSeen = {}; // nurseId -> {label, idx, period, rooms}
-    // 그룹 인계 피하기 — 같은 그룹(하나라도 겹치면) 다른 사람끼리만. 그룹이 없으면 아무 일도 하지 않는다
-    const hGroups = {};
-    let hOn = false;
-    if (opts.handoverGroups && roomsFor) for (const nid in opts.handoverGroups) {
-      const g = [].concat(opts.handoverGroups[nid] || []).map(String).filter(Boolean);
-      if (g.length) { hGroups[nid] = g; hOn = true; }
-    }
+    // 그룹 인계 피하기 — 같은 그룹(하나라도 겹치면) 다른 사람끼리만. 그룹이 없으면 아무 일도 하지 않는다.
+    // 함수로 주면 날마다 그 날의 그룹을 쓴다(그룹원을 넣고 뺀 날부터 바뀌게, 2026-10-09 사용자) — 인계는 받는 근무의 날 그룹으로 잰다
+    const normGroups = function (src) {
+      const m = {};
+      let on = false;
+      if (src) for (const nid in src) {
+        const g = [].concat(src[nid] || []).map(String).filter(Boolean);
+        if (g.length) { m[nid] = g; on = true; }
+      }
+      return on ? m : null;
+    };
+    const hgFn = roomsFor && typeof opts.handoverGroups === 'function' ? opts.handoverGroups : null;
+    const hgFixed = roomsFor && !hgFn ? normGroups(opts.handoverGroups) : null;
+    let hGroups = hgFixed || {};
+    const hOn = !!(hgFn || hgFixed);
     const sameGroup = function (a, b) {
       if (a === b || !hGroups[a] || !hGroups[b]) return false;
       for (let i = 0; i < hGroups[a].length; i++) if (hGroups[b].indexOf(hGroups[a][i]) >= 0) return true;
@@ -177,6 +188,7 @@
 
     for (let idx = 0; idx < dateKeys.length; idx++) {
       const dk = dateKeys[idx];
+      if (hgFn) hGroups = normGroups(hgFn(dk)) || {};
       for (const P in PERIOD_CODES) {
         const staff = nurses.filter(function (n) {
           return periodOf((schedule[n.id] || {})[dk]) === P;

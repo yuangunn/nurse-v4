@@ -843,6 +843,17 @@ assert.equal(periodOf('OF'), null);
     assert.deepEqual(compute(NS, sch1, days4, Object.assign({ handoverGroups: {} }, o1)), off, '그룹 목록이 비었다');
     assert.deepEqual(compute(NS, sch1, days4, { seed: seed1, handoverGroups: NEW }), compute(NS, sch1, days4, { seed: seed1 }),
       '방 정보가 없으면 아무 일도 하지 않는다');
+    assert.deepEqual(compute(NS, sch1, days4, { seed: seed1, handoverGroups: () => NEW }), compute(NS, sch1, days4, { seed: seed1 }),
+      '함수로 줘도 방 정보가 없으면 아무 일도 하지 않는다');
+
+    // 날마다 그룹 (함수) — 그룹원을 넣은 날(d3)부터만 피한다. 그 전 날은 그룹 없을 때와 같다
+    const from3 = compute(NS, sch1, days4, Object.assign({ handoverGroups: (dk) => (dk >= 'd3' ? NEW : {}) }, o1));
+    assert.deepEqual(days4.map(dk => seatOf(from3, dk, 'E', '신2')), ['B', 'B', 'A', 'A'], '넣은 날부터 옮긴다');
+    for (const dk of ['d1', 'd2']) assert.deepEqual(from3.byDay[dk], off.byDay[dk], dk + ' 넣기 전 날은 그대로');
+    // 뺀 날(d3)부터는 피하지 않는다 — 옮긴 자리(A)를 이어 본다(원칙 1), 인계 보고도 없다
+    const until2 = compute(NS, sch1, days4, Object.assign({ handoverGroups: (dk) => (dk < 'd3' ? NEW : {}) }, o1));
+    assert.deepEqual(days4.map(dk => seatOf(until2, dk, 'E', '신2')), ['A', 'A', 'A', 'A']);
+    for (const dk of days4) assert.equal(until2.byDay[dk].E.handover, undefined);
   }
 
   // ② 주지 않을 방 > 같은 그룹 인계 > 원칙 1 — ① 의 첫날 신2 에게 A 가 주지 않을 방이면 신2 는 B 에 남고 인계를 알린다.
@@ -895,6 +906,9 @@ assert.equal(periodOf('OF'), null);
     assert.equal(seatOf(on2, 'd1', 'N', '신1'), 'B');
     assert.deepEqual(on2.byDay.d2.D.labels, { 차지: '다', A: '신2', B: '라' }, '전날 밤 신1 의 병상을 피한다');
     assert.equal(seatOf(on2, 'd2', 'N', '신1'), 'B', '신1 은 밤에 B 를 이어 본다 (d2 E 가 비어 N 의 앞 근무가 없다)');
+    // 날마다 그룹이면 N→D 는 **받는 날(d2)** 의 그룹으로 — d2 에 그룹이면 피하고, d1 에만 그룹이면 피하지 않는다
+    assert.deepEqual(compute(NS, nd, ['d1', 'd2'], { roomsFor: rf3, handoverGroups: (dk) => (dk === 'd2' ? NEW : {}) }).byDay.d2.D, on2.byDay.d2.D);
+    assert.deepEqual(compute(NS, nd, ['d1', 'd2'], { roomsFor: rf3, handoverGroups: (dk) => (dk === 'd1' ? NEW : {}) }).byDay.d2.D, off2.byDay.d2.D);
   }
 
   // ⑤ 그룹 맞추기 — 그룹이 여럿이면 하나라도 같을 때만 같은 그룹. 다른 그룹끼리·그룹 없는 사람은 피하지 않는다
@@ -1066,7 +1080,7 @@ assert.equal(periodOf('OF'), null);
   const ri = (n) => Math.floor(rnd() * n);
   const PREV = { D: 'N', E: 'D', N: 'E' };
   const ids = Array.from({ length: 12 }, (_, i) => 'n' + i);
-  let shifts = 0, withHolders = 0, moved = 0, reported = 0;
+  let shifts = 0, withHolders = 0, moved = 0, reported = 0, datedShifts = 0;
   for (let trial = 0; trial < 80; trial++) {
     const NS = ids.map((id, i) => N(id, i, i < 5 || rnd() < 0.2));
     const days = ['k0', 'k1', 'k2', 'k3', 'k4'];
@@ -1081,6 +1095,19 @@ assert.equal(periodOf('OF'), null);
     // 그룹: 없음 · g1 · g2 · 둘 다 — 신규가 많은 병동처럼 절반쯤
     const groups = {};
     for (const id of ids) { const k = ri(5); if (k === 1 || k === 2) groups[id] = ['g1']; else if (k === 3) groups[id] = ['g2']; else if (k === 4) groups[id] = ['g1', 'g2']; }
+    // 셋 중 하나는 날마다 그룹이 바뀐다(함수로 넘긴다 — 그룹원을 넣고 뺀 날부터). 인계는 받는 근무의 날 그룹으로 잰다
+    const dated = trial % 3 === 2, dayG = {};
+    if (dated) {
+      let cur = groups;
+      for (const dk of days) {
+        if (rnd() < 0.5) {
+          cur = Object.assign({}, cur);
+          for (let k = 0; k < 3; k++) { const id = ids[ri(12)], x = ri(4); if (!x) delete cur[id]; else cur[id] = [['g1'], ['g2'], ['g1', 'g2']][x - 1]; }
+        }
+        dayG[dk] = cur;
+      }
+    }
+    const G = (dk) => (dated ? dayG[dk] : groups);
     // 방 구성: 근무·인원·날마다 1~14호를 자리 수만큼 자른다 (자리 경계가 근무마다 달라 조금씩 겹친다)
     const lay = {};
     const roomsFor = (P, cnt, l, dk) => {
@@ -1105,16 +1132,18 @@ assert.equal(periodOf('OF'), null);
     const base = { roomsFor, bedsOf, avoid, overrides, seed: {} };
     if (floating) base.chargeSeats = floating;
     const off = compute(NS, sch, days, base);
-    const r = compute(NS, sch, days, Object.assign({ handoverGroups: groups }, base));
+    const r = compute(NS, sch, days, Object.assign({ handoverGroups: dated ? (dk) => dayG[dk] : groups }, base));
+    if (!dated) assert.deepEqual(compute(NS, sch, days, Object.assign({ handoverGroups: () => groups }, base)), r, '함수로 줘도 날마다 같은 그룹이면 그대로');
     const solo = {}; ids.forEach(id => (solo[id] = ['혼자' + id]));
     assert.deepEqual(compute(NS, sch, days, Object.assign({ handoverGroups: solo }, base)), off, '겹치는 그룹이 없으면 그대로');
-    const same = (a, b) => a !== b && groups[a] && groups[b] && groups[a].some(g => groups[b].includes(g));
+    assert.deepEqual(compute(NS, sch, days, Object.assign({ handoverGroups: () => solo }, base)), off, '함수로 줘도 겹치는 그룹이 없으면 그대로');
+    const same = (a, b, dk) => { const g = G(dk); return a !== b && g[a] && g[b] && g[a].some(x => g[b].includes(x)); };
 
     days.forEach((dk, di) => {
       for (const P of ['D', 'E', 'N']) {
         const staff = NS.filter(n => periodOf(sch[n.id][dk]) === P);
         if (!staff.length) continue;
-        shifts++;
+        shifts++; if (dated) datedShifts++;
         const day = r.byDay[dk][P], cnt = staff.length;
         const labels = LABELS.slice(0, Math.min(cnt, 5));
         assert.deepEqual(Object.values(day.labels).concat(day.extra).sort(), staff.map(n => n.id).sort(), dk + P + ' 모두 한 번씩');
@@ -1133,7 +1162,7 @@ assert.equal(periodOf('OF'), null);
           for (const l in prev.labels) for (const t of roomsFor(pP, pc, l, pdk)) (hold[t] = hold[t] || []).push(prev.labels[l]);
           withHolders++;
         }
-        const hw = (id, l) => roomsFor(P, cnt, l, dk).reduce((s, t) => s + ((hold[t] || []).some(h => same(h, id)) ? bedsOf(t) : 0), 0);
+        const hw = (id, l) => roomsFor(P, cnt, l, dk).reduce((s, t) => s + ((hold[t] || []).some(h => same(h, id, dk)) ? bedsOf(t) : 0), 0);
         const av = (avoid[dk] || {})[P] || {};
         const cost = (asg) => {   // asg: {label: id}
           let v = 0, g = 0;
@@ -1168,7 +1197,7 @@ assert.equal(periodOf('OF'), null);
         const want = [];
         for (const l in day.labels) {
           const to = day.labels[l], by = {};
-          for (const t of roomsFor(P, cnt, l, dk)) for (const h of hold[t] || []) if (same(h, to)) (by[h] = by[h] || []).push(t);
+          for (const t of roomsFor(P, cnt, l, dk)) for (const h of hold[t] || []) if (same(h, to, dk)) (by[h] = by[h] || []).push(t);
           for (const h in by) want.push({ from: h, to, rooms: by[h] });
         }
         const key = (x) => x.from + '>' + x.to;
@@ -1178,7 +1207,7 @@ assert.equal(periodOf('OF'), null);
       }
     });
   }
-  assert.ok(shifts > 900 && withHolders > 600, '충분히 돌았다 ' + shifts + '/' + withHolders);
+  assert.ok(shifts > 900 && withHolders > 600 && datedShifts > 250, '충분히 돌았다 ' + shifts + '/' + withHolders + '/' + datedShifts);
   assert.ok(moved > 30 && reported > 30, '그룹이 실제로 자리를 바꾸고 · 피하지 못한 인계도 나온다 ' + moved + '/' + reported);
 }
 
