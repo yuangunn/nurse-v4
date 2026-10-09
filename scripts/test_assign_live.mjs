@@ -14,6 +14,7 @@
 //   E6 차지 자리가 고정이면 차지는 그 자리   E6f 차지가 자리에 안 묶여도 종이에 찍히는 자리에 (손 안 탄 종이 자리가 남았으면)
 //   E7 이틀 연속 같은 사람이면 자리도 같다 (차지가 자리에 안 묶이면 차지가 바뀌어도; 어제 배치가 오늘 같은 그룹 인계를 더 늘리면 예외)
 //   E8 같은 그룹 인계 보고(byDay.handover) = 앞 근무(D ← 전날 N, E ← D, N ← E)의 병상을 같은 그룹이 넘겨받은 것 — 근무표에서 따로 세어 견준다
+//      (그룹은 그 날의 그룹 — 그룹 수정은 고른 날을 '오늘'로 하고, O11 그 전 날 배정은 그대로)
 //   V1 확인 카드의 '같은 그룹 인계' 줄 = 엔진이 알린 인계 (사람 짝·날 수)
 //   S  화면 줄 = 엔진 자리, /CRN 은 차지가 자리에 안 묶일 때 차지에게만
 //   X  엑셀 = 화면 (자리 이름 줄마다 같은 사람), 엑셀 /CRN 은 서식이 찍을 때(102 모양)만, 신규 줄은 /CRN 뒤,
@@ -108,7 +109,7 @@ function LIB() {
   const S = () => A.store;
   const code = (n, iso) => { const pc = A.parseCellRaw(((S().cells[n] || {})[iso]) || ''); return pc && pc.code || ''; };
   let FIXEDG = new Set();
-  const stateKey = () => JSON.stringify([S().cells, S().ovr, S().ovrPair, S().relief, S().trOv, S().trainee, S().groups]);
+  const stateKey = () => JSON.stringify([S().cells, S().ovr, S().ovrPair, S().relief, S().trOv, S().trainee, S().groups, S().groupLog]);
 
   /* ── 장면 만들기 ── */
   async function setup(spec, seed) {
@@ -116,7 +117,8 @@ function LIB() {
     const s = S();
     Object.assign(s, { formId: '101', order: WARD.concat(spec.su ? SU : [], [TR]), cells: {}, ovr: {}, ovrPair: {}, roomOv: {}, roomOvCnt: {},
       presetDay: {}, presetPlan: {}, presets: {}, seedManual: {}, unit: {}, relief: {}, trainee: {}, trOv: {}, evRules: [], daily: {},
-      banRooms: {}, caps: {}, hidden: {}, newUntil: {}, forms: {}, groups: [] });
+      banRooms: {}, caps: {}, hidden: {}, newUntil: {}, forms: {}, groups: [], groupLog: [] });
+    A.setToday(null);
     s.rules = { keepSameShift: true, keepAcrossShift: true, keepAfterOff: true, bounceAfterOff: false };
     A.store = s;
     if (spec.ward) A.setWard(spec.ward); else { A.setFormId(spec.form); A.setWard(spec.form); }
@@ -254,15 +256,24 @@ function LIB() {
       info[iso + P] = { W, d, pinned, labels };
     }
     // E8 — 엔진이 알린 같은 그룹 인계 = 근무표에서 센 인계 (켠 그룹, 병동 간호사만 — 대체간호사·다른 소속은 그룹에 들지 않는다)
-    // 앱의 handoverGroupsOf 를 쓰지 않고 따로 짠다 — 켠 그룹 중 병동 간호사(다른 소속 아님)가 둘 이상인 그룹의 그룹원
-    const HG = {}, wardNow = new Set(S().order.filter(n => !(S().unit || {})[n]));
-    for (const g of S().groups || []) {
-      const ms = g.members.filter(m => wardNow.has(m));
-      if (g.noHandover === true && ms.length >= 2) for (const m of ms) (HG[m] = HG[m] || []).push(g.id);
-    }
+    // 앱의 handoverGroupsOf 를 쓰지 않고 따로 짠다 — 그 날의 그룹(고친 날 기록 groupLog: 그 날 이하의 마지막 기록, 마지막 기록 날부터는 지금 그룹)에서
+    // 켠 그룹 중 병동 간호사(다른 소속 아님)가 둘 이상인 그룹의 그룹원. 인계는 받는 근무의 날 그룹으로 잰다
+    const wardNow = new Set(S().order.filter(n => !(S().unit || {})[n])), hgMemo = {};
+    const HGat = iso => {
+      if (hgMemo[iso]) return hgMemo[iso];
+      const L = S().groupLog || [];
+      let G = S().groups || [];
+      if (L.length && iso < L[L.length - 1].from) { G = L[0].groups; for (const x of L) if (x.from <= iso) G = x.groups; }
+      const HG = {};
+      for (const g of G) {
+        const ms = g.members.filter(m => wardNow.has(m));
+        if (g.noHandover === true && ms.length >= 2) for (const m of ms) (HG[m] = HG[m] || []).push(g.id);
+      }
+      return (hgMemo[iso] = HG);
+    };
     for (const k in info) {
       const iso = k.slice(0, 10), P = k.slice(10), d = info[k].d;
-      const want = handovers(info, HG, d.labels, iso, P), got = {};
+      const want = handovers(info, HGat(iso), d.labels, iso, P), got = {};
       for (const h of d.handover || []) (got[h.from + '→' + h.to] = got[h.from + '→' + h.to] || []).push(...h.rooms);
       const fmt = o => Object.keys(o).sort().map(x => x + ':' + o[x].slice().sort().join(',')).join(' ; ');
       if (fmt(want) !== fmt(got)) out.push(`E8 ${iso} ${P} 같은 그룹 인계 — 엔진 ${fmt(got) || '없음'} · 근무표로 센 것 ${fmt(want) || '없음'} (${fmtD(d)})`);
@@ -278,7 +289,8 @@ function LIB() {
       if (a.labels.some(l => A.roomsFor(P, cnt, l, ISOS[i]) !== A.roomsFor(P, cnt, l, ISOS[i + 1]))) continue;
       if (fmtD(a.d) === fmtD(b.d)) continue;
       // 그룹원끼리 인계 피하기는 방 유지(원칙 1~3)보다 먼저다 — 어제 배치를 오늘 그대로 두면 같은 그룹 인계가 늘어나는 날은 옮겨도 맞다
-      if (handCost(info, HG, a.d.labels, ISOS[i + 1], P) > handCost(info, HG, b.d.labels, ISOS[i + 1], P)) continue;
+      const HG1 = HGat(ISOS[i + 1]);
+      if (handCost(info, HG1, a.d.labels, ISOS[i + 1], P) > handCost(info, HG1, b.d.labels, ISOS[i + 1], P)) continue;
       // 새 차지가 어제 종이 밖 자리(양식 줄을 넘는 자리)였으면 종이로 올라와야 한다 — 그 사람과 밀려나는 한 사람만 옮긴다
       const nc = b.d.charge, ncSeat = Object.keys(a.d.labels).find(l => a.d.labels[l] === nc);
       const moved = a.W.filter(n => seatOf(a.d, n) !== seatOf(b.d, n));
@@ -496,8 +508,10 @@ function LIB() {
     }
     else if (kind === 'prune') { A.show('admin'); A.pickAdmin('manual'); A.pruneOvr(); A.show('week'); desc = '효력 없는 교체 지우기'; }
     else if (kind === 'grp') {
-      // 간호사 그룹 — 배정 원칙의 스위치를 누르거나(인계 피하기 켜고 끄기) 간호사 관리의 그룹 칩을 누른다(그룹원 넣고 빼기)
-      const g0 = JSON.stringify(S().groups);
+      // 간호사 그룹 — 배정 원칙의 스위치를 누르거나(인계 피하기 켜고 끄기) 간호사 관리의 그룹 칩을 누른다(그룹원 넣고 빼기).
+      // 고친 날 = 수정을 고른 날 — 그 날부터 바뀌고 앞 날 배정은 그대로여야 한다(E8 이 날마다 그 날 그룹으로 견준다, 아래 O11)
+      const g0 = JSON.stringify(S().groups), past = ISOS.filter(x => x < iso), pastRes = JSON.stringify(past.map(x => A.result.byDay[x]));
+      A.setToday(iso);
       if (R() < 0.5) {
         A.show('admin'); A.pickAdmin('rules'); await sleep(5);
         const inp = pick([...document.querySelectorAll('#adminPanelBox .grpRules .rulRow[data-g] .sw input')].filter(x => !FIXEDG.has(x.closest('.rulRow').dataset.g)));
@@ -518,6 +532,7 @@ function LIB() {
         if (A.groupById(m[1]).members.includes(m[2]) === was) fails.push(`O10 ${desc} 칩을 눌렀는데 그대로`);
       }
       if (JSON.stringify(S().groups) === g0) fails.push(`O10 ${desc} — 그룹이 그대로`);
+      if (JSON.stringify(past.map(x => A.result.byDay[x])) !== pastRes) fails.push(`O11 ${desc} (${iso}) — 그 전 날 배정이 바뀌었다`);
       A.show('week');
     }
     else if (kind === 'addOff' || kind === 'relief') {

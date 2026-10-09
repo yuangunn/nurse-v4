@@ -1311,7 +1311,8 @@
    *                  roomsFor:(P,cnt,label,dateKey)=>[방 토큰],  ← 주면 방 기준 연속성
    *                  maxSeats: 숫자 또는 (P,cnt,dateKey)=>숫자  ← 자리 수(1~6, 기본 5)
    *                  chargeSeats:(P,cnt,dateKey)=>[라벨]|null  ← 주면 차지가 그 자리 중 한 곳에 (방이 고정이 아닌 차지)
-   *                  handoverGroups:{nurseId:[그룹]}  ← 주면 같은 그룹끼리 앞 근무의 병상을 넘겨받지 않게 (주지 않을 방 다음, 원칙 1~3 보다 먼저)}
+   *                  handoverGroups:{nurseId:[그룹]} 또는 (dateKey)=>{nurseId:[그룹]}  ← 주면 같은 그룹끼리 앞 근무의 병상을 넘겨받지 않게
+   *                                  (주지 않을 방 다음, 원칙 1~3 보다 먼저. 함수면 받는 근무의 날 그룹)}
    * @returns {byDay:{dk:{P:{labels:{label:nurseId}, extra:[nurseId], charge:nurseId,
    *                        handover?:[{from:nurseId, to:nurseId, rooms:[방 토큰]}]}}},  ← 피하지 못한 같은 그룹 인계
    *           byNurse:{nurseId:{dk:{period,label,charge?:true}}}}
@@ -1334,13 +1335,21 @@
     };
     const byDay = {}, byNurse = {};
     const lastSeen = {}; // nurseId -> {label, idx, period, rooms}
-    // 그룹 인계 피하기 — 같은 그룹(하나라도 겹치면) 다른 사람끼리만. 그룹이 없으면 아무 일도 하지 않는다
-    const hGroups = {};
-    let hOn = false;
-    if (opts.handoverGroups && roomsFor) for (const nid in opts.handoverGroups) {
-      const g = [].concat(opts.handoverGroups[nid] || []).map(String).filter(Boolean);
-      if (g.length) { hGroups[nid] = g; hOn = true; }
-    }
+    // 그룹 인계 피하기 — 같은 그룹(하나라도 겹치면) 다른 사람끼리만. 그룹이 없으면 아무 일도 하지 않는다.
+    // 함수로 주면 날마다 그 날의 그룹을 쓴다(그룹원을 넣고 뺀 날부터 바뀌게, 2026-10-09 사용자) — 인계는 받는 근무의 날 그룹으로 잰다
+    const normGroups = function (src) {
+      const m = {};
+      let on = false;
+      if (src) for (const nid in src) {
+        const g = [].concat(src[nid] || []).map(String).filter(Boolean);
+        if (g.length) { m[nid] = g; on = true; }
+      }
+      return on ? m : null;
+    };
+    const hgFn = roomsFor && typeof opts.handoverGroups === 'function' ? opts.handoverGroups : null;
+    const hgFixed = roomsFor && !hgFn ? normGroups(opts.handoverGroups) : null;
+    let hGroups = hgFixed || {};
+    const hOn = !!(hgFn || hgFixed);
     const sameGroup = function (a, b) {
       if (a === b || !hGroups[a] || !hGroups[b]) return false;
       for (let i = 0; i < hGroups[a].length; i++) if (hGroups[b].indexOf(hGroups[a][i]) >= 0) return true;
@@ -1361,6 +1370,7 @@
 
     for (let idx = 0; idx < dateKeys.length; idx++) {
       const dk = dateKeys[idx];
+      if (hgFn) hGroups = normGroups(hgFn(dk)) || {};
       for (const P in PERIOD_CODES) {
         const staff = nurses.filter(function (n) {
           return periodOf((schedule[n.id] || {})[dk]) === P;
@@ -2020,7 +2030,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261009k'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261009n'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -2134,6 +2144,7 @@ function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{}
   daily:{},       // 하루 어싸인표 {날짜:{notes?:공지,duty?:{칸:글자}}} — 이 날만 고친 공지·적은 당직. 양식은 store.dayForm {name,b64,savedAt} (2026-09-27)
   roomOvCnt:{},   // 그날 방 수정을 한 인원수 {날짜:{근무:{자리:인원}}} — 인원이 바뀐 날엔 그 수정을 쓰지 않는다 (2026-10-01, roomOvOn)
   groups:[],      // 간호사 그룹 [{id,name,members:[이름],noHandover}] — noHandover 면 그룹원끼리 앞 근무의 병상을 넘겨받지 않게 (2026-10-09, handoverGroupsOf)
+  groupLog:[],    // 그룹을 고친 날 기록 [{from:'YYYY-MM-DD',groups}] — 고친 날부터 바뀌고 지난 배정은 그대로 (groupsAt, noteGroups)
   rules:{keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false}}; }
 const capsOf=n=>store.caps[n]||ALL_CAPS;
 /* 새로 들어온 간호사의 가능 근무 — 명부에 가능 근무를 정해 둔 병동이면 차지(DC·EC·NC)는 빼고 넣는다. 정해 둔 것이 없는 병동(처음 시작)은
@@ -2223,6 +2234,7 @@ function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무
   // 간호사 그룹 (2026-10-09) — 옛 파일은 빈 목록. 손으로 고친 파일도 모양을 맞춘다: 이름 없는 그룹은 '그룹', 같은 id 는 새로,
   // 그룹원은 명부에 있는 이름만 한 번씩, 인계 피하기 값이 없으면 켬(새로 만든 그룹과 같게)
   store.groups=normGroups(store.groups,store.order);
+  fixGroupLog();   // 그룹원·스위치를 고친 날 기록 (고친 날부터 — 지난 배정은 그대로)
   // 그날 방 수정을 한 인원수 {날짜:{근무:{자리:인원}}} — 인원이 바뀌면 그 수정은 쓰지 않는다 (roomOvOn). 수정이 없어진 칸은 걷어 낸다
   if(!store.roomOvCnt||typeof store.roomOvCnt!=='object') store.roomOvCnt={};
   for(const iso of Object.keys(store.roomOvCnt)){ for(const P of Object.keys(store.roomOvCnt[iso]||{})){
@@ -3073,10 +3085,15 @@ function recompute(){
     }
   }
   // 그룹원끼리 인계 피하기 — 켠 그룹의 병동 간호사만(다른 소속·대체간호사는 그룹에 들지 않는다). 없으면 넘기지 않는다
-  const hg=handoverGroupsOf(wardOnly);
+  // 그룹을 고친 기록이 있으면 날마다 그 날의 그룹 (고친 날부터 — 지난 배정은 그대로)
+  let hg=null;
+  if(Array.isArray(store.groupLog)&&store.groupLog.length){
+    const memo=new Map();
+    hg=dk=>{ const G=groupsAt(dk); if(!memo.has(G)) memo.set(G,handoverGroupsOf(wardOnly,dk)); return memo.get(G); };
+  } else { hg=handoverGroupsOf(wardOnly); if(!Object.keys(hg).length) hg=null; }
   result=AssignCore.compute(nurses,schedule,tlKeys,
     {rules:store.rules,overrides:merged,seed:Object.keys(seed).length?seed:null,avoid,
-     ...(Object.keys(hg).length?{handoverGroups:hg}:{}),
+     ...(hg?{handoverGroups:hg}:{}),
      roomsFor:roomsForCore,maxSeats:P=>seatsFor(P),
      // 102: CRN 은 방이 고정이 아니다 — 종이의 어느 자리든 이어 보던 자리에 앉는다 (차지를 첫 자리에 못 박으면 CRN 이 바뀔 때마다 모두 밀린다)
      chargeSeats:P=>crnFloat(P)?crnSeats(P):null,
@@ -3679,7 +3696,7 @@ function renderWeekWarnings(days,infos){
       // 그 근무에 손으로 정한 다른 자리가 있음(held) / 받은 사람의 주지 않을 방을 먼저 지킴(ban) / 그 밖(뒤 근무 자리만으로는 못 피함, none).
       // 엔진은 앞 근무를 그대로 두고 뒤 근무 자리만 고르므로 none 은 '넘겨준 사람 자리를 바꾸면 피할 수 있을 때가 있다'고 알린다 (2026-10-09 교차 검토)
       for(const h of ((((result&&result.byDay[iso])||{})[P]||{}).handover)||[]){
-        const gs=groupsBetween(h.from,h.to); if(!gs.length) continue;
+        const gs=groupsBetween(h.from,h.to,iso); if(!gs.length) continue;   // 받는 날의 그룹 (그룹원을 넣고 뺀 날부터)
         const labs=day[P].labels, seat=Object.keys(labs).find(l=>labs[l]===h.to), hs=handSeat(h.to,iso,P);
         const pv=P==='D'?isoOfD(addDays(new Date(iso+'T00:00:00'),-1)):iso, pP={D:'N',E:'D',N:'E'}[P];
         // 차지 자리 방을 옮겨 고칠 수 있을 때만 chg — 자리가 하나뿐인 근무(82 N)나 차지 → 차지(두 근무 차지 자리가 같은 방)는 방 구성으로 못 고친다
@@ -3689,7 +3706,7 @@ function renderWeekWarnings(days,infos){
           :(seat==='차지'&&!crnFloat(P)&&Object.keys(labs).length>1&&pvCharge!==h.from)?'chg'
           :Object.keys(labs).some(l=>{ const x=labs[l]!==h.to&&handSeat(labs[l],iso,P); return x&&x.l===l; })?'held'
           :bk.length&&Object.keys(labs).some(l=>expandBeds(roomTokens(roomsFor(P,cnt,l,iso))).some(t=>bk.includes(t)))?'ban':'none';
-        const gk=gs.map(g=>g.name).join('·');
+        const gk=gs.map(groupNameOf).join('·');
         (hand[gk]=hand[gk]||[]).push({from:h.from,to:h.to,why,
           txt:`${md(pv)} ${pP} ${esc(h.from)} → ${P==='D'?md(iso)+' ':''}${P} ${esc(h.to)} (${esc(roomsLabel(collapseBeds(h.rooms)))})`});
       }
@@ -4914,7 +4931,7 @@ function snapshot(){ // 이름 변경/삭제가 ovr·caps·금지방·시드까�
     ch:store.caps,br:store.banRooms,sd:store.seedManual,al:store.alias,cu:store.custom,fi:store.formId,fs:store.forms,rm:store.rooms,sc:store.schemes,ps:store.presets,
     ev:store.events,na:store.nameAlias,tr:store.trainee,to:store.trOv,pd:store.presetDay,op:store.ovrPair,hd:store.hidden,
     pp:store.presetPlan,rl:store.relief,nu:store.newUntil,er:store.evRules,dy:store.daily,df:store.dayForm||null,du:store.duty,
-    ru:store.rules,rc:store.roomOvCnt,gr:store.groups,un:store.unit||{}}));
+    ru:store.rules,rc:store.roomOvCnt,gr:store.groups,gl:store.groupLog||[],un:store.unit||{}}));
   if(undoStack.length>40) undoStack.shift(); }
 function restoreSnapshot(s){
   store.order=s.o; store.cells=s.c;
@@ -4931,7 +4948,7 @@ function restoreSnapshot(s){
   if(s.dy) store.daily=s.dy;
   if(s.du) store.duty=s.du;
   if(s.ru) store.rules=s.ru; if(s.rc) store.roomOvCnt=s.rc;
-  if(s.gr) store.groups=s.gr; if(s.un) store.unit=s.un;
+  if(s.gr) store.groups=s.gr; if(s.gl) store.groupLog=s.gl; if(s.un) store.unit=s.un;
   if(s.df!==undefined){ if(s.df) store.dayForm=s.df; else delete store.dayForm; DAYTPL=null; }
   if(s.fi!==undefined){ if(store.formId!==s.fi) TPL=null; store.formId=s.fi; }
 }
@@ -5144,7 +5161,7 @@ function applyNurseName(r,nu){
     }};
   if(!nu){ store.order.splice(r,1); delete store.cells[old]; delete store.hidden[old];
     delete store.caps[old]; delete store.banRooms[old]; delete store.seedManual[old]; delete store.newUntil[old]; migOv(old,null); migTr(old,null);
-    for(const g of store.groups||[]) g.members=g.members.filter(m=>m!==old);
+    for(const G of [store.groups||[],...(store.groupLog||[]).map(x=>x.groups)]) for(const g of G) g.members=g.members.filter(m=>m!==old);
     if(store.unit) delete store.unit[old]; }
   else{
     store.order[r]=nu;
@@ -5154,7 +5171,7 @@ function applyNurseName(r,nu){
     if(old in store.banRooms){ store.banRooms[nu]=store.banRooms[old]; delete store.banRooms[old]; }
     if(old in store.seedManual){ store.seedManual[nu]=store.seedManual[old]; delete store.seedManual[old]; }
     if(old in store.newUntil){ store.newUntil[nu]=store.newUntil[old]; delete store.newUntil[old]; }
-    for(const g of store.groups||[]) g.members=[...new Set(g.members.map(m=>m===old?nu:m))];   // 그룹원도 새 이름으로
+    for(const G of [store.groups||[],...(store.groupLog||[]).map(x=>x.groups)]) for(const g of G) g.members=[...new Set(g.members.map(m=>m===old?nu:m))];   // 그룹원도 새 이름으로 (지난 기록까지)
     if(store.unit&&old in store.unit){ store.unit[nu]=store.unit[old]; delete store.unit[old]; }   // 다른 소속(82 SU)도 — 안 옮기면 새 이름이 병동 자리로 들어왔다
     migOv(old,nu); migTr(old,nu);
   }
@@ -5545,7 +5562,7 @@ const ADMIN_PANELS={
     get more(){ return (crnFloat('D')?'차지(CRN)는 근무표의 DC·EC·NC 표시, 없으면 이 순서로 정해집니다. 앉는 자리는 정해져 있지 않습니다 — 어제 보던 방을 그대로 보고 이름 뒤에 <b>/CRN</b> 이 붙습니다. '+
          'CRN 을 다른 사람으로 바꾸려면 배정표에서 그 사람 이름을 눌러 <b>[CRN 맡기기]</b>를 누르세요. ':'차지는 배정표의 차지 자리(A(CN)·CN·D(CRN) 처럼 이름에 CN 이 붙은 자리)에 앉습니다. ')+'줄을 끌어서(또는 ▲▼) 순서를 바꾸세요. 가능한 근무에서 <b>DC · EC · NC</b> 를 켜면 그 시간대에 차지로 뽑힐 수 있습니다. '+
          '이름 옆 <b>신규</b> 표시를 누르면 신규 기간을 고칩니다.<br>배정표에 다른 소속 칸이 있는 병동(82의 <span class="unitTag">SU</span>)은 이름 옆 소속 표시를 눌러 켜고 끕니다 — 켜면 병동 자리에 배정되지 않고 그 칸에만 나옵니다.<br>'+
-         '<b>[＋ 그룹 만들기]</b>로 그룹을 만들고 <b>그룹</b> 칸의 이름을 눌러 그룹원을 넣고 빼세요 — 갓 독립한 신규끼리처럼 서로 인계하지 않게 합니다. 새 그룹은 <b>인계 피하기</b>가 켜진 채로 시작하고, 끄고 켜는 곳은 관리 &gt; 배정 원칙입니다.'; },
+         '<b>[＋ 그룹 만들기]</b>로 그룹을 만들고 <b>그룹</b> 칸의 이름을 눌러 그룹원을 넣고 빼세요 — 갓 독립한 신규끼리처럼 서로 인계하지 않게 합니다. 새 그룹은 <b>인계 피하기</b>가 켜진 채로 시작하고, 끄고 켜는 곳은 관리 &gt; 배정 원칙입니다. 그룹원을 넣고 빼면 <b>그 날부터</b> 배정에 반영되고 지난 배정은 그대로입니다.'; },
     aux:`<button onclick="addGroup()" title="서로 인계하지 않을 간호사들(갓 독립한 신규 등)을 묶을 그룹을 만듭니다">＋ 그룹 만들기</button><button onclick="addNurse()">＋ 간호사 추가</button>`,
     body(){ return groupStripHtml()+`<table id="capsTable" class="dt"></table>`; },
     after(){
@@ -5993,18 +6010,64 @@ function normGroups(list,order){
     return {id,name,members,noHandover:g.noHandover==null?true:!off};
   });
 }
+/* 그룹원·인계 피하기는 **고친 날부터** (2026-10-09 원근 '고친 날부터') — 그룹원을 넣고 빼거나 스위치를 바꿔도 지난 배정표는 그대로다.
+ * store.groupLog=[{from:'YYYY-MM-DD', groups:[그 날부터의 그룹]}] — from 순서, 첫 기록은 from '' (처음부터). 비었으면 store.groups 가 모든 날.
+ * store.groups 는 늘 지금 상태 — 화면은 이것을 보이고 마지막 기록 날부터는 이것을 쓴다. 배정에 상관없는 것(이름, 쓰이지 않는 그룹)은 기록하지 않는다.
+ * '오늘'은 이 컴퓨터의 날짜 — 검사는 setToday 로 정한다. */
+let todayOvr=null;
+const editDay=()=>todayOvr||isoOfD(new Date());
+// 배정에 쓰이는 모양 — 인계 피하기가 켜지고 그룹원이 둘 이상인 그룹의 그룹원 (이것이 같으면 배정도 같다)
+const grpShape=G=>JSON.stringify((G||[]).filter(g=>g.noHandover&&g.members.length>=2).map(g=>[g.id,[...g.members].sort()]).sort());
+const grpCopy=G=>(G||[]).map(g=>({id:g.id,name:g.name,members:g.members.slice(),noHandover:!!g.noHandover}));
+function groupsAt(iso){
+  const L=store.groupLog;
+  if(!iso||!Array.isArray(L)||!L.length||iso>=L[L.length-1].from) return store.groups||[];
+  let v=L[0]; for(const x of L) if(x.from<=iso) v=x;
+  return v.groups;
+}
+/* 그룹을 고친 뒤 부른다 — prev = 고치기 전 store.groups 복사. 오늘부터의 기록을 지금 상태로 (같은 날 여러 번 고치면 하나) */
+function noteGroups(prev){
+  if(grpShape(prev)===grpShape(store.groups)) return false;
+  const T=editDay();
+  let L=Array.isArray(store.groupLog)&&store.groupLog.length?store.groupLog:[{from:'',groups:grpCopy(prev)}];
+  L=L.filter((x,i)=>i===0||x.from<T);
+  L.push({from:T,groups:grpCopy(store.groups)});
+  if(grpShape(L[L.length-2].groups)===grpShape(L[L.length-1].groups)) L.pop();   // 넣었다가 같은 날 뺐다 — 앞 기록 그대로
+  store.groupLog=L.length>1?L:[];
+  return true;
+}
+/* 파일을 열 때 — 모양 맞추기. 날짜 순서·같은 날 하나·첫 기록은 처음부터. 기록을 모르는 판에서 그룹을 고친 파일이면 마지막 기록과 지금이 달라
+ * 그 차이는 오늘부터로 친다(지난 배정을 바꾸지 않게) */
+function fixGroupLog(){
+  const by={};
+  for(const x of Array.isArray(store.groupLog)?store.groupLog:[]){
+    if(!x||typeof x!=='object'||typeof x.from!=='string'||!(x.from===''||/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(x.from))) continue;
+    by[x.from]={from:x.from,groups:normGroups(x.groups,store.order)};
+  }
+  let L=Object.keys(by).sort().map(k=>by[k]);
+  if(L.length){
+    L[0].from='';
+    const last=L[L.length-1];
+    if(grpShape(last.groups)!==grpShape(store.groups)){
+      const T=editDay(); L=L.filter((x,i)=>i===0||x.from<T); L.push({from:T,groups:grpCopy(store.groups)});
+      if(grpShape(L[L.length-2].groups)===grpShape(L[L.length-1].groups)) L.pop();
+    }
+  }
+  store.groupLog=L.length>1?L:[];
+}
 const groupById=id=>(store.groups||[]).find(g=>g.id===id);
 const groupWard=g=>store.order.filter(n=>g.members.includes(n)&&!(store.unit||{})[n]);   // 병동 자리에 앉는 그룹원 — 명부 순서
 const groupActive=g=>!!g.noHandover&&groupWard(g).length>=2;                            // 인계 피하기가 실제로 쓰이는 그룹
 /* 엔진에 넘길 {이름:[그룹 id]} — ward 를 주면 그 사람들만 (recompute 는 병동 간호사 목록을 준다) */
-function handoverGroupsOf(ward){
+function handoverGroupsOf(ward,iso){
   const out={};
-  for(const g of store.groups||[]){ if(!groupActive(g)) continue;
+  for(const g of groupsAt(iso)){ if(!groupActive(g)) continue;
     for(const n of groupWard(g)) if(!ward||ward.includes(n)) (out[n]=out[n]||[]).push(g.id); }
   return out;
 }
 /* 같은 그룹(인계 피하기를 켠)인 두 사람 — 확인 카드의 그룹 이름 */
-const groupsBetween=(a,b)=>(store.groups||[]).filter(g=>groupActive(g)&&g.members.includes(a)&&g.members.includes(b));
+const groupsBetween=(a,b,iso)=>groupsAt(iso).filter(g=>groupActive(g)&&g.members.includes(a)&&g.members.includes(b));
+const groupNameOf=g=>(groupById(g.id)||g).name;   // 지운 그룹은 그 때 이름
 /* 그룹 이름 묻기 — 비었거나 길거나 겹치면 알리고 다시 묻는다(적은 글자는 그대로 둔 채) */
 async function askGroupName(title,initial,selfId,okLabel){
   let cur=initial||'';
@@ -6024,7 +6087,7 @@ async function addGroup(){
   const nm=await askGroupName('그룹 만들기','',null,'만들기'); if(nm==null) return;
   snapshot();
   store.groups=store.groups||[];
-  store.groups.push({id:grpId(),name:nm,members:[],noHandover:true});
+  store.groups.push({id:grpId(),name:nm,members:[],noHandover:true});   // 그룹원이 없으니 배정은 그대로 — 기록할 것도 없다
   touch(); recompute(); renderAdmin();
   toast(`'${nm}' 그룹을 만들었습니다 — 표의 그룹 칸에서 넣을 사람 줄의 그룹 이름을 누르세요`,4200,true);
 }
@@ -6038,22 +6101,27 @@ async function renameGroup(id){
 function deleteGroup(id){
   const g=groupById(id); if(!g) return;
   if(!confirm(`'${g.name}' 그룹을 지울까요?\n간호사 명부와 근무표는 그대로입니다 (Ctrl+Z 로 되돌릴 수 있습니다).`)) return;
-  snapshot(); store.groups=store.groups.filter(x=>x.id!==id);
+  snapshot(); const prev=grpCopy(store.groups); store.groups=store.groups.filter(x=>x.id!==id);
+  const dated=noteGroups(prev);
   touch(); recompute(); renderAdmin(); if(curScr==='week') renderWeek();
-  toast(`'${g.name}' 그룹을 지웠습니다`,3200,true);
+  toast(`'${g.name}' 그룹을 지웠습니다`+(dated?` — 오늘(${editDay().slice(5).replace('-','/')})부터 배정에 반영되고 지난 배정은 그대로입니다`:''),dated?4200:3200,true);
 }
 function toggleGroupMember(id,name){
   const g=groupById(id); if(!g||!store.order.includes(name)) return;
-  snapshot();
-  g.members=g.members.includes(name)?g.members.filter(m=>m!==name):store.order.filter(n=>n===name||g.members.includes(n));   // 명부 순서로
+  snapshot(); const prev=grpCopy(store.groups), was=g.members.includes(name);
+  g.members=was?g.members.filter(m=>m!==name):store.order.filter(n=>n===name||g.members.includes(n));   // 명부 순서로
+  const dated=noteGroups(prev);
   touch(); recompute(); renderAdmin(); if(curScr==='week') renderWeek();
+  if(dated) toast(`${name} — '${g.name}'${was?'에서 뺐습니다':'에 넣었습니다'} · 오늘(${editDay().slice(5).replace('-','/')})부터 배정에 반영되고 지난 배정은 그대로입니다`,3600,true);
 }
 /* 배정 원칙의 그룹 스위치 — 원칙처럼 Ctrl+Z 로 되돌린다 */
 function setGroupHandover(id,on){
   const g=groupById(id); if(!g) return;
-  snapshot(); g.noHandover=!!on;
+  snapshot(); const prev=grpCopy(store.groups); g.noHandover=!!on;
+  const dated=noteGroups(prev);
   touch(); recompute(); renderAdmin(); if(curScr==='week') renderWeek();
-  toast(`'${g.name}' — 그룹원끼리 인계 피하기를 ${on?'켰습니다':'껐습니다'}`+(on&&groupWard(g).length<2?' · 그룹원이 둘 이상이어야 쓰입니다':''),3600,true);
+  toast(`'${g.name}' — 그룹원끼리 인계 피하기를 ${on?'켰습니다':'껐습니다'}`+(on&&groupWard(g).length<2?' · 그룹원이 둘 이상이어야 쓰입니다':'')+
+    (dated?` · 오늘(${editDay().slice(5).replace('-','/')})부터 배정에 반영되고 지난 배정은 그대로입니다`:''),dated?4200:3600,true);
 }
 /* 간호사 관리 표 위의 그룹 띠 — 그룹마다 이름 · 인원 · 인계 피하기 · ✎ ✕ */
 function groupStripHtml(){
@@ -6073,7 +6141,7 @@ function groupStripHtml(){
 function groupRulesHtml(){
   const G=store.groups||[];
   const head=`<div class="grpRules"><div class="grpRulesHd">그룹원끼리 인계 피하기</div>`+
-    `<div class="rd">켠 그룹의 그룹원끼리는 D→E·E→N·N→D 에서 같은 병상을 넘겨받지 않게 자리를 고릅니다 — 방 유지(원칙 1~3)보다 먼저 봅니다.</div>`;
+    `<div class="rd">켠 그룹의 그룹원끼리는 D→E·E→N·N→D 에서 같은 병상을 넘겨받지 않게 자리를 고릅니다 — 방 유지(원칙 1~3)보다 먼저 봅니다. 켜고 끄면 그 날부터 반영되고 지난 배정은 그대로입니다.</div>`;
   if(!G.length) return head+`<div class="grpNone"><span class="dim">아직 그룹이 없습니다 — 간호사 관리에서 [＋ 그룹 만들기]로 만듭니다.</span>`+
     `<button onclick="pickAdmin('caps')" title="관리 > 간호사 관리 — 그룹을 만들고 그룹원을 넣습니다">간호사 관리 열기</button></div></div>`;
   return head+G.map(g=>{
@@ -10787,6 +10855,7 @@ const HELP=[
         '피할 자리가 없는 날은 배정표 <b>안내 카드</b>에 <b>같은 그룹 인계</b>로 날짜·근무·방이 뜹니다 — 이름을 눌러 자리를 바꿀 수 있습니다.'],
  tips:['앞 근무는 그대로 두고 <b>뒤 근무</b>의 자리를 고릅니다. 누가 차지인지는 바꾸지 않습니다.',
        '방 유지(원칙 1~3)보다 먼저 보므로 그룹원이 보던 방을 한 번 옮기기도 합니다 — 그 뒤로는 다시 방 유지가 이어집니다.',
+       '그룹원을 넣고 빼거나 인계 피하기를 켜고 끄면 <b>그 날(이 컴퓨터의 오늘)부터</b> 배정에 반영됩니다 — 지난 주 배정표는 그대로입니다.',
        '그룹 이름 옆 ✎ 로 이름을 고치고 ✕ 로 지웁니다. 간호사 명부와 근무표는 그대로이고, <kbd>Ctrl+Z</kbd> 로 되돌립니다.']},
 {cat:'우리 병동 설정',id:'seed',title:'지난 어싸인 직접 입력',
  lead:'표에 지난 기록이 없을 때(처음 시작할 때) 이어짐의 시작점을 알려 주는 곳입니다.',
@@ -11399,7 +11468,7 @@ window.__app={get store(){return store},set store(v){store=v},
   hwKids,hwPage,hwTopH,hwBodyH,hwFitPage,hwBlankPara,hwPage1,hwParaVisible,dayNoteSplit,dayNoteShow,dayNoteParas,dutyPrefer,dutyPreferSet,dutySetPrefer,dutyNumStr,dutyNumOf,
   paperPlan,tagOrder,weekSlots,tplOrder,hasPlaceholders,capsOf,get undoDepth(){return undoStack.length},undoClear(){undoStack.length=0;},
   seatOfLabel,seatNames,worksP,ovrMateGone,freeOvr,clearOvrDay,handSeat,ovrAudit,pruneOvr,giveChargeMark,capsForNew,setRule,roomOvOn,setRoomOv,roomTextWarn,josa,get cellPins(){return cellPins},
-  normGroups,groupById,groupWard,groupActive,groupsBetween,handoverGroupsOf,addGroup,renameGroup,deleteGroup,toggleGroupMember,setGroupHandover,groupStripHtml,groupRulesHtml,groupCellHtml,keepHistory,restoreHistory,
+  normGroups,groupById,groupWard,groupActive,groupsBetween,handoverGroupsOf,groupsAt,noteGroups,fixGroupLog,editDay,setToday(v){todayOvr=v||null;},addGroup,renameGroup,deleteGroup,toggleGroupMember,setGroupHandover,groupStripHtml,groupRulesHtml,groupCellHtml,keepHistory,restoreHistory,
   get pickCtx(){return pickCtx},set pickCtx(v){pickCtx=v},
   memoryMode(){window.__memoryMode=true;
     setFileLoc({kind:'none'});afterLoad();}};

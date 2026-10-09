@@ -2580,6 +2580,7 @@ async function main() {
   const v37 = await ev(`return (async()=>{ const A=window.__app, out={}, D1='2026-09-06', D2='2026-09-07';
     const wait=ms=>new Promise(r=>setTimeout(r,ms));
     const keepStore=JSON.parse(JSON.stringify(A.store));
+    A.setToday('2026-09-01');   // 그룹을 고친 날 — 이 검사의 날(9월 6일~)보다 앞이라 고친 것이 모든 날에 든다 (고친 날부터)
     A.setFormId('101'); A.setWard('101'); const s=A.store;
     s.order=['가선임','나선임','다선임','라선임','마선임','바간호','사간호','아간호','자신규','차신규'];
     Object.assign(s,{cells:{},ovr:{},ovrPair:{},roomOv:{},roomOvCnt:{},presetDay:{},presetPlan:{},presets:{},seedManual:{},unit:{},relief:{},
@@ -2593,7 +2594,7 @@ async function main() {
     const lap=()=>{ const a=toks('D',5,seat(D1,'D','자신규'),D1), b=toks('E',5,seat(D1,'E','차신규'),D1); return b.filter(t=>a.includes(t)).length; };
     // 엔진에 실제로 무엇이 넘어가나 — compute 를 잠깐 감싸 본다
     const sent=()=>{ const orig=AssignCore.compute; let got='없음'; AssignCore.compute=(...a)=>{ got=('handoverGroups' in (a[3]||{}))?a[3].handoverGroups:'없음'; return orig(...a); };
-      try{ A.recompute(); } finally{ AssignCore.compute=orig; } return got; };
+      try{ A.recompute(); } finally{ AssignCore.compute=orig; } return typeof got==='function'?got(D1):got; };   // 고친 날 기록이 있으면 날마다(함수)
     out.pre=[lap()>0, !!A.result.byDay[D1].E.handover, sent()];
     const base=JSON.stringify(A.result.byDay), seat0=seat(D1,'E','차신규');
     // 그룹 만들기 — 공용 창에 이름을 적고 [만들기]
@@ -2685,18 +2686,56 @@ async function main() {
     A.startWizard(A.WIZ.findIndex(w=>w.id==='caps'));
     out.wiz=[!!document.querySelector('#wizBody .grpStrip'), document.querySelectorAll('#wizBody .grpChip').length, !!document.querySelector('#wizBody .grpStrip button[onclick^="pickAdmin"]')];
     A.closeWizard();
+    // ── 고친 날부터 (2026-10-09 원근) — 그룹원을 넣고 빼거나 스위치를 바꾸면 그 날부터 바뀌고 지난 날 배정은 그대로 ──
+    { const D3='2026-09-08', J=x=>JSON.stringify(x), Dp=['가선임','나선임','다선임','라선임','자신규'];
+      A.store.ovr={}; A.store.unit={}; A.store.groupLog=[];
+      for(const n of A.store.order){ A.store.cells[n]={}; for(const d of [D1,D2,D3]) A.store.cells[n][d]=Dp.includes(n)?'D':'E'; }
+      const lapAt=iso=>{ const a=toks('D',5,seat(iso,'D','자신규'),iso), b=toks('E',5,seat(iso,'E','차신규'),iso); return b.filter(t=>a.includes(t)).length; };
+      A.store.groups=[]; A.recompute(); const noneJ=JSON.parse(J(A.result.byDay)), lap0=[D1,D2,D3].map(lapAt);
+      A.store.groups=[{id:'gd',name:'신규 독립',members:['자신규','차신규'],noHandover:true}]; A.recompute();
+      const allJ=JSON.parse(J(A.result.byDay)), lap1=[D1,D2,D3].map(lapAt);
+      out.dBase=[lap0.every(x=>x>0), lap1.every(x=>x===0), J(noneJ[D1])!==J(allJ[D1])];
+      // 빼기 — D2 에 차신규를 뺀다: D1 은 그룹이 있던 배정 그대로, D2 부터 그룹 없음
+      A.setToday(D2); A.undoClear(); A.show('admin'); A.pickAdmin('caps');
+      A.toggleGroupMember('gd','차신규');
+      out.dOut=[A.store.groupLog.map(x=>x.from), J(A.result.byDay[D1])===J(allJ[D1]), Object.keys(A.handoverGroupsOf(null,D1)).sort(),
+        Object.keys(A.handoverGroupsOf(null,D2)), (A.groupsAt(D1)[0]||{}).members, /오늘[(]09[/]07[)]부터/.test(document.querySelector('#toast').textContent)];
+      // 같은 날 다시 넣으면 기록이 필요 없다 — 처음 그대로
+      A.toggleGroupMember('gd','차신규'); out.dBack=[A.store.groupLog.length, J(A.result.byDay)===J(allJ)];
+      A.undoAny(); out.dUndo=[A.store.groupLog.map(x=>x.from), A.store.groups[0].members];
+      A.undoAny(); out.dUndo2=[A.store.groupLog.length, A.store.groups[0].members];
+      // 넣기 — 자신규뿐이던 그룹에 D2 에 차신규를 넣는다: D1 은 그룹 없던 배정 그대로, D2 부터 피한다
+      A.store.groups=[{id:'gd',name:'신규 독립',members:['자신규'],noHandover:true}]; A.store.groupLog=[]; A.recompute();
+      A.toggleGroupMember('gd','차신규');
+      out.dIn=[J(A.result.byDay[D1])===J(noneJ[D1]), lapAt(D2), lapAt(D3), !A.result.byDay[D2].E.handover];
+      // 스위치도 — D3 에 끄면 D2 는 그대로, D3 부터 그룹 없음
+      A.setToday(D3); const before=J(A.result.byDay[D2]);
+      A.setGroupHandover('gd',false);
+      out.dSw=[A.store.groupLog.map(x=>x.from), J(A.result.byDay[D2])===before, Object.keys(A.handoverGroupsOf(null,D3)).length];
+      // 이름 바꾸기 — 지난 기록의 그룹원도 새 이름 (Ctrl+Z 로 돌아온다)
+      A.applyNurseName(A.store.order.indexOf('차신규'),'차독립'); out.dRen=A.store.groupLog.map(x=>(x.groups[0]||{}).members); A.undoAny();
+      out.dRenUndo=A.store.groupLog.map(x=>(x.groups[0]||{}).members);
+      // 저장 → 다시 열기 — 기록 그대로, 배정도 같다
+      const gl=J(A.store.groupLog), res=J(A.result.byDay);
+      adoptStore(parseStoreText(serializeStore(A.store))); A.recompute();
+      out.dTrip=[J(A.store.groupLog)===gl, J(A.result.byDay)===res];
+      // 기록을 모르는 판에서 고친 파일 — 지금과 마지막 기록이 다르면 그 차이는 오늘부터 (여기선 D2 기록과 같아져 하나로 접힌다)
+      A.store.groups[0].noHandover=true; A.migrateStore(); out.dFix=A.store.groupLog.map(x=>x.from);
+      A.store.groupLog=[{from:'2026-09-03',groups:[]},{from:'2026-09-03',groups:[{id:'gd',name:'x',members:['자신규','차신규'],noHandover:true}]},{from:'bad'},null];
+      A.migrateStore(); out.dFix2=A.store.groupLog.map(x=>x.from);
+      A.store.groupLog=[]; A.setToday(null); }
     // 옛 파일(그룹 없음)·손으로 고친 파일
     const t=JSON.parse(JSON.stringify(A.store)); delete t.groups;
     A.store=t; A.migrateStore(); out.migOld=A.store.groups;
     A.store.groups=[{name:'  신규 ',members:['자신규','자신규','없는사람',3]},{id:'g1',name:'',members:'x',noHandover:false},null,{id:'g1',name:'겹침',members:[]},{name:'신규',members:[],noHandover:'false'}];
     A.migrateStore(); out.migBad=A.store.groups.map(x=>[x.id==='g1'?'g1':/^g[a-z0-9]+$/.test(x.id)?'새 id':x.id, x.name, x.members, x.noHandover]);
     // 저장 → 다시 열기 · 파일 안 스냅샷
-    A.store.groups=[{id:'g7',name:'신규 독립',members:['자신규','차신규'],noHandover:true}]; A.recompute();
+    A.store.groups=[{id:'g7',name:'신규 독립',members:['자신규','차신규'],noHandover:true}]; A.store.groupLog=[]; A.recompute();
     const want=JSON.stringify(A.store.groups), res0=JSON.stringify(A.result.byDay);
     adoptStore(parseStoreText(serializeStore(A.store))); A.recompute();
     out.trip=[JSON.stringify(A.store.groups)===want, JSON.stringify(A.result.byDay)===res0];
     A.keepHistory('검사'); out.hist=JSON.stringify(JSON.parse(A.store.history[0].data).groups)===want;
-    A.store=keepStore; A.migrateStore(); A.undoClear(); A.recompute(); A.show('week');
+    A.setToday(null); A.store=keepStore; A.migrateStore(); A.undoClear(); A.recompute(); A.show('week');
     return out; })()`, 60000);
   eq('그룹 없이 — 자신규(D) → 차신규(E) 같은 병상 인계가 있고, 엔진에 그룹을 넘기지 않는다', v37.pre, [true, false, '없음']);
   eq('그룹이 없으면 간호사 관리에 그룹 띠·그룹 칸이 없다', v37.noCol, [false, false]);
@@ -2738,6 +2777,19 @@ async function main() {
   eq('그룹 지우기 (확인창)', v37.delG, ['새내기']);
   eq('Ctrl+Z — 지운 그룹이 돌아온다', v37.undoG, ['새내기', '야간']);
   eq('마법사 간호사 단계 — 그룹 띠와 칩, 상태는 단추가 아니라 글자', v37.wiz, [true, 10, false]);
+  eq('고친 날부터 — 그룹 없이는 매일 신규끼리 인계, 그룹이면 매일 없음, 첫날 배정이 다르다', v37.dBase, [true, true, true]);
+  eq('고친 날부터 — 09/07 에 그룹원을 빼면 09/06 은 그룹 있던 배정 그대로 · 09/07 부터 그룹 없음 · 알림', v37.dOut,
+    [['', '2026-09-07'], true, ['자신규', '차신규'], [], ['자신규', '차신규'], true]);
+  eq('같은 날 다시 넣으면 기록이 필요 없다 — 처음 배정 그대로', v37.dBack, [0, true]);
+  eq('Ctrl+Z — 뺀 기록으로', v37.dUndo, [['', '2026-09-07'], ['자신규']]);
+  eq('Ctrl+Z 한 번 더 — 기록 없음, 그룹원 둘', v37.dUndo2, [0, ['자신규', '차신규']]);
+  eq('09/07 에 그룹원을 넣으면 09/06 은 그룹 없던 배정 그대로 · 09/07 부터 인계 없음', v37.dIn, [true, 0, 0, true]);
+  eq('스위치도 고친 날부터 — 09/08 에 끄면 09/07 은 그대로', v37.dSw, [['', '2026-09-07', '2026-09-08'], true, 0]);
+  eq('간호사 이름을 바꾸면 지난 기록의 그룹원도 새 이름', v37.dRen, [['자신규'], ['자신규', '차독립'], ['자신규', '차독립']]);
+  eq('Ctrl+Z — 기록의 이름도 돌아온다', v37.dRenUndo, [['자신규'], ['자신규', '차신규'], ['자신규', '차신규']]);
+  eq('저장 → 다시 열기 — 기록 · 배정 그대로', v37.dTrip, [true, true]);
+  eq('기록을 모르는 판에서 고친 파일 — 그 차이는 오늘부터 (마지막 기록과 같으면 하나로)', v37.dFix, ['', '2026-09-07']);
+  eq('손으로 고친 기록 — 날짜 아닌 것·빈 것은 버리고 같은 날은 하나, 첫 기록은 처음부터', v37.dFix2, []);
   eq('옛 파일(그룹 없음) — 빈 목록', v37.migOld, []);
   // 이름도 그룹원도 없는 항목은 버린다 · 같은 이름은 번호를 붙인다 · 'false' 글자는 끔
   eq('손으로 고친 파일 — 이름·그룹원·id·인계 피하기 정리', v37.migBad,

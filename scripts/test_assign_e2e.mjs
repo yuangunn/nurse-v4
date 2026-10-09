@@ -517,6 +517,9 @@ try {
   await tapSel('#adminPanelBox .grpRules .rulRow[data-g] .sw input');
   await sleep(300);
   eq('다시 누르면 켜진다', await ev(`return window.__app.store.groups[0].noHandover`), true);
+  // 고친 날부터 — 그룹원 둘을 넣은 오늘부터 기록 (켰다 껐다 같은 날은 하나), 오늘은 이 컴퓨터 날짜
+  const gl = await ev(`const A=window.__app, d=new Date(); return [A.store.groupLog.map(x=>x.from), A.isoOfD(d)]`);
+  eq('그룹원을 넣은 날부터 — 기록은 처음과 오늘', gl[0], ['', gl[1]]);
   await tap('배정표', '.topbar');
   await sleep(400);
 
