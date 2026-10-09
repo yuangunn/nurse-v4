@@ -184,6 +184,7 @@ node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs \
   && node scripts/test_assign_logic.mjs   # standalone 로직 (헤드리스 크롬, $CHROME 로 경로 지정 가능)
 node scripts/test_assign_compat.mjs      # 옛 배포본이 저장한 데이터 파일을 지금 assign.html 로 열어 본다 (CI)
+node scripts/make-assign-examples.mjs --check  # 병동별 예시 파일(standalone/예시/)이 지금 assign.html 로 만든 것과 같고 깨끗하게 열리는지 (CI) — 인자 없이 돌리면 다시 만든다
 node scripts/test_assign_live.mjs        # 병동 양식 9가지에서 배정표를 실제로 눌러 고치고 화면·엑셀·인쇄·하루 어싸인표를 본다 (CI, 약 30초)
 node scripts/test_assign_principles.mjs  # 어싸인 원칙 — 배정 엔진을 '모든 배치를 다 따져 본 정답'과 견준다 (CI, 약 40초, docs/verification.md)
 # 화면(index.html)을 재배치했다면 — 핸들러 손실 0 확인 (REMOVED 는 전부 의도한 것이어야 한다)
@@ -574,6 +575,14 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   **그룹원·스위치는 고친 날부터 (결정 2-47)**: `store.groupLog=[{from,groups}]`(첫 기록 from '' = 처음부터, 마지막 기록 날부터는 `store.groups`) — 고친 뒤 `noteGroups(prev)`,
   그 날의 그룹은 `groupsAt(iso)`, 엔진엔 기록이 있을 때만 `handoverGroups:(dk)=>…`(받는 근무의 날 그룹). 오늘 = `editDay()`(검사는 `setToday`). 앞 근무 사람 자리는 옮기지 않는다(원근 '뒤 근무만').
   원칙 검사 E13~E16·S0, 실시간 수정 E8·V1. 그룹을 켜면 자리가 조금 더 자주 바뀌고(이어 보기보다 먼저라) 6명 이상인 날 선임 신규가 헬퍼가 될 수 있다.
+  **그룹의 가능 근무·주지 않을 방 (결정 2-48)**: 간호사 관리 표 위 그룹 표 — `groups[*].caps?`(그룹원이 할 수 있는 근무)·`bans?`(그룹원 모두에게 주지 않을 방).
+  가능 근무 = 개인 ∩ 그 날 그룹(`capsAt`, **그룹은 끄기만**), 주지 않을 방 = 개인 ∪ 그 날 그룹(`bansAt`), 그룹에서 빼면 바로 풀린다. `capsOf` 는 개인 설정 그대로.
+  고친 날부터(`grpShape` 가 제한만 있는 그룹도 본다) — 차지 자격이 날마다 달라질 수 있어 코어 `chargeCapable` 은 `(P,날짜)` 함수로도 받는다. 호실 바꾸기는 기록 속 그룹의 방도 옮긴다.
+  **예시로 둘러보기 (결정 2-49)**: `makeExample(병동)`(병동 번호가 씨앗, 날짜만 지난주~4주 뒤) → `enterDemo` 가 **메모리에서만** 연다 — 파일·IndexedDB·localStorage 에 쓰지 않고
+  (`_writeStore`·`touch`·beforeunload·옛 키 옮기기가 `inDemo()` 면 건너뛴다), 열려 있던 우리 병동 파일은 `demoPrev` 로 기억했다가 [예시 끝내기](`leaveDemo`)에 돌아간다. 진짜 파일을 열면 `quitDemo`.
+  리포의 `standalone/예시/<병동>병동 예시.js` 14개도 같은 함수로 만든다(`node scripts/make-assign-examples.mjs`, CI `--check` = 같은지 + 5주 '확인 필요' 0) — 파일의 `example` 표시 때문에
+  어느 길로 열어도(파일 열기·끌어 놓기·백업 불러오기·옆 파일) 예시로 연다. **makeExample·서식·병실 규칙을 바꾸면 예시 파일을 다시 만들어 커밋할 것.** 이름은 옛이야기 이름, 번호는 010-0000-….
+  끌어 놓기는 `getAsFileSystemHandle` 을 **첫 await 전에** 잡는다(내용부터 읽으면 핸들이 사라진다).
 - **병상 단위 배정 (2026-09-18, v260918i, 결정 2-26)**: 환자가 많으면 **한 병실을 둘이 나눠 본다**. 토큰은 **방**(`1001`) 또는 **병상**(`1001:1`)이고
   화면·인쇄는 `1` / `1:1`(한 자리). 병상 번호는 병실 목록의 **병상수로 1..n 자동** — 따로 적을 게 없다. 1인실·병상수 모르는 방은 나누지 않는다.
   **코어에는 늘 병상 키로 펼쳐서 넘긴다**(`roomsForCore` → `expandBeds`) — 방 표기와 병상 표기가 섞이면 같은 환자를 가리키는 두 토큰이 문자열로 달라
@@ -896,7 +905,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   결정 2-22(exe 는 인트라넷에서 못 쓰므로 범위 밖)를 리포에도 반영했다. 실행 경로는 **HTML 더블클릭 하나뿐**이라
   런처 `assign_app.cmd`·구형 `standalone.xlsm`·`사용법.txt`(NAS 공유 전제)도 함께 지웠다.
   필요하면 git 이력에서 꺼낸다 (마지막 커밋 `2c79c7b`).
-- **인쇄용 설명서**: `docs/manual/` — 병동에 나눠 줄 A4 24쪽 PDF(`어싸인_배정표_사용설명서.pdf`).
+- **인쇄용 설명서**: `docs/manual/` — 병동에 나눠 줄 A4 26쪽 PDF(`어싸인_배정표_사용설명서.pdf`).
   원본 `manual.html`, 캡처 `shots.mjs`(예시 데이터 홍길동 등 12명으로 실제 화면을 띄워 찍는다), 출력 `build.mjs`
   (쪽 넘침·쪽 번호 겹침을 먼저 검사하고 걸리면 PDF 를 쓰지 않는다). 화면을 바꿨으면 **캡처부터 다시 찍는다** —
   옛 화면이 실린 설명서는 거짓말이 된다. `shots/` 는 커밋하지 않는다.

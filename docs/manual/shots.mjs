@@ -1,4 +1,5 @@
 // 설명서용 실제 화면 캡처 — 예시 데이터(홍길동 등) (2026-09-18, 2026-09-27·09-28·10-09 다시 찍음)
+// 25-example 만 앱의 예시(makeExample('101') — 옛이야기 이름)로 찍는다
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -82,6 +83,21 @@ await page.evaluate(()=>{ pickAdmin('rules'); window.scrollTo(0,0); });
     return {x:p.x,y:r4.top-14,width:p.width,height:p.bottom-r4.top+14}; });
   await shot('22-rules',b); }
 await page.setViewportSize({width:1920,height:1080});
+
+// ── 24. 그룹의 가능 근무·주지 않을 방 — 신규 독립의 DC·EC·NC 를 끄고 3호를 주지 않는다 (찍고 나서 되돌린다) ──
+{ const keep=await page.evaluate(()=>{ const k=JSON.stringify(store.groups);
+    grpRestrict(store.groups[0],['D','E','N'],['1003']); touch(); recompute(); show('admin'); pickAdmin('caps'); return k; });
+  await page.setViewportSize({width:1920,height:2000});
+  await page.evaluate(()=>window.scrollTo(0,0));
+  const b=await page.evaluate(()=>{ const t=document.querySelector('#adminPanelBox .grpTable').getBoundingClientRect();
+    const rows=[...document.querySelectorAll('#capsTable tr.nrow')].filter(tr=>/장영실|허준/.test(tr.querySelector('td.nm2').textContent));
+    const a=rows[0].getBoundingClientRect(), z=rows[rows.length-1].getBoundingClientRect();
+    return {top:{x:t.x-4,y:t.y-4,width:t.width+8,height:t.height+8},
+            rows:{x:t.x-4,y:a.top-2,width:t.width+8,height:z.bottom-a.top+6}}; });
+  await shot('24-group-limits',b.top);
+  await shot('24-group-rows',b.rows);
+  await page.setViewportSize({width:1920,height:1080});
+  await page.evaluate(k=>{ store.groups=JSON.parse(k); touch(); recompute(); },keep); }
 
 // ── 4. 근무표 넣기 (붙여넣기 화면 빈 상태) ──
 await page.evaluate(()=>{ show('paste'); window.scrollTo(0,0); });
@@ -213,6 +229,13 @@ await el('15-warn','#wkWarn');
 { const h=await page.evaluateHandle(()=>[...document.querySelectorAll('#wkWarn .warn')].find(x=>x.textContent.includes('같은 그룹')));
   if(h&&await h.evaluate(x=>!!x)){ await page.waitForTimeout(200); await h.asElement().screenshot({path:OUT+'23-handover.png'}); console.log('  23-handover'); }
   else console.log('  !! 같은 그룹 인계 줄이 없다'); }
+
+// ── 25. 예시로 둘러보기 — 101병동 예시 (가상의 간호사·근무표, 저장 안 됨). 예시 카드는 1920 에서 표 오른쪽 열 ──
+await page.evaluate(async ()=>{ closeHelp(); closePick(); await enterDemo(makeExample('101',{start:'2026-10-04'}));
+  wkSunday=new Date(2026,9,4); renderWeek(); renderOnboard(); window.scrollTo(0,0);
+  document.querySelector('#toast').style.display='none'; });   // 앞 그림(15)에서 남은 되돌리기 알림
+await page.waitForTimeout(800);
+await shot('25-example',{x:0,y:0,width:1920,height:760});
 
 console.log('오류:',errs.length?errs:'없음');
 await browser.close();

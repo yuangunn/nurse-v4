@@ -4,7 +4,7 @@
  * "버튼이 실제로 눌리는가"는 못 본다. 여기서는 좌표로 마우스를 눌러 클릭하고,
  * 진짜 paste 이벤트를 쏘고, 브라우저가 내려받은 xlsx 파일을 열어 확인한다.
  *
- *   처음 켜기(환영 = 마법사 첫 단계 → [처음 시작] 한 번에 파일 만들기)
+ *   처음 켜기(환영 = 마법사 첫 단계 → [예시로 먼저 둘러보기] 101병동 → [예시 끝내기] → [처음 시작] 한 번에 파일 만들기)
  *   → 마법사(병동·방구성·근무표 붙여넣기·표기·가능근무) → 배정표가 뜨는지
  *   → 빈 자리에 대체간호사 넣기 → 교육·행사 매주 일정 → 엑셀로 내보내기 → 받은 파일 열어 보기
  *   → 날짜 머리칸을 눌러 하루 어싸인표 → 당직 적기 → 한글 파일로 받기
@@ -153,6 +153,26 @@ try {
   eq('처음 켜면 환영 단계가 뜬다', await ev(`return document.querySelector('#wizTitle').textContent`), '어싸인 배정표에 오신 걸 환영합니다');
   eq('진행 막대에 단계 이름', await ev(`return [...document.querySelectorAll('#wizSteps span')].map(e=>e.textContent)`),
     ['시작', '병동', '방 구성', '근무표', '표기', '간호사', '끝']);
+
+  step('1a 예시로 먼저 둘러보기 — 파일 없이 눌러 보고 끝내기');
+  await tap('예시로 먼저 둘러보기', '#wiz');
+  await tap('101병동', '#modalBox');
+  for (let i = 0; i < 20 && !(await ev('return window.__app.inDemo()')); i++) await sleep(150);
+  eq('예시가 열리고 환영 단계는 닫힌다', await ev(`const A=window.__app;
+    return [A.inDemo(), document.querySelector('#wiz').classList.contains('on'), A.store.ward]`), [true, false, '101']);
+  eq('머리줄 알약 — 저장 안 됨', await ev(`return document.querySelector('#fileInfo').textContent.trim()`), '예시 · 저장 안 됨');
+  const ex = await ev(`const t=document.querySelector('#wkTable'), o=document.querySelector('#onboard');
+    return {이름:t?t.querySelectorAll('td.nm').length:0, 카드:!!o&&o.classList.contains('demo')&&getComputedStyle(o).display!=='none'};`);
+  ok('예시 근무표로 배정표가 찼다', ex.이름 > 40, JSON.stringify(ex));
+  ok('배정표 옆에 예시 카드', ex.카드, JSON.stringify(ex));
+  await tap('예시 끝내기', '#onboard');
+  eq('예시를 끝내면 남는 것 없이 시작 화면', await ev(`const A=window.__app;
+    return [A.inDemo(), A.store.order.length, A.fileLoc.kind, getComputedStyle(document.querySelector('#scrStart')).display!=='none']`),
+    [false, 0, 'none', true]);
+  await ev('window.__app.startWizard(0); return 1');
+  for (let i = 0; i < 20 && !(await ev(`return document.querySelector('#wiz').classList.contains('on')`)); i++) await sleep(150);
+  eq('환영 단계로 다시', await ev(`return document.querySelector('#wizTitle').textContent`), '어싸인 배정표에 오신 걸 환영합니다');
+
   await ev(`window.showSaveFilePicker=async()=>{ let data='';
       return {name:'assign-data.js',kind:'file',
         requestPermission:async()=>'granted', queryPermission:async()=>'granted',

@@ -2952,6 +2952,129 @@ async function main() {
   eq('저장 → 다시 열기 — 그룹 제한·배정 그대로', v38.trip, [true, true]);
   eq('다른 소속(SU)은 그룹 제한을 쓰지 않는다', v38.su, [true, []]);
 
+  // ── 39. 예시로 둘러보기 (2026-10-09 원근: "병동별 예시 js 파일을 추가하고 근무표도 임의로 채워서 한번 사용할수 있게") ─────────
+  // 예시는 메모리에서만 연다 — 데이터 파일·IndexedDB·localStorage 에 아무것도 쓰지 않는다. 우리 병동 파일을 보다가 열었으면
+  // 끝낼 때 그 파일로 그대로 돌아온다. 예시 파일(store.example)은 어느 길로 열어도(파일 고르기·끌어다 놓기·백업 불러오기·옆 파일)
+  // 연결하지 않고 예시로 연다 — 고친 것이 예시 파일에 쌓이지 않게. 실제 파일 창은 못 띄우므로 같은 모양의 가짜 핸들을 쓴다.
+  step('39 예시로 둘러보기');
+  const v39 = await ev(`return (async()=>{ const A=window.__app, out={}, J=x=>JSON.stringify(x);
+    const wait=ms=>new Promise(r=>setTimeout(r,ms));
+    const keepStore=JSON.parse(J(A.store));
+    const pill=()=>document.querySelector('#fileInfo').textContent.trim();
+    const sunIso=()=>{ const t=new Date(); t.setHours(0,0,0,0); t.setDate(t.getDate()-t.getDay()); return A.isoOfD(t); };
+    const mk=(name,body)=>{ const h={name,kind:'file',written:null,asked:0,
+      queryPermission:async()=>'prompt', requestPermission:async()=>{ h.asked++; return 'granted'; },
+      getFile:async()=>new File([h.written||body||''],name),
+      createWritable:async()=>({write:async d=>{ h.written=d; }, close:async()=>{}})}; return h; };
+    // 만들기 — 같은 병동·같은 날이면 같은 데이터, 병동마다 그 병동의 병실·서식, 날짜를 옮겨도 사람·순서는 같다
+    out.same=A.serializeStore(A.makeExample('92',{start:'2026-10-04'}))===A.serializeStore(A.makeExample('92',{start:'2026-10-04'}));
+    out.wards=A.WARDS.map(w=>{ const S=A.makeExample(w,{start:'2026-10-04'});
+      return [w,S.formId,S.rooms[0][0]===A.wardRooms(w)[0],S.order.length,!!S.example&&S.example.ward===w&&S.example.start==='2026-10-04',S.wardPicked]; });
+    const s1=A.makeExample('101',{start:'2026-10-04'}), s2=A.makeExample('101',{start:'2026-11-01'});
+    out.shift=[J(s1.order)===J(s2.order), s1.cells[s1.order[0]]['2026-10-04']===s2.cells[s2.order[0]]['2026-11-01']];
+    const s82=A.makeExample('82',{start:'2026-10-04'});
+    out.su=[Object.keys(s82.unit).length, s82.order.slice(-4).every(n=>s82.unit[n]==='SU')];
+    const s122=A.makeExample('122',{start:'2026-10-04'});
+    out.relief=[J((s122.relief['2026-10-05']||{}).D), (s122.relief['2026-10-06']||null)];
+    // 우리 병동 파일을 연결해 두고 하나 고쳐 저장
+    const real={...JSON.parse(J(keepStore)),rev:3};
+    const h=mk('assign-data.js',A.serializeStore(real));
+    await A.useHandle(h); A.store.caps[A.store.order[0]]=['D','E','N']; touch(); await wait(1000);
+    const realOrder=J(A.store.order), realCaps=J(A.store.caps), saved=h.written; A.toggleCap(A.store.order[1],'DC');
+    await wait(1000); const saved2=h.written, undo0=A.undoDepth;
+    out.real=[/^저장됨/.test(pill()), !!saved, saved2!==saved, undo0>0];
+    // 여기서부터 저장소에 쓰는 것을 센다 (화면 밝기는 보는 사람 편의라 뺀다)
+    localStorage.setItem('assignPrinted','1');
+    const writes=[]; const ls=Storage.prototype.setItem, lr=Storage.prototype.removeItem, realIdbSet=idbSet;
+    Storage.prototype.setItem=function(k,v){ if(k!=='assignTheme') writes.push('ls:'+k); return ls.call(this,k,v); };
+    Storage.prototype.removeItem=function(k){ writes.push('lsdel:'+k); return lr.call(this,k); };
+    window.idbSet=async(k,v)=>{ writes.push('idb:'+k); return realIdbSet(k,v); };
+    // 예시 열기 — 이번 주, 노랑 알약, 되돌리기 기록 없음, 병동 칩에 '예시', 예시 카드
+    await A.openExample('101');
+    const ob=document.querySelector('#onboard');
+    out.open=[A.inDemo(), pill(), A.fileLoc.kind, A.undoDepth, A.isoOfD(A.wkSunday)===sunIso(), A.store.example&&A.store.example.ward,
+      /101병동 예시/.test(document.querySelector('#wardChip').textContent), ob.classList.contains('demo')&&ob.style.display!=='none'&&/예시로 둘러보는 중/.test(ob.textContent),
+      ['우리 병동 파일 만들기','다른 병동 예시','예시 끝내기'].every(t=>[...ob.querySelectorAll('button')].some(b=>b.textContent.trim()===t))];
+    // 예시 안에서 고치기 — 되돌리기는 되고, 어디에도 쓰지 않는다
+    A.toggleCap(A.store.order[2],'DC'); A.setRule('keepSameShift',false); uiSet('printed',1);
+    const u1=A.undoDepth; A.undoAny(); await wait(1000);
+    const ev1=new Event('beforeunload',{cancelable:true}); window.dispatchEvent(ev1);
+    out.edit=[u1>=2, A.undoDepth===u1-1, h.written===saved2, J(writes), A.dirty, ev1.defaultPrevented, localStorage.getItem('assignPrinted'), pill()];
+    // 처음 안내 — 예시는 연결된 파일이 아니다: 환영(파일 만들기)에서 멈춘다
+    A.startWizard(3); const hello=A.WIZ[A.wizAt].id, hb=document.querySelector('#wizBody').textContent; A.wizGo(1);
+    out.wiz=[hello, /처음 시작/.test(hb), /예시로 먼저 둘러보기/.test(hb), A.wizAt]; A.closeWizard();
+    // 데이터 보관 — 백업·저장 위치 대신 예시 안내, 백업 불러오기는 막는다
+    A.show('admin'); A.pickAdmin('data'); const dp=document.querySelector('#adminPanelBox').textContent;
+    const rb=await A.restoreBackup(new File([A.serializeStore(real)],'x.js'));
+    out.data=[A.adminBadge('data'), /예시를 보는 중/.test(dp), /백업 불러오기/.test(dp), rb, A.inDemo()];
+    // 다른 병동 예시로 갈아타도 돌아갈 곳(우리 병동 파일)은 그대로
+    await A.openExample('82'); A.show('week');
+    out.swap=[A.store.formId, A.demoPrev&&A.demoPrev.fileHandle===h, A.isoOfD(A.wkSunday)===sunIso()];
+    // 예시 끝내기 — 우리 병동 파일·내용·되돌리기 기록 그대로, 파일엔 예시가 쓰이지 않았다
+    A.leaveDemo(); await wait(600);
+    out.leave=[A.inDemo(), A.fileLoc.kind, J(A.store.order)===realOrder, /^저장됨/.test(pill()), A.undoDepth===undo0, h.written===saved2, !/example/.test(h.written||'')];
+    // 예시 파일을 [데이터 파일 열기]로 고르면 — 연결하지 않고(허용도 묻지 않고) 예시로. 이번 주가 예시 밖이면 예시의 첫 주
+    const hx=mk('101병동 예시.js',A.serializeStore(A.makeExample('101',{start:'2025-01-05'})));
+    const ru=await A.useHandle(hx);
+    out.pickEx=[ru, A.inDemo(), hx.asked, hx.written, A.isoOfD(A.wkSunday), A.demoPrev&&A.demoPrev.fileHandle===h, A.fileLoc.kind];
+    A.leaveDemo(); await wait(300);
+    // 백업 불러오기로 예시 파일을 골라도 — 우리 병동 데이터를 덮지 않고 예시로
+    const rb2=await A.restoreBackup(new File([A.serializeStore(A.makeExample('61',{start:'2026-10-04'}))],'61병동 예시.js'));
+    out.restoreEx=[rb2, A.inDemo(), A.store.ward, h.written===saved2];
+    A.leaveDemo(); await wait(300);
+    out.restoreBack=[J(A.store.order)===realOrder, J(A.store.caps)!==realCaps];
+    // 끌어다 놓기 — 예시 파일이면 예시로
+    const dt=new DataTransfer(); dt.items.add(new File([A.serializeStore(A.makeExample('102',{start:'2026-10-04'}))],'102병동 예시.js',{type:'text/javascript'}));
+    window.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,cancelable:true})); await wait(600);
+    out.drop=[A.inDemo(), A.store.formId, h.written===saved2];
+    A.leaveDemo(); await wait(300);
+    // 옆 파일이 예시 파일이어도 예시로
+    openSidecar({name:'assign-data.js',data:A.makeExample('112',{start:'2026-10-04'})}); await wait(300);
+    out.side=[A.inDemo(), A.fileLoc.kind, A.store.ward];
+    A.leaveDemo(); await wait(300);
+    out.writes=J(writes);
+    // 파일 없이 연 예시를 끝내면 시작 화면 — 아무것도 남지 않는다
+    fileHandle=null; window.__memoryMode=false; A.setFileLoc({kind:'none'});
+    await A.openExample('92'); A.leaveDemo();
+    out.bare=[A.inDemo(), document.querySelector('#scrStart').style.display!=='none', A.store.order.length, !!window.__memoryMode];
+    // 예시에서 [우리 병동 파일 만들기] — 빈 새 파일, 예시 끝, 병동 단계부터
+    await A.openExample('92');
+    const h6=mk('assign-data.js'); const keepSave=window.showSaveFilePicker; window.showSaveFilePicker=async()=>h6;
+    await A.demoMakeFile(); await wait(300);
+    out.make=[A.inDemo(), A.fileLoc.kind, A.store.order.length, !!h6.written&&!/example/.test(h6.written), A.WIZ[A.wizAt]&&A.WIZ[A.wizAt].id];
+    A.closeWizard(); window.showSaveFilePicker=keepSave;
+    Storage.prototype.setItem=ls; Storage.prototype.removeItem=lr; window.idbSet=realIdbSet; localStorage.removeItem('assignPrinted');
+    // 도움말 — 예시 주제와 시작 화면 단추
+    out.help=[!!A.HELP.find(t=>t.id==='example'&&t.action&&/openExamplePick/.test(t.action.fn)), !!document.querySelector('#btnExample')];
+    fileHandle=null; clearTimeout(saveT); A.dirty=false; A.store=keepStore; A.memoryMode(); A.undoClear(); A.saveMsg(''); A.show('week');
+    return out; })()`, 90000);
+  ok('같은 병동·같은 날이면 같은 예시', v39.same);
+  ok('병동 14개 모두 — 그 병동 서식·병실, 예시 표시, 병동 고름',
+    v39.wards.length === 14 && v39.wards.every(([w, f, room, n, ex, picked]) => f === (['101', '102', '122', '82'].includes(w) ? w : '101') && room && n >= 14 && ex && picked),
+    JSON.stringify(v39.wards));
+  eq('날짜를 옮겨도 사람·근무 순서는 같다', v39.shift, [true, true]);
+  eq('82 — SU 소속 넷이 명부 맨 뒤', v39.su, [4, true]);
+  eq('122 — 월요일에 대체간호사, 화요일엔 없음', v39.relief, ['["전우치"]', null]);
+  eq('우리 병동 파일 — 저장됨, 고친 것이 파일에', v39.real, [true, true, true, true]);
+  eq('예시 열기 — 이번 주, 노랑 알약, 되돌리기 기록 없음, 병동 칩·예시 카드', v39.open,
+    [true, '예시 · 저장 안 됨', 'demo', 0, true, '101', true, true, true]);
+  eq('예시 안에서 고치기 — Ctrl+Z 는 되고 파일·IndexedDB·localStorage 에 아무것도 안 쓴다, 닫을 때 묻지 않는다, 옛 표시는 그대로',
+    v39.edit, [true, true, true, '[]', false, false, '1', '예시 · 저장 안 됨']);
+  eq('처음 안내 — 예시는 연결된 파일이 아니라 환영(처음 시작)에서 멈춘다', v39.wiz, ['hello', true, true, 0]);
+  eq('데이터 보관 — 예시 안내, 백업 불러오기 막음', v39.data, ['예시', true, false, false, true]);
+  eq('다른 병동 예시로 갈아타도 돌아갈 파일은 그대로', v39.swap, ['82', true, true]);
+  eq('예시 끝내기 — 우리 병동 파일·내용·되돌리기 기록 그대로, 파일에 예시가 안 쓰였다', v39.leave, [false, 'file', true, true, true, true, true]);
+  eq('예시 파일을 골라 열면 — 연결 안 함·허용 안 물음·안 씀, 이번 주가 예시 밖이면 예시의 첫 주', v39.pickEx,
+    ['demo', true, 0, null, '2025-01-05', true, 'demo']);
+  eq('백업 불러오기로 예시 파일 — 덮지 않고 예시로', v39.restoreEx, [true, true, '61', true]);
+  eq('…끝내면 우리 병동 데이터 그대로', v39.restoreBack, [true, true]);
+  eq('예시 파일을 끌어다 놓으면 예시로', v39.drop, [true, '102', true]);
+  eq('옆 파일이 예시 파일이어도 예시로', v39.side, [true, 'demo', '112']);
+  eq('예시를 여닫는 동안 저장소에 쓴 것 없음', v39.writes, '[]');
+  eq('파일 없이 연 예시를 끝내면 시작 화면 — 남는 것 없음', v39.bare, [false, true, 0, false]);
+  eq('예시에서 [우리 병동 파일 만들기] — 예시 끝, 빈 새 파일(예시 표시 없음), 병동 단계', v39.make, [false, 'file', 0, true, 'ward']);
+  eq('도움말 주제·시작 화면 단추', v39.help, [true, true]);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
