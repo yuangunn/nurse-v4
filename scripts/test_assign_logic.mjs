@@ -2797,6 +2797,284 @@ async function main() {
   eq('저장 → 다시 열기 — 그룹·배정 그대로', v37.trip, [true, true]);
   ok('파일 안 스냅샷(이전 상태로 되돌리기)에 그룹이 든다', v37.hist);
 
+  // ── 38. 그룹의 가능 근무·주지 않을 방 (2026-10-09 원근: "그룹별 가능근무 수정, 그룹별 배정하지 않을 방을 지정") ─────────────
+  // 그룹원 각자 설정 위에 더한다(가능 근무 = 개인 ∩ 그룹, 주지 않을 방 = 개인 ∪ 그룹). 고친 날부터 — 지난 배정은 그대로.
+  // 인계 피하기를 끈 그룹·그룹원 하나인 그룹도 기록된다(예전 기록 모양은 인계 피하기 그룹만 봤다). 호실을 고치면 기록 속 그룹의 방도 따라간다
+  step('38 그룹의 가능 근무·주지 않을 방');
+  const v38 = await ev(`return (async()=>{ const A=window.__app, out={}, D1='2026-09-06', D2='2026-09-07', D3='2026-09-08', J=x=>JSON.stringify(x);
+    const wait=ms=>new Promise(r=>setTimeout(r,ms));
+    const keepStore=JSON.parse(JSON.stringify(A.store));
+    A.setToday('2026-09-01'); A.setFormId('101'); A.setWard('101'); const s=A.store;
+    s.order=['자신규','가선임','나선임','다선임','라선임','마선임','바간호','사간호','아간호','차신규'];
+    Object.assign(s,{cells:{},ovr:{},ovrPair:{},roomOv:{},roomOvCnt:{},presetDay:{},presetPlan:{},presets:{},seedManual:{},unit:{},relief:{},
+      trainee:{},trOv:{},evRules:[],daily:{},banRooms:{},caps:{},hidden:{},newUntil:{},groups:[],groupLog:[]});
+    s.rules={keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false};
+    const Dp=['자신규','가선임','나선임','다선임','라선임'];
+    s.order.forEach(n=>{ s.cells[n]={}; for(const d of [D1,D2,D3]) s.cells[n][d]=Dp.includes(n)?'D':'E'; });
+    A.store=s; A.resetSchemes(); A.undoClear(); A.recompute();
+    const toks=(P,l,iso)=>A.expandBeds(A.roomTokens(A.roomsFor(P,5,l,iso)));
+    const seat=(iso,P,n)=>{ const L=A.result.byDay[iso][P].labels; return Object.keys(L).find(l=>L[l]===n)||null; };
+    const chg=()=>[D1,D2,D3].map(d=>A.result.byDay[d].D.charge);
+    // 엔진에 넘어가는 것 — 차지 자격(함수면 날마다)과 주지 않을 방
+    const sent=()=>{ const orig=AssignCore.compute; let got=null; AssignCore.compute=(...a)=>{ got={nurses:a[0],opts:a[3]||{}}; return orig(...a); };
+      try{ A.recompute(); } finally{ AssignCore.compute=orig; } return got; };
+    out.pre=[chg(), typeof sent().nurses[0].chargeCapable];
+    const base=JSON.parse(J(A.result.byDay));
+    // 그룹 — 인계 피하기는 끄고(제한만 쓰는 그룹), 자신규 하나만
+    s.groups=[{id:'gn',name:'신규 독립',members:['자신규'],noHandover:false}]; A.recompute();
+    out.same=J(A.result.byDay)===J(base);
+    // 간호사 관리 — 그룹 표에서 DC 를 끈다 (09/07 에)
+    A.setToday(D2); A.undoClear(); A.show('admin'); A.pickAdmin('caps');
+    const gchip=c=>[...document.querySelectorAll('#adminPanelBox .grpTable .gcap')].find(b=>(b.getAttribute('onclick')||'')==="toggleGroupCap('gn','"+c+"')");
+    out.tbl=[!!document.querySelector('#adminPanelBox .grpStrip .grpTable'), document.querySelectorAll('#adminPanelBox .grpTable .gcap').length,
+      document.querySelectorAll('#adminPanelBox .grpTable .gcap.on').length, (document.querySelector('#adminPanelBox .grpTable')||{}).textContent.includes('그룹원 주지 않을 방')];
+    gchip('DC').click(); await wait(20);
+    const g=A.store.groups[0];
+    out.cap=[g.caps, A.store.groupLog.map(x=>x.from), A.store.groupLog[0].groups[0].caps||null, /오늘[(]09[/]07[)]부터/.test(document.querySelector('#toast').textContent),
+      A.capsOf('자신규').includes('DC'), A.capsAt('자신규',D1).includes('DC'), A.capsAt('자신규',D2).includes('DC')];
+    out.capChg=chg();
+    { const x=sent(), f=x.nurses.find(n=>n.id==='자신규').chargeCapable; out.capFn=[typeof f, f('D',D1), f('D',D2), f('E',D3), x.nurses.find(n=>n.id==='가선임').chargeCapable('D',D2)]; }
+    out.capPast=J(A.result.byDay[D1])===J(base[D1]);
+    // 간호사 표 — 그룹에서 꺼 둔 근무는 점선, 개인 칩을 눌러도 켜지지 않는다(개인 설정 그대로)
+    A.pickAdmin('caps');
+    const pchip=(n,c)=>[...document.querySelectorAll('#capsTable .capChip')].find(b=>(b.getAttribute('onclick')||'')==="toggleCap('"+n+"','"+c+"')");
+    out.pChip=[pchip('자신규','DC').classList.contains('gOff'), pchip('자신규','DC').classList.contains('on'), /신규 독립/.test(pchip('자신규','DC').title||''),
+      pchip('자신규','D').classList.contains('on'), pchip('가선임','DC').classList.contains('on')];
+    const d0=A.undoDepth; pchip('자신규','DC').click(); await wait(20);
+    out.pBlock=[A.store.caps['자신규']||null, A.undoDepth===d0, /그룹에서 꺼 둔 근무/.test(document.querySelector('#toast').textContent)];
+    // 개인 칩은 Ctrl+Z 로 되돌린다
+    pchip('가선임','N').click(); out.pTog=[A.store.caps['가선임'], A.undoDepth-d0]; A.undoAny(); out.pUndo=A.store.caps['가선임']||null;
+    // 확인 카드 — 그룹에서 끈 근무가 근무표에 적혀 있으면 그룹 이름과 함께 (지난 날은 그대로 가능)
+    s.cells['자신규'][D1]='DC'; s.cells['자신규'][D3]='DC'; A.recompute();
+    const card=()=>{ A.wkSunday=new Date(2026,8,6); A.show('week');
+      for(let i=0;i<3;i++){ const f=document.querySelector('#wkWarn.shut .fold')||document.querySelector('#wkWarn .items.clip ~ .more');
+        if(!f||!/자세히|더 보기/.test(f.textContent)) break; f.click(); }
+      const w=document.querySelector('#wkWarn'); return w?w.textContent:''; };
+    out.capCard=(card().match(/자신규 — [^:]*: 가능 근무가 아닙니다[^.]*[.]/)||[''])[0];
+    s.cells['자신규'][D1]='D'; s.cells['자신규'][D3]='D'; A.recompute();
+    // 그룹에서 빼면 바로 풀린다 (09/08 에) — 09/07 은 그대로
+    A.setToday(D3); A.toggleGroupMember('gn','자신규');
+    out.leave=[A.store.groupLog.map(x=>x.from), chg(), A.capsAt('자신규',D3).includes('DC')];
+    A.undoAny(); out.leaveUndo=[A.store.groupLog.map(x=>x.from), chg()];
+    // 다른 사람을 그룹에 넣으면 그 날부터 그 사람도 — 가선임을 09/08 에 넣으면 09/08 차지는 나선임
+    A.toggleGroupMember('gn','가선임'); out.join=[chg(), A.store.groups[0].members];
+    A.undoAny();
+    // 다시 켜기 — 같은 날 되돌리면 기록 하나로
+    A.setToday(D2); A.toggleGroupCap('gn','DC');
+    out.back=[A.store.groups[0].caps||null, A.store.groupLog.length, J(A.result.byDay)===J(base)];
+    A.undoAny(); out.backUndo=[A.store.groups[0].caps, A.store.groupLog.map(x=>x.from)];
+    // ── 주지 않을 방 — 나선임 하나인 그룹(인계 피하기 끔)에 09/07 부터 나선임이 보던 방을 준다 ──
+    A.store.groups=[{id:'gb',name:'격리',members:['나선임'],noHandover:false}]; A.store.groupLog=[]; A.undoClear(); A.recompute();
+    const b0=JSON.parse(J(A.result.byDay)), myL=seat(D2,'D','나선임'), room=A.splitBed(toks('D',myL,D2)[0])[0];
+    out.banPre=[myL, !!room, J(sent().opts.avoid)];
+    // 방 고르기 창 — 그룹 머리말, 방을 누르면 그룹 금지 방 (고친 날부터)
+    A.pickAdmin('caps');
+    const addBtn=document.querySelector('#adminPanelBox .grpTable .gBans .addChip.banBtn');
+    out.addBtn=!!addBtn && /openRoomPick[(][{]kind:'group',id:'gb'[}]/.test(addBtn.getAttribute('onclick')||'');
+    A.openRoomPick({kind:'group',id:'gb'},10,10);
+    out.rpHead=(document.querySelector('#rpick')||{}).textContent.includes("'격리' 그룹 — 주지 않을 방");
+    toggleRoom(room); await wait(20);
+    out.ban=[A.store.groups[0].bans, A.store.groupLog.map(x=>x.from), A.store.groupLog[0].groups[0].bans||null, A.bansAt('나선임',D1), A.bansAt('나선임',D2)];
+    closeRoomPick();
+    { const av=sent().opts.avoid||{}; out.banAvoid=[!!(av[D1]&&av[D1].D&&av[D1].D['나선임']), ((av[D2]||{}).D||{})['나선임']||null]; }
+    const myRooms=iso=>toks('D',seat(iso,'D','나선임'),iso).map(t=>A.splitBed(t)[0]);
+    out.banSeat=[J(A.result.byDay[D1])===J(b0[D1]), myRooms(D1).includes(room), myRooms(D2).includes(room), myRooms(D3).includes(room)];
+    // 간호사 표 — 그룹의 주지 않을 방은 그룹 이름과 함께 (× 없음)
+    A.pickAdmin('caps');
+    { const row=[...document.querySelectorAll('#capsTable tr.nrow')].find(r=>r.querySelector('td.nm2')&&r.querySelector('td.nm2').textContent.startsWith('나선임'));
+      const gb=row&&row.querySelector('.banChip.gBan'); out.banRow=gb?[gb.textContent.includes('격리'), !gb.querySelector('.x')]:null; }
+    // 확인 카드 — 손으로 그 방 자리에 앉히면 그룹 이름과 함께
+    A.store.ovr={[D3]:{D:{'나선임':myL}}}; A.recompute();
+    out.banCard=(card().match(/나선임 — [^.]*주지 않을 방[^.]*배정됐습니다[.]/)||[''])[0];
+    A.store.ovr={}; A.recompute();
+    // 호실 이름을 바꾸면 그룹의 방도 — 기록 속 그룹까지 (고친 날로 치지 않는다)
+    A.show('admin'); A.pickAdmin('rooms');
+    const ri=A.store.rooms.findIndex(r=>String(r[0])===room);
+    A.setRoom(ri,0,'1099');
+    out.ren=[A.store.groups[0].bans, A.store.groupLog.map(x=>x.from), A.store.groupLog[1].groups[0].bans];
+    A.undoAny(); out.renUndo=A.store.groups[0].bans;
+    A.delRoom(ri); out.del=[A.store.groups[0].bans||null, A.store.groupLog[1].groups[0].bans||null, J(A.store.groups[0])];
+    A.undoAny();
+    // 병동을 바꾸면 같은 자리 방으로 (101 → 92: 1001 → 951)
+    A.setWard('92'); out.ward=[A.store.groups[0].bans, A.store.groupLog[1].groups[0].bans];
+    A.store=JSON.parse(J(keepStore)); A.migrateStore();
+    // 손으로 고친 파일 — 가능 근무는 ALL_CAPS 안의 것만 그 순서로(전부면 칸 없음), 방은 글자로 겹치지 않게
+    A.store.order=['가','나']; A.store.groups=[{id:'g1',name:'a',members:['가'],caps:['N','x','DC','DC'],bans:[' 1001 ','1001',3,null,'']},
+      {id:'g2',name:'b',members:['나'],caps:['DC','D','EC','E','NC','N'],bans:[]},{id:'g3',name:'c',members:[],caps:'DC',bans:'1001'}];
+    A.store.groupLog=[]; A.migrateStore();
+    out.norm=A.store.groups.map(x=>[x.id,x.caps||null,x.bans||null,Object.keys(x).join(',')]);
+    // 저장 → 다시 열기 — 그룹 제한·기록·배정 그대로
+    A.store=JSON.parse(J(keepStore)); A.migrateStore();
+    A.store.groups=[{id:'gt',name:'신규 독립',members:[A.store.order[0]],noHandover:false,caps:['D','E','N'],bans:[String(A.store.rooms[0][0])]}]; A.store.groupLog=[]; A.recompute();
+    const want=J(A.store.groups), res=J(A.result&&A.result.byDay);
+    adoptStore(parseStoreText(serializeStore(A.store))); A.recompute();
+    out.trip=[J(A.store.groups)===want, J(A.result&&A.result.byDay)===res];
+    // 다른 소속(SU)은 그룹 제한을 쓰지 않는다 (병동 자리에 앉지 않는다)
+    A.store.unit={[A.store.order[0]]:'SU'}; out.su=[A.capsAt(A.store.order[0],D2).includes('DC'), A.bansAt(A.store.order[0],D2)];
+    A.setToday(null); A.store=keepStore; A.migrateStore(); A.undoClear(); A.recompute(); A.show('week');
+    return out; })()`, 60000);
+  eq('그룹 없이 — 차지는 맨 위 자신규, 차지 자격은 사람마다 {D,E,N}', v38.pre, [['자신규', '자신규', '자신규'], 'object']);
+  ok('제한 없는 그룹(인계 피하기 끔)은 배정을 바꾸지 않는다', v38.same);
+  eq('그룹 표 — 간호사 표 위, 그룹원 가능 근무 칩 여섯(모두 켬), 주지 않을 방 칸', v38.tbl, [true, 6, 6, true]);
+  eq('09/07 에 그룹의 DC 를 끄면 — 그룹 가능 근무 · 기록(처음, 09/07) · 첫 기록엔 제한 없음 · 알림 · 개인 설정 그대로 · 09/06 가능 · 09/07 불가', v38.cap,
+    [['D', 'EC', 'E', 'NC', 'N'], ['', '2026-09-07'], null, true, true, true, false]);
+  eq('차지 — 09/06 은 그대로 자신규, 09/07 부터 가선임', v38.capChg, ['자신규', '가선임', '가선임']);
+  eq('엔진에 넘기는 차지 자격은 날마다 — 09/06 가능 · 09/07 D 불가 · 09/08 E 는 그대로 가능 · 다른 사람은 가능', v38.capFn, ['function', true, false, true, true]);
+  ok('지난 날(09/06) 배정은 그대로', v38.capPast);
+  eq('간호사 표 — 그룹에서 꺼 둔 DC 는 점선(켜짐 아님)·그룹 이름 툴팁, D 는 켜짐, 다른 사람은 그대로', v38.pChip, [true, false, true, true, true]);
+  eq('그 점선 칩을 누르면 — 개인 설정은 그대로, 되돌리기 기록 없음, 그룹에서 꺼 둔 근무라고 알린다', v38.pBlock, [null, true, true]);
+  eq('개인 칩은 Ctrl+Z 기록을 남긴다', v38.pTog, [['DC', 'D', 'EC', 'E', 'NC'], 1]);
+  eq('Ctrl+Z — 개인 가능 근무가 돌아온다', v38.pUndo, null);
+  ok('확인 카드 — 09/08 DC 만, 그룹 이름과 함께 (09/06 은 그때 가능)',
+    /^자신규 — 09[/]08 DC: 가능 근무가 아닙니다 [(]'신규 독립' 그룹에서 꺼 둔 근무[)][.]/.test(v38.capCard), v38.capCard);
+  eq('09/08 에 그룹에서 빼면 — 그 날부터 풀린다, 09/07 은 그대로', v38.leave, [['', '2026-09-07', '2026-09-08'], ['자신규', '가선임', '자신규'], true]);
+  eq('Ctrl+Z — 다시 그룹원', v38.leaveUndo, [['', '2026-09-07'], ['자신규', '가선임', '가선임']]);
+  eq('09/08 에 가선임을 넣으면 그 날부터 가선임도 차지 불가 — 나선임', v38.join, [['자신규', '가선임', '나선임'], ['자신규', '가선임']]);
+  eq('같은 날 다시 켜면 기록이 필요 없다 — 처음 배정 그대로', v38.back, [null, 0, true]);
+  eq('Ctrl+Z — 끈 기록으로', v38.backUndo, [['D', 'EC', 'E', 'NC', 'N'], ['', '2026-09-07']]);
+  ok('주지 않을 방 — 나선임이 보던 자리, 처음엔 엔진에 넘기는 것이 없다', v38.banPre[0] && v38.banPre[1] && v38.banPre[2] === 'null', JSON.stringify(v38.banPre));
+  ok('그룹 표의 ＋ 는 그룹 방 고르기 창을 연다', v38.addBtn);
+  ok('방 고르기 창 머리말 — 그룹 이름', v38.rpHead);
+  ok('방을 누르면 그룹의 주지 않을 방 · 그룹원 하나·인계 피하기 끔이어도 고친 날부터 기록 · 09/06 엔 없음',
+    v38.ban[0].length === 1 && JSON.stringify(v38.ban[1]) === JSON.stringify(['', '2026-09-07']) && v38.ban[2] === null && v38.ban[3].length === 0 && v38.ban[4].length === 1, JSON.stringify(v38.ban));
+  ok('엔진에 넘기는 주지 않을 방 — 09/06 엔 없고 09/07 엔 나선임의 자리', !v38.banAvoid[0] && Array.isArray(v38.banAvoid[1]) && v38.banAvoid[1].length > 0, JSON.stringify(v38.banAvoid));
+  eq('09/06 배정 그대로(그 방을 본다) · 09/07·09/08 엔 그 방을 피한다', v38.banSeat, [true, true, false, false]);
+  eq('간호사 표 — 그룹의 주지 않을 방은 그룹 이름과 함께, × 없음', v38.banRow, [true, true]);
+  ok('확인 카드 — 손으로 그 방 자리에 앉히면 그룹 이름과 함께',
+    /^나선임 — .+는 주지 않을 방[(]'격리' 그룹[)]인데 배정됐습니다[.]/.test(v38.banCard), v38.banCard);
+  ok('호실 이름을 바꾸면 그룹의 방도 · 기록 날짜는 그대로 · 기록 속 그룹도',
+    JSON.stringify(v38.ren) === JSON.stringify([['1099'], ['', '2026-09-07'], ['1099']]), JSON.stringify(v38.ren));
+  ok('Ctrl+Z — 옛 호실로', JSON.stringify(v38.renUndo) !== JSON.stringify(['1099']) && v38.renUndo.length === 1, JSON.stringify(v38.renUndo));
+  ok('병실을 지우면 그룹의 방에서도 빠진다 (빈 칸은 두지 않는다)', v38.del[0] === null && v38.del[1] === null && !/bans/.test(v38.del[2]), JSON.stringify(v38.del));
+  ok('병동을 바꾸면 그룹의 방도 같은 자리로 (101 → 92)', /^95[0-9]$/.test((v38.ward[0] || [])[0]) && JSON.stringify(v38.ward[0]) === JSON.stringify(v38.ward[1]), JSON.stringify(v38.ward));
+  eq('손으로 고친 파일 — 가능 근무는 ALL_CAPS 순서·전부면 없음, 방은 글자로 겹치지 않게', v38.norm,
+    [['g1', ['DC', 'N'], ['1001', '3'], 'id,name,members,noHandover,caps,bans'], ['g2', null, null, 'id,name,members,noHandover'], ['g3', null, null, 'id,name,members,noHandover']]);
+  eq('저장 → 다시 열기 — 그룹 제한·배정 그대로', v38.trip, [true, true]);
+  eq('다른 소속(SU)은 그룹 제한을 쓰지 않는다', v38.su, [true, []]);
+
+  // ── 39. 예시로 둘러보기 (2026-10-09 원근: "병동별 예시 js 파일을 추가하고 근무표도 임의로 채워서 한번 사용할수 있게") ─────────
+  // 예시는 메모리에서만 연다 — 데이터 파일·IndexedDB·localStorage 에 아무것도 쓰지 않는다. 우리 병동 파일을 보다가 열었으면
+  // 끝낼 때 그 파일로 그대로 돌아온다. 예시 파일(store.example)은 어느 길로 열어도(파일 고르기·끌어다 놓기·백업 불러오기·옆 파일)
+  // 연결하지 않고 예시로 연다 — 고친 것이 예시 파일에 쌓이지 않게. 실제 파일 창은 못 띄우므로 같은 모양의 가짜 핸들을 쓴다.
+  step('39 예시로 둘러보기');
+  const v39 = await ev(`return (async()=>{ const A=window.__app, out={}, J=x=>JSON.stringify(x);
+    const wait=ms=>new Promise(r=>setTimeout(r,ms));
+    const keepStore=JSON.parse(J(A.store));
+    const pill=()=>document.querySelector('#fileInfo').textContent.trim();
+    const sunIso=()=>{ const t=new Date(); t.setHours(0,0,0,0); t.setDate(t.getDate()-t.getDay()); return A.isoOfD(t); };
+    const mk=(name,body)=>{ const h={name,kind:'file',written:null,asked:0,
+      queryPermission:async()=>'prompt', requestPermission:async()=>{ h.asked++; return 'granted'; },
+      getFile:async()=>new File([h.written||body||''],name),
+      createWritable:async()=>({write:async d=>{ h.written=d; }, close:async()=>{}})}; return h; };
+    // 만들기 — 같은 병동·같은 날이면 같은 데이터, 병동마다 그 병동의 병실·서식, 날짜를 옮겨도 사람·순서는 같다
+    out.same=A.serializeStore(A.makeExample('92',{start:'2026-10-04'}))===A.serializeStore(A.makeExample('92',{start:'2026-10-04'}));
+    out.wards=A.WARDS.map(w=>{ const S=A.makeExample(w,{start:'2026-10-04'});
+      return [w,S.formId,S.rooms[0][0]===A.wardRooms(w)[0],S.order.length,!!S.example&&S.example.ward===w&&S.example.start==='2026-10-04',S.wardPicked]; });
+    const s1=A.makeExample('101',{start:'2026-10-04'}), s2=A.makeExample('101',{start:'2026-11-01'});
+    out.shift=[J(s1.order)===J(s2.order), s1.cells[s1.order[0]]['2026-10-04']===s2.cells[s2.order[0]]['2026-11-01']];
+    const s82=A.makeExample('82',{start:'2026-10-04'});
+    out.su=[Object.keys(s82.unit).length, s82.order.slice(-4).every(n=>s82.unit[n]==='SU')];
+    const s122=A.makeExample('122',{start:'2026-10-04'});
+    out.relief=[J((s122.relief['2026-10-05']||{}).D), (s122.relief['2026-10-06']||null)];
+    // 우리 병동 파일을 연결해 두고 하나 고쳐 저장
+    const real={...JSON.parse(J(keepStore)),rev:3};
+    const h=mk('assign-data.js',A.serializeStore(real));
+    await A.useHandle(h); A.store.caps[A.store.order[0]]=['D','E','N']; touch(); await wait(1000);
+    const realOrder=J(A.store.order), realCaps=J(A.store.caps), saved=h.written; A.toggleCap(A.store.order[1],'DC');
+    await wait(1000); const saved2=h.written, undo0=A.undoDepth;
+    out.real=[/^저장됨/.test(pill()), !!saved, saved2!==saved, undo0>0];
+    // 여기서부터 저장소에 쓰는 것을 센다 (화면 밝기는 보는 사람 편의라 뺀다)
+    localStorage.setItem('assignPrinted','1');
+    const writes=[]; const ls=Storage.prototype.setItem, lr=Storage.prototype.removeItem, realIdbSet=idbSet;
+    Storage.prototype.setItem=function(k,v){ if(k!=='assignTheme') writes.push('ls:'+k); return ls.call(this,k,v); };
+    Storage.prototype.removeItem=function(k){ writes.push('lsdel:'+k); return lr.call(this,k); };
+    window.idbSet=async(k,v)=>{ writes.push('idb:'+k); return realIdbSet(k,v); };
+    // 예시 열기 — 이번 주, 노랑 알약, 되돌리기 기록 없음, 병동 칩에 '예시', 예시 카드
+    await A.openExample('101');
+    const ob=document.querySelector('#onboard');
+    out.open=[A.inDemo(), pill(), A.fileLoc.kind, A.undoDepth, A.isoOfD(A.wkSunday)===sunIso(), A.store.example&&A.store.example.ward,
+      /101병동 예시/.test(document.querySelector('#wardChip').textContent), ob.classList.contains('demo')&&ob.style.display!=='none'&&/예시로 둘러보는 중/.test(ob.textContent),
+      ['우리 병동 파일 만들기','다른 병동 예시','예시 끝내기'].every(t=>[...ob.querySelectorAll('button')].some(b=>b.textContent.trim()===t))];
+    // 예시 안에서 고치기 — 되돌리기는 되고, 어디에도 쓰지 않는다
+    A.toggleCap(A.store.order[2],'DC'); A.setRule('keepSameShift',false); uiSet('printed',1);
+    const u1=A.undoDepth; A.undoAny(); await wait(1000);
+    const ev1=new Event('beforeunload',{cancelable:true}); window.dispatchEvent(ev1);
+    out.edit=[u1>=2, A.undoDepth===u1-1, h.written===saved2, J(writes), A.dirty, ev1.defaultPrevented, localStorage.getItem('assignPrinted'), pill()];
+    // 처음 안내 — 예시는 연결된 파일이 아니다: 환영(파일 만들기)에서 멈춘다
+    A.startWizard(3); const hello=A.WIZ[A.wizAt].id, hb=document.querySelector('#wizBody').textContent; A.wizGo(1);
+    out.wiz=[hello, /처음 시작/.test(hb), /예시로 먼저 둘러보기/.test(hb), A.wizAt]; A.closeWizard();
+    // 데이터 보관 — 백업·저장 위치 대신 예시 안내, 백업 불러오기는 막는다
+    A.show('admin'); A.pickAdmin('data'); const dp=document.querySelector('#adminPanelBox').textContent;
+    const rb=await A.restoreBackup(new File([A.serializeStore(real)],'x.js'));
+    out.data=[A.adminBadge('data'), /예시를 보는 중/.test(dp), /백업 불러오기/.test(dp), rb, A.inDemo()];
+    // 다른 병동 예시로 갈아타도 돌아갈 곳(우리 병동 파일)은 그대로
+    await A.openExample('82'); A.show('week');
+    out.swap=[A.store.formId, A.demoPrev&&A.demoPrev.fileHandle===h, A.isoOfD(A.wkSunday)===sunIso()];
+    // 예시 끝내기 — 우리 병동 파일·내용·되돌리기 기록 그대로, 파일엔 예시가 쓰이지 않았다
+    A.leaveDemo(); await wait(600);
+    out.leave=[A.inDemo(), A.fileLoc.kind, J(A.store.order)===realOrder, /^저장됨/.test(pill()), A.undoDepth===undo0, h.written===saved2, !/example/.test(h.written||'')];
+    // 예시 파일을 [데이터 파일 열기]로 고르면 — 연결하지 않고(허용도 묻지 않고) 예시로. 이번 주가 예시 밖이면 예시의 첫 주
+    const hx=mk('101병동 예시.js',A.serializeStore(A.makeExample('101',{start:'2025-01-05'})));
+    const ru=await A.useHandle(hx);
+    out.pickEx=[ru, A.inDemo(), hx.asked, hx.written, A.isoOfD(A.wkSunday), A.demoPrev&&A.demoPrev.fileHandle===h, A.fileLoc.kind];
+    A.leaveDemo(); await wait(300);
+    // 백업 불러오기로 예시 파일을 골라도 — 우리 병동 데이터를 덮지 않고 예시로
+    const rb2=await A.restoreBackup(new File([A.serializeStore(A.makeExample('61',{start:'2026-10-04'}))],'61병동 예시.js'));
+    out.restoreEx=[rb2, A.inDemo(), A.store.ward, h.written===saved2];
+    A.leaveDemo(); await wait(300);
+    out.restoreBack=[J(A.store.order)===realOrder, J(A.store.caps)!==realCaps];
+    // 끌어다 놓기 — 예시 파일이면 예시로
+    const dt=new DataTransfer(); dt.items.add(new File([A.serializeStore(A.makeExample('102',{start:'2026-10-04'}))],'102병동 예시.js',{type:'text/javascript'}));
+    window.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,cancelable:true})); await wait(600);
+    out.drop=[A.inDemo(), A.store.formId, h.written===saved2];
+    A.leaveDemo(); await wait(300);
+    // 옆 파일이 예시 파일이어도 예시로
+    openSidecar({name:'assign-data.js',data:A.makeExample('112',{start:'2026-10-04'})}); await wait(300);
+    out.side=[A.inDemo(), A.fileLoc.kind, A.store.ward];
+    A.leaveDemo(); await wait(300);
+    out.writes=J(writes);
+    // 파일 없이 연 예시를 끝내면 시작 화면 — 아무것도 남지 않는다
+    fileHandle=null; window.__memoryMode=false; A.setFileLoc({kind:'none'});
+    await A.openExample('92'); A.leaveDemo();
+    out.bare=[A.inDemo(), document.querySelector('#scrStart').style.display!=='none', A.store.order.length, !!window.__memoryMode];
+    // 예시에서 [우리 병동 파일 만들기] — 빈 새 파일, 예시 끝, 병동 단계부터
+    await A.openExample('92');
+    const h6=mk('assign-data.js'); const keepSave=window.showSaveFilePicker; window.showSaveFilePicker=async()=>h6;
+    await A.demoMakeFile(); await wait(300);
+    out.make=[A.inDemo(), A.fileLoc.kind, A.store.order.length, !!h6.written&&!/example/.test(h6.written), A.WIZ[A.wizAt]&&A.WIZ[A.wizAt].id];
+    A.closeWizard(); window.showSaveFilePicker=keepSave;
+    Storage.prototype.setItem=ls; Storage.prototype.removeItem=lr; window.idbSet=realIdbSet; localStorage.removeItem('assignPrinted');
+    // 도움말 — 예시 주제와 시작 화면 단추
+    out.help=[!!A.HELP.find(t=>t.id==='example'&&t.action&&/openExamplePick/.test(t.action.fn)), !!document.querySelector('#btnExample')];
+    fileHandle=null; clearTimeout(saveT); A.dirty=false; A.store=keepStore; A.memoryMode(); A.undoClear(); A.saveMsg(''); A.show('week');
+    return out; })()`, 90000);
+  ok('같은 병동·같은 날이면 같은 예시', v39.same);
+  ok('병동 14개 모두 — 그 병동 서식·병실, 예시 표시, 병동 고름',
+    v39.wards.length === 14 && v39.wards.every(([w, f, room, n, ex, picked]) => f === (['101', '102', '122', '82'].includes(w) ? w : '101') && room && n >= 14 && ex && picked),
+    JSON.stringify(v39.wards));
+  eq('날짜를 옮겨도 사람·근무 순서는 같다', v39.shift, [true, true]);
+  eq('82 — SU 소속 넷이 명부 맨 뒤', v39.su, [4, true]);
+  eq('122 — 월요일에 대체간호사, 화요일엔 없음', v39.relief, ['["전우치"]', null]);
+  eq('우리 병동 파일 — 저장됨, 고친 것이 파일에', v39.real, [true, true, true, true]);
+  eq('예시 열기 — 이번 주, 노랑 알약, 되돌리기 기록 없음, 병동 칩·예시 카드', v39.open,
+    [true, '예시 · 저장 안 됨', 'demo', 0, true, '101', true, true, true]);
+  eq('예시 안에서 고치기 — Ctrl+Z 는 되고 파일·IndexedDB·localStorage 에 아무것도 안 쓴다, 닫을 때 묻지 않는다, 옛 표시는 그대로',
+    v39.edit, [true, true, true, '[]', false, false, '1', '예시 · 저장 안 됨']);
+  eq('처음 안내 — 예시는 연결된 파일이 아니라 환영(처음 시작)에서 멈춘다', v39.wiz, ['hello', true, true, 0]);
+  eq('데이터 보관 — 예시 안내, 백업 불러오기 막음', v39.data, ['예시', true, false, false, true]);
+  eq('다른 병동 예시로 갈아타도 돌아갈 파일은 그대로', v39.swap, ['82', true, true]);
+  eq('예시 끝내기 — 우리 병동 파일·내용·되돌리기 기록 그대로, 파일에 예시가 안 쓰였다', v39.leave, [false, 'file', true, true, true, true, true]);
+  eq('예시 파일을 골라 열면 — 연결 안 함·허용 안 물음·안 씀, 이번 주가 예시 밖이면 예시의 첫 주', v39.pickEx,
+    ['demo', true, 0, null, '2025-01-05', true, 'demo']);
+  eq('백업 불러오기로 예시 파일 — 덮지 않고 예시로', v39.restoreEx, [true, true, '61', true]);
+  eq('…끝내면 우리 병동 데이터 그대로', v39.restoreBack, [true, true]);
+  eq('예시 파일을 끌어다 놓으면 예시로', v39.drop, [true, '102', true]);
+  eq('옆 파일이 예시 파일이어도 예시로', v39.side, [true, 'demo', '112']);
+  eq('예시를 여닫는 동안 저장소에 쓴 것 없음', v39.writes, '[]');
+  eq('파일 없이 연 예시를 끝내면 시작 화면 — 남는 것 없음', v39.bare, [false, true, 0, false]);
+  eq('예시에서 [우리 병동 파일 만들기] — 예시 끝, 빈 새 파일(예시 표시 없음), 병동 단계', v39.make, [false, 'file', 0, true, 'ward']);
+  eq('도움말 주제·시작 화면 단추', v39.help, [true, true]);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));
