@@ -2052,7 +2052,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261009t'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261010b'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -3135,6 +3135,19 @@ async function demoMakeFile(){
   try{ if(await newDataFile()) startWizard(1); }
   catch(e){ toast('만들기 실패: '+e.message,4000); }
 }
+/* 예시 파일 받기 (2026-10-10, 원근 "인트라넷에서 시연용 파일을 html 안에서 내려받을 방법") — 파일을 HTML 에 넣어 두지 않고
+ * makeExample 로 그 자리에서 만든다(HTML 크기 그대로, 날짜는 받는 날 기준 지난주 ~ 4주 뒤). 고친 것은 넣지 않는다 — 늘 처음 상태.
+ * 받은 파일에는 예시 표시(example)가 있어 끌어다 놓거나 [데이터 파일 열기]로 열어도 예시로 연다(저장되지 않는다). */
+function downloadExample(W){
+  W=String(W||(inDemo()&&window.__demo.ward)||store.ward||'101');
+  if(!WARDS.includes(W)) W='101';
+  const blob=new Blob([serializeStore(makeExample(W))],{type:'text/javascript'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=`${W}병동 예시.js`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  toast(`${W}병동 예시 파일을 내려받았습니다 — 이 창에 끌어다 놓거나 [데이터 파일 열기]로 열면 같은 예시가 열립니다`,4800);
+  return a.download;
+}
 async function openExamplePick(){
   const kinds={}; for(const w of WARDS){ const k=FORMS[w]?FORMS[w].kind:'101'; (kinds[k]=kinds[k]||[]).push(w); }
   const KN={'101':'101병동 서식 — 요일마다 방·이름 두 칸','122':'122병동 서식 — 이름·싸인 두 칸, 방은 세 열','102':'102병동 서식 — 방 칸 없음, 차지에 /CRN','82':'82병동 서식 — SU 칸이 따로'};
@@ -3162,6 +3175,7 @@ function demoCardHtml(open){
     `<div class="obFoot"><button onclick="startTopicTour('look')" title="지금 화면의 버튼을 하나씩 짚어 줍니다">▶ 화면 둘러보기</button>`+
     `<button onclick="demoMakeFile()" title="예시를 끝내고 우리 병동 데이터 파일을 만듭니다 — 병동·방 구성·근무표를 차례로 묻습니다">우리 병동 파일 만들기</button>`+
     `<button onclick="openExamplePick()" title="다른 병동의 병실·서식으로 된 예시를 엽니다">다른 병동 예시</button>`+
+    `<button onclick="downloadExample()" title="이 병동 예시를 처음 상태 그대로 파일로 받습니다 — 끌어다 놓거나 [데이터 파일 열기]로 열면 같은 예시가 열립니다">예시 파일 받기</button>`+
     `<button onclick="leaveDemo()" title="예시를 닫습니다 — 고친 것은 남지 않습니다">예시 끝내기</button></div>`;
 }
 
@@ -5904,6 +5918,7 @@ const ADMIN_PANELS={
       if(inDemo()) return `<div class="wizNote">지금은 <b>예시</b>를 보는 중입니다 — 고친 것은 어디에도 저장되지 않습니다. 백업·저장 위치는 우리 병동 파일에서 다룹니다.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
         <button class="pri" onclick="demoMakeFile()" title="예시를 끝내고 우리 병동 데이터 파일을 만듭니다">우리 병동 파일 만들기</button>
+        <button onclick="downloadExample()" title="이 병동 예시를 처음 상태 그대로 파일로 받습니다 — 끌어다 놓거나 [데이터 파일 열기]로 열면 같은 예시가 열립니다">예시 파일 받기</button>
         <button onclick="leaveDemo()" title="예시를 닫습니다 — 고친 것은 남지 않습니다">예시 끝내기</button></div>`;
       return `<div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="pri" onclick="downloadBackup()" title="지금 내용의 사본을 파일로 내려받습니다">백업 내려받기</button>
@@ -10997,7 +11012,7 @@ const HELP=[
         '배정표·근무표·관리 화면을 마음껏 눌러 보세요. 이름을 눌러 자리를 바꾸고, 날짜를 눌러 하루 어싸인표를 보고, 엑셀로도 받아 볼 수 있습니다. 맨 위 오른쪽이 노랑 <b>예시 · 저장 안 됨</b>이면 예시를 보는 중입니다.',
         '다 봤으면 배정표 화면의 예시 카드에서 <b>[우리 병동 파일 만들기]</b>로 진짜 파일을 만들거나 <b>[예시 끝내기]</b>를 누릅니다. 우리 병동 파일을 보다가 예시를 열었으면 예시를 끝낼 때 그 파일로 돌아옵니다.'],
  tips:['예시에서 고친 것은 어디에도 저장되지 않습니다 — 창을 닫으면 사라집니다.',
-       '예시 파일(예: <b>101병동 예시.js</b>)을 이 창에 끌어다 놓아도 같은 예시가 열립니다.'],
+       '예시 카드의 <b>[예시 파일 받기]</b>로 그 병동 예시를 파일(예: <b>101병동 예시.js</b>)로 받을 수 있습니다. 그 파일을 이 창에 끌어다 놓거나 [데이터 파일 열기]로 열면 같은 예시가 열리고, 역시 저장되지 않습니다.'],
  action:{label:'예시 고르기',fn:'closeHelp();openExamplePick()'}},
 {cat:'시작하기',id:'onboard',title:'시작 안내 카드 — 무엇이 남았는지',
  lead:'배정표 화면 위(넓은 화면에서는 표 오른쪽)의 <b>시작 안내</b> 카드는 데이터 파일·병동·방 구성·차지 가능자·이번 주 근무표·엑셀 내려받기가 준비됐는지를 <b>실제 상태로</b> ✓ ○ 표시합니다. 다 되면 저절로 사라집니다.',
@@ -11826,7 +11841,7 @@ window.__app={get store(){return store},set store(v){store=v},
   seatOfLabel,seatNames,worksP,ovrMateGone,freeOvr,clearOvrDay,handSeat,ovrAudit,pruneOvr,giveChargeMark,capsForNew,setRule,roomOvOn,setRoomOv,roomTextWarn,josa,get cellPins(){return cellPins},
   normGroups,groupById,groupWard,groupActive,groupsBetween,handoverGroupsOf,groupsAt,noteGroups,fixGroupLog,editDay,setToday(v){todayOvr=v||null;},addGroup,renameGroup,deleteGroup,toggleGroupMember,setGroupHandover,groupStripHtml,groupRulesHtml,groupCellHtml,keepHistory,restoreHistory,
   capsAt,bansAt,capBlockers,grpOfAt,toggleGroupCap,setGroupBans,delGroupBan,grpShape,grpCopy,toggleCap,delBan,closeRoomPick,offCandidates,
-  makeExample,enterDemo,openExample,leaveDemo,quitDemo,demoMakeFile,openExamplePick,inDemo,serializeStore,parseStoreText,useHandle,restoreBackup,EX_PLAN,EX_NAMES,WARDS,get demoPrev(){return demoPrev},
+  makeExample,enterDemo,openExample,leaveDemo,quitDemo,demoMakeFile,openExamplePick,downloadExample,inDemo,serializeStore,parseStoreText,useHandle,restoreBackup,EX_PLAN,EX_NAMES,WARDS,get demoPrev(){return demoPrev},
   get pickCtx(){return pickCtx},set pickCtx(v){pickCtx=v},
   memoryMode(){window.__memoryMode=true;
     setFileLoc({kind:'none'});afterLoad();}};
