@@ -222,6 +222,34 @@ def test_relax_moves_leave_wish_before_off_teukgeun(solver):
     assert r["schedule"]["a1"]["2026-03-03"] != "V", r["schedule"]["a1"]
 
 
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+@pytest.mark.parametrize("code", ["공", "특"])
+def test_relax_keeps_fixed_date_leave_over_off_teukgeun(solver, code):
+    """날이 정해진 휴가는 오프특근보다 먼저 지킨다 (2026-10-03 원근 결정, 결정 1-35) —
+    "경가·조가 등으로 휴무가 갑자기 많아지면 남은 근무자들이 오프를 줄여가며 근무를 뛴다"(제1원칙 3).
+    위 V 시험과 같은 표에서 V 자리만 공·특으로 바꾸면, 휴가는 그대로 두고 a1 이 그 주 OF 를 반납한다."""
+    d = [1, 2, 1, 1, 2, 2, 1]
+    per_day = {f"2026-03-0{i + 1}": {"D": n, "E": 0, "N": 0} for i, n in enumerate(d)}
+    pre = {"a0": {"2026-03-04": "주"},
+           "a1": {"2026-03-01": "주", "2026-03-03": code, "2026-03-06": "OF"}}
+    req = _request(2, pre, per_day=per_day, longRunLastResort=False)
+    req.allow_pre_relax = True
+    r = make_limited(req, days=7, solver=solver).solve()
+    assert r["success"], r["message"]
+    assert r["schedule"]["a1"]["2026-03-03"] == code, r["schedule"]["a1"]
+    assert len(r.get("off_teukgeun") or []) == 1, r.get("off_teukgeun")
+
+
+def test_fixed_date_leave_bonus_tops_off_teukgeun():
+    """날이 정해진 휴가 한 칸 = 오프특근 감점 × 3 — 완화 이력 보정으로 감점이 커져도 따라간다."""
+    from server.scheduler_base import _FIXED_DATE_LEAVE
+    assert _FIXED_DATE_LEAVE == {"특", "공", "병", "경가", "조가", "산전"}
+    s = NurseScheduler(_six_run_request())
+    assert s._relax_fixed_leave_bonus(5000, 3000, 500) == 15300
+    s.relax_boosts = {"a0": 1.5}
+    assert s._relax_fixed_leave_bonus(5000, 3000, 500) == 22800
+
+
 def test_relax_off_teukgeun_penalty_tops_boosted_leave_wish():
     """완화 이력 보정으로 커진 휴가 원티드(5000×1.5)보다도 오프특근 한 번이 더 비싸다."""
     s = NurseScheduler(_six_run_request())

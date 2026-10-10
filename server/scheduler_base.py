@@ -27,6 +27,9 @@ WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 # 경가(경사휴가)·조가(조사휴가)·산전(산전검진) = 병동 번표에 실제로 쓰는 사전입력 전용 휴가 (2026-10-03)
 _LEAVE_CODES = frozenset({"V", "생", "특", "공", "법", "병", "경가", "조가", "산전"})  # 연차류 휴가
 _OFF_CODES = frozenset({"OF", "P1"})                          # 휴식(비번) + 임부휴무(모성보호)
+# 날이 정해진 휴가 — 결혼·장례·공적 업무·병가·산전검진·특별휴가. V·생·법과 달리 다른 날로
+# 옮겨 쓸 수 없어, 완화에서 오프특근보다 먼저 지킨다 (2026-10-03 원근 결정, 결정 1-35).
+_FIXED_DATE_LEAVE = frozenset({"특", "공", "병", "경가", "조가", "산전"})
 _OFF_CODE = "OF"                                              # 휴식(비번)
 _JUHU_CODE = "주"                                            # 주휴(고정)
 # 오프특근 페널티 — 제1원칙 3(2026-08-20 사용자 명시).
@@ -562,14 +565,31 @@ class _SchedulerBase:
         **오프특근은 가장 나중** (2026-10-03 원근 결정): 감점을 원티드 한 칸의 유지 보너스 중
         가장 큰 것(휴가 원티드, 완화 이력 보정 포함)과 마지막 수단보다 크게 둔다 — 근무·OF·휴가
         원티드를 풀어서 되면 오프특근을 쓰지 않는다. 견주는 단위는 한 칸 대 한 번이다.
+        단 날이 정해진 휴가(경가·조가·공·특·병·산전)는 오프특근보다 먼저 지킨다
+        (_relax_fixed_leave_bonus, 2026-10-03 원근 결정) — 옮길 수 있는 건 V·생·법·OF·근무 원티드.
         bonuses = 엔진의 원티드 유지 보너스(휴가·쉬는 날·근무). 100 단위로 맞춰 완화 폴백의
         보너스 gcd 를 깨지 않는다."""
+        pen = self._relax_off_teukgeun_pen(*bonuses)
+        return [(pen, sl) for sl in getattr(self, "_off_slack", [])]
+
+    def _relax_off_teukgeun_pen(self, *bonuses: int) -> int:
+        """완화 1단계 오프특근 한 번의 감점 — 옮길 수 있는 원티드 한 칸의 유지 보너스 중 가장 큰 것
+        (완화 이력 보정 포함)·마지막 수단보다 크게, 100 단위로."""
         boosts = getattr(self, "relax_boosts", None) or {}
         boost = max([1.0] + [float(b) for b in boosts.values()])
         top = max([int(round(int(b) * boost)) for b in bonuses]
                   + [_LONG_RUN_PENALTY, _RARE_TRANSITION_PENALTY])
-        pen = -(-top // 100) * 100 + 100
-        return [(pen, sl) for sl in getattr(self, "_off_slack", [])]
+        return -(-top // 100) * 100 + 100
+
+    def _relax_fixed_leave_bonus(self, *bonuses: int) -> int:
+        """날이 정해진 휴가(_FIXED_DATE_LEAVE) 한 칸의 완화 1단계 유지 보너스 = 오프특근 감점 × 3.
+
+        "경가·조가 등으로 휴무가 갑자기 많아지면 남은 근무자들이 오프를 줄여가며 근무를 뛴다"
+        (제1원칙 3) — 이 휴가는 오프특근으로 메우는 쪽이지 옮기는 쪽이 아니다 (2026-10-03 원근 결정).
+        한 칸을 비우면 그날 근무 하루가 빠지므로 보통 오프특근 한 번으로 메워진다. ×3 은 그 여유 —
+        오프특근 둘에 다른 원티드 한 칸을 더 풀어야 해도 지킨다. 그래도 근무표가 안 나오면 옮긴다.
+        bonuses = _relax_off_teukgeun_terms 와 같은 값(옮길 수 있는 원티드의 유지 보너스)."""
+        return 3 * self._relax_off_teukgeun_pen(*bonuses)
 
     def _effective_pre(self, nurse: dict, dt: date, pre: str, is_holiday: bool):
         """변수 도메인 기준의 '유효 사전입력' — 공휴일 OF 드롭(일반 간호사) + 모성보호 드롭.
