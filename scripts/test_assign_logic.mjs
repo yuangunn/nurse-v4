@@ -2994,19 +2994,28 @@ async function main() {
     const ob=document.querySelector('#onboard');
     out.open=[A.inDemo(), pill(), A.fileLoc.kind, A.undoDepth, A.isoOfD(A.wkSunday)===sunIso(), A.store.example&&A.store.example.ward,
       /101병동 예시/.test(document.querySelector('#wardChip').textContent), ob.classList.contains('demo')&&ob.style.display!=='none'&&/예시로 둘러보는 중/.test(ob.textContent),
-      ['우리 병동 파일 만들기','다른 병동 예시','예시 끝내기'].every(t=>[...ob.querySelectorAll('button')].some(b=>b.textContent.trim()===t))];
+      ['우리 병동 파일 만들기','다른 병동 예시','예시 파일 받기','예시 끝내기'].every(t=>[...ob.querySelectorAll('button')].some(b=>b.textContent.trim()===t))];
     // 예시 안에서 고치기 — 되돌리기는 되고, 어디에도 쓰지 않는다
     A.toggleCap(A.store.order[2],'DC'); A.setRule('keepSameShift',false); uiSet('printed',1);
     const u1=A.undoDepth; A.undoAny(); await wait(1000);
     const ev1=new Event('beforeunload',{cancelable:true}); window.dispatchEvent(ev1);
     out.edit=[u1>=2, A.undoDepth===u1-1, h.written===saved2, J(writes), A.dirty, ev1.defaultPrevented, localStorage.getItem('assignPrinted'), pill()];
+    // 예시 파일 받기 (2026-10-10) — HTML 이 그 자리에서 만든 처음 상태(예시에서 고친 것은 안 든다), 이름은 '병동 예시.js', 다시 열면 예시
+    const dls=[], aclick=HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click=function(){ if(this.href.startsWith('blob:')) dls.push({name:this.download,href:this.href}); else aclick.call(this); };
+    const r1=A.downloadExample(), r2=A.downloadExample('82');
+    HTMLAnchorElement.prototype.click=aclick;
+    const txts=await Promise.all(dls.map(async d=>(await fetch(d.href)).text()));
+    const px=txts.map(t=>A.parseStoreText(t));
+    out.dl=[r1, r2, dls.map(d=>d.name).join('|'), txts[0]===A.serializeStore(A.makeExample('101')), txts[1]===A.serializeStore(A.makeExample('82')),
+      px[0]&&px[0].example&&px[0].example.ward, px[0]&&px[0].example&&px[0].example.start===sunIso(), J(px[0]&&px[0].caps)!==J(A.store.caps), A.inDemo(), A.store.formId];
     // 처음 안내 — 예시는 연결된 파일이 아니다: 환영(파일 만들기)에서 멈춘다
     A.startWizard(3); const hello=A.WIZ[A.wizAt].id, hb=document.querySelector('#wizBody').textContent; A.wizGo(1);
     out.wiz=[hello, /처음 시작/.test(hb), /예시로 먼저 둘러보기/.test(hb), A.wizAt]; A.closeWizard();
     // 데이터 보관 — 백업·저장 위치 대신 예시 안내, 백업 불러오기는 막는다
     A.show('admin'); A.pickAdmin('data'); const dp=document.querySelector('#adminPanelBox').textContent;
     const rb=await A.restoreBackup(new File([A.serializeStore(real)],'x.js'));
-    out.data=[A.adminBadge('data'), /예시를 보는 중/.test(dp), /백업 불러오기/.test(dp), rb, A.inDemo()];
+    out.data=[A.adminBadge('data'), /예시를 보는 중/.test(dp), /백업 불러오기/.test(dp), rb, A.inDemo(), /예시 파일 받기/.test(dp)];
     // 다른 병동 예시로 갈아타도 돌아갈 곳(우리 병동 파일)은 그대로
     await A.openExample('82'); A.show('week');
     out.swap=[A.store.formId, A.demoPrev&&A.demoPrev.fileHandle===h, A.isoOfD(A.wkSunday)===sunIso()];
@@ -3060,8 +3069,10 @@ async function main() {
     [true, '예시 · 저장 안 됨', 'demo', 0, true, '101', true, true, true]);
   eq('예시 안에서 고치기 — Ctrl+Z 는 되고 파일·IndexedDB·localStorage 에 아무것도 안 쓴다, 닫을 때 묻지 않는다, 옛 표시는 그대로',
     v39.edit, [true, true, true, '[]', false, false, '1', '예시 · 저장 안 됨']);
+  eq('예시 파일 받기 — 그 자리에서 만든 처음 상태(고친 것 없음)·이번 주·병동 이름 파일, 받아도 예시 그대로', v39.dl,
+    ['101병동 예시.js', '82병동 예시.js', '101병동 예시.js|82병동 예시.js', true, true, '101', true, true, true, '101']);
   eq('처음 안내 — 예시는 연결된 파일이 아니라 환영(처음 시작)에서 멈춘다', v39.wiz, ['hello', true, true, 0]);
-  eq('데이터 보관 — 예시 안내, 백업 불러오기 막음', v39.data, ['예시', true, false, false, true]);
+  eq('데이터 보관 — 예시 안내 · 예시 파일 받기, 백업 불러오기 막음', v39.data, ['예시', true, false, false, true, true]);
   eq('다른 병동 예시로 갈아타도 돌아갈 파일은 그대로', v39.swap, ['82', true, true]);
   eq('예시 끝내기 — 우리 병동 파일·내용·되돌리기 기록 그대로, 파일에 예시가 안 쓰였다', v39.leave, [false, 'file', true, true, true, true, true]);
   eq('예시 파일을 골라 열면 — 연결 안 함·허용 안 물음·안 씀, 이번 주가 예시 밖이면 예시의 첫 주', v39.pickEx,
