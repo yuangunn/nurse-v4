@@ -3225,6 +3225,181 @@ async function main() {
     ['9', false, true, true, 7, 7, true]);
   eq('예시 중 다른 파일을 열면 — 우리 파일로 먼저 돌아오고 되돌리기 기록은 새 파일에 안 따라감', v40.swapFile, [true, true, false, '61', 0, false, true]);
 
+  // ── 41. 손으로 바꿀 때 사유 (2026-10-11, 결정 2-51) ─────────────────────────────────────
+  // 원근: "어싸인 방배정 변경이나 어싸인 간호사 변경시 사유를 꼭 작성할 수 있게 — 왜 바꿨는지를 모르니까 보기가 힘들다".
+  // 배정표에서 눌러 연 창에서만 사유를 받는다 — 비우면 안 바뀌고, 그만두면 아무것도 안 바뀌며, 되돌리기 한 번에 사유까지 돌아간다.
+  step('41 손으로 바꿀 때 사유');
+  const v41 = await ev(`return (async()=>{ const A=window.__app, D='2026-09-06', out={}, J=x=>JSON.stringify(x);
+    const wait=ms=>new Promise(r=>setTimeout(r,ms));
+    const setup=(id,n,off)=>{ A.setFormId(id); A.setWard(id); const s=A.store;
+      s.order=['김차지','이에이','박비','최씨','정디','한막내'].slice(0,n||5); s.cells={}; s.ovr={}; s.ovrPair={}; s.roomOv={}; s.roomOvCnt={};
+      s.presetDay={}; s.seedManual={}; s.unit={}; s.relief={}; s.trainee={}; s.trOv={}; s.evRules=[]; s.daily={}; s.banRooms={}; s.caps={}; s.hidden={}; s.why={};
+      s.rules={keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false};
+      for(const nm of s.order) s.cells[nm]={[D]:(off||[]).includes(nm)?'OF':'D'};
+      s.presets={}; s.presetPlan={}; s.groups=[]; s.groupLog=[]; A.store=s; A.resetSchemes(); A.recompute();
+      A.wkSunday=new Date(2026,8,6); A.show('week'); A.undoClear(); return A.store; };
+    const modalOn=()=>document.querySelector('#modal').classList.contains('on');
+    const whyIn=()=>document.querySelector('#modalBox #whyIn');
+    const nmCell=nm=>[...document.querySelectorAll('#wkTable td.nm')].find(t=>t.dataset.n===nm&&t.dataset.iso===D);
+    const openName=async nm=>{ nmCell(nm).click(); await wait(10); return document.querySelector('#pick').style.display==='block'; };
+    const ok=async t=>{ if(t!=null) whyIn().value=t; document.querySelector('#mdOk').click(); await wait(20); };
+    const err=()=>(document.querySelector('#mdErr')||{}).textContent||'';
+    const seatKeys=()=>Object.keys((A.store.why||{})[D]||{}).sort();
+    // ① 자리 바꾸기 — 창에서 누르면 사유 창이 먼저, 비우면 안 바뀐다, 적으면 둘 다 같은 사유로
+    let s=setup('101');
+    out.open=await openName('최씨');
+    [...document.querySelectorAll('#pick .swapBtn')].find(b=>/pickChoose[(]'차지'/.test(b.getAttribute('onclick'))).click(); await wait(20);
+    out.asked=[modalOn(),!!whyIn(),J(A.store.ovr),document.querySelector('#pick').style.display];
+    await ok(''); out.empty=[modalOn(),err(),J(A.store.ovr)];
+    const d0=A.undoDepth;
+    await ok('격리 환자 담당'); out.swapped=[modalOn(),(A.store.ovr[D]||{}).D,seatKeys(),A.store.why[D]['seat|D|최씨'].t,A.store.why[D]['seat|D|김차지'].t,A.undoDepth-d0];
+    const c=nmCell('최씨'); out.tip=[c.classList.contains('why'),/사유: 격리 환자 담당/.test(c.title),c.classList.contains('ovd')];
+    const wb=document.querySelector('#wkWhy'); out.card=[wb.style.display,/손으로 바꾼 것/.test(wb.textContent),/격리 환자 담당/.test(wb.textContent),A.WHY_ROWS.wk.length];
+    // 이름 창 위의 사유 줄 — 맞바꾼 상대에서 열어도
+    await openName('김차지'); out.pkWhy=(document.querySelector('#pick .pkWhy')||{}).textContent||''; A.closePick();
+    // ② 그만두기 — 아무것도 안 바뀌고 되돌리기 기록도 없다
+    const st=J([A.store.ovr,A.store.why]), d1=A.undoDepth;
+    await openName('정디'); [...document.querySelectorAll('#pick .swapBtn:not([disabled])')][0].click(); await wait(20);
+    document.querySelector('#mdCancel').click(); await wait(20);
+    out.cancel=[modalOn(),J([A.store.ovr,A.store.why])===st,A.undoDepth-d1];
+    // ③ 되돌리기 한 번 — 자리와 사유가 함께 돌아간다
+    A.undoAny(); out.undo=[J(A.store.ovr),J(A.store.why)];
+    // ④ 자동으로 되돌리기는 묻지 않고, 바꾼 것이 없어지면 사유도 걷힌다
+    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지','회진 준비');
+    out.direct=[J((A.store.ovr[D]||{}).D),seatKeys()];
+    await openName('최씨'); [...document.querySelectorAll('#pick button')].find(b=>b.getAttribute('onclick')==='pickChoose(null)').click(); await wait(20);
+    out.auto=[modalOn(),J(A.store.ovr),J(A.store.why)];
+    // ⑤ 근무 바꾸기는 묻지 않는다 — 근무를 바꾸는 것은 지금처럼 바로 (원근이 고른 범위 '자리·방만')
+    s=setup('101'); await openName('정디');
+    [...document.querySelectorAll('#pick .shl button')].find(b=>b.textContent.trim()==='OF').click(); await wait(20);
+    out.shift=[modalOn(),A.store.cells['정디'][D],J(A.store.why),document.querySelector('#wkWhy').style.display];
+    // 옛 시험판의 근무·대체간호사 사유는 열 때 걷힌다
+    A.store.why={[D]:{'shift|정디':{t:'옛 사유',v:'OF'},'relief|D|한대체':{t:'옛 사유',v:'한대체'}}}; A.migrateStore(); out.shiftOld=J(A.store.why);
+    // ⑥ 그날 방 고치기 — 처음 고칠 때 한 번만 묻고, 창은 그 자리에 다시 열리고, 되돌리기 한 번에 창을 열기 전으로
+    s=setup('101');
+    const rmCell=[...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l==='B');
+    const rm0=A.roomsFor('D',5,'B',D); rmCell.click(); await wait(10);
+    const off=()=>[...document.querySelectorAll('#rpick .rpRoom > button:first-child')].filter(b=>!b.classList.contains('on'));
+    const d2=A.undoDepth;
+    off()[0].click(); await wait(20);
+    out.rmAsk=[modalOn(),document.querySelector('#rpick').style.display,J(A.store.roomOv)];
+    await ok('격리실 추가'); out.rm1=[modalOn(),document.querySelector('#rpick').style.display,!!((A.store.roomOv[D]||{}).D||{}).B,(A.store.why[D]['room|D|B']||{}).t,
+      /이번에 고치는 사유/.test(document.querySelector('#rpick').textContent)];
+    off()[0].click(); await wait(20);
+    out.rm2=[modalOn(),A.undoDepth-d2,(A.store.why[D]['room|D|B']||{}).v===A.store.roomOv[D].D.B];
+    A.closeRoomPick();
+    const rc=[...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l==='B');
+    out.rmTip=[rc.classList.contains('why'),/사유: 격리실 추가/.test(rc.title)];
+    A.undoAny(); out.rmUndo=[A.roomsFor('D',5,'B',D)===rm0,J(A.store.why)];
+    // ⑦ 직접 입력 — 방과 사유를 한 창에서 (브라우저 입력 창이 아니다)
+    s=setup('101'); [...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l==='C').click(); await wait(10);
+    [...document.querySelectorAll('#rpick button')].find(b=>/직접 입력/.test(b.textContent)).click(); await wait(20);
+    out.manAsk=[modalOn(),!!document.querySelector('#rpText'),!!whyIn()];
+    document.querySelector('#rpText').value='1, 2'; await ok(''); out.manEmpty=[modalOn(),err()];
+    const d3=A.undoDepth; await ok('보호자 요청');
+    out.man=[A.store.roomOv[D].D.C,(A.store.why[D]['room|D|C']||{}).t,A.undoDepth-d3];
+    // ⑧ 오늘만 방 구성 — 사유를 받는다, 매주 계획은 묻지 않는다
+    s=setup('101'); s.presets[5]=[{id:'px',name:'격리',rooms:JSON.parse(J(s.schemes[5]))}];
+    [...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l==='B').click(); await wait(10);
+    document.querySelector('#rpPresetSel').value='px';
+    [...document.querySelectorAll('#rpick button')].find(b=>b.textContent.trim()==='오늘만').click(); await wait(20);
+    out.preAsk=[modalOn(),J(A.store.presetDay)];
+    await ok('격리 환자 많음'); out.pre=[J(A.store.presetDay),(A.store.why[D]['preset|D|5']||{}).t];
+    [...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l==='B').click(); await wait(10);
+    document.querySelector('#rpPresetSel').value='px';
+    [...document.querySelectorAll('#rpick button')].find(b=>/^매주/.test(b.textContent.trim())).click(); await wait(20);
+    out.weekly=[modalOn(),J(A.store.presetPlan)];
+    // ⑨ 대체간호사 넣기 — 이름만 (사유 칸 없음)
+    s=setup('101',4); await openName('최씨'); [...document.querySelectorAll('#pick button')].find(b=>/대체간호사 넣기/.test(b.textContent)).click(); await wait(20);
+    out.rlfAsk=[modalOn(),!!document.querySelector('#modalBox #mdInput'),!!whyIn()];
+    document.querySelector('#modalBox #mdInput').value='한대체'; document.querySelector('#mdOk').click(); await wait(20);
+    out.rlf=[modalOn(),J(A.store.relief),J(A.store.why),nmCell('한대체').title||''];
+    // ⑩ 쉬는 간호사 넣기 — 사람을 고르면 바로
+    s=setup('101',6,['한막내']); await openName('최씨'); [...document.querySelectorAll('#pick button')].find(b=>/쉬는 간호사 넣기/.test(b.textContent)).click(); await wait(20);
+    [...document.querySelectorAll('#modalBox button[data-g]')].find(b=>/한막내/.test(b.textContent)).click(); await wait(20);
+    out.add=[modalOn(),A.store.cells['한막내'][D],J(A.store.why)];
+    // ⑪ CRN 맡기기 (102) — 바로 DC
+    s=setup('102'); await openName('박비'); [...document.querySelectorAll('#pick button')].find(b=>/CRN 맡기기/.test(b.textContent)).click(); await wait(20);
+    out.crn=[modalOn(),A.store.cells['박비'][D],A.dayInfo(D).D.charge,J(A.store.why)];
+    // ⑫ 지난 사유 — 눌러서 채운다
+    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지','선임 교육');
+    await openName('정디'); [...document.querySelectorAll('#pick .swapBtn:not([disabled])')][0].click(); await wait(20);
+    const chips=[...document.querySelectorAll('#modalBox .whyChip')].map(b=>b.textContent);
+    const ch=[...document.querySelectorAll('#modalBox .whyChip')].find(b=>b.textContent==='선임 교육'); if(ch) ch.click();
+    out.chips=[chips.includes('선임 교육'),whyIn().value,modalOn()]; A.closeModal(null); await wait(10);
+    // ⑬ 이름을 바꾸면 사유도 새 이름으로, 지우면 사유도 사라진다
+    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지','회진');
+    A.applyNurseName(A.store.order.indexOf('최씨'),'최새'); A.recompute(); out.ren=seatKeys();
+    A.applyNurseName(A.store.order.indexOf('최새'),''); A.recompute(); out.renDel=seatKeys();
+    // ⑭ 옛 파일 — 사유 없는 손 교체는 '사유 없음', 목록에서 나중에 적을 수 있다. 모양이 틀린 사유는 열 때 걷힌다
+    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지');
+    A.store.why={x:5,[D]:{'seat|D|없는사람':{t:'옛 것',v:'A'},'bad':null,'seat|D|최씨':{t:'',v:'차지'}}}; A.migrateStore();
+    out.migr=J(A.store.why);
+    A.show('admin'); A.pickAdmin('manual'); await wait(20);
+    const tb=document.querySelector('#whyTable'); out.adm=[/사유 없음/.test(tb.textContent),A.WHY_ROWS.adm.length];
+    [...tb.querySelectorAll('button')].find(b=>b.textContent==='사유 적기').click(); await wait(20);
+    out.admAsk=[modalOn(),whyIn().value];
+    await ok('옛 교체 — 회진'); out.admWhy=[(A.store.why[D]['seat|D|최씨']||{}).t,(A.store.why[D]['seat|D|김차지']||{}).t,/옛 교체 — 회진/.test(document.querySelector('#whyTable').textContent)];
+    // 초기화도 되돌릴 수 있다
+    A.resetOv(); const r1=J(A.store.ovr); A.undoAny(); out.reset=[r1,!!(A.store.ovr[D]||{}).D,(A.store.why[D]['seat|D|최씨']||{}).t];
+    A.show('week');
+    // ⑮ 확인 카드 — 손으로 정한 자리의 사유가 문장 뒤에 붙는다 (문장은 그대로)
+    s=setup('101'); s.caps={'박비':['D','E','N']}; A.recompute(); A.openPick('박비',D,10,10); A.pickChoose('차지','차지 교육');
+    for(let i=0;i<3;i++){ const f=document.querySelector('#wkWarn.shut .fold')||document.querySelector('#wkWarn .more'); if(!f||!/자세히|더 보기/.test(f.textContent)) break; f.click(); }
+    const wt=document.querySelector('#wkWarn').textContent;
+    out.warn=[/박비 — 자격 없이 차지입니다[.] 배정표에서 손으로 차지 자리로 정해 두었기 때문입니다[.] [(]사유: 차지 교육[)]/.test(wt)];
+    // ⑯ 하루 어싸인표 옆 열에도, 종이에는 안 나온다
+    await A.openDay(D); await wait(400);
+    out.day=[/손으로 바꾼 것/.test(document.querySelector('#daySide').textContent),/차지 교육/.test(document.querySelector('#daySide').textContent),
+      /차지 교육/.test(document.querySelector('#dayPreview').textContent)];
+    A.show('week'); await A.buildPrintArea(false); await wait(50);
+    out.paper=/차지 교육/.test(document.querySelector('#printArea').textContent);
+    // 접힌 카드 — 펼치면 줄마다 사유
+    const fb=document.querySelector('#wkWhy .fold'); if(fb) fb.click(); await wait(10);
+    out.fold=[!!fb,document.querySelectorAll('#wkWhy .whyRow').length];
+    return out; })()`, 60000);
+  eq('사유 — 배정표에서 이름을 누르면 창이 열린다', v41.open, true);
+  eq('자리 바꾸기를 누르면 사유 창이 먼저 — 아직 안 바뀌고 이름 창은 닫힌다', v41.asked, [true, true, '{}', 'none']);
+  eq('사유를 비우면 안 바뀐다', v41.empty, [true, '사유를 적어 주세요 — 비워 두면 바뀌지 않습니다.', '{}']);
+  eq('적으면 맞바꾼 두 사람 모두 같은 사유, 되돌리기 한 번', v41.swapped,
+    [false, { '김차지': 'C', '최씨': '차지' }, ['seat|D|김차지', 'seat|D|최씨'], '격리 환자 담당', '격리 환자 담당', 1]);
+  eq('이름 칸에 점과 마우스를 올리면 사유', v41.tip, [true, true, true]);
+  eq("배정표 옆 '손으로 바꾼 것'에 한 줄(맞바꿈은 한 줄)", v41.card, ['flex', true, true, 1]);
+  ok('맞바꾼 상대의 이름 창에도 사유 줄', /자리 바꿈 · 사유: 격리 환자 담당/.test(v41.pkWhy), v41.pkWhy);
+  eq('그만두기 — 아무것도 안 바뀌고 되돌리기 기록도 없다', v41.cancel, [false, true, 0]);
+  eq('되돌리기 한 번에 자리와 사유가 함께', v41.undo, ['{}', '{}']);
+  eq('함수를 바로 부르면 사유를 묻지 않는다(검사·캡처 길)', v41.direct, [JSON.stringify({ '김차지': 'C', '최씨': '차지' }), ['seat|D|김차지', 'seat|D|최씨']]);
+  eq('자동으로 되돌리기는 묻지 않고, 사유도 걷힌다', v41.auto, [false, '{}', '{}']);
+  eq("근무 바꾸기는 묻지 않고 바로 — '손으로 바꾼 것'에도 안 나온다", v41.shift, [false, 'OF', '{}', 'none']);
+  eq('옛 시험판의 근무·대체간호사 사유는 열 때 걷힌다', v41.shiftOld, '{}');
+  eq('그날 방 — 처음 고칠 때 사유 창, 아직 안 바뀜', v41.rmAsk, [true, 'none', '{}']);
+  eq('사유를 적으면 바뀌고 방 창이 그 자리에 다시 열린다', v41.rm1, [false, 'block', true, '격리실 추가', true]);
+  eq('같은 창에서 또 고치면 묻지 않고, 되돌리기는 창 하나에 한 번', v41.rm2, [false, 1, true]);
+  eq('방 칸에도 점과 사유', v41.rmTip, [true, true]);
+  eq('되돌리기 한 번에 창을 열기 전 방으로 (예전엔 되돌릴 길이 없었다)', v41.rmUndo, [true, '{}']);
+  eq('직접 입력 — 방과 사유를 한 창에서', v41.manAsk, [true, true, true]);
+  eq('직접 입력도 사유를 비우면 안 바뀐다', v41.manEmpty, [true, '사유를 적어 주세요 — 비워 두면 바뀌지 않습니다.']);
+  eq('직접 입력 — 바뀌고 사유, 되돌리기 한 번', v41.man, ['1, 2', '보호자 요청', 1]);
+  eq('오늘만 방 구성 — 사유가 먼저', v41.preAsk, [true, '{}']);
+  eq('오늘만 방 구성 — 바뀌고 사유', v41.pre, [JSON.stringify({ '2026-09-06': { D: { 5: 'px' } } }), '격리 환자 많음']);
+  eq('매주 계획은 설정이라 묻지 않는다', v41.weekly, [false, JSON.stringify({ sun: { D: { 5: 'px' } } })]);
+  eq('대체간호사 넣기 — 이름만 묻는다(사유 칸 없음)', v41.rlfAsk, [true, true, false]);
+  eq('대체간호사 — 바로 들어가고 사유는 없다', v41.rlf, [false, JSON.stringify({ '2026-09-06': { D: ['한대체'] } }), '{}', '']);
+  eq('쉬는 간호사 넣기 — 사람을 고르면 바로', v41.add, [false, 'D', '{}']);
+  eq('CRN 맡기기 — 묻지 않고 바로 DC', v41.crn, [false, 'DC', '박비', '{}']);
+  eq('지난 사유를 누르면 채운다(바로 바꾸지는 않는다)', v41.chips, [true, '선임 교육', true]);
+  eq('이름을 바꾸면 사유도 새 이름으로', v41.ren, ['seat|D|김차지', 'seat|D|최새']);
+  eq('명부에서 지우면 그 사람과 맞바꾼 상대의 사유가 함께 사라진다(맞바꿈이 풀리므로)', v41.renDel, []);
+  eq('열 때 모양이 틀린 사유·없는 것의 사유는 걷힌다', v41.migr, '{}');
+  eq("관리 > 수동 수정 관리 — 옛 교체는 '사유 없음'으로", v41.adm, [true, 1]);
+  eq('[사유 적기] — 빈 칸으로 열린다', v41.admAsk, [true, '']);
+  eq('목록에서 적은 사유 — 맞바꾼 두 사람 모두', v41.admWhy, ['옛 교체 — 회진', '옛 교체 — 회진', true]);
+  eq('담당 교체 모두 초기화도 되돌린다(사유까지)', v41.reset, ['{}', true, '옛 교체 — 회진']);
+  eq('확인 카드 — 문장 뒤에 사유', v41.warn, [true]);
+  eq('하루 어싸인표 옆 열에 사유, 종이(미리보기)에는 없다', v41.day, [true, true, false]);
+  eq('인쇄에는 사유가 안 나온다', v41.paper, false);
+  eq("좁은 화면 — '손으로 바꾼 것'은 접혀 있고 펼치면 줄마다", v41.fold, [true, 1]);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));

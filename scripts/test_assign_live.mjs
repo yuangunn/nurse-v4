@@ -109,7 +109,7 @@ function LIB() {
   const S = () => A.store;
   const code = (n, iso) => { const pc = A.parseCellRaw(((S().cells[n] || {})[iso]) || ''); return pc && pc.code || ''; };
   let FIXEDG = new Set();
-  const stateKey = () => JSON.stringify([S().cells, S().ovr, S().ovrPair, S().relief, S().trOv, S().trainee, S().groups, S().groupLog]);
+  const stateKey = () => JSON.stringify([S().cells, S().ovr, S().ovrPair, S().relief, S().trOv, S().trainee, S().groups, S().groupLog, S().why]);
 
   /* ── 장면 만들기 ── */
   async function setup(spec, seed) {
@@ -117,7 +117,7 @@ function LIB() {
     const s = S();
     Object.assign(s, { formId: '101', order: WARD.concat(spec.su ? SU : [], [TR]), cells: {}, ovr: {}, ovrPair: {}, roomOv: {}, roomOvCnt: {},
       presetDay: {}, presetPlan: {}, presets: {}, seedManual: {}, unit: {}, relief: {}, trainee: {}, trOv: {}, evRules: [], daily: {},
-      banRooms: {}, caps: {}, hidden: {}, newUntil: {}, forms: {}, groups: [], groupLog: [] });
+      banRooms: {}, caps: {}, hidden: {}, newUntil: {}, forms: {}, groups: [], groupLog: [], why: {} });
     A.setToday(null);
     s.rules = { keepSameShift: true, keepAcrossShift: true, keepAfterOff: true, bounceAfterOff: false };
     A.store = s;
@@ -470,6 +470,19 @@ function LIB() {
       (f ? f(opts) : pick(opts)).click(); await sleep(15);
     }
   }
+  /* 사유 창 — 배정표에서 자리·방을 손으로 바꾸면 사유를 받는다 (2026-10-11). 가끔은 비워서 눌러 보고(창이 그대로여야) 그만둔다 —
+   * 그만두면 아무것도 안 바뀌고 되돌리기 기록도 없어야 한다(W1, 아래) */
+  const whyOn = () => modalOn() && !!document.querySelector('#modalBox #whyIn');
+  async function answerWhy(ctx, i) {
+    if (!whyOn()) return;
+    const r = R();
+    if (r < 0.12) {
+      if (r < 0.06) { document.querySelector('#whyIn').value = ''; document.querySelector('#mdOk').click(); await sleep(10);
+        if (!modalOn()) { ctx.whyBad = '사유를 비우고 눌렀는데 창이 닫혔다'; return; } }
+      document.querySelector('#mdCancel').click(); await sleep(15); ctx.whyCancel = true; return;
+    }
+    const t = '사유 ' + i; document.querySelector('#whyIn').value = t; document.querySelector('#mdOk').click(); await sleep(15); ctx.why = t;
+  }
   async function op(i) {
     if (pickOn()) A.closePick(); if (modalOn()) A.closeModal(null);
     const di = ri(DAYS), iso = ISOS[di], wk = di < 7 ? 0 : 1;
@@ -613,13 +626,32 @@ function LIB() {
         if (b) b.click(); else { A.closePick(); desc += ' (단추 없음)'; ctx.none = true; }
       }
       await sleep(15);
+      if (kind === 'swap') await answerWhy(ctx, i);   // 근무 바꾸기·CRN 맡기기·사람 넣기는 사유를 묻지 않는다 — 창이 뜨면 아래에서 '창 닫음'
     }
+    if (ctx.whyBad) fails.push('W1 ' + ctx.whyBad);
+    if ((kind === 'shift' || kind === 'crn') && modalOn()) fails.push(`W5 ${kind === 'shift' ? '근무 바꾸기' : 'CRN 맡기기'} 뒤에 창이 떴다 — 근무를 바꾸는 것은 사유를 묻지 않는다`);
     if (modalOn()) { A.closeModal(null); desc += ' (창 닫음)'; }
     await sleep(5);
     // 되돌리기 기록 — 바꾼 수정은 Ctrl+Z 로 돌아와야 한다
     const changed = stateKey() !== before, pushed = A.undoDepth > depth;
     if (pushed) { model.push(before); if (model.length > 40) model.shift(); }
     else if (changed) fails.push('U2 바뀌었는데 되돌리기(Ctrl+Z) 기록이 없다');
+    // W — 사유. 그만두면 그대로, 적으면 바꾼 것에 그 사유, 남은 사유는 모두 지금 그대로인 것에만
+    if (ctx.whyCancel) {
+      desc += ' (사유 창 그만둠)';
+      if (changed || pushed) fails.push(`W1 사유 창에서 그만뒀는데 ${changed ? '바뀌었다' : '되돌리기 기록이 늘었다'}`);
+      return { desc, fails, ctx };
+    }
+    if (ctx.why && ctx.to) {
+      desc += ` (사유 '${ctx.why}')`;
+      const key = 'seat|' + ctx.P + '|' + ctx.name, t = (A.whyOf(iso, key) || {}).t;
+      if (t !== ctx.why) fails.push(`W2 ${desc} — ${key} 에 사유가 ${t ? "'" + t + "'" : '없다'}`);
+    }
+    // 사유는 자리·방에만 — 근무표 칸·대체간호사에 남은 사유가 있으면 안 된다
+    for (const dk in S().why || {}) for (const k in S().why[dk]) if (!/^(seat|room|preset)[|]/.test(k)) fails.push(`W4 ${dk} ${k} — 자리·방이 아닌 사유`);
+    for (const dk in S().why || {}) for (const k in S().why[dk]) {
+      const e = S().why[dk][k]; if (!e || A.whyVal(dk, k) !== e.v) fails.push(`W3 ${dk} ${k} 사유가 지금 없는 것(${JSON.stringify(A.whyVal(dk, k))} ≠ ${JSON.stringify(e && e.v)})에 남았다`);
+    }
     // O — 누른 단추가 한 일
     const res = A.result, dN = (n, P) => ((res.byNurse[n] || {})[iso] || {}), day = P => (res.byDay[iso] || {})[P];
     if (kind === 'swap' && ctx.to) {
