@@ -223,6 +223,35 @@
   #wkWarn.okay .cnt{background:var(--ok)}
   #wkWarn.okay .ttl{color:var(--ok)}
   #wkWarn.okay .okSub{font-size:13px;color:var(--ink-2);line-height:1.5}
+  /* 손으로 바꾼 것 — 배정표에서 손으로 바꾼 자리·방·근무·대체간호사와 그 사유 (2026-10-11). 확인 카드 아래, 같은 열.
+     좁은 화면에서는 확인 카드처럼 한 줄로 접힌다 */
+  #wkWhy{display:none;gap:10px;padding:12px 16px;border-radius:14px;background:var(--card-warm);box-shadow:inset 0 0 0 1px var(--rule-2);margin-bottom:14px;align-items:center}
+  #wkWhy .whHead{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+  #wkWhy .cnt{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;flex:0 0 auto;
+    border-radius:9999px;background:var(--ink-2);color:var(--card);font-size:12px;font-weight:800}
+  #wkWhy .ttl{font-size:14px;font-weight:800;color:var(--ink);letter-spacing:-0.01em}
+  #wkWhy .wsSub{font-size:12px;font-weight:700;color:var(--warn)}
+  #wkWhy .peek{flex:1;min-width:0;font-size:13px;color:var(--ink-2);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  #wkWhy .fold{margin-left:auto;flex:0 0 auto;font-size:12px;font-weight:700;padding:4px 10px;min-height:28px}
+  #wkWhy .items{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink-2);line-height:1.5;flex:1;min-width:0}
+  #wkWhy.open,#wkWhy.side{flex-direction:column;align-items:stretch}
+  #wkWhy.side .wsSub{margin-left:auto}
+  #wkSide #wkWhy{margin:0}
+  .whyRow{padding:8px 10px;border-radius:10px;background:var(--card);line-height:1.5}
+  .whyRow.off{opacity:.72}
+  .whyRow .wl b{color:var(--ink)}
+  .whyT{color:var(--ink)}
+  .whyT.none{color:var(--warn);font-weight:700}
+  .whyRow button.inl,.pkWhy button,.rpWhy button{min-height:26px;padding:3px 10px;font-size:12px;margin:0 0 0 4px}
+  .whyAt{font-size:12px;color:var(--ink-3);margin-left:4px;white-space:nowrap}
+  /* 사유가 있는 칸 — 오른쪽 위 작은 점. 마우스를 올리면 사유가 보인다 (todayCol 의 background !important 에 지워지지 않게 점은 ::after) */
+  #wkTable td.why{position:relative}
+  #wkTable td.why::after{content:'';position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--ink-2)}
+  .hint .lg i.whyDot{width:6px;height:6px;border-radius:50%;background:var(--ink-2)}
+  /* 이름·방 고르기 창 위쪽의 사유 줄 */
+  .pkWhy,.rpWhy{margin:2px 0 8px;padding:7px 10px;border-radius:10px;background:var(--card-warm);font-size:13px;color:var(--ink-2);line-height:1.5}
+  #modalBox .whyRec{display:flex;flex-wrap:wrap;gap:6px}
+  #modalBox .whyRec button{min-height:36px;font-size:14px;padding:6px 12px;margin:0;font-weight:600}
   #wkTable{width:100%;border-collapse:collapse;table-layout:fixed;background:var(--card)}
   #wkTable td,#wkTable th{border:1px solid var(--rule);padding:0 4px;text-align:center;
     overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
@@ -1071,6 +1100,7 @@
   <!-- 확인 열 — 넓은 화면(1860px 이상)에서는 표 오른쪽, 좁으면 표 위에 접혀 쌓인다 -->
   <aside id="wkSide">
     <div id="wkWarn"></div>
+    <div id="wkWhy"></div>
     <div id="onboard" style="display:none"></div>
   </aside>
   <div id="wkPaper" class="card" style="padding:10px">
@@ -1080,6 +1110,7 @@
       <span class="lg"><i style="background:var(--err)"></i>수동 교체</span>
       <span class="lg rmOnly"><i style="background:var(--down-deep)"></i>방 수정</span>
       <span class="lg rmOnly"><i style="background:var(--ok)"></i>프리셋 적용</span>
+      <span class="lg" title="손으로 바꾸며 적은 사유가 있는 칸입니다 — 마우스를 올리면 보입니다"><i class="whyDot"></i>사유 있음</span>
       <span style="margin-left:auto">엑셀로 내보내면 병동 양식 그대로 열려 고칠 수 있습니다</span>
     </div>
   </div>
@@ -2066,7 +2097,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261011b'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261011f'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -2182,6 +2213,7 @@ function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{}
   groups:[],      // 간호사 그룹 [{id,name,members:[이름],noHandover,caps?,bans?}] — noHandover 면 그룹원끼리 앞 근무의 병상을 넘겨받지 않게 (2026-10-09, handoverGroupsOf).
                   // caps = 그룹원이 할 수 있는 근무(이것 밖은 꺼짐, 없으면 제한 없음) · bans = 그룹원 모두에게 주지 않을 방 (capsAt·bansAt)
   groupLog:[],    // 그룹을 고친 날 기록 [{from:'YYYY-MM-DD',groups}] — 고친 날부터 바뀌고 지난 배정은 그대로 (groupsAt, noteGroups)
+  why:{},         // 배정표에서 손으로 바꾼 사유 {날짜:{키:{t,v,at,f?,k?}}} — 바꾼 것이 그대로일 때만 산다 (2026-10-11, whyOf·noteWhy)
   rules:{keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false}}; }
 const capsOf=n=>store.caps[n]||ALL_CAPS;
 /* 그룹의 가능 근무·주지 않을 방 (2026-10-09, 원근 "그룹별 가능근무 수정, 그룹별 배정하지 않을 방") — 그룹원 각자 설정 위에 더한다:
@@ -2301,6 +2333,7 @@ function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무
       for(const l of Object.keys(store.roomOvCnt[iso][P]||{})) if(!((store.roomOv||{})[iso]&&store.roomOv[iso][P]&&l in store.roomOv[iso][P])) delete store.roomOvCnt[iso][P][l];
       if(!Object.keys(store.roomOvCnt[iso][P]||{}).length) delete store.roomOvCnt[iso][P]; }
     if(!Object.keys(store.roomOvCnt[iso]||{}).length) delete store.roomOvCnt[iso]; }
+  pruneWhy();   // 손으로 바꾼 사유 — 모양이 틀린 것·바꾼 것이 이미 없어진 것은 걷어 낸다
 }
 let store=emptyStore();
 let fileHandle=null, dirty=false, saveT=null;
@@ -3333,6 +3366,7 @@ let cellPins={};
 function recompute(){
   const r=timelineRange();
   result=null; tlKeys=[]; cellPins={};
+  pruneWhy();   // 되돌렸거나 근무표가 바뀌어 없어진 손 변경의 사유는 걷어 낸다 — 되돌리는 길마다 따로 지우지 않아도 되게
   rowsSig=seatSig();
   if(!r||!store.order.length){ return; }
   let start=new Date(r.min+'T00:00:00');
@@ -3765,6 +3799,7 @@ async function addRelief(iso,P){
 function editRelief(iso,P,nm,to){
   const d=(store.relief||{})[iso]; const a=d&&d[P]; if(!a||!a.includes(nm)) return false;
   const ov=store.ovr[iso]&&store.ovr[iso][P], pr=store.ovrPair[iso]&&store.ovrPair[iso][P];
+  whyRename(nm,to||null,iso);   // 이 날 이 사람의 맞바꾼 자리 사유도
   if(to){ a[a.indexOf(nm)]=to;
     if(ov&&nm in ov){ ov[to]=ov[nm]; delete ov[nm]; }
     if(pr){ if(nm in pr){ pr[to]=pr[nm]; delete pr[nm]; } for(const k in pr) if(pr[k]===nm) pr[k]=to; }
@@ -3865,6 +3900,7 @@ function renderWeek(){
     $('#wkBody').innerHTML=`<div id="wkEmpty">이 주의 근무표가 없습니다.<br><br>
       <button class="pri big" onclick="show('paste')">＋ 새 근무표 넣기</button></div>`;
     renderWeekWarnings(days,infos);        // 지난 주 카드가 남지 않게
+    renderWeekWhy(days);
     if(curScr!=='day') buildPrintArea(false).catch(()=>{});   // 빈 주도 양식 틀은 인쇄되게 (하루 어싸인표 화면이면 그쪽 종이를 두고)
     return;
   }
@@ -3923,9 +3959,13 @@ function renderWeek(){
         const isRov=roomOvOn(iso,P,label,cnt)!=null;
         const hasDup=dups[di]&&expandBeds(roomTokens(rmStr)).some(t=>dups[di][P].has(t));
         const pr=presetFor(P,cnt,iso), preOn=li===0&&pr.src!=='default';
-        h+=(noRm?'':`<td class="rm${isRov?' rov':''}${hasDup?' rdup':''}${preOn?' rpre':''}${tdCls(d)}" data-iso="${iso}" data-p="${P}" data-l="${label}"`+
-           ` title="${esc(rmStr)}호 — 클릭 = 이 날 방 수정·프리셋${pr.src!=='default'?' · 방 구성: '+esc(pr.name)+(pr.src==='day'?' (오늘만)':' (요일 계획)'):''}${hasDup?' · ⚠ 다른 어싸인과 방 겹침':''}">${esc(rmStr)}</td>`)+
-           `<td class="nm${ov?' ovd':''}${tdCls(d)}" data-n="${esc(nm)}" data-iso="${iso}">${esc(nm)}${
+        // 사유 — 그날 방 수정이면 그 자리의, 오늘만 방 구성이면 첫 줄에 (칸 오른쪽 위 점 + 마우스를 올리면)
+        const rw=isRov&&whyOf(iso,'room|'+P+'|'+label), pw=preOn&&pr.src==='day'&&whyOf(iso,'preset|'+P+'|'+clampCnt(cnt,P));
+        const rmWhy=(isRov?'\n그날 방 수정 — '+(rw?'사유: '+rw.t:'사유 없음'):'')+(pw?'\n오늘만 방 구성 — 사유: '+pw.t:'');
+        const nw=whyTipName(iso,P,nm,ov);
+        h+=(noRm?'':`<td class="rm${isRov?' rov':''}${hasDup?' rdup':''}${preOn?' rpre':''}${rw||pw?' why':''}${tdCls(d)}" data-iso="${iso}" data-p="${P}" data-l="${label}"`+
+           ` title="${esc(rmStr)}호 — 클릭 = 이 날 방 수정·프리셋${pr.src!=='default'?' · 방 구성: '+esc(pr.name)+(pr.src==='day'?' (오늘만)':' (요일 계획)'):''}${hasDup?' · ⚠ 다른 어싸인과 방 겹침':''}${escA(rmWhy)}">${esc(rmStr)}</td>`)+
+           `<td class="nm${ov?' ovd':''}${nw.has?' why':''}${tdCls(d)}" data-n="${esc(nm)}" data-iso="${iso}"${nw.tip?` title="${escA(nw.tip)}"`:''}>${esc(nm)}${
              rl?'<span class="rlfTag" title="대체간호사 — 우리 근무표에 없는 사람입니다. 눌러서 빼거나 이름을 고칩니다">대체</span>':''}${
              crnOn&&nm===day[P].charge?'<span class="dim crnTag"> /CRN</span>':''}${
              traineesUnder(iso,P,nm).map(T=>`<div class="trn">/ ${esc(T)}</div>`).join('')}</td>`;
@@ -3941,6 +3981,7 @@ function renderWeek(){
   h+='</table>';
   $('#wkBody').innerHTML=h;
   renderWeekWarnings(days,infos);
+  renderWeekWhy(days);
   // 브라우저 메뉴/Ctrl+P 인쇄도 양식대로 나오게 — 지금 주를 인쇄 영역에 미리 채워둔다 (하루 어싸인표 화면이면 그쪽 종이를 두고)
   if(curScr!=='day') buildPrintArea(false).catch(()=>{});
 }
@@ -4022,7 +4063,8 @@ function renderWeekWarnings(days,infos){
           const viaOvr=[ch,...held].some(n=>handSeat(n,iso,P)&&handSeat(n,iso,P).by==='ovr');
           const btn=viaOvr?` <button class="inl" onclick="clearOvrDay('${iso}','${P}')" title="이 날 ${P} 근무에서 손으로 바꾼 자리를 모두 자동으로 되돌립니다 — Ctrl+Z 로 되돌릴 수 있습니다">이 날 ${P} 교체 풀기</button>`:'';
           const by=ns=>{ const k=new Set(ns.map(n=>handSeat(n,iso,P).by)); return k.size>1?'손으로':k.has('ovr')?'배정표에서 손으로':'근무표 칸에'; };
-          if(hand&&hand.l==='차지') push('err',`${md(iso)} ${P} ${tag} — 자격 없이 차지입니다. ${by([ch])} 차지 자리로 정해 두었기 때문입니다.${btn}`);
+          const hw=hand&&hand.by==='ovr'&&whyOf(iso,'seat|'+P+'|'+ch);   // 손으로 정하며 적은 사유 — 문장 뒤에 (검사가 문장을 그대로 본다)
+          if(hand&&hand.l==='차지') push('err',`${md(iso)} ${P} ${tag} — 자격 없이 차지입니다. ${by([ch])} 차지 자리로 정해 두었기 때문입니다.${hw?` (사유: ${esc(hw.t)})`:''}${btn}`);
           else if(held.length) push('err',`${md(iso)} ${P} ${tag} — 자격 없이 차지가 됐습니다. 차지 가능한 ${held.map(esc).join(', ')}의 자리를 ${by(held)} 정해 두었기 때문입니다.${btn}`);
           else chgMiss.push(`${md(iso)} ${P} ${tag}`);
         } }
@@ -4094,7 +4136,8 @@ function renderWeekWarnings(days,infos){
         // 효력 있는 손 교체(맞바꾼 상대가 빠진 반쪽은 아님) 또는 근무표 칸의 자리 — 그 자리에 실제로 앉았을 때만.
         // 코어는 그날 없는 자리(4명인 날의 D)를 버리므로, 손 자리가 있어도 다른 자리에 앉았으면 손 탓이 아니다 (2026-10-01 교차 검토)
         const hs=handSeat(nm,iso,P), byHand=!!hs&&hs.l===l;
-        const why=byHand?'손으로 옮긴 자리입니다 — 그 자리 이름을 눌러 바꿀 수 있습니다.'
+        const hw=byHand&&hs.by==='ovr'&&whyOf(iso,'seat|'+P+'|'+nm);
+        const why=byHand?'손으로 옮긴 자리입니다 — 그 자리 이름을 눌러 바꿀 수 있습니다.'+(hw?` (사유: ${esc(hw.t)})`:'')
           :(l==='차지'&&day[P].charge===nm&&!crnFloat(P))?'차지 자리의 방이라 차지가 봅니다 — 그날 방 수정이나 관리 > 방 구성에서 그 방을 다른 자리로 옮기세요.'
           :'모두 피하는 배치가 없습니다.';
         const src=banSources(nm,iso,hit), via=src.gs.length&&!src.own?`(${src.gs.map(x=>`'${esc(x)}'`).join('·')} 그룹)`:'';
@@ -4290,13 +4333,185 @@ $('#wkBody').addEventListener('click',e=>{
   if(em){ openEmptyPick(em.dataset.iso,em.dataset.p,em.dataset.l,e.pageX,e.pageY); return; }
   const rm=e.target.closest('td.rm');
   if(rm&&rm.dataset.iso){
-    openRoomPick({kind:'day',iso:rm.dataset.iso,P:rm.dataset.p,l:rm.dataset.l},e.pageX,e.pageY);
+    openRoomPick({kind:'day',iso:rm.dataset.iso,P:rm.dataset.p,l:rm.dataset.l,ask:true},e.pageX,e.pageY);   // ask — 배정표에서 눌러 연 창은 고칠 때 사유를 받는다
     return;
   }
   const td=e.target.closest('td.nm'); if(!td) return;
-  openPick(td.dataset.n,td.dataset.iso,e.pageX,e.pageY);
+  openPick(td.dataset.n,td.dataset.iso,e.pageX,e.pageY,true);
 });
 
+/* ── 손으로 바꾼 사유 (2026-10-11, 원근: "어싸인 방배정 변경이나 어싸인 간호사 변경시 사유를 꼭 작성할 수 있게 — 왜 바꿨는지를 모르니까 보기가 힘들다") ──
+ * 배정표에서 손으로 자리·방을 바꾸면 사유를 적어야 바뀐다(비우면 바꾸지 않는다): 자리 바꾸기 · 그날 방 고치기 · 오늘만 방 구성 —
+ * 배정표에 빨간·파란 밑줄이 생기는 것. 근무를 바꾸는 것(근무 바꾸기·쉬는 간호사 넣기·대체간호사 넣기·CRN 맡기기)은 묻지 않는다
+ * (원근이 고른 범위 '자리·방만', 2026-10-11). 되돌리는 것(자동으로 되돌리기·교체 풀기·초기화)과 오래 쓰는 설정(매주 계획·
+ * 신규 붙이기·주지 않을 방·근무표 고치기)도 묻지 않는다.
+ * store.why[날짜][키] = {t:사유, v:그때 값, at:적은 때}. 키 —
+ *   seat|근무|이름(맞바꾼 자리 = ovr) · room|근무|자리(그날 방 수정 = roomOv) · preset|근무|인원(오늘만 방 구성 = presetDay).
+ * 사유는 바꾼 것이 그대로일 때만 산다(whyLive: 지금 값 === v) — 되돌리거나 근무표가 바뀌면 recompute 가 걷어 낸다(pruneWhy).
+ * 그래서 되돌리는 길마다 사유를 따로 지우지 않는다. 이름이 바뀌면 applyNurseName·editRelief 가 키를 옮긴다(whyRename).
+ * 바꾸는 함수(pickChoose·applyRoomSel·applyPresetDay)는 그대로 동기 — 배정표에서 눌러 연 창(ctx.ask)일 때만
+ * 창을 닫고 사유를 받은 뒤 다시 부른다(whyThen). 검사·설명서 캡처가 함수를 바로 부르는 길은 사유 없이 그대로 바뀐다.
+ * 종이(인쇄·엑셀·한글)에는 나오지 않는다 — 122 의 이름 옆 칸은 싸인 칸이다. 화면: 칸 오른쪽 위 점 + 마우스를 올리면 사유,
+ * 이름·방 고르기 창 위 줄, 배정표 옆 '손으로 바꾼 것', 하루 어싸인표 옆 열, 관리 > 수동 수정 관리. */
+const WHY_MAX=100;
+const whyMD=iso=>fmtMD(new Date(iso+'T00:00:00'));
+function whySplit(key){ key=String(key); const i=key.indexOf('|'), k=key.slice(0,i), r=key.slice(i+1), j=r.indexOf('|');
+  return [k,r.slice(0,j),r.slice(j+1)]; }
+/* 그 키가 가리키는 것의 지금 값 — 없으면 null (모르는 키도 null 이라 열 때 걷힌다) */
+function whyVal(iso,key){
+  const [k,a,b]=whySplit(key);
+  if(k==='seat') return (((store.ovr||{})[iso]||{})[a]||{})[b]??null;
+  if(k==='room') return (((store.roomOv||{})[iso]||{})[a]||{})[b]??null;
+  if(k==='preset') return (((store.presetDay||{})[iso]||{})[a]||{})[b]??null;
+  return null;
+}
+const whyLive=(iso,key,e)=>!!(e&&typeof e==='object'&&typeof e.t==='string'&&e.t.trim())&&whyVal(iso,key)===e.v;
+function whyOf(iso,key){ const e=((store.why||{})[iso]||{})[key]; return whyLive(iso,key,e)?e:null; }
+function whyStamp(){ const d=new Date(); return isoOfD(d)+' '+pad2(d.getHours())+':'+pad2(d.getMinutes()); }
+/* 사유를 적는다 — 바꾼 뒤에 부른다(그때 값을 v 로) */
+function noteWhy(iso,key,t){
+  t=String(t||'').trim().replace(/\s+/g,' ').slice(0,WHY_MAX); if(!t) return false;
+  const v=whyVal(iso,key); if(v==null) return false;
+  const W=(store.why=store.why&&typeof store.why==='object'?store.why:{}), d=(W[iso]=W[iso]||{});
+  d[key]={t,v,at:whyStamp()};
+  return true;
+}
+function pruneWhy(){
+  if(!store) return;
+  const W=store.why; if(!W||typeof W!=='object'||Array.isArray(W)){ store.why={}; return; }
+  for(const iso of Object.keys(W)){ const d=W[iso];
+    if(!d||typeof d!=='object'){ delete W[iso]; continue; }
+    for(const key of Object.keys(d)) if(!whyLive(iso,key,d[key])) delete d[key];
+    if(!Object.keys(d).length) delete W[iso]; }
+}
+/* 이름이 바뀌면(to) 그 이름이 든 자리 키를 옮기고, 빠지면(null) 지운다. onlyIso 를 주면 그 날만(대체간호사 이름 고치기·빼기) */
+function whyRename(from,to,onlyIso){
+  const W=store.why||{};
+  for(const iso of Object.keys(W)){ if(onlyIso&&iso!==onlyIso) continue; const d=W[iso];
+    for(const key of Object.keys(d)){ const [k,a,b]=whySplit(key);
+      if(k!=='seat'||b!==from) continue;
+      const e=d[key]; delete d[key];
+      if(to) d[k+'|'+a+'|'+to]=e; }
+    if(!Object.keys(d).length) delete W[iso]; }
+}
+/* 지난 사유 — 최근에 적은 것부터, 같은 글은 한 번 */
+function whyRecent(n){
+  const all=[];
+  for(const iso in (store.why||{})) for(const key in store.why[iso]){ const e=store.why[iso][key]; if(e&&e.t) all.push(e); }
+  all.sort((a,b)=>String(b.at||'').localeCompare(String(a.at||'')));
+  const out=[]; for(const e of all) if(!out.includes(e.t)){ out.push(e.t); if(out.length>=(n||6)) break; }
+  return out;
+}
+/* 사유 칸 — 지난 사유를 누르면 채운다(고쳐 써도 된다). 사유 받는 창·방 직접 입력이 같이 쓴다 */
+function whyFieldHtml(cur){
+  const rec=whyRecent(6).filter(t=>t!==cur);
+  return (rec.length?`<div class="mg">지난 사유 — 누르면 채웁니다</div><div class="whyRec">${rec.map(t=>
+      `<button type="button" class="whyChip" title="이 사유로 채웁니다 — 고쳐 써도 됩니다">${esc(t)}</button>`).join('')}</div>`:'')+
+    `<div class="lb">사유</div><input type="text" id="whyIn" maxlength="${WHY_MAX}" placeholder="예: 격리 환자 · 신규 교육 · 환자 요청 · 보호자 요청" value="${escA(cur||'')}">`;
+}
+function whyFieldMount(box){
+  box.querySelectorAll('.whyChip').forEach(b=>b.onclick=()=>{ const i=box.querySelector('#whyIn'); i.value=b.textContent; i.focus(); const e=box.querySelector('#mdErr'); if(e) e.textContent=''; });
+}
+const whyNeed='사유를 적어 주세요 — 비워 두면 바뀌지 않습니다.';
+const whyRead=box=>{ const t=box.querySelector('#whyIn').value.trim().replace(/\s+/g,' '); if(!t) throw whyNeed; return t; };
+/* 사유 받기 — {what: 무엇을 바꾸는지(HTML), cur: 지금 사유} → 사유(글자) 또는 null(그만두기) */
+function askWhy({title,what,cur,okLabel}){
+  return formModal({title:title||'바꾸는 사유',
+    sub:`${what}<br>왜 바꾸는지 적어 주세요. 이 칸에 마우스를 올리거나 배정표 옆 '손으로 바꾼 것'에서 다시 봅니다 — 종이에는 나오지 않습니다.`,
+    body:whyFieldHtml(cur),
+    mount(box){ whyFieldMount(box); const i=box.querySelector('#whyIn'); i.setAttribute('autofocus',''); },
+    read:whyRead, okLabel:okLabel||'바꾸기', cancelLabel:'그만두기'});
+}
+/* 이름 클릭 창에서 고른 것 — 창을 닫고 사유를 받은 뒤 그 창의 내용(ctx)으로 다시 부른다. 그만두면 아무것도 바뀌지 않는다 */
+async function whyThen(ctx,o,go){
+  closePick();
+  const w=await askWhy(o);
+  if(w==null){ toast('바꾸지 않았습니다',1800); return; }
+  pickCtx=ctx; go(w);
+}
+/* 이 날들의 손 변경(자리·방) — 사유가 있든 없든(옛 파일의 변경도 '사유 없음'으로 보인다). 맞바꾼 두 사람은 한 줄.
+ * 줄 = {iso,P,kind,keys,e,eff,html,lab} */
+function handChanges(isos){
+  const rows=[], lbl=(l,P)=>esc(FORM_LBL(l,P));
+  for(const iso of isos){
+    const day=dayInfo(iso), cntOf=P=>day&&day[P]?Object.keys(day[P].labels).length+day[P].extra.length:0;
+    for(const P of ['D','E','N']){
+      const pv=((store.ovr||{})[iso]||{})[P]||{}, pr=((store.ovrPair||{})[iso]||{})[P]||{}, done=new Set();
+      for(const nm of Object.keys(pv)){ if(done.has(nm)) continue; done.add(nm);
+        const m=pr[nm], pair=!!m&&pr[m]===nm&&(m in pv); if(pair) done.add(m);
+        const keys=['seat|'+P+'|'+nm].concat(pair?['seat|'+P+'|'+m]:[]);
+        rows.push({iso,P,kind:'seat',keys,e:keys.map(k=>whyOf(iso,k)).find(Boolean)||null,
+          eff:worksP(nm,iso,P)&&!ovrMateGone(iso,P,nm),lab:'자리 바꿈',
+          html:pair?`${esc(nm)} → ${lbl(pv[nm],P)} · ${esc(m)} → ${lbl(pv[m],P)} <span class="dim">자리 맞바꿈</span>`:`${esc(nm)} → ${lbl(pv[nm],P)} 자리`}); }
+      const ro=((store.roomOv||{})[iso]||{})[P]||{};
+      for(const l of Object.keys(ro)) rows.push({iso,P,kind:'room',keys:['room|'+P+'|'+l],e:whyOf(iso,'room|'+P+'|'+l),
+        eff:roomOvOn(iso,P,l,cntOf(P))!=null,lab:'방 수정',html:`${lbl(l,P)} 자리 방 → ${esc(ro[l])}${/:|호$/.test(ro[l])?'':'호'}`});
+      const pd=((store.presetDay||{})[iso]||{})[P]||{};
+      for(const c of Object.keys(pd)){ const p=presetById(+c,pd[c]);
+        rows.push({iso,P,kind:'preset',keys:['preset|'+P+'|'+c],e:whyOf(iso,'preset|'+P+'|'+c),
+          eff:!!p&&clampCnt(cntOf(P),P)===+c,lab:'방 구성',html:`방 구성 '${esc(p?p.name:'지운 프리셋')}' <span class="dim">(${c}인 · 오늘만)</span>`}); }
+    }
+  }
+  const PO={D:0,E:1,N:2}, KO={seat:0,room:1,preset:2};
+  return rows.sort((a,b)=>a.iso.localeCompare(b.iso)||PO[a.P]-PO[b.P]||KO[a.kind]-KO[b.kind]);
+}
+/* 이름 칸에 마우스를 올리면 보이는 사유 — 그 날 그 사람의 손으로 바꾼 자리 */
+function whyTipName(iso,P,nm,ovd){
+  const s=whyOf(iso,'seat|'+P+'|'+nm);
+  return {tip:s||ovd?'손으로 바꾼 자리 — '+(s?'사유: '+s.t:'사유 없음'):'',has:!!s};
+}
+/* 줄 하나의 사유와 [고치기]·[사유 적기] — 어느 화면의 목록인지(sf)와 줄 번호로 고친다 */
+const WHY_ROWS={};
+function whyLine(sf,r,i){
+  return `<span class="whyT${r.e?'':' none'}">${r.e?'사유: '+esc(r.e.t):'사유 없음'}</span>`+
+    `<button class="inl" onclick="whyEdit('${sf}',${i})" title="${r.e?'적은 사유를 고칩니다':'왜 바꿨는지 적어 둡니다'}">${r.e?'고치기':'사유 적기'}</button>`;
+}
+async function whyEdit(sf,i){
+  const r=(WHY_ROWS[sf]||[])[i]; if(!r) return;
+  closePick(); closeRoomPick();
+  const t=await askWhy({title:r.e?'사유 고치기':'사유 적기',what:`<b>${whyMD(r.iso)} ${r.P}</b> ${r.html}`,cur:r.e&&r.e.t,okLabel:'저장'});
+  if(t==null) return;
+  snapshot();
+  for(const k of r.keys) noteWhy(r.iso,k,t);
+  touch(); recompute(); whyRedraw();
+  toast('사유를 적었습니다',2400,true);
+}
+function whyRedraw(){ if(curScr==='week') renderWeek(); else if(curScr==='day') renderDay(); else if(curScr==='admin') renderAdmin(); }
+/* 배정표 옆 '손으로 바꾼 것' — 이번 주. 넓은 화면은 확인 카드 아래에 펼친 채, 좁으면 한 줄로 접힌다 */
+let wkWhyOpen=false;
+function renderWeekWhy(days){
+  const box=$('#wkWhy'); if(!box) return;
+  const rows=handChanges(days.map(isoOfD)); WHY_ROWS.wk=rows;
+  if(!rows.length){ box.style.display='none'; box.innerHTML=''; box.className=''; return; }
+  const side=sideMode(), miss=rows.filter(r=>!r.e).length, open=side||wkWhyOpen;
+  box.style.display='flex'; box.className=(side?'side':'')+(open&&!side?' open':'');
+  const fold=side?'':`<button class="fold" onclick="wkWhyOpen=!wkWhyOpen;renderWeekWhy(wkDays())" title="${wkWhyOpen?'접어서 배정표를 넓게 봅니다':'이번 주에 손으로 바꾼 것과 사유를 펼쳐 봅니다'}">${wkWhyOpen?'접기 ▴':'자세히 ▾'}</button>`;
+  const head=`<div class="whHead"><span class="cnt">${rows.length}</span><span class="ttl">손으로 바꾼 것</span>${miss?`<span class="wsSub">사유 없음 ${miss}</span>`:''}</div>`;
+  if(!open){
+    const r=rows[0];
+    box.innerHTML=head+`<div class="peek">${whyMD(r.iso)} ${r.P} ${r.html.replace(/<[^>]+>/g,'')} — ${r.e?'사유: '+esc(r.e.t):'사유 없음'}${rows.length>1?` 외 ${rows.length-1}건`:''}</div>`+fold;
+    return;
+  }
+  box.innerHTML=(side?head:`<div style="display:flex;align-items:center;gap:8px">${head}${fold}</div>`)+
+    `<div class="items">${rows.map((r,i)=>`<div class="whyRow${r.eff?'':' off'}"><div class="wl"><b>${whyMD(r.iso)} ${r.P}</b> ${r.html}${r.eff?'':' <span class="dim">(지금은 쓰지 않음)</span>'}</div>`+
+      `<div>${whyLine('wk',r,i)}${r.e&&r.e.at?`<span class="whyAt">${esc(whyMD(r.e.at.slice(0,10)))} ${esc(r.e.at.slice(11))} 적음</span>`:''}</div></div>`).join('')}</div>`;
+}
+const wkDays=()=>[...Array(7)].map((_,i)=>addDays(wkSunday,i));
+/* 관리 > 수동 수정 관리 — 모든 날의 손 변경과 사유, 최근 날짜부터. 길면 60줄까지만 보이고 [모두 보기] */
+let whyAdmAll=false;
+function renderWhyAdmin(){
+  const t=$('#whyTable'); if(!t) return;
+  const ds=new Set();
+  for(const k of ['ovr','roomOv','presetDay']) for(const iso in (store[k]||{})) ds.add(iso);
+  const rows=handChanges([...ds].sort()).reverse(); WHY_ROWS.adm=rows;
+  if(!rows.length){ t.innerHTML=`<tr><td class="note">배정표에서 손으로 바꾼 것이 없습니다.</td></tr>`; return; }
+  const LIM=60, show=whyAdmAll?rows:rows.slice(0,LIM);
+  t.innerHTML=`<tr><th style="width:7.5em">날짜</th><th>바꾼 것</th><th>사유</th><th class="end" style="width:6em"></th></tr>`+
+    show.map((r,i)=>`<tr${r.eff?'':' style="opacity:.72"'}><td class="nm2">${whyMD(r.iso)} ${r.P}</td><td>${r.html}${r.eff?'':' <span class="dim">(지금은 쓰지 않음)</span>'}</td>`+
+      `<td><span class="whyT${r.e?'':' none'}">${r.e?esc(r.e.t):'사유 없음'}</span>${r.e&&r.e.at?`<span class="whyAt">${esc(whyMD(r.e.at.slice(0,10)))} ${esc(r.e.at.slice(11))}</span>`:''}</td>`+
+      `<td class="end"><button class="inl" style="min-height:30px;padding:4px 12px;font-size:13px;margin:0" onclick="whyEdit('adm',${i})" title="${r.e?'적은 사유를 고칩니다':'왜 바꿨는지 적어 둡니다'}">${r.e?'고치기':'사유 적기'}</button></td></tr>`).join('')+
+    (rows.length>LIM?`<tr><td class="note" colspan="4"><button onclick="whyAdmAll=!whyAdmAll;renderWhyAdmin()">${whyAdmAll?'접기':`모두 보기 (${rows.length}줄)`}</button></td></tr>`:'');
+}
 /* ── 담당 교체 픽커 (큰 버튼) ── */
 let pickCtx=null;
 /* 휴무·휴가인 사람을 그 자리에서 근무로 올린다 (2026-09-20).
@@ -4376,10 +4591,10 @@ async function addWorker(iso,P){
   touch(); recompute(); renderWeek();
   toast(`${pick} ${md} ${was||'빈칸'} → ${code}`,2800,true);
 }
-function openPick(name,iso,x,y){
+function openPick(name,iso,x,y,ask){
   const info=result&&result.byNurse[name]&&result.byNurse[name][iso];
   if(!info) return;
-  pickCtx={name,iso,period:info.period,current:info.label||'',x,y};
+  pickCtx={name,iso,period:info.period,current:info.label||'',x,y,ask:!!ask};   // ask — 배정표에서 눌러 연 창: 바꿀 때 사유를 받는다
   const day=result.byDay[iso]&&result.byDay[iso][info.period];
   // 배정표 줄 순서(종이의 위에서부터, weekSlots)로 정렬 + 지금 그 자리인 사람 이름을 함께 —
   // 누구와 맞바꾸는지 보이지 않으면 고를 수가 없다. 앱 안쪽 순서로 두면 옛 102 양식(D(CRN) 이 맨 아래)에서 화면과 순서가 달랐다 (2026-10-01 교차 검토)
@@ -4400,6 +4615,9 @@ function openPick(name,iso,x,y){
   pk.innerHTML=`<div class="pkHead"><span><b>${esc(name)}</b>${esc(crnT(name))}${rel?'<span class="rlfTag">대체</span>':''} · ${dd}일 ${P}</span>`+
       `<span class="dim">지금 ${info.label?FORM_LBL(info.label,P):'자리 없음'}</span>`+
       `<button class="pkX" onclick="closePick()" title="닫기 (Esc)">✕</button></div>`+
+    // 이 날 이 사람을 손으로 바꾼 것과 그 사유 — 맞바꾼 상대 쪽에서 열어도 같은 줄
+    (()=>{ const rows=handChanges([iso]).filter(r=>r.P===P&&r.keys.some(k=>k.endsWith('|'+name))); WHY_ROWS.pk=rows;
+      return rows.length?`<div class="pkWhy">${rows.map((r,i)=>`<div>${esc(r.lab)} · ${whyLine('pk',r,i)}</div>`).join('')}</div>`:''; })()+
     `<div class="pkSec">자리 바꾸기 <span class="dim">누른 사람과 자리를 맞바꿉니다</span></div>`+
     `<div class="pkSwaps">`+
     labels.map(l=>{
@@ -4456,7 +4674,12 @@ function placePopup(el,x,y){
   el.style.left=left+'px'; el.style.top=top+'px';
 }
 function closePick(){ $('#pick').style.display='none'; pickCtx=null; }
-function pickChoose(label){
+function pickChoose(label,why){
+  // 배정표에서 연 창이면 먼저 사유를 받는다 — 되돌리기(null)는 묻지 않는다
+  if(label!==null&&why===undefined&&pickCtx&&pickCtx.ask){ const c=pickCtx, P=c.period;
+    const holder=((result.byDay[c.iso]||{})[P]||{labels:{}}).labels[label], sw=holder&&holder!==c.name&&c.current;
+    return whyThen(c,{what:`<b>${whyMD(c.iso)} ${P}</b> ${esc(c.name)} → ${esc(FORM_LBL(label,P))} 자리`+(sw?` · ${esc(holder)} → ${esc(FORM_LBL(c.current,P))} (맞바꿈)`:''),
+      cur:(whyOf(c.iso,'seat|'+P+'|'+c.name)||{}).t},w=>pickChoose(label,w)); }
   const {name,iso,period,current}=pickCtx; closePick();
   snapshot();
   const ov=(store.ovr[iso]=store.ovr[iso]||{});
@@ -4471,6 +4694,7 @@ function pickChoose(label){
     if(holder&&holder!==name&&current){ pv[holder]=current; pr[holder]=name; pr[name]=holder; }
     else delete pr[name];
     pv[name]=label;
+    if(why){ noteWhy(iso,'seat|'+period+'|'+name,why); if(holder&&holder!==name&&current) noteWhy(iso,'seat|'+period+'|'+holder,why); }   // 맞바꾼 두 사람 다 같은 사유
   }
   if(!Object.keys(pr).length) delete store.ovrPair[iso][period];
   if(!Object.keys(store.ovrPair[iso]).length) delete store.ovrPair[iso];
@@ -4549,7 +4773,8 @@ function resetOv(){
   const n=Object.keys(store.ovr).length;
   if(!n){ toast('수동 교체 없음'); return; }
   if(!confirm('수동 교체 '+n+'일치를 모두 초기화할까요?')) return;
-  store.ovr={}; store.ovrPair={}; touch(); recompute(); renderAdmin(); toast('초기화됨');
+  snapshot();   // Ctrl+Z 로 되돌린다 (예전엔 되돌릴 길이 없었다)
+  store.ovr={}; store.ovrPair={}; touch(); recompute(); renderAdmin(); toast('초기화됨',2800,true);
 }
 /* 받침에 맞는 조사 — josa('김간호','이','가') → '김간호가' */
 function josa(w,a,b){ w=String(w); const c=w.charCodeAt(w.length-1); return w+(c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28?a:b); }
@@ -4604,7 +4829,8 @@ function resetRoomOv(){
   const n=Object.keys(store.roomOv).length, m=Object.keys(store.presetDay||{}).length;
   if(!n&&!m){ toast('방 수정 없음'); return; }
   if(!confirm('일별 방 수정 '+n+'일치'+(m?' · 그날만 바꾼 프리셋 '+m+'일치':'')+'를 모두 초기화할까요?')) return;
-  store.roomOv={}; store.roomOvCnt={}; store.presetDay={}; touch(); recompute(); renderAdmin(); if(curScr==='week') renderWeek(); toast('초기화됨');
+  snapshot();
+  store.roomOv={}; store.roomOvCnt={}; store.presetDay={}; touch(); recompute(); renderAdmin(); if(curScr==='week') renderWeek(); toast('초기화됨',2800,true);
 }
 document.addEventListener('mousedown',e=>{
   if($('#pick').style.display==='block'&&!e.target.closest('#pick')&&!e.target.closest('td.nm')&&!e.target.closest('td[data-empty]')) closePick();
@@ -4623,7 +4849,7 @@ function rpSelected(){ // 현재 선택된 방 (실호실 번호 + 목록에 없
   return roomTokens(roomsFor(P,cnt,l,iso)).map(roomFull);
 }
 function openRoomPick(ctx,x,y){
-  rpCtx=ctx;
+  rpCtx=Object.assign({},ctx,{x,y});   // x·y — 사유를 받고 같은 자리에 다시 연다
   rpBedOpen={};
   for(const t of rpSelected()){ const [room,no]=splitBed(roomFull(t)); if(no!=null) rpBedOpen[room]=true; }
   renderRoomPick();
@@ -4640,6 +4866,12 @@ function renderRoomPick(){
     : rpCtx.kind==='group'
     ? `'${esc((groupById(rpCtx.id)||{}).name||'')}' 그룹 — 주지 않을 방 <span class="dim">(그룹원 모두, 고친 날부터)</span>`
     : `${+rpCtx.iso.slice(8,10)}일 ${rpCtx.P} ${FORM_LBL(rpCtx.l,rpCtx.P)} 방`;
+  // 그날 방 — 이 자리 방 수정·오늘만 방 구성의 사유, 이 창에서 고치며 받은 사유
+  let whyRow='';
+  if(rpCtx.kind==='day'){ const {iso,P,l}=rpCtx;
+    const rows=handChanges([iso]).filter(r=>r.P===P&&(r.keys[0]==='room|'+P+'|'+l||r.kind==='preset')); WHY_ROWS.rp=rows;
+    whyRow=rpCtx.why!=null?`<div class="rpWhy">이번에 고치는 사유: <span class="whyT">${esc(rpCtx.why)}</span> <span class="dim">— 창을 닫을 때까지 이 사유로</span></div>`
+      :rows.length?`<div class="rpWhy">${rows.map((r,i)=>`<div>${esc(r.lab)} · ${whyLine('rp',r,i)}</div>`).join('')}</div>`:''; }
   const extra=sel.filter(t=>!master.includes(String(t))&&splitBed(String(t))[1]==null);
   let presetRow='';
   if(rpCtx.kind==='day'){
@@ -4653,7 +4885,7 @@ function renderRoomPick(){
         <span class="dim">지금: ${presetSrcLabel(pr)}</span></div>`; }
   }
   $('#rpick').innerHTML=
-    `<div style="font-weight:700;margin-bottom:6px">${head}</div>`+presetRow+
+    `<div style="font-weight:700;margin-bottom:6px">${head}</div>`+whyRow+presetRow+
     (rpCtx.kind==='day'?`<div class="dim" style="margin:2px 0 4px">이 자리 방만 손으로 고치기 — 이 날 하루만</div>`:'')+
     master.map(r=>{
       const keys=bedKeys(r), n=bedCount(r);
@@ -4690,10 +4922,25 @@ function applyRoomSel(keys){
   }else if(rpCtx.kind==='group'){
     setGroupBans(rpCtx.id,sel); renderRoomPick();
   }else{
-    const {iso,P,l}=rpCtx, day=dayInfo(iso);
+    // 배정표에서 연 창이면 처음 고칠 때 사유를 받는다 — 한 번 받으면 창을 닫을 때까지 그 사유로(방을 여러 번 눌러도 한 번)
+    if(rpCtx.ask&&rpCtx.why==null){ const c=rpCtx;
+      return roomWhyThen({what:`<b>${whyMD(c.iso)} ${c.P}</b> ${esc(FORM_LBL(c.l,c.P))} 자리 방 고치기 — 이 날 하루만`,cur:(whyOf(c.iso,'room|'+c.P+'|'+c.l)||{}).t},
+        w=>{ c.why=w; applyRoomSel(keys); if(rpCtx===c) placePopup($('#rpick'),c.x,c.y); }); }
+    const {iso,P,l}=rpCtx, day=dayInfo(iso), first=!rpCtx.snap;
+    // 창 하나에 되돌리기 한 번 — 방을 여러 번 눌러도 Ctrl+Z 한 번에 창을 열기 전으로 (예전엔 그날 방 수정을 되돌릴 길이 없었다)
+    if(first){ snapshot(); rpCtx.snap=true; }
     setRoomOv(iso,P,l,abbrevRooms(sel),day?Object.keys(day[P].labels).length+day[P].extra.length:0);
+    if(rpCtx.why) noteWhy(iso,'room|'+P+'|'+l,rpCtx.why);
     touch(); recompute(); renderWeek(); renderRoomPick();
+    if(first) toast(`${whyMD(iso)} ${P} ${FORM_LBL(l,P)} 자리 방 — 이 날만 고쳤습니다`,2400,true);
   }
+}
+/* 방 고르기 창에서 사유 받기 — 창을 닫고 받은 뒤 rpCtx 를 되살려 go(사유). 그만두면 아무것도 바뀌지 않는다 */
+async function roomWhyThen(o,go){
+  const c=rpCtx; closeRoomPick();
+  const w=await askWhy(o);
+  if(w==null){ toast('바꾸지 않았습니다',1800); return; }
+  rpCtx=c; go(w);
 }
 function toggleRoom(rm){
   const keys=expandBeds(rpSelected()), mine=bedKeys(rm);
@@ -4705,20 +4952,31 @@ function toggleBed(rm,no){
   applyRoomSel(keys.includes(k)?keys.filter(x=>x!==k):[...keys,k]);
 }
 function roomPickAuto(){
-  const {iso,P,l}=rpCtx; closeRoomPick();
+  const c=rpCtx, {iso,P,l}=c; closeRoomPick();
+  if((((store.roomOv||{})[iso]||{})[P]||{})[l]==null) return;   // 이미 자동
+  if(!c.snap) snapshot();
   setRoomOv(iso,P,l,null);
   touch(); recompute(); renderWeek();
+  toast(`${whyMD(iso)} ${P} ${FORM_LBL(l,P)} 자리 방 — 자동으로`,2400,true);
 }
-function roomPickManual(){
-  const {iso,P,l}=rpCtx; closeRoomPick();
+/* 직접 입력 — 방과 사유를 한 창에서 (예전엔 브라우저 입력 창이라 Ctrl+Z 도 안 됐다). 비우면 자동으로 — 사유 없이 */
+async function roomPickManual(){
+  const c=rpCtx, {iso,P,l}=c; closeRoomPick();
   const day=dayInfo(iso); if(!day) return;
   const cnt=Object.keys(day[P].labels).length+day[P].extra.length;
-  const v=prompt(`${+iso.slice(8,10)}일 ${P} ${FORM_LBL(l,P)} 방 — 이 날 하루만 적용 (예: ${roomHint()} · 비우면 자동으로)`,
-    roomsFor(P,cnt,l,iso));
-  if(v===null) return;
-  setRoomOv(iso,P,l,v.trim()||null,cnt);
+  const v=await formModal({title:`${whyMD(iso)} ${P} ${esc(FORM_LBL(l,P))} 자리 방 — 직접 입력`,
+    sub:`이 날 하루만 씁니다. 방은 ${roomHint()} 처럼, 병상은 1:2 처럼 적습니다. 비우면 자동으로 돌아갑니다.`,
+    body:`<div class="lb">방</div><input type="text" id="rpText" autofocus value="${escA(roomsFor(P,cnt,l,iso))}">`+whyFieldHtml(c.why!=null?c.why:((whyOf(iso,'room|'+P+'|'+l)||{}).t||'')),
+    mount:whyFieldMount,
+    read(box){ const t=box.querySelector('#rpText').value.trim(); return {t,why:t?whyRead(box):''}; },
+    okLabel:'바꾸기',cancelLabel:'그만두기'});
+  if(!v) return;
+  if(!c.snap) snapshot();
+  setRoomOv(iso,P,l,v.t||null,cnt);
+  if(v.why) noteWhy(iso,'room|'+P+'|'+l,v.why);
   touch(); recompute(); renderWeek();
-  roomTextWarn(v);
+  if(v.t) roomTextWarn(v.t);
+  else toast(`${whyMD(iso)} ${P} ${FORM_LBL(l,P)} 자리 방 — 자동으로`,2400,true);
 }
 function banClear(){
   if(rpCtx.kind==='group'){ setGroupBans(rpCtx.id,[]); renderRoomPick(); return; }
@@ -5309,7 +5567,7 @@ function snapshot(){ // 이름 변경/삭제가 ovr·caps·금지방·시드까�
     ch:store.caps,br:store.banRooms,sd:store.seedManual,al:store.alias,cu:store.custom,fi:store.formId,fs:store.forms,rm:store.rooms,sc:store.schemes,ps:store.presets,
     ev:store.events,na:store.nameAlias,tr:store.trainee,to:store.trOv,pd:store.presetDay,op:store.ovrPair,hd:store.hidden,
     pp:store.presetPlan,rl:store.relief,nu:store.newUntil,er:store.evRules,dy:store.daily,df:store.dayForm||null,du:store.duty,
-    ru:store.rules,rc:store.roomOvCnt,gr:store.groups,gl:store.groupLog||[],un:store.unit||{}}));
+    ru:store.rules,rc:store.roomOvCnt,gr:store.groups,gl:store.groupLog||[],un:store.unit||{},wy:store.why||{}}));
   if(undoStack.length>40) undoStack.shift(); }
 function restoreSnapshot(s){
   store.order=s.o; store.cells=s.c;
@@ -5326,7 +5584,7 @@ function restoreSnapshot(s){
   if(s.dy) store.daily=s.dy;
   if(s.du) store.duty=s.du;
   if(s.ru) store.rules=s.ru; if(s.rc) store.roomOvCnt=s.rc;
-  if(s.gr) store.groups=s.gr; if(s.gl) store.groupLog=s.gl; if(s.un) store.unit=s.un;
+  if(s.gr) store.groups=s.gr; if(s.gl) store.groupLog=s.gl; if(s.un) store.unit=s.un; if(s.wy) store.why=s.wy;
   if(s.df!==undefined){ if(s.df) store.dayForm=s.df; else delete store.dayForm; DAYTPL=null; }
   if(s.fi!==undefined){ if(store.formId!==s.fi) TPL=null; store.formId=s.fi; }
 }
@@ -5540,7 +5798,7 @@ function applyNurseName(r,nu){
   if(!nu){ store.order.splice(r,1); delete store.cells[old]; delete store.hidden[old];
     delete store.caps[old]; delete store.banRooms[old]; delete store.seedManual[old]; delete store.newUntil[old]; migOv(old,null); migTr(old,null);
     for(const G of [store.groups||[],...(store.groupLog||[]).map(x=>x.groups)]) for(const g of G) g.members=g.members.filter(m=>m!==old);
-    if(store.unit) delete store.unit[old]; }
+    if(store.unit) delete store.unit[old]; whyRename(old,null); }
   else{
     store.order[r]=nu;
     store.cells[nu]=store.cells[old]||{}; delete store.cells[old];
@@ -5551,7 +5809,7 @@ function applyNurseName(r,nu){
     if(old in store.newUntil){ store.newUntil[nu]=store.newUntil[old]; delete store.newUntil[old]; }
     for(const G of [store.groups||[],...(store.groupLog||[]).map(x=>x.groups)]) for(const g of G) g.members=[...new Set(g.members.map(m=>m===old?nu:m))];   // 그룹원도 새 이름으로 (지난 기록까지)
     if(store.unit&&old in store.unit){ store.unit[nu]=store.unit[old]; delete store.unit[old]; }   // 다른 소속(82 SU)도 — 안 옮기면 새 이름이 병동 자리로 들어왔다
-    migOv(old,nu); migTr(old,nu);
+    migOv(old,nu); migTr(old,nu); whyRename(old,nu);   // 손으로 바꾼 사유도 새 이름으로
   }
   return true;
 }
@@ -5997,15 +6255,18 @@ const ADMIN_PANELS={
           onchange="setRule('${k}',this.checked)"><i></i></label></div>`).join('')+groupRulesHtml();
     }},
   manual:{title:'수동 수정 관리',
-    desc:'배정표에서 직접 바꾼 담당 교체·일별 방 수정을 한 번에 되돌립니다.',
+    desc:'배정표에서 손으로 바꾼 것과 그 사유를 봅니다. 담당 교체·일별 방 수정을 한 번에 되돌릴 수도 있습니다.',
     body(){ return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button class="danger" onclick="resetOv()">담당 교체 모두 초기화</button>
-      <button class="danger" onclick="resetRoomOv()">일별 방 수정 모두 초기화</button>
+      <button class="danger" onclick="resetOv()" title="배정표에서 손으로 바꾼 자리를 모두 자동으로 되돌립니다 — Ctrl+Z 로 되돌릴 수 있습니다">담당 교체 모두 초기화</button>
+      <button class="danger" onclick="resetRoomOv()" title="그날 방 수정과 오늘만 바꾼 방 구성을 모두 지웁니다 — Ctrl+Z 로 되돌릴 수 있습니다">일별 방 수정 모두 초기화</button>
       <button onclick="pruneOvr()" title="근무표가 바뀌어 그 사람이 그날 그 시간대 근무가 아니게 된 교체만 지웁니다">효력 없는 교체 정리</button>
-      <span class="dim" id="ovCount"></span></div>`; },
+      <span class="dim" id="ovCount"></span></div>
+      <div class="lb" style="margin:18px 0 4px;font-size:14px;font-weight:800">손으로 바꾼 것 <span class="dim" style="font-weight:600">최근 날짜부터 · 종이에는 나오지 않습니다</span></div>
+      <table class="dt" id="whyTable"></table>`; },
     after(){
       const oa=ovrAudit();
       $('#ovCount').textContent=`담당 교체 ${Object.keys(store.ovr).length}일 (유효 ${oa.ok}건${oa.bad.length?` · 근무가 바뀌어 효력 없는 ${oa.bad.length}건`:''}) · 방 수정 ${Object.keys(store.roomOv).length}일 · 그날만 바꾼 프리셋 ${Object.keys(store.presetDay||{}).length}일`;
+      renderWhyAdmin();
     }},
   about:{title:'이 프로그램',
     desc:'병동 어싸인(병실 배정)을 자동으로 짜고 병실 배정표 양식 그대로 인쇄하는 프로그램입니다.',
@@ -6166,10 +6427,15 @@ function setPlan(wd,P,cnt,id){
   touch(); recompute(); if(curScr==='admin') renderPlan(); if(curScr==='week') renderWeek();
 }
 /* 배정표 방 칸 픽커에서 — 이 날 이 근무의 프리셋을 바꾼다 (오늘만 / 매주 이 요일). 그 근무의 손 수정은 지운다(프리셋이 가려지므로) */
-function applyPresetDay(weekly){
-  const {iso,P}=rpCtx; const day=dayInfo(iso); if(!day) return;
+function applyPresetDay(weekly,why,pid){
+  const c=rpCtx; if(!c) return;
+  const {iso,P}=c; const day=dayInfo(iso); if(!day) return;
   const cnt=clampCnt(Object.keys(day[P].labels).length+day[P].extra.length,P);
-  const id=($('#rpPresetSel')||{}).value||'default'; const p=presetById(cnt,id); if(!p) return;
+  const id=pid||($('#rpPresetSel')||{}).value||'default'; const p=presetById(cnt,id); if(!p) return;
+  // 오늘만 — 배정표에서 연 창이면 사유를 받는다(이 창에서 방을 고치며 적은 사유가 있으면 채워 둔다). 매주 계획은 설정이라 묻지 않는다
+  if(!weekly&&why===undefined&&c.ask)
+    return roomWhyThen({what:`<b>${whyMD(iso)} ${P}</b> 방 구성 → '${esc(p.name)}' (${cnt}인 · 오늘만)`,cur:c.why!=null?c.why:(whyOf(iso,'preset|'+P+'|'+cnt)||{}).t},
+      w=>applyPresetDay(false,w,id));
   snapshot();
   const pd=store.presetDay[iso];
   if(weekly){
@@ -6177,6 +6443,7 @@ function applyPresetDay(weekly){
     if(pd&&pd[P]){ delete pd[P][cnt]; if(!Object.keys(pd[P]).length) delete pd[P]; if(!Object.keys(pd).length) delete store.presetDay[iso]; }
   }else{
     const d=(store.presetDay[iso]=store.presetDay[iso]||{}); (d[P]=d[P]||{})[cnt]=id;
+    if(why) noteWhy(iso,'preset|'+P+'|'+cnt,why);
   }
   if(store.roomOv[iso]&&store.roomOv[iso][P]){ delete store.roomOv[iso][P]; if(!Object.keys(store.roomOv[iso]).length) delete store.roomOv[iso]; }
   if(store.roomOvCnt&&store.roomOvCnt[iso]){ delete store.roomOvCnt[iso][P]; if(!Object.keys(store.roomOvCnt[iso]).length) delete store.roomOvCnt[iso]; }
@@ -10213,6 +10480,10 @@ function renderDaySide(res,err){
       }).join('')+
       `<div class="dsBtns"><button onclick="openDutyAdmin(null,dayIso)" title="관리 > 당직표·번호 — 엑셀 당직표 올리기, 번호 고치기, 날짜별 당직 고치기">당직표·번호 관리</button></div></div>`;
   }
+  // 이 날 손으로 바꾼 것과 사유 — 종이에는 나오지 않으니 여기서 본다 (2026-10-11)
+  { const rows=handChanges([iso]); WHY_ROWS.day=rows;
+    if(rows.length) h+=`<div class="dsSec"><div class="dsH">손으로 바꾼 것 <span class="dsSub">종이에는 나오지 않습니다</span></div>`+
+      rows.map((r,i)=>`<div class="whyRow${r.eff?'':' off'}" style="margin-bottom:6px;box-shadow:inset 0 0 0 1px var(--rule)"><div class="wl"><b>${r.P}</b> ${r.html}</div><div>${whyLine('day',r,i)}</div></div>`).join('')+`</div>`; }
   h+=`<div class="dsSec"><div class="dsH">확인</div><div id="dayWarn"></div></div>`+
     `<div class="dsSec dsForm"><div class="dsH">양식</div><div class="dsNote">${esc(T?T.name:'')}</div>`+
     (T&&!T.custom&&String(store.ward||'')!=='101'&&store.wardPicked?`<div class="dsWarn">기본 양식은 101병동 것입니다(자리 이름의 내선 번호·화재반). 우리 병동 양식을 올리거나 [양식 글자 고치기]로 고쳐 주세요.</div>`:'')+
@@ -11137,7 +11408,7 @@ const HELP=[
  lead:'설정이 끝난 뒤 매주 반복하는 일은 셋뿐입니다.',
  steps:['<b>새 근무표 넣기</b> — 엑셀에서 긁어 <kbd>Ctrl+V</kbd>. 이미 표가 있으면 근무 칸만 붙여넣어도 됩니다.',
         '<b>확인 필요 카드</b> — 빨강(규칙 위반)은 고치고, 노랑(신규 미배정 등)은 이름을 눌러 붙입니다.',
-        '<b>손질</b> — 이름 클릭으로 담당을 바꾸고, 방 칸 클릭으로 그날 병실을 고칩니다. 잘못하면 <kbd>Ctrl+Z</kbd>.',
+        '<b>손질</b> — 이름 클릭으로 담당을 바꾸고, 방 칸 클릭으로 그날 병실을 고칩니다. 바꿀 때 <b>사유</b>를 한 줄 적습니다. 잘못하면 <kbd>Ctrl+Z</kbd>.',
         '<b>인쇄</b> 또는 엑셀로 내보내기.'],
  tips:['고치는 즉시 저장됩니다 — 맨 위 오른쪽이 <b>저장 중…</b> 에서 <b>저장됨 · 시각</b> 으로 바뀝니다.']},
 
@@ -11154,10 +11425,10 @@ const HELP=[
  lead:'두 사람의 자리를 맞바꿉니다. 근무표는 그대로 두고 어싸인만 바꾸는 것입니다.',
  steps:['바꾸고 싶은 사람의 <b>이름을 클릭</b>합니다.',
         '그 시간대의 자리들이 <b>A(CN) 김수진 · 1, 14</b> 처럼 이름·병실과 함께 나옵니다. 본인 자리는 회색으로 비활성입니다.',
-        '바꿀 상대를 누르면 두 사람이 서로 자리를 맞바꿉니다.',
+        '바꿀 상대를 누르면 <b>사유 창</b>이 뜹니다. 왜 바꾸는지 적고 [바꾸기]를 누르면 두 사람이 서로 자리를 맞바꿉니다 — 비워 두면 바뀌지 않습니다. 전에 적은 사유는 눌러서 채울 수 있습니다.',
         '되돌리려면 다시 눌러 [자동으로 되돌리기]를 고르면 됩니다 — 맞바꾼 상대의 고정도 함께 풀립니다. [이 날 ○ 교체 모두 풀기]는 그 날 그 시간대의 수동 교체를 한 번에 풉니다.'],
- tips:['손으로 바꾼 칸은 이름 아래 <b>빨간 밑줄</b>이 생깁니다.',
-       '같은 창 맨 아래 <b>[근무 바꾸기]</b>를 펼치면 그 날 근무 자체(D·E·N·OF·V·병가·생리휴가 등, 우리 병동 표기 포함)를 바꿀 수 있습니다 — 그러면 인원이 달라져 뒤의 어싸인이 자동으로 다시 맞춰집니다. 한 번 펼치면 창을 닫았다 열어도 펼친 채입니다.',
+ tips:['손으로 바꾼 칸은 이름 아래 <b>빨간 밑줄</b>이 생기고, 사유를 적었으면 칸 오른쪽 위에 <b>점</b>이 찍힙니다 — 마우스를 올리면 사유가 보입니다. 모아 보는 곳은 <b>손으로 바꾼 사유 보기</b>.',
+       '같은 창 맨 아래 <b>[근무 바꾸기]</b>를 펼치면 그 날 근무 자체(D·E·N·OF·V·병가·생리휴가 등, 우리 병동 표기 포함)를 바꿀 수 있습니다 — 그러면 인원이 달라져 뒤의 어싸인이 자동으로 다시 맞춰집니다. 근무를 바꾸는 것은 사유를 묻지 않습니다. 한 번 펼치면 창을 닫았다 열어도 펼친 채입니다.',
        '같은 창의 <b>＋ 쉬는 간호사 넣기 · ＋ 대체간호사 넣기</b>로 그 시간대에 사람을 더할 수 있습니다 — 자세한 것은 <b>빈 자리 채우기</b>.',
        '102 처럼 자리 이름에 CN 표기가 없는 배정표는 이름 뒤에 <b>/CRN</b> 이 붙고, 자리를 맞바꿔도 <b>CRN 은 그 사람 그대로</b>입니다(CRN 은 어느 방이든 봅니다). CRN 을 다른 사람으로 바꾸려면 그 사람 이름을 눌러 <b>[CRN 맡기기]</b> — 그 날 근무가 DC·EC·NC 로 바뀝니다. 종이에 차지 자리(A(CN)·D(CRN))가 따로 있는 양식은 그 자리에 앉은 사람이 차지라, 맞바꾸면 차지도 바뀝니다.',
        '<b>잘못 눌렀을 때</b>: 오른쪽 아래에 뜨는 <b>파란 알림을 누르면</b> 방금 한 것이 그대로 되돌아갑니다. <kbd>Ctrl+Z</kbd> 도 같습니다 — 근무 바꾸기·교육 입력·새 근무표 넣기 모두 됩니다.']},
@@ -11182,11 +11453,22 @@ const HELP=[
 {cat:'이번 주 배정표',id:'rooms',title:'그날 병실 고치기 (방 칸 클릭)',
  lead:'환자가 줄거나 늘어 그날만 병실을 다르게 볼 때 씁니다. 그 날 하루에만 적용됩니다.',
  steps:['고칠 자리의 <b>방 칸(왼쪽)</b>을 클릭합니다.',
-        '병실 목록이 뜹니다. 누를 때마다 담당에서 넣고 뺄 수 있습니다.',
+        '병실 목록이 뜹니다. 누를 때마다 담당에서 넣고 뺄 수 있습니다. 처음 누를 때 <b>사유</b>를 한 번 적습니다 — 같은 창에서 더 고칠 때는 다시 묻지 않습니다.',
         '아래에 <b>담당 n개 방 · 병상 m개</b>가 같이 나와 몇 명까지 보는지 바로 압니다.',
         '원래대로 돌리려면 [↩ 자동으로]를 누릅니다.'],
- tips:['손으로 고친 방 칸은 <b>파란 밑줄</b>로 표시됩니다.',
+ tips:['손으로 고친 방 칸은 <b>파란 밑줄</b>로 표시되고, 사유를 적었으면 칸 오른쪽 위에 <b>점</b>이 찍힙니다.',
+       '같은 창의 <b>이 날 방 구성 [오늘만]</b>도 사유를 받습니다. <b>[매주 ○요일]</b>은 계속 쓰는 설정이라 묻지 않습니다.',
        '두 사람이 같은 병실을 보게 되면 <b>빨간 글씨</b>로 알려 줍니다 — 자동으로 고치지는 않으니 확인하고 정리하세요.']},
+{cat:'이번 주 배정표',id:'why',title:'손으로 바꾼 사유 보기',
+ lead:'배정표에서 <b>자리를 맞바꾸거나 그날 방·방 구성을 고칠 때</b>는 사유를 적어야 바뀝니다. 나중에 보는 사람이 왜 바꿨는지 알 수 있게 하려는 것입니다.',
+ steps:['칸 오른쪽 위에 <b>점</b>이 있으면 사유가 적힌 칸입니다. <b>마우스를 올리면</b> 사유가 보입니다. 이름이나 방 칸을 눌러 연 창 맨 위에도 나옵니다.',
+        '배정표 옆 <b>손으로 바꾼 것</b> 카드에 이번 주에 바꾼 것과 사유가 모입니다. 좁은 화면에서는 한 줄로 접혀 있어 [자세히 ▾]로 펼칩니다.',
+        '<b>관리 &gt; 수동 수정 관리</b>에는 모든 날의 손 변경과 사유가 최근 날짜부터 나옵니다. 하루 어싸인표 화면 옆 열에도 그 날 것이 나옵니다.',
+        '사유가 없는 손 변경(예전에 바꾼 것)은 <b>사유 없음</b>으로 보이고, 옆의 [사유 적기]로 나중에 적을 수 있습니다. 적은 사유는 [고치기]로 고칩니다.'],
+ tips:['사유는 <b>인쇄·엑셀·한글 파일에는 나오지 않습니다</b> — 화면에서만 봅니다.',
+       '근무 바꾸기·쉬는 간호사 넣기·대체간호사 넣기·CRN 맡기기는 사유를 묻지 않습니다.',
+       '되돌리면(자동으로 되돌리기·<kbd>Ctrl+Z</kbd>·교체 풀기) 그 사유도 함께 사라집니다.'],
+ action:{label:'수동 수정 관리 열기',fn:"closeHelp();show('admin');pickAdmin('manual')"}},
 {cat:'이번 주 배정표',id:'warn',title:'확인 필요 · 안내 카드 읽는 법',
  lead:'그 주에 확인이 필요한 것만 표 위에 모아 보여 줍니다 — 넓은 화면(1920 등)에서는 <b>표 오른쪽</b>에 펼쳐진 채로 섭니다. <b>빨강 = 규칙 위반</b>(고쳐야 함), <b>노랑 = 안내</b>. 없으면 표 위에는 카드가 뜨지 않고, 오른쪽 열에는 초록 <b>확인할 것 없음</b>이 섭니다. 같은 종류는 사람별·내용별로 한 줄에 묶이고, 줄 아래 단추(<b>간호사 관리 열기·방 구성 열기</b>)로 고칠 곳에 바로 갑니다.',
  steps:['<b>가능 근무가 아닙니다</b> — 그 간호사가 못 하는 근무가 배정돼 있습니다. 관리 &gt; 간호사 관리에서 확인하세요.',
@@ -11472,6 +11754,7 @@ const TOURS={
     canPrint()
       ?{sel:'#btnPrint',title:'인쇄',text:'이번 주 배정표가 양식 그대로 <b>A4 한 장</b>으로 나옵니다. 옆의 [엑셀로 내보내기]는 같은 양식의 엑셀 파일입니다.'}
       :{sel:'#btnXlsx',title:'엑셀로 내보내기',text:'이 서식은 병동 양식 그대로 <b>엑셀 파일</b>로 받아 엑셀에서 인쇄합니다.'},
+    (w=>w&&w.offsetHeight>4)(document.querySelector('#wkWhy'))?{el:()=>document.querySelector('#wkWhy'),title:'손으로 바꾼 것',text:'이번 주에 손으로 바꾼 자리·방과 그 <b>사유</b>입니다. 칸 오른쪽 위 점에 마우스를 올려도 보입니다.'}:null,
     sideMode()?{el:()=>{ const w=document.querySelector('#wkWarn'); return w&&w.offsetHeight>4?w:null; },title:'이번 주 확인할 것',text:'넓은 화면에서는 표 <b>오른쪽</b>에 모입니다. 빨강은 고칠 것, 노랑은 안내이고, 줄마다 고치러 가는 단추가 붙어 있습니다.'}:null,
     {sel:'#tabEdit',title:'근무표',text:'이 달 근무를 칸마다 고치거나 <b>새 근무표</b>를 넣습니다.'},
     {sel:'#tabAdmin',title:'관리',text:'병실·방 구성·간호사·데이터 보관은 여기서 <b>한 번만</b> 맞춰 두면 됩니다.'},
@@ -11489,13 +11772,13 @@ const TOURS={
   ]},
   swap:{needData:true,steps:()=>{ const td=_firstNm(); if(!td) return []; const n=td.dataset.n, iso=td.dataset.iso; return [
     {before:()=>{ show('week'); closePick(); },el:_firstNm,title:'1. 이름을 클릭',text:'바꾸고 싶은 사람의 <b>이름</b>을 누릅니다.'},
-    {before:()=>{ const [x,y]=_pageXY(_firstNm()); openPick(n,iso,x,y); },el:()=>document.querySelector('#pick .swapBtn:not([disabled])'),title:'2. 바꿀 상대를 누르면 맞바뀝니다',text:'그 시간대의 자리가 <b>이름·병실</b>과 함께 나옵니다. 본인 자리는 회색입니다.'},
+    {before:()=>{ const [x,y]=_pageXY(_firstNm()); openPick(n,iso,x,y); },el:()=>document.querySelector('#pick .swapBtn:not([disabled])'),title:'2. 바꿀 상대를 누릅니다',text:'그 시간대의 자리가 <b>이름·병실</b>과 함께 나옵니다. 본인 자리는 회색입니다. 누르면 <b>사유 창</b>이 먼저 뜹니다 — 왜 바꾸는지 적으면 맞바뀝니다.'},
     {sel:'#pick button[onclick="pickChoose(null)"]',title:'3. 되돌리기',text:'손으로 바꾼 뒤에는 [자동으로 되돌리기]. 오른쪽 아래 <b>파란 알림</b>이나 <kbd>Ctrl+Z</kbd> 로도 됩니다.'},
     {el:()=>document.querySelector('#pick .pkFold'),title:'근무 자체를 바꾸려면',text:'맨 아래 <b>근무 바꾸기</b>를 펼쳐 그 날 근무(D·E·N·OF 등)를 바꾸면 인원이 달라져 어싸인이 다시 맞춰집니다.',after:()=>closePick()},
   ]; },cleanup:()=>closePick()},
   rooms:{needData:true,steps:()=>{ const td=_firstRm(); if(!td) return []; const d=td.dataset; return [
     {before:()=>{ show('week'); closeRoomPick(); },el:_firstRm,title:'1. 방 칸을 클릭',text:'고칠 자리의 <b>왼쪽 방 칸</b>을 누릅니다.'},
-    {before:()=>{ const [x,y]=_pageXY(_firstRm()); openRoomPick({kind:'day',iso:d.iso,P:d.p,l:d.l},x,y); },el:()=>document.querySelector('#rpick button[onclick^="toggleRoom"]'),title:'2. 병실을 넣고 뺍니다',text:'누를 때마다 담당에서 <b>넣고 뺍니다</b>. 그 날 하루에만 적용됩니다.'},
+    {before:()=>{ const [x,y]=_pageXY(_firstRm()); openRoomPick({kind:'day',iso:d.iso,P:d.p,l:d.l},x,y); },el:()=>document.querySelector('#rpick button[onclick^="toggleRoom"]'),title:'2. 병실을 넣고 뺍니다',text:'누를 때마다 담당에서 <b>넣고 뺍니다</b>. 그 날 하루에만 적용됩니다. 처음 누를 때 <b>사유</b>를 한 번 적습니다.'},
     {el:()=>[...document.querySelectorAll('#rpick div')].find(x=>/담당 .*방/.test(x.textContent))||document.querySelector('#rpick'),title:'몇 명까지 보는지',text:'아래에 <b>담당 n개 방 · 병상 m개</b>가 같이 나옵니다.'},
     {sel:'#rpick button[onclick="roomPickAuto()"]',title:'원래대로',text:'[↩ 자동으로]를 누르면 자동 배정으로 돌아갑니다. 손으로 고친 방 칸은 <b>파란 밑줄</b>이 생깁니다.',after:()=>closeRoomPick()},
   ]; },cleanup:()=>closeRoomPick()},
@@ -11982,7 +12265,8 @@ window.__app={get store(){return store},set store(v){store=v},
   normGroups,groupById,groupWard,groupActive,groupsBetween,handoverGroupsOf,groupsAt,noteGroups,fixGroupLog,editDay,setToday(v){todayOvr=v||null;},addGroup,renameGroup,deleteGroup,toggleGroupMember,setGroupHandover,groupStripHtml,groupRulesHtml,groupCellHtml,keepHistory,restoreHistory,
   capsAt,bansAt,capBlockers,grpOfAt,toggleGroupCap,setGroupBans,delGroupBan,grpShape,grpCopy,toggleCap,delBan,closeRoomPick,offCandidates,
   makeExample,enterDemo,openExample,leaveDemo,quitDemo,demoMakeFile,openExamplePick,pickExampleWard,wizTryExample,demoRestart,renderDemoBar,get demoWiz(){return demoWiz},get wizDemoTried(){return wizDemoTried},downloadExample,inDemo,serializeStore,parseStoreText,useHandle,restoreBackup,EX_PLAN,EX_NAMES,WARDS,get demoPrev(){return demoPrev},
-  get pickCtx(){return pickCtx},set pickCtx(v){pickCtx=v},
+  get pickCtx(){return pickCtx},set pickCtx(v){pickCtx=v},get rpCtx(){return rpCtx},
+  whyOf,whyVal,noteWhy,pruneWhy,whyRename,whyRecent,askWhy,handChanges,whyTipName,whyEdit,renderWeekWhy,renderWhyAdmin,roomPickAuto,roomPickManual,get WHY_ROWS(){return WHY_ROWS},resetOv,resetRoomOv,
   memoryMode(){window.__memoryMode=true;
     setFileLoc({kind:'none'});afterLoad();}};
 </script>

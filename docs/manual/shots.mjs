@@ -1,4 +1,4 @@
-// 설명서용 실제 화면 캡처 — 예시 데이터(홍길동 등) (2026-09-18, 2026-09-27·09-28·10-09·10-10 다시 찍음)
+// 설명서용 실제 화면 캡처 — 예시 데이터(홍길동 등) (2026-09-18, 2026-09-27·09-28·10-09·10-10·10-11 다시 찍음)
 // 25-example 만 앱의 예시(makeExample('101') — 옛이야기 이름)로 찍는다
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
@@ -126,6 +126,26 @@ await page.evaluate(()=>{
   openPick(td.dataset.n,td.dataset.iso,700,320);
 });
 await el('07-pick','#pick');
+
+// ── 26. 사유 창 — 자리를 맞바꾸려고 누르면 먼저 뜬다(지난 사유를 누르면 채운다) · 27. 배정표 옆 '손으로 바꾼 것' ──
+// 지난 사유가 보이게 하나를 먼저 맞바꾸고(9/15 D), 그날 방도 하나 고친 뒤(9/16 D) 찍는다. 찍고 나서 되돌린다
+await page.evaluate(()=>{ closePick(); undoStack.length=0;
+  const seats=(iso,P)=>{ const L=result.byDay[iso][P].labels; return Object.keys(L).filter(k=>k!=='차지').map(k=>[k,L[k]]); };
+  const a=seats('2026-09-15','D'); openPick(a[0][1],'2026-09-15',0,0); pickChoose(a[1][0],'격리 환자 담당');
+  const b=seats('2026-09-16','D').find(x=>FORM_LBL(x[0],'D')==='C'); openRoomPick({kind:'day',iso:'2026-09-16',P:'D',l:b[0]},0,0); rpCtx.why='보호자 요청 — 창가 병실';
+  const off=[...document.querySelectorAll('#rpick .rpRoom > button:first-child')].find(x=>!x.classList.contains('on')); off&&off.click();
+  closeRoomPick(); renderWeek();
+  const c=seats('2026-09-17','D'); const td=[...document.querySelectorAll('#wkTable td.nm[data-n]')].find(x=>x.dataset.iso==='2026-09-17'&&x.dataset.n===c[0][1]);
+  openPick(td.dataset.n,td.dataset.iso,700,320,true);
+  [...document.querySelectorAll('#pick .swapBtn:not([disabled])')][1].click();
+});
+await page.waitForTimeout(300);
+await page.evaluate(()=>{ const i=document.querySelector('#modalBox #whyIn'); i.value='신규 교육 — 프리셉터와 이웃 방'; i.blur(); });
+await el('26-why','#modalBox');
+await page.evaluate(()=>{ closeModal(null); show('week'); renderWeek(); window.scrollTo(0,0); });
+await page.waitForTimeout(300);
+await el('27-why-card','#wkWhy');
+await page.evaluate(()=>{ while(undoStack.length) undoAny(); if(Object.keys(store.why||{}).length||Object.keys(store.ovr||{}).length||Object.keys(store.roomOv||{}).length) throw new Error('사유 캡처를 되돌리지 못했습니다'); renderWeek(); });
 
 // ── 8. 방 바꾸기 (방 칸 클릭) ──
 await page.evaluate(()=>{ closePick();
