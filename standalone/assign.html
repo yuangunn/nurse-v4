@@ -108,6 +108,16 @@
   #fileInfo .fiTxt{min-width:0;overflow:hidden;text-overflow:ellipsis}
   #fileInfo.ok{background:var(--ok-bg);color:var(--ok)}
   #fileInfo.warn{background:var(--warn-bg);color:var(--warn)}
+  /* 예시 수정 알림 띠 (2026-10-10 원근: "예시파일로 수정할 때는 위에 알림 뱃지 — 예시파일 수정중으로 연동이 되지 않는다는 내용").
+   * 머리줄 안 마지막 줄(grid-column 1/-1) — 머리줄 높이(--tbH)에 함께 들어가 옆 열의 sticky 윗자리가 따라온다. 인쇄엔 .app 째 안 나온다 */
+  #demoBar{display:none;grid-column:1/-1;min-width:0;margin:0 -24px -5px;padding:7px 24px;align-items:center;gap:8px 12px;flex-wrap:wrap;
+    background:var(--warn-bg);color:var(--warn-sub);box-shadow:inset 0 1px 0 var(--warn-ring),inset 0 -1px 0 var(--warn-ring);
+    font-size:14px;font-weight:600;line-height:1.45;letter-spacing:-0.01em}
+  #demoBar.on{display:flex}
+  #demoBar .dbTxt{flex:1 1 360px;min-width:0}
+  #demoBar .dbTxt b{color:var(--warn);font-weight:800}
+  #demoBar button{min-height:32px;padding:4px 12px;font-size:13px;font-weight:700;color:var(--ink);background:var(--card);box-shadow:inset 0 0 0 1px var(--warn-ring)}
+  #demoBar button.pri{background:var(--accent);color:var(--on-accent);box-shadow:none}
   #fileInfo.off{background:var(--err-bg);color:var(--err)}
   #fileInfo.busy .fiDot{animation:fiPulse 1.1s ease-in-out infinite}
   @keyframes fiPulse{50%{opacity:.25}}
@@ -702,6 +712,9 @@
   .wizNote b{color:var(--ink)}
   .wizBig{display:flex;flex-direction:column;gap:10px;align-items:flex-start;margin-top:14px}
   .wizBig button{min-height:46px;padding:12px 22px;font-size:16px;font-weight:700}
+  .wizBig.row{flex-direction:row;flex-wrap:wrap;align-items:center}
+  .wizTry{margin:6px 0 0;padding-left:22px}
+  .wizTry li{margin:2px 0}
   #onboard.shut{padding:10px 18px}
   #onboard.shut .obHead{margin-bottom:0}
   #onboard .obFold{font-size:12px;font-weight:700;padding:4px 10px;min-height:28px}
@@ -785,7 +798,7 @@
     @page{size:A4 portrait;margin:0}
     body{background:#fff;padding:0}
     .app{display:none}
-    #helpWrap,#wiz,#toast,#drop,#pick,#rpick,#tourShield,#tourHole,#tourBox,#onboard{display:none !important}
+    #helpWrap,#wiz,#toast,#drop,#pick,#rpick,#tourShield,#tourHole,#tourBox,#onboard,#demoBar{display:none !important}
     #printArea{display:block}
   }
   .sheet{width:210mm;height:297mm;padding:10mm;box-sizing:border-box;page-break-after:always;
@@ -989,6 +1002,7 @@
     <button id="themeBtn" class="tbBtn" onclick="cycleTheme()" title="화면 밝기 — 누를 때마다 자동(기기 설정 따름) → 다크 → 라이트"></button>
     <button id="helpBtn" class="tbBtn" onclick="openHelp()" title="도움말 (F1) — 기능별 사용법과 화면에서 보여 주기">도움말</button>
   </div>
+  <div id="demoBar" role="status" aria-live="polite"></div>
 </div>
 
 <!-- ══ 시작 화면 ══ -->
@@ -1232,7 +1246,7 @@
       <b>도움말</b>
       <input type="text" id="helpQ" placeholder="찾기 (예: 인쇄, 병실, 붙여넣기)" oninput="renderHelpNav(this.value)">
       <span style="margin-left:auto;display:flex;gap:8px">
-        <button onclick="closeHelp();startWizard(0)" title="처음 켰을 때의 안내(파일 만들기 → 병동 → 방 구성 → 근무표 → 간호사)를 다시 봅니다">처음 안내 다시 보기</button>
+        <button onclick="closeHelp();startWizard(0)" title="처음 켰을 때의 안내(파일 만들기 → 병동 → 예시 → 방 구성 → 근무표 → 간호사)를 다시 봅니다">처음 안내 다시 보기</button>
         <button onclick="closeHelp()">✕ 닫기</button>
       </span>
     </div>
@@ -2052,7 +2066,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261010b'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261011b'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -2151,7 +2165,7 @@ function formOv(id){ id=id||formId(); const o=store&&store.forms&&store.forms[id
  * 유일한 저장소이므로 여기가 제자리다. 옛 값은 migrateStore 가 한 번 옮긴다. */
 const uiGet=k=>!!(store&&store.ui&&store.ui[k]);
 function uiSet(k,v){ if(!store) return; store.ui=store.ui||{};
-  if(v) store.ui[k]=1; else delete store.ui[k]; touch(); }
+  if(v) store.ui[k]=1; else delete store.ui[k]; touch('ui'); }   // 'ui' — 예시에서 고친 것으로 치지 않는다(알림 띠)
 function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{},roomOv:{},events:{},
   seedManual:{},caps:{},unit:{},alias:{},custom:{},nameAlias:{},trainee:{},trOv:{},
   rooms:DEFAULT_ROOMS.map(r=>r.slice()),ward:'101',wardPicked:false,banRooms:{},formId:'101',forms:{},
@@ -2355,7 +2369,11 @@ async function scanSidecars(){
   out.stale=stale;
   return out;
 }
+/* 쓰던 칸을 먼저 마친다 — 칸의 change 는 포커스가 떠날 때 오므로, 데이터를 갈아 끼운 뒤에 오면 고친 값이 엉뚱한 데이터에 들어간다
+ * (2026-10-11 교차 검토: 예시에서 병상수 칸에 9 를 쳐 둔 채 백업을 끌어다 놓으면 9 가 우리 병동 파일에 저장됐다) */
+function commitFocus(){ try{ const a=document.activeElement; if(a&&a!==document.body&&typeof a.blur==='function') a.blur(); }catch(e){} }
 function adoptStore(j){
+  commitFocus();
   overwriteOk=false;
   if(!j||j.app!=='assign') return false;
   store={...emptyStore(),...j}; migrateStore();
@@ -2363,6 +2381,13 @@ function adoptStore(j){
   return true;
 }
 async function useHandle(h,{create=false}={}){
+  commitFocus();
+  // 예시 파일(store.example)은 연결하지 않고 예시로 연다 — 고친 것이 예시 파일에 쌓이지 않게. 읽기만 하므로 [허용]도 묻지 않는다.
+  // 아래 '버리고 열까요?'보다 먼저 본다 — 예시는 우리 병동 파일을 버리지 않는다(enterDemo 가 고친 것을 저장하고 기억해 둔다)
+  if(!create){ try{ const j0=parseStoreText(await (await h.getFile()).text());
+    if(j0&&j0.app==='assign'&&j0.example){ await enterDemo(j0); return 'demo'; } }catch(e){} }
+  // 우리 병동 파일을 두고 예시를 보던 중이면(시작 화면이 떠 있던 경우 등) 그 파일로 먼저 돌아온다 — 저장 안 된 것을 아래에서 저장하거나 묻는다
+  if(inDemo()&&demoPrev) leaveDemo({wiz:false});
   // 다른 파일로 갈아타기 전, 대기 중인 저장을 기존 파일에 먼저 반영 (편집 유실/오배달 방지)
   clearTimeout(saveT);
   if(dirty&&fileHandle){
@@ -2370,9 +2395,6 @@ async function useHandle(h,{create=false}={}){
     if(dirty&&!confirm('저장되지 않은 변경이 있습니다. 버리고 다른 파일을 열까요?')) return;
     dirty=false;
   }
-  // 예시 파일(store.example)은 연결하지 않고 예시로 연다 — 고친 것이 예시 파일에 쌓이지 않게. 읽기만 하므로 [허용]도 묻지 않는다
-  if(!create){ try{ const j0=parseStoreText(await (await h.getFile()).text());
-    if(j0&&j0.app==='assign'&&j0.example){ await enterDemo(j0); return 'demo'; } }catch(e){} }
   if(h.requestPermission&&await h.requestPermission({mode:'readwrite'})!=='granted')
     throw new Error('파일 접근이 허용되지 않았습니다');
   let txt=null;
@@ -2389,6 +2411,7 @@ async function useHandle(h,{create=false}={}){
     if(inDemo()) quitDemo();
     store={...emptyStore(),...j}; migrateStore();
   } else{ if(inDemo()) quitDemo(); store=emptyStore(); }          // 새 파일 또는 진짜 빈(0바이트) 파일만
+  undoStack.length=0;                              // 앞 파일의 되돌리기 기록이 이 파일을 앞 파일 내용으로 덮지 않게
   fileHandle=h; window.__memoryMode=false; window.__autoRead=false;
   $('#btnConnect').style.display='none';
   try{ localStorage.setItem('assignMode','file'); }catch(e){}
@@ -2500,6 +2523,7 @@ function renderFileInfo(){
   el.title=(path?'파일: '+path+'\n':'')+title+(sv?'\n지금: '+sv.replace(/^⚠\s*/,''):'')+(path?'\n클릭 = 경로 복사':'');
   el.dataset.path=path||'';
   el.innerHTML=`<span class="fiDot"></span><span class="fiTxt">${esc(txt)}</span>`;
+  renderDemoBar();
 }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') renderFileInfo(); });
 async function copyFilePath(){
@@ -2550,15 +2574,19 @@ function writeStore(opts={}){
 }
 async function _writeStore({interactive=true}={}){
   if(inDemo()){ dirty=false; renderFileInfo(); return; }   // 예시 — 파일에도 exe 에도 쓰지 않는다
-  store.by=CLIENT_ID;
+  // 시작할 때의 내용·파일을 쥐고 쓴다 — 파일을 읽는 사이 예시가 열리면(끌어다 놓기 등) 전역 store 는 예시다.
+  // 그것을 우리 병동 파일에 쓰면 그 파일이 예시가 된다. 바뀌었으면 쓰지 않는다(다음 저장이 맞는 내용으로 쓴다)
+  const S=store, H=fileHandle;
+  const gone=()=>inDemo()||store!==S||fileHandle!==H;
+  S.by=CLIENT_ID;
   if(NATIVE&&nativeInfo) return writeStoreNative({interactive});
-  if(!fileHandle){ dirty=false;
+  if(!H){ dirty=false;
     saveMsg(window.__autoRead ? '⚠ 저장 연결 안 됨 — 수정하려면 [저장 연결]'
           : window.__memoryMode ? '⚠ 파일 미연결 — 저장되지 않음' : '');
     return; }
   let fileRev=0, fileBy='', fileSaved='', readOk=false;
   try{
-    const cur=await (await fileHandle.getFile()).text();
+    const cur=await (await H.getFile()).text();
     if(!cur.trim()) readOk=true;
     else{ const j=parseStoreText(cur); fileRev=(j&&j.rev)||0; fileBy=(j&&j.by)||'';
           fileSaved=(j&&j.saved)||''; readOk=true; }
@@ -2568,8 +2596,9 @@ async function _writeStore({interactive=true}={}){
     if(interactive) toast('데이터 파일을 읽을 수 없어 저장을 보류했습니다 — 네트워크/파일을 확인하거나 관리에서 백업을 내려받으세요',5000);
     return;                                            // dirty 유지 → 다음 편집/저장 때 재시도
   }
-  if(fileRev>(store.rev||0)&&fileBy===CLIENT_ID) store.rev=fileRev;   // 내가 쓴 것 — 물어볼 일 아니다
-  if(fileRev>(store.rev||0)){
+  if(gone()) return;
+  if(fileRev>(S.rev||0)&&fileBy===CLIENT_ID) S.rev=fileRev;   // 내가 쓴 것 — 물어볼 일 아니다
+  if(fileRev>(S.rev||0)){
     if(!interactive){ saveMsg('⚠ 파일이 밖에서 바뀜 — 저장 대기'); return; }
     if(!conflictOk(fileSaved)){
       downloadBackup();
@@ -2578,16 +2607,21 @@ async function _writeStore({interactive=true}={}){
       return;
     }
   }
-  const newRev=Math.max(fileRev,store.rev||0)+1;       // 파일 rev 기준 전진 — 되감김 방지
+  const newRev=Math.max(fileRev,S.rev||0)+1;           // 파일 rev 기준 전진 — 되감김 방지
   const saved=new Date().toISOString();
-  const w=await fileHandle.createWritable();
-  await w.write(serializeStore({...store,rev:newRev,saved,by:CLIENT_ID})); await w.close();
-  store.rev=newRev; store.saved=saved;                 // 성공 후에만 커밋
+  if(gone()) return;
+  const w=await H.createWritable();
+  if(gone()){ try{ await w.abort(); }catch(e){} return; }
+  await w.write(serializeStore({...S,rev:newRev,saved,by:CLIENT_ID})); await w.close();
+  S.rev=newRev; S.saved=saved;                         // 성공 후에만 커밋
+  if(gone()) return;
   dirty=false; saveMsg('저장됨');
   setTimeout(()=>{if(!dirty)saveMsg('')},2500);
 }
-function touch(){
-  if(inDemo()){ try{ renderOnboard(); }catch(e){} return; }   // 예시 — 저장하지 않는다 (_writeStore 도 막아 둔다)
+function touch(kind){
+  if(inDemo()){                                   // 예시 — 저장하지 않는다 (_writeStore 도 막아 둔다)
+    if(kind!=='ui'&&window.__demo&&!window.__demo.edited){ window.__demo.edited=true; renderDemoBar(true); }   // 처음 고치면 위에 '연동 안 됨' 띠
+    try{ renderOnboard(); }catch(e){} return; }
   if(window.__autoRead){
     window.__autoEdits=true;                        // 읽기 전용 중 고친 것 — 저장 연결되면 그대로 살린다
     if(!window.__reattachTried){ window.__reattachTried=true; tryReattachOnEdit(); }
@@ -2603,7 +2637,9 @@ function flushSave(){ if(dirty&&(fileHandle||nativeInfo)){ clearTimeout(saveT); 
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushSave(); });
 window.addEventListener('pagehide',flushSave);
 window.addEventListener('beforeunload',e=>{
-  if(inDemo()) return;   // 예시는 닫으면 사라지는 것이 맞다
+  if(inDemo()){          // 예시는 닫으면 사라지는 것이 맞다 — 다만 예시를 열기 전 우리 병동 파일에 못 쓴 것이 있으면 붙잡는다
+    if(demoPrev&&(demoPrev.dirty||demoPrev.autoEdits&&!demoPrev.fileHandle)){ e.preventDefault(); e.returnValue=''; }
+    return; }
   if(dirty&&(fileHandle||nativeInfo)){ flushSave(); e.preventDefault(); e.returnValue=''; }
   // 읽기만 하는 중에 고친 것 — 파일에 쓸 길이 없어 닫으면 사라진다. 브라우저의 '나가시겠습니까?'로 한 번 붙잡는다
   else if(window.__autoRead&&window.__autoEdits&&!fileHandle){ e.preventDefault(); e.returnValue=''; }});
@@ -2735,6 +2771,7 @@ async function writeStoreNative({interactive=true}={}){
 }
 /* 데이터 파일 바꾸기 — 브라우저 피커가 아니라 윈도우 기본 파일 창 */
 async function nativePickData(){
+  if(inDemo()) return;                             // 예시는 어떤 파일에도 잇지 않는다
   // 다른 파일로 갈아타기 전, 대기 중인 저장을 먼저 반영 (편집 유실 방지)
   if(dirty){
     clearTimeout(saveT);
@@ -2829,7 +2866,7 @@ function showSidecarPick(list){
  * requestPermission 만 부르면 된다. 파일이 그 사이 안 바뀌었으면(rev 같음) 지금 화면
  * 내용을 그대로 잇는다 — 읽기 전용으로 보다가 고친 것도 살린다. */
 async function reattachHandle(h){
-  if(!h||!h.requestPermission) return false;
+  if(!h||!h.requestPermission||inDemo()) return false;   // 예시는 어떤 파일에도 잇지 않는다
   let st;
   try{ st=await h.requestPermission({mode:'readwrite'}); }catch(e){ return false; }   // 사용자 동작 밖 등
   if(st!=='granted'){ window.__reattachDenied=true; return false; }
@@ -2893,6 +2930,7 @@ async function copyPathHint(name){
 }
 /* 첫 편집이 사용자 클릭 안에서 일어나면 그 자리에서 '허용' 창 하나로 저장 연결 — 파일 창 없이 */
 async function tryReattachOnEdit(){
+  if(inDemo()) return;
   let h=null; try{ h=await idbGet('handle'); }catch(e){}
   const active=!navigator.userActivation||navigator.userActivation.isActive;
   if(h&&h.name===window.__autoReadName&&active&&await reattachHandle(h)){
@@ -2902,6 +2940,7 @@ async function tryReattachOnEdit(){
 }
 /* 자동으로 읽은 상태에서 같은 파일에 쓰기 권한 연결 — 기억한 핸들이 있으면 '허용'만, 없으면 파일 하나 고르기 */
 async function connectSave(){
+  if(inDemo()) return;                             // 예시는 어떤 파일에도 잇지 않는다 (단추도 숨겨 둔다)
   try{
     let h0=null; try{ h0=await idbGet('handle'); }catch(e){}
     if(h0&&!window.__reattachDenied&&!window.__reattachOther&&(!window.__autoReadName||h0.name===window.__autoReadName)&&
@@ -3074,15 +3113,20 @@ function makeExample(W,{start}={}){
   return S;
 }
 let demoPrev=null;   // 예시를 열기 전 상태 — 예시를 끝내면 그대로 돌아간다
+let demoWiz=null;    // 처음 설정(마법사)에서 예시를 열었으면 예시를 끝낼 때 이어 할 단계 (환영에서 열었으면 0)
+let wizDemoTried=false;   // 마법사 예시 단계에서 예시를 한 번 열어 봤다 — 그 단계의 [다음]이 주 단추가 된다
 const inDemo=()=>!!window.__demo;
 /* 예시를 메모리에 연다. 우리 병동 파일이 열려 있으면 고친 것을 먼저 파일에 저장하고 지금 상태를 통째로 기억해 둔다 */
 async function enterDemo(data){
   if(!data||data.app!=='assign') return false;
+  commitFocus();                                   // 우리 병동 파일에서 쓰던 칸은 그 파일에 먼저 (아래에서 저장한다)
   if(tour) endTour();
   closeModal(null); closeHelp(); closePick(); closeRoomPick();
+  const wAt=wizOn()?wizAt:-1;
   if(!inDemo()){
     clearTimeout(saveT);
     if(dirty&&(fileHandle||nativeInfo)){ try{ await writeStore({interactive:false}); }catch(e){} }
+    for(let i=0;i<4&&_saving;i++){ try{ await _saving; }catch(e){} }   // 쓰고 있던 저장이 끝난 뒤에 바꾼다 — 예시가 우리 병동 파일에 들어가지 않게
     demoPrev=connected()?{store,fileHandle,fileLoc,dirty,saveState,wk:new Date(wkSunday),undo:undoStack.slice(),
       mem:!!window.__memoryMode,auto:!!window.__autoRead,autoName:window.__autoReadName,autoSig:window.__autoReadSig,
       autoEdits:!!window.__autoEdits,btn:$('#btnConnect').style.display}:null;
@@ -3094,6 +3138,10 @@ async function enterDemo(data){
   $('#btnConnect').style.display='none';
   undoStack.length=0; dirty=false; saveState=''; overwriteOk=false;
   setFileLoc({kind:'demo',name:w?w+'병동 예시':'예시'});
+  // 열려 있던 처음 설정 창은 닫는다 — 예시 위를 덮으면 단추가 듣지 않는다(예시 안에선 단계를 넘어갈 수 없다).
+  // 끝낼 때(leaveDemo) 그 단계로 돌아온다 — 예시 단계였으면 그 다음부터 (2026-10-11 교차 검토: 끌어 놓기·도움말로 연 예시)
+  if(wAt>=0){ wizAt=-1; $('#wiz').classList.remove('on'); $('#wizBody').innerHTML='';
+    if(demoWiz==null){ const d=WIZ[wAt]&&WIZ[wAt].id==='demo'; demoWiz=d?Math.min(wAt+1,WIZ.length-1):wAt; if(d) wizDemoTried=true; } }
   // 이번 주가 예시 근무표 안이면 이번 주, 아니면(리포의 예시 파일을 나중에 연 경우) 예시의 첫 주
   const r=timelineRange(), t=new Date(); t.setHours(0,0,0,0);
   const now=addDays(t,-t.getDay()), first=ex.start||(r&&r.min);
@@ -3108,27 +3156,68 @@ async function openExample(W){
   return true;
 }
 /* 예시를 그만 보고 진짜 파일로 갈 때(useHandle) — 기억해 둔 앞 상태는 버린다(이미 파일에 저장해 두었다) */
-function quitDemo(){ window.__demo=null; demoPrev=null; undoStack.length=0; dirty=false; }
+function quitDemo(){ window.__demo=null; demoPrev=null; demoWiz=null; undoStack.length=0; dirty=false; }
 /* [예시 끝내기] — 우리 병동 파일이 열려 있었으면 그대로, 아니면 시작 화면 */
-function leaveDemo(){
+function leaveDemo({wiz=true}={}){
   if(!inDemo()) return false;
+  commitFocus();                                   // 예시에서 쓰던 칸은 예시에 — 우리 병동 파일로 돌아간 뒤에 들어가지 않게
   if(tour) endTour();
   closePick(); closeRoomPick(); closeModal(null);
   clearTimeout(saveT);
-  const p=demoPrev; quitDemo(); saveState='';
+  // 예시에서 쓰던 초안(양식 보기·당직표 미리보기·넣기 미리보기·하루 어싸인표 입력)은 예시와 함께 버린다 — 우리 병동 파일로 따라가지 않게
+  fvDraft=null; dutyUI.pv=null; clearTimeout(dayInputTimer); dayInputTimer=null; try{ resetPaste(); }catch(e){}
+  const p=demoPrev, back=wiz?demoWiz:null; quitDemo(); saveState='';
   if(p){
     store=p.store; fileHandle=p.fileHandle; wkSunday=p.wk; undoStack.push(...p.undo);
     window.__memoryMode=p.mem; window.__autoRead=p.auto; window.__autoReadName=p.autoName; window.__autoReadSig=p.autoSig; window.__autoEdits=p.autoEdits;
     $('#btnConnect').style.display=p.btn; saveState=p.saveState; dirty=p.dirty;
     setFileLoc(p.fileLoc); recompute(); show('week');
     if(dirty&&(fileHandle||nativeInfo)) writeStore({interactive:false}).catch(()=>{});
-    toast('예시를 끝냈습니다 — 우리 병동 파일로 돌아왔습니다',3200);
+    if(back!=null){ startWizard(back); toast('예시를 끝냈습니다 — 처음 설정을 이어 합니다',3200); }
+    else toast('예시를 끝냈습니다 — 우리 병동 파일로 돌아왔습니다',3200);
     return true;
   }
   store=emptyStore(); fileHandle=null; window.__memoryMode=false; window.__autoRead=false;
   setFileLoc({kind:'none'}); recompute(); show('start');
+  if(back!=null) startWizard(0);                   // 환영 단계에서 예시를 봤으면 환영으로 — [처음 시작]이 거기 있다
   toast('예시를 끝냈습니다',2400);
   return true;
+}
+/* 알림 띠의 [처음 상태로] — 고친 것을 버리고 같은 병동 예시를 다시 연다(돌아갈 파일·처음 설정 단계는 그대로) */
+async function demoRestart(){
+  if(!inDemo()) return false;
+  const w=window.__demo.ward;
+  if(!WARDS.includes(w)) return false;
+  return openExample(w);
+}
+/* 예시를 고치는 중이면 머리줄 아래 띠 (원근 2026-10-10 "예시파일로 수정할 때는 위에 알림 뱃지 — 예시파일 수정중으로 연동이 되지 않는다는 내용").
+ * 예시를 연 것만으로는 안 뜨고 처음 고칠 때(touch) 뜬다. 예시를 끝내거나 다시 열면 사라진다(window.__demo 째 새로 생긴다).
+ * grow — 처음 뜰 때 머리줄이 길어진 만큼 화면을 내려 보던 자리가 움직이지 않게 한다(열려 있는 방 고르기 창도 같이) */
+let demoBarKey='';
+function renderDemoBar(grow){
+  const bar=$('#demoBar'); if(!bar) return;
+  const on=inDemo()&&!!window.__demo&&!!window.__demo.edited;
+  const key=on?[demoPrev?1:0,demoWiz==null?'':demoWiz].join('|'):'';
+  if(key===demoBarKey) return;
+  demoBarKey=key;
+  const tb=$('.topbar'), h0=tb?tb.offsetHeight:0;
+  if(!on){ bar.classList.remove('on'); bar.innerHTML=''; return; }
+  const nx=demoWiz!=null&&WIZ[demoWiz]?WIZ[demoWiz].nm:'';
+  bar.innerHTML=`<span class="dbTxt"><b>예시 파일 수정 중</b> — ${demoPrev?'우리 병동 파일과 연동되지 않습니다. 고친 것은 저장되지 않고, 우리 병동 파일은 그대로입니다.'
+      :'어느 파일과도 연동되지 않습니다. 고친 것은 저장되지 않고 창을 닫으면 사라집니다.'}</span>`+
+    `<button onclick="demoRestart()" title="고친 것을 버리고 이 병동 예시를 처음 상태로 다시 엽니다">처음 상태로</button>`+
+    (demoWiz!=null&&demoPrev
+      ?`<button class="pri" onclick="leaveDemo()" title="예시를 끝내고 우리 병동 파일로 돌아가 ${escA(nx||'다음 단계')}부터 이어서 정합니다">처음 설정 이어 하기 ▶</button>`
+      :`<button onclick="leaveDemo()" title="${demoPrev?'예시를 닫고 우리 병동 파일로 돌아갑니다 — 예시에서 고친 것은 남지 않습니다':'예시를 닫습니다 — 고친 것은 남지 않습니다'}">예시 끝내기</button>`);
+  const was=bar.classList.contains('on');
+  bar.classList.add('on');
+  if(grow&&!was&&tb){
+    const dh=tb.offsetHeight-h0;
+    if(dh>0){
+      window.scrollBy(0,dh);                       // 머리줄은 붙어 있고 아래 내용만 밀린다 — 밀린 만큼 내려 보던 자리 그대로
+      for(const id of ['#pick','#rpick']){ const el=$(id); if(el&&el.style.display==='block') el.style.top=(parseFloat(el.style.top)||0)+dh+'px'; }
+    }
+  }
 }
 /* 예시에서 [우리 병동 파일 만들기] — 파일을 만들면(useHandle 이 예시를 끝낸다) 빈 파일로 처음 설정을 묻는다 */
 async function demoMakeFile(){
@@ -3149,6 +3238,12 @@ function downloadExample(W){
   return a.download;
 }
 async function openExamplePick(){
+  const W=await pickExampleWard();
+  if(!W) return false;
+  return openExample(W);                          // 처음 설정 창에서 열었으면 enterDemo 가 돌아올 단계를 적는다(환영 창이면 끝낼 때 환영 창으로)
+}
+/* 어느 병동 예시를 볼지 고르는 창 — 고른 병동 번호(또는 null) */
+async function pickExampleWard(){
   const kinds={}; for(const w of WARDS){ const k=FORMS[w]?FORMS[w].kind:'101'; (kinds[k]=kinds[k]||[]).push(w); }
   const KN={'101':'101병동 서식 — 요일마다 방·이름 두 칸','122':'122병동 서식 — 이름·싸인 두 칸, 방은 세 열','102':'102병동 서식 — 방 칸 없음, 차지에 /CRN','82':'82병동 서식 — SU 칸이 따로'};
   const back=connected()&&!inDemo();
@@ -3157,9 +3252,25 @@ async function openExamplePick(){
       (back?' — 예시를 끝내면 지금 파일로 돌아옵니다.':'.'),
     groups:['101','122','102','82'].filter(k=>kinds[k]).map(k=>({name:KN[k],options:kinds[k].map(w=>{ const rs=wardRooms(w);
       return {label:w+'병동',value:w,hint:`${w}병동 예시 — 병실 ${rs[0]}~${rs[rs.length-1]}호`}; })})),
-    current:inDemo()?window.__demo.ward:''});
-  if(W) return openExample(W);
+    current:inDemo()?window.__demo.ward:(store&&store.wardPicked?String(store.ward||''):'')});
+  return W||null;
+}
+/* 처음 설정의 예시 단계 — 고른 병동(또는 고르게 해서) 예시를 연다. 마법사는 닫고(예시 위를 덮지 않게, 예시 안에선 넘어갈 수 없다)
+ * 예시를 끝내면(leaveDemo) 우리 병동 파일로 돌아와 이 다음 단계부터 이어 한다 */
+async function wizTryExample(W){
+  const at=wizAt;
+  if(!W){ W=await pickExampleWard(); if(!W) return false; }
+  wizAt=-1; $('#wiz').classList.remove('on'); $('#wizBody').innerHTML='';
+  const ok=await openExample(String(W));
+  if(ok&&inDemo()&&demoPrev){ demoWiz=Math.min(at+1,WIZ.length-1); wizDemoTried=true; renderOnboard(); renderDemoBar(); return true; }
+  if(!inDemo()) startWizard(at);                  // 못 열었으면 그 단계로
   return false;
+}
+/* 예시를 끝내는 단추 — 처음 설정에서 열었으면 '처음 설정 이어 하기'(주 단추), 우리 병동 파일에서 열었으면 그 파일로, 아니면 그냥 닫기 */
+function demoLeaveBtn(){
+  if(demoWiz!=null&&demoPrev){ const nx=WIZ[demoWiz]?WIZ[demoWiz].nm:'다음 단계';
+    return `<button class="pri" onclick="leaveDemo()" title="예시를 끝내고 우리 병동 파일로 돌아가 ${escA(nx)}부터 이어서 정합니다">처음 설정 이어 하기 ▶</button>`; }
+  return `<button onclick="leaveDemo()" title="${demoPrev?'예시를 닫고 우리 병동 파일로 돌아갑니다 — 예시에서 고친 것은 남지 않습니다':'예시를 닫습니다 — 고친 것은 남지 않습니다'}">예시 끝내기</button>`;
 }
 /* 배정표 화면의 예시 카드 — 시작 안내 자리에 선다 (해 볼 것 + 끝내는 길) */
 function demoCardHtml(open){
@@ -3173,10 +3284,10 @@ function demoCardHtml(open){
     (open?tries.map(([id,t],i)=>`<div class="obRow"><span class="st">${i+1}</span><span class="lb">${esc(t)}</span>`+
       (TOURS[id]?`<button onclick="startTopicTour('${id}')" title="실제 화면에서 보여 줍니다">보여 주기</button>`:'')+`</div>`).join(''):'')+
     `<div class="obFoot"><button onclick="startTopicTour('look')" title="지금 화면의 버튼을 하나씩 짚어 줍니다">▶ 화면 둘러보기</button>`+
-    `<button onclick="demoMakeFile()" title="예시를 끝내고 우리 병동 데이터 파일을 만듭니다 — 병동·방 구성·근무표를 차례로 묻습니다">우리 병동 파일 만들기</button>`+
+    (demoPrev?'':`<button onclick="demoMakeFile()" title="예시를 끝내고 우리 병동 데이터 파일을 만듭니다 — 병동·방 구성·근무표를 차례로 묻습니다">우리 병동 파일 만들기</button>`)+
     `<button onclick="openExamplePick()" title="다른 병동의 병실·서식으로 된 예시를 엽니다">다른 병동 예시</button>`+
     `<button onclick="downloadExample()" title="이 병동 예시를 처음 상태 그대로 파일로 받습니다 — 끌어다 놓거나 [데이터 파일 열기]로 열면 같은 예시가 열립니다">예시 파일 받기</button>`+
-    `<button onclick="leaveDemo()" title="예시를 닫습니다 — 고친 것은 남지 않습니다">예시 끝내기</button></div>`;
+    demoLeaveBtn()+`</div>`;
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -5144,7 +5255,7 @@ window.addEventListener('drop',async e=>{
     const hp=it&&it.getAsFileSystemHandle?it.getAsFileSystemHandle().catch(()=>null):null;
     let j0=null; try{ j0=parseStoreText(await f.text()); }catch(err){}
     if(j0&&j0.app==='assign'&&j0.example){ if(await enterDemo(j0)) toast(f.name+' — 예시로 열었습니다. 고친 것은 저장되지 않습니다',4200); return; }
-    if(inDemo()) leaveDemo();                            // 예시를 보던 중이면 예시를 끝내고 (앞 파일로 돌아가) 평소대로
+    if(inDemo()) leaveDemo({wiz:false});                 // 예시를 보던 중이면 예시를 끝내고 (앞 파일로 돌아가) 평소대로
     if(connected()){ await restoreBackup(f); return; }   // 이미 데이터가 있으면 → 백업 되살리기 (연결된 파일·보관 방식은 그대로)
     try{
       const h=hp&&await hp;
@@ -5915,11 +6026,11 @@ const ADMIN_PANELS={
     more:`자동 열림: 데이터 파일 이름이 <b>${SIDE_NAME}</b> 이고 이 프로그램(assign.html)과 같은 폴더에 있으면, 켤 때 파일을 고르지 않아도 바로 배정표가 뜹니다.<br>`+
          '브라우저는 닫았다 켜면 쓰기 권한을 잊습니다 — 다음에 고칠 때 <b>[허용]</b> 한 번만 누르면 같은 파일에 다시 이어집니다 (파일 창은 뜨지 않습니다).',
     body(){
-      if(inDemo()) return `<div class="wizNote">지금은 <b>예시</b>를 보는 중입니다 — 고친 것은 어디에도 저장되지 않습니다. 백업·저장 위치는 우리 병동 파일에서 다룹니다.</div>
+      if(inDemo()) return `<div class="wizNote">지금은 <b>예시</b>를 보는 중입니다 — 고친 것은 어느 파일과도 연동되지 않고 저장되지 않습니다. 백업·저장 위치는 우리 병동 파일에서 다룹니다.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
-        <button class="pri" onclick="demoMakeFile()" title="예시를 끝내고 우리 병동 데이터 파일을 만듭니다">우리 병동 파일 만들기</button>
+        ${demoPrev?'':`<button class="pri" onclick="demoMakeFile()" title="예시를 끝내고 우리 병동 데이터 파일을 만듭니다">우리 병동 파일 만들기</button>`}
         <button onclick="downloadExample()" title="이 병동 예시를 처음 상태 그대로 파일로 받습니다 — 끌어다 놓거나 [데이터 파일 열기]로 열면 같은 예시가 열립니다">예시 파일 받기</button>
-        <button onclick="leaveDemo()" title="예시를 닫습니다 — 고친 것은 남지 않습니다">예시 끝내기</button></div>`;
+        ${demoLeaveBtn()}</div>`;
       return `<div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="pri" onclick="downloadBackup()" title="지금 내용의 사본을 파일로 내려받습니다">백업 내려받기</button>
         <button onclick="restoreBackup()" title="백업 파일을 골라 그 내용으로 되살립니다 — 지금 데이터 파일에 저장됩니다">백업 불러오기</button>
@@ -6508,6 +6619,7 @@ function groupCellHtml(n){
     return `<button class="grpChip${on?' on':''}" onclick="toggleGroupMember('${g.id}','${escA(jsq(n))}')" title="${escA(g.name)} — ${su?'다른 소속이라 병동 자리에 앉지 않아 인계 피하기에 쓰이지 않습니다. 누르면 뺍니다':on?'그룹원입니다. 누르면 뺍니다':'누르면 이 그룹에 넣습니다'}">${esc(g.name)}</button>`; }).join('')}</div>`;
 }
 async function pickNewLocation(){
+  if(inDemo()) return;                             // 예시는 어떤 파일에도 잇지 않는다
   try{
     const h=await pickWith(o=>window.showSaveFilePicker(o),{suggestedName:fileHandle?fileHandle.name:SIDE_NAME,
       types:[{description:'어싸인 데이터 (자동 열림)',accept:{'text/javascript':['.js']}},
@@ -7721,6 +7833,7 @@ async function restoreBackup(file){
 }
 /* 파일에서 다시 읽기 — 파일 내용을 다시 불러온다 (다른 창에서 고쳤을 때; 자동 열림 파일도 지원) */
 async function reloadFromFile(){
+  if(inDemo()) return;
   if(dirty&&!confirm('저장되지 않은 변경이 있습니다. 버리고 파일 내용을 다시 읽을까요?')) return;
   try{
     let j=null;
@@ -11001,16 +11114,16 @@ const HELP=[
        '가끔 관리 &gt; 데이터 보관 &gt; [백업 내려받기]로 사본을 받아 두세요. 되살릴 때는 [백업 불러오기] 또는 백업 파일을 창에 끌어다 놓으면 됩니다.']},
 {cat:'시작하기',id:'first',title:'처음이라면 — 3단계',
  lead:'아무 것도 없는 상태에서 이번 주 배정표를 인쇄하기까지. 처음 켜면 환영 창이 뜨고, 거기서부터 한 단계씩 묻습니다.',
- steps:['환영 창의 <b>[처음 시작]</b>을 누르면 저장 창이 뜹니다. 이름은 <b>assign-data.js</b> 그대로 두고 이 프로그램과 같은 폴더에 저장하세요. 저장하면 바로 <b>병동 → 방 구성 → 근무표 → 표기 → 간호사</b> 순서로 묻습니다.',
+ steps:['환영 창의 <b>[처음 시작]</b>을 누르면 저장 창이 뜹니다. 이름은 <b>assign-data.js</b> 그대로 두고 이 프로그램과 같은 폴더에 저장하세요. 저장하면 바로 <b>병동 → 예시 → 방 구성 → 근무표 → 표기 → 간호사</b> 순서로 묻습니다. 병동을 고르면 그 병동 예시로 먼저 눌러 볼 수 있습니다(건너뛰어도 됩니다).',
         '근무표 단계에서 엑셀 근무표를 긁어 복사(<kbd>Ctrl+C</kbd>) → 넣기 화면에서 <kbd>Ctrl+V</kbd> → 읽은 내용을 확인하고 [맞아요, 저장]. 다음 달부터는 배정표 화면의 [새 근무표 넣기]로 같은 일을 합니다.',
         '[인쇄]를 누르면 병실 배정표 양식 그대로 A4 한 장이 나옵니다. 102·82병동 서식은 [이번 주 배정표 엑셀로 내보내기]로 받아 엑셀에서 인쇄합니다.'],
  tips:['방 구성·간호사 가능 근무 같은 병동 설정은 관리에서 한 번만 맞춰 두면 됩니다.',
        '환영 창을 [나중에 하기]로 닫았으면 시작 화면의 [처음 시작]이 같은 일을 합니다. 도움말 위의 [처음 안내 다시 보기]로 언제든 다시 열 수 있습니다.']},
 {cat:'시작하기',id:'example',title:'예시로 둘러보기',
  lead:'우리 병동 파일을 만들기 전에 <b>가상의 병동</b>으로 먼저 눌러 볼 수 있습니다. 가상의 간호사와 지난주부터 4주 뒤까지의 근무표·당직표·교육 일정이 들어 있고, 고른 병동의 병실과 배정표 서식으로 나옵니다.',
- steps:['시작 화면(또는 처음 켤 때 뜨는 환영 창)의 <b>[예시로 둘러보기]</b>를 누르고 병동을 고릅니다.',
-        '배정표·근무표·관리 화면을 마음껏 눌러 보세요. 이름을 눌러 자리를 바꾸고, 날짜를 눌러 하루 어싸인표를 보고, 엑셀로도 받아 볼 수 있습니다. 맨 위 오른쪽이 노랑 <b>예시 · 저장 안 됨</b>이면 예시를 보는 중입니다.',
-        '다 봤으면 배정표 화면의 예시 카드에서 <b>[우리 병동 파일 만들기]</b>로 진짜 파일을 만들거나 <b>[예시 끝내기]</b>를 누릅니다. 우리 병동 파일을 보다가 예시를 열었으면 예시를 끝낼 때 그 파일로 돌아옵니다.'],
+ steps:['시작 화면(또는 처음 켤 때 뜨는 환영 창)의 <b>[예시로 둘러보기]</b>를 누르고 병동을 고릅니다. 처음 설정에서는 병동을 고른 다음 단계에서 <b>[○○병동 예시로 해 보기]</b>로 바로 열립니다.',
+        '배정표·근무표·관리 화면을 마음껏 눌러 보세요. 이름을 눌러 자리를 바꾸고, 날짜를 눌러 하루 어싸인표를 보고, 엑셀로도 받아 볼 수 있습니다. 맨 위 오른쪽이 노랑 <b>예시 · 저장 안 됨</b>이면 예시를 보는 중이고, 무엇이든 고치면 맨 위에 <b>예시 파일 수정 중 — 연동되지 않습니다</b> 띠가 뜹니다.',
+        '다 봤으면 배정표 화면의 예시 카드에서 <b>[예시 끝내기]</b>를 누릅니다(파일이 없으면 <b>[우리 병동 파일 만들기]</b>로 진짜 파일을 만들 수도 있습니다). 우리 병동 파일을 보다가 예시를 열었으면 그 파일로 돌아오고, 처음 설정에서 열었으면 <b>[처음 설정 이어 하기 ▶]</b>로 다음 단계부터 이어 합니다.'],
  tips:['예시에서 고친 것은 어디에도 저장되지 않습니다 — 창을 닫으면 사라집니다.',
        '예시 카드의 <b>[예시 파일 받기]</b>로 그 병동 예시를 파일(예: <b>101병동 예시.js</b>)로 받을 수 있습니다. 그 파일을 이 창에 끌어다 놓거나 [데이터 파일 열기]로 열면 같은 예시가 열리고, 역시 저장되지 않습니다.'],
  action:{label:'예시 고르기',fn:'closeHelp();openExamplePick()'}},
@@ -11557,6 +11670,13 @@ const WIZ=[
   {id:'ward',nm:'병동',panel:'rooms',t:'어느 병동인가요?',
    sub:'병동을 고르면 병실 14개가 자동으로 채워집니다. 목록에 없으면 아래 표에서 호실을 직접 고쳐 주세요 (＋ 방 추가·✕·순서 바꾸기 모두 됩니다).',
    ok:()=>!!store.wardPicked},
+  /* 고른 병동 예시로 먼저 해 보기 (2026-10-10 원근: "온보딩으로 할 때 병동 고르고 예시파일로 어떻게 하는지 알아보기를 유도") —
+   * 넘어가도 되는 단계. 예시를 열면 마법사는 닫히고, 예시를 끝내면 우리 병동 파일로 돌아와 다음 단계(방 구성)부터 이어 한다 */
+  {id:'demo',nm:'예시',t:'고른 병동 예시로 먼저 해 볼까요?',
+   get sub(){ const w=wizDemoWard(); return (w?`${w}병동의 병실과 배정표 서식에`:'병동을 고르면 그 병동의 병실과 서식에')+
+     ' 가상의 간호사와 근무표를 채운 예시입니다. 직접 눌러 보면 매주 무엇을 하는지 금방 보입니다 — 건너뛰어도 됩니다.'; },
+   next:()=>wizDemoTried?null:{t:'예시 없이 다음 ▶',pri:false},
+   ok:()=>true},
   {id:'scheme',nm:'방 구성',panel:'schemes',t:'방 구성이 어떻게 되나요?',
    get sub(){ return `근무 인원이 ${cntTabs().join('·')}명일 때 각 자리가 어느 방을 보는지입니다. 기본값이 채워져 있으니 우리 병동과 다른 것만 고치면 됩니다.`; },
    ok:()=>cntTabs().every(c=>!presetBad(presetsOf(c)[0]))},
@@ -11580,6 +11700,8 @@ const WIZ=[
 let wizAt=-1;
 const wizOn=()=>wizAt>=0;
 function startWizard(at){
+  // 우리 병동 파일을 두고 예시를 보던 중이면 예시를 끝내고 그 파일로 연다 (예시 안에서는 단계를 넘어갈 수 없고, 환영의 [처음 시작]이 두 번째 파일을 만든다)
+  if(inDemo()&&demoPrev) leaveDemo({wiz:false});
   wizAt=connected()&&!inDemo()?Math.max(0,Math.min(at||0,WIZ.length-1)):0;   // 파일이 없으면(예시를 보는 중이어도) 환영(파일 만들기)부터
   $('#wiz').classList.add('on'); renderWizard();
 }
@@ -11626,6 +11748,20 @@ function renderWizard(){
           <button onclick="openExamplePick()" title="가상의 병동으로 먼저 눌러 봅니다 — 저장되지 않습니다">예시로 먼저 둘러보기</button>
           <button onclick="closeWizard();openHelp('first')" title="처음 쓰는 법을 도움말로 봅니다">사용법 먼저 보기</button></div>
       </div>`;
+  } else if(st.id==='demo'){
+    const w=wizDemoWard(), nx=WIZ[wizAt+1]?WIZ[wizAt+1].nm:'다음 단계';
+    body.innerHTML=`<div class="wizNote"><b>예시에서 해 볼 것</b>
+      <ol class="wizTry"><li>간호사 이름을 눌러 자리 바꾸기</li><li>방 칸을 눌러 그날 방 고치기</li>
+        <li>날짜를 눌러 하루 어싸인표 보기</li><li>이번 주 배정표 엑셀로 받기</li></ol>
+      예시 카드의 <b>[보여 주기]</b>가 실제 화면에서 눌러야 할 곳을 짚어 줍니다.
+      예시에서 고친 것은 <b>우리 병동 파일과 연동되지 않고</b> 저장되지 않습니다.<br>
+      다 보면 <b>[처음 설정 이어 하기 ▶]</b>를 누르세요 — 우리 병동 파일로 돌아와 <b>${esc(nx)}</b>부터 이어서 정합니다.</div>
+    <div class="wizBig row">
+      ${w?`<button class="pri" onclick="wizTryExample('${w}')" title="${w}병동의 병실·서식으로 된 예시를 엽니다 — 우리 병동 파일은 그대로입니다">${w}병동 예시로 해 보기 ▶</button>`
+         :`<button class="pri" onclick="wizTryExample()" title="병동을 골라 그 병동 예시를 엽니다 — 우리 병동 파일은 그대로입니다">병동 고르고 예시 보기 ▶</button>`}
+      ${w?`<button onclick="wizTryExample()" title="다른 병동의 병실·서식으로 된 예시를 고릅니다">다른 병동 예시</button>`:''}
+      <button onclick="downloadExample(${w?`'${w}'`:''})" title="예시를 처음 상태 그대로 파일로 받습니다 — 나중에 다른 사람에게 보여 줄 때 끌어다 놓거나 [데이터 파일 열기]로 열면 같은 예시가 열립니다">예시 파일 받기</button>
+    </div>`;
   } else if(st.panel){
     // 관리 화면(가려져 있어도)에 같은 패널이 그려져 있으면 id 가 겹쳐 after() 가 앞선 관리 쪽을 채우고
     // 마법사 본문은 텅 빈다 — 관리 > 방 구성을 본 뒤 [처음 설정 다시 하기] 를 누르면 그랬다.
@@ -11663,14 +11799,18 @@ function renderWizard(){
   const done=st.ok?st.ok():true;
   // 환영 단계에서 파일이 없으면 주 단추는 본문의 [처음 시작] 하나 — 아래 줄엔 [나중에 하기]만
   const noNext=st.id==='hello'&&(!connected()||inDemo());
+  const nx=st.next?st.next():null;                 // 예시 단계 — 아직 안 열어 봤으면 [예시 없이 다음]은 보조 단추(주 단추는 본문의 예시 열기)
   $('#wizFoot').innerHTML=
     (first?'':`<button onclick="wizGo(-1)">◀ 이전</button>`)+
     `<button onclick="closeWizard()" title="${connected()?'지금까지 한 것은 저장됩니다. 배정표 화면의 [시작 안내] 를 펼쳐 [처음 설정 다시 하기] 로 언제든 이어서 할 수 있습니다':'시작 화면으로 돌아갑니다 — [처음 시작]은 거기에도 있습니다'}">나중에 하기</button>`+
     `<span class="sp"></span>`+
     (done||noNext?'':`<span class="dim" style="font-size:13px">${esc(wizWhy(st))}</span>`)+
     (noNext?'':last?`<button class="pri" onclick="closeWizard()">배정표 보기 ▶</button>`
+         :nx?`<button${nx.pri?' class="pri"':''} onclick="wizGo(1)">${esc(nx.t)}</button>`
          :`<button class="pri" onclick="wizGo(1)">${done?'다음 ▶':'건너뛰고 다음 ▶'}</button>`);
 }
+/* 예시 단계에서 열 병동 — 고른 병동(병동 단계를 건너뛰었으면 없음) */
+function wizDemoWard(){ const w=String(store&&store.wardPicked&&store.ward||''); return WARDS.includes(w)?w:''; }
 function wizWhy(st){
   if(st.id==='ward') return '아직 병동을 고르지 않았습니다';
   if(st.id==='scheme') return '비어 있거나 빠진 방이 있습니다';
@@ -11841,7 +11981,7 @@ window.__app={get store(){return store},set store(v){store=v},
   seatOfLabel,seatNames,worksP,ovrMateGone,freeOvr,clearOvrDay,handSeat,ovrAudit,pruneOvr,giveChargeMark,capsForNew,setRule,roomOvOn,setRoomOv,roomTextWarn,josa,get cellPins(){return cellPins},
   normGroups,groupById,groupWard,groupActive,groupsBetween,handoverGroupsOf,groupsAt,noteGroups,fixGroupLog,editDay,setToday(v){todayOvr=v||null;},addGroup,renameGroup,deleteGroup,toggleGroupMember,setGroupHandover,groupStripHtml,groupRulesHtml,groupCellHtml,keepHistory,restoreHistory,
   capsAt,bansAt,capBlockers,grpOfAt,toggleGroupCap,setGroupBans,delGroupBan,grpShape,grpCopy,toggleCap,delBan,closeRoomPick,offCandidates,
-  makeExample,enterDemo,openExample,leaveDemo,quitDemo,demoMakeFile,openExamplePick,downloadExample,inDemo,serializeStore,parseStoreText,useHandle,restoreBackup,EX_PLAN,EX_NAMES,WARDS,get demoPrev(){return demoPrev},
+  makeExample,enterDemo,openExample,leaveDemo,quitDemo,demoMakeFile,openExamplePick,pickExampleWard,wizTryExample,demoRestart,renderDemoBar,get demoWiz(){return demoWiz},get wizDemoTried(){return wizDemoTried},downloadExample,inDemo,serializeStore,parseStoreText,useHandle,restoreBackup,EX_PLAN,EX_NAMES,WARDS,get demoPrev(){return demoPrev},
   get pickCtx(){return pickCtx},set pickCtx(v){pickCtx=v},
   memoryMode(){window.__memoryMode=true;
     setFileLoc({kind:'none'});afterLoad();}};

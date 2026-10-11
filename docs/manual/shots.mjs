@@ -1,4 +1,4 @@
-// 설명서용 실제 화면 캡처 — 예시 데이터(홍길동 등) (2026-09-18, 2026-09-27·09-28·10-09 다시 찍음)
+// 설명서용 실제 화면 캡처 — 예시 데이터(홍길동 등) (2026-09-18, 2026-09-27·09-28·10-09·10-10 다시 찍음)
 // 25-example 만 앱의 예시(makeExample('101') — 옛이야기 이름)로 찍는다
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
@@ -233,7 +233,8 @@ await el('15-warn','#wkWarn');
 // ── 25. 예시로 둘러보기 — 101병동 예시 (가상의 간호사·근무표, 저장 안 됨). 예시 카드는 1920 에서 표 오른쪽 열 ──
 await page.evaluate(async ()=>{ closeHelp(); closePick(); await enterDemo(makeExample('101',{start:'2026-10-04'}));
   wkSunday=new Date(2026,9,4); renderWeek(); renderOnboard(); window.scrollTo(0,0);
-  document.querySelector('#toast').style.display='none'; });   // 앞 그림(15)에서 남은 되돌리기 알림
+  document.querySelector('#toast').style.display='none';   // 앞 그림(15)에서 남은 되돌리기 알림
+  touch(); window.scrollTo(0,0); });   // 예시를 고친 뒤 — 맨 위 '예시 파일 수정 중' 띠가 보이게
 await page.waitForTimeout(800);
 await shot('25-example',{x:0,y:0,width:1920,height:760});
 

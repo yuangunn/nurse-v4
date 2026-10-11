@@ -152,7 +152,7 @@ try {
     await sleep(150);
   eq('처음 켜면 환영 단계가 뜬다', await ev(`return document.querySelector('#wizTitle').textContent`), '어싸인 배정표에 오신 걸 환영합니다');
   eq('진행 막대에 단계 이름', await ev(`return [...document.querySelectorAll('#wizSteps span')].map(e=>e.textContent)`),
-    ['시작', '병동', '방 구성', '근무표', '표기', '간호사', '끝']);
+    ['시작', '병동', '예시', '방 구성', '근무표', '표기', '간호사', '끝']);
 
   step('1a 예시로 먼저 둘러보기 — 파일 없이 눌러 보고 끝내기');
   await tap('예시로 먼저 둘러보기', '#wiz');
@@ -165,13 +165,19 @@ try {
     return {이름:t?t.querySelectorAll('td.nm').length:0, 카드:!!o&&o.classList.contains('demo')&&getComputedStyle(o).display!=='none'};`);
   ok('예시 근무표로 배정표가 찼다', ex.이름 > 40, JSON.stringify(ex));
   ok('배정표 옆에 예시 카드', ex.카드, JSON.stringify(ex));
+  // 고치면 맨 위에 '예시 파일 수정 중 — 연동되지 않습니다' 띠 (원근 2026-10-10)
+  eq('열기만 해서는 띠가 없다', await ev(`return getComputedStyle(document.querySelector('#demoBar')).display`), 'none');
+  await ev(`const A=window.__app; A.toggleCap(A.store.order[3],'DC'); return 1`);
+  eq('고치면 위에 띠 — 파일이 없으면 \'어느 파일과도 연동되지 않습니다\'', await ev(`const b=document.querySelector('#demoBar');
+    return [getComputedStyle(b).display!=='none', /예시 파일 수정 중/.test(b.textContent), /어느 파일과도 연동되지 않습니다/.test(b.textContent),
+      b.getBoundingClientRect().top<document.querySelector('.topbar').getBoundingClientRect().bottom]`), [true, true, true, true]);
   await tap('예시 끝내기', '#onboard');
-  eq('예시를 끝내면 남는 것 없이 시작 화면', await ev(`const A=window.__app;
-    return [A.inDemo(), A.store.order.length, A.fileLoc.kind, getComputedStyle(document.querySelector('#scrStart')).display!=='none']`),
-    [false, 0, 'none', true]);
-  await ev('window.__app.startWizard(0); return 1');
+  eq('예시를 끝내면 남는 것 없이 시작 화면 · 띠 내림', await ev(`const A=window.__app;
+    return [A.inDemo(), A.store.order.length, A.fileLoc.kind, getComputedStyle(document.querySelector('#scrStart')).display!=='none',
+      getComputedStyle(document.querySelector('#demoBar')).display]`),
+    [false, 0, 'none', true, 'none']);
   for (let i = 0; i < 20 && !(await ev(`return document.querySelector('#wiz').classList.contains('on')`)); i++) await sleep(150);
-  eq('환영 단계로 다시', await ev(`return document.querySelector('#wizTitle').textContent`), '어싸인 배정표에 오신 걸 환영합니다');
+  eq('환영 창에서 본 예시를 끝내면 환영 단계로 다시', await ev(`return document.querySelector('#wizTitle').textContent`), '어싸인 배정표에 오신 걸 환영합니다');
 
   await ev(`window.showSaveFilePicker=async()=>{ let data='';
       return {name:'assign-data.js',kind:'file',
@@ -193,6 +199,25 @@ try {
   await sleep(300);
   eq('병실 14개가 자동으로 찼다', await ev('return window.__app.store.rooms.length'), 14);
   await tap('다음', '#wizFoot');
+
+  step('2a 고른 병동 예시로 해 보기 — 끝내면 처음 설정을 이어 한다');
+  eq('병동 다음은 예시 단계', await ev(`return document.querySelector('#wizTitle').textContent`), '고른 병동 예시로 먼저 해 볼까요?');
+  await tap('122병동 예시로 해 보기', '#wizBody');
+  for (let i = 0; i < 20 && !(await ev('return window.__app.inDemo()')); i++) await sleep(150);
+  eq('122병동 예시가 열리고 마법사는 닫힌다', await ev(`const A=window.__app;
+    return [A.inDemo(), document.querySelector('#wiz').classList.contains('on'), A.store.ward, !!A.store.example]`), [true, false, '122', true]);
+  await ev(`const A=window.__app; A.toggleCap(A.store.order[2],'DC'); return 1`);
+  const h0 = await ev(`return document.querySelector('.topbar').offsetHeight`);
+  eq('고치면 위에 띠 — 우리 병동 파일과 연동되지 않습니다', await ev(`const b=document.querySelector('#demoBar');
+    return [getComputedStyle(b).display!=='none', /우리 병동 파일과 연동되지 않습니다/.test(b.textContent)]`), [true, true]);
+  await sleep(150);
+  eq('옆 열 윗자리(--tbH)가 늘어난 머리줄을 따라온다', await ev(`return getComputedStyle(document.documentElement).getPropertyValue('--tbH').trim()`), h0 + 'px');
+  await tap('처음 설정 이어 하기', '.topbar');
+  for (let i = 0; i < 20 && !(await ev(`return document.querySelector('#wiz').classList.contains('on')`)); i++) await sleep(150);
+  eq('우리 병동 파일로 돌아와 방 구성부터', await ev(`const A=window.__app;
+    return [A.inDemo(), A.fileLoc.kind+':'+A.fileLoc.name, A.store.ward, document.querySelector('#wizTitle').textContent,
+      getComputedStyle(document.querySelector('#demoBar')).display]`),
+    [false, 'file:assign-data.js', '122', '방 구성이 어떻게 되나요?', 'none']);
 
   step('3 방 구성');
   await tap('다음', '#wizFoot');
