@@ -3357,6 +3357,59 @@ async function main() {
     // 접힌 카드 — 펼치면 줄마다 사유
     const fb=document.querySelector('#wkWhy .fold'); if(fb) fb.click(); await wait(10);
     out.fold=[!!fb,document.querySelectorAll('#wkWhy .whyRow').length];
+    // ── 머지 뒤 검토에서 고친 것 (2026-10-11) ──
+    const rmB=()=>[...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l==='B');
+    const ctrlZ=()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true}));
+    // ⓐ 방 창이 열린 채 Ctrl+Z — 창이 닫히고, 다시 고치면 사유를 또 묻고 되돌리기 점도 새로 (그 앞의 맞바꿈은 남는다)
+    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지','앞의 맞바꿈');
+    rmB().click(); await wait(10); off()[0].click(); await wait(20); await ok('방 사유 1');
+    ctrlZ(); await wait(20);
+    out.uRp=[document.querySelector('#rpick').style.display,A.rpCtx,J(A.store.roomOv)];
+    rmB().click(); await wait(10); off()[0].click(); await wait(20);
+    const asked2=modalOn(); await ok('방 사유 2'); A.closeRoomPick();
+    A.undoAny(); out.uRp2=[asked2,J(A.store.roomOv),((A.store.ovr[D]||{}).D||{})['최씨'],(A.store.why[D]||{})['seat|D|최씨']&&A.store.why[D]['seat|D|최씨'].t];
+    // ⓑ 병상수를 줄여도 — 상관없는 방 수정은 글자 그대로 사유도 그대로, 줄어든 병상이 든 수정은 고쳐 쓰고 사유를 잇는다
+    s=setup('101'); s.rooms[0][1]=4; s.rooms[8][1]=4; A.recompute(); A.show('week');
+    const manual=async(l,txt,why)=>{ [...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l===l).click(); await wait(10);
+      [...document.querySelectorAll('#rpick button')].find(b=>/직접 입력/.test(b.textContent)).click(); await wait(20);
+      document.querySelector('#rpText').value=txt; await ok(why); };
+    await manual('C','2,3','보호자 요청'); await manual('D','1:1, 1:4','격리 병상');
+    A.setRoom(8,1,'2');
+    out.bedOther=[A.store.roomOv[D].D.C,(A.store.why[D]['room|D|C']||{}).t];
+    A.setRoom(0,1,'3');
+    out.bedCut=[A.store.roomOv[D].D.D,(A.store.why[D]['room|D|D']||{}).t,(A.store.why[D]['room|D|D']||{}).v===A.store.roomOv[D].D.D];
+    // ⓒ 사유 창이 열린 동안 파란 알림을 눌러도 되돌리지 않는다
+    s=setup('101'); await openName('최씨');
+    [...document.querySelectorAll('#pick .swapBtn')].find(b=>/pickChoose[(]'차지'/.test(b.getAttribute('onclick'))).click(); await wait(20); await ok('먼저 바꿈');
+    const ov1=J(A.store.ovr);
+    await openName('정디'); [...document.querySelectorAll('#pick .swapBtn:not([disabled])')][0].click(); await wait(20);
+    document.querySelector('#toast').click(); await wait(20);
+    out.toast=[modalOn(),J(A.store.ovr)===ov1]; document.querySelector('#mdCancel').click(); await wait(20);
+    // ⓓ 사유를 적는 사이 배정이 바뀌면(함수로 바로 되돌리기) 창을 연 때의 자리로 맞바꾸지 않는다
+    s=setup('101'); A.openPick('정디',D,10,10); A.pickChoose('B','먼저 맞바꿈');
+    await openName('정디'); [...document.querySelectorAll('#pick .swapBtn')].find(b=>/pickChoose[(]'A'/.test(b.getAttribute('onclick'))).click(); await wait(20);
+    A.undoAny(); const ov2=J(A.store.ovr); await ok('늦은 사유');
+    out.stale=[J(A.store.ovr)===ov2,J(A.store.why),/배정이 바뀌어/.test(document.querySelector('#toast').textContent)];
+    // ⓔ 맞바꾼 상대가 그 근무에서 빠지면 이름 칸의 점·풍선이 없어지고 창에는 '지금은 쓰지 않음'
+    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지','격리');
+    s.cells['김차지'][D]='OF'; A.recompute(); A.show('week');
+    const c2=nmCell('최씨'); out.gone=[c2.classList.contains('why'),/격리/.test(c2.title||'')];
+    await openName('최씨'); out.goneTxt=/지금은 쓰지 않음/.test((document.querySelector('#pick .pkWhy')||{}).textContent||''); A.closePick();
+    // ⓕ 적은 때가 글자가 아닌 사유(손으로 고친 파일)도 화면을 멈추지 않는다
+    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지');
+    A.store.why={[D]:{'seat|D|최씨':{t:'옛 사유',v:'차지',at:5}}}; A.migrateStore();
+    let thrown=''; try{ A.show('admin'); A.pickAdmin('manual'); await wait(20); A.show('week'); }catch(e){ thrown=String(e); }
+    out.badAt=[A.store.why[D]['seat|D|최씨'].at,thrown,/옛 사유/.test(document.querySelector('#wkWhy').textContent)];
+    // ⓖ [사유 적기] 사이 그 변경이 없어지면 아무것도 적지 않고 되돌리기 점도 없다
+    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지'); A.show('admin'); A.pickAdmin('manual'); await wait(20);
+    const d5=A.undoDepth; A.whyEdit('adm',0); await wait(20); s.ovr={}; s.ovrPair={}; await ok('늦은 사유');
+    out.editGone=[A.undoDepth-d5,J(A.store.why),/적지 않았습니다/.test(document.querySelector('#toast').textContent)];
+    A.show('week');
+    // ⓗ 창을 연 단추를 두 번 눌러도(둘째 누름이 창 바깥에) 사유 창이 바로 닫히지 않는다 — 조금 뒤 바깥을 누르면 닫힌다
+    s=setup('101'); await openName('정디'); [...document.querySelectorAll('#pick .swapBtn:not([disabled])')][0].click(); await wait(10);
+    const md=()=>document.querySelector('#modal').dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+    md(); const stay=modalOn(); await wait(500); md();
+    out.dbl=[stay,modalOn(),J(A.store.ovr)];
     return out; })()`, 60000);
   eq('사유 — 배정표에서 이름을 누르면 창이 열린다', v41.open, true);
   eq('자리 바꾸기를 누르면 사유 창이 먼저 — 아직 안 바뀌고 이름 창은 닫힌다', v41.asked, [true, true, '{}', 'none']);
@@ -3399,6 +3452,17 @@ async function main() {
   eq('하루 어싸인표 옆 열에 사유, 종이(미리보기)에는 없다', v41.day, [true, true, false]);
   eq('인쇄에는 사유가 안 나온다', v41.paper, false);
   eq("좁은 화면 — '손으로 바꾼 것'은 접혀 있고 펼치면 줄마다", v41.fold, [true, 1]);
+  eq('방 창이 열린 채 Ctrl+Z — 창이 닫힌다', v41.uRp, ['none', null, '{}']);
+  eq('다시 고치면 사유를 또 묻고, 되돌리기는 그 고침만 (앞의 맞바꿈과 사유는 남는다)', v41.uRp2, [true, '{}', '차지', '앞의 맞바꿈']);
+  eq('병상수를 줄여도 상관없는 방 수정은 글자·사유 그대로', v41.bedOther, ['2,3', '보호자 요청']);
+  eq('줄어든 병상이 든 방 수정은 고쳐 쓰고 사유를 잇는다', v41.bedCut, ['1:1', '격리 병상', true]);
+  eq('사유 창이 열린 동안 파란 알림을 눌러도 되돌리지 않는다', v41.toast, [true, true]);
+  eq('사유를 적는 사이 배정이 바뀌면 바꾸지 않는다', v41.stale, [true, '{}', true]);
+  eq('맞바꾼 상대가 빠져 효력이 없으면 이름 칸에 점·사유 풍선이 없다', v41.gone, [false, false]);
+  ok("그 사람 창에는 '지금은 쓰지 않음'", v41.goneTxt, String(v41.goneTxt));
+  eq('적은 때가 망가진 사유도 화면을 멈추지 않는다', v41.badAt, ['', '', true]);
+  eq('[사유 적기] 사이 변경이 없어지면 적지 않고 되돌리기 점도 없다', v41.editGone, [0, '{}', true]);
+  eq('창을 연 단추를 두 번 눌러도 사유 창이 바로 닫히지 않는다', v41.dbl, [true, false, '{}']);
 
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
