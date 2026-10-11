@@ -132,7 +132,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 247건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지)
+├── tests/                   # pytest 회귀 252건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -176,7 +176,7 @@ npm start
 ### 테스트
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 247건
+python3 -m pytest -q                  # 252건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_hospital_holidays.mjs \
@@ -303,7 +303,8 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 - **파트장 확인 마지막 수단** (제1원칙 13, 배점 규칙 아님 — 상수): 연속 근무 한도+1 `-3000 + 500×주말·공휴일 수`(최소 -1500) ·
   E→D1·중→D `-2000`. **완화 1단계(원티드 유지 최대화)에도 같은 감점을 넣는다** — 근무 원티드(500) 하나를 지키려고
   6일 연속을 만들지 않게 (`_last_resort_terms`, HiGHS·CP-SAT 양쪽). 오프특근도 1단계에 넣되 **가장 나중** — 감점이 원티드 한 칸(휴가 원티드 × 완화 이력 보정)보다 크다
-  (기본 5100, `_relax_off_teukgeun_terms`, 결정 1-32 원근 답)
+  (기본 5100, `_relax_off_teukgeun_terms`, 결정 1-32 원근 답). **날이 정해진 휴가(특·공·병·경가·조가·산전)는 오프특근보다 먼저 지킨다** —
+  1단계 유지 보너스 = 오프특근 감점 × 3 (기본 15300, `_relax_fixed_leave_bonus`, 결정 1-35)
 - 생 사용 (여성) 보상 (+80)
 - 법정공휴일 휴가 보상 (+30)
 - 공휴일 근무 보상 (+20)
