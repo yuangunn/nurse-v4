@@ -100,8 +100,9 @@ table.qa tr:last-child td{border-bottom:none}
 <li><span class="n">2</span><div>아래 화면이 나오면 <span class="k">처음 시작</span> 을 누릅니다.</div></li>
 <li><span class="n">3</span><div>파일 이름을 물어보면 <b>그대로 두고</b> 저장을 누릅니다.
 저장 위치는 <b>assign.html 과 같은 폴더</b>로 하세요.</div></li>
-<li><span class="n">4</span><div>이어서 <b>설정 안내</b>가 병동 → 방 구성 → 근무표 → 간호사를 하나씩 묻습니다.
-다음 쪽부터의 <b>준비 2~4</b> 가 그 화면들입니다.</div></li>
+<li><span class="n">4</span><div>이어서 <b>설정 안내</b>가 병동 → 예시 → 방 구성 → 근무표 → 간호사를 하나씩 묻습니다.
+병동을 고르면 <b>그 병동 예시로 먼저 해 볼지</b> 묻습니다(다음 쪽). 건너뛰어도 됩니다.
+<b>준비 2~4</b> 가 나머지 화면들입니다.</div></li>
 </ol>
 
 <figure><img src="shots/01-start.png"><figcaption>처음 열면 바로 이 안내가 뜹니다. 검은 [처음 시작] 단추를 누르세요.
@@ -116,20 +117,20 @@ table.qa tr:last-child td{border-bottom:none}
 간호사와 근무표가 채워져 있고, 무엇을 고쳐도 <b>저장되지 않습니다</b>.</div>
 
 <ol class="steps">
-<li><span class="n">1</span><div>처음 화면 아래의 <span class="k">예시로 먼저 둘러보기</span> 를 누릅니다.
-(시작 화면의 <span class="k">예시로 둘러보기</span>, 도움말의 <b>예시로 둘러보기</b> 도 같습니다)</div></li>
-<li><span class="n">2</span><div>볼 병동을 고릅니다. 그 병동의 병실과 배정표 서식으로 열립니다.</div></li>
-<li><span class="n">3</span><div>오른쪽 <b>예시 카드</b>의 해 볼 것을 차례로 눌러 봅니다.
+<li><span class="n">1</span><div>설정 안내에서 병동을 고르면 다음 화면의 <span class="k">101병동 예시로 해 보기 ▶</span> 를 누릅니다(우리 병동 번호로 나옵니다).
+(처음 화면의 <span class="k">예시로 먼저 둘러보기</span>, 시작 화면의 <span class="k">예시로 둘러보기</span>, 도움말의 <b>예시로 둘러보기</b> 로도 열립니다)</div></li>
+<li><span class="n">2</span><div>우리 병동 병실·서식에 가상의 간호사와 근무표를 채운 예시가 열립니다. 오른쪽 <b>예시 카드</b>의 해 볼 것을 차례로 눌러 봅니다.
 <span class="k">보여 주기</span> 를 누르면 실제 화면에서 눌러야 할 곳을 짚어 줍니다.</div></li>
-<li><span class="n">4</span><div>다 봤으면 <span class="k">예시 끝내기</span>, 바로 시작하려면 <span class="k">우리 병동 파일 만들기</span> 를 누릅니다.</div></li>
+<li><span class="n">3</span><div>다 봤으면 <span class="k">처음 설정 이어 하기 ▶</span> 를 누릅니다. 방 구성부터 이어집니다.
+(설정 안내 밖에서 열었으면 <span class="k">예시 끝내기</span>)</div></li>
 </ol>
 
-<figure><img src="shots/25-example.png"><figcaption>맨 위 오른쪽에 <b>예시 · 저장 안 됨</b> 이 보이는 동안은 무엇을 눌러도 파일에 남지 않습니다.
-이름은 옛이야기 속 인물(홍길동 · 성춘향 등)입니다.</figcaption></figure>
+<figure><img src="shots/25-example.png"><figcaption>예시에서 무엇이든 고치면 맨 위에 노란 띠 <b>예시 파일 수정 중</b> 이 뜹니다. 예시는 어느 파일과도 연동되지 않고,
+고친 것은 저장되지 않습니다. 이름은 옛이야기 속 인물(홍길동 · 성춘향 등)입니다.</figcaption></figure>
 
 <div class="tip ok"><span class="h">쓰다가 열어 봐도 됩니다</span>
 우리 병동 파일을 쓰는 중에 예시를 열어도, <b>[예시 끝내기]</b> 를 누르면 쓰던 파일로 그대로 돌아옵니다.
-예시 카드의 <b>[예시 파일 받기]</b> 로 받은 파일(예: 101병동 예시.js)을 화면에 끌어다 놓아도 같은 예시로 열립니다.</div>
+예시 카드의 <b>[예시 파일 받기]</b> 로 받은 파일(예: 101병동 예시.js)을 화면에 끌어다 놓아도 같은 예시로 열립니다 — 이것도 저장되지 않습니다.</div>
 <div class="pgnum">4</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
 <h1><span class="tag">준비 2</span>우리 병동 고르기</h1>
 <div class="lead">병동만 고르면 병실 번호가 저절로 채워집니다. <b>병상 수만</b> 적어 주시면 됩니다.</div>
@@ -496,7 +497,7 @@ GS 당직폰처럼 번호가 정해진 칸은 <b>늘 같은 번호</b>, 진료�
     <div class="d">① assign.html 두 번 누르기 → <b>[처음 시작]</b> → 같은 폴더에 저장<br>
     ② 이어지는 설정 안내대로 — 우리 병동 고르고 <b>병상수</b> 적기 → 방 구성 → 근무표 넣기<br>
     ③ 간호사 순서(위가 선임)와 <b>DC·EC·NC</b> 확인 (나중에는 관리에서)<br>
-    먼저 눌러 보려면 <b>[예시로 먼저 둘러보기]</b> — 저장되지 않습니다</div></div>
+    병동을 고르면 <b>[○○병동 예시로 해 보기]</b> 로 먼저 눌러 볼 수 있습니다 — 저장되지 않습니다</div></div>
 
   <div class="card"><div class="t"><span class="when b">매달 한 번</span></div>
     <div class="d">엑셀 근무표 긁어서 <b>Ctrl+C</b> → <b>[새 근무표 넣기]</b> → <b>Ctrl+V</b> → <b>[맞아요, 저장]</b><br>
