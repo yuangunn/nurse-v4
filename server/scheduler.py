@@ -361,7 +361,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                         _free_vars_r.append(v)
                     elif s in ("생", "V") and is_holiday and not is_night:
                         x[nid][d][s] = 0
-                    elif s == "주" and self.allow_juhu_relax:
+                    elif s == "주" and self.allow_juhu_relax and self._relax_juhu_free_ok(nurse, d):
+                        # 주휴 재배치 — 나이트킵의 날엔 그 주에 미리 넣은 주휴를 옮길 때만 (제1원칙 10)
                         v = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")
                         x[nid][d][s] = v
                         _free_vars_r.append(v)
@@ -408,13 +409,14 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         # 주휴 재배치: 주당 주휴 최대 1개 하드 제약
         # + 사전입력 주휴가 있던 주는 주휴를 옮길 수는 있어도 없애지 않는다 — 주휴는 오프특근 때도
         #   깎이지 않는 최소한의 휴무다 (제1원칙 3). 유지 보너스(300)만으로는 오프특근(5100)을
-        #   피하려고 주휴를 지웠다. 없애면 날이 정해진 휴가만큼(15300) 깎는다 — 결정 1-36
+        #   피하려고 주휴를 지웠다. 없애면 _relax_juhu_drop_pen(기본 14900)만큼 깎는다 —
+        #   오프특근 < 주휴 없애기 < 날이 정해진 휴가 (결정 1-36)
+        # 나이트킵도 건다 — 빼면 미리 넣은 주휴가 근무로 바뀌거나(다음 달 며칠엔 일반 간호사인데도)
+        #   한 주에 주휴가 여럿 생겼다. 근무일 수는 14일로 정해져 있어 어느 쉬는 날이 주휴인지만 정한다.
         _juhu_drop: list = []
         if self.allow_juhu_relax and "주" in self.ALL_SHIFTS:
             for nurse in self.nurses:
                 nid = nurse["id"]
-                if nurse.get("is_night_shift"):
-                    continue
                 for ws, we in self.weeks:
                     week_days = [d for d in range(ws, we + 1)
                                  if self.all_dates[d] >= first_of_month]
@@ -432,14 +434,20 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                             pulp.lpSum(var_terms) <= max(0, 1 - const_sum),
                             f"weekly_juhu_{nid}_{ws}"
                         )
-                    # 그 칸이 엔진이 실제로 옮길 수 있는 주휴일 때만 — 재적 밖(전입 전·전출 뒤)에 남은 주는 없는 칸
-                    if var_terms and const_sum < 1 and any(
-                            self.prev.get(nid, {}).get(self.all_dates[d].strftime("%Y-%m-%d")) == "주"
-                            and isinstance(x[nid][d]["주"], pulp.LpVariable)
-                            for d in week_days):
-                        u = pulp.LpVariable(f"juhu_drop_{nid}_{ws}", cat="Binary")
-                        prob += (pulp.lpSum(var_terms) + u >= 1, f"weekly_juhu_floor_{nid}_{ws}")
-                        _juhu_drop.append(u)
+                    # 그 칸이 엔진이 실제로 옮길 수 있는 주휴일 때만 — 재적 밖(전입 전·전출 뒤)에 남은 주는 없는 칸.
+                    # 나이트킵의 날과 일반의 날은 따로 지킨다 (_juhu_floor_segments)
+                    if const_sum >= 1:
+                        continue
+                    for seg in self._juhu_floor_segments(nurse, week_days):
+                        seg_vars = [x[nid][d]["주"] for d in seg
+                                    if isinstance(x[nid][d]["주"], pulp.LpVariable)]
+                        if seg_vars and any(
+                                self.prev.get(nid, {}).get(self.all_dates[d].strftime("%Y-%m-%d")) == "주"
+                                and isinstance(x[nid][d]["주"], pulp.LpVariable)
+                                for d in seg):
+                            u = pulp.LpVariable(f"juhu_drop_{nid}_{seg[0]}", cat="Binary")
+                            prob += (pulp.lpSum(seg_vars) + u >= 1, f"weekly_juhu_floor_{nid}_{seg[0]}")
+                            _juhu_drop.append(u)
         if self.rules.maxConsecutiveWork:
             self._c_max_consecutive_work(prob, x, self.rules.maxConsecutiveWorkDays)
         if self.rules.maxConsecutiveNight:
@@ -474,7 +482,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             lr = self._last_resort_terms() + self._relax_off_teukgeun_terms(
                 PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK)
             # 주휴 없애기 — 오프특근보다 나중, 날이 정해진 휴가보다 먼저 (유지 보너스까지 더해도 그 휴가 한 칸보다 작게)
-            _juhu_drop_pen = max(PRE_BONUS_FIXED - PRE_BONUS_REST - 100, 0)
+            _juhu_drop_pen = self._relax_juhu_drop_pen(
+                PRE_BONUS_REST, PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK)
             lr += [(_juhu_drop_pen, u) for u in _juhu_drop]
             if lr:
                 bonus_expr = bonus_expr - pulp.lpSum(pen * sl for pen, sl in lr)

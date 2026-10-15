@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from server.conflict_analyzer import analyze_conflicts
@@ -291,12 +293,17 @@ def test_juhu_floor_ignores_juhu_outside_stay(solver, stay, stale):
 
 @pytest.mark.parametrize("solver", ["highs", "cpsat"])
 @pytest.mark.parametrize("code", ["병", "공"])
-def test_juhu_floor_yields_to_fixed_date_leave(solver, code):
+@pytest.mark.parametrize("side_wish", [False, True])
+def test_juhu_floor_yields_to_fixed_date_leave(solver, code, side_wish):
     """한 주에 하루만 쉴 수 있는데 주휴와 날이 정해진 휴가가 다 있으면 그 휴가를 지킨다 —
-    그날 쉬는 것은 같고, 휴가는 날을 옮길 수 없다 (결정 1-35·1-36: 오프특근 < 주휴 없애기 < 날이 정해진 휴가)."""
+    그날 쉬는 것은 같고, 휴가는 날을 옮길 수 없다 (결정 1-35·1-36: 오프특근 < 주휴 없애기 < 날이 정해진 휴가).
+    side_wish: a2 의 3/1 D 원티드 하나가 휴가를 지키는 쪽에만 더 든다. 휴가 보너스가 주휴 없애기와
+    100 차이이던 때는 이 원티드(500) 하나에 병·공이 근무로 바뀌었다 (v4.14.0 뒤 재점검)."""
     a1 = ["D", "D", "OF", "D", "D", "주", "D"]
     pre = {"a0": {"2026-03-01": "주", "2026-03-04": code},
            "a1": {f"2026-03-0{i + 1}": v for i, v in enumerate(a1)}}
+    if side_wish:
+        pre["a2"] = {"2026-03-01": "D"}
     req = _juhu_relax_request(3, pre, [2, 3, 2, 2, 3, 2, 3])
     req.locked_cells = {"a1": {f"2026-03-0{i}": True for i in range(1, 8)}}
     r = make_limited(req, days=7, solver=solver).solve()
@@ -304,14 +311,97 @@ def test_juhu_floor_yields_to_fixed_date_leave(solver, code):
     assert r["schedule"]["a0"]["2026-03-04"] == code, r["schedule"]["a0"]
 
 
+class _NovLastWeek:
+    """11월 생성의 마지막 주(11/29~12/5)만 — 11/29·30 은 11월, 12/1~12/5 는 다음 달 며칠."""
+
+    def _build_date_range(self):
+        super()._build_date_range()
+        self.all_dates = [d for d in self.all_dates
+                          if date(2026, 11, 29) <= d <= date(2026, 12, 5)]
+        self.T = len(self.all_dates)
+        self.date_to_idx = {d: i for i, d in enumerate(self.all_dates)}
+        self.weeks = [(0, 6)]
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+@pytest.mark.parametrize("block_lock", [True, False])
+def test_juhu_floor_covers_this_months_keeper_on_next_month_days(solver, block_lock):
+    """11월만 나이트킵인 a0 은 12/1~12/5 엔 일반 간호사다 (결정 1-33). 그 며칠에 미리 넣은 주휴도
+    오프특근을 피하려고 없애지 않는다 — 나이트킵을 통째로 빼던 때는 a0 의 12/2 주휴가 DC 로 바뀌고
+    오프특근이 사라졌다 (v4.14.0 뒤 재점검). 다음 달 나이트킵 표시 없이 같은 표면 a0 이 주휴를 지켰다."""
+    from server.scheduler_cpsat import CpSatScheduler
+
+    days = [f"2026-11-{d}" for d in (29, 30)] + [f"2026-12-0{d}" for d in range(1, 6)]
+    per_day = {dk: {"D": dd, "E": 0, "N": nn}
+               for dk, dd, nn in zip(days, [1, 2, 2, 3, 2, 3, 2], [1, 0, 0, 0, 0, 0, 0])}
+    pre = {"a0": {"2026-12-02": "주"}, "a1": {"2026-12-03": "주"},
+           "a2": {"2026-12-04": "주", "2026-11-30": "E"}}
+    nurses = [Nurse(id=f"a{i}", name=f"*간호{i}", group="A", gender="male", capable_shifts=CAPS,
+                    seniority=i, night_months={"2026-11": True} if i == 0 else {}) for i in range(3)]
+    week_req = Requirements()     # 다음 달 며칠은 요일별 인원을 본다
+    for day, dd in zip(("sun", "mon", "tue", "wed", "thu", "fri", "sat"), [1, 2, 2, 3, 2, 3, 2]):
+        setattr(week_req, day, DayRequirement(D=dd, E=0, N=0))
+    req = GenerateRequest(
+        year=2026, month=11, nurses=nurses, requirements=week_req,
+        rules=Rules(**ISO, longRunLastResort=False), prev_schedule=pre, shifts=PROD_SHIFTS,
+        per_day_requirements=per_day, time_limit=60)
+    req.allow_pre_relax = True
+    req.allow_juhu_relax = True
+    req.juhu_block_lock = block_lock
+    base = NurseScheduler if solver == "highs" else CpSatScheduler
+    r = type("W", (_NovLastWeek, base), {})(req).solve()
+    assert r["success"], r["message"]
+    a0 = [r["schedule"]["a0"][dk] for dk in days[2:]]
+    assert a0.count("주") == 1, a0
+    assert r.get("off_teukgeun"), r.get("off_teukgeun")
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_juhu_relax_keeps_keepers_juhu_once_a_week(solver):
+    """주휴 이동 허용에서도 나이트킵이 미리 넣은 주휴는 그 주에 하나 남는다 — 야간 날(3/3·3/4·3/7)이
+    정해져 있어 3/4 주휴는 그 주 다른 쉬는 날로 옮길 뿐이다. 나이트킵을 빼던 때는 주휴가 NC 로 바뀌고 그 주에
+    주휴가 하나도 없었다(v4.14.0 뒤 재점검). 나이트킵의 날엔 새 주휴를 만들지 않는다 (N·V·생·OF 뿐 — 제1원칙 10)."""
+    per_day = {f"2026-03-0{i + 1}": {"D": dd, "E": 0, "N": nn}
+               for i, (dd, nn) in enumerate(zip([1, 1, 1, 1, 2, 2, 1], [0, 0, 1, 1, 0, 0, 1]))}
+    pre = {"a0": {"2026-03-04": "주"}, "a1": {"2026-03-03": "주", "2026-03-05": "특"},
+           "a2": {"2026-03-07": "주", "2026-03-01": "병", "2026-03-06": "E"}}
+    req = _juhu_relax_request(3, pre, [0] * 7, a0={"is_night_shift": True, "capable_shifts": ["NC", "N"]})
+    req.per_day_requirements = per_day
+    req.juhu_block_lock = False
+    r = make_limited(req, days=7, solver=solver).solve()
+    assert r["success"], r["message"]
+    a0 = [r["schedule"]["a0"][f"2026-03-0{i}"] for i in range(1, 8)]
+    assert a0.count("주") == 1, a0
+    assert set(a0) <= {"N", "NC", "OF", "V", "생", "주"}, a0
+
+
+def test_relax_gives_keeper_no_new_juhu():
+    """주휴 이동 허용이어도 나이트킵의 날엔 미리 넣은 주휴가 없는 주에 주휴 변수를 두지 않는다 (제1원칙 10)."""
+    pre = {"a0": {"2026-03-04": "주"}}
+    req = _juhu_relax_request(2, pre, [1] * 7, a0={"is_night_shift": True})
+    s = make_limited(req, days=14)
+    n0 = next(n for n in s.nurses if n["id"] == "a0")
+    n1 = next(n for n in s.nurses if n["id"] == "a1")
+    assert all(s._relax_juhu_free_ok(n0, d) for d in range(0, 7))
+    assert not any(s._relax_juhu_free_ok(n0, d) for d in range(7, 14))
+    assert all(s._relax_juhu_free_ok(n1, d) for d in range(14))
+
+
 def test_fixed_date_leave_bonus_tops_off_teukgeun():
-    """날이 정해진 휴가 한 칸 = 오프특근 감점 × 3 — 완화 이력 보정으로 감점이 커져도 따라간다."""
+    """날이 정해진 휴가 한 칸 = 오프특근 감점 × 5, 주휴 없애기 = × 3 − 주휴 유지 보너스 − 100 —
+    완화 이력 보정으로 감점이 커져도 따라간다. 순서: 오프특근 둘 < 주휴 없애기 < 날이 정해진 휴가,
+    그리고 휴가와 주휴 없애기 사이에 오프특근 둘이 더 들어간다 (결정 1-35·1-36)."""
     from server.scheduler_base import _FIXED_DATE_LEAVE
     assert _FIXED_DATE_LEAVE == {"특", "공", "병", "경가", "조가", "산전"}
     s = NurseScheduler(_six_run_request())
-    assert s._relax_fixed_leave_bonus(5000, 3000, 500) == 15300
-    s.relax_boosts = {"a0": 1.5}
-    assert s._relax_fixed_leave_bonus(5000, 3000, 500) == 22800
+    for boost, fixed, drop in ((None, 25500, 14900), (1.5, 38000, 22400)):
+        if boost:
+            s.relax_boosts = {"a0": boost}
+        off = s._relax_off_teukgeun_pen(5000, 3000, 500)
+        assert s._relax_fixed_leave_bonus(5000, 3000, 500) == fixed
+        assert s._relax_juhu_drop_pen(300, 5000, 3000, 500) == drop
+        assert 2 * off < drop + 300 < 3 * off
+        assert drop + 300 + 2 * off < fixed
 
 
 def test_relax_off_teukgeun_penalty_tops_boosted_leave_wish():
