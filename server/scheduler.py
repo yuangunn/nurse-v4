@@ -406,6 +406,10 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         self._c_pregnancy_p1_weekly(prob, x)           # 임산부 P1 주1회 (모성보호)
         self._c_juhu_block_dow(prob, x)
         # 주휴 재배치: 주당 주휴 최대 1개 하드 제약
+        # + 사전입력 주휴가 있던 주는 주휴를 옮길 수는 있어도 없애지 않는다 — 주휴는 오프특근 때도
+        #   깎이지 않는 최소한의 휴무다 (제1원칙 3). 유지 보너스(300)만으로는 오프특근(5100)을
+        #   피하려고 주휴를 지웠다. 없애면 날이 정해진 휴가만큼(15300) 깎는다 — 결정 1-36
+        _juhu_drop: list = []
         if self.allow_juhu_relax and "주" in self.ALL_SHIFTS:
             for nurse in self.nurses:
                 nid = nurse["id"]
@@ -428,6 +432,12 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                             pulp.lpSum(var_terms) <= max(0, 1 - const_sum),
                             f"weekly_juhu_{nid}_{ws}"
                         )
+                    if var_terms and const_sum < 1 and any(
+                            self.prev.get(nid, {}).get(self.all_dates[d].strftime("%Y-%m-%d")) == "주"
+                            for d in week_days):
+                        u = pulp.LpVariable(f"juhu_drop_{nid}_{ws}", cat="Binary")
+                        prob += (pulp.lpSum(var_terms) + u >= 1, f"weekly_juhu_floor_{nid}_{ws}")
+                        _juhu_drop.append(u)
         if self.rules.maxConsecutiveWork:
             self._c_max_consecutive_work(prob, x, self.rules.maxConsecutiveWorkDays)
         if self.rules.maxConsecutiveNight:
@@ -461,6 +471,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             # 오프특근도 같이 넣는다 — 빠지면 6일 연속 대신 오프특근을 공짜로 고른다 (원티드보다 나중).
             lr = self._last_resort_terms() + self._relax_off_teukgeun_terms(
                 PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK)
+            lr += [(PRE_BONUS_FIXED, u) for u in _juhu_drop]   # 주휴 없애기 — 오프특근보다 나중
             if lr:
                 bonus_expr = bonus_expr - pulp.lpSum(pen * sl for pen, sl in lr)
             prob.setObjective(bonus_expr)

@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.13.1 (2026-09-06, M8 리디자인 + 생성 성공·확정 시 자동 저장)
+**최신**: v4.14.0 (2026-10-15, 101병동 실제 번표와 견줘 고친 엔진 — 나이트킵·병동 휴가 코드·파트장 확인 마지막 수단·둘 중 하나 원티드·잠근 칸 차지·날이 정해진 휴가)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -132,7 +132,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 252건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지)
+├── tests/                   # pytest 회귀 256건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -176,7 +176,7 @@ npm start
 ### 테스트
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 252건
+python3 -m pytest -q                  # 256건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_hospital_holidays.mjs \
@@ -200,7 +200,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.13.1.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.14.0.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -271,7 +271,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | **공휴일 OF 금지** | 법정공휴일에는 OF 배정 불가 (일반/완화/진단 모두 적용). **일반 간호사만** — 나이트킵은 법을 못 받아 공휴일에도 OF (제1원칙 10, `_holiday_of_banned`) |
 | 법은 공휴일에만 | 법정공휴일 코드 `법`은 공휴일 날짜에만 **자유 배정** (사전입력 확정 셀은 사실로 수용) |
 | 야간전담 공휴일 제외 | 야간전담에게 법/생/V 공휴일 배정 차단 규칙 다름 |
-| 주휴(주) | **엔진이 배정하지 않는다** — 사전입력 전용(auto_assign ✗). 일반 모드엔 강제 없음(사람이 넣은 그대로), 주휴 재배치 완화(`allow_juhu_relax`)를 켰을 때만 주당 `<=1` |
+| 주휴(주) | **엔진이 배정하지 않는다** — 사전입력 전용(auto_assign ✗). 일반 모드엔 강제 없음(사람이 넣은 그대로), 주휴 재배치 완화(`allow_juhu_relax`)를 켰을 때만 주당 `<=1` — 그때도 사전입력 주휴가 있던 주는 `>=1` 소프트 바닥(없애면 완화 1단계 `-15300`, `juhu_drop`): 옮겨도 없애지 않는다 (제1원칙 3, 결정 1-36) |
 | OF 1회/주 | 완전한 주 `Σ OF + s == 1` (`s`=오프특근 슬랙), 부분 주는 `<=1`. **상한 1회는 하드**, 1회 의무는 목적함수에서 `-1,000,000×s`로 지킨다 — 어떤 배점보다 크므로 **그러지 않으면 근무표가 성립하지 않을 때만** OF를 반납한다(제1원칙 3). 반납한 주는 결과 `off_teukgeun`으로 보고 |
 | 최대 연속 근무 | 기본 5일 (설정 가능). **한도+1일은 마지막 수단**(`longRunLastResort`, 기본 켬) — 한도+1 윈도우에 슬랙 + `-(3000 − 500×그 안의 토·일·공휴일 수)`(최소 1500), 한도+2 윈도우로 한도+1 하드 상한(7일 연속 금지). 확정 쉬는 칸이 낀 윈도우는 슬랙을 만들지 않는다. 쓴 곳은 결과 `manager_check`('파트장 확인 필요', 확정 칸만으로 된 것은 `pinned_notes`) (제1원칙 13) |
 | 최대 연속 야간 | 기본 3일 (설정 가능) |
@@ -281,7 +281,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | **사전입력 사실-클램프** | 확정(사전입력) 셀은 검증 대상이 아니라 **주어진 사실** — 제약에 걸리는 셀이 전부 확정이면 그 제약은 스킵(일 전체·인접 쌍·윈도우·주 전체 확정, 완전 확정 날은 변수 리터럴화), 확정+자유 혼합 카운트 제약은 상한을 `max(규칙, 확정분)`으로 클램프(자유 셀이 위반을 더 늘리는 건 금지). 부분 확정("2주차까지만 꽉 채움")도 동일 작동. 규칙 차이는 성공 결과에 `pinned_notes` 안내만. 완화(allow_pre_relax) 명시 시엔 클램프 OFF(완화 우선). 완전 확정 표 폴백(`pinned_confirmed`)은 타임아웃 안전망으로 유지. 결정 1-15 |
 | 월 최대 야간 | 기본 월 6회 (수면OFF 임계) |
 | 홀짝월 합산 야간 | 전월+당월 ≤ 11회 (선택적). **나이트킵 달의 야간은 합산 제외** (제1원칙 7) — 전월N 자동 인수인계(`compute_prev_month_nights`)와 엔진 `_two_month_rhs` 양쪽에서 뺀다 |
-| **야간전담 규칙** | N/NC만 배정, 5일 윈도우 내 ≤3 야간, 당월 정확히 14일 근무 (생휴 강제 없음 — 월 ≤1 상한만). **나이트킵인지는 날짜가 속한 달로**(`_keeper_on`) — 생성 범위 끝의 다음 달 며칠은 그 달 나이트킵에게 N/NC·쉬는 것만(`_keeper_forbids`, 사전입력은 사실), 이번 달 나이트킵은 그 며칠 일반 간호사 (결정 1-33) |
+| **야간전담 규칙** | N/NC만 배정, 5일 윈도우 내 ≤3 야간, 당월 정확히 14일 근무 (생휴 강제 없음 — 월 ≤1 상한만). **나이트킵인지는 날짜가 속한 달로**(`_keeper_on`) — 생성 범위 끝의 다음 달 며칠은 그 달 나이트킵에게 N/NC·쉬는 것만(`_keeper_forbids`, 사전입력은 사실), 이번 달만 나이트킵인 사람은 그 며칠 일반 간호사(다음 달도 나이트킵·상시 야간전담이면 그대로 나이트킵) (결정 1-33) |
 | **임산부 모성보호** | `is_pregnant`+`pregnancy`{early,late} 설정 시: ①P1 구간 완전 포함 주마다 P1 정확히 1회(부분 주 ≤1) ②임신 전 구간 `[early.start~late.end]` N/NC 금지 ③임신-중-달 생(生) 면제(배정 금지) ④임산부 달엔 야간전담 자동 해제. P1은 임산부+구간 또는 사전입력 P1에서만 허용(그 외 변수 0). HiGHS·CP-SAT·conflict_analyzer 패리티. 헬퍼: `_preg_window_on`/`_preg_span_on`/`_preg_active_in_month`/`_preg_forbids`/`_preg_effective_pre` (scheduler_base) |
 | 전입/전출 재적 | start_date ≤ d ≤ end_date 범위에서만 배정 |
 | **셀 잠금** | `locked_cells[nurse][date]=true`인 셀은 완화 모드에서도 사전입력 고정. 단 잠긴 D·E·N 은 같은 시간대 차지(DC·EC·NC)로 올릴 수 있다 — 번표엔 차지 표시가 없다(제1원칙 11, `_locked_domain`, 결정 1-34). 사람이 고른 차지·지난달 기록·나이트킵의 야간 외 근무는 글자 그대로. 승격되는 잠긴 칸끼리는 시니어리티대로(선임이 차지) |
@@ -345,6 +345,8 @@ effective_day = (juhu_day - cycle) % 7   # 4주마다 1일 당기기
 - 엔진: `juhu_block_lock`(기본 True). **`allow_juhu_relax`(주휴 무시)로 재배치할
   때만** 걸린다 — strict 로 풀리면 사전입력 주휴는 손대지 않는다(제1원칙 8).
   `_c_juhu_block_dow`(HiGHS) / `_cs_juhu_block_dow`(CP-SAT) 패리티.
+  재배치해도 **사전입력 주휴가 있던 주의 주휴는 없애지 않는다** — `weekly_juhu_floor`(주당 `>=1`, 어기면 날이 정해진 휴가만큼 감점).
+  유지 보너스(300)만으로는 오프특근(5100)을 피하려고 주휴를 지웠다 (결정 1-36).
   UI 토글 '주휴 이동 제한 풀기' = `juhu_block_lock=False`.
 - 블록 번호 기준 `_CYCLE_REF = 2026-03-01` 은 프론트 `view-helpers.js` 와
   **같아야 한다** — 어긋나면 화면의 '3주기'와 엔진의 블록이 다른 걸 가리킨다.
@@ -527,7 +529,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
    - 주의(⚡) 목록은 **규칙 한도를 넘긴 것만** (연속 근무·월 야간, 나이트킵 제외) — 주말 근무 횟수 같은
      통계는 요약 표 열로 옮겼다 (정상 표에서도 병동 절반에게 매달 뜨던 노이즈).
      **'파트장 확인 필요'가 맨 위** — 한도+1 연속(주말·공휴일 수 포함)·E→D1·중→D (`scheduleWarnings` type `check`,
-     달을 넘는 연속도 센다). 생성 결과에 `manager_check` 가 있으면 서랍이 '주의' 탭으로 열린다. 표의 위반 표시
+     달을 넘는 연속도 센다). 생성 결과에 `manager_check` 가 있으면 서랍이 '주의' 탭으로 열린다(원티드 미반영 `relaxed_cells` 가 있으면 그 탭이 먼저). 표의 위반 표시
      (`checkScheduleViolations`)에는 넣지 않는다. 검증 `node scripts/test_manager_check.mjs`
 
 > 엑셀 붙여넣기/파일 읽기의 날짜 해석은 **멀티월**: 날짜에 월이 있으면(5/26 등) 그대로,
@@ -996,10 +998,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.13.1.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.14.0.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.13.1.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.14.0.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -1092,7 +1094,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.13.1 기준)
+## 알려진 주의사항 (v4.14.0 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)

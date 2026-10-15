@@ -240,6 +240,29 @@ def test_relax_keeps_fixed_date_leave_over_off_teukgeun(solver, code):
     assert len(r.get("off_teukgeun") or []) == 1, r.get("off_teukgeun")
 
 
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+@pytest.mark.parametrize("block_lock", [True, False])
+def test_juhu_relax_never_drops_juhu_to_avoid_off_teukgeun(solver, block_lock):
+    """주휴 이동 허용(주휴 무시)을 켜도 오프특근을 피하려고 주휴를 없애지 않는다 — 주휴는 오프특근 때도
+    깎이지 않는 최소 휴무다(제1원칙 3). 오프특근 감점(1단계)이 주휴 유지 보너스(300)보다 커지자, 위 표에서
+    a1 의 3/1 주휴가 DC 로 바뀌고 오프특근이 사라졌다(v4.14.0 릴리스 전 점검). v4.13.1 은 주휴를 지켰다."""
+    d = [1, 2, 1, 1, 2, 2, 1]
+    per_day = {f"2026-03-0{i + 1}": {"D": n, "E": 0, "N": 0} for i, n in enumerate(d)}
+    pre = {"a0": {"2026-03-04": "주"},
+           "a1": {"2026-03-01": "주", "2026-03-03": "공", "2026-03-06": "OF"}}
+    req = _request(2, pre, per_day=per_day, longRunLastResort=False)
+    req.allow_pre_relax = True
+    req.allow_juhu_relax = True
+    req.juhu_block_lock = block_lock
+    r = make_limited(req, days=7, solver=solver).solve()
+    assert r["success"], r["message"]
+    for nid in ("a0", "a1"):
+        week = [r["schedule"][nid][f"2026-03-0{i}"] for i in range(1, 8)]
+        assert week.count("주") == 1, (nid, week)
+    assert r["schedule"]["a1"]["2026-03-03"] == "공", r["schedule"]["a1"]
+    assert len(r.get("off_teukgeun") or []) == 1, r.get("off_teukgeun")
+
+
 def test_fixed_date_leave_bonus_tops_off_teukgeun():
     """날이 정해진 휴가 한 칸 = 오프특근 감점 × 3 — 완화 이력 보정으로 감점이 커져도 따라간다."""
     from server.scheduler_base import _FIXED_DATE_LEAVE
