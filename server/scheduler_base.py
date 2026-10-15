@@ -582,14 +582,23 @@ class _SchedulerBase:
         return -(-top // 100) * 100 + 100
 
     def _relax_fixed_leave_bonus(self, *bonuses: int) -> int:
-        """날이 정해진 휴가(_FIXED_DATE_LEAVE) 한 칸의 완화 1단계 유지 보너스 = 오프특근 감점 × 3.
+        """날이 정해진 휴가(_FIXED_DATE_LEAVE) 한 칸의 완화 1단계 유지 보너스 = 오프특근 감점 × 5.
 
         "경가·조가 등으로 휴무가 갑자기 많아지면 남은 근무자들이 오프를 줄여가며 근무를 뛴다"
         (제1원칙 3) — 이 휴가는 오프특근으로 메우는 쪽이지 옮기는 쪽이 아니다 (2026-10-03 원근 결정).
-        한 칸을 비우면 그날 근무 하루가 빠지므로 보통 오프특근 한 번으로 메워진다. ×3 은 그 여유 —
-        오프특근 둘에 다른 원티드 한 칸을 더 풀어야 해도 지킨다. 그래도 근무표가 안 나오면 옮긴다.
+        한 칸을 비우면 그날 근무 하루가 빠지므로 보통 오프특근 한 번으로 메워진다. ×5 는 그 여유 —
+        주휴 없애기(_relax_juhu_drop_pen, ×3) 위에 오프특근 둘을 더 얹어도 지킨다. ×3 이던 때는
+        주휴 없애기와 100 차이라 근무 원티드 한 칸(500)에 병·공이 먼저 빠졌다 (결정 1-36 후속).
+        그래도 근무표가 안 나오면 옮긴다.
         bonuses = _relax_off_teukgeun_terms 와 같은 값(옮길 수 있는 원티드의 유지 보너스)."""
-        return 3 * self._relax_off_teukgeun_pen(*bonuses)
+        return 5 * self._relax_off_teukgeun_pen(*bonuses)
+
+    def _relax_juhu_drop_pen(self, rest_bonus: int, *bonuses: int) -> int:
+        """주휴 이동 허용에서 사전입력 주휴가 있던 주의 주휴를 아예 없애는 감점 (결정 1-36).
+        오프특근 감점 × 3 − 주휴 유지 보너스 − 100 — 유지 보너스를 더해도 오프특근 셋보다 작고
+        둘보다는 크다. 날이 정해진 휴가(×5)와는 오프특근 둘만큼 떨어져 있다.
+        bonuses = _relax_off_teukgeun_terms 와 같은 값."""
+        return max(3 * self._relax_off_teukgeun_pen(*bonuses) - int(rest_bonus) - 100, 0)
 
     def _effective_pre(self, nurse: dict, dt: date, pre: str, is_holiday: bool):
         """변수 도메인 기준의 '유효 사전입력' — 공휴일 OF 드롭(일반 간호사) + 모성보호 드롭.
@@ -1056,6 +1065,31 @@ class _SchedulerBase:
                 continue
             blocks.setdefault(self._juhu_block(d), []).append((d, dt.weekday(), t))
         return blocks
+
+    def _relax_juhu_free_ok(self, nurse, d: int) -> bool:
+        """주휴 이동 허용에서 이 칸에 주휴 자유 변수를 둘 수 있는가 — 양 엔진 공용.
+        나이트킵의 날엔 N·V·생·OF 뿐이라 새 주휴를 만들지 않는다 (제1원칙 10). 그 주 나이트킵의 날에
+        미리 넣은 주휴가 있을 때만 그것을 같은 주 나이트킵의 날 안에서 옮길 수 있다."""
+        if not self._keeper_on(nurse, self.all_dates[d]):
+            return True
+        cache = self.__dict__.setdefault("_keeper_juhu_weeks", {})
+        nid = nurse["id"]
+        if nid not in cache:
+            pre = self.prev.get(nid, {})
+            cache[nid] = [(ws, we) for ws, we in self.weeks
+                          if any(pre.get(self.all_dates[k].strftime("%Y-%m-%d")) == "주"
+                                 and self._keeper_on(nurse, self.all_dates[k])
+                                 for k in range(ws, we + 1))]
+        return any(ws <= d <= we for ws, we in cache[nid])
+
+    def _juhu_floor_segments(self, nurse, week_days) -> list:
+        """주휴 바닥(결정 1-36)을 거는 묶음 — 한 주를 나이트킵의 날과 일반의 날로 나눈다.
+        이번 달 나이트킵도 다음 달 며칠은 일반 간호사라(결정 1-33) 거기 미리 넣은 주휴는 그 며칠 안에서
+        지키고, 나이트킵의 날로 옮겨 일반의 날 쉬는 날을 없애지 않게 한다. 나이트킵이 아닌 주는 한 묶음."""
+        segs: dict = {}
+        for d in week_days:
+            segs.setdefault(self._keeper_on(nurse, self.all_dates[d]), []).append(d)
+        return list(segs.values())
 
     def _week_has_holiday(self, week_days) -> bool:
         """주(날짜 인덱스 목록)에 법정공휴일이 있는가."""

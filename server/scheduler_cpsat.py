@@ -301,8 +301,8 @@ class CpSatScheduler(_SchedulerBase):
                         x[nid][d][s] = model.NewBoolVar(f"rx_{nid}_{d}_{s}")
                     elif s == "생" and is_male:
                         x[nid][d][s] = 0
-                    elif s == "주" and self.allow_juhu_relax:
-                        # 주휴 재배치: 임의 날짜에 '주' 배치 가능 (HiGHS 패리티)
+                    elif s == "주" and self.allow_juhu_relax and self._relax_juhu_free_ok(nurse, d):
+                        # 주휴 재배치: 임의 날짜에 '주' 배치 가능 — 나이트킵의 날은 그 주에 미리 넣은 주휴를 옮길 때만 (HiGHS 패리티)
                         x[nid][d][s] = model.NewBoolVar(f"rx_{nid}_{d}_{s}")
                     elif s in self.SOLVER_SHIFTS:
                         x[nid][d][s] = model.NewBoolVar(f"rx_{nid}_{d}_{s}")
@@ -330,15 +330,13 @@ class CpSatScheduler(_SchedulerBase):
         x, pre_keeps = self._build_vars_relaxed(model)
         self._apply_hard_constraints(model, x)
         self._cs_juhu_block_dow(model, x)
-        # 주휴 재배치 시 주당 주휴 ≤1 (HiGHS weekly_juhu 패리티 — 야간전담 제외)
+        # 주휴 재배치 시 주당 주휴 ≤1 (HiGHS weekly_juhu 패리티 — 나이트킵 포함)
         # + 사전입력 주휴가 있던 주는 옮겨도 없애지 않는다 (제1원칙 3, 결정 1-36 — HiGHS 패리티)
         _juhu_drop = []
         if self.allow_juhu_relax and "주" in self.ALL_SHIFTS:
             first_of_month = date(self.year, self.month, 1)
             for nurse in self.nurses:
                 nid = nurse["id"]
-                if nurse.get("is_night_shift"):
-                    continue
                 for ws, we in self.weeks:
                     week_days = [d for d in range(ws, we + 1)
                                  if self.all_dates[d] >= first_of_month]
@@ -350,14 +348,20 @@ class CpSatScheduler(_SchedulerBase):
                     # 사용자 고정(잠금 주휴) 존중 — 자유 변수만 잔여 한도로 제한
                     if var_terms:
                         model.Add(sum(var_terms) <= max(0, 1 - const_sum))
-                    # 엔진이 실제로 옮길 수 있는 주휴 칸만 — 재적 밖에 남은 주는 없는 칸 (HiGHS 패리티)
-                    if var_terms and const_sum < 1 and any(
-                            self.prev.get(nid, {}).get(self.all_dates[d].strftime("%Y-%m-%d")) == "주"
-                            and not isinstance(x[nid][d].get("주", 0), int)
-                            for d in week_days):
-                        u = model.NewBoolVar(f"juhu_drop_{nid}_{ws}")
-                        model.Add(sum(var_terms) + u >= 1)
-                        _juhu_drop.append(u)
+                    # 엔진이 실제로 옮길 수 있는 주휴 칸만 — 재적 밖에 남은 주는 없는 칸.
+                    # 나이트킵의 날과 일반의 날은 따로 지킨다 (HiGHS 패리티)
+                    if const_sum >= 1:
+                        continue
+                    for seg in self._juhu_floor_segments(nurse, week_days):
+                        seg_vars = [x[nid][d].get("주", 0) for d in seg
+                                    if not isinstance(x[nid][d].get("주", 0), int)]
+                        if seg_vars and any(
+                                self.prev.get(nid, {}).get(self.all_dates[d].strftime("%Y-%m-%d")) == "주"
+                                and not isinstance(x[nid][d].get("주", 0), int)
+                                for d in seg):
+                            u = model.NewBoolVar(f"juhu_drop_{nid}_{seg[0]}")
+                            model.Add(sum(seg_vars) + u >= 1)
+                            _juhu_drop.append(u)
         obj_terms = self._build_objective_cpsat(model, x)
         # 사전순 지배 유지보너스 — 근무 < OFF < 연차류. 사용자 설정(preBonus*)을
         # HiGHS와 동일 소스에서 읽는다 (하드코딩 시 엔진별 완화 결과가 달라짐).
@@ -383,7 +387,8 @@ class CpSatScheduler(_SchedulerBase):
         lr = (self._last_resort_terms()
               + self._relax_off_teukgeun_terms(_BONUS["leave"], _BONUS["off"], _BONUS["work"])
               # 주휴 없애기 — 오프특근보다 나중, 날이 정해진 휴가보다 먼저 (HiGHS 패리티)
-              + [(max(_BONUS["fixed"] - _BONUS["juhu"] - 100, 0), u) for u in _juhu_drop]
+              + [(self._relax_juhu_drop_pen(_BONUS["juhu"], _BONUS["leave"], _BONUS["off"], _BONUS["work"]), u)
+                 for u in _juhu_drop]
               if keep_terms else [])
         for pen, sl in lr:
             keep_terms.append(-pen * sl)
