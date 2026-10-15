@@ -432,8 +432,10 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                             pulp.lpSum(var_terms) <= max(0, 1 - const_sum),
                             f"weekly_juhu_{nid}_{ws}"
                         )
+                    # 그 칸이 엔진이 실제로 옮길 수 있는 주휴일 때만 — 재적 밖(전입 전·전출 뒤)에 남은 주는 없는 칸
                     if var_terms and const_sum < 1 and any(
                             self.prev.get(nid, {}).get(self.all_dates[d].strftime("%Y-%m-%d")) == "주"
+                            and isinstance(x[nid][d]["주"], pulp.LpVariable)
                             for d in week_days):
                         u = pulp.LpVariable(f"juhu_drop_{nid}_{ws}", cat="Binary")
                         prob += (pulp.lpSum(var_terms) + u >= 1, f"weekly_juhu_floor_{nid}_{ws}")
@@ -471,7 +473,9 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             # 오프특근도 같이 넣는다 — 빠지면 6일 연속 대신 오프특근을 공짜로 고른다 (원티드보다 나중).
             lr = self._last_resort_terms() + self._relax_off_teukgeun_terms(
                 PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK)
-            lr += [(PRE_BONUS_FIXED, u) for u in _juhu_drop]   # 주휴 없애기 — 오프특근보다 나중
+            # 주휴 없애기 — 오프특근보다 나중, 날이 정해진 휴가보다 먼저 (유지 보너스까지 더해도 그 휴가 한 칸보다 작게)
+            _juhu_drop_pen = max(PRE_BONUS_FIXED - PRE_BONUS_REST - 100, 0)
+            lr += [(_juhu_drop_pen, u) for u in _juhu_drop]
             if lr:
                 bonus_expr = bonus_expr - pulp.lpSum(pen * sl for pen, sl in lr)
             prob.setObjective(bonus_expr)

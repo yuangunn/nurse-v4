@@ -263,6 +263,47 @@ def test_juhu_relax_never_drops_juhu_to_avoid_off_teukgeun(solver, block_lock):
     assert len(r.get("off_teukgeun") or []) == 1, r.get("off_teukgeun")
 
 
+def _juhu_relax_request(nurse_n, pre, d, **nurse_kw):
+    per_day = {f"2026-03-0{i + 1}": {"D": n, "E": 0, "N": 0} for i, n in enumerate(d)}
+    req = _request(nurse_n, pre, per_day=per_day)
+    for nid, kw in nurse_kw.items():
+        for k, v in kw.items():
+            setattr(req.nurses[int(nid[1:])], k, v)
+    req.allow_pre_relax = True
+    req.allow_juhu_relax = True
+    return req
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+@pytest.mark.parametrize("stay, stale", [({"end_date": "2026-03-04"}, "2026-03-06"),
+                                         ({"start_date": "2026-03-04"}, "2026-03-02")])
+def test_juhu_floor_ignores_juhu_outside_stay(solver, stay, stale):
+    """전입 전·전출 뒤 칸에 남은 주(주휴 추천을 적용한 뒤 전출일을 넣은 경우)는 없는 칸 — 그 주에 주휴를
+    지키라는 바닥을 만들지 않는다. 바닥이 걸리면 그 사람 근무일에 없던 주휴를 지어내고 남에게 오프특근을 떠넘겼다."""
+    pre = {"a0": {"2026-03-02": "주"}, "a1": {stale: "주"}, "a2": {"2026-03-03": "주", "2026-03-07": "E"}}
+    if "start_date" in stay:
+        pre = {"a0": {"2026-03-05": "주"}, "a1": {stale: "주"}, "a2": {"2026-03-06": "주", "2026-03-01": "E"}}
+    r = make_limited(_juhu_relax_request(3, pre, [2] * 7, a1=stay), days=7, solver=solver).solve()
+    assert r["success"], r["message"]
+    assert "주" not in r["schedule"]["a1"].values(), r["schedule"]["a1"]
+    assert not r.get("off_teukgeun"), r.get("off_teukgeun")
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+@pytest.mark.parametrize("code", ["병", "공"])
+def test_juhu_floor_yields_to_fixed_date_leave(solver, code):
+    """한 주에 하루만 쉴 수 있는데 주휴와 날이 정해진 휴가가 다 있으면 그 휴가를 지킨다 —
+    그날 쉬는 것은 같고, 휴가는 날을 옮길 수 없다 (결정 1-35·1-36: 오프특근 < 주휴 없애기 < 날이 정해진 휴가)."""
+    a1 = ["D", "D", "OF", "D", "D", "주", "D"]
+    pre = {"a0": {"2026-03-01": "주", "2026-03-04": code},
+           "a1": {f"2026-03-0{i + 1}": v for i, v in enumerate(a1)}}
+    req = _juhu_relax_request(3, pre, [2, 3, 2, 2, 3, 2, 3])
+    req.locked_cells = {"a1": {f"2026-03-0{i}": True for i in range(1, 8)}}
+    r = make_limited(req, days=7, solver=solver).solve()
+    assert r["success"], r["message"]
+    assert r["schedule"]["a0"]["2026-03-04"] == code, r["schedule"]["a0"]
+
+
 def test_fixed_date_leave_bonus_tops_off_teukgeun():
     """날이 정해진 휴가 한 칸 = 오프특근 감점 × 3 — 완화 이력 보정으로 감점이 커져도 따라간다."""
     from server.scheduler_base import _FIXED_DATE_LEAVE

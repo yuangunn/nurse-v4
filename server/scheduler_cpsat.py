@@ -350,8 +350,10 @@ class CpSatScheduler(_SchedulerBase):
                     # 사용자 고정(잠금 주휴) 존중 — 자유 변수만 잔여 한도로 제한
                     if var_terms:
                         model.Add(sum(var_terms) <= max(0, 1 - const_sum))
+                    # 엔진이 실제로 옮길 수 있는 주휴 칸만 — 재적 밖에 남은 주는 없는 칸 (HiGHS 패리티)
                     if var_terms and const_sum < 1 and any(
                             self.prev.get(nid, {}).get(self.all_dates[d].strftime("%Y-%m-%d")) == "주"
+                            and not isinstance(x[nid][d].get("주", 0), int)
                             for d in week_days):
                         u = model.NewBoolVar(f"juhu_drop_{nid}_{ws}")
                         model.Add(sum(var_terms) + u >= 1)
@@ -380,7 +382,8 @@ class CpSatScheduler(_SchedulerBase):
         # 파트장 확인 마지막 수단(제1원칙 13)·오프특근도 1단계에서 원티드와 맞바꾼다 (HiGHS 패리티)
         lr = (self._last_resort_terms()
               + self._relax_off_teukgeun_terms(_BONUS["leave"], _BONUS["off"], _BONUS["work"])
-              + [(_BONUS["fixed"], u) for u in _juhu_drop]     # 주휴 없애기 — 오프특근보다 나중
+              # 주휴 없애기 — 오프특근보다 나중, 날이 정해진 휴가보다 먼저 (HiGHS 패리티)
+              + [(max(_BONUS["fixed"] - _BONUS["juhu"] - 100, 0), u) for u in _juhu_drop]
               if keep_terms else [])
         for pen, sl in lr:
             keep_terms.append(-pen * sl)

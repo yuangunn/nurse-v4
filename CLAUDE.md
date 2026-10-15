@@ -132,7 +132,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 256건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지)
+├── tests/                   # pytest 회귀 264건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -176,7 +176,7 @@ npm start
 ### 테스트
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 256건
+python3 -m pytest -q                  # 264건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_hospital_holidays.mjs \
@@ -271,7 +271,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | **공휴일 OF 금지** | 법정공휴일에는 OF 배정 불가 (일반/완화/진단 모두 적용). **일반 간호사만** — 나이트킵은 법을 못 받아 공휴일에도 OF (제1원칙 10, `_holiday_of_banned`) |
 | 법은 공휴일에만 | 법정공휴일 코드 `법`은 공휴일 날짜에만 **자유 배정** (사전입력 확정 셀은 사실로 수용) |
 | 야간전담 공휴일 제외 | 야간전담에게 법/생/V 공휴일 배정 차단 규칙 다름 |
-| 주휴(주) | **엔진이 배정하지 않는다** — 사전입력 전용(auto_assign ✗). 일반 모드엔 강제 없음(사람이 넣은 그대로), 주휴 재배치 완화(`allow_juhu_relax`)를 켰을 때만 주당 `<=1` — 그때도 사전입력 주휴가 있던 주는 `>=1` 소프트 바닥(없애면 완화 1단계 `-15300`, `juhu_drop`): 옮겨도 없애지 않는다 (제1원칙 3, 결정 1-36) |
+| 주휴(주) | **엔진이 배정하지 않는다** — 사전입력 전용(auto_assign ✗). 일반 모드엔 강제 없음(사람이 넣은 그대로), 주휴 재배치 완화(`allow_juhu_relax`)를 켰을 때만 주당 `<=1` — 그때도 사전입력 주휴가 있던 주는 `>=1` 소프트 바닥(없애면 완화 1단계 `-14900` = 날이 정해진 휴가 − 주휴 유지 − 100, `juhu_drop`): 옮겨도 없애지 않는다 — 오프특근 < 주휴 없애기 < 날이 정해진 휴가, 재적 밖에 남은 주는 세지 않음 (제1원칙 3, 결정 1-36) |
 | OF 1회/주 | 완전한 주 `Σ OF + s == 1` (`s`=오프특근 슬랙), 부분 주는 `<=1`. **상한 1회는 하드**, 1회 의무는 목적함수에서 `-1,000,000×s`로 지킨다 — 어떤 배점보다 크므로 **그러지 않으면 근무표가 성립하지 않을 때만** OF를 반납한다(제1원칙 3). 반납한 주는 결과 `off_teukgeun`으로 보고 |
 | 최대 연속 근무 | 기본 5일 (설정 가능). **한도+1일은 마지막 수단**(`longRunLastResort`, 기본 켬) — 한도+1 윈도우에 슬랙 + `-(3000 − 500×그 안의 토·일·공휴일 수)`(최소 1500), 한도+2 윈도우로 한도+1 하드 상한(7일 연속 금지). 확정 쉬는 칸이 낀 윈도우는 슬랙을 만들지 않는다. 쓴 곳은 결과 `manager_check`('파트장 확인 필요', 확정 칸만으로 된 것은 `pinned_notes`) (제1원칙 13) |
 | 최대 연속 야간 | 기본 3일 (설정 가능) |
@@ -345,7 +345,7 @@ effective_day = (juhu_day - cycle) % 7   # 4주마다 1일 당기기
 - 엔진: `juhu_block_lock`(기본 True). **`allow_juhu_relax`(주휴 무시)로 재배치할
   때만** 걸린다 — strict 로 풀리면 사전입력 주휴는 손대지 않는다(제1원칙 8).
   `_c_juhu_block_dow`(HiGHS) / `_cs_juhu_block_dow`(CP-SAT) 패리티.
-  재배치해도 **사전입력 주휴가 있던 주의 주휴는 없애지 않는다** — `weekly_juhu_floor`(주당 `>=1`, 어기면 날이 정해진 휴가만큼 감점).
+  재배치해도 **사전입력 주휴가 있던 주의 주휴는 없애지 않는다** — `weekly_juhu_floor`(주당 `>=1`, 어기면 날이 정해진 휴가보다 조금 작게 감점).
   유지 보너스(300)만으로는 오프특근(5100)을 피하려고 주휴를 지웠다 (결정 1-36).
   UI 토글 '주휴 이동 제한 풀기' = `juhu_block_lock=False`.
 - 블록 번호 기준 `_CYCLE_REF = 2026-03-01` 은 프론트 `view-helpers.js` 와
