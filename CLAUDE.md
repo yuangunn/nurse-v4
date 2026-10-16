@@ -132,7 +132,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 298건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지)
+├── tests/                   # pytest 회귀 303건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -176,7 +176,7 @@ npm start
 ### 테스트
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 298건
+python3 -m pytest -q                  # 303건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_hospital_holidays.mjs \
@@ -349,8 +349,8 @@ effective_day = (juhu_day - cycle) % 7   # 4주마다 1일 당기기
   유지 보너스(300)만으로는 오프특근(5100)을 피하려고 주휴를 지웠다 (결정 1-36).
   UI 토글 '주휴 이동 제한 풀기' = `juhu_block_lock=False`.
 - **달이 블록 중간에서 시작하면 그 블록은 지난달 요일을 잇는다** (결정 1-37) — 사전입력의 지난달 칸 > 지난달 저장본
-  (`/api/prev_month_juhu` → `prev_juhu_dates`). 엔진 `_juhu_anchor` 는 다른 요일에 감점 2500(하드 아님 — 자리가 없으면 주휴를 없애지 않고 그날 둔다),
-  추천 `_juhuAnchorDow` 는 기준 요일로만 쓴다. 지난달 나이트킵의 날은 잇지 않는다.
+  (`/api/prev_month_juhu` → `prev_juhu_dates`). 엔진 `_juhu_anchor` 는 다른 요일에 감점 1400(`_juhu_anchor_pen` — 파트장 확인 마지막 수단·OF 원티드보다 작고 블록 주휴 넷 옮기기(1200)보다 크다.
+  하드 아님 — 자리가 없으면 주휴를 없애지 않고 그날 둔다), 추천 `_juhuAnchorDow` 는 기준 요일로만 쓴다(요일 고정은 그 블록 뒤 제 요일로). 지난달 나이트킵의 날은 잇지 않는다.
 - 블록 번호 기준 `_CYCLE_REF = 2026-03-01` 은 프론트 `view-helpers.js` 와
   **같아야 한다** — 어긋나면 화면의 '3주기'와 엔진의 블록이 다른 걸 가리킨다.
 

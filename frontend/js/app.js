@@ -494,6 +494,7 @@ function app() {
 
     async _initApp(){
       // 프로필 열린 후 앱 데이터 로드
+      this._prevJuhuYM='';this.prevMonthJuhu={};   // 지난달 주휴 날짜는 프로필(병동)마다 — 같은 달이어도 다시 받는다
       await Promise.all([this.loadNurses(),this.loadRules(),this.loadRequirements(),this.loadShifts(),this.loadScoringRules(),this.loadSavedList(),this.loadPrevSavesList()]);
       this._checkPendingGenerate();
       this._restoreFullState()||this._restoreAutoSave();

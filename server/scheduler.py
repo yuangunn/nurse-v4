@@ -43,8 +43,9 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             anchor = self._juhu_anchor(nurse)
             for blk, items in blocks.items():
                 dows = sorted({wd for _, wd, _ in items})
-                anchored = bool(anchor) and blk == anchor[0]
-                if len(dows) <= 1 and not (anchored and dows and dows[0] != anchor[1]):
+                # 지난달 요일에 옮길 칸이 없으면(잠근 근무·재적 밖) 어느 요일이든 같은 감점이라 잇지 않는다
+                anchored = bool(anchor) and blk == anchor[0] and anchor[1] in dows
+                if len(dows) <= 1:
                     continue
                 y = {wd: pulp.LpVariable(f"juhudow_{nid}_{blk}_{wd}", cat="Binary")
                      for wd in dows}
@@ -488,7 +489,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 PRE_BONUS_REST, PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK)
             lr += [(_juhu_drop_pen, u) for u in _juhu_drop]
             # 지난달에 시작한 블록의 요일 어기기 (결정 1-37)
-            lr += [(self._JUHU_ANCHOR_PEN, y) for y in getattr(self, "_juhu_anchor_dev", [])]
+            _anchor_pen = self._juhu_anchor_pen(PRE_BONUS_OFF, PRE_BONUS_LEAVE)
+            lr += [(_anchor_pen, y) for y in getattr(self, "_juhu_anchor_dev", [])]
             if lr:
                 bonus_expr = bonus_expr - pulp.lpSum(pen * sl for pen, sl in lr)
             prob.setObjective(bonus_expr)

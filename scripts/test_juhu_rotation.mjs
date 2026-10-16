@@ -236,6 +236,20 @@ check('이동은 경고로 보고된다', moveWarn > 0, `${moveWarn}건`);
   const kp = dowsByBlock(recFor({ a1: THU }).a1);
   nurses[1].night_months = saved1;
   check('지난달 나이트킵은 잇지 않는다', JSON.stringify(kp) === JSON.stringify(base1), `a1 ${JSON.stringify(kp)}`);
+  // 임신 중인 달은 나이트킵이 아니다 (엔진 night_keeper_in_month) — 그러면 잇는다
+  const saved1p = { nm: nurses[1].night_months, p: nurses[1].is_pregnant, pg: nurses[1].pregnancy };
+  Object.assign(nurses[1], { night_months: { '2026-10': true }, is_pregnant: true,
+    pregnancy: { early: { start: '2026-09-01', end: '2026-10-31' }, late: { start: '2027-02-01', end: '2027-03-31' } } });
+  const pg = dowsByBlock(recFor({ a1: THU }).a1);
+  Object.assign(nurses[1], { night_months: saved1p.nm, is_pregnant: saved1p.p, pregnancy: saved1p.pg });
+  check('임신 달의 나이트킵은 나이트킵이 아니다 — 잇는다', JSON.stringify(pg['8']) === '[4]', `a1 ${JSON.stringify(pg)}`);
+  // 요일 고정(a6 토요일, 회전 없음)은 이어받은 블록이 끝나면 제 요일로 — 지난달에 옮긴 요일이 달마다 이어지지 않게
+  const fx = dowsByBlock(recFor({ a6: THU }).a6);
+  check('요일 고정은 이어받은 블록 뒤에 제 요일', JSON.stringify(fx['8']) === '[4]' && JSON.stringify(fx['9']) === '[6]',
+    `a6 ${JSON.stringify(fx)}`);
+  // 생성 범위(10/25~) 밖의 사전입력은 지난달 사전입력이 남은 칸 — 엔진처럼 보지 않는다
+  const st = dowsByBlock(recFor({ a1: ['2026-10-15', '2026-10-22'] }, { a1: { '2026-10-23': '주' } }).a1);
+  check('생성 범위 밖 사전입력은 세지 않는다', JSON.stringify(st['8']) === '[4]', `a1 ${JSON.stringify(st)}`);
 }
 
 // ── 핀 덤프 (E2E 용) — node scripts/test_juhu_rotation.mjs --emit <out.json> [tight]

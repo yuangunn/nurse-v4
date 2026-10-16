@@ -184,6 +184,7 @@ window.AnalysisModule = function() {
     // 1~4주기는 같은 요일이라 달이 3주기에서 시작해도 지난달 1·2주기 요일을 잇는다 (결정 1-37).
     // 사전입력의 지난달 칸(전달 이월)이 저장본보다 먼저, 그 블록에서 가장 늦은 주휴.
     // 지난달에 나이트킵이었으면 잇지 않는다 — 엔진의 블록 잠금도 나이트킵의 날을 뺀다 (결정 1-36 후속 2).
+    // 엔진(_juhu_anchor)과 같은 칸을 본다: 사전입력은 생성 범위(scheduleDays) 안의 칸만, 트레이니 표시(/D)·원티드 D/E 는 빈칸으로.
     _juhuAnchorDow(nid,periodIdx){
       const ms=86400000;
       const start=new Date(this._CYCLE_REF.getTime()+periodIdx*28*ms);
@@ -193,14 +194,23 @@ window.AnalysisModule = function() {
       if(nurse){   // 블록 시작은 늘 지난달 안이다 (블록 28일 ≤ 지난달 일수)
         const nm=nurse.night_months||{};
         const pk=`${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,'0')}`;
-        if(Object.keys(nm).length?!!nm[pk]:!!nurse.is_night_shift)return null;
+        let keep=Object.keys(nm).length?!!nm[pk]:!!nurse.is_night_shift;
+        if(keep&&nurse.is_pregnant){   // 임신 중인 달은 나이트킵이 아니다 — 엔진 night_keeper_in_month (임신 구간 = 초기 시작~출산 전 끝)
+          const ws=['early','late'].map(k=>(nurse.pregnancy||{})[k]||{}).filter(w=>w.start&&w.end);
+          const mS=`${pk}-01`,mE=this.dayKey(new Date(start.getFullYear(),start.getMonth()+1,0));
+          if(ws.length&&ws.map(w=>w.start).sort()[0]<=mE&&ws.map(w=>w.end).sort().pop()>=mS)keep=false;
+        }
+        if(keep)return null;
       }
+      const inRange=new Set((this.scheduleDays||[]).map(d=>this.dayKey(d)));   // 그 밖은 지난달 사전입력이 남은 칸 ('다른 달 정리')
       const pre=this.prevSchedule[nid]||{};
       const saved=new Set((this.prevMonthJuhu||{})[nid]||[]);
       let last=null;
       for(const t=new Date(start);t<first;t.setDate(t.getDate()+1)){
         const dk=this.dayKey(t);
-        if((dk in pre?pre[dk]:(saved.has(dk)?'주':null))==='주')last=t.getDay();
+        const v=inRange.has(dk)?pre[dk]:null;
+        const has=!!v&&!String(v).startsWith('/')&&!this.isFlexWish?.(v);
+        if((has?v:(saved.has(dk)?'주':null))==='주')last=t.getDay();
       }
       return last;
     },
@@ -261,11 +271,15 @@ window.AnalysisModule = function() {
         // 첫 블록이 지난달에 시작했으면 지난달 요일이 그 블록의 기준 — 자리가 있으면 그대로, 없으면 다른 블록처럼 옮긴다 (결정 1-37)
         const anchor=this._juhuAnchorDow(nurse.id,firstPeriodIdx0);
         let base=anchor!==null?anchor:(rotate?((jd-firstPeriodIdx0)%7+7)%7:jd);
+        let fromAnchor=anchor!==null;
         for(const[periodIdx,periodWeeks]of periods){
           if(rotate&&periodIdx>firstPeriodIdx0)base=(base-1+7)%7;
+          // 요일 고정은 이어받은 블록이 끝나면 제 요일로 — 안 그러면 지난달에 한 번 옮긴 요일이 달마다 이어진다
+          else if(fromAnchor&&periodIdx>firstPeriodIdx0){base=jd;fromAnchor=false}
           const pick=this._pickBlockDow(periodWeeks,base,daySlack,nurseAssignedWeeks[nurse.id]);
           if(pick.dow===null)continue;             // 이 블록은 이미 다 배정됐거나 자리가 없다
           if(pick.dow!==base){
+            fromAnchor=false;                      // 이번 달에 옮긴 요일은 다음 블록의 기준 (2026-08-24 규칙)
             const cyc=periodWeeks[0]?periodWeeks[0].cycle:'';
             warnings.push({type:'warn',msg:`${nurse.name}: ${cyc}주기 ${DOWN[base]}→${DOWN[pick.dow]} 주휴 이동 (${DOWN[base]} 자리 부족) — 이후 주기는 ${DOWN[pick.dow]} 기준`});
             base=pick.dow;                          // 옮긴 요일이 새 기준

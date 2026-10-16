@@ -113,3 +113,63 @@ def test_prev_month_juhu_from_latest_saved(tmp_path, monkeypatch):
     req = _nov_request(lock=False)
     _attach_prev_juhu(req)
     assert req.prev_juhu_dates is None                        # 블록 잠금을 풀면 쓰지 않는다
+
+
+def _ladder_request(prev_juhu):
+    """11/1~11/14 · a1 은 11/3·11/5 말고 다 잠갔다 — a0 의 주휴를 지난달 요일(화 11/3)로 옮기면
+    a1 이 11/4~11/9 6일 연속(주말 이틀)이 된다. 2026-10-16 검토에서 나온 재현."""
+    days = [f"2026-11-{i:02d}" for i in range(1, 15)]
+    per_day = {dk: {"D": n, "E": 0, "N": 0}
+               for dk, n in zip(days, [1, 2, 1, 2, 1, 2, 2, 1, 2, 1, 1, 2, 2, 1])}
+    a1 = {dk: "D" for dk in days}
+    a1.update({"2026-11-01": "DC", "2026-11-02": "E", "2026-11-08": "주", "2026-11-11": "OF",
+               "2026-11-10": "DC", "2026-11-14": "DC"})   # 11/2 E 는 못 지키는 원티드 — strict 가 실패해 완화로 간다
+    del a1["2026-11-03"], a1["2026-11-05"]
+    pre = {"a0": {"2026-11-01": "OF", "2026-11-05": "주", "2026-11-10": "주", "2026-11-14": "OF"}, "a1": a1}
+    req = Requirements()
+    for k in ("mon", "tue", "wed", "thu", "fri", "sat", "sun"):
+        setattr(req, k, DayRequirement(D=0, E=0, N=0))
+    nurses = [Nurse(id=f"a{i}", name=f"*간호{i}", group="A", gender="male",
+                    capable_shifts=CAPS, seniority=i) for i in range(2)]
+    r = GenerateRequest(year=2026, month=11, nurses=nurses, requirements=req, rules=Rules(**ISO),
+                        prev_schedule=pre, shifts=PROD_SHIFTS, per_day_requirements=per_day,
+                        time_limit=60, prev_juhu_dates=prev_juhu,
+                        locked_cells={"a1": {dk: True for dk in a1 if dk != "2026-11-02"}})
+    r.allow_pre_relax = True
+    r.allow_juhu_relax = True
+    r.juhu_block_lock = True
+    return r
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_anchor_never_buys_a_last_resort(solver):
+    """지난달 요일 감점은 파트장 확인 마지막 수단(6일 연속·E→D1·중→D)보다 작다 — 지난달 요일을 지키려고
+    6일 연속을 만들지 않는다 (제1원칙 13). 감점 2500 이던 때는 주말 이틀 낀 6일 연속(2000)을 골랐다."""
+    r = make_limited(_ladder_request({"a0": TUESDAYS}), days=14, solver=solver).solve()
+    assert r["success"], r["message"]
+    assert not r.get("manager_check"), r.get("manager_check")
+    assert r["schedule"]["a0"]["2026-11-05"] == "주", r["schedule"]["a0"]
+
+
+def test_anchor_penalty_sits_between_moves_and_last_resorts():
+    """블록의 이번 달 주휴를 다 옮겨도(많아야 넷 × 300) 감점보다 싸고, 감점은 마지막 수단·OF 원티드·휴가 원티드보다 작다."""
+    from server.scheduler_base import _LONG_RUN_MIN_PENALTY, _RARE_TRANSITION_PENALTY
+    s = NurseScheduler(_nov_request({"a0": TUESDAYS}))
+    pen = s._juhu_anchor_pen(3000, 5000)
+    assert pen == 1400
+    assert 4 * 300 < pen < min(_LONG_RUN_MIN_PENALTY, _RARE_TRANSITION_PENALTY)
+    assert s._juhu_anchor_pen(1000, 5000) == 900          # OF 원티드 보너스를 낮추면 그 아래로
+    assert s._juhu_anchor_pen(0, 0) == 1400               # 0 인 보너스(지키지 않는 원티드)는 세지 않는다
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_no_anchor_term_when_weekday_unavailable(solver):
+    """지난달 요일에 옮길 칸이 없으면(잠근 D) 잇지 않는다 — 어느 요일이든 같은 감점이면 주휴 대신 V 를 고를 수 있다."""
+    req = _nov_request({"a0": TUESDAYS}, pre_extra={"a0": {"2026-11-03": "D"}})
+    req.locked_cells = {"a0": {"2026-11-03": True}}
+    sch = make_limited(req, days=7, solver=solver)
+    assert sch.solve()["success"]
+    assert sch._juhu_anchor_dev == []
+    sch = make_limited(_nov_request({"a0": TUESDAYS}), days=7, solver=solver)
+    assert sch.solve()["success"]
+    assert sch._juhu_anchor_dev                              # 화요일이 비어 있으면 잇는다
