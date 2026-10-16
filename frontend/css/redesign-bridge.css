@@ -63,6 +63,13 @@ body.rd .rt-foot input, body.rd .rt-cell.rt-input input { width: 100%; height: 3
 body.rd .rt-foot input:focus, body.rd .rt-cell.rt-input input:focus { outline: 2px solid var(--focus); outline-offset: -2px; background: var(--card); }
 body.rd .rt-foot input.is-default { color: var(--ink-2); font-weight: var(--fw-body); }
 .rt-day .hol { font-size: var(--fs-min); line-height: 1; }
+/* 전월·익월 머리 칸은 sticky 라 칸째 반투명(opacity)이면 밑으로 지나가는 줄 글자가 비친다 (2026-10-16 원근 화면, 25~31일).
+   바탕은 불투명하게 — 반투명일 때와 같은 색을 카드 바탕에 섞어 — 두고 글자만 옅게 */
+.rt-day.overflow { opacity: 1; }
+.rt-day.overflow.sat { background-color: color-mix(in srgb, var(--sat-bg) calc(var(--overflow-opacity) * 100%), var(--card)); }
+.rt-day.overflow.sun { background-color: color-mix(in srgb, var(--sun-bg) calc(var(--overflow-opacity) * 100%), var(--card)); }
+.rt-day.overflow.hol { background-color: color-mix(in srgb, var(--hol-bg) calc(var(--overflow-opacity) * 100%), var(--card)); }
+.rt-day.overflow > * { opacity: var(--overflow-opacity); }
 .rt-cell.today-col, .rt-day.today { box-shadow: inset 0 3px 0 var(--ink); }
 .rtable tbody tr:hover td { background-color: var(--card-warm); }
 .rtable tbody tr:hover td[data-shift] { filter: brightness(0.97); }
@@ -82,6 +89,9 @@ body.rd .rt-foot input.is-default { color: var(--ink-2); font-weight: var(--fw-b
 .rpop-wish .rbtn { height: 40px; padding: 0 10px; font-size: var(--fs-sub); background: var(--paper); flex: 1; justify-content: center; }
 .rpop-wish .rbtn.on { background: var(--warn-bg); color: var(--warn); font-weight: var(--fw-strong); }
 .rpop-code small { font-size: var(--fs-min); }   /* 검사기 최소 글자 14px — 핸드오프 13px 은 예외 없이 14 로 */
+/* 14px 로 키운 보조 이름('Evening Charge'·'Night Charge')이 칸(약 80px)을 넘쳐 옆 칸으로 삐져나왔다 — 두 줄로 늘어나게.
+   한 줄이면 그대로 44px. line-height 는 핸드오프 규칙 끝의 font: inherit 이 지우므로 여기서 다시 준다 */
+.rpop-code { height: auto; min-height: 44px; padding: 4px 2px; line-height: 1.15; }
 
 /* 근무표 상태 줄 보조 */
 .rstatus .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
@@ -103,17 +113,34 @@ body.rd .rt-foot input.is-default { color: var(--ink-2); font-weight: var(--fw-b
 .rdrawer-body table.rsum td { height: 38px; text-align: center; border-bottom: 1px solid var(--rule-soft); font-weight: var(--fw-body); }
 .rdrawer-body table.rsum td:first-child { text-align: left; font-weight: var(--fw-label); }
 .rdrawer-body .hi { color: var(--err); font-weight: var(--fw-strong); } .rdrawer-body .lo { color: var(--ok); font-weight: var(--fw-strong); }
-.rdrawer-body .rlog { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: var(--fs-min); background: var(--log-bg); color: var(--log-text); padding: 12px; border-radius: 10px; max-height: 140px; overflow: auto; white-space: pre; line-height: 1.5; }
+.rdrawer-body .rlog, .rlive .rlog { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: var(--fs-min); background: var(--log-bg); color: var(--log-text); padding: 12px; border-radius: 10px; max-height: 140px; overflow: auto; white-space: pre; line-height: 1.5; }
+/* 만드는 중 — 상태 줄 아래 진행 한 줄 + 계산 기록 (서랍은 표가 없으면 열리지 않는다) */
+.rlive { margin: 0 24px 8px; display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.rlive-head { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 4px 0 16px; font-size: var(--fs-sub); color: var(--ink-2); }
+.rlive-head .rbtn-sm { margin-left: auto; flex: none; }
+.rlive .rlog { max-height: 220px; }
 .rdrawer-body .rmsg { white-space: pre-wrap; font-size: var(--fs-sub); line-height: 1.5; }
 .rdrawer-body .rmsg .star { background: var(--warn-bg); border-left: 3px solid var(--warn); padding: 2px 8px; margin: 2px 0; }
 .rdrawer-body .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .rdrawer-body .rbtn-sm { height: 40px; }
 
+/* 슬라이더 바탕 줄 — 앱의 모든 슬라이더. components.css 가 없는 이름(::-webkit-slider-track)에 그려
+   엄지(검은 점)만 떠 있었다. 엄지 margin-top:-6px 은 이 4px 줄 가운데 맞춤 */
+input[type="range"]::-webkit-slider-runnable-track { height: 4px; background: var(--rule-strong); border-radius: 4px; }
+
 /* 고급 패널 (근무표 툴바 아래 드롭다운) */
-.radv { position: absolute; top: calc(100% + 4px); left: 0; z-index: 40; width: 720px; max-width: calc(100vw - 48px); background: var(--card); border-radius: 12px; box-shadow: var(--shadow-pop); padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+/* 폭 760 — 이름표 150 + 사이 10 + 가장 긴 단추 줄(정확도 넷: Pretendard 473, 서체가 안 읽혀 대체 글꼴이면 527) + 좌우 여백 40 = 727,
+   높이를 줄여 세로 스크롤 막대(약 15)가 생겨도 한 줄. left/max-height 는 열 때 rdFitPop 이 창 안으로 맞춘다 (1024 폭에선 오른쪽이 잘렸다) */
+.radv { position: absolute; top: calc(100% + 4px); left: 0; z-index: 40; width: 760px; max-width: calc(100vw - 48px); overflow-y: auto; background: var(--card); border-radius: 12px; box-shadow: var(--shadow-pop); padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
 .radv .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .radv .lbl { width: 150px; font-size: var(--fs-sub); font-weight: var(--fw-label); flex: none; }
-.radv .rseg button { min-width: 0; padding: 0 14px; }
+.radv .row > .lbl { align-self: flex-start; min-height: 48px; display: flex; align-items: center; }
+/* 이름표 오른쪽 칸 — 단추 줄, 그 아래 .line(슬라이더·설명)은 늘 제 줄 */
+.radv .ctl { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.radv .ctl > .line { flex: 0 0 100%; display: flex; align-items: center; gap: 12px; }
+.radv .ctl > .unit { margin-left: -4px; font-size: var(--fs-sub); }
+/* 단추 글자를 접지 않는다 — flex:1(기준 0)로 같은 폭을 나누면 '빠르게 (5%)'·'10분'·'둘 다 돌려 빠른 쪽'이 두 줄로 꺾였다 */
+.radv .rseg > button, .radv .rseg > label { flex: 1 0 auto; min-width: 0; white-space: nowrap; padding: 0 14px; }
 .radv input[type="range"] { width: 160px; height: 40px; }
 .radv .sub { font-size: var(--fs-min); color: var(--ink-2); }
 .radv .fold { border-top: 1px solid var(--rule); padding-top: 10px; }

@@ -105,8 +105,7 @@ function app() {
     get stepperSummary(){
       const nurseN = (this.nurses||[]).length;
       const prevN = this.countPrevEntries();
-      const totalCells = (this.nurses||[]).filter(n=>!n.is_trainee).length *
-                         (this.scheduleDays?.filter(d=>!this.isOverflow(d))?.length || 0);
+      const totalCells = this.rdCells;   // 신규는 트레이닝 날만 뺀다 (달 중간에 독립하면 그 뒤는 센다)
       const warns = (this.scheduleWarnings||[]).length;
       const sched = this.schedule && Object.keys(this.schedule).length>0;
       const savedN = (this.savedList||[]).length;
@@ -283,9 +282,20 @@ function app() {
       for(const nurse of this.nurses){
         const nid=nurse.id;
         const sched=this.schedule[nid]||{};
+        // 신규의 트레이닝 날('/E' = 프리셉터와 E)도 그날 일한 것 — 독립한 첫날들과 이어 센다 (엔진 manager_check 와 같게).
+        // 트레이닝 날 안에서 끝나는 연속·전환은 프리셉터 쪽 일이라 세지 않는다
+        const tLast=this.traineeLastKey(nurse);
+        const fromKey=tLast&&tLast>=firstKey?tLast+'~':firstKey;   // 'YYYY-MM-DD~' > 그 날 (그 다음 날부터)
+        const pid=nurse.preceptor_id;
+        const at=day=>{const v=sched[this.dayKey(day)];return v&&v.startsWith('/')?v.slice(1):v};
+        const keptT=day=>{   // 트레이닝 날의 '/' 칸·빈 칸 = 프리셉터 칸 — 프리셉터가 넣은 그대로면 사실 (엔진 kept 와 같게)
+          const dk=this.dayKey(day),own=this.prevSchedule?.[nid]?.[dk];
+          if(!tLast||dk>tLast||(own&&!own.startsWith('/')))return kept(nid,day);
+          return !!pid&&kept(pid,day);
+        };
         let run=[];
         const flush=()=>{
-          if(run.length>consecLimit&&this.dayKey(run[run.length-1])>=firstKey&&!run.every(d=>kept(nid,d))){
+          if(run.length>consecLimit&&this.dayKey(run[run.length-1])>=fromKey&&!run.every(d=>keptT(d))){
             const k=run.filter(d=>d.getDay()===0||d.getDay()===6||holSet.has(this.dayKey(d))).length;
             const span=`${md(run[0])}~${md(run[run.length-1])}`;
             if(softRun&&run.length===consecLimit+1)
@@ -295,17 +305,17 @@ function app() {
           run=[];
         };
         for(const day of allDays){
-          const val=sched[this.dayKey(day)];
+          const val=at(day);
           if(val&&workCodes.includes(val))run.push(day);else flush();
         }
         flush();
         // E→D1 · 중→D — 번표가 정 안 나올 때만 쓰는 전환 (파트장 확인)
         for(let i=0;i+1<allDays.length;i++){
-          const k2=this.dayKey(allDays[i+1]);if(k2<firstKey)continue;
-          const c1=sched[this.dayKey(allDays[i])],c2=sched[k2];
+          const k2=this.dayKey(allDays[i+1]);if(k2<fromKey)continue;
+          const c1=at(allDays[i]),c2=at(allDays[i+1]);
           const rule=evening.has(c1)&&day1.has(c2)?'E→D1':(middle.has(c1)&&dayD.has(c2)?'중→D':null);
           // 끄면 표의 위반 표시(checkScheduleViolations)가 맡는다
-          if(rule&&softTr&&!(kept(nid,allDays[i])&&kept(nid,allDays[i+1])))warns.push({type:'check',nurse:nurse.name,msg:`${md(allDays[i])} ${c1} → ${md(allDays[i+1])} ${c2} (${rule}) — 파트장 확인 필요`});
+          if(rule&&softTr&&!(keptT(allDays[i])&&keptT(allDays[i+1])))warns.push({type:'check',nurse:nurse.name,msg:`${md(allDays[i])} ${c1} → ${md(allDays[i+1])} ${c2} (${rule}) — 파트장 확인 필요`});
         }
 
         // 야간 — 월 한도를 넘긴 것만. 야간전담(나이트킵) 달은 14회가 정상이라 제외
@@ -356,7 +366,7 @@ function app() {
         const nm=n.night_months||{};
         const nightKeep=Object.keys(nm).length?!!nm[mk]:!!n.is_night_shift;
         const partial=!!((n.start_date&&n.start_date>firstK)||(n.end_date&&n.end_date<lastK));
-        const trainee=!!n.is_trainee&&(!n.training_end_date||n.training_end_date>=firstK);
+        const trainee=!!n.is_trainee&&this.traineeLastKey(n)>=firstK;   // 이 달에 하루라도 트레이닝 (엔진 공정성 풀과 같게)
         const preg=!!n.is_pregnant&&['early','late'].some(k=>{const w=(n.pregnancy||{})[k]||{};return w.start&&w.end&&w.start<=lastK&&w.end>=firstK});
         const canNight=(n.capable_shifts||nightCodes).some(c=>nightCodes.includes(c));
         const cum=this.fairnessLedger3m?.[s.id]||{};
@@ -607,7 +617,8 @@ function app() {
           this.sseSource=new EventSource('/api/generate/stream');
           this.sseSource.onmessage=(e)=>{
             const data=JSON.parse(e.data);
-            if(data.type==='log'){this.solverLogs.push({id:++this._logSeq,msg:data.msg});if(this.solverLogs.length>300)this.solverLogs=this.solverLogs.slice(-200);this.$nextTick(()=>{const el=document.getElementById('logPanel');if(el)el.scrollTop=el.scrollHeight})}
+            if(data.type==='log'){this.solverLogs.push({id:++this._logSeq,msg:data.msg});if(this.solverLogs.length>300)this.solverLogs=this.solverLogs.slice(-200);this._scrollLogs()}
+            else if(data.type==='hint'){this.solverLogs.push({id:++this._logSeq,msg:data.msg,hint:true});this._scrollLogs()}
             else if(data.type==='progress')this.solveProgress=data;
             else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
           };

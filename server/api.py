@@ -1323,7 +1323,9 @@ def _build_wish_report(request: GenerateRequest, result: dict) -> Optional[dict]
                 except (ValueError, TypeError):
                     continue
             assigned = ns.get(dk, "")
-            if not assigned:
+            # 신규의 트레이닝 날('/'+프리셉터 근무)은 엔진이 고르지 않는다 — 위시 대상이 아니다
+            # (미반영으로 세면 다음 달 위시 보정이 그를 끌어올린다)
+            if not assigned or assigned.startswith("/"):
                 continue
             requested += 1
             if wish == "OFF":
@@ -1396,7 +1398,7 @@ def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts
     요구사항을 충족할 수 있는지 사전 검증.
     부족한 날이 있으면 경고 메시지 반환, 없으면 None.
     """
-    from .scheduler_base import _PRE_ALIAS   # 번표 표기 OFF·특V·공가 → 엔진 코드
+    from .scheduler_base import _PRE_ALIAS, generation_bounds, trainee_last_day
     weekday_keys = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
     year, month = request.year, request.month
     first = _date(year, month, 1)
@@ -1409,6 +1411,15 @@ def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts
     off_shifts = leave_shifts + rest_shifts
     prev = request.prev_schedule or {}
     warnings = []
+    # 신규간호사는 트레이닝 날엔 인원으로 세지 않는다 — 마지막 트레이닝 날은 엔진과 같은 규칙
+    # (끝나는 날과 생성 범위 안 '/' 칸 중 늦은 쪽, None = 계속 트레이닝)
+    g0, g1 = generation_bounds(year, month)
+    range_iso = {(g0 + _td(days=i)).strftime("%Y-%m-%d") for i in range((g1 - g0).days + 1)}
+    in_training = {}
+    for nurse in request.nurses:
+        if nurse.is_trainee:
+            lt = trainee_last_day(nurse.model_dump(), prev.get(nurse.id), range_iso)
+            in_training[nurse.id] = lt.strftime("%Y-%m-%d") if lt else "9999-12-31"
 
     cur = first
     while cur <= last:
@@ -1419,7 +1430,8 @@ def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts
 
         unavailable = sum(
             1 for nurse in request.nurses
-            if _PRE_ALIAS.get(prev.get(nurse.id, {}).get(dt_str, ""),
+            if dt_str <= in_training.get(nurse.id, "")
+            or _PRE_ALIAS.get(prev.get(nurse.id, {}).get(dt_str, ""),
                               prev.get(nurse.id, {}).get(dt_str, "")) in off_shifts
         )
         available = len(request.nurses) - unavailable
@@ -1627,6 +1639,21 @@ def generate(request: GenerateRequest):
         if solver_progress.is_cancelled() and result.get("success"):
             result["stopped"] = True
 
+        # 실패하면 신호등과 같은 한 줄 원인을 맨 앞에 — 13단계 진단은 누적 단계에서 처음 터진 곳을
+        # 짚어 엉뚱한 원인('야간전담 설정')을 대기도 한다. 한 사람·한 날의 충돌이면 그것을 먼저 말한다.
+        # 완화를 켜고 실패했으면 넣지 않는다 — '사전입력 완화를 켜 주세요'가 거꾸로 읽히고, 완화 전 원인이라 이 실패의 답이 아니다
+        if (not result.get("success") and not solver_progress.is_cancelled()
+                and not request.allow_pre_relax):
+            try:
+                from .conflict_analyzer import check_feasibility
+                fz = check_feasibility(request.model_copy(update={"allow_pre_relax": False}))
+                if fz.get("status") == "infeasible" and fz.get("summary"):
+                    result["summary"] = fz["summary"]
+                    result["message"] = f"[원인] {fz['summary']}\n\n" + result.get("message", "")
+                    if not result.get("anchored") and fz.get("focus"):
+                        result["anchored"] = [fz["focus"]]
+            except Exception:
+                logger.exception("실패 원인 한 줄 요약 실패")
         if warning and not result.get("success"):
             result["message"] = warning + "\n\n" + result.get("message", "")
         elif warning:

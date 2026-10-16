@@ -51,6 +51,7 @@ function makeCtx(mod, year, month, nurses, prevSchedule = {}) {
       if (nurse.end_date && ymd > nurse.end_date) return 'after';
       return false;
     },
+    isTraineeInTraining() { return false },  // preinput-io.js — 이 검사의 병동엔 신규간호사가 없다
     isOverflow(day) { return day.getMonth() !== this.month - 1 || day.getFullYear() !== this.year },
     dayKey(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` },
     get reqShiftCodes() { return ['D', 'E', 'N'] },
@@ -121,8 +122,11 @@ for (const { rec } of neu) {
 check('블록 안에서는 주휴 요일이 하나', blockViolations === 0, `블록 ${blocksSeen}개 중 위반 ${blockViolations}`);
 
 // ── 2. 배정률이 기존보다 나빠지지 않는다 ────────────────────────────────────
-const cover = runs => runs.reduce((s, { rec }) =>
-  s + Object.values(rec.assignments || {}).reduce((t, l) => t + l.length, 0), 0);
+// 1일부터만 센다 — 1일 앞(지난달) 칸에는 이제 새 주휴를 넣지 않는다 (기록이다, 2026-10-16).
+// 구버전과 견줄 때 지난달 칸까지 세면 그만큼 '배정이 줄었다'로 보인다.
+const cover = runs => runs.reduce((s, { y, m, rec }) =>
+  s + Object.values(rec.assignments || {}).reduce((t, l) =>
+    t + l.filter(a => a.day >= new Date(y, m - 1, 1)).length, 0), 0);
 const danger = runs => runs.reduce((s, { rec }) =>
   s + (rec.warnings || []).filter(w => w.type === 'danger').length, 0);
 if (OLD) {
@@ -250,6 +254,56 @@ check('이동은 경고로 보고된다', moveWarn > 0, `${moveWarn}건`);
   // 생성 범위(10/25~) 밖의 사전입력은 지난달 사전입력이 남은 칸 — 엔진처럼 보지 않는다
   const st = dowsByBlock(recFor({ a1: ['2026-10-15', '2026-10-22'] }, { a1: { '2026-10-23': '주' } }).a1);
   check('생성 범위 밖 사전입력은 세지 않는다', JSON.stringify(st['8']) === '[4]', `a1 ${JSON.stringify(st)}`);
+}
+
+// ── 7. 달 끝에 걸친 주 (11/29~12/05) — 주휴 없음 안내 + 추천이 12/1~12/5 를 블록 요일로 채운다 (2026-10-16) ──
+// 병동 11월 번표 = 11/1~12/5. 11월 칸에만 주휴를 넣으면 꼬리 주가 비어 엔진이 V·꼬리 생으로 메웠다.
+// 블록 9(11/8~12/5)의 주휴 요일 B, 블록 8(11/1 주)은 B+1. 일·월이 B 인 사람은 11/29·11/30 에 이미 있다.
+// 나이트킵(a5, 11월)·트레이니(a4)도 주휴를 받는다 (실제 번표). a17 은 아직 아무것도 안 넣음.
+{
+  REQ = REQ_NORMAL; WARD_N = 18;
+  const mod = loadModule(NEW);
+  const dk = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const at = (m, d) => new Date(2026, m - 1, d);
+  const plus = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  const nurses = ward().map(n => ({ ...n, juhu_day: null }));
+  nurses[5].night_months = { '2026-11': true };
+  nurses[4].is_trainee = true;
+  const prev = {};
+  const B = i => i % 7;
+  for (let i = 0; i < 17; i++) {
+    const p = prev[`a${i}`] = {};
+    p[dk(plus(at(11, 1), (B(i) + 1) % 7))] = '주';
+    for (const s of [at(11, 8), at(11, 15), at(11, 22)]) p[dk(plus(s, B(i)))] = '주';
+    if (B(i) <= 1) p[dk(plus(at(11, 29), B(i)))] = '주';      // 11/29(일)·11/30(월) — 11월 칸
+  }
+  const ctx = makeCtx(mod, 2026, 11, nurses, prev);
+  ctx.runAnalysis();
+  const lines = ctx.analysisResult.warnings.map(w => w.msg).filter(m => /주휴 없음|주휴가 아직/.test(m));
+  const missing = [...Array(17).keys()].filter(i => B(i) > 1);
+  check('꼬리 주 주휴 없음 한 줄', lines.filter(m => m.startsWith('4주기(11/29~12/05) 주휴 없음 ')).length === 1
+    && lines.some(m => m.startsWith(`4주기(11/29~12/05) 주휴 없음 ${missing.length}명: `)), JSON.stringify(lines));
+  check('11월 안 주는 안내 없음', lines.filter(m => m.includes('주휴 없음')).length === 1, JSON.stringify(lines));
+  check('아직 안 넣은 사람은 한 줄로', lines.some(m => m.startsWith('주휴가 아직 하나도 없는 사람 1명: 간호17')),
+    JSON.stringify(lines));
+  check('나이트킵·트레이니도 센다', ['간호4', '간호5'].every(n => lines[0].includes(n)), lines[0]);
+  const as = ctx.juhuRecommendation.assignments;
+  const tailOk = missing.every(i => (as[`a${i}`] || []).some(a => !a.existing && a.dk === dk(plus(at(11, 29), B(i)))));
+  check('추천이 꼬리 주를 블록 요일로 채운다', tailOk,
+    missing.map(i => `a${i}:${(as[`a${i}`] || []).filter(a => !a.existing && a.dk >= '2026-11-29').map(a => a.dk.slice(5)).join('/')}`).join(' '));
+  const before = Object.values(as).flat().filter(a => !a.existing && a.dk < '2026-11-01');
+  check('1일 앞 지난달 칸엔 새 주휴를 넣지 않는다', before.length === 0, `${before.length}건`);
+  // 완전한 주가 하나도 없는 사람(12/3 전입)은 주휴를 따지지 않는다 — 엔진 _missing_juhu_weeks 와 같다
+  const late = nurses.map((n, i) => i === 17 ? { ...n, start_date: '2026-12-03' } : n);
+  const ctx2 = makeCtx(mod, 2026, 11, late, JSON.parse(JSON.stringify(prev)));
+  ctx2.runAnalysis();
+  const l2 = ctx2.analysisResult.warnings.map(w => w.msg).filter(m => /주휴 없음|주휴가 아직/.test(m));
+  check('완전한 주가 없는 전입자는 안내하지 않는다', l2.length === 1 && !l2.some(m => m.includes('간호17')), JSON.stringify(l2));
+  ctx.applyRecommendedJuhu = mod.applyRecommendedJuhu;
+  Object.assign(ctx, { _pushUndo() {}, toast() {} });
+  ctx.applyRecommendedJuhu();
+  const after = ctx.analysisResult.warnings.map(w => w.msg).filter(m => /주휴 없음|주휴가 아직/.test(m));
+  check('추천을 넣으면 주휴 없음 안내가 사라진다', after.length === 0, JSON.stringify(after));
 }
 
 // ── 핀 덤프 (E2E 용) — node scripts/test_juhu_rotation.mjs --emit <out.json> [tight]

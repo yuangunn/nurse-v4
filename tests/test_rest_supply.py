@@ -97,14 +97,17 @@ def test_신호등_주휴_넣으면_쉴코드_부족은_사라진다():
     assert "쉴 코드" not in (res.get("message") or ""), res
 
 
-def test_월경계_주는_판정하지_않는다():
-    """V·생 월 한도가 다음 달로 넘어가 공급이 달라진다 — 거짓 부족 방지."""
-    s = LimitedScheduler(_req(), max_days=40)
-    weeks = {w["week"] for w in s.rest_supply_shortfall()}
-    boundary = {wi + 1 for wi, (ws, we) in enumerate(s.weeks)
-                if any(s.all_dates[d].month != MONTH for d in range(ws, we + 1)
-                       if s.all_dates[d] >= __import__("datetime").date(YEAR, MONTH, 1))}
-    assert not (weeks & boundary), f"월 경계 주가 잡혔다: {weeks & boundary}"
+def test_월경계_주도_판정한다():
+    """달 끝에 걸친 주도 이 근무표가 정한다 (병동 11월 번표 = 11/1~12/5, 2026-10-16) — 예전엔
+    V·생 월 한도가 다음 달로 넘어간다며 건너뛰어, 주휴가 빠진 꼬리 주를 아무도 알리지 않았다.
+    다음 달 몫은 따로 센다: V 는 끝에 붙은 며칠에 1회, 생은 미리 넣은 것만 (엔진 _tail_saeng_cap —
+    자세한 산술은 test_month_tail)."""
+    prev = {f"a{i}": {"2026-03-02": "V"} for i in range(6)}     # 3월 V 는 이미 씀
+    s = LimitedScheduler(_req(prev=prev), max_days=40)
+    rows = [w for w in s.rest_supply_shortfall() if w["boundary"]]
+    assert [(w["start"], w["end"]) for w in rows] == [("2026-03-29", "2026-04-04")], rows
+    # 6명×7 − 21 = 21 · 공급 = 사람마다 OF 1 + 4월 몫 V 1 + 3월 생(여성 4명) = 16 — 4월 생은 세지 않는다
+    assert (rows[0]["demand"], rows[0]["supply"]) == (21, 16), rows[0]
 
 
 def test_신호등_주휴가_첫주만_있으면_남은_주를_짚는다():
@@ -150,3 +153,70 @@ def test_임신_달의_야간전담_표시는_일반으로_센다():
     assert a1["is_night_shift"] is False
     base = LimitedScheduler(_req(prev=_juhu_prev(_mini_nurses(6), YEAR, MONTH, 7)), max_days=7)
     assert s.rest_supply_shortfall() == base.rest_supply_shortfall(), s.rest_supply_shortfall()
+
+
+# ── 실제 병동 번표가 '쉴 코드 부족'으로 막히던 것 (2026-10-16) ─────────────────
+# 1~10월 실제 번표 10개가 전부 이 산술에 걸렸다. 근무 칸을 요구 인원 그대로(하한)
+# 잡고 나이트킵 근무를 최대치로 빼서, 쉬어야 할 칸이 실제보다 부풀었기 때문이다.
+# 이 산술의 수요는 하한이어야 한다 — 근무 칸은 엔진 인원 제약과 같은 상한으로 잡는다.
+
+def test_확정_근무가_요구보다_많으면_그만큼_덜_쉰다():
+    """사실-클램프(결정 1-15): 3/2 D 를 셋이 확정하면 엔진은 그날 D 3명을 받아들인다.
+    쉬어야 할 칸도 그만큼(2칸) 준다 — 요구(1명)로 세면 거짓 부족이 난다."""
+    prev = {f"a{i}": {"2026-03-02": "D"} for i in range(3)}
+    w = LimitedScheduler(_req(prev=prev), max_days=7).rest_supply_shortfall()[0]
+    assert w["demand"] == 21 - 2, w
+    # 완화를 켜면 엔진이 확정 칸을 규칙 앞에서 바꿀 수 있다 — 클램프 없이 요구 그대로
+    w2 = LimitedScheduler(_req(prev=prev, allow_pre_relax=True), max_days=7).rest_supply_shortfall()[0]
+    assert w2["demand"] == 21, w2
+
+
+def test_날_전체가_확정이면_그날_인원은_확정된_근무_그대로():
+    """빈칸 없는 날은 엔진이 인원 제약을 건너뛴다 — 그날 근무가 요구보다 적어도 사실이다."""
+    day = {"a0": "D", "a1": "E", "a2": "OF", "a3": "주", "a4": "V", "a5": "OF"}
+    prev = {nid: {"2026-03-02": c} for nid, c in day.items()}
+    w = LimitedScheduler(_req(prev=prev), max_days=7).rest_supply_shortfall()[0]
+    # 그날 근무 2칸(요구 3칸) — 쉬어야 할 칸이 하나 는다
+    assert w["demand"] == 21 + 1, w
+
+
+def test_나이트킵은_확정된_근무만큼만_뺀다():
+    """나이트킵 근무는 정해진 것(하한)만 일반 간호사 몫에서 뺀다. 예전엔 재적 칸 전부(7)를
+    빼서 수요가 21 로 부풀었고, 주휴까지 넣은 번표가 막혔다."""
+    nurses = _mini_nurses(6)
+    prev = _juhu_prev(nurses[:5], YEAR, MONTH, 7)
+    prev["a5"] = {"2026-03-02": "N", "2026-03-03": "N", "2026-03-05": "N"}
+    req = _req(prev=prev)
+    req.nurses[5].night_months = {"2026-03": True}
+    s = LimitedScheduler(req, max_days=7)
+    assert next(n for n in s.nurses if n["id"] == "a5")["is_night_shift"] is True
+    # 일반 5명 × 7일 = 35칸, 근무 21 − 나이트킵 확정 3 = 18 → 쉬어야 할 칸 17
+    # 공급 = 주휴 5 + OF 5 + V 5 + 생 4(여성 a0·a1·a2·a4) = 19 ≥ 17
+    assert s.rest_supply_shortfall() == [], s.rest_supply_shortfall()
+    nojuhu = dict(prev)
+    for nid in ("a0", "a1", "a2", "a3", "a4"):
+        nojuhu.pop(nid)
+    req2 = _req(prev=nojuhu)
+    req2.nurses[5].night_months = {"2026-03": True}
+    w = LimitedScheduler(req2, max_days=7).rest_supply_shortfall()[0]
+    assert w["demand"] == 17, w
+
+
+def test_D1_중_확정은_쉬는_칸도_DEN_칸도_아니다():
+    """D1(상근)·중간번은 D·E·N 인원 밖 근무 — 그 칸을 '쉬어야 할 칸'으로 세면 거짓 부족."""
+    prev = {"a1": {"2026-03-02": "D1"}, "a2": {"2026-03-03": "중"}}
+    w = LimitedScheduler(_req(prev=prev), max_days=7).rest_supply_shortfall()[0]
+    assert w["demand"] == 21 - 2, w
+
+
+def test_V_월_한도가_2회_이상이면_한_주에_그만큼_쉴_수_있다():
+    """공급은 상한 — 월 2회면 한 주에 V 둘도 된다. 1개로만 세면 엔진이 만드는 표에 거짓 '쉴 코드 부족'이 뜬다
+    (2026-10-16 검토). 규칙이 0 이면 엔진은 V 월 한도를 걸지 않는다 — 부족으로 보지 않는다."""
+    req = _req()
+    one = LimitedScheduler(req, max_days=7).rest_supply_shortfall()
+    assert one and (one[0]["demand"], one[0]["supply"]) == (21, 16), one
+    # 월 2회: OF 6 + V 12 + 생 4 = 22 ≥ 21
+    req.rules = Rules(**{**req.rules.model_dump(), "maxVPerMonth": 2})
+    assert LimitedScheduler(req, max_days=7).rest_supply_shortfall() == []
+    req.rules = Rules(**{**req.rules.model_dump(), "maxVPerMonth": 0})
+    assert LimitedScheduler(req, max_days=7).rest_supply_shortfall() == []

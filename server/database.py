@@ -645,8 +645,8 @@ def compute_wish_ledger(year: int, month: int, months_back: int = 3) -> Dict:
                         except (ValueError, TypeError):
                             continue
                     s = ns.get(dk, "")
-                    if not s:
-                        continue
+                    if not s or s.startswith("/"):
+                        continue   # 신규의 트레이닝 날('/'+프리셉터 근무)은 위시 대상이 아니다 (_build_wish_report 와 같게)
                     ent["requested"] += 1
                     if wish == "OFF":
                         ok = s in WISH_REST_LIKE or s in WISH_LEAVE_LIKE

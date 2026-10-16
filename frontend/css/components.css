@@ -113,11 +113,7 @@ input[type="range"] {
   background: transparent;
   height: 20px;
 }
-input[type="range"]::-webkit-slider-track {
-  height: 4px;
-  background: var(--border);
-  border-radius: 4px;
-}
+/* 트랙(바탕 줄)은 redesign-bridge.css 의 ::-webkit-slider-runnable-track 한 곳에서 그린다 */
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 16px; height: 16px;
