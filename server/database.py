@@ -475,6 +475,21 @@ def compute_prev_month_nights(year: int, month: int) -> Dict[str, int]:
     return out
 
 
+def compute_prev_month_juhu(year: int, month: int) -> Dict[str, list]:
+    """직전 달 최신 저장 근무표에서 간호사별 주휴(주) 날짜 — 달이 4주 블록 중간에서 시작할 때
+    그 블록의 주휴 요일을 이어받는 데 쓴다 (결정 1-37). 직전 달 날짜만, 날짜순."""
+    py, pm = (year - 1, 12) if month == 1 else (year, month - 1)
+    prefix = f"{py:04d}-{pm:02d}-"
+    with get_conn() as conn:
+        data = _latest_saved(conn, py, pm)
+    out: Dict[str, list] = {}
+    for nid, days in ((data or {}).get("schedule") or {}).items():
+        ds = sorted(dk for dk, s in (days or {}).items() if dk.startswith(prefix) and s == "주")
+        if ds:
+            out[nid] = ds
+    return out
+
+
 def compute_fairness_ledger(year: int, month: int, months_back: int = 3) -> Dict:
     """공정성 원장 — 직전 months_back개월 저장본에서 간호사별 누적 부담 집계.
     Returns {nid: {"nights": n, "weekends": n, "holiday_work": n,

@@ -240,6 +240,7 @@ class _SchedulerBase:
         self.fairness_offsets = getattr(request, "fairness_offsets", None) or {}
         # 주말·공휴일 근무 공정성 원장 오프셋 (직전 달 누적 주말·공휴일 근무일) — {nid: n} (M6 P3②)
         self.weekend_offsets = getattr(request, "weekend_offsets", None) or {}
+        self.prev_juhu_dates = getattr(request, "prev_juhu_dates", None) or {}
 
         # ── 근무 정의 → 카테고리 리스트 동적 구성 ─────────────────────────────
         shifts = [s.model_dump() for s in request.shifts] if request.shifts else []
@@ -1050,6 +1051,36 @@ class _SchedulerBase:
     def _juhu_block(self, d: int) -> int:
         """절대 4주 블록 번호. 1~4주기가 한 블록이고, 블록이 바뀔 때만 주휴 요일이 바뀐다."""
         return ((self.all_dates[d] - self._CYCLE_REF).days // 7) // 4
+
+    # 지난달 요일 어기기 — 주휴 옮기기(300)·근무 원티드(500) < 이것 < OF 원티드(3000) < 휴가 원티드(5000) < 오프특근(5100)
+    # < 주휴 없애기(14900). 하드로 두면 그 요일에 자리가 없을 때 주휴를 없앴다 (제1원칙 3 — 결정 1-37)
+    _JUHU_ANCHOR_PEN = 2500
+
+    def _juhu_anchor(self, nurse):
+        """달 첫날이 든 4주 블록이 지난달에 시작했으면 (블록 번호, 그 블록 지난달 주휴의 요일) — 아니면 None.
+
+        1~4주기는 같은 요일이다 (결정 1-37, 2026-10-15 원근 '지난달 요일 이어받기'). 엔진은 이번 달만 보므로
+        달이 3주기에서 시작하면 지난달 1·2주기 요일을 몰라 3·4주기만 다른 요일로 옮길 수 있었다.
+        출처: 사전입력의 지난달 칸(사람이 넣은 사실 — 전달 이월) > 지난달 저장본(prev_juhu_dates, 서버 주입).
+        그 블록에서 가장 늦은 주휴의 요일 (파이썬 weekday). 지난달 나이트킵의 날은 세지 않는다 — 블록 요일 잠금도
+        나이트킵의 날을 뺀다 (결정 1-36 후속 2)."""
+        first = date(self.year, self.month, 1)
+        blk = ((first - self._CYCLE_REF).days // 7) // 4
+        start = self._CYCLE_REF + timedelta(days=blk * 28)
+        if start >= first:
+            return None
+        nid = nurse["id"]
+        pre = self.prev.get(nid, {})
+        saved = set(self.prev_juhu_dates.get(nid) or [])
+        last = None
+        dt = start
+        while dt < first:
+            iso = dt.strftime("%Y-%m-%d")
+            if (not self._keeper_on(nurse, dt)
+                    and (pre[iso] if iso in pre else ("주" if iso in saved else None)) == "주"):
+                last = dt
+            dt += timedelta(days=1)
+        return (blk, last.weekday()) if last else None
 
     def _juhu_block_items(self, nurse, x, is_var):
         """블록 → [(날짜 인덱스, 파이썬 weekday, 주휴 변수)] — 양 엔진 공용 수집기.

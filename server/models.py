@@ -142,6 +142,9 @@ class GenerateRequest(BaseModel):
     # 주말·공휴일 근무 공정성 원장 오프셋 — 직전 달들의 누적 주말·공휴일 근무일 수 {nurse_id: n}
     # (토·일 ∪ 법정공휴일, 합집합). weekend_fairness가 (누적+당월)의 편차를 최소화 (M6 P3②).
     weekend_offsets: Optional[Dict[str, int]] = None
+    # 지난달 주휴 날짜 {nurse_id: ['YYYY-MM-DD', …]} — 직전 달 최신 저장본에서 서버가 자동으로 채운다.
+    # 달이 4주 블록 중간에서 시작하면 그 블록의 주휴 요일을 이어받는다 (주휴 이동 허용 + 블록 잠금, 결정 1-37).
+    prev_juhu_dates: Optional[Dict[str, List[str]]] = None
 
 
 class ScheduleSave(BaseModel):

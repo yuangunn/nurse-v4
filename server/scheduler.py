@@ -29,7 +29,9 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         병동 관행: 1~4주기 동안 주휴 요일이 같고, 4주기→1주기로 넘어갈 때만 바뀐다.
         allow_juhu_relax 만 켜면 주당 ≤1 만 걸려서 주마다 요일이 흩어질 수 있었다.
         juhu_block_lock=False('주휴 이동 제한 풀기')면 걸지 않는다.
+        달이 블록 중간에서 시작하면 그 블록은 지난달 요일 그대로 (_juhu_anchor, 결정 1-37).
         """
+        self._juhu_anchor_dev = []
         if not (self.allow_juhu_relax and self.juhu_block_lock):
             return
         if "주" not in self.ALL_SHIFTS:
@@ -38,15 +40,19 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             nid = nurse["id"]   # 나이트킵의 날은 _juhu_block_items 가 날짜마다 뺀다 (결정 1-33)
             blocks = self._juhu_block_items(
                 nurse, x, lambda t: isinstance(t, pulp.LpVariable))
+            anchor = self._juhu_anchor(nurse)
             for blk, items in blocks.items():
                 dows = sorted({wd for _, wd, _ in items})
-                if len(dows) <= 1:
+                anchored = bool(anchor) and blk == anchor[0]
+                if len(dows) <= 1 and not (anchored and dows and dows[0] != anchor[1]):
                     continue
                 y = {wd: pulp.LpVariable(f"juhudow_{nid}_{blk}_{wd}", cat="Binary")
                      for wd in dows}
                 prob += (pulp.lpSum(y.values()) <= 1, f"juhu_blk_one_{nid}_{blk}")
                 for d, wd, t in items:
                     prob += (t <= y[wd], f"juhu_blk_{nid}_{blk}_{d}")
+                if anchored:   # 지난달에 시작한 블록 — 지난달 요일이 아니면 감점 (완화 1단계)
+                    self._juhu_anchor_dev += [y[wd] for wd in dows if wd != anchor[1]]
     def solve(self) -> Dict:
         if not self.nurses:
             return {"success": False, "message": "간호사가 등록되지 않았습니다.", "schedule": {}}
@@ -481,6 +487,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             _juhu_drop_pen = self._relax_juhu_drop_pen(
                 PRE_BONUS_REST, PRE_BONUS_LEAVE, PRE_BONUS_OFF, PRE_BONUS_WORK)
             lr += [(_juhu_drop_pen, u) for u in _juhu_drop]
+            # 지난달에 시작한 블록의 요일 어기기 (결정 1-37)
+            lr += [(self._JUHU_ANCHOR_PEN, y) for y in getattr(self, "_juhu_anchor_dev", [])]
             if lr:
                 bonus_expr = bonus_expr - pulp.lpSum(pen * sl for pen, sl in lr)
             prob.setObjective(bonus_expr)

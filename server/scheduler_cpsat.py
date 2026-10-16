@@ -387,6 +387,8 @@ class CpSatScheduler(_SchedulerBase):
               # 주휴 없애기 — 오프특근보다 나중, 날이 정해진 휴가보다 먼저 (HiGHS 패리티)
               + [(self._relax_juhu_drop_pen(_BONUS["juhu"], _BONUS["leave"], _BONUS["off"], _BONUS["work"]), u)
                  for u in _juhu_drop]
+              # 지난달에 시작한 블록의 요일 어기기 (결정 1-37, HiGHS 패리티)
+              + [(self._JUHU_ANCHOR_PEN, y) for y in getattr(self, "_juhu_anchor_dev", [])]
               if keep_terms else [])
         for pen, sl in lr:
             keep_terms.append(-pen * sl)
@@ -561,7 +563,9 @@ class CpSatScheduler(_SchedulerBase):
         return x
 
     def _cs_juhu_block_dow(self, model, x):
-        """HiGHS _c_juhu_block_dow 패리티 — 재배치해도 블록(4주기) 안에서는 같은 요일."""
+        """HiGHS _c_juhu_block_dow 패리티 — 재배치해도 블록(4주기) 안에서는 같은 요일.
+        달이 블록 중간에서 시작하면 그 블록은 지난달 요일 그대로 (결정 1-37)."""
+        self._juhu_anchor_dev = []
         if not (self.allow_juhu_relax and self.juhu_block_lock):
             return
         if "주" not in self.ALL_SHIFTS:
@@ -570,14 +574,18 @@ class CpSatScheduler(_SchedulerBase):
             nid = nurse["id"]   # 나이트킵의 날은 _juhu_block_items 가 날짜마다 뺀다 (HiGHS 패리티)
             blocks = self._juhu_block_items(
                 nurse, x, lambda t: not isinstance(t, int))
+            anchor = self._juhu_anchor(nurse)
             for blk, items in blocks.items():
                 dows = sorted({wd for _, wd, _ in items})
-                if len(dows) <= 1:
+                anchored = bool(anchor) and blk == anchor[0]
+                if len(dows) <= 1 and not (anchored and dows and dows[0] != anchor[1]):
                     continue
                 y = {wd: model.NewBoolVar(f"juhudow_{nid}_{blk}_{wd}") for wd in dows}
                 model.Add(sum(y.values()) <= 1)
                 for _d, wd, t in items:
                     model.Add(t <= y[wd])
+                if anchored:   # 지난달 요일이 아니면 감점 (HiGHS 패리티)
+                    self._juhu_anchor_dev += [y[wd] for wd in dows if wd != anchor[1]]
 
     # ── 선형 하드 제약 (각각 HiGHS _c_* 와 1:1) ──────────────────────────────
     def _cs_one_shift_per_day(self, model, x):

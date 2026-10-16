@@ -8,7 +8,18 @@
 window.AnalysisModule = function() {
   return {
     // ── 분석 탭 ─────────────────────────────────────────────
+    prevMonthJuhu:{},   // 지난달 저장본의 주휴 날짜 {nid:[dk…]} — 블록 중간에서 시작하는 달의 요일 이어받기
+    _prevJuhuYM:'',
     runAnalysis(){
+      // 달이 바뀌면 지난달 주휴 날짜를 다시 받는다 — 받으면 한 번 더 분석 (결정 1-37)
+      const ym=`${this.year}-${this.month}`;
+      if(this.api&&this._prevJuhuYM!==ym){
+        this._prevJuhuYM=ym;this.prevMonthJuhu={};
+        Promise.resolve(this.api('GET',`/api/prev_month_juhu?year=${this.year}&month=${this.month}`)).then(r=>{
+          if(this._prevJuhuYM!==ym||!r||!Object.keys(r).length)return;
+          this.prevMonthJuhu=r;this.runAnalysis();
+        }).catch(()=>{});
+      }
       this.analysisRunning=true;
       try{
         this.analysisResult=this._analyzeStaffing();
@@ -169,6 +180,31 @@ window.AnalysisModule = function() {
       return{dow:best.dow,covered:best.cov};
     },
 
+    // 블록(periodIdx)이 지난달에 시작했으면 그 블록 지난달 주휴의 요일(getDay) — 아니면 null.
+    // 1~4주기는 같은 요일이라 달이 3주기에서 시작해도 지난달 1·2주기 요일을 잇는다 (결정 1-37).
+    // 사전입력의 지난달 칸(전달 이월)이 저장본보다 먼저, 그 블록에서 가장 늦은 주휴.
+    // 지난달에 나이트킵이었으면 잇지 않는다 — 엔진의 블록 잠금도 나이트킵의 날을 뺀다 (결정 1-36 후속 2).
+    _juhuAnchorDow(nid,periodIdx){
+      const ms=86400000;
+      const start=new Date(this._CYCLE_REF.getTime()+periodIdx*28*ms);
+      const first=new Date(this.year,this.month-1,1);
+      if(start>=first)return null;
+      const nurse=(this.nurses||[]).find(n=>n.id===nid);
+      if(nurse){   // 블록 시작은 늘 지난달 안이다 (블록 28일 ≤ 지난달 일수)
+        const nm=nurse.night_months||{};
+        const pk=`${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,'0')}`;
+        if(Object.keys(nm).length?!!nm[pk]:!!nurse.is_night_shift)return null;
+      }
+      const pre=this.prevSchedule[nid]||{};
+      const saved=new Set((this.prevMonthJuhu||{})[nid]||[]);
+      let last=null;
+      for(const t=new Date(start);t<first;t.setDate(t.getDate()+1)){
+        const dk=this.dayKey(t);
+        if((dk in pre?pre[dk]:(saved.has(dk)?'주':null))==='주')last=t.getDay();
+      }
+      return last;
+    },
+
     _recommendJuhu(analysis){
       if(!analysis)return null;
       const {days,weeks,totalNurses}=analysis;
@@ -222,7 +258,9 @@ window.AnalysisModule = function() {
         // 옮긴 요일이 다음 블록의 기준이 된다 (사용자 규칙, 2026-08-24).
         // 여유가 큰 요일이 뽑히므로 결과적으로 주말에 몰린다 — 토 4/3/2 로 필요
         // 인원이 가장 적기 때문. 별도의 '권장 요일' 설정이 필요 없는 이유.
-        let base=rotate?((jd-firstPeriodIdx0)%7+7)%7:jd;
+        // 첫 블록이 지난달에 시작했으면 지난달 요일이 그 블록의 기준 — 자리가 있으면 그대로, 없으면 다른 블록처럼 옮긴다 (결정 1-37)
+        const anchor=this._juhuAnchorDow(nurse.id,firstPeriodIdx0);
+        let base=anchor!==null?anchor:(rotate?((jd-firstPeriodIdx0)%7+7)%7:jd);
         for(const[periodIdx,periodWeeks]of periods){
           if(rotate&&periodIdx>firstPeriodIdx0)base=(base-1+7)%7;
           const pick=this._pickBlockDow(periodWeeks,base,daySlack,nurseAssignedWeeks[nurse.id]);
@@ -306,9 +344,10 @@ window.AnalysisModule = function() {
             continue;
           }
 
-          // 최고 점수 요일 선택
+          // 최고 점수 요일 선택 — 첫 블록이 지난달에 시작했으면 지난달 요일이 기준 (결정 1-37)
           candidates.sort((a,b)=>b.score-a.score||b.feasibleWeeks-a.feasibleWeeks);
-          const chosenDow=candidates[0].dow;
+          const anchor3=this._juhuAnchorDow(nurse.id,firstPeriodIdx);
+          const chosenDow=anchor3!==null?anchor3:candidates[0].dow;
           dowAssignCount[chosenDow]++;
           if(!dowGroupCount[chosenDow][nurseGroup])dowGroupCount[chosenDow][nurseGroup]=0;
           dowGroupCount[chosenDow][nurseGroup]++;
