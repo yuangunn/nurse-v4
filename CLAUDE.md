@@ -132,7 +132,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 303건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지)
+├── tests/                   # pytest 회귀 377건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -176,11 +176,11 @@ npm start
 ### 테스트
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 303건
+python3 -m pytest -q                  # 377건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_hospital_holidays.mjs \
-  && node scripts/test_manager_check.mjs \
+  && node scripts/test_manager_check.mjs && node scripts/test_trainee_days.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs \
   && node scripts/test_assign_logic.mjs   # standalone 로직 (헤드리스 크롬, $CHROME 로 경로 지정 가능)
 node scripts/test_assign_compat.mjs      # 옛 배포본이 저장한 데이터 파일을 지금 assign.html 로 열어 본다 (CI)
@@ -239,7 +239,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 > 한글 자판 입력: ㅈ 주 · ㅂ 병 · ㅃ 법 · ㅅ 생 · ㅌ 특 · ㄱ 공 · **ㄲ 경가 · ㅉ 조가 · ㅆ 산전** (Shift 쌍자음).
 
 **트레이니 표시 코드** (출력 전용): `/D`, `/E`, `/N` — 프리셉터 근무에 `/` 접두어.
-사전입력으로 재로드 시 스케줄러가 자동 무시 (프리셉터 기반 복사 로직으로 위임).
+사전입력으로 재로드 시 스케줄러가 자동 무시 (프리셉터 기반 복사 로직으로 위임). 단 생성 범위 안 '/' 칸은 그 날까지 트레이닝 날로 본다 (마지막 트레이닝 날 계산).
 
 ### 근무 분류
 - **WORK_SHIFTS**: DC, D, D1, EC, E, 중, NC, N
@@ -271,13 +271,14 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | **공휴일 OF 금지** | 법정공휴일에는 OF 배정 불가 (일반/완화/진단 모두 적용). **일반 간호사만** — 나이트킵은 법을 못 받아 공휴일에도 OF (제1원칙 10, `_holiday_of_banned`) |
 | 법은 공휴일에만 | 법정공휴일 코드 `법`은 공휴일 날짜에만 **자유 배정** (사전입력 확정 셀은 사실로 수용) |
 | 야간전담 공휴일 제외 | 야간전담에게 법/생/V 공휴일 배정 차단 규칙 다름 |
-| 주휴(주) | **엔진이 배정하지 않는다** — 사전입력 전용(auto_assign ✗). 일반 모드엔 강제 없음(사람이 넣은 그대로), 주휴 재배치 완화(`allow_juhu_relax`)를 켰을 때만 주당 `<=1` — 그때도 사전입력 주휴가 있던 주는 `>=1` 소프트 바닥(없애면 완화 1단계 `-14900` = 오프특근 감점 × 3 − 주휴 유지 − 100, `_relax_juhu_drop_pen`): 옮겨도 없애지 않는다 — 오프특근 < 주휴 없애기 < 날이 정해진 휴가, 재적 밖에 남은 주는 세지 않음. 나이트킵도 건다 — 나이트킵의 날과 일반의 날(다음 달 며칠)을 따로 지키고(상한·바닥 모두 묶음마다, `_juhu_week_segments`), 나이트킵의 날엔 그 주에 엔진이 옮길 수 있는 미리 넣은 주휴가 있을 때만 주휴 변수를 둔다(`_relax_juhu_free_ok`, 제1원칙 10) (제1원칙 3, 결정 1-36) |
-| OF 1회/주 | 완전한 주 `Σ OF + s == 1` (`s`=오프특근 슬랙), 부분 주는 `<=1`. **상한 1회는 하드**, 1회 의무는 목적함수에서 `-1,000,000×s`로 지킨다 — 어떤 배점보다 크므로 **그러지 않으면 근무표가 성립하지 않을 때만** OF를 반납한다(제1원칙 3). 반납한 주는 결과 `off_teukgeun`으로 보고 |
+| 주휴(주) | **엔진이 배정하지 않는다** — 사전입력 전용(auto_assign ✗). 일반 모드엔 강제 없음(사람이 넣은 그대로), 주휴 재배치 완화(`allow_juhu_relax`)를 켰을 때만 주당 `<=1` — 그때도 사전입력 주휴가 있던 주는 `>=1` 소프트 바닥(없애면 완화 1단계 `-14900` = 오프특근 감점 × 3 − 주휴 유지 − 100, `_relax_juhu_drop_pen`): 옮겨도 없애지 않는다 — 오프특근 < 주휴 없애기 < 날이 정해진 휴가, 재적 밖에 남은 주는 세지 않음. 나이트킵도 건다 — 나이트킵의 날과 일반의 날(다음 달 며칠)을 따로 지키고(상한·바닥 모두 묶음마다, `_juhu_week_segments`), 나이트킵의 날엔 그 주에 엔진이 옮길 수 있는 미리 넣은 주휴가 있을 때만 주휴 변수를 둔다(`_relax_juhu_free_ok`, 제1원칙 10) (제1원칙 3, 결정 1-36). **끝 주**(끝에 다음 달 며칠이 붙은 주)에 주휴가 빠졌으면 시작할 때 블록 요일 칸에 넣는다(`_fill_missing_juhu` — 빈 칸·잠기지 않음·나이트킵의 날 아님·그날 사람이 남을 때만, 새 블록이면 하루 당김, 결과 `auto_juhu`, 결정 1-41) |
+| OF 1회/주 | **그 사람이 일반 간호사인 날만** 센다(`_of_week_days` — 1일부터·재적 안·나이트킵의 날 제외, 결정 1-40). 일반의 날이 7일인 주 `Σ OF + s == 1` (`s`=오프특근 슬랙), 부분 주는 `<=1`. 독립한 신규의 트레이닝 날 OF 도 그 주 몫(`_of_week_bound`). **상한 1회는 하드**, 1회 의무는 목적함수에서 `-1,000,000×s`로 지킨다 — 어떤 배점보다 크므로 **그러지 않으면 근무표가 성립하지 않을 때만** OF를 반납한다(제1원칙 3). 반납한 주는 결과 `off_teukgeun`으로 보고 |
 | 최대 연속 근무 | 기본 5일 (설정 가능). **한도+1일은 마지막 수단**(`longRunLastResort`, 기본 켬) — 한도+1 윈도우에 슬랙 + `-(3000 − 500×그 안의 토·일·공휴일 수)`(최소 1500), 한도+2 윈도우로 한도+1 하드 상한(7일 연속 금지). 확정 쉬는 칸이 낀 윈도우는 슬랙을 만들지 않는다. 쓴 곳은 결과 `manager_check`('파트장 확인 필요', 확정 칸만으로 된 것은 `pinned_notes`) (제1원칙 13) |
 | 최대 연속 야간 | 기본 3일 (설정 가능) |
 | 연속야간 후 휴무 | 2연속 이상 야간 후 2일 휴무 (기본값) |
-| V 월 최대 | 기본 월 1회 (hard, unlimited_v 모드 해제 가능) |
-| 생 월 최대 | 여성 간호사 월 **≤1회 (보장 아님)** — 스케줄상 안 나오면 못 받는 것. 강제 배정 없음 (2026-08-19 야간전담 예외도 제거) |
+| V 월 최대 | 기본 월 1회 (hard, unlimited_v 모드 해제 가능, 규칙 0 = 한도 없음). 끝에 붙은 다음 달 며칠은 1회. 주 OF·월 V·꼬리 V·월 생 상한은 `_cap_with_training` 한 곳(확정분 클램프 + 독립한 신규의 트레이닝 날 자기 사전입력분, 결정 1-42) |
+| 생 월 최대 | 여성 간호사 월 **≤1회 (보장 아님)** — 스케줄상 안 나오면 못 받는 것. 강제 배정 없음 (2026-08-19 야간전담 예외도 제거). 생성 범위 끝의 다음 달 며칠은 **미리 넣은 생만**(`_tail_saeng_cap`, 결정 1-40) |
+| **신규간호사(트레이니)** | 마지막 트레이닝 날(끝나는 날 · 생성 범위 안 '/' 사전입력 중 늦은 날, `trainee_last_day` = 프론트 `traineeLastKey`)까지는 '/'+프리셉터 근무(자기 사전입력 '/' 아닌 코드가 먼저), 다음 날부터 재적하는 보통 간호사(start_date). 독립한 첫날들의 역순 전환·N→휴무→D·연속 근무/야간·연속 야간 후 휴무는 트레이닝 날 근무에 잇는다(`_training_view`·`_rules_from`·`_pin_view`, 두 엔진·진단·분석기). 이 달 독립한 신규는 야간 공정 풀 제외 (결정 1-39). 트레이닝 날 넣은 OF·V·생도 그 주·달 몫 (결정 1-42) |
 | **사전입력 사실-클램프** | 확정(사전입력) 셀은 검증 대상이 아니라 **주어진 사실** — 제약에 걸리는 셀이 전부 확정이면 그 제약은 스킵(일 전체·인접 쌍·윈도우·주 전체 확정, 완전 확정 날은 변수 리터럴화), 확정+자유 혼합 카운트 제약은 상한을 `max(규칙, 확정분)`으로 클램프(자유 셀이 위반을 더 늘리는 건 금지). 부분 확정("2주차까지만 꽉 채움")도 동일 작동. 규칙 차이는 성공 결과에 `pinned_notes` 안내만. 완화(allow_pre_relax) 명시 시엔 클램프 OFF(완화 우선). 완전 확정 표 폴백(`pinned_confirmed`)은 타임아웃 안전망으로 유지. 결정 1-15 |
 | 월 최대 야간 | 기본 월 6회 (수면OFF 임계) |
 | 홀짝월 합산 야간 | 전월+당월 ≤ 11회 (선택적). **나이트킵 달의 야간은 합산 제외** (제1원칙 7) — 전월N 자동 인수인계(`compute_prev_month_nights`)와 엔진 `_two_month_rhs` 양쪽에서 뺀다 |
@@ -389,7 +390,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   "juhu_day": None,            # 0~6 or None
   "juhu_auto_rotate": True,    # 4주 순환
   "is_trainee": False,         # 트레이니(신규)
-  "training_end_date": None,   # 트레이닝 종료 → 이후 일반 전환
+  "training_end_date": None,   # 마지막 트레이닝 날 = 이 날과 생성 범위 안 '/' 사전입력 중 늦은 날 → 다음 날부터 보통 간호사 (달 중간이어도, trainee_last_day)
   "preceptor_id": None,        # 프리셉터 연결
   "start_date": None,          # 전입일 YYYY-MM-DD (None=상시)
   "end_date": None,            # 전출일 YYYY-MM-DD (None=상시)
@@ -517,6 +518,9 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
      주말∪공휴일 열, 야간·주말·공휴일의 누적(3M)+당월 합과 편차 색, ※ = 공정성 대상 아님,
      "이번 생성에 누적 반영" = 원장 주입됨) → **📋 리포트 서랍**(원티드 미반영·**🧾 연차(V) 설명**·오프특근·
      주의·위시 반영·생성 리포트·솔버 로그; 사연 항목이 있으면 생성 직후 자동으로 열림)
+   - **만드는 중**: 상태 줄 바로 아래 진행 한 줄(`rdLiveProgress` — 답을 찾았는지·가장 좋은 답과 n% 안쪽·3분 넘게 그대로면
+     '지금 멈춰도 됩니다'·조건을 정리하는 중) + 계산 기록 칸(`.rlive`, `data-rd=live-log`, 기본 펼침 `showLiveLog`). 서랍은 표가 있어야
+     열리므로 만드는 동안 기록은 여기서 본다. 맨 아래 따라가기는 `_scrollLogs` 하나 (결정 1-43)
    - **🧾 연차(V) 설명** (`_v_report`, 결과 `v_report`): 솔버가 놓은 V를 주 단위로 "재적 칸 − 근무 = 쉬어야 할 칸,
      주휴·OF·확정 휴가·생으로 채우고 남은 칸이 V" 산술로 설명 + 힌트(주휴 없는 사람·남는 날 원티드·필요 인원).
      사전입력 V는 세지 않는다. 주 안에서 주휴 요일을 옮기는 것은 주간 총량을 못 바꾼다 (결정 1-23)
@@ -1127,6 +1131,8 @@ self.cbLogging.subscribe(_on_log)
 - **`x-for` 키는 문자열** — `:key="day"`(Date 객체)는 Alpine 경고가 행마다 찍힌다 → `:key="dayKey(day)"`
 - **문구는 `design/handoff/copy.json` 그대로** — 라벨·툴팁을 의역하지 말 것. 새 버튼에도 `title` 한 문장(끝 문장은 툴팁에서 옅게 표시)
 - **목록(x-for)을 품은 블록은 x-show** — x-if 는 내려가는 찰나 안쪽 x-for 가 한 번 더 돌아 콘솔 오류(결정 2-21). 부재를 단언하는 상태 줄만 x-if.
+- 슬라이더 바탕 줄은 `::-webkit-slider-runnable-track` (redesign-bridge.css 한 곳) — `::-webkit-slider-track` 은 없는 이름이라 엄지만 뜬다
+- **sticky 칸에 opacity 를 쓰지 말 것** — 칸째 반투명이면 밑으로 지나가는 줄 글자가 비친다. 바탕은 `color-mix` 로 불투명하게, 글자만 옅게 (결정 1-43)
   늘 그려지므로 리포트 식은 널 안전(`vReport?.total`, `(wishReport?.per_nurse||[])`)으로 쓴다
 
 ---
