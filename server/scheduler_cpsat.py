@@ -330,7 +330,7 @@ class CpSatScheduler(_SchedulerBase):
         x, pre_keeps = self._build_vars_relaxed(model)
         self._apply_hard_constraints(model, x)
         self._cs_juhu_block_dow(model, x)
-        # 주휴 재배치 시 주당 주휴 ≤1 (HiGHS weekly_juhu 패리티 — 나이트킵 포함)
+        # 주휴 재배치 시 주당 주휴 ≤1 (HiGHS weekly_juhu 패리티 — 나이트킵 포함, 나이트킵의 날·일반의 날 각각)
         # + 사전입력 주휴가 있던 주는 옮겨도 없애지 않는다 (제1원칙 3, 결정 1-36 — HiGHS 패리티)
         _juhu_drop = []
         if self.allow_juhu_relax and "주" in self.ALL_SHIFTS:
@@ -342,19 +342,17 @@ class CpSatScheduler(_SchedulerBase):
                                  if self.all_dates[d] >= first_of_month]
                     if not week_days:
                         continue
-                    juhu_terms = [x[nid][d].get("주", 0) for d in week_days]
-                    var_terms = [t for t in juhu_terms if not isinstance(t, int)]
-                    const_sum = sum(t for t in juhu_terms if isinstance(t, int))
-                    # 사용자 고정(잠금 주휴) 존중 — 자유 변수만 잔여 한도로 제한
-                    if var_terms:
-                        model.Add(sum(var_terms) <= max(0, 1 - const_sum))
-                    # 엔진이 실제로 옮길 수 있는 주휴 칸만 — 재적 밖에 남은 주는 없는 칸.
-                    # 나이트킵의 날과 일반의 날은 따로 지킨다 (HiGHS 패리티)
-                    if const_sum >= 1:
-                        continue
-                    for seg in self._juhu_floor_segments(nurse, week_days):
-                        seg_vars = [x[nid][d].get("주", 0) for d in seg
-                                    if not isinstance(x[nid][d].get("주", 0), int)]
+                    # 나이트킵의 날과 일반의 날은 따로 — 상한도 바닥도 묶음마다 (HiGHS 패리티)
+                    for seg in self._juhu_week_segments(nurse, week_days):
+                        juhu_terms = [x[nid][d].get("주", 0) for d in seg]
+                        seg_vars = [t for t in juhu_terms if not isinstance(t, int)]
+                        const_sum = sum(t for t in juhu_terms if isinstance(t, int))
+                        # 사용자 고정(잠금 주휴) 존중 — 자유 변수만 잔여 한도로 제한
+                        if seg_vars:
+                            model.Add(sum(seg_vars) <= max(0, 1 - const_sum))
+                        # 엔진이 실제로 옮길 수 있는 주휴 칸만 — 재적 밖에 남은 주는 없는 칸
+                        if const_sum >= 1:
+                            continue
                         if seg_vars and any(
                                 self.prev.get(nid, {}).get(self.all_dates[d].strftime("%Y-%m-%d")) == "주"
                                 and not isinstance(x[nid][d].get("주", 0), int)
@@ -569,9 +567,7 @@ class CpSatScheduler(_SchedulerBase):
         if "주" not in self.ALL_SHIFTS:
             return
         for nurse in self.nurses:
-            if nurse.get("is_night_shift"):
-                continue
-            nid = nurse["id"]
+            nid = nurse["id"]   # 나이트킵의 날은 _juhu_block_items 가 날짜마다 뺀다 (HiGHS 패리티)
             blocks = self._juhu_block_items(
                 nurse, x, lambda t: not isinstance(t, int))
             for blk, items in blocks.items():

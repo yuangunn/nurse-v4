@@ -387,6 +387,117 @@ def test_relax_gives_keeper_no_new_juhu():
     assert all(s._relax_juhu_free_ok(n1, d) for d in range(14))
 
 
+@pytest.mark.parametrize("case", ["last_month", "outside_stay", "locked"])
+def test_relax_gives_keeper_no_new_juhu_from_fixed_cells(case):
+    """엔진이 옮길 수 없는 주휴(지난달 칸·재적 밖·잠긴 칸)로는 그 주 나이트킵의 날에 주휴 변수를 열지 않는다 —
+    옮길 것이 없으니 연 변수는 새 주휴가 된다 (2026-10-16 검토)."""
+    if case == "last_month":     # 4월 생성 · 두 달 다 나이트킵 · 3/31(지난달 칸)에 주
+        nurses = [Nurse(id="a0", name="*k", group="A", gender="male", capable_shifts=["NC", "N"],
+                        seniority=0, is_night_shift=True),
+                  Nurse(id="a1", name="*r", group="A", gender="male", capable_shifts=CAPS, seniority=1)]
+        req = GenerateRequest(year=2026, month=4, nurses=nurses, requirements=_req(), rules=Rules(**ISO),
+                              prev_schedule={"a0": {"2026-03-30": "OF", "2026-03-31": "주"}},
+                              shifts=PROD_SHIFTS, time_limit=60)
+        req.allow_pre_relax = True
+        req.allow_juhu_relax = True
+        s = NurseScheduler(req)
+        days = [s.date_to_idx[date(2026, 4, d)] for d in range(1, 5)]
+    else:
+        kw = {"is_night_shift": True, "capable_shifts": ["NC", "N"]}
+        if case == "outside_stay":
+            kw["start_date"] = "2026-03-04"
+        req = _juhu_relax_request(2, {"a0": {"2026-03-02": "주"}}, [1] * 7, a0=kw)
+        if case == "locked":
+            req.locked_cells = {"a0": {"2026-03-02": True}}
+        s = make_limited(req, days=7)
+        days = range(3, 7)
+    n0 = next(n for n in s.nurses if n["id"] == "a0")
+    assert not any(s._relax_juhu_free_ok(n0, d) for d in days)
+
+
+def _relaxed_only(solver, mixin, req):
+    from server.scheduler_cpsat import CpSatScheduler
+    base = NurseScheduler if solver == "highs" else CpSatScheduler
+    s = type("W", (mixin, base), {})(req)
+    if solver == "highs":
+        s._build_pin_index()
+        return s._solve_with_relaxed_pre()
+    return s._solve_relaxed()
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_juhu_relax_keeps_juhu_on_both_sides_of_keeper_month_end(solver):
+    """11월만 나이트킵인 a0 의 마지막 주(11/29~12/5): 11/29(나이트킵의 날)와 12/2(일반의 날) 주휴 둘 다 지킨다.
+    상한을 주 전체에 1 로 걸던 때는 바닥 둘이 함께 설 수 없어 11/29 주휴가 NC 로 바뀌었다 (2026-10-16 검토).
+    달이 바뀌는 주는 두 달의 근무표가 제 주휴를 따로 정한다 (결정 1-33)."""
+    days = [f"2026-11-{d}" for d in (29, 30)] + [f"2026-12-0{d}" for d in range(1, 6)]
+    per_day = {dk: {"D": dd, "E": 0, "N": nn}
+               for dk, dd, nn in zip(days, [1, 1, 2, 2, 2, 2, 2], [1, 1, 0, 0, 0, 0, 0])}
+    pre = {"a0": {"2026-11-29": "주", "2026-12-02": "주"}, "a1": {"2026-12-03": "주"},
+           "a2": {"2026-12-04": "주"}, "a3": {"2026-12-05": "주"}}
+    nurses = [Nurse(id=f"a{i}", name=f"*간호{i}", group="A", gender="male", capable_shifts=CAPS,
+                    seniority=i, night_months={"2026-11": True} if i == 0 else {}) for i in range(4)]
+    week_req = Requirements()
+    for day, dd in zip(("sun", "mon", "tue", "wed", "thu", "fri", "sat"), [1, 1, 2, 2, 2, 2, 2]):
+        setattr(week_req, day, DayRequirement(D=dd, E=0, N=0))
+    req = GenerateRequest(year=2026, month=11, nurses=nurses, requirements=week_req,
+                          rules=Rules(**ISO, longRunLastResort=False), prev_schedule=pre, shifts=PROD_SHIFTS,
+                          per_day_requirements=per_day, time_limit=60)
+    req.allow_pre_relax = True
+    req.allow_juhu_relax = True
+    req.juhu_block_lock = False
+    r = _relaxed_only(solver, _NovLastWeek, req)
+    assert r, "완화 실패"
+    a0 = r["schedule"]["a0"]
+    assert a0["2026-11-29"] == "주" and a0["2026-12-02"] == "주", a0
+    assert not (r.get("relaxed_cells") or {}).get("a0"), r.get("relaxed_cells")
+
+
+class _NovBlock9:
+    """11/8~12/5 — 블록 9 전체 (11/29~12/5 는 다음 달 며칠이 낀 주)."""
+
+    def _build_date_range(self):
+        super()._build_date_range()
+        self.all_dates = [d for d in self.all_dates if date(2026, 11, 8) <= d <= date(2026, 12, 5)]
+        self.T = len(self.all_dates)
+        self.date_to_idx = {d: i for i, d in enumerate(self.all_dates)}
+        self.weeks = [(i, i + 6) for i in range(0, self.T, 7)]
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_juhu_block_lock_leaves_next_month_keeper_days_out(solver):
+    """11월엔 일반, 12월엔 나이트킵인 a0: 블록 9(11/8~12/5) 주휴 요일은 일요일(11/8·15·22), 12/3(목, 나이트킵의 날)에도
+    미리 넣은 주휴. 블록 요일 잠금이 12/3 까지 한 요일로 묶던 때는 그 하나를 지키려고 11월 일요일 주휴 셋을 옮겼다
+    (2026-10-16 검토). 나이트킵인지는 날짜의 달로 정하므로(결정 1-33) 잠금도 나이트킵의 날을 뺀다."""
+    from datetime import timedelta
+    lo = date(2026, 11, 8)
+    tot = [3, 4, 4, 4, 3, 4, 3]       # 일~토
+    per_day = {}
+    for i in range(28):
+        dt = lo + timedelta(days=i)
+        w = (dt.weekday() + 1) % 7
+        per_day[dt.isoformat()] = ({"D": tot[w] - 1, "E": 0, "N": 1} if dt.month == 12
+                                   else {"D": tot[w], "E": 0, "N": 0})
+    pre = {"a0": {"2026-11-08": "주", "2026-11-15": "주", "2026-11-22": "주", "2026-12-03": "주"}}
+    nurses = [Nurse(id=f"a{i}", name=f"*간호{i}", group="A", gender="male", capable_shifts=CAPS,
+                    seniority=i, night_months={"2026-12": True} if i == 0 else {}) for i in range(5)]
+    wk = Requirements()
+    for k, (dd, nn) in dict(sun=(3, 0), mon=(4, 0), tue=(3, 1), wed=(3, 1), thu=(2, 1),
+                            fri=(3, 1), sat=(2, 1)).items():
+        setattr(wk, k, DayRequirement(D=dd, E=0, N=nn))
+    req = GenerateRequest(year=2026, month=11, nurses=nurses, requirements=wk, rules=Rules(**ISO),
+                          prev_schedule=pre, shifts=PROD_SHIFTS, per_day_requirements=per_day, time_limit=120)
+    req.allow_pre_relax = True
+    req.allow_juhu_relax = True
+    req.juhu_block_lock = True
+    r = _relaxed_only(solver, _NovBlock9, req)
+    assert r, "완화 실패"
+    a0 = r["schedule"]["a0"]
+    assert all(a0[f"2026-11-{d}"] == "주" for d in ("08", "15", "22")), a0
+    assert a0["2026-12-03"] == "주", a0
+    assert not (r.get("relaxed_cells") or {}).get("a0"), r.get("relaxed_cells")
+
+
 def test_fixed_date_leave_bonus_tops_off_teukgeun():
     """날이 정해진 휴가 한 칸 = 오프특근 감점 × 5, 주휴 없애기 = × 3 − 주휴 유지 보너스 − 100 —
     완화 이력 보정으로 감점이 커져도 따라간다. 순서: 오프특근 둘 < 주휴 없애기 < 날이 정해진 휴가,

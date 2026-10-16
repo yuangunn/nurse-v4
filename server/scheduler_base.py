@@ -1053,12 +1053,16 @@ class _SchedulerBase:
 
     def _juhu_block_items(self, nurse, x, is_var):
         """블록 → [(날짜 인덱스, 파이썬 weekday, 주휴 변수)] — 양 엔진 공용 수집기.
-        재배치 대상(자유 변수)인 주휴 칸만 모은다."""
+        재배치 대상(자유 변수)인 주휴 칸만 모은다. 나이트킵의 날은 뺀다 — 나이트킵은 날짜가 속한 달로 정하고
+        (결정 1-33) 그 날의 주휴는 같은 주 나이트킵의 날 안에서만 옮기므로, 일반의 날과 한 요일로 묶으면
+        다음 달 며칠의 주휴 하나를 지키려고 이번 달 주휴 셋을 옮겼다 (2026-10-16 검토)."""
         first_of_month = date(self.year, self.month, 1)
         nid = nurse["id"]
         blocks = {}
         for d, dt in enumerate(self.all_dates):
             if dt < first_of_month or not self._nurse_active_idx(nurse, d):
+                continue
+            if self._keeper_on(nurse, dt):
                 continue
             t = x.get(nid, {}).get(d, {}).get("주")
             if not is_var(t):
@@ -1069,23 +1073,31 @@ class _SchedulerBase:
     def _relax_juhu_free_ok(self, nurse, d: int) -> bool:
         """주휴 이동 허용에서 이 칸에 주휴 자유 변수를 둘 수 있는가 — 양 엔진 공용.
         나이트킵의 날엔 N·V·생·OF 뿐이라 새 주휴를 만들지 않는다 (제1원칙 10). 그 주 나이트킵의 날에
-        미리 넣은 주휴가 있을 때만 그것을 같은 주 나이트킵의 날 안에서 옮길 수 있다."""
+        미리 넣은 주휴가 있을 때만 그것을 같은 주 나이트킵의 날 안에서 옮길 수 있다.
+        엔진이 옮길 수 있는 칸만 센다 — 지난달 칸(1일 전)·재적 밖·잠긴 칸의 주휴는 고정이라 옮길 것이 없다."""
         if not self._keeper_on(nurse, self.all_dates[d]):
             return True
         cache = self.__dict__.setdefault("_keeper_juhu_weeks", {})
         nid = nurse["id"]
         if nid not in cache:
             pre = self.prev.get(nid, {})
+            locked = self.locked_cells.get(nid, {})
+            first_of_month = date(self.year, self.month, 1)
+
+            def movable(k):
+                dt = self.all_dates[k]
+                iso = dt.strftime("%Y-%m-%d")
+                return (pre.get(iso) == "주" and dt >= first_of_month and not locked.get(iso)
+                        and self._nurse_active_idx(nurse, k) and self._keeper_on(nurse, dt))
             cache[nid] = [(ws, we) for ws, we in self.weeks
-                          if any(pre.get(self.all_dates[k].strftime("%Y-%m-%d")) == "주"
-                                 and self._keeper_on(nurse, self.all_dates[k])
-                                 for k in range(ws, we + 1))]
+                          if any(movable(k) for k in range(ws, we + 1))]
         return any(ws <= d <= we for ws, we in cache[nid])
 
-    def _juhu_floor_segments(self, nurse, week_days) -> list:
-        """주휴 바닥(결정 1-36)을 거는 묶음 — 한 주를 나이트킵의 날과 일반의 날로 나눈다.
+    def _juhu_week_segments(self, nurse, week_days) -> list:
+        """주휴 이동 허용의 주당 상한(≤1)·바닥(결정 1-36)을 거는 묶음 — 한 주를 나이트킵의 날과 일반의 날로 나눈다.
         이번 달 나이트킵도 다음 달 며칠은 일반 간호사라(결정 1-33) 거기 미리 넣은 주휴는 그 며칠 안에서
-        지키고, 나이트킵의 날로 옮겨 일반의 날 쉬는 날을 없애지 않게 한다. 나이트킵이 아닌 주는 한 묶음."""
+        지키고, 나이트킵의 날로 옮겨 일반의 날 쉬는 날을 없애지 않게 한다. 상한도 묶음마다 — 주 전체에 1 을 걸면
+        두 묶음에 다 미리 넣은 주휴가 있을 때 하나를 늘 없앴다 (2026-10-16 검토). 나이트킵이 아닌 주는 한 묶음."""
         segs: dict = {}
         for d in week_days:
             segs.setdefault(self._keeper_on(nurse, self.all_dates[d]), []).append(d)

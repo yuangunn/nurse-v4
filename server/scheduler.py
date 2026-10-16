@@ -35,9 +35,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         if "주" not in self.ALL_SHIFTS:
             return
         for nurse in self.nurses:
-            if nurse.get("is_night_shift"):
-                continue
-            nid = nurse["id"]
+            nid = nurse["id"]   # 나이트킵의 날은 _juhu_block_items 가 날짜마다 뺀다 (결정 1-33)
             blocks = self._juhu_block_items(
                 nurse, x, lambda t: isinstance(t, pulp.LpVariable))
             for blk, items in blocks.items():
@@ -406,7 +404,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             self._c_weekly_off(prob, x)
         self._c_pregnancy_p1_weekly(prob, x)           # 임산부 P1 주1회 (모성보호)
         self._c_juhu_block_dow(prob, x)
-        # 주휴 재배치: 주당 주휴 최대 1개 하드 제약
+        # 주휴 재배치: 주당 주휴 최대 1개 하드 제약 (나이트킵의 날·일반의 날 각각)
         # + 사전입력 주휴가 있던 주는 주휴를 옮길 수는 있어도 없애지 않는다 — 주휴는 오프특근 때도
         #   깎이지 않는 최소한의 휴무다 (제1원칙 3). 유지 보너스(300)만으로는 오프특근(5100)을
         #   피하려고 주휴를 지웠다. 없애면 _relax_juhu_drop_pen(기본 14900)만큼 깎는다 —
@@ -422,25 +420,23 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                                  if self.all_dates[d] >= first_of_month]
                     if not week_days:
                         continue
-                    juhu_terms = [x[nid][d]["주"] for d in week_days]
-                    var_terms = [t for t in juhu_terms if isinstance(t, pulp.LpVariable)]
-                    const_sum = sum(t for t in juhu_terms
-                                    if not isinstance(t, pulp.LpVariable))
-                    # 사용자 고정(잠금 주휴) 존중: 상수 합이 한도를 넘어도 모순
-                    # 제약(2<=1)을 만들지 않고, 솔버 자유 변수만 잔여 한도로 제한
-                    # (CP-SAT 쪽과 동일 의미로 통일).
-                    if var_terms:
-                        prob += (
-                            pulp.lpSum(var_terms) <= max(0, 1 - const_sum),
-                            f"weekly_juhu_{nid}_{ws}"
-                        )
-                    # 그 칸이 엔진이 실제로 옮길 수 있는 주휴일 때만 — 재적 밖(전입 전·전출 뒤)에 남은 주는 없는 칸.
-                    # 나이트킵의 날과 일반의 날은 따로 지킨다 (_juhu_floor_segments)
-                    if const_sum >= 1:
-                        continue
-                    for seg in self._juhu_floor_segments(nurse, week_days):
-                        seg_vars = [x[nid][d]["주"] for d in seg
-                                    if isinstance(x[nid][d]["주"], pulp.LpVariable)]
+                    # 나이트킵의 날과 일반의 날은 따로 — 상한도 바닥도 묶음마다 (_juhu_week_segments)
+                    for seg in self._juhu_week_segments(nurse, week_days):
+                        juhu_terms = [x[nid][d]["주"] for d in seg]
+                        seg_vars = [t for t in juhu_terms if isinstance(t, pulp.LpVariable)]
+                        const_sum = sum(t for t in juhu_terms
+                                        if not isinstance(t, pulp.LpVariable))
+                        # 사용자 고정(잠금 주휴) 존중: 상수 합이 한도를 넘어도 모순
+                        # 제약(2<=1)을 만들지 않고, 솔버 자유 변수만 잔여 한도로 제한
+                        # (CP-SAT 쪽과 동일 의미로 통일).
+                        if seg_vars:
+                            prob += (
+                                pulp.lpSum(seg_vars) <= max(0, 1 - const_sum),
+                                f"weekly_juhu_{nid}_{seg[0]}"
+                            )
+                        # 그 칸이 엔진이 실제로 옮길 수 있는 주휴일 때만 — 재적 밖(전입 전·전출 뒤)에 남은 주는 없는 칸
+                        if const_sum >= 1:
+                            continue
                         if seg_vars and any(
                                 self.prev.get(nid, {}).get(self.all_dates[d].strftime("%Y-%m-%d")) == "주"
                                 and isinstance(x[nid][d]["주"], pulp.LpVariable)
