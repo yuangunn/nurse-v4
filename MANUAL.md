@@ -28,8 +28,9 @@
 - GitHub Releases: https://github.com/yuangunn/nurse-v4/releases
 
 ### macOS (Apple Silicon)
-1. **NurseScheduler_v4_mac_arm64.dmg** 다운로드 → 열어서 앱을 Applications로 드래그
-2. 첫 실행 시 **우클릭 → 열기** (미서명 앱이라 1회 허용 필요)
+1. **NurseScheduler_v4_mac_arm64.dmg** 다운로드 → 열면 나오는 앱을 옆의 **응용 프로그램** 폴더로 끌어 넣기
+2. 첫 실행 시 **우클릭 → 열기** (미서명 앱이라 1회 허용 필요). '손상되었기 때문에 열 수 없습니다'가 나오면 터미널에서
+   `xattr -dr com.apple.quarantine /Applications/NurseScheduler.app` 를 한 번 실행한 뒤 다시 엽니다.
 
 ### 시스템 요구사항
 - Windows 10/11 (64bit) 또는 macOS (Apple Silicon, 14 Sonoma+ 권장)
@@ -534,7 +535,8 @@ P1은 임산부의 지정 구간에서만 나옵니다 — 다른 사람에게�
 복사해 어싸인 도구에 붙여넣으세요.
 
 **Q: 데이터는 어디에 저장되나요?**
-`%APPDATA%\NurseScheduler\` 폴더에 저장됩니다. 앱을 삭제해도 데이터는 보존됩니다.
+Windows는 `%APPDATA%\NurseScheduler\`, macOS는 `~/Library/Application Support/NurseScheduler/` 폴더에 저장됩니다.
+앱을 삭제하거나 새 판으로 바꿔도 데이터는 보존됩니다.
 
 ---
 

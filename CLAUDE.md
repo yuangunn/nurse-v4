@@ -132,7 +132,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 275건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지)
+├── tests/                   # pytest 회귀 279건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -176,7 +176,7 @@ npm start
 ### 테스트
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 275건
+python3 -m pytest -q                  # 279건
 node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
   && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_hospital_holidays.mjs \
@@ -955,6 +955,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 - **기본**: `%APPDATA%\NurseScheduler\nurse_scheduler.db` (프로필 시스템 도입 전 폴백)
 - **프로필별**: `%APPDATA%\NurseScheduler\{profile_id}.db` (평문) 또는 `.db.enc` (암호화)
 - **게스트**: `%APPDATA%\NurseScheduler\_guest_temp.db` (종료 시 삭제)
+- **macOS 앱**: APPDATA 가 없으므로 `~/Library/Application Support/NurseScheduler/` — 앱 안(`_internal/data`)에 두면 새 판으로 바꿀 때 지워진다 (결정 2-52)
 - **프로필 메타**: `%APPDATA%\NurseScheduler\profiles.json`
 
 ### 테이블
@@ -1008,6 +1009,8 @@ build.bat
 ### 제약
 - **electron-builder 사용 금지** — 26.x가 `winCodeSign` 심볼릭 링크 생성 실패 (Windows 개발자 모드 없이 불가). `@electron/packager` + 수동 ISCC로 대체.
 - **PyInstaller `--windowed`**에서 `sys.stdout=None` → `main.py:_ensure_stdio()`로 devnull 대체 + `PORT:` 출력 try/except.
+- **macOS: `--extra-resource` 금지** — PyInstaller `_internal` 의 상대 링크가 빌드 컴퓨터의 절대 경로로 바뀌어 다른 맥에서 엔진이 안 켜진다
+  (v4.13.1·v4.14.0). `build-mac.sh` 가 packager 뒤 `ditto` 로 넣고 `check_links`·앱 안 엔진 셀프테스트로 막는다. 검사 `mac-build.yml` (결정 2-52).
 
 ---
 

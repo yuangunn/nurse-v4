@@ -32,7 +32,11 @@ build.bat
 3. PyInstaller로 Python 서버 번들
 4. Electron 의존성 설치 (`npm install`)
 5. electron-packager로 Electron 앱 빌드 (win32 / darwin)
-6. 배포물 생성 — Windows: 포터블 ZIP + Inno Setup 설치파일 / macOS: ad-hoc 서명 후 zip + dmg
+6. 배포물 생성 — Windows: 포터블 ZIP + Inno Setup 설치파일 / macOS: 서버 번들을 `ditto` 로 앱에 넣고(링크 검사) ad-hoc 서명 →
+   앱 안 서버·두 엔진 켜 보기 → zip + dmg('응용 프로그램' 바로가기 포함)
+
+> macOS 서버 번들은 `--extra-resource` 로 넣지 않는다 — 복사하며 PyInstaller 의 상대 링크를 빌드 컴퓨터의 절대 경로로 바꿔
+> 다른 맥에서 엔진이 켜지지 않는다(v4.13.1·v4.14.0, 결정 2-52). 맥 빌드 파일을 고치면 PR 에서 `mac-build.yml` 이 설치까지 해 본다.
 
 > 태그(`vX.Y.Z`) push 시 GitHub Actions(`.github/workflows/release.yml`)가 두 플랫폼을 자동
 > 빌드해 릴리스에 업로드합니다. macOS 빌드는 유료 Apple Developer 계정이 없어 **미서명(ad-hoc)**

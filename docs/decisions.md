@@ -1145,6 +1145,20 @@
   옛 파일·관리 목록·초기화 되돌리기·확인 카드·하루 어싸인표·인쇄·접힘), 실시간 수정 W1~W5(그만두면 그대로 · 적으면 그 자리에 · 남은 사유는 지금 그대로인 것에만 · 자리·방 키만 ·
   근무 바꾸기·CRN 뒤 창 없음).
 
+### 2-52. electron-packager `--extra-resource` 는 PyInstaller 의 상대 링크를 절대 경로로 바꾼다 — 맥 판은 ditto 로 넣는다 (2026-10-15)
+- **증상**: v4.14.0 맥 앱을 응용 프로그램에 넣고 `xattr -dr com.apple.quarantine` 하니 `_internal/*` 마다 'No such file'.
+  릴리스 zip 을 열어 보니 `_internal` 의 링크 103개(ortools `libabsl_*.dylib` 등)가 `/Users/runner/work/nurse-v4/nurse-v4/dist/NurseScheduler/…`
+  — 빌드한 러너의 경로. v4.13.1 맥 판도 같다 — **지금까지 나간 맥 판은 다른 맥에서 엔진이 켜지지 않았다.**
+- **원인**: PyInstaller 6 은 맥에서 `_internal/libX.dylib → ortools/.libs/libX.dylib` 같은 **상대** 링크를 만든다.
+  `--extra-resource` 의 복사가 그것을 그 컴퓨터의 절대 경로로 바꿨다. 빌드 러너에선 그 경로가 있어 서명·실행이 다 됐다.
+- **해결**: `--extra-resource` 를 빼고 packager 뒤 `ditto dist/NurseScheduler <앱>/Contents/Resources/NurseScheduler`(링크 그대로) → 서명.
+  `check_links` 가 PyInstaller 결과와 앱 안의 절대 경로·끊어진 링크를 하나라도 보면 빌드를 멈추고, 끝에 앱 안 서버를 임시 데이터 폴더로 켜
+  `/api/dev/highs-selftest`·`cpsat-selftest` 를 부른다(위 `import highspy` 가 ImportError 를 삼키므로 /health 만으론 모른다).
+- **검사**: `mac-build.yml` — 빌드 폴더를 **지운 뒤** dmg 에서 꺼낸 앱으로 본다. 빌드 폴더가 남아 있으면 절대 경로 링크가 이어져 보여 아무것도 못 잡는다.
+- **함께**: dmg 는 앱 + `/Applications` 링크를 담은 폴더로 만든다(끌어 넣기 설치). 맥 앱엔 APPDATA 가 없어 데이터가 번들 안
+  `_internal/data` 에 쌓였다 — 새 판으로 바꾸면 지워진다 → 얼린(frozen) 맥에선 `~/Library/Application Support/NurseScheduler`
+  (`database.get_db_path`·`profiles._app_dir`, 개발 환경·윈도우는 그대로).
+
 ## 3. 사용자 정립 규칙 (명시 지시)
 
 | 규칙 | 출처 |

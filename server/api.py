@@ -343,6 +343,29 @@ def dev_cpsat_selftest():
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
+@app.get("/api/dev/highs-selftest")
+def dev_highs_selftest():
+    """HiGHS(highspy)가 번들 환경에서 실리고 풀리는지 셀프테스트 — cpsat-selftest 의 짝.
+    맨 위 `import highspy` 는 ImportError 를 삼키므로 엔진 라이브러리가 빠져도 서버는 켜진다.
+    macOS 빌드(build-mac.sh)가 끝에 두 셀프테스트를 불러 확인한다 (2026-10-15)."""
+    if not solver_progress.try_begin():
+        return {"ok": False, "error": "생성이 진행 중입니다"}
+    try:
+        import pulp
+        p = pulp.LpProblem("selftest", pulp.LpMaximize)
+        xs = [pulp.LpVariable(f"x{i}", cat="Binary") for i in range(5)]
+        p += pulp.lpSum(xs)
+        p += pulp.lpSum(xs) <= 2
+        p.solve(pulp.HiGHS(msg=False))
+        ok = pulp.LpStatus[p.status] == "Optimal"
+        return {"ok": ok, "sum": int(round(pulp.value(p.objective))) if ok else None,
+                "status": pulp.LpStatus[p.status]}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    finally:
+        solver_progress.end()
+
+
 @app.get("/api/dev/info")
 def dev_info():
     """현재 DB 경로, 크기, 간호사 수"""
