@@ -176,11 +176,23 @@ window.PreinputIoModule = function() {
     async deletePrevSave(id){if(!confirm('삭제하시겠습니까?'))return;await this.api('DELETE',`/api/prev_schedules/${id}`);await this.loadPrevSavesList()},
 
     // ── 트레이니 근무 목록 ───────────────────────────────────
+    // 신규간호사의 마지막 트레이닝 날 'YYYY-MM-DD' — 다음 날부터 보통 간호사 (엔진 trainee_last_day 와 같은 규칙).
+    // 트레이닝 끝나는 날과, 생성 범위(scheduleDays) 안에서 사전입력이 '/'(/D·/E·/N…)로 시작하는 가장 늦은 날 중 늦은 쪽
+    // (2026-10-16, 101병동: 명부엔 11/03 인데 번표엔 11/04 까지 /E). 신규가 아니면 '', 끝나는 날이 없으면 계속 트레이닝.
+    traineeLastKey(nurse){
+      if(!nurse?.is_trainee)return '';
+      const end=nurse.training_end_date;
+      if(!end||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(end))return '9999-12-31'; // 종료일 미설정 = 계속 트레이닝
+      const keys=this._cycleDateKeys();
+      let last=end;
+      for(const[k,v]of Object.entries(this.prevSchedule?.[nurse.id]||{}))
+        if(typeof v==='string'&&v.startsWith('/')&&keys.has(k)&&k>last)last=k;
+      return last;
+    },
+    // 그 날 트레이닝 중인가 — 인원·셀 수에 세지 않고, 칸은 프리셉터 근무를 따른다
     isTraineeInTraining(nurse,day){
-      if(!nurse?.is_trainee)return false;
-      if(!nurse.training_end_date)return true; // 종료일 미설정 = 계속 트레이닝
-      const end=new Date(nurse.training_end_date);
-      return day<=end;
+      const last=this.traineeLastKey(nurse);
+      return !!last&&this.dayKey(day)<=last;
     },
     getEditShifts(){
       const nurse=this.shiftEdit.nurse;

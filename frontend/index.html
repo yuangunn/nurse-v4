@@ -795,24 +795,31 @@
     <label class="rcheck" data-rd="chk-vfree" title="연차(V)를 더 써도 되게 허용합니다. 꼭 필요한 만큼만 쓰도록 큰 감점이 붙습니다."><input type="checkbox" x-model="unlimitedV"/><span class="box"></span>연차(V) 무제한</label>
     <div class="rmenu-host">
       <button @click="showGenAdvanced=!showGenAdvanced" class="rbtn rbtn-quiet" data-rd="btn-advanced" title="정확도 · 시간 제한 · 계산 방식 · 주휴 이동 · 우선순위. 기본값이면 열 일이 없습니다.">고급<svg class="caret" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
-      <div x-show="showGenAdvanced" x-cloak @click.outside="showGenAdvanced=false" class="radv">
+      <!-- 줄마다 이름표 | 단추 줄 + 그 아래 줄(슬라이더·설명). 단추 글자는 접지 않는다. 창이 좁거나 낮으면 rdFitPop 이 안쪽으로 당기고 높이를 줄인다 -->
+      <div x-show="showGenAdvanced" x-cloak @click.outside="showGenAdvanced=false" x-effect="showGenAdvanced&&$nextTick(()=>rdFitPop($el))" class="radv">
         <div class="row"><span class="lbl">정확도</span>
-          <div class="rseg"><template x-for="v in [0,0.02,0.05,0.1]" :key="'gap'+v"><button :class="mipGap===v?'on':''" @click="mipGap=v" x-text="({0:'정밀',0.02:'보통 (2%)',0.05:'빠르게 (5%)',0.1:'아주 빠르게 (10%)'})[v]" :title="v===0?'가장 좋은 답을 끝까지 찾습니다. 오래 걸릴 수 있어요.':`가장 좋은 답과 ${v*100}% 안이면 멈춥니다. 빠릅니다.`"></button></template></div>
-          <input type="range" min="0" max="0.1" step="0.01" x-model.number="mipGap" title="정확도를 미세하게 조정합니다. 왼쪽이 정밀, 오른쪽이 빠르게."/>
-          <span class="sub" x-text="mipGap===0?'가장 좋은 답을 끝까지 찾습니다':`가장 좋은 답과 ${(mipGap*100).toFixed(0)}% 안이면 멈춥니다`"></span>
+          <div class="ctl">
+            <div class="rseg"><template x-for="v in [0,0.02,0.05,0.1]" :key="'gap'+v"><button :class="mipGap===v?'on':''" @click="mipGap=v" x-text="({0:'정밀',0.02:'보통 (2%)',0.05:'빠르게 (5%)',0.1:'아주 빠르게 (10%)'})[v]" :title="v===0?'가장 좋은 답을 끝까지 찾습니다. 오래 걸릴 수 있어요.':`가장 좋은 답과 ${v*100}% 안이면 멈춥니다. 빠릅니다.`"></button></template></div>
+            <div class="line"><input type="range" min="0" max="0.1" step="0.01" x-model.number="mipGap" title="정확도를 미세하게 조정합니다. 왼쪽이 정밀, 오른쪽이 빠르게."/>
+              <span class="sub" x-text="mipGap===0?'가장 좋은 답을 끝까지 찾습니다':`가장 좋은 답과 ${(mipGap*100).toFixed(0)}% 안이면 멈춥니다`"></span></div>
+          </div>
         </div>
         <div class="row"><span class="lbl">최대 기다릴 시간</span>
-          <div class="rseg"><template x-for="v in [5,10,20,60]" :key="'tm'+v"><button :class="generateTimeout===v?'on':''" @click="generateTimeout=v" x-text="v+'분'" :title="`최대 ${v}분까지 기다립니다. 그 전에 답을 찾으면 바로 끝납니다.`"></button></template></div>
-          <div class="rnum rnum-sm"><button @click="bumpTimeout(-1)" title="1분 줄입니다.">−</button><input type="number" min="1" max="60" x-model.number="generateTimeout" title="최대 기다릴 시간 (분)"/><button @click="bumpTimeout(1)" title="1분 늘립니다.">+</button></div>
-          <input type="range" min="1" max="60" step="1" x-model.number="generateTimeout" title="최대 기다릴 시간을 미세하게 조정합니다."/><span class="sub">분</span>
+          <div class="ctl">
+            <div class="rseg"><template x-for="v in [5,10,20,60]" :key="'tm'+v"><button :class="generateTimeout===v?'on':''" @click="generateTimeout=v" x-text="v+'분'" :title="`최대 ${v}분까지 기다립니다. 그 전에 답을 찾으면 바로 끝납니다.`"></button></template></div>
+            <div class="rnum rnum-sm"><button @click="bumpTimeout(-1)" title="1분 줄입니다.">−</button><input type="number" min="1" max="60" x-model.number="generateTimeout" title="최대 기다릴 시간 (분)"/><button @click="bumpTimeout(1)" title="1분 늘립니다.">+</button></div><span class="sub unit">분</span>
+            <div class="line"><input type="range" min="1" max="60" step="1" x-model.number="generateTimeout" title="최대 기다릴 시간을 미세하게 조정합니다."/></div>
+          </div>
         </div>
         <div class="row"><span class="lbl">계산 방식</span>
-          <div class="rseg">
-            <label :class="solver==='highs'?'on':''" title="보통은 이것으로 충분합니다."><input type="radio" name="solver" value="highs" x-model="solver"/>기본</label>
-            <label :class="solver==='cpsat'?'on':''" title="안 될 때 원인을 더 정확히 짚어 줍니다."><input type="radio" name="solver" value="cpsat" x-model="solver"/>다른 방식</label>
-            <label :class="solver==='race'?'on':''" title="두 방식을 동시에 돌려 먼저 끝나는 쪽을 씁니다."><input type="radio" name="solver" value="race" x-model="solver"/>둘 다 돌려 빠른 쪽</label>
+          <div class="ctl">
+            <div class="rseg">
+              <label :class="solver==='highs'?'on':''" title="보통은 이것으로 충분합니다."><input type="radio" name="solver" value="highs" x-model="solver"/>기본</label>
+              <label :class="solver==='cpsat'?'on':''" title="안 될 때 원인을 더 정확히 짚어 줍니다."><input type="radio" name="solver" value="cpsat" x-model="solver"/>다른 방식</label>
+              <label :class="solver==='race'?'on':''" title="두 방식을 동시에 돌려 먼저 끝나는 쪽을 씁니다."><input type="radio" name="solver" value="race" x-model="solver"/>둘 다 돌려 빠른 쪽</label>
+            </div>
+            <div class="line"><span class="sub" x-text="solver==='cpsat'?'안 될 때 원인을 더 정확히 짚어 줍니다':solver==='race'?'두 방식을 동시에 돌려 먼저 끝나는 쪽을 씁니다':'보통은 이걸로 충분합니다'"></span></div>
           </div>
-          <span class="sub" x-text="solver==='cpsat'?'안 될 때 원인을 더 정확히 짚어 줍니다':solver==='race'?'두 방식을 동시에 돌려 먼저 끝나는 쪽을 씁니다':'보통은 이걸로 충분합니다'"></span>
         </div>
         <div class="row">
           <label class="rcheck" title="정말 안 풀릴 때만 켜세요. 사전입력 주휴를 같은 주 안에서 옮길 수 있게 허용합니다."><input type="checkbox" x-model="allowJuhuRelax"/><span class="box"></span>주휴 이동 허용</label>
@@ -886,6 +893,15 @@
       <template x-if="rdEdited>0&&!generating"><span class="relaxed-note"><span x-text="`손으로 고친 칸 ${rdEdited}개`"></span><button @click="readjustSchedule()" class="rbtn rbtn-sm rbtn-secondary" title="고친 칸은 그대로 잠그고, 인원·규칙이 다시 맞도록 나머지를 최소한으로 다시 맞춥니다.">고친 대로 다시 맞추기</button><span x-show="readjustSummary" x-text="readjustSummary"></span></span></template>
     </div>
   </template>
+
+  <!-- 만드는 중 — 진행 한 줄(답을 찾았는지·가장 좋은 답과 차이·정체) + 계산 기록. 서랍은 표가 없으면 열리지 않고
+       v4.13 상태 줄이 옛 '생성 중' 카드의 진행을 가져가지 않아, 만드는 동안 볼 곳이 없었다 (2026-10-16 원근).
+       목록(x-for)을 품으므로 x-show (결정 2-21) -->
+  <div class="rlive fs-hide rdesk-only" data-rd="live-log" x-show="generating" x-cloak>
+    <div class="rlive-head"><span x-text="rdLiveProgress"></span>
+      <button x-show="solverLogs.length" @click="showLiveLog=!showLiveLog;_scrollLogs()" class="rbtn rbtn-sm rbtn-quiet" title="자동 배정이 지금 계산하며 남기는 기록입니다. 문의할 때 복사해 보내면 도움이 됩니다."><span x-text="showLiveLog?'계산 기록 접기':'계산 기록 펼치기'"></span><span x-text="' ('+solverLogs.length+'줄)'"></span></button></div>
+    <div x-show="showLiveLog&&solverLogs.length" id="liveLogPanel" class="rlog"><template x-for="line in solverLogs" :key="'lv'+line.id"><div x-text="line.msg" :style="line.hint?'color:#F0A070;font-weight:600':''"></div></template></div>
+  </div>
 
   <!-- 실패 배너 — 이유 한 줄 + 후보 3 + 주 버튼 1 -->
       <div class="rfail fs-hide rdesk-only" data-rd="fail" x-show="rdFail" x-cloak>
@@ -1002,7 +1018,8 @@
         <!-- 원티드 미반영 -->
                   <div x-show="reportTab==='relaxed'" x-cloak>
             <div class="intro" x-show="rdRelaxedCount" x-html="`이 조건으로 만들려면 아래 <b>${rdRelaxedCount}칸</b>을 바꿔야 했습니다. 바꾸면 안 되는 칸은 <b>되돌려서 잠금</b>을 누른 뒤 다시 만들어 보세요. 메모(사연)가 있는 칸이 먼저 옵니다.`"></div>
-            <div class="intro" x-show="!rdRelaxedCount">사전입력을 모두 지켰어요. 바뀐 칸이 없습니다.</div>
+            <div class="intro" x-show="!rdRelaxedCount&&!rdTraineeChanged">사전입력을 모두 지켰어요. 바뀐 칸이 없습니다.</div>
+            <div class="intro" x-show="rdTraineeChanged" x-text="`신규간호사의 트레이닝 날 ${rdTraineeChanged}칸은 사전입력과 달리 프리셉터 근무를 따랐어요. 트레이닝 날의 '/' 칸은 프리셉터 근무를 그대로 씁니다.`"></div>
             <template x-for="x in (rdRelaxedList||[])" :key="'rx'+x.nid+x.dk">
               <div class="rrow">
                 <span style="font-weight:var(--fw-label)" x-text="x.name"></span><span style="color:var(--ink-2)" x-text="x.date"></span>
@@ -1034,7 +1051,7 @@
                   <div x-show="reportTab==='teukgeun'" x-cloak>
             <div class="intro" x-show="offTeukgeun.length">휴무 자리가 모자라 <b>주 1회 OFF를 반납</b>한 주입니다 (주휴는 유지). 결원·휴가가 몰린 주에 불가피하게 생깁니다 — 수당·보상은 별도로 챙기세요.</div>
             <div class="intro" x-show="!offTeukgeun.length">오프특근이 없습니다.</div>
-            <div class="chips"><template x-for="(t,ti) in (offTeukgeun||[])" :key="'ot'+ti"><span class="rbadge" style="height:auto;padding:6px 10px;font-weight:var(--fw-label)" x-text="t.name+' '+t.week+'주차 ('+t.start.slice(5)+'~'+t.end.slice(5)+')'"></span></template></div>
+            <div class="chips"><template x-for="(t,ti) in (offTeukgeun||[])" :key="'ot'+ti"><span class="rbadge" style="height:auto;padding:6px 10px;font-weight:var(--fw-label)" x-text="t.name+' '+t.start.slice(5).replace('-','/')+'~'+t.end.slice(5).replace('-','/')+' 주'"></span></template></div>
           </div>
         
         <!-- 주의 -->
@@ -1098,7 +1115,7 @@
             <div x-show="solverLogs.length>0">
               <div class="chips"><button @click="showLogPanel=!showLogPanel" class="rbtn rbtn-sm rbtn-quiet" title="자동 배정이 계산하며 남긴 기록입니다. 문의할 때 복사해 보내면 도움이 됩니다."><span x-text="showLogPanel?'계산 기록 접기':'계산 기록 펼치기'"></span><span x-text="' ('+solverLogs.length+'줄)'"></span></button>
                 <button x-show="showLogPanel" @click="navigator.clipboard.writeText(solverLogs.map(l=>l.msg).join('\n')).then(()=>$el.textContent='복사됨').catch(()=>{})" class="rbtn rbtn-sm rbtn-quiet" title="계산 기록 전체를 복사합니다.">기록 복사</button></div>
-              <div x-show="showLogPanel" x-cloak id="logPanel" class="rlog"><template x-for="line in solverLogs" :key="line.id"><div x-text="line.msg" :style="line.hint?'color:#F0A070;font-weight:600':''"></div></template></div>
+              <div x-show="showLogPanel" x-cloak id="logPanel" class="rlog"><template x-for="line in solverLogs" :key="'lg'+line.id"><div x-text="line.msg" :style="line.hint?'color:#F0A070;font-weight:600':''"></div></template></div>
             </div>
             <div class="intro" x-show="!statusMessage&&!generationReport&&!solverLogs.length">아직 만들기 기록이 없습니다.</div>
           </div>

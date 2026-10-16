@@ -22,6 +22,7 @@ window.RedesignModule = function() {
   return {
     // ── 상태 ──
     reportTab: 'summary',        // 서랍 탭: summary·relaxed·v·teukgeun·warn·wish·log
+    showLiveLog: true,           // 만드는 중 상태 줄 아래 계산 기록 펼침 (기본 펼침 — 그 자리는 비어 있다)
     rdToast: null,               // {msg, undo}
     _rdToastTimer: null,
     showPrintPreview: false,
@@ -75,8 +76,27 @@ window.RedesignModule = function() {
 
     // ── 공통 ──
     get rdWard(){ return (this.profiles||[]).find(p=>p.id===this.currentProfile)?.name || '게스트'; },
+    // 당월 칸 수 — 신규는 트레이닝 날만 빼고 센다 (달 중간에 독립하면 그 뒤는 보통 간호사, 엔진과 같은 규칙)
     get rdCells(){
-      return (this.nurses||[]).filter(n=>!n.is_trainee).length * ((this.scheduleDays||[]).filter(d=>!this.isOverflow(d)).length || 0);
+      const days=(this.scheduleDays||[]).filter(d=>!this.isOverflow(d));
+      return (this.nurses||[]).reduce((a,n)=>a+(n.is_trainee?days.filter(d=>!this.isTraineeInTraining(n,d)).length:days.length), 0);
+    },
+    // 지키지 못한 신규의 트레이닝 날 사전입력 — 트레이닝 날 칸은 자기 사전입력('/' 아닌 코드)이 이기고
+    // '/' 칸은 프리셉터 근무를 따른다. '/E' 를 넣었는데 프리셉터가 D 면 그 칸은 바뀐 것이다 (상태 줄이 '모두 지켰어요'라 하지 않게)
+    get rdTraineeChanged(){
+      if(!this.rdSched) return 0;
+      let n=0;
+      for(const nurse of (this.nurses||[])){
+        if(!nurse.is_trainee) continue;
+        const pre=this.prevSchedule?.[nurse.id]||{}, rx=this.relaxedCells?.[nurse.id]||{};
+        for(const day of (this.scheduleDays||[])){
+          if(!this.isTraineeInTraining(nurse,day)) continue;
+          const dk=this.dayKey(day), p=pre[dk];
+          if(rx[dk]) continue;   // 원티드 미반영(D/E 등)으로 이미 센 칸
+          if(p && this.plainShift(this._getShift(nurse.id,day)||'')!==this.plainShift(p)) n++;
+        }
+      }
+      return n;
     },
     get rdSched(){ return !!(this.schedule && Object.keys(this.schedule).length); },
     get rdRelaxedCount(){ return Object.keys(this.relaxedCells||{}).reduce((a,k)=>a+Object.keys(this.relaxedCells[k]||{}).length, 0); },
@@ -118,8 +138,10 @@ window.RedesignModule = function() {
       const f=this.feas;
       if(f && f.checking && !f.status) return {kind:'checking', dot:'none', text:`만들 수 있는지 확인하는 중… · ${n} / ${total}칸 입력`, link:null};
       if(f && f.status==='infeasible'){
-        const a=(f.anchored||[])[0];
-        return {kind:'fail', dot:'err', text:`이대로는 만들 수 없어요 — ${a ? a.label : (f.message||'')}`, link: a ? {label:'칸으로 가기', act:'jumpA', a} : {label:'자세히', act:'detail'}};
+        // summary = 한 사람·한 날의 충돌을 날짜와 이미 넣은 휴무로 푼 한 줄 (라벨 하나만 보이면
+        // '2주차 OF 2회'처럼 그 사람이 OF 를 두 번 넣은 것으로 읽힌다). focus = 문제가 시작되는 칸
+        const a=f.focus||(f.anchored||[])[0];
+        return {kind:'fail', dot:'err', text:`이대로는 만들 수 없어요 — ${f.summary || (a ? a.label : (f.message||''))}`, link: a ? {label:'칸으로 가기', act:'jumpA', a} : {label:'자세히', act:'detail'}};
       }
       const eta=f && f.estimated_seconds ? ` · 예상 ${this.rdEta(f.estimated_seconds)}` : '';
       if(f && f.status==='unknown') return {kind:'unknown', dot:'warn', text:`만들 수 있는지 5초 안에 판정하지 못했어요 (만들 때 확정) · ${n} / ${total}칸 입력`, link:null};
@@ -154,9 +176,26 @@ window.RedesignModule = function() {
       const q = this.scheduleStopped ? ' · 중간에 멈춰 지금까지 찾은 답' : (g==null ? '' : (g<=0.1 ? ' · 가장 좋은 답' : (g<=10 ? ` · 가장 좋은 답과 ${Math.round(g*10)/10}% 안쪽 차이` : ' · 시간 안에 찾은 답 (더 좋은 표가 있을 수 있어요)')));
       const at=this.rdDoneAt instanceof Date ? ` (${this.rdDoneAt.getMonth()+1}월 ${this.rdDoneAt.getDate()}일 ${String(this.rdDoneAt.getHours()).padStart(2,'0')}:${String(this.rdDoneAt.getMinutes()).padStart(2,'0')})` : '';
       const saved = this.rdSaved ? '만들어졌고 저장됐습니다' : '만들어졌습니다';
-      if(rx) return {kind:'ok', relaxed:true, text:`근무표가 ${saved}${at} · 사전입력 ${rx}칸을 바꿔서 만들었어요${q}`};
+      // 신규의 트레이닝 날 칸은 완화가 아니라 프리셉터 근무를 따라 바뀐다 — relaxedCells 에 없으니 따로 센다
+      const tc=this.rdTraineeChanged;
+      const tcNote=tc ? ` · 신규 트레이닝 날 ${tc}칸은 프리셉터 근무를 따랐어요` : '';
+      if(rx) return {kind:'ok', relaxed:true, text:`근무표가 ${saved}${at} · 사전입력 ${rx}칸을 바꿔서 만들었어요${tcNote}${q}`};
       if(!this.statusOk && this.statusMessage) return {kind:'warn', text:`근무표는 있지만 확인이 필요해요 — 아래 요약·리포트의 생성 기록을 보세요`};
+      if(tc) return {kind:'ok', text:`근무표가 ${saved}${at} · 사전입력 ${Math.max(pre-tc,0)}칸 지켰어요${tcNote}${q}`};
       return {kind:'ok', text:`근무표가 ${saved}${at} · 사전입력 ${pre}칸 모두 지켰어요${q}`};
+    },
+    // 만드는 중 진행 한 줄 — solveProgress(SSE progress, 1초마다). 차이 숫자는 상태 줄과 같은 규칙(10% 안쪽만),
+    // 3분 넘게 나아지지 않으면 멈춰도 된다고 알린다 (v4.12 '생성 중' 카드의 'n분째 개선 없음')
+    get rdLiveProgress(){
+      const p=this.solveProgress||{};
+      if(p.has_solution){
+        const g=p.gap_percent;
+        const q = g==null||g>10 ? '더 좋은 답을 찾는 중' : (g<=0.1 ? '가장 좋은 답이에요 · 마무리하는 중' : `가장 좋은 답과 ${Math.round(g*10)/10}% 안쪽 차이`);
+        const st=(p.stalled_seconds||0)>=180 ? ` · ${Math.floor(p.stalled_seconds/60)}분째 나아지지 않음 — 지금 멈춰도 됩니다` : '';
+        return `답을 찾았어요 · ${q}${st}`;
+      }
+      if((p.nodes||0)>0) return `답을 찾는 중 · ${p.nodes.toLocaleString('ko-KR')}가지 경우를 따져 봤어요`;
+      return '조건을 정리하는 중';
     },
     get rdEdited(){ return this._originalSchedule ? this.getManualEditCount() : 0; },
 
@@ -186,8 +225,10 @@ window.RedesignModule = function() {
           if(need>1) fixes.push({kind:'req', label:`${fmtMD(a.dk)} ${PERIOD_KO[p]} 필요 인원 ${need} → ${need-1}`, dk:a.dk, period:p});
         }
       }else{
-        const first=(this.statusMessage||'').split('\n').map(s=>s.replace(/^[★⚠❌✗\s]+/,'').trim()).find(s=>s&&!/^[━─=]+/.test(s))||'';
-        title=`이 조건으로는 만들 수 없어요.${first ? ' '+first.slice(0,80) : ''}`;
+        // 생성 결과·신호등의 한 줄 요약이 있으면 그것을 쓴다 — 진단 첫 줄('원인 진단 결과:')은 아무것도 말하지 않는다
+        const summary=((this.diagResult||{}).summary)||((this.feas||{}).status==='infeasible' ? (this.feas||{}).summary : '');
+        const first=(this.statusMessage||'').split('\n').map(s=>s.replace(/^[★⚠❌✗\s]+/,'').trim()).find(s=>s&&!/^[━─=]+/.test(s)&&!/원인 진단 결과:?$/.test(s))||'';
+        title=summary ? `이 조건으로는 만들 수 없어요. ${summary}` : `이 조건으로는 만들 수 없어요.${first ? ' '+first.slice(0,80) : ''}`;
         body='아래에서 하나를 고치거나 사전입력 완화를 켜고 다시 만들어 보세요. 잠근 칸은 완화해도 바뀌지 않습니다.';
       }
       return {title, body, fixes: fixes.slice(0,3)};
@@ -328,6 +369,16 @@ window.RedesignModule = function() {
         if(top+H>window.innerHeight-8) top=Math.max(8, window.innerHeight-H-8);
         this.cellPop={left:Math.round(left), top:Math.round(top)};
       });
+    },
+    // 고급 팝업(툴바 고급 단추 아래, position:absolute)이 창 밖으로 나가지 않게 — 오른쪽이 넘치면 그만큼 왼쪽으로 당기고
+    // (1024 폭에선 오른쪽이 잘렸다), 높이는 창 아래까지로 줄여 안에서 스크롤 (접힌 조절을 펼쳐도 그 안에서)
+    rdFitPop(el){
+      if(!el || !el.offsetParent) return;
+      el.style.left=''; el.style.maxHeight='';
+      const r=el.getBoundingClientRect(), M=16;
+      const over=r.right-(window.innerWidth-M);
+      if(over>0) el.style.left=`${-Math.round(Math.min(over, Math.max(0, r.left-M)))}px`;
+      el.style.maxHeight=`${Math.max(240, Math.floor(window.innerHeight-r.top-M))}px`;
     },
     rdPopPick(code){ if(this.shiftEdit.mode==='prev_multi') this.applyMultiShiftEdit(code); else this.applyShiftEditWithUndo(code); },
     rdCellTipPre(nurse, day){
@@ -478,7 +529,12 @@ window.RedesignModule = function() {
         this.activeTab='schedule'; setPrev(true);
         const st=state||'success';
         if(st==='before') setSched('none');
-        else if(st==='running'){ setSched('none'); this.generating=true; this.estimatedSeconds=180; this.generateElapsed=30; this.statusMessage=''; }
+        else if(st==='running'){ setSched('none'); this.generating=true; this.estimatedSeconds=180; this.generateElapsed=30; this.statusMessage='';
+          // 상태 줄 아래 계산 기록 — 진행 한 줄 + 기록 몇 줄이 있어야 검사기가 이 자리를 본다
+          this.showLiveLog=true; this.solveProgress={gap_percent:3.4, nodes:1520, has_solution:true, is_running:true, stalled_seconds:12};
+          this.solverLogs=['Running HiGHS 1.8.1: Copyright (c) 2024 HiGHS under MIT licence terms','Presolving model','Solving MIP model with:','   9445 rows','   5272 columns (5180 binary, 0 integer)',
+            ' H       0       0         0   0.00%   -37065          -35120             5.25%        0      0      0         0     1.7s',
+            '         1       0         1 100.00%   -36980          -35730             3.40%      812     95    410      1520     9.4s'].map((msg,i)=>({id:i+1, msg})); }
         else if(st==='failed'){
           setSched('none'); this.statusOk=false;
           this.statusMessage='★ 10/03(토) D 인원 부족: 필요 4명, 가용 3명\n사전입력을 확인하세요.';

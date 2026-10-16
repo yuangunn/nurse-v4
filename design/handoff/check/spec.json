@@ -405,6 +405,22 @@
             {
               "sel": "[data-rd=btn-stop]",
               "textIncludes": "멈추기"
+            },
+            {
+              "sel": "[data-rd=live-log] .rlive-head",
+              "fontSize": 16,
+              "textIncludes": "답을 찾았어요",
+              "$comment": "2026-10-16 추가 — 만드는 동안 진행 한 줄(답을 찾았는지·가장 좋은 답과 차이)과 계산 기록을 상태 줄 아래에 보인다. v4.13 에서 기록이 서랍 안으로만 들어가 만드는 중엔 볼 곳이 없었다(서랍은 표가 없으면 열리지 않는다). 핸드오프 시안에 없는 자리라 글자 크기·문구만 건다"
+            },
+            {
+              "sel": "[data-rd=live-log] .rlive-head .rbtn",
+              "textIncludes": "계산 기록 접기",
+              "minHeight": 40,
+              "hasTitle": true
+            },
+            {
+              "sel": "[data-rd=live-log] .rlog",
+              "fontSize": 14
             }
           ]
         },

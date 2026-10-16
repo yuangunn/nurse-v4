@@ -64,8 +64,9 @@ window.AnalysisModule = function() {
         const dk=this.dayKey(day);
         const req=this._getReqForDay(day);
 
-        // 날짜별 재적 간호사만 카운트 (전입/전출 범위 내)
-        const activeNurses=this.nurses.filter(n=>!this.isNurseInactive(n,day));
+        // 날짜별 재적 간호사만 카운트 (전입/전출 범위 내) — 트레이닝 중인 신규는 인원이 아니다
+        // (프리셉터를 따른다). 달 중간에 독립하면 그 다음 날부터 센다 (엔진과 같은 규칙, traineeLastKey)
+        const activeNurses=this.nurses.filter(n=>!this.isNurseInactive(n,day)&&!this.isTraineeInTraining(n,day));
         const totalNurses=activeNurses.length;
 
         // 사전입력 카운트 (재적 간호사만)
@@ -121,18 +122,66 @@ window.AnalysisModule = function() {
       return {days:dayAnalysis, weeks, warnings, totalNurses:this.nurses.length};
     },
 
+    // 그 달 나이트킵인가 — 엔진 night_keeper_in_month 와 같게: night_months 가 있으면 그 달 키, 없으면 is_night_shift,
+    // 임신 구간(초기 시작~출산 전 끝)이 그 달과 겹치면 나이트킵이 아니다. 나이트킵은 달력 달로 맡는다 (결정 1-33).
+    _keeperInMonth(nurse,y,m){
+      if(!nurse)return false;
+      const nm=nurse.night_months||{};
+      const pk=`${y}-${String(m).padStart(2,'0')}`;
+      let keep=Object.keys(nm).length?!!nm[pk]:!!nurse.is_night_shift;
+      if(keep&&nurse.is_pregnant){
+        const ws=['early','late'].map(k=>(nurse.pregnancy||{})[k]||{}).filter(w=>w.start&&w.end);
+        const mS=`${pk}-01`,mE=this.dayKey(new Date(y,m,0));
+        if(ws.length&&ws.map(w=>w.start).sort()[0]<=mE&&ws.map(w=>w.end).sort().pop()>=mS)keep=false;
+      }
+      return keep;
+    },
+
+    // 주휴가 빠진 완전한 주 — 안내만 (생성은 막지 않는다, 엔진 _missing_juhu_weeks 와 같은 기준).
+    // 병동 번표는 모든 완전한 주에 사람마다 주휴가 하나다 (나이트킵·트레이니도, 달이 바뀌는 주도).
+    // 끝에 붙은 다음 달 며칠도 이 근무표에서 정한다 (11월 번표 = 11/1~12/5) — 거기 주휴가 빠지면
+    // 엔진이 그 주를 V·오프특근으로 메운다. 완전한 주 = 7일 모두 1일 이후(지난달 칸은 기록) + 7일 내내 재적.
+    // 범위 안에 주휴가 하나도 없는 사람(아직 안 넣음)은 주마다 되풀이하지 않고 한 줄로 모은다.
+    _missingJuhuWarnings(weeks){
+      const first=new Date(this.year,this.month-1,1);
+      const isJuhu=v=>String(v||'').replace(/^\//,'')==='주';
+      const md=d=>`${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+      const names=ns=>ns.slice(0,6).join(', ')+(ns.length>6?` 외 ${ns.length-6}명`:'');
+      const own=weeks.flat().filter(d=>d>=first);
+      const full=weeks.filter(wk=>wk[0]>=first);
+      const whole=(n,wk)=>wk.every(d=>!this.isNurseInactive(n,d));   // 7일 내내 재적
+      const none=new Set();
+      for(const n of this.nurses){
+        const pre=this.prevSchedule[n.id]||{};
+        if(full.some(wk=>whole(n,wk))&&!own.some(d=>isJuhu(pre[this.dayKey(d)])))none.add(n.id);
+      }
+      const out=[];
+      for(const wk of full){
+        const miss=this.nurses.filter(n=>!none.has(n.id)&&whole(n,wk)
+          &&!wk.some(d=>isJuhu((this.prevSchedule[n.id]||{})[this.dayKey(d)]))).map(n=>n.name);
+        if(miss.length)out.push({type:'warn',msg:`${this.getCycleNum(wk[0])}주기(${md(wk[0])}~${md(wk[6])}) 주휴 없음 ${miss.length}명: ${names(miss)}`});
+      }
+      if(none.size){
+        const ns=this.nurses.filter(n=>none.has(n.id)).map(n=>n.name);
+        out.push({type:'warn',msg:`주휴가 아직 하나도 없는 사람 ${ns.length}명: ${names(ns)} — 아래 '주휴 추천 배분 → 사전입력에 적용'으로 넣을 수 있습니다`});
+      }
+      return out;
+    },
+
     _prevStructureWarnings(){
       const out=[];
       const days=this.scheduleDays;
       if(!days.length||!this.nurses.length)return out;
       const weeks=[];
       for(let i=0;i+6<days.length;i+=7)weeks.push(days.slice(i,i+7));
+      out.push(...this._missingJuhuWarnings(weeks));
+      const first=new Date(this.year,this.month-1,1);
       let count=0;
       for(const nurse of this.nurses){
-        if(this.isNightThisMonth&&this.isNightThisMonth(nurse))continue; // 야간전담은 OF 규칙 제외
         const pre=this.prevSchedule[nurse.id]||{};
         for(let wi=0;wi<weeks.length;wi++){
-          const wd=weeks[wi].filter(d=>!this.isOverflow(d));
+          // 1일부터(끝에 붙은 다음 달 며칠 포함) — 나이트킵의 날은 OF 규칙 제외, 날짜가 속한 달로 (엔진 _of_week_days)
+          const wd=weeks[wi].filter(d=>d>=first&&!this._keeperInMonth(nurse,d.getFullYear(),d.getMonth()+1));
           if(!wd.length)continue;
           const codes=wd.map(d=>pre[this.dayKey(d)]||'');
           const ofs=codes.filter(c=>c==='OF').length;
@@ -143,7 +192,9 @@ window.AnalysisModule = function() {
           if(ofs>1){
             count++;
             const hint=jus===0?" — 하나를 '주'로 바꾸면 규칙대로가 됩니다 (주휴 배치는 직접 결정)":'';
-            out.push({type:'note',msg:`${nurse.name}: ${wi+1}주차 OF ${ofs}회 — 규칙은 주당 1회 (확정으로 수용)${hint}`});
+            // 주는 날짜로 — 'N주차'는 생성 범위 첫 주(지난달 말)부터 세어 화면 주기 번호와 달랐다 (결정 1-42)
+            const md=d=>String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0');
+            out.push({type:'note',msg:`${nurse.name}: ${md(weeks[wi][0])}~${md(weeks[wi][weeks[wi].length-1])} 주 OF ${ofs}회 — 규칙은 주당 1회 (확정으로 수용)${hint}`});
           }
           if(count>=12){
             out.push({type:'warn',msg:'… 사전입력 구조 경고가 더 있습니다 (12건까지만 표시)'});
@@ -191,17 +242,8 @@ window.AnalysisModule = function() {
       const first=new Date(this.year,this.month-1,1);
       if(start>=first)return null;
       const nurse=(this.nurses||[]).find(n=>n.id===nid);
-      if(nurse){   // 블록 시작은 늘 지난달 안이다 (블록 28일 ≤ 지난달 일수)
-        const nm=nurse.night_months||{};
-        const pk=`${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,'0')}`;
-        let keep=Object.keys(nm).length?!!nm[pk]:!!nurse.is_night_shift;
-        if(keep&&nurse.is_pregnant){   // 임신 중인 달은 나이트킵이 아니다 — 엔진 night_keeper_in_month (임신 구간 = 초기 시작~출산 전 끝)
-          const ws=['early','late'].map(k=>(nurse.pregnancy||{})[k]||{}).filter(w=>w.start&&w.end);
-          const mS=`${pk}-01`,mE=this.dayKey(new Date(start.getFullYear(),start.getMonth()+1,0));
-          if(ws.length&&ws.map(w=>w.start).sort()[0]<=mE&&ws.map(w=>w.end).sort().pop()>=mS)keep=false;
-        }
-        if(keep)return null;
-      }
+      // 블록 시작은 늘 지난달 안이다 (블록 28일 ≤ 지난달 일수) — 임신 중인 달은 나이트킵이 아니다 (_keeperInMonth)
+      if(nurse&&this._keeperInMonth(nurse,start.getFullYear(),start.getMonth()+1))return null;
       const inRange=new Set((this.scheduleDays||[]).map(d=>this.dayKey(d)));   // 그 밖은 지난달 사전입력이 남은 칸 ('다른 달 정리')
       const pre=this.prevSchedule[nid]||{};
       const saved=new Set((this.prevMonthJuhu||{})[nid]||[]);
@@ -213,6 +255,18 @@ window.AnalysisModule = function() {
         if((has?v:(saved.has(dk)?'주':null))==='주')last=t.getDay();
       }
       return last;
+    },
+
+    // 블록(4주기)에 이번 달(1일부터, 끝에 붙은 다음 달 며칠 포함) 이미 넣은 주휴가 있으면 그중 가장 늦은 것의 요일(getDay) — 없으면 null.
+    // 1~4주기는 같은 요일이라 남은 주(대개 달 끝에 걸친 주)도 그 요일로 추천한다. 병동 11월 번표: 11/10·17·24 화 → 12/1 화.
+    // 1일 앞 지난달 칸은 _juhuAnchorDow 가 맡는다 (지난달 나이트킵은 잇지 않는다).
+    _blockExistingDow(nid,periodWeeks){
+      const first=new Date(this.year,this.month-1,1);
+      const pre=this.prevSchedule[nid]||{};
+      let last=null;
+      for(const w of periodWeeks)for(const wd of w.days)
+        if(wd.day>=first&&pre[wd.dk]==='주'&&(!last||wd.day>last.day))last=wd;
+      return last?last.dow:null;
     },
 
     _recommendJuhu(analysis){
@@ -276,6 +330,9 @@ window.AnalysisModule = function() {
           if(rotate&&periodIdx>firstPeriodIdx0)base=(base-1+7)%7;
           // 요일 고정은 이어받은 블록이 끝나면 제 요일로 — 안 그러면 지난달에 한 번 옮긴 요일이 달마다 이어진다
           else if(fromAnchor&&periodIdx>firstPeriodIdx0){base=jd;fromAnchor=false}
+          // 이 블록에 이번 달 넣은 주휴가 있으면 남은 주도 그 요일 — 요일 고정은 이 블록 뒤에 제 요일로 (지난달 요일 잇기와 같게)
+          const ex=this._blockExistingDow(nurse.id,periodWeeks);
+          if(ex!==null&&ex!==base){base=ex;fromAnchor=true}
           const pick=this._pickBlockDow(periodWeeks,base,daySlack,nurseAssignedWeeks[nurse.id]);
           if(pick.dow===null)continue;             // 이 블록은 이미 다 배정됐거나 자리가 없다
           if(pick.dow!==base){
@@ -372,6 +429,8 @@ window.AnalysisModule = function() {
           let base3=chosenDow;
           for(const[periodIdx,periodWeeks]of periods){
             if(periodIdx>firstPeriodIdx)base3=(base3-1+7)%7;
+            const ex3=this._blockExistingDow(nurse.id,periodWeeks);   // 이 블록에 이번 달 넣은 주휴의 요일
+            if(ex3!==null)base3=ex3;
             const pick=this._pickBlockDow(periodWeeks,base3,daySlack,nurseAssignedWeeks[nurse.id]);
             if(pick.dow===null)continue;
             if(pick.dow!==base3){
@@ -393,6 +452,15 @@ window.AnalysisModule = function() {
             }
           }
         }
+      }
+
+      // 1일 앞(지난달) 칸에는 새 주휴를 넣지 않는다 — 기록이다 (전달 이월로 들어온 주휴는 '기존'으로 남는다).
+      // 11월처럼 1일이 주기 첫날이면 범위 앞에 지난달 한 주가 통째로 붙는데, 거기 18명 주휴를 지어 넣었다 (2026-10-16).
+      // 요일은 그 주까지 보고 고른 뒤에 걸러서 블록 규칙(_pickBlockDow)은 그대로다. 끝에 붙은 다음 달 며칠은 넣는다.
+      const firstDay=new Date(this.year,this.month-1,1);
+      for(const nid of Object.keys(assignments)){
+        assignments[nid]=assignments[nid].filter(a=>a.existing||a.day>=firstDay);
+        if(!assignments[nid].length)delete assignments[nid];
       }
 
       // 추천 후 일별 주휴 수 집계
