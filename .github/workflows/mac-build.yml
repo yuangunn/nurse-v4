@@ -1,0 +1,125 @@
+name: macOS build check
+
+# 맥 판을 실제로 빌드해 '받은 사람의 맥'처럼 설치해 본다 — 맥 빌드 파일을 고친 PR 에서만.
+#
+# 왜 붙였나 (2026-10-15): v4.13.1·v4.14.0 맥 판의 엔진 폴더(_internal) 링크 103개가 빌드한
+# 러너의 절대 경로를 가리켜 다른 맥에서 전부 끊어져 있었다. 빌드 러너에서는 그 경로가 있어서
+# 아무도 몰랐다. 그래서 여기서는 빌드 폴더를 지운 뒤 dmg 에서 꺼낸 앱만으로 확인한다:
+# dmg 의 '응용 프로그램' 바로가기 · 끊어진 링크 0 · xattr -dr 가 'No such file' 없이 끝남 ·
+# 앱 안 서버와 두 엔진 · Electron 앱이 서버를 띄움.
+
+on:
+  pull_request:
+    paths:
+      - build-mac.sh
+      - NurseScheduler.spec
+      - requirements.txt
+      - main.py
+      - electron/**
+      - server/database.py
+      - server/profiles.py
+      - .github/workflows/mac-build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 3.11 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Node 20 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: macOS 빌드 (build-mac.sh — 링크 검사·엔진 켜 보기 포함)
+        run: bash build-mac.sh
+        env:
+          PYTHON: python3
+
+      - name: 받은 사람의 맥처럼 설치해 보기
+        run: |
+          set -euo pipefail
+          DMG="$(ls dist/NurseScheduler_v4_mac_*.dmg)"
+          ZIP="$(ls dist/NurseScheduler_v4_mac_*.zip)"
+          # 빌드 폴더가 남아 있으면 절대 경로 링크가 이어져 보인다 — 지우고 본다
+          rm -rf dist/NurseScheduler dist/electron build/NurseScheduler
+
+          MNT="$(mktemp -d)"
+          hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MNT" >/dev/null
+          ls -la "$MNT"
+          test "$(readlink "$MNT/Applications")" = /Applications
+          INST="$(mktemp -d)"
+          ditto "$MNT/NurseScheduler.app" "$INST/NurseScheduler.app"
+          hdiutil detach "$MNT" >/dev/null
+          APP="$INST/NurseScheduler.app"
+
+          broken="$(find -L "$APP" -type l)"
+          if [ -n "$broken" ]; then echo "✗ 끊어진 링크:"; echo "$broken" | head -20; exit 1; fi
+
+          # 받은 파일처럼 격리 표시를 붙였다가 안내대로 지운다
+          xattr -w com.apple.quarantine "0083;00000000;Safari;" "$APP"
+          xattr -dr com.apple.quarantine "$APP" 2>"$INST/xattr.err" || true
+          cat "$INST/xattr.err"
+          if grep -q "No such file" "$INST/xattr.err"; then exit 1; fi
+          codesign --verify --deep "$APP"
+
+          # zip 도 같은지
+          ZDIR="$(mktemp -d)"
+          ditto -x -k "$ZIP" "$ZDIR"
+          zbroken="$(find -L "$ZDIR/NurseScheduler.app" -type l)"
+          if [ -n "$zbroken" ]; then echo "✗ zip 의 끊어진 링크:"; echo "$zbroken" | head -20; exit 1; fi
+
+          echo "APP=$APP" >> "$GITHUB_ENV"
+
+      - name: 설치한 앱으로 서버·엔진 켜 보기
+        run: |
+          set -euo pipefail
+          RES="$APP/Contents/Resources/NurseScheduler"
+          DATA="$(mktemp -d)"
+          APPDATA="$DATA" NURSE_NO_BROWSER=1 NURSE_PORT=57991 "$RES/NurseScheduler" >"$DATA/server.log" 2>&1 &
+          PID=$!
+          for _ in $(seq 1 120); do
+            curl -fsS http://127.0.0.1:57991/health >/dev/null 2>&1 && break
+            kill -0 "$PID" 2>/dev/null || { cat "$DATA/server.log"; exit 1; }
+            sleep 0.5
+          done
+          for t in highs cpsat; do
+            r="$(curl -fsS "http://127.0.0.1:57991/api/dev/$t-selftest")"
+            echo "$t: $r"
+            case "$r" in *'"ok":true'*) ;; *) cat "$DATA/server.log"; exit 1 ;; esac
+          done
+          kill "$PID"; wait "$PID" 2>/dev/null || true
+
+      - name: Electron 앱이 서버를 띄우는지
+        run: |
+          set -euo pipefail
+          DATA="$(mktemp -d)"
+          APPDATA="$DATA" "$APP/Contents/MacOS/NurseScheduler" >"$DATA/electron.log" 2>&1 &
+          PID=$!
+          ok=0
+          for _ in $(seq 1 180); do
+            for p in $(seq 5757 5766); do
+              if curl -fsS "http://127.0.0.1:$p/health" >/dev/null 2>&1; then ok=1; echo "서버 포트 $p"; break 2; fi
+            done
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 0.5
+          done
+          kill "$PID" 2>/dev/null || true
+          sleep 2
+          pkill -f "$APP/Contents/Resources/NurseScheduler/NurseScheduler" 2>/dev/null || true
+          cat "$DATA/electron.log" | tail -30
+          test "$ok" = 1

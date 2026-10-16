@@ -3,6 +3,7 @@
 """
 import json
 import os
+import sys
 import hashlib
 import base64
 import shutil
@@ -19,6 +20,9 @@ def _app_dir() -> Path:
     app_data = os.environ.get("APPDATA", "")
     if app_data:
         d = Path(app_data) / "NurseScheduler"
+    elif getattr(sys, "frozen", False) and sys.platform == "darwin":
+        # 맥 앱엔 APPDATA 가 없다 — 앱 안(.app/…/_internal/data)에 두면 새 판으로 바꿀 때 지워진다
+        d = Path.home() / "Library" / "Application Support" / "NurseScheduler"
     else:
         d = Path(__file__).parent.parent / "data"
     d.mkdir(parents=True, exist_ok=True)

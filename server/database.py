@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import os
+import sys
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
@@ -10,6 +11,9 @@ def get_db_path() -> str:
     app_data = os.environ.get("APPDATA", "")
     if app_data:
         db_dir = Path(app_data) / "NurseScheduler"
+    elif getattr(sys, "frozen", False) and sys.platform == "darwin":
+        # 맥 앱엔 APPDATA 가 없다 — 앱 안(.app/…/_internal/data)에 두면 새 판으로 바꿀 때 지워진다
+        db_dir = Path.home() / "Library" / "Application Support" / "NurseScheduler"
     else:
         db_dir = Path(__file__).parent.parent / "data"
     db_dir.mkdir(parents=True, exist_ok=True)
