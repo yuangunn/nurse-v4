@@ -211,6 +211,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             # ── 완전 확정 표: 검증 거부 대신 그대로 확정 (+규칙 차이 안내) ──
             if self._fully_pinned():
                 return self._confirm_pinned_result()
+            if getattr(self, "_relax_timed_out", False):
+                return self._relax_timeout_result()
             # 즉시 판정된 Infeasible → 진단 실행 (각 단계 10초 이내)
             diagnosis = self._diagnose_infeasibility()
             return {
@@ -235,6 +237,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                     return relax_result
             if self._fully_pinned():
                 return self._confirm_pinned_result()
+            if getattr(self, "_relax_timed_out", False):
+                return self._relax_timeout_result()
             return {
                 "success": False,
                 "schedule": {},
@@ -503,6 +507,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             s1_status = pulp.constants.LpStatus.get(prob.status, "Unknown")
             if s1_status == "Infeasible":
                 self._pre_soft = False
+                self._relax_timed_out = False
                 return None
             if s1_status == "Optimal":
                 best_keep = int(round(pulp.value(bonus_expr) or 0))
@@ -606,6 +611,9 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 "message": f"근무표가 생성되었습니다. (상태: {label})\n{relax_msg}",
                 "estimated_seconds": self.estimate_seconds(),
             })
+        # 완화해도 해를 못 찾음 — 시간이 모자랐는지(진단 대신 시간 안내) 정말 안 되는지
+        self._relax_timed_out = (status_str != "Infeasible" and not _sp.is_cancelled()
+                                 and not _sp.was_cancel_all())
         return None
 
     # ── 결과 추출 ────────────────────────────────────────────────────────────

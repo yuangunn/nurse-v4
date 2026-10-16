@@ -37,14 +37,18 @@ class _ConflictAnalyzer(CpSatScheduler):
         self._anchor_by_label: Dict[str, dict] = {}  # 라벨 → {nurse_id, date} 셀 점프
         lits: List = []
 
-        def gate(label: str, nid=None, dt=None):
+        def gate(label: str, nid=None, dt=None, kind=None, **info):
+            """kind·info 는 신호등 한 줄 요약(_conflict_summary)이 쓴다 — 화면엔 label 만 나간다."""
             lit = model.NewBoolVar(f"assume_{len(lits)}")
             self._labels[lit.Index()] = label
             if nid is not None or dt is not None:
-                self._anchor_by_label[label] = {
-                    "nurse_id": nid,
-                    "date": dt.strftime("%Y-%m-%d") if dt is not None else None,
-                }
+                a = {"nurse_id": nid,
+                     "date": dt.strftime("%Y-%m-%d") if dt is not None else None}
+                if kind:
+                    a["kind"] = kind
+                if info:
+                    a["info"] = info
+                self._anchor_by_label[label] = a
             lits.append(lit)
             return lit
 
@@ -87,6 +91,11 @@ class _ConflictAnalyzer(CpSatScheduler):
         if not self.nurses:
             return {"status": "unknown", "conflicts": [], "message": "간호사가 없습니다."}
         out = {"estimated_seconds": self.estimate_seconds()}
+        # 빈칸 없는 완성된 표는 만들기에서 그대로 근무표로 확정된다(_confirm_pinned_result) —
+        # 신호등도 같은 답을 해야 한다. 앱 규칙과 다른 곳은 만든 뒤 '참고' 목록으로 나온다.
+        # (완화를 켜면 엔진이 표를 고쳐 보려 하므로 이 지름길을 쓰지 않는다)
+        if not self.allow_pre_relax and self._fully_pinned():
+            return {**out, "status": "feasible", "conflicts": [], "pinned_table": True}
         # 쉴 코드 수급 산술 (M4-P1) — 솔버를 돌리기 전에 확정 판정이 나온다.
         # 수요 하한 vs 공급 상한이라 부족이 나오면 무조건 infeasible.
         rest_short = self.rest_supply_shortfall()
@@ -128,14 +137,32 @@ class _ConflictAnalyzer(CpSatScheduler):
         anchored = [{"label": c, **(self._anchor_by_label.get(c)
                                     or {"nurse_id": None, "date": None})}
                     for c in labels]
+        # 라벨 묶음은 최소가 아니라 인원 라벨 등이 섞여 온다 — 한 사람 규칙만으로도 막히면
+        # 그 사람 묶음을 앞에 두고 그것으로 한 줄을 만든다 (11월 실제 사례: 인원 라벨이 끼면
+        # 한 사람 휴무 한도 설명이 안 나왔다)
+        core = self._nurse_core(gmodel, lits, anchored, min(2.0, time_limit)) if anchored else None
+        if core:
+            keep = {a["label"] for a in core}
+            anchored = core + [a for a in anchored if a["label"] not in keep]
+            labels = [a["label"] for a in anchored]
         res = {**out, "status": "infeasible", "conflicts": labels, "anchored": anchored}
+        summary, focus = self._conflict_summary(core or anchored)
+        if summary:
+            res["summary"] = summary
+        if focus:
+            res["focus"] = focus
         if not labels:
-            res["message"] = ("원인 자동 추출 시간 초과 — 흔한 원인은 인원 대비 수요 불일치"
-                              "(일별 필요 인원은 '정확히 일치'라 남는 인원도 배치 불가)입니다. "
-                              "주휴/휴가 사전입력으로 균형을 맞추거나 '정밀 분석'을 실행하세요."
-                              if st2 != cp_model.INFEASIBLE else
-                              "구조 제약(1일 1근무·근무 자격·알 수 없는 코드)만으로 "
-                              "충돌합니다. 사전입력 코드와 간호사 자격을 확인하세요.")
+            if st2 in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                # 게이트를 다 켜도 풀린다 = 게이트가 엔진 규칙 하나를 못 따라간 것 — 무엇 때문이라고 단정하지 않는다
+                res["message"] = ("막힌 곳을 규칙 하나로 좁히지 못했어요. "
+                                  "'정밀 분석'을 실행하거나 사전입력 완화를 켜 주세요.")
+            elif st2 != cp_model.INFEASIBLE:
+                res["message"] = ("원인 자동 추출 시간 초과 — 흔한 원인은 인원 대비 수요 불일치"
+                                  "(일별 필요 인원은 '정확히 일치'라 남는 인원도 배치 불가)입니다. "
+                                  "주휴/휴가 사전입력으로 균형을 맞추거나 '정밀 분석'을 실행하세요.")
+            else:
+                res["message"] = ("구조 제약(1일 1근무·근무 자격·알 수 없는 코드)만으로 "
+                                  "충돌합니다. 사전입력 코드와 간호사 자격을 확인하세요.")
         return res
 
     def analyze(self) -> Dict:
@@ -258,17 +285,156 @@ class _ConflictAnalyzer(CpSatScheduler):
         ovr = self.per_day_req.get(date_key, {}) if is_cur else {}
         return {**base, **ovr} if ovr else base
 
+    # ── 신호등 한 줄 요약 ─────────────────────────────────────────────────────
+
+    def _pinned_dates(self, nid, idxs, code) -> list:
+        """그 칸들 중 사전입력(엔진이 보는 값)이 code 인 날짜 (ISO)."""
+        out = []
+        nurse = next((n for n in self.nurses if n["id"] == nid), None)
+        for d in idxs:
+            dt = self.all_dates[d]
+            dk = dt.strftime("%Y-%m-%d")
+            raw = self.prev.get(nid, {}).get(dk)
+            if raw and nurse is not None and self._effective_pre(nurse, dt, raw, dk in self.holidays) == code:
+                out.append(dk)
+        return out
+
+    def _nurse_core(self, gmodel, lits, anchored: list, time_limit: float):
+        """그 사람 규칙(전환·연속·휴무 한도…)만 켜도 막히는 간호사가 있으면 그 묶음의 라벨.
+
+        SufficientAssumptions 는 최소가 아니어서 인원·차지 라벨이 섞여 온다. 한 사람 게이트만
+        가정으로 다시 풀어 그래도 막히면 그 사람 탓이 확실하다. 없으면 None."""
+        mixed = len({a.get("nurse_id") for a in anchored}) > 1
+        if not mixed:
+            return None
+        cand = []
+        for a in anchored:
+            nid = a.get("nurse_id")
+            if nid and a.get("kind") in ("rest_cap", "transition", "sequence") and nid not in cand:
+                cand.append(nid)
+        by_nid = {}
+        for lit in lits:
+            lab = self._labels.get(lit.Index())
+            nid = (self._anchor_by_label.get(lab) or {}).get("nurse_id")
+            if nid:
+                by_nid.setdefault(nid, []).append(lit)
+        for nid in cand[:3]:
+            own = by_nid.get(nid) or []
+            if not own:
+                continue
+            gmodel.ClearAssumptions()
+            gmodel.AddAssumptions(own)
+            s = cp_model.CpSolver()
+            s.parameters.max_time_in_seconds = time_limit
+            if s.Solve(gmodel) != cp_model.INFEASIBLE:
+                continue
+            out, seen = [], set()
+            for i in s.SufficientAssumptionsForInfeasibility():
+                lab = self._labels.get(i)
+                if lab and lab not in seen:
+                    seen.add(lab)
+                    out.append({"label": lab, **(self._anchor_by_label.get(lab)
+                                                 or {"nurse_id": None, "date": None})})
+            if out:
+                return out
+        return None
+
+    def _conflict_summary(self, anchored: list):
+        """충돌 라벨 묶음을 사람이 읽는 한 줄로 (+ '칸으로 가기'가 갈 칸).
+
+        라벨 하나('2주차 OF 2회 이상 금지')만 보여 주면 그 사람이 OF 를 두 번 넣은 것처럼 읽힌다.
+        실제로는 한 사람의 전환 금지·연속 규칙이 쉬는 날을 요구하는데 OF·생·V 한도가 이미 찬 것 —
+        그 묶음 전체를 날짜와 이미 넣은 휴무로 말한다. 모르는 모양이면 ("", 첫 칸)."""
+        if not anchored:
+            return "", None
+        with_date = [a for a in anchored if a.get("date")]
+        nids = {a.get("nurse_id") for a in anchored if a.get("nurse_id")}
+        staff = [a for a in anchored if a.get("kind") == "staff"]
+        if len(nids) == 1 and not staff:
+            nid = next(iter(nids))
+            nurse = next((n for n in self.nurses if n["id"] == nid), None)
+            if nurse is None:
+                return "", (with_date or anchored)[0]
+            who = self._fmt_nurse_label(nurse)
+            caps = [a for a in anchored if a.get("kind") == "rest_cap"]
+            trans = sorted((a for a in anchored if a.get("kind") == "transition" and a.get("date")),
+                           key=lambda a: a["date"])
+            seq = [a for a in anchored if a.get("kind") == "sequence"]
+            focus = trans[0] if trans else (with_date or anchored)[0]
+            if caps and (trans or seq):
+                used = sorted({(dk, (a.get("info") or {}).get("code") or "")
+                               for a in caps for dk in ((a.get("info") or {}).get("used") or [])})
+                if trans:
+                    frm = (trans[0].get("info") or {}).get("frm") or ""
+                    need = (f"{self._fmt_date(date.fromisoformat(trans[0]['date']))} {frm} 뒤로 "
+                            f"쉬는 날이 있어야 하는데")
+                else:
+                    need = "연속 근무·야간 규칙상 쉬는 날이 하나 더 있어야 하는데"
+                if used:
+                    have = "·".join(f"{c}({dk[5:].replace('-', '/')})" for dk, c in used)
+                    body = f"이미 넣은 {have}로 휴무 한도가 찼어요"
+                else:
+                    body = "그 주에 더 넣을 수 있는 휴무가 없어요"
+                return (f"{who}: {need} {body}. 이 사람 원티드 하나를 옮기거나 사전입력 완화를 켜 주세요.",
+                        focus)
+            short = [a["label"][len(who):].strip() if a["label"].startswith(who) else a["label"]
+                     for a in anchored[:2]]
+            return f"{who} 칸끼리 맞지 않아요: {' · '.join(short)}", focus
+        if staff:
+            days = sorted({a["date"] for a in staff if a.get("date")})
+            # 한 사람 휴무 한도 + 그날들 인원 — 다른 사람이 자리를 다 채워 이 사람이 쉬어야 하는데 쉴 코드가 모자란 것
+            own = [a for a in anchored if a.get("kind") != "staff"]
+            caps = [a for a in own if a.get("kind") == "rest_cap"]
+            own_ids = {a.get("nurse_id") for a in own}
+            if (days and caps and len(own_ids) == 1 and None not in own_ids
+                    and not any(a.get("kind") in ("transition", "sequence") for a in own)):
+                nid = next(iter(own_ids))
+                nurse = next((n for n in self.nurses if n["id"] == nid), None)
+                if nurse is not None:
+                    who = self._fmt_nurse_label(nurse)
+                    a, b = date.fromisoformat(days[0]), date.fromisoformat(days[-1])
+                    span = self._fmt_date(a) if a == b else f"{self._fmt_date(a)}~{self._fmt_date(b)}"
+                    used = sorted({(dk, (c.get("info") or {}).get("code") or "")
+                                   for c in caps for dk in ((c.get("info") or {}).get("used") or [])})
+                    body = ("이미 넣은 " + "·".join(f"{c}({dk[5:].replace('-', '/')})" for dk, c in used)
+                            + "로 휴무 한도가 찼어요") if used else "넣을 수 있는 휴무(OF 주 1회·V)가 모자라요"
+                    return (f"{who}: {span} 근무 자리가 다 차서 쉬어야 하는 날이 있는데 {body}. "
+                            f"이 사람이나 그날 다른 사람의 원티드 하나를 옮기거나 사전입력 완화를 켜 주세요.",
+                            {"label": caps[0]["label"], "nurse_id": nid, "date": days[0], "kind": "rest_cap"})
+            if len(days) == 1:
+                dt = date.fromisoformat(days[0])
+                return (f"{self._fmt_date(dt)} 인원을 채울 수 없어요 — 그날 쉬기로 넣은 사람이 많거나, "
+                        f"전날 근무 때문에 그날 들어올 수 없는 사람이 있어요. 그날 휴무 하나를 옮기거나 "
+                        f"필요 인원을 바꿔 주세요."), next(a for a in staff if a.get("date") == days[0])
+        return "", (with_date or anchored)[0]
+
+    def _gate_pins(self):
+        """사람마다 거는 게이트의 사실-클램프 — (_pin, 이음 규칙용 _pin_view). 신호등(probe)만 채워져 있고
+        analyze() 는 둘 다 비어 클램프 없이 전수 설명한다. 엔진과 같은 값으로 걸어야 엔진이 받아들이는
+        사람이 넣은 칸(지난달 E→이번 달 D 같은 확정 쌍, 확정 야간 7회 등)을 원인으로 짚지 않는다 —
+        한 사람 게이트만 켜서 막히면 그 사람 탓으로 확정하는 _nurse_core 가 특히 그렇다."""
+        pin = getattr(self, "_pin", {}) or {}
+        return pin, (self._pin_view() if pin else {})
+
     def _g_daily_requirements(self, model, x, gate):
         period_map = {"D": self.DAY_SHIFTS, "E": self.EVENING_SHIFTS, "N": self.NIGHT_SHIFTS}
         first = date(self.year, self.month, 1)
+        # 신호등(probe)은 _build_pin_index 뒤에 부른다 — 엔진과 같은 사실-클램프로 라벨을 뽑아야
+        # 엔진이 받아들이는 확정 칸(요구보다 많은 근무 등)을 원인으로 짚지 않는다.
+        # analyze() 는 _pin 이 비어 있어 예전처럼 클램프 없이 전수 설명한다.
+        pin = getattr(self, "_pin", {}) or {}
         for d, dt in enumerate(self.all_dates):
             if dt < first:
+                continue
+            if pin and self._day_all_pinned(d, dt):
                 continue
             day_req = self._cur_day_req(dt)
             for period, shifts in period_map.items():
                 if period not in day_req:
                     continue
                 req = max(0, int(day_req.get(period) or 0))
+                if pin:
+                    req = max(req, self._pin_day_period_count(d, shifts))
                 # 명시적 0도 게이팅 — 솔버는 ==0을 강제하므로 빠지면 '0명 요구일
                 # 사전입력 근무' 충돌을 '충돌 없음'으로 오진한다
                 exprs = [x[n["id"]][d][s] for n in self.nurses for s in shifts]
@@ -276,46 +442,58 @@ class _ConflictAnalyzer(CpSatScheduler):
                     continue
                 label = (f"{self._fmt_date(dt)} {period} 필요 인원 {req}명" if req > 0
                          else f"{self._fmt_date(dt)} {period} 0명(배정 금지)")
-                lit = gate(label, dt=dt)
+                lit = gate(label, dt=dt, kind="staff")
                 model.Add(sum(exprs) == req).OnlyEnforceIf(lit)
 
     def _g_charge_requirements(self, model, x, gate):
         period_to_req = {"day": "D", "evening": "E", "night": "N"}
         charge_shifts = [s for s in self._shifts if s["is_charge"]]
         first = date(self.year, self.month, 1)
+        pin = getattr(self, "_pin", {}) or {}
         for d, dt in enumerate(self.all_dates):
             if dt < first:
                 continue
+            if pin and self._day_all_pinned(d, dt):
+                continue   # 사실-클램프: 확정된 날의 차지 구성은 표 그대로 (엔진 _cs_charge_requirements 와 같게)
             day_req = self._cur_day_req(dt)
             for s in charge_shifts:
                 rk = period_to_req.get(s["period"])
                 if rk and day_req.get(rk, 0) > 0:
-                    lit = gate(f"{self._fmt_date(dt)} {s['code']} 차지 1명 필요", dt=dt)
+                    lit = gate(f"{self._fmt_date(dt)} {s['code']} 차지 1명 필요", dt=dt, kind="staff")
                     model.Add(sum(x[n["id"]][d][s["code"]] for n in self.nurses) == 1).OnlyEnforceIf(lit)
 
     def _g_weekly_off(self, model, x, gate):
         if "OF" not in self.SOLVER_SHIFTS:
             return
-        first = date(self.year, self.month, 1)
+        pin = getattr(self, "_pin", {}) or {}
         for nurse in self.nurses:
             nid = nurse["id"]
-            if nurse.get("is_night_shift", False):
-                continue
             for wi, (ws, we) in enumerate(self.weeks):
-                week_days = [d for d in range(ws, we + 1)
-                             if self.all_dates[d] >= first and self._nurse_active_idx(nurse, d)]
-                if len(week_days) >= 7:
-                    # 오프특근(제1원칙 3): OF 주 1회는 슬랙으로 양보되므로 생성 실패의
-                    # 원인이 될 수 없다 — 상한(주 2회 금지)만 게이팅한다.
-                    of_sum = sum(x[nid][d]["OF"] for d in week_days)
-                    lit = gate(f"{self._fmt_nurse_label(nurse)} {wi+1}주차 OF 2회 이상 금지", nid=nid)
-                    model.Add(of_sum <= 1).OnlyEnforceIf(lit)
+                # 나이트킵의 날은 OF 무제한 — 날짜가 속한 달로 (엔진과 같은 _of_week_days)
+                week_days = self._of_week_days(nurse, ws, we)
+                if not week_days:
+                    continue
+                if pin and all(pin.get((nid, d)) for d in week_days):
+                    continue  # 사실-클램프: 묶음 전체 확정 (엔진 _cs_weekly_off 와 같게)
+                # 오프특근(제1원칙 3): OF 주 1회는 슬랙으로 양보되므로 생성 실패의
+                # 원인이 될 수 없다 — 상한(주 2회 금지)만 게이팅한다.
+                # 부분 묶음(달이 바뀌는 주의 일반의 날 며칠)에도 엔진은 상한을 건다 — 예전엔 7일 묶음만
+                # 게이팅해서, 달 끝 며칠에 OF 를 둘 놓는 '가능한' 표를 찾고 원인을 못 짚었다.
+                # 주는 날짜로 적는다 — 'N주차'는 생성 범위 첫 주(지난달 말)부터 세어
+                # 화면의 주기 번호와 달라 '2주차'가 11/1 주를 가리켰다.
+                bound = self._of_week_bound(nurse, ws, we, week_days)   # 엔진과 같은 값 (확정분·트레이닝 날 OF)
+                of_sum = sum(x[nid][d]["OF"] for d in week_days)
+                lit = gate(f"{self._fmt_nurse_label(nurse)} {self._week_span(week_days)} OF 주 1회 한도",
+                           nid=nid, dt=self.all_dates[week_days[0]], kind="rest_cap",
+                           code="OF", used=self._pinned_dates(nid, week_days, "OF"))
+                model.Add(of_sum <= bound).OnlyEnforceIf(lit)
 
     def _g_pregnancy_p1(self, model, x, gate):
         """임산부 P1 주1회 — 게이팅 (충돌 시 라벨 핀포인트). 야간 제외·생 면제는 변수 도메인 처리."""
         if "P1" not in self.ALL_SHIFTS:
             return
         first_of_month = date(self.year, self.month, 1)
+        pin, _ = self._gate_pins()
         for nurse in self.nurses:
             if not nurse.get("is_pregnant"):
                 continue
@@ -331,22 +509,55 @@ class _ConflictAnalyzer(CpSatScheduler):
                            if not isinstance(x[nid][d].get("P1"), int)]
                 if not p1_vars:
                     continue
+                if pin and all(pin.get((nid, d)) for d in win_days):
+                    continue   # 사실-클램프 (엔진 _cs_pregnancy_p1_weekly 와 같게)
+                bound = max(1, self._pin_nurse_count(nid, win_days, ("P1",)))
                 full_week = (we - ws + 1) == len(win_days)
                 if full_week and len(win_days) >= 7:
-                    lit = gate(f"{self._fmt_nurse_label(nurse)} {wi+1}주차 P1(임부휴무) 1회 의무", nid=nid)
-                    model.Add(sum(p1_vars) == 1).OnlyEnforceIf(lit)
+                    lit = gate(f"{self._fmt_nurse_label(nurse)} {self._week_span(win_days)} P1(임부휴무) 1회 의무",
+                               nid=nid, dt=self.all_dates[win_days[0]])
+                    model.Add(sum(p1_vars) == bound).OnlyEnforceIf(lit)
+                else:   # 부분 주도 엔진처럼 상한을 건다
+                    lit = gate(f"{self._fmt_nurse_label(nurse)} {self._week_span(win_days)} P1(임부휴무) 주 1회 한도",
+                               nid=nid, dt=self.all_dates[win_days[0]], kind="rest_cap", code="P1",
+                               used=self._pinned_dates(nid, win_days, "P1"))
+                    model.Add(sum(p1_vars) <= bound).OnlyEnforceIf(lit)
 
     def _g_max_v(self, model, x, gate):
         max_v = self.rules.maxVPerMonth
-        if max_v <= 0 or self.unlimited_v:
+        month_cap = max_v > 0 and not self.unlimited_v
+        if "V" not in self.ALL_SHIFTS:
             return
+        first = date(self.year, self.month, 1)
+        m_idx = [d for d, dt in enumerate(self.all_dates)
+                 if dt.month == self.month and dt.year == self.year]
+        # 끝에 붙은 다음 달 며칠 — 엔진(_cs_max_v_per_month)은 그 며칠에도 V 를 1개(확정분이 더 많으면 그만큼)로 묶는다.
+        # 예전엔 생성 달만 게이팅해서 꼬리 며칠에 V 를 다섯씩 놓는 '가능한' 표를 찾고 원인을 못 짚었다.
+        n_idx = [d for d, dt in enumerate(self.all_dates)
+                 if (dt.month != self.month or dt.year != self.year) and dt >= first]
         for nurse in self.nurses:
             nid = nurse["id"]
-            v_vars = [x[nid][d]["V"] for d, dt in enumerate(self.all_dates)
-                      if dt.month == self.month and dt.year == self.year]
+            # 지난달 칸에 V 금지 (확정된 지난달 V 는 그대로) — 엔진과 같은 하드 제약, 원인 후보는 아니다
+            pre = self.prev.get(nid, {})
+            for d, dt in enumerate(self.all_dates):
+                if dt >= first:
+                    break
+                v = x[nid][d].get("V")
+                if v is not None and not isinstance(v, int) and pre.get(dt.strftime("%Y-%m-%d")) != "V":
+                    model.Add(v == 0)
+            v_vars = [x[nid][d]["V"] for d in m_idx] if month_cap else []
             if v_vars:
-                lit = gate(f"{self._fmt_nurse_label(nurse)} V(연차) 월 {max_v}회 이하", nid=nid)
-                model.Add(sum(v_vars) <= max_v).OnlyEnforceIf(lit)
+                cap = self._cap_with_training(nurse, m_idx, "V", max_v)   # 엔진과 같은 값
+                lit = gate(f"{self._fmt_nurse_label(nurse)} V(연차) 월 {max_v}회 이하", nid=nid,
+                           kind="rest_cap", code="V", used=self._pinned_dates(nid, m_idx, "V"))
+                model.Add(sum(v_vars) <= cap).OnlyEnforceIf(lit)
+            t_vars = [x[nid][d]["V"] for d in n_idx]
+            if t_vars:
+                cap = self._cap_with_training(nurse, n_idx, "V", 1)
+                lit = gate(f"{self._fmt_nurse_label(nurse)} {self._week_span(n_idx)} V(연차) 1회 이하", nid=nid,
+                           dt=self.all_dates[n_idx[0]], kind="rest_cap", code="V",
+                           used=self._pinned_dates(nid, n_idx, "V"))
+                model.Add(sum(t_vars) <= cap).OnlyEnforceIf(lit)
 
     def _g_night_dedicated(self, model, x, gate):
         import calendar
@@ -364,8 +575,38 @@ class _ConflictAnalyzer(CpSatScheduler):
             active_days, target = self._night_dedicated_quota(nurse, month_idxs, month_days)
             if active_days <= 0:
                 continue
-            lit = gate(f"{self._fmt_nurse_label(nurse)} 야간전담 당월 {target}일", nid=nid)
-            model.Add(sum(x[nid][d][s] for d in month_idxs for s in self.NIGHT_SHIFTS) == target).OnlyEnforceIf(lit)
+            pin = getattr(self, "_pin", {}) or {}
+            # 엔진(_cs_night_shift_nurses)과 같은 사실-클램프 — 신호등은 _build_pin_index 뒤에 부른다
+            pin_n = sum(1 for d in month_idxs if pin.get((nid, d)) in self.NIGHT_SHIFTS)
+            free_days = sum(1 for d in month_idxs
+                            if self._nurse_active_idx(nurse, d) and not pin.get((nid, d)))
+            eff = min(max(target, pin_n), pin_n + free_days) if pin else target
+            lit = gate(f"{self._fmt_nurse_label(nurse)} 나이트킵 당월 야간 {eff}일", nid=nid, kind="keeper")
+            model.Add(sum(x[nid][d][s] for d in month_idxs for s in self.NIGHT_SHIFTS) == eff).OnlyEnforceIf(lit)
+            # 나이트킵은 야간·쉬는 코드만 — 엔진과 같다(확정 칸은 그대로)
+            non_night_work = [sh["code"] for sh in self._shifts
+                              if sh["period"] not in ("night", "rest", "leave")]
+            only = [x[nid][d][sc] for d in month_idxs if not pin.get((nid, d))
+                    for sc in non_night_work
+                    if x[nid][d].get(sc) is not None and not isinstance(x[nid][d][sc], int)]
+            if only:
+                lit = gate(f"{self._fmt_nurse_label(nurse)} 나이트킵은 야간만", nid=nid, kind="keeper")
+                for v in only:
+                    model.Add(v == 0).OnlyEnforceIf(lit)
+            # 5일 중 야간 3일 이하 — 월 경계에 걸친 윈도우 포함 (엔진과 같다)
+            w_lo = max(0, month_idxs[0] - 4)
+            w_hi = min(self.T - 5, month_idxs[-1])
+            wins = []
+            for start in range(w_lo, w_hi + 1):
+                window = range(start, start + 5)
+                if pin and all(pin.get((nid, d)) for d in window):
+                    continue
+                cap = max(3, sum(1 for d in window if pin.get((nid, d)) in self.NIGHT_SHIFTS))
+                wins.append((window, cap))
+            if wins:
+                lit = gate(f"{self._fmt_nurse_label(nurse)} 나이트킵 5일 중 야간 3일 이하", nid=nid, kind="keeper")
+                for window, cap in wins:
+                    model.Add(sum(x[nid][d][sc] for d in window for sc in self.NIGHT_SHIFTS) <= cap).OnlyEnforceIf(lit)
 
     def _g_menstrual(self, model, x, gate):
         if "생" not in self.ALL_SHIFTS:
@@ -374,15 +615,35 @@ class _ConflictAnalyzer(CpSatScheduler):
         month_days = calendar.monthrange(self.year, self.month)[1]
         month_idxs = [d for d, dt in enumerate(self.all_dates)
                       if dt.month == self.month and dt.year == self.year]
+        last_day = self._month_last_day()
+        tail_idxs = [d for d, dt in enumerate(self.all_dates) if dt > last_day]
         for nurse in self.nurses:
             nid = nurse["id"]
             # 모든 여성: 당월 생 ≤1 (솔버 하드 제약과 패리티 — 빠지면 생 2회
             # 사전입력이 실제로는 infeasible인데 '충돌 없음'으로 오진)
             if nurse.get("gender") == "female":
+                # 지난달 칸에 생 금지 (확정된 지난달 생은 그대로) — 엔진과 같은 하드 제약, 원인 후보는 아니다.
+                # 빠지면 첫 주 빈 지난달 칸이 생으로 쉬어 게이팅 모델만 풀리고 원인을 못 짚는다.
+                pre = self.prev.get(nid, {})
+                first = date(self.year, self.month, 1)
+                for d, dt in enumerate(self.all_dates):
+                    if dt >= first:
+                        break
+                    v = x[nid][d].get("생")
+                    if v is not None and not isinstance(v, int) and pre.get(dt.strftime("%Y-%m-%d")) != "생":
+                        model.Add(v == 0)
                 m_terms = [x[nid][d]["생"] for d in month_idxs]
                 if any(not isinstance(t, int) for t in m_terms):
-                    lit = gate(f"{self._fmt_nurse_label(nurse)} 생리휴가 월 1회 한도", nid=nid)
-                    model.Add(sum(m_terms) <= 1).OnlyEnforceIf(lit)
+                    lit = gate(f"{self._fmt_nurse_label(nurse)} 생리휴가 월 1회 한도", nid=nid,
+                               kind="rest_cap", code="생", used=self._pinned_dates(nid, month_idxs, "생"))
+                    # 엔진과 같은 상한 — 확정 생만큼 올리고(신호등) 독립한 신규의 트레이닝 날 생도 센다
+                    model.Add(sum(m_terms) <= self._cap_with_training(nurse, month_idxs, "생", 1)).OnlyEnforceIf(lit)
+                # 끝에 붙은 다음 달 며칠: 미리 넣은 생만 (엔진 _tail_saeng_cap 패리티 — 다음 달 몫)
+                t_terms = [x[nid][d]["생"] for d in tail_idxs]
+                if any(not isinstance(t, int) for t in t_terms):
+                    lit = gate(f"{self._fmt_nurse_label(nurse)} 다음 달 며칠의 생리휴가는 다음 달 몫 (새로 놓지 않음)",
+                               nid=nid)
+                    model.Add(sum(t_terms) <= self._tail_saeng_cap(nurse, tail_idxs)).OnlyEnforceIf(lit)
             # (야간전담 '여성+31일달 생 정확히 1회' 게이트는 제거 — 생휴는 보장이
             #  아니라는 사용자 원칙. 솔버에서도 같은 강제를 제거함 — 패리티)
 
@@ -390,20 +651,31 @@ class _ConflictAnalyzer(CpSatScheduler):
         """역순 전환 중 하드인 것 (가장 흔한 사전입력 충돌). per (nurse, date-pair).
         E→D1·중→D 가 마지막 수단(제1원칙 13)이면 하드가 아니므로 게이팅하지 않는다."""
         forbidden = [(tag, g1, g2) for tag, g1, g2, soft in self._transition_rules() if not soft]
+        x = self._training_view(x)    # 독립한 신규의 트레이닝 날 = 그날 한 근무 (솔버 패리티)
+        _, pin = self._gate_pins()
+        first = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
+            # 엔진과 같다(_cs_forbidden_transitions) — 지난달 안에 갇힌 쌍은 기록, 트레이닝 날끼리의 쌍은 프리셉터 쪽 일
+            from_ = self._rules_from(nurse, first)
             for d in range(self.T - 1):
+                if self.all_dates[d + 1] < from_:
+                    continue
+                if pin.get((nid, d)) and pin.get((nid, d + 1)):
+                    continue   # 사실-클램프: 두 칸 다 사람이 넣은 것
                 for tag, g1, g2 in forbidden:
                     for s1 in g1:
                         v1 = x[nid][d][s1]
-                        if isinstance(v1, int):
+                        if isinstance(v1, int) and v1 != 1:
                             continue
                         for s2 in g2:
                             v2 = x[nid][d + 1][s2]
-                            if isinstance(v2, int):
+                            # 상수 1(트레이닝 날 근무)은 식에 넣는다 — 빼면 /E 다음 날 D 가 안 걸린다 (엔진 패리티)
+                            if isinstance(v2, int) and (v2 != 1 or isinstance(v1, int)):
                                 continue
                             lit = gate(f"{self._fmt_nurse_label(nurse)} "
-                                       f"{self._fmt_date(self.all_dates[d])}→{self._fmt_date(self.all_dates[d+1])} {tag} 금지", nid=nid, dt=self.all_dates[d])
+                                       f"{self._fmt_date(self.all_dates[d])}→{self._fmt_date(self.all_dates[d+1])} {tag} 금지",
+                                       nid=nid, dt=self.all_dates[d], kind="transition", frm=tag.split("→")[0])
                             model.Add(v1 + v2 <= 1).OnlyEnforceIf(lit)
 
     def _g_charge_seniority(self, model, x, gate):
@@ -429,6 +701,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                     if charge_s in j_capable:
                         eligible_pairs.append((i_nurse["id"], j_nurse["id"], charge_s, regulars))
         nurse_by_id = {n["id"]: n for n in self.nurses}
+        pin, _ = self._gate_pins()
         for d, dt in enumerate(self.all_dates):
             if dt.month != self.month:
                 continue
@@ -436,6 +709,8 @@ class _ConflictAnalyzer(CpSatScheduler):
             is_holiday = dt_str in self.holidays
             day_lit = None
             for nid_i, nid_j, charge_s, regulars in eligible_pairs:
+                if pin.get((nid_i, d)) and pin.get((nid_j, d)):
+                    continue   # 사실-클램프: 두 칸 다 사람이 넣은 것 (엔진 _cs_charge_seniority 와 같게)
                 # 솔버와 동일한 '유효 사전입력' 게이팅 (공용 헬퍼)
                 jf = self._seniority_jfixed(nurse_by_id[nid_j], dt, dt_str, is_holiday)
                 if jf and jf != charge_s:
@@ -453,24 +728,34 @@ class _ConflictAnalyzer(CpSatScheduler):
 
     def _g_nod(self, model, x, gate):
         """N→OF→D 금지 — per nurse 1 리터럴."""
+        x = self._training_view(x)    # 독립한 신규의 트레이닝 날 = 그날 한 근무 (솔버 패리티)
+        _, pin = self._gate_pins()
+        first = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             lit = None
+            from_ = self._rules_from(nurse, first)   # 엔진(_cs_nod_pattern)과 같다
             for d in range(self.T - 2):
+                if self.all_dates[d + 2] < from_:
+                    continue
+                if pin.get((nid, d)) and pin.get((nid, d + 1)) and pin.get((nid, d + 2)):
+                    continue   # 사실-클램프: 세 칸 다 사람이 넣은 것
                 for ns in self.NIGHT_SHIFTS:
                     vn = x[nid][d][ns]
-                    if isinstance(vn, int):
+                    if isinstance(vn, int) and vn != 1:
                         continue
                     for rs in self.REST_SHIFTS:
                         vr = x[nid][d + 1][rs]
-                        if isinstance(vr, int):
+                        if isinstance(vr, int) and vr != 1:
                             continue
                         for ds in self.DAY_SHIFTS:
                             vd = x[nid][d + 2][ds]
-                            if isinstance(vd, int):
+                            if isinstance(vd, int) and vd != 1:
+                                continue
+                            if isinstance(vn, int) and isinstance(vr, int) and isinstance(vd, int):
                                 continue
                             if lit is None:
-                                lit = gate(f"{self._fmt_nurse_label(nurse)} N→휴무→D 금지", nid=nid)
+                                lit = gate(f"{self._fmt_nurse_label(nurse)} N→휴무→D 금지", nid=nid, kind="sequence")
                             model.Add(vn + vr + vd <= 2).OnlyEnforceIf(lit)
 
     def _g_consecutive_work(self, model, x, gate):
@@ -480,36 +765,56 @@ class _ConflictAnalyzer(CpSatScheduler):
         cap = max_days + 1 if self._soft_long_run() else max_days
         tag = (f"연속근무 ≤{cap}일 (한도 {max_days}일 + 파트장 확인 하루)" if cap > max_days
                else f"연속근무 ≤{max_days}일")
+        x = self._training_view(x)    # 독립한 신규의 트레이닝 날 근무도 연속에 센다 (솔버 패리티)
+        _, pin = self._gate_pins()
+        first = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
+            from_ = self._rules_from(nurse, first)   # 엔진(_cs_max_consecutive_work)과 같다
             if self.T <= cap:
                 continue
-            lit = gate(f"{self._fmt_nurse_label(nurse)} {tag}", nid=nid)
+            lit = gate(f"{self._fmt_nurse_label(nurse)} {tag}", nid=nid, kind="sequence")
             for start in range(self.T - cap):
+                if self.all_dates[start + cap] < from_:
+                    continue
                 window = range(start, start + cap + 1)
+                if pin and all(pin.get((nid, d)) for d in window):
+                    continue   # 사실-클램프
                 model.Add(sum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= cap).OnlyEnforceIf(lit)
 
     def _g_consecutive_night(self, model, x, gate):
         """최대 연속 야간 — per nurse 1 리터럴."""
         max_n = self.rules.maxConsecutiveNightDays
+        x = self._training_view(x)    # 독립한 신규의 트레이닝 날 야간도 연속에 센다 (솔버 패리티)
+        _, pin = self._gate_pins()
+        first = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
+            from_ = self._rules_from(nurse, first)   # 엔진(_cs_max_consecutive_night)과 같다
             if self.T <= max_n:
                 continue
-            lit = gate(f"{self._fmt_nurse_label(nurse)} 연속야간 ≤{max_n}일", nid=nid)
+            lit = gate(f"{self._fmt_nurse_label(nurse)} 연속야간 ≤{max_n}일", nid=nid, kind="sequence")
             for start in range(self.T - max_n):
+                if self.all_dates[start + max_n] < from_:
+                    continue
                 window = range(start, start + max_n + 1)
+                if pin and all(pin.get((nid, d)) for d in window):
+                    continue   # 사실-클램프
                 model.Add(sum(x[nid][d][s] for d in window for s in self.NIGHT_SHIFTS) <= max_n).OnlyEnforceIf(lit)
 
     def _g_rest_after_night(self, model, x, gate):
         """연속야간 후 휴무 — per nurse 1 리터럴."""
         min_consec = getattr(self.rules, 'restAfterNightMinConsec', 2)
         rest_days = getattr(self.rules, 'restAfterNightDays', 2)
+        x = self._training_view(x)    # 독립한 신규의 트레이닝 날 연속 야간 뒤도 쉰다 (솔버 패리티)
+        pin, _ = self._gate_pins()
+        first = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             if nurse.get("is_night_shift"):
                 continue
             lit = None
+            from_ = self._rules_from(nurse, first)   # 엔진(_cs_rest_after_night)과 같다
             for d in range(self.T - min_consec):
                 night_terms = [x[nid][d + i][s] for i in range(min_consec)
                                for s in self.NIGHT_SHIFTS if not isinstance(x[nid][d + i][s], int)]
@@ -528,12 +833,16 @@ class _ConflictAnalyzer(CpSatScheduler):
                     rest_d = next_d + k
                     if rest_d >= self.T:
                         break
+                    if self.all_dates[rest_d] < from_:
+                        continue   # 트레이닝 날에 휴식 강제 소급 금지
+                    if pin.get((nid, rest_d)):
+                        continue   # 사실-클램프: 확정된 휴식일 칸은 사람이 고른 그대로
                     work_vars = [x[nid][rest_d][s] for s in self.WORK_SHIFTS
                                  if s not in self.NIGHT_SHIFTS and not isinstance(x[nid][rest_d][s], int)]
                     if not work_vars:
                         continue
                     if lit is None:
-                        lit = gate(f"{self._fmt_nurse_label(nurse)} 연속야간 후 휴무 보장", nid=nid)
+                        lit = gate(f"{self._fmt_nurse_label(nurse)} 연속야간 후 휴무 보장", nid=nid, kind="sequence")
                     lhs = sum(night_terms) + night_fixed
                     lhs = lhs - (sum(night_next) if night_next else night_next_fixed)
                     lhs = lhs + sum(work_vars)
@@ -542,16 +851,17 @@ class _ConflictAnalyzer(CpSatScheduler):
     def _g_max_night_per_month(self, model, x, gate):
         """월 최대 야간 — per nurse 1 리터럴 (야간전담 제외)."""
         max_n = self.rules.maxNightPerMonthCount
+        month_idx = [d for d, dt in enumerate(self.all_dates)
+                     if dt.month == self.month and dt.year == self.year]
         for nurse in self.nurses:
             if nurse.get("is_night_shift"):
                 continue
             nid = nurse["id"]
-            night_vars = [x[nid][d][s] for d, dt in enumerate(self.all_dates)
-                          if dt.month == self.month and dt.year == self.year
-                          for s in self.NIGHT_SHIFTS]
+            night_vars = [x[nid][d][s] for d in month_idx for s in self.NIGHT_SHIFTS]
             if night_vars:
+                cap = max(max_n, self._pin_nurse_count(nid, month_idx, self.NIGHT_SHIFTS))   # 엔진과 같은 사실-클램프
                 lit = gate(f"{self._fmt_nurse_label(nurse)} 월 야간 ≤{max_n}회", nid=nid)
-                model.Add(sum(night_vars) <= max_n).OnlyEnforceIf(lit)
+                model.Add(sum(night_vars) <= cap).OnlyEnforceIf(lit)
 
     def _g_max_night_two_month(self, model, x, gate):
         """홀짝월 합산 야간 — per nurse 1 리터럴 (야간전담 제외)."""
@@ -569,6 +879,9 @@ class _ConflictAnalyzer(CpSatScheduler):
                 # 솔버와 동일한 클램프 (공용 헬퍼) — 미클램프 시 자체 모순 리터럴이
                 # 항상 단독 MUS로 검출돼 실제 원인을 가린다
                 rhs = self._two_month_rhs(nid)
+                month_idx = [d for d, dt in enumerate(self.all_dates)
+                             if dt.month == self.month and dt.year == self.year]
+                cap = max(rhs, self._pin_nurse_count(nid, month_idx, self.NIGHT_SHIFTS))   # 엔진과 같은 사실-클램프
                 py, pm = ((self.year - 1, 12) if self.month == 1
                           else (self.year, self.month - 1))
                 if self._night_dedicated_in(nid, py, pm):
@@ -580,7 +893,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                 else:
                     label = f"{self._fmt_nurse_label(nurse)} 전월 야간 {prev_count}회로 상한 초과 — 당월 야간 0회"
                 lit = gate(label, nid=nid)
-                model.Add(sum(night_vars) <= rhs).OnlyEnforceIf(lit)
+                model.Add(sum(night_vars) <= cap).OnlyEnforceIf(lit)
 
 
     # ── #3 MCS (최소 수정집합) — "이것만 빼면/줄이면 풀린다" 처방 ──────────────

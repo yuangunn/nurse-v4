@@ -349,11 +349,13 @@ class _HighsDiagnosisMixin:
         block = ["  [원인] 잉여 인력이 쉴 코드가 없습니다 (산술 확정)."]
         for w in rest_short[:6]:
             block.append(
-                f"    · {w['week']}주차 ({w['start'][5:]}~{w['end'][5:]}, "
+                f"    · {w['start'][5:].replace('-', '/')}~{w['end'][5:].replace('-', '/')} 주 ("
                 f"재적 {w['nurses']}명): 휴무 필요 {w['demand']}칸 / "
                 f"놓을 수 있는 휴무 {w['supply']}칸 — 부족 {w['shortfall']}칸")
         block.append("    ※ 솔버가 놓을 수 있는 휴무는 OF(주1)·V(월1)·생(월1·여성)뿐입니다.")
         block.append("       주휴(주)·특·공·법·병·경가·조가·산전은 사전입력 전용이라 사람이 넣어야 합니다.")
+        if any(w.get("boundary") for w in rest_short):
+            block.append("    ※ 끝에 붙은 다음 달 며칠의 주휴도 이 근무표에서 넣습니다 — 그 며칠엔 생을 새로 놓지 않습니다(다음 달 몫).")
         block.append("  → 해결: 분석 탭 '주휴 추천 배분 → 사전입력에 적용' 후 다시 생성하세요.")
         block.append("     (인원을 늘리면 오히려 악화됩니다 — 쉴 사람이 늘어납니다.)")
         if any(t in msg for t in self._REST_SHADOW_PHASES):
@@ -678,25 +680,27 @@ class _HighsDiagnosisMixin:
                 if not week_dates:
                     continue
                 for nurse in self.nurses:
-                    # 야간전담은 OF 무제한이므로 skip
-                    if nurse.get("is_night_shift"):
-                        continue
                     nid, nname = nurse["id"], nurse["name"]
+                    # 나이트킵의 날은 OF 무제한 — OF 는 일반의 날만 센다 (날짜가 속한 달로, _of_week_days)
+                    reg_dates = {self.all_dates[d].strftime("%Y-%m-%d")
+                                 for d in self._of_week_days(nurse, ws, we)}
                     prev_week = {dt: self.prev.get(nid, {}).get(dt, "") for dt in week_dates}
-                    of_days  = [dt for dt, s in prev_week.items() if s == "OF"]
-                    joo_days = [dt for dt, s in prev_week.items() if s == "주"]
+                    of_days  = [dt for dt, s in prev_week.items() if s == "OF" and dt in reg_dates]
+                    # 주휴 중복은 예전처럼 이 달 야간전담이 아닌 사람만
+                    joo_days = ([] if nurse.get("is_night_shift") else
+                                [dt for dt, s in prev_week.items() if s == "주"])
                     if len(of_days) >= 2:
                         dup_found.append(
-                            f"    · {nname}({nid}) {wi+1}주차: OF가 {len(of_days)}회 "
+                            f"    · {nname}({nid}) {self._week_span([ws, we])} 주: OF가 {len(of_days)}회 "
                             f"({', '.join(of_days)})"
                         )
-                        _anchor(f"{nname} {wi+1}주차 OF 중복", nid=nid, iso=of_days[0])
+                        _anchor(f"{nname} {self._week_span([ws, we])} OF 중복", nid=nid, iso=of_days[0])
                     if len(joo_days) >= 2:
                         dup_found.append(
-                            f"    · {nname}({nid}) {wi+1}주차: 주휴가 {len(joo_days)}회 "
+                            f"    · {nname}({nid}) {self._week_span([ws, we])} 주: 주휴가 {len(joo_days)}회 "
                             f"({', '.join(joo_days)})"
                         )
-                        _anchor(f"{nname} {wi+1}주차 주휴 중복", nid=nid, iso=joo_days[0])
+                        _anchor(f"{nname} {self._week_span([ws, we])} 주휴 중복", nid=nid, iso=joo_days[0])
             if dup_found:
                 lines.append("  [세부 원인] 같은 주에 OF 또는 주휴가 2회 이상 사전입력되었습니다.")
                 lines.extend(dup_found[:10])
@@ -705,7 +709,7 @@ class _HighsDiagnosisMixin:
 
 
             # ── 원인 2: 휴가 + OF + 주휴 → 주 내 off가 너무 많아 슬랙 부족 ──
-            lines.append("  [주차별 분석]")
+            lines.append("  [주별 분석]")
             worst_week_gap = 0
             worst_week_label = ""
             worst_week_daily_avg = 0  # 가장 부족한 주의 일평균 필요 슬롯
@@ -752,12 +756,12 @@ class _HighsDiagnosisMixin:
                 end_dt = self.all_dates[min(we, len(self.all_dates)-1)]
                 leave_note = f", 휴가고정 {total_extra_leave}건" if total_extra_leave else ""
                 lines.append(
-                    f"    {wi+1}주차 ({start_dt.strftime('%m/%d')}~{end_dt.strftime('%m/%d')}): "
+                    f"    {start_dt.strftime('%m/%d')}~{end_dt.strftime('%m/%d')} 주: "
                     f"필요 {week_slots_needed}슬롯 / 가용 {effective_avail}슬롯{leave_note}{tight}"
                 )
                 if gap > worst_week_gap:
                     worst_week_gap = gap
-                    worst_week_label = f"{wi+1}주차 ({start_dt.strftime('%m/%d')}~{end_dt.strftime('%m/%d')})"
+                    worst_week_label = f"{start_dt.strftime('%m/%d')}~{end_dt.strftime('%m/%d')} 주"
                     worst_week_daily_avg = week_slots_needed / month_days_in_week
                 # 해당 주에서 가장 빡빡한 날 상위 3개
                 day_details_sorted = sorted(day_details, key=lambda x: x[1] - (N - x[2]), reverse=True)
@@ -821,9 +825,9 @@ class _HighsDiagnosisMixin:
                         if all(pres) and "P1" not in pres:
                             iso = self.all_dates[win[0]].strftime("%Y-%m-%d")
                             direct.append(
-                                f"    · {nname}({nid}) {wi+1}주차: 한 주가 전부 "
+                                f"    · {nname}({nid}) {self._week_span([ws, we])} 주: 한 주가 전부 "
                                 f"사전입력됐는데 P1이 없습니다")
-                            _anchor(f"{nname} {wi+1}주차 P1 누락", nid=nid, iso=iso)
+                            _anchor(f"{nname} {self._week_span([ws, we])} P1 누락", nid=nid, iso=iso)
                 if direct:
                     lines.append("  사전입력에서 직접 충돌 — P1을 놓을 자리가 없는 주:")
                     lines.extend(direct[:8])
@@ -1308,6 +1312,8 @@ class _HighsDiagnosisMixin:
                 lines.append("    이 단계까지 쌓았을 때 처음 막힌 것일 뿐, 대개 원인은 생휴가 아니라 '쉴 수 있는 코드의 공급 부족'입니다:")
                 lines.append("    솔버가 놓을 수 있는 휴무는 OF(주당 정확히 1회)·V(월 1회)·생(월 1회, 여성)뿐이라,")
                 lines.append("    빈 칸(잉여 인력)이 그보다 많으면 채울 코드가 없어 실패합니다.")
+                if self.all_dates and self.all_dates[-1] > self._month_last_day():
+                    lines.append("    끝에 붙은 다음 달 며칠엔 생을 새로 놓지 않습니다(다음 달 몫) — 그 며칠의 주휴도 이 근무표에서 넣어야 합니다.")
                 lines.append("  → 해결: 주휴(주)를 사전입력하거나(분석 탭 → 주휴 배분 → 사전입력에 적용), 간호사 수·필요 인원 균형을 조정하세요.")
             return "\n".join(lines)
 

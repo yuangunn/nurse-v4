@@ -168,6 +168,8 @@ class CpSatScheduler(_SchedulerBase):
             # 완전 확정 표: 검증 거부 대신 그대로 확정 (HiGHS 패리티)
             if self._fully_pinned():
                 return self._confirm_pinned_result()
+            if getattr(self, "_relax_timed_out", False):
+                return self._relax_timeout_result()
             msg = "CP-SAT: 제약을 모두 만족하는 근무표가 없습니다 (infeasible)."
             # 인라인 정밀분석은 단독 CP-SAT 모드에서만 — 레이스 패자의 분석은
             # 결과가 폐기되는데 분~수십 분 CPU를 태울 수 있고 취소도 안 된다.
@@ -191,6 +193,8 @@ class CpSatScheduler(_SchedulerBase):
                 return relaxed
         if self._fully_pinned():
             return self._confirm_pinned_result()
+        if getattr(self, "_relax_timed_out", False):
+            return self._relax_timeout_result()
         return {
             "success": False, "schedule": {}, "extended_schedule": {},
             "message": f"CP-SAT: 제한 시간 내에 해를 찾지 못했습니다 (상태: {solver.StatusName(status)}).",
@@ -458,6 +462,9 @@ class CpSatScheduler(_SchedulerBase):
             solver_progress.unregister(prog)
             self._pre_soft = False  # 플래그 누수 방지 (후속 분석 경로 보호)
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            # 시간이 모자랐는지(진단 대신 시간 안내) 정말 안 되는지 — 중지·레이스 패자는 시간 탓이 아니다
+            self._relax_timed_out = (status != cp_model.INFEASIBLE and not prog.cancelled
+                                     and not solver_progress.is_cancelled())
             return None
         schedule, extended = self._extract_solution(x, lambda v: solver.Value(v))
         nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
@@ -676,20 +683,16 @@ class CpSatScheduler(_SchedulerBase):
         self._off_slack = []          # 오프특근 슬랙 (목적함수에서 페널티)
         if of_code not in self.SOLVER_SHIFTS:
             return
-        first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
-            if nurse.get("is_night_shift", False):
-                continue
             for ws, we in self.weeks:
-                week_days = [d for d in range(ws, we + 1)
-                             if self.all_dates[d] >= first_of_month
-                             and self._nurse_active_idx(nurse, d)]
+                # 나이트킵의 날은 OF 무제한 — 날짜가 속한 달로 (_of_week_days, HiGHS 패리티)
+                week_days = self._of_week_days(nurse, ws, we)
                 if not week_days:
                     continue
                 if all(self._pin.get((nid, d)) for d in week_days):
                     continue  # 사실-클램프: 주 전체 확정
-                bound = max(1, self._pin_nurse_count(nid, week_days, ("OF",)))
+                bound = self._of_week_bound(nurse, ws, we, week_days)
                 of_sum = sum(x[nid][d][of_code] for d in week_days)
                 if len(week_days) < 7:
                     model.Add(of_sum <= bound)
@@ -741,7 +744,7 @@ class CpSatScheduler(_SchedulerBase):
                              if dt.month == self.month and dt.year == self.year]
                 v_vars = [x[nid][d]["V"] for d in month_idx]
                 if v_vars:
-                    cap = max(max_v, self._pin_nurse_count(nid, month_idx, ("V",)))
+                    cap = self._cap_with_training(nurse, month_idx, "V", max_v)   # 트레이닝 날 V 도 센다 (HiGHS 패리티)
                     model.Add(sum(v_vars) <= cap)
             # 이전달 overflow: V 금지 — 사전입력으로 확정된 전월 기록은 존중
             # (무조건 금지하면 1일1근무와 모순돼 전체 infeasible)
@@ -755,7 +758,7 @@ class CpSatScheduler(_SchedulerBase):
                         if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month]
             next_v_vars = [x[nid][d]["V"] for d in next_idx]
             if next_v_vars:
-                model.Add(sum(next_v_vars) <= max(1, self._pin_nurse_count(nid, next_idx, ("V",))))
+                model.Add(sum(next_v_vars) <= self._cap_with_training(nurse, next_idx, "V", 1))
 
     def _cs_max_night_per_month(self, model, x):
         max_n = self.rules.maxNightPerMonthCount
@@ -794,14 +797,17 @@ class CpSatScheduler(_SchedulerBase):
         rules = self._transition_rules()
         self._rare_tr_slack = []      # [(감점, 슬랙)]
         first_of_month = date(self.year, self.month, 1)
+        x = self._training_view(x)    # 독립한 신규의 트레이닝 날 = 그날 한 근무 (HiGHS 패리티)
+        pin = self._pin_view()        # 사실-클램프 + 트레이닝 날 (자기 사전입력·프리셉터 확정 칸)
         for nurse in self.nurses:
             nid = nurse["id"]
+            from_ = self._rules_from(nurse, first_of_month)
             for d in range(self.T - 1):
-                # 전월(역사) 내부 완결 쌍 제외 — 과거 기록에 현재 규칙 소급 금지
-                if self.all_dates[d + 1] < first_of_month:
+                # 전월(역사)·트레이닝 날 내부 완결 쌍 제외 — 과거 기록에 현재 규칙 소급 금지
+                if self.all_dates[d + 1] < from_:
                     continue
                 # 사실-클램프: 두 셀 모두 확정 = 사용자 사실 (HiGHS 패리티)
-                if self._pin.get((nid, d)) and self._pin.get((nid, d + 1)):
+                if pin.get((nid, d)) and pin.get((nid, d + 1)):
                     continue
                 for ri, (label, first_group, second_group, soft) in enumerate(rules):
                     if soft:
@@ -836,14 +842,17 @@ class CpSatScheduler(_SchedulerBase):
     def _cs_nod_pattern(self, model, x):
         """N→휴무→D 금지 (vn+vr+vd<=2)."""
         first_of_month = date(self.year, self.month, 1)
+        x = self._training_view(x)    # 독립한 신규의 트레이닝 날 = 그날 한 근무 (HiGHS 패리티)
+        pin = self._pin_view()        # 사실-클램프 + 트레이닝 날 (자기 사전입력·프리셉터 확정 칸)
         for nurse in self.nurses:
             nid = nurse["id"]
+            from_ = self._rules_from(nurse, first_of_month)
             for d in range(self.T - 2):
-                # 전월(역사) 내부 완결 윈도우 제외
-                if self.all_dates[d + 2] < first_of_month:
+                # 전월(역사)·트레이닝 날 내부 완결 윈도우 제외
+                if self.all_dates[d + 2] < from_:
                     continue
-                if (self._pin.get((nid, d)) and self._pin.get((nid, d + 1))
-                        and self._pin.get((nid, d + 2))):
+                if (pin.get((nid, d)) and pin.get((nid, d + 1))
+                        and pin.get((nid, d + 2))):
                     continue  # 사실-클램프: 세 셀 모두 확정
                 for ns in self.NIGHT_SHIFTS:
                     vn = x[nid][d][ns]
@@ -871,24 +880,27 @@ class CpSatScheduler(_SchedulerBase):
         soft = self._soft_long_run()
         cap = max_days + 1 if soft else max_days
         self._long_run_slack = []     # [(감점, 슬랙)]
+        x = self._training_view(x)    # 독립한 신규의 트레이닝 날 근무도 연속에 센다 (HiGHS 패리티)
+        pin = self._pin_view()        # 사실-클램프 + 트레이닝 날 (자기 사전입력·프리셉터 확정 칸)
         for nurse in self.nurses:
             nid = nurse["id"]
+            from_ = self._rules_from(nurse, first_of_month)
             for start in range(self.T - cap):
-                if self.all_dates[start + cap] < first_of_month:
-                    continue  # 전월 내부 완결 윈도우 제외 (역사 소급 금지)
+                if self.all_dates[start + cap] < from_:
+                    continue  # 전월·트레이닝 날 내부 완결 윈도우 제외 (역사 소급 금지)
                 window = range(start, start + cap + 1)
-                if all(self._pin.get((nid, d)) for d in window):
+                if all(pin.get((nid, d)) for d in window):
                     continue  # 사실-클램프
                 model.Add(sum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) <= cap)
             if not soft:
                 continue
             for start in range(self.T - max_days):
-                if self.all_dates[start + max_days] < first_of_month:
+                if self.all_dates[start + max_days] < from_:
                     continue
                 window = range(start, start + max_days + 1)
-                if all(self._pin.get((nid, d)) for d in window):
+                if all(pin.get((nid, d)) for d in window):
                     continue
-                if self._window_has_pinned_rest(nid, window):
+                if self._window_has_pinned_rest(nid, window, pin):
                     continue
                 sl = model.NewBoolVar(f"long_run_{nid}_{start}")
                 model.Add(sum(x[nid][d][s] for d in window for s in self.WORK_SHIFTS) - sl <= max_days)
@@ -896,13 +908,16 @@ class CpSatScheduler(_SchedulerBase):
 
     def _cs_max_consecutive_night(self, model, x, max_nights: int):
         first_of_month = date(self.year, self.month, 1)
+        x = self._training_view(x)    # 독립한 신규의 트레이닝 날 야간도 연속에 센다 (HiGHS 패리티)
+        pin = self._pin_view()        # 사실-클램프 + 트레이닝 날 (자기 사전입력·프리셉터 확정 칸)
         for nurse in self.nurses:
             nid = nurse["id"]
+            from_ = self._rules_from(nurse, first_of_month)
             for start in range(self.T - max_nights):
-                if self.all_dates[start + max_nights] < first_of_month:
-                    continue  # 전월 내부 완결 윈도우 제외
+                if self.all_dates[start + max_nights] < from_:
+                    continue  # 전월·트레이닝 날 내부 완결 윈도우 제외
                 window = range(start, start + max_nights + 1)
-                if all(self._pin.get((nid, d)) for d in window):
+                if all(pin.get((nid, d)) for d in window):
                     continue  # 사실-클램프
                 model.Add(sum(x[nid][d][s] for d in window for s in self.NIGHT_SHIFTS) <= max_nights)
 
@@ -912,10 +927,12 @@ class CpSatScheduler(_SchedulerBase):
         min_consec = getattr(self.rules, 'restAfterNightMinConsec', 2)
         rest_days = getattr(self.rules, 'restAfterNightDays', 2)
         first_of_month = date(self.year, self.month, 1)
+        x = self._training_view(x)    # 독립한 신규의 트레이닝 날 연속 야간 뒤도 쉰다 (HiGHS 패리티)
         for nurse in self.nurses:
             nid = nurse["id"]
             if nurse.get("is_night_shift"):
                 continue
+            from_ = self._rules_from(nurse, first_of_month)
             for d in range(self.T - min_consec):
                 night_terms = [x[nid][d + i][s] for i in range(min_consec)
                                for s in self.NIGHT_SHIFTS if not isinstance(x[nid][d + i][s], int)]
@@ -934,8 +951,8 @@ class CpSatScheduler(_SchedulerBase):
                     rest_d = next_d + k
                     if rest_d >= self.T:
                         break
-                    if self.all_dates[rest_d] < first_of_month:
-                        continue  # 전월(역사) 날짜에 휴식 강제 소급 금지
+                    if self.all_dates[rest_d] < from_:
+                        continue  # 전월(역사)·트레이닝 날에 휴식 강제 소급 금지
                     if self._pin.get((nid, rest_d)):
                         continue  # 사실-클램프: 확정된 휴식일 셀은 사용자 선택 그대로
                     work_vars = [x[nid][rest_d][s] for s in self.WORK_SHIFTS
@@ -1014,7 +1031,7 @@ class CpSatScheduler(_SchedulerBase):
                          if dt.month == self.month and dt.year == self.year]
             month_vars = [x[nid][d]["생"] for d in month_idx]
             if month_vars:
-                model.Add(sum(month_vars) <= max(1, self._pin_nurse_count(nid, month_idx, ("생",))))
+                model.Add(sum(month_vars) <= self._cap_with_training(nurse, month_idx, "생", 1))
             # 이전달 overflow: 생 금지 — 사전입력된 전월 확정 기록은 존중
             for d, dt in enumerate(self.all_dates):
                 if dt < first_of_month:
@@ -1025,8 +1042,8 @@ class CpSatScheduler(_SchedulerBase):
             next_idx = [d for d, dt in enumerate(self.all_dates)
                         if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month]
             next_m = [x[nid][d]["생"] for d in next_idx]
-            if next_m:
-                model.Add(sum(next_m) <= max(1, self._pin_nurse_count(nid, next_idx, ("생",))))
+            if next_m:   # 끝에 붙은 다음 달 며칠: 미리 넣은 생만 (자유 생 0, HiGHS 패리티)
+                model.Add(sum(next_m) <= self._tail_saeng_cap(nurse, next_idx))
 
     def _cs_night_shift_nurses(self, model, x):
         """야간전담: N/NC만, 5일 윈도우<=3, 당월 정확 14일. (생휴 강제 없음 — ≤1 상한만)"""
