@@ -14,7 +14,7 @@
 
 ### 설치 버전 (권장)
 
-1. **NurseScheduler_Setup_v4.14.0.exe** 다운로드 (Windows) — macOS는 `NurseScheduler_v4_mac_arm64.dmg`
+1. **NurseScheduler_Setup_v4.14.1.exe** 다운로드 (Windows) — macOS는 `NurseScheduler_v4_mac_arm64.dmg`
 2. 실행 → 설치 마법사 진행
 3. 바탕화면 또는 시작메뉴의 **NurseScheduler** 바로가기 클릭
 
@@ -564,4 +564,4 @@ Windows는 `%APPDATA%\NurseScheduler\`, macOS는 `~/Library/Application Support/
 
 ---
 
-**NurseScheduler v4.14.0** | 개발: yuangunn | https://github.com/yuangunn/nurse-v4
+**NurseScheduler v4.14.1** | 개발: yuangunn | https://github.com/yuangunn/nurse-v4
