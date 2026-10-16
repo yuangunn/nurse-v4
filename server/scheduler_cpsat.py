@@ -388,7 +388,8 @@ class CpSatScheduler(_SchedulerBase):
               + [(self._relax_juhu_drop_pen(_BONUS["juhu"], _BONUS["leave"], _BONUS["off"], _BONUS["work"]), u)
                  for u in _juhu_drop]
               # 지난달에 시작한 블록의 요일 어기기 (결정 1-37, HiGHS 패리티)
-              + [(self._JUHU_ANCHOR_PEN, y) for y in getattr(self, "_juhu_anchor_dev", [])]
+              + [(self._juhu_anchor_pen(_BONUS["off"], _BONUS["leave"]), y)
+                 for y in getattr(self, "_juhu_anchor_dev", [])]
               if keep_terms else [])
         for pen, sl in lr:
             keep_terms.append(-pen * sl)
@@ -577,8 +578,9 @@ class CpSatScheduler(_SchedulerBase):
             anchor = self._juhu_anchor(nurse)
             for blk, items in blocks.items():
                 dows = sorted({wd for _, wd, _ in items})
-                anchored = bool(anchor) and blk == anchor[0]
-                if len(dows) <= 1 and not (anchored and dows and dows[0] != anchor[1]):
+                # 지난달 요일에 옮길 칸이 없으면 잇지 않는다 (HiGHS 패리티)
+                anchored = bool(anchor) and blk == anchor[0] and anchor[1] in dows
+                if len(dows) <= 1:
                     continue
                 y = {wd: model.NewBoolVar(f"juhudow_{nid}_{blk}_{wd}") for wd in dows}
                 model.Add(sum(y.values()) <= 1)
