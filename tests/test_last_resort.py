@@ -425,11 +425,13 @@ def _relaxed_only(solver, mixin, req):
     return s._solve_relaxed()
 
 
+@pytest.mark.parametrize("lock", [False, True])
 @pytest.mark.parametrize("solver", ["highs", "cpsat"])
-def test_juhu_relax_keeps_juhu_on_both_sides_of_keeper_month_end(solver):
+def test_juhu_relax_keeps_juhu_on_both_sides_of_keeper_month_end(solver, lock):
     """11월만 나이트킵인 a0 의 마지막 주(11/29~12/5): 11/29(나이트킵의 날)와 12/2(일반의 날) 주휴 둘 다 지킨다.
     상한을 주 전체에 1 로 걸던 때는 바닥 둘이 함께 설 수 없어 11/29 주휴가 NC 로 바뀌었다 (2026-10-16 검토).
-    달이 바뀌는 주는 두 달의 근무표가 제 주휴를 따로 정한다 (결정 1-33)."""
+    달이 바뀌는 주는 두 달의 근무표가 제 주휴를 따로 정한다 (결정 1-33). 블록 잠금을 켜도 같다 — 일반의 날(12/1~)이
+    잠금에 들어가도 한 주라 묶을 것이 없다 (PR #97 검토 후속)."""
     days = [f"2026-11-{d}" for d in (29, 30)] + [f"2026-12-0{d}" for d in range(1, 6)]
     per_day = {dk: {"D": dd, "E": 0, "N": nn}
                for dk, dd, nn in zip(days, [1, 1, 2, 2, 2, 2, 2], [1, 1, 0, 0, 0, 0, 0])}
@@ -445,7 +447,7 @@ def test_juhu_relax_keeps_juhu_on_both_sides_of_keeper_month_end(solver):
                           per_day_requirements=per_day, time_limit=60)
     req.allow_pre_relax = True
     req.allow_juhu_relax = True
-    req.juhu_block_lock = False
+    req.juhu_block_lock = lock
     r = _relaxed_only(solver, _NovLastWeek, req)
     assert r, "완화 실패"
     a0 = r["schedule"]["a0"]

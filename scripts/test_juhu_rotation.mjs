@@ -199,6 +199,45 @@ const moveWarn = tightNew.reduce((s2, { rec }) =>
   s2 + (rec.warnings || []).filter(w => (w.msg || '').includes('주휴 이동')).length, 0);
 check('이동은 경고로 보고된다', moveWarn > 0, `${moveWarn}건`);
 
+// ── 6. 달이 블록 중간에서 시작하면 지난달 요일을 잇는다 (결정 1-37) ─────────────
+// 2026-11-01(일)은 블록 8(10/11~11/7)의 4주기 — 10월 1~3주기 주휴가 목요일이면 11월 첫 주도 목요일,
+// 다음 블록(11/8~)은 하루 당겨 수요일. 요일 미지정(a2)도 같다. 사전입력의 지난달 칸이 저장본보다 먼저.
+{
+  REQ = REQ_NORMAL; WARD_N = 18;
+  const mod = loadModule(NEW);
+  const nurses = ward();
+  nurses[2].juhu_day = null;
+  const THU = ['2026-10-15', '2026-10-22', '2026-10-29'];
+  const recFor = (prevMonthJuhu, prevSchedule = {}) => {
+    const ctx = makeCtx(mod, 2026, 11, nurses.map(n => ({ ...n })), prevSchedule);
+    ctx.prevMonthJuhu = prevMonthJuhu;
+    ctx._prevJuhuYM = '2026-11';
+    ctx.runAnalysis();
+    return ctx.juhuRecommendation.assignments;
+  };
+  const dowsByBlock = list => {
+    const m = {};
+    for (const a of list || []) (m[Math.floor(a.weekIdx / 4)] ||= new Set()).add(a.dow);
+    return Object.fromEntries(Object.entries(m).map(([k, v]) => [k, [...v]]));
+  };
+  const got = recFor({ a1: THU, a2: THU });
+  const b1 = dowsByBlock(got.a1), b2 = dowsByBlock(got.a2);
+  check('지난달에 시작한 블록은 지난달 요일 (요일 지정·회전)', JSON.stringify(b1['8']) === '[4]' && JSON.stringify(b1['9']) === '[3]',
+    `a1 ${JSON.stringify(b1)}`);
+  check('요일 미지정도 지난달 요일', JSON.stringify(b2['8']) === '[4]' && JSON.stringify(b2['9']) === '[3]',
+    `a2 ${JSON.stringify(b2)}`);
+  const base1 = dowsByBlock(recFor({}).a1);
+  check('지난달 저장본이 없으면 지금처럼', JSON.stringify(base1['8']) !== '[4]', `a1 ${JSON.stringify(base1)}`);
+  const pre = dowsByBlock(recFor({ a1: THU }, { a1: { '2026-10-29': 'D', '2026-10-27': '주' } }).a1);
+  check('사전입력의 지난달 칸이 저장본보다 먼저', JSON.stringify(pre['8']) === '[2]', `a1 ${JSON.stringify(pre)}`);
+  // 지난달 나이트킵이었으면 잇지 않는다 — 엔진의 블록 잠금도 나이트킵의 날을 뺀다 (결정 1-36 후속 2)
+  const saved1 = nurses[1].night_months;
+  nurses[1].night_months = { '2026-10': true };
+  const kp = dowsByBlock(recFor({ a1: THU }).a1);
+  nurses[1].night_months = saved1;
+  check('지난달 나이트킵은 잇지 않는다', JSON.stringify(kp) === JSON.stringify(base1), `a1 ${JSON.stringify(kp)}`);
+}
+
 // ── 핀 덤프 (E2E 용) — node scripts/test_juhu_rotation.mjs --emit <out.json> [tight]
 const emitAt = process.argv.indexOf('--emit');
 if (emitAt > 0) {

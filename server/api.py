@@ -413,6 +413,15 @@ def get_relax_ledger(year: int, month: int, months_back: int = 3):
         return {}
 
 
+@app.get("/api/prev_month_juhu")
+def get_prev_month_juhu(year: int, month: int):
+    """직전 달 저장본의 주휴 날짜 — 분석 탭 주휴 추천이 지난달 요일을 이어받는다 (결정 1-37)."""
+    try:
+        return db.compute_prev_month_juhu(year, month)
+    except Exception:
+        return {}
+
+
 @app.get("/api/prev_month_nights")
 def get_prev_month_nights(year: int, month: int):
     """직전 달 최신 저장 근무표 기준 간호사별 야간 수 — '전월N' 자동 채움용."""
@@ -1274,6 +1283,18 @@ def _attach_fairness_offsets(request: GenerateRequest) -> Optional[dict]:
         return None
 
 
+def _attach_prev_juhu(request: GenerateRequest) -> None:
+    """주휴 이동 허용 + 블록 잠금일 때 지난달 저장본의 주휴 날짜를 주입 — 달이 블록 중간에서 시작하면
+    엔진이 그 블록의 지난달 요일을 이어받는다 (결정 1-37). 저장본이 없으면 아무것도 안 한다."""
+    try:
+        if request.allow_juhu_relax and request.juhu_block_lock and not request.prev_juhu_dates:
+            got = db.compute_prev_month_juhu(request.year, request.month)
+            if got:
+                request.prev_juhu_dates = got
+    except Exception:
+        pass
+
+
 def _build_wish_report(request: GenerateRequest, result: dict) -> Optional[dict]:
     """생성 결과 대비 위시 반영 리포트 — 간호사별 신청/반영/미반영 목록."""
     if not result.get("success"):
@@ -1588,6 +1609,7 @@ def generate(request: GenerateRequest):
         # 공정성 원장 — night_fairness·weekend_fairness가 (직전 3개월 누적 + 당월)
         # 편차를 줄이도록 누적 오프셋을 자동 주입 (저장본 파생 — 별도 기록 불필요)
         fair_ctx = _attach_fairness_offsets(request)
+        _attach_prev_juhu(request)
         if request.solver == "race":
             result = _run_race(request)
         elif request.solver == "cpsat":
