@@ -70,7 +70,10 @@ def git(*args):
 
 def claude_hook(rules):
     cmd = (json.load(sys.stdin).get("tool_input") or {}).get("command", "")
-    if not re.search(r"\bgh\s+(pr|release|issue|api|gist|repo)\b|\bgit\s+(commit|tag)\b", cmd):
+    # 내보내는 명령만 — 조회(gh pr list·git grep)는 말 목록의 말을 써도 된다. push 는 브랜치·태그 이름이 공개된다.
+    if not re.search(r"\bgh\s+(pr\s+(create|edit|comment|review|merge)|release\s+(create|edit|upload)"
+                     r"|issue\s+(create|edit|comment)|api|gist\s+create|repo\s+(create|edit))\b"
+                     r"|\bgit\s+(commit|tag|push)\b", cmd):
         return []
     hits = scan("명령", cmd, rules)
     for m in re.finditer(r"(?:--body-file|--notes-file|--file|-F)[=\s]+(\S+)", cmd):

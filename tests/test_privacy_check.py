@@ -49,6 +49,8 @@ def test_claude_hook_checks_outgoing_text_only(rules, tmp_path, monkeypatch):
     assert run(f"gh release edit v1 --notes-file {body}") == [f"{body}:2: ci#1"]
     assert run("git commit -q -F - <<'EOF'\n길순이 고른 범위\nEOF") == ["명령:2: ci#2"]
     assert run("git grep -n 가나다병원") == []                 # 찾기는 내보내는 글이 아니다
+    assert run("gh pr list --search 가나다병원") == []
+    assert run("git push origin HEAD:refs/heads/가나다병원-v5") == ["명령:1: ci#1"]   # 브랜치 이름은 공개된다
 
 
 def test_require_fails_without_rules(tmp_path, monkeypatch):
