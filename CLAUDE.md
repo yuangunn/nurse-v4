@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.15.0 (2026-10-17, 11월 생성 고침 — 주휴 지난달 요일 잇기·신규 독립·끝 주·완성된 번표·실패 한 줄 원인·만드는 동안 계산 기록 · 병동 번표 파일 그대로 올리기·지난달 표 이어오기 앞 칸)
+**최신**: v4.15.1 (2026-10-17, 야간 뒤 휴무를 병동 규칙대로 — 2연속 뒤 이틀 온전히 쉼·나이트킵도 같음·'5일 중 3일' 뺌 · 달을 바꾸면 상태 줄 다시 계산)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -75,6 +75,10 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
     정해진 칸이 아니다 — 엔진은 사전입력(확정 사실)에서 떼어 `flex_pre` 로 두고 그 칸에 허용 근무만 쓴다
     (둘 중 하나 = 두 시간대 근무, 차지 포함·D1·중 아님 / N제외 = 야간만 빼고 쉬어도 됨). 완화에선 근무 원티드(500)처럼 지키고,
     못 지키면 '원티드 미반영'에 원래 표기 그대로 알린다.
+15. **야간 2연속 뒤 휴무 2일 — 나이트킵도 같다** (2026-10-17, 사용자 "2 night 이후 2 휴무 보장"). 쉬는 이틀엔 N 도 안 된다
+    (N N OF N 은 이틀을 쉰 게 아니다). 야간이 이어지는 N N N 은 그대로(연속 야간 ≤3). 설정 '연속 야간 뒤 휴무'(2회·2일)가 이것이다.
+    **'5일 중 야간 3일 이하'는 병동 규칙이 아니다** — 2026-03 엔진을 처음 만들 때 '3연속 뒤 2휴무'를 그렇게 옮겨 넣었고,
+    실제 번표의 나이트킵 N OF N N N(5일 중 4일, 10개월 중 8개월)을 막아 11월 생성이 원인 없이 막혔다 (결정 1-45).
 
 > ✅ **확인 완료 (2026-08-20 사용자 답변 — 반영됨)**:
 > ⓐ 토요일 인원 → DB 시드·문서·시뮬레이터 모두 **4/3/2**로 수정.
@@ -211,7 +215,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.15.0.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.15.1.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -293,7 +297,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | **사전입력 사실-클램프** | 확정(사전입력) 셀은 검증 대상이 아니라 **주어진 사실** — 제약에 걸리는 셀이 전부 확정이면 그 제약은 스킵(일 전체·인접 쌍·윈도우·주 전체 확정, 완전 확정 날은 변수 리터럴화), 확정+자유 혼합 카운트 제약은 상한을 `max(규칙, 확정분)`으로 클램프(자유 셀이 위반을 더 늘리는 건 금지). 부분 확정("2주차까지만 꽉 채움")도 동일 작동. 규칙 차이는 성공 결과에 `pinned_notes` 안내만. 완화(allow_pre_relax) 명시 시엔 클램프 OFF(완화 우선). 완전 확정 표 폴백(`pinned_confirmed`)은 타임아웃 안전망으로 유지. 결정 1-15 |
 | 월 최대 야간 | 기본 월 6회 (수면OFF 임계) |
 | 홀짝월 합산 야간 | 전월+당월 ≤ 11회 (선택적). **나이트킵 달의 야간은 합산 제외** (제1원칙 7) — 전월N 자동 인수인계(`compute_prev_month_nights`)와 엔진 `_two_month_rhs` 양쪽에서 뺀다 |
-| **야간전담 규칙** | N/NC만 배정, 5일 윈도우 내 ≤3 야간, 당월 정확히 14일 근무 (생휴 강제 없음 — 월 ≤1 상한만). **나이트킵인지는 날짜가 속한 달로**(`_keeper_on`) — 생성 범위 끝의 다음 달 며칠은 그 달 나이트킵에게 N/NC·쉬는 것만(`_keeper_forbids`, 사전입력은 사실), 이번 달만 나이트킵인 사람은 그 며칠 일반 간호사(다음 달도 나이트킵·상시 야간전담이면 그대로 나이트킵) (결정 1-33) |
+| **야간전담 규칙** | N/NC만 배정, 당월 정확히 14일 근무, 야간 뒤 휴무는 일반과 같다(제1원칙 15 — 예전 '5일 중 3일'은 뺐다) (생휴 강제 없음 — 월 ≤1 상한만). **나이트킵인지는 날짜가 속한 달로**(`_keeper_on`) — 생성 범위 끝의 다음 달 며칠은 그 달 나이트킵에게 N/NC·쉬는 것만(`_keeper_forbids`, 사전입력은 사실), 이번 달만 나이트킵인 사람은 그 며칠 일반 간호사(다음 달도 나이트킵·상시 야간전담이면 그대로 나이트킵) (결정 1-33) |
 | **임산부 모성보호** | `is_pregnant`+`pregnancy`{early,late} 설정 시: ①P1 구간 완전 포함 주마다 P1 정확히 1회(부분 주 ≤1) ②임신 전 구간 `[early.start~late.end]` N/NC 금지 ③임신-중-달 생(生) 면제(배정 금지) ④임산부 달엔 야간전담 자동 해제. P1은 임산부+구간 또는 사전입력 P1에서만 허용(그 외 변수 0). HiGHS·CP-SAT·conflict_analyzer 패리티. 헬퍼: `_preg_window_on`/`_preg_span_on`/`_preg_active_in_month`/`_preg_forbids`/`_preg_effective_pre` (scheduler_base) |
 | 전입/전출 재적 | start_date ≤ d ≤ end_date 범위에서만 배정 |
 | **셀 잠금** | `locked_cells[nurse][date]=true`인 셀은 완화 모드에서도 사전입력 고정. 단 잠긴 D·E·N 은 같은 시간대 차지(DC·EC·NC)로 올릴 수 있다 — 번표엔 차지 표시가 없다(제1원칙 11, `_locked_domain`, 결정 1-34). 사람이 고른 차지·지난달 기록·나이트킵의 야간 외 근무는 글자 그대로. 승격되는 잠긴 칸끼리는 시니어리티대로(선임이 차지) |
@@ -1017,10 +1021,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.15.0.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.15.1.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.15.0.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.15.1.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -1115,7 +1119,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.15.0 기준)
+## 알려진 주의사항 (v4.15.1 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)

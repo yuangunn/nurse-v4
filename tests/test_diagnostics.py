@@ -30,9 +30,11 @@ def test_short_rest_supply_yields_off_teukgeun(build_request, solve_small, small
     for day in ("mon", "tue", "wed", "thu", "fri", "sat", "sun"):
         setattr(req, day, DayRequirement(D=2, E=2, N=1))
 
+    # 야간 뒤 휴무 이틀을 온전히 주면(2026-10-17) 6명·하루 5명 근무로는 수가 안 맞는다 — 이 시험은 오프특근 보고만 본다
     result = _solve(
         build_request, solve_small,
         nurses=nurses, requirements=req,
+        rules=Rules(maxConsecutiveWorkDays=6, maxVPerMonth=1, restAfterNight=False),
     )
     assert result["success"], result["message"]
     rows = result.get("off_teukgeun") or []

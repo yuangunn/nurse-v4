@@ -611,7 +611,7 @@ class _SchedulerBase:
     def _keeper_forbids(self, nurse: dict, dt: date, s: str, pre: str = None) -> bool:
         """생성 달 뒤에 붙은 다음 달 며칠에서, 그 달 나이트킵에게 야간 외 근무를 막는다.
 
-        생성 달 안은 _c_night_shift_nurses / _cs_night_shift_nurses 가 맡는다 (14회·5일 윈도우와 함께).
+        생성 달 안은 _c_night_shift_nurses / _cs_night_shift_nurses 가 맡는다 (14회와 함께).
         사전입력 pre 의 근무는 그대로 둔다 — strict 에서 사전입력은 사실이다. 완화 경로는
         잠긴 칸을 이 게이트 전에 상수로 묶으므로 pre=None 으로 불러 원티드도 함께 막는다."""
         if s not in self.WORK_SHIFTS or s in self.NIGHT_SHIFTS:
@@ -2282,8 +2282,6 @@ class _SchedulerBase:
             ran_days = getattr(self.rules, "restAfterNightDays", 2)
             work_non_night = work_set - night_set
             for nurse in self.nurses:
-                if nurse.get("is_night_shift"):
-                    continue
                 days = sched.get(nurse["id"], {})
                 codes = [days.get(dt.strftime("%Y-%m-%d")) for dt in self.all_dates]
                 run = 0
@@ -2296,7 +2294,7 @@ class _SchedulerBase:
                             rd = i + k
                             if rd >= len(codes):
                                 break
-                            if (codes[rd] in work_non_night
+                            if (codes[rd] in (work_set if k else work_non_night)   # 둘째 날부터 N 도 근무
                                     and self.all_dates[rd] >= first_of_month):
                                 seq = "→".join(self.all_dates[j].strftime("%m/%d")
                                                for j in range(i - run, i))

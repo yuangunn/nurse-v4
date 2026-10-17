@@ -429,9 +429,11 @@ class _HighsConstraintsMixin:
                 )
 
     def _c_rest_after_night(self, prob, x):
-        """연속 야간 후 연속 휴무 보장.
-        min_consec 이상 연속 야간 근무 후, rest_days 일간 근무 불가.
-        제약: sum_N(d) + sum_N(d+1) - sum_N(d+2) + sum_W(d+k) <= 2
+        """연속 야간 후 연속 휴무 보장 — 설정 '야간 min_consec 회 이상이면 rest_days 일 휴무' (기본 2·2).
+        제약: sum_N(d..) - sum_N(next) + sum_W(rest_d) <= min_consec
+        첫 휴무일(next)의 N 은 야간이 이어지는 것이라 빼고(-sum_N(next)), 둘째 날부터는 N 도 근무다 —
+        N N OF N 은 이틀을 쉰 게 아니다 (2026-10-17, 사용자 "2 night 이후 2 휴무 보장").
+        나이트킵(야간전담)도 같다 — 예전엔 빠지고 '5일 중 야간 3일'이 대신했는데, 그건 병동 규칙이 아니었다.
         """
         min_consec = getattr(self.rules, 'restAfterNightMinConsec', 2)
         rest_days = getattr(self.rules, 'restAfterNightDays', 2)
@@ -439,8 +441,6 @@ class _HighsConstraintsMixin:
         x = self._training_view(x)    # 독립한 신규 — 트레이닝 날 연속 야간 뒤 첫 독립 날도 쉰다
         for nurse in self.nurses:
             nid = nurse["id"]
-            if nurse.get("is_night_shift"):
-                continue  # 야간전담은 제외
             from_ = self._rules_from(nurse, first_of_month)
             for d in range(self.T - min_consec):
                 # 연속 야간 min_consec일 체크 (마지막 야간 다음날이 야간 아닐 때)
@@ -482,7 +482,7 @@ class _HighsConstraintsMixin:
                     work_vars = [
                         x[nid][rest_d][s]
                         for s in self.WORK_SHIFTS
-                        if s not in self.NIGHT_SHIFTS
+                        if (k > 0 or s not in self.NIGHT_SHIFTS)
                         and not isinstance(x[nid][rest_d][s], (int, float))
                     ]
                     if not work_vars:
@@ -603,7 +603,7 @@ class _HighsConstraintsMixin:
         """
         야간전담 간호사 전용 제약 (is_night_shift=True):
           1. N/NC만 배정 (낮·저녁·중간번·상근 모두 금지)
-          2. 5일 윈도우 내 근무 <= 3 → 3일 연속 후 2일 휴무 자동 보장
+          2. 야간 뒤 휴무는 _c_rest_after_night 가 일반과 같게 맡는다 (2026-10-17 — 예전 '5일 중 3일'은 병동 규칙이 아니었다)
           3. 당월 정확히 14일 근무 (N+NC)
         (생리휴가는 강제하지 않음 — 월 ≤1 상한만, _c_menstrual_leave)
         주휴는 _c_weekly_off 에서 일반과 동일하게 처리.
@@ -639,24 +639,6 @@ class _HighsConstraintsMixin:
                     v = x[nid][d].get(s)
                     if isinstance(v, pulp.LpVariable):
                         prob += v == 0, f"night_only_{nid}_{d}_{s}"
-
-            # ── 2. 5일 윈도우 <= 3 — 월 경계에 걸친 윈도우(전월 tail·익월
-            #       overflow 포함)도 검사한다 ──────────────────────────────
-            w_lo = max(0, month_idxs[0] - 4)
-            w_hi = min(self.T - 5, month_idxs[-1])
-            for start in range(w_lo, w_hi + 1):
-                window = range(start, start + 5)
-                if all(self._pin.get((nid, d)) for d in window):
-                    continue  # 사실-클램프
-                w_cap = max(3, self._pin_nurse_count(nid, window, self.NIGHT_SHIFTS))
-                prob += (
-                    pulp.lpSum(
-                        x[nid][d][s]
-                        for d in window
-                        for s in self.NIGHT_SHIFTS
-                    ) <= w_cap,
-                    f"night_5day_{nid}_{start}",
-                )
 
             # ── 3. 당월 야간 근무 일수 — 재적 비례 + N 가용일 클램프 (공용 헬퍼)
             #       + 사실-클램프: 확정분이 목표를 넘으면 실측 존중, 자유 일수가
