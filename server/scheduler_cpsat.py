@@ -840,7 +840,7 @@ class CpSatScheduler(_SchedulerBase):
                             model.Add(v1 + v2 <= 1)
 
     def _cs_nod_pattern(self, model, x):
-        """N→휴무→D 금지 (vn+vr+vd<=2)."""
+        """N→휴무→D 금지 (vn+vr+vd<=2) — 휴무는 OFF_SHIFTS (V·생·법 같은 휴가 포함)."""
         first_of_month = date(self.year, self.month, 1)
         x = self._training_view(x)    # 독립한 신규의 트레이닝 날 = 그날 한 근무 (HiGHS 패리티)
         pin = self._pin_view()        # 사실-클램프 + 트레이닝 날 (자기 사전입력·프리셉터 확정 칸)
@@ -854,24 +854,13 @@ class CpSatScheduler(_SchedulerBase):
                 if (pin.get((nid, d)) and pin.get((nid, d + 1))
                         and pin.get((nid, d + 2))):
                     continue  # 사실-클램프: 세 셀 모두 확정
-                for ns in self.NIGHT_SHIFTS:
-                    vn = x[nid][d][ns]
-                    vn_const = isinstance(vn, int)
-                    if vn_const and vn != 1:
-                        continue
-                    for rs in self.REST_SHIFTS:
-                        vr = x[nid][d + 1][rs]
-                        vr_const = isinstance(vr, int)
-                        if vr_const and vr != 1:
-                            continue
-                        for ds in self.DAY_SHIFTS:
-                            vd = x[nid][d + 2][ds]
-                            vd_const = isinstance(vd, int)
-                            if vd_const and vd != 1:
-                                continue
-                            if vn_const and vr_const and vd_const:
-                                continue  # 전부 사용자 고정 — 사용자 입력 존중
-                            model.Add(vn + vr + vd <= 2)
+                # 하루 한 근무라 세 합은 각각 0/1 — N·쉼·D 가 다 서는 것만 막는다 (HiGHS 패리티)
+                terms = ([x[nid][d][s] for s in self.NIGHT_SHIFTS]
+                         + [x[nid][d + 1][s] for s in self.OFF_SHIFTS]
+                         + [x[nid][d + 2][s] for s in self.DAY_SHIFTS])
+                if all(isinstance(v, int) for v in terms):
+                    continue  # 전부 사용자 고정 — 사용자 입력 존중
+                model.Add(sum(terms) <= 2)
 
     def _cs_max_consecutive_work(self, model, x, max_days: int):
         """최대 연속 근무 — longRunLastResort 면 한도+1 은 슬랙+감점, 한도+2 윈도우에서

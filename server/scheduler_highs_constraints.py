@@ -261,7 +261,7 @@ class _HighsConstraintsMixin:
                             )
 
     def _c_nod_pattern(self, prob, x):
-        """N→휴무→D 금지: N/NC 다음날 REST_SHIFTS(OF, 주 등) 중 하나, 그 다음날 D/DC 금지"""
+        """N→휴무→D 금지: N/NC 다음날 쉬는 날(OF·주 + V·생·법 같은 휴가 — OFF_SHIFTS), 그 다음날 D/DC 금지"""
         first_of_month = date(self.year, self.month, 1)
         x = self._training_view(x)    # 독립한 신규의 트레이닝 날 = 그날 한 근무
         pin = self._pin_view()        # 사실-클램프 + 트레이닝 날 (자기 사전입력·프리셉터 확정 칸)
@@ -276,28 +276,14 @@ class _HighsConstraintsMixin:
                 if (pin.get((nid, d)) and pin.get((nid, d + 1))
                         and pin.get((nid, d + 2))):
                     continue
-                for ns in self.NIGHT_SHIFTS:
-                    vn = x[nid][d][ns]
-                    vn_const = not isinstance(vn, pulp.LpVariable)
-                    if vn_const and vn != 1:
-                        continue
-                    for rs in self.REST_SHIFTS:
-                        vr = x[nid][d + 1][rs]
-                        vr_const = not isinstance(vr, pulp.LpVariable)
-                        if vr_const and vr != 1:
-                            continue
-                        for ds in self.DAY_SHIFTS:
-                            vd = x[nid][d + 2][ds]
-                            vd_const = not isinstance(vd, pulp.LpVariable)
-                            if vd_const and vd != 1:
-                                continue
-                            if vn_const and vr_const and vd_const:
-                                continue  # 전부 사용자 고정 — 사용자 입력 존중
-                            # 상수 1(잠금 고정)도 식에 반영 (예: 1+vr+vd<=2)
-                            prob += (
-                                vn + vr + vd <= 2,
-                                f"nod_{nid}_{d}_{ns}_{rs}_{ds}"
-                            )
+                # 하루 한 근무라 세 합은 각각 0/1 — 합이 3 이 되는 것(N·쉼·D 가 다 서는 것)만 막는다.
+                # 코드 조합마다 식을 두면 쉬는 코드가 휴가까지 12개라 식이 48배였다 (2026-10-18).
+                terms = ([x[nid][d][s] for s in self.NIGHT_SHIFTS]
+                         + [x[nid][d + 1][s] for s in self.OFF_SHIFTS]
+                         + [x[nid][d + 2][s] for s in self.DAY_SHIFTS])
+                if all(isinstance(v, (int, float)) for v in terms):
+                    continue  # 전부 고정 — 사용자 입력 존중 (트레이닝 날은 프리셉터 식이라 변수 쪽)
+                prob += pulp.lpSum(terms) <= 2, f"nod_{nid}_{d}"
 
     def _c_weekly_off(self, prob, x):
         """

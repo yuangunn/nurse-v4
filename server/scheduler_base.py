@@ -319,6 +319,8 @@ class _SchedulerBase:
         self.CHARGE_SHIFTS  = [s["code"] for s in shifts if s["is_charge"]]
         self.REST_SHIFTS    = [s["code"] for s in shifts if s["period"] == "rest"]
         self.LEAVE_SHIFTS   = [s["code"] for s in shifts if s["period"] == "leave"]
+        # 쉬는 날 전부 — N→휴무→D 의 '휴무'는 V·생·법 같은 휴가도다 (2026-10-17, 사용자 "N > V > D 도 금지")
+        self.OFF_SHIFTS     = self.REST_SHIFTS + self.LEAVE_SHIFTS
         self.WORK_SHIFTS    = (self.DAY_SHIFTS + self.DAY1_SHIFTS +
                                self.EVENING_SHIFTS + self.MIDDLE_SHIFTS + self.NIGHT_SHIFTS)
         self.ALL_SHIFTS     = self.WORK_SHIFTS + self.REST_SHIFTS + self.LEAVE_SHIFTS
@@ -2307,7 +2309,7 @@ class _SchedulerBase:
 
         # ⑨ N→휴무→D 패턴 (noNOD) — 확정만으로 완결된 위반 안내
         if getattr(self.rules, "noNOD", False):
-            rest_set = set(self.REST_SHIFTS)
+            rest_set = set(self.OFF_SHIFTS)
             day_set = set(self.DAY_SHIFTS)
             for nid, days in sched.items():
                 for i in range(len(self.all_dates) - 2):

@@ -33,6 +33,7 @@ def _feasible(nid: str, pattern: dict[int, str]) -> bool:
     sch._cs_night_shift_nurses(model, x)
     sch._cs_max_consecutive_night(model, x, sch.rules.maxConsecutiveNightDays)
     sch._cs_rest_after_night(model, x)
+    sch._cs_nod_pattern(model, x)
     base = next(i for i, dt in enumerate(sch.all_dates) if (dt.month, dt.day) == (3, 1))
     for day, code in pattern.items():
         cell = x[nid][base + day - 1]
@@ -57,3 +58,10 @@ def test_keeper_four_nights_in_five_days_is_allowed():
 def test_two_nights_then_two_full_rest_days(nid):
     assert not _feasible(nid, {2: "N", 3: "N", 4: "-", 5: "N"})        # N N 쉼 N — 이틀을 쉰 게 아니다
     assert _feasible(nid, {2: "N", 3: "N", 4: "N", 5: "-", 6: "-", 7: "N"})   # N N N 쉼 쉼 N
+
+
+@pytest.mark.parametrize("mid", ["OF", "V"])
+def test_night_offday_then_day_is_forbidden_with_leave_too(mid):
+    # N → 쉼 → D 금지 — 쉼이 V(휴가)여도 (2026-10-17, 사용자 "N > V > D 도 금지")
+    assert not _feasible("r", {2: "N", 3: mid, 4: "D"})
+    assert _feasible("r", {2: "N", 3: mid, 4: "E"})

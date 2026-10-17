@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.15.1 (2026-10-17, 야간 뒤 휴무를 병동 규칙대로 — 2연속 뒤 이틀 온전히 쉼·나이트킵도 같음·'5일 중 3일' 뺌 · 달을 바꾸면 상태 줄 다시 계산)
+**최신**: v4.15.2 (2026-10-18, N→휴무→D 금지에 V·생·법 같은 휴가도 · v4.15.1 야간 뒤 휴무를 병동 규칙대로 — 2연속 뒤 이틀 온전히·나이트킵도 같음·'5일 중 3일' 뺌)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -79,6 +79,8 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
     (N N OF N 은 이틀을 쉰 게 아니다). 야간이 이어지는 N N N 은 그대로(연속 야간 ≤3). 설정 '연속 야간 뒤 휴무'(2회·2일)가 이것이다.
     **'5일 중 야간 3일 이하'는 병동 규칙이 아니다** — 2026-03 엔진을 처음 만들 때 '3연속 뒤 2휴무'를 그렇게 옮겨 넣었고,
     실제 번표의 나이트킵 N OF N N N(5일 중 4일, 10개월 중 8개월)을 막아 11월 생성이 원인 없이 막혔다 (결정 1-45).
+16. **N→휴무→D 금지의 '휴무'는 V·생·법 같은 휴가도다** (2026-10-17, 사용자 "N > V > D 도 금지"). 실제 번표 1~10월에
+    N→(V·생·법)→D 는 한 번도 없었다 (N→주→D 1번). 엔진은 쉬는 날 전부(`OFF_SHIFTS` = rest + leave)로 본다 (결정 1-46).
 
 > ✅ **확인 완료 (2026-08-20 사용자 답변 — 반영됨)**:
 > ⓐ 토요일 인원 → DB 시드·문서·시뮬레이터 모두 **4/3/2**로 수정.
@@ -215,7 +217,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.15.1.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.15.2.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -282,7 +284,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | **Charge 시니어리티** | DC/EC/NC는 해당 듀티에서 seniority 가장 낮은(선임)에게만. 더 선임이 같은 듀티 일반 근무면 후임은 Charge 불가 |
 | 근무 자격 | capable_shifts에 없는 D/E/N period 근무 불가 (D1/중은 체크 안 함) |
 | **역순 전환 금지** | E→D, E→중, N→E, N→D, N→D1, N→중, 중→D1 (물리적 간격 < 8h). **E→D1·중→D 는 마지막 수단**(`rareTransitionLastResort`, 기본 켬) — 하드 대신 슬랙 + `-2000`, 끄면 9개 모두 하드 (제1원칙 13). 목록은 `_transition_rules()` 한 곳 |
-| N→OF→D 금지 | `noNOD` 규칙 시 Night→Off→Day 패턴 금지 |
+| N→휴무→D 금지 | `noNOD` 규칙 시 Night→쉬는 날(OF·주 + V·생·법 같은 휴가, `OFF_SHIFTS`)→Day 패턴 금지 (제1원칙 16) |
 | **공휴일 OF 금지** | 법정공휴일에는 OF 배정 불가 (일반/완화/진단 모두 적용). **일반 간호사만** — 나이트킵은 법을 못 받아 공휴일에도 OF (제1원칙 10, `_holiday_of_banned`) |
 | 법은 공휴일에만 | 법정공휴일 코드 `법`은 공휴일 날짜에만 **자유 배정** (사전입력 확정 셀은 사실로 수용) |
 | 야간전담 공휴일 제외 | 야간전담에게 법/생/V 공휴일 배정 차단 규칙 다름 |
@@ -1021,10 +1023,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.15.1.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.15.2.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.15.1.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.15.2.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -1119,7 +1121,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.15.1 기준)
+## 알려진 주의사항 (v4.15.2 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)
