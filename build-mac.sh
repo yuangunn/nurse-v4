@@ -11,8 +11,8 @@
 #        바뀌어 다른 맥에서 전부 끊어진다 (v4.13.1·v4.14.0 맥 판 103개, 2026-10-15). 그래서
 #        packager 가 끝난 뒤 ditto 로 직접 넣고, 끊어지거나 절대 경로인 링크가 하나라도 있으면 멈춘다.
 #  서명: 유료 Apple Developer 계정 없이 ad-hoc 서명만 (arm64 실행 요건 충족).
-#        배포본은 공증(notarization)이 없으므로 첫 실행 시 우클릭→열기 또는
-#        `xattr -dr com.apple.quarantine <앱>` 필요.
+#        배포본은 공증(notarization)이 없으므로 설치·업데이트할 때마다
+#        `xattr -dr com.apple.quarantine <앱>` 필요 (macOS 15 부터 우클릭→열기로는 안 됨).
 #  요구: Node 20 LTS (Node 24는 @electron/packager의 electron 추출 단계에서 크래시),
 #        Python 3.11 (highspy/ortools 휠 호환). CI(.github/workflows/release.yml)는 고정 사용.
 # ═══════════════════════════════════════════════════════════════

@@ -14,6 +14,7 @@
 - 만드는 동안 **계산 기록과 진행**이 상태 줄 바로 아래에 보입니다 — 답을 찾았는지, 지금 멈춰도 되는지.
 
 ### 설치·업데이트
-- Windows 는 새 설치 파일을 실행하면 됩니다. 맥은 dmg 를 열어 NurseScheduler 를 응용 프로그램으로 끌어 넣고, 처음 한 번 터미널에서 `xattr -dr com.apple.quarantine /Applications/NurseScheduler.app` 를 실행합니다.
+- Windows 는 새 설치 파일을 실행하면 됩니다 — 옛 판은 알아서 지웁니다.
+- 맥은 앱을 끄고(⌘Q) dmg 를 열어 NurseScheduler 를 응용 프로그램으로 끌어 넣은 뒤 **대치**를 누릅니다(「둘 다 유지」는 옛 앱이 남습니다). 그리고 터미널에서 `xattr -dr com.apple.quarantine /Applications/NurseScheduler.app` 를 실행합니다 — **업데이트할 때마다** 다시 해야 합니다.
 - 사용하던 데이터는 그대로 남습니다.
 - 자동 검사가 286건에서 377건으로 늘었습니다.
