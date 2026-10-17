@@ -80,7 +80,7 @@
 | [**NurseScheduler_v4_mac_arm64.dmg**](https://github.com/yuangunn/nurse-v4/releases/download/v4.15.0/NurseScheduler_v4_mac_arm64.dmg) | 디스크 이미지 (권장) | ~226 MB |
 | [**NurseScheduler_v4_mac_arm64.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.15.0/NurseScheduler_v4_mac_arm64.zip) | 포터블 (.app) | ~200 MB |
 
-> 🍎 macOS 빌드는 미서명(ad-hoc)이라 첫 실행 시 **우클릭 → 열기**로 한 번 허용해야 합니다 (또는 터미널에서 `xattr -dr com.apple.quarantine /Applications/NurseScheduler.app`). 현재 **Apple Silicon(arm64) 전용**입니다.
+> 🍎 macOS 빌드는 미서명(ad-hoc)이라 **설치·업데이트할 때마다** 터미널에서 `xattr -dr com.apple.quarantine /Applications/NurseScheduler.app` 를 한 번 실행해야 열립니다 (또는 한 번 열어 막힌 뒤 시스템 설정 → 개인정보 보호 및 보안 → **그래도 열기** — macOS 15 부터 우클릭 → 열기로는 안 됩니다). 업데이트는 앱을 끄고 dmg 에서 다시 끌어 넣은 뒤 **대치**를 누르면 되고, 데이터는 그대로 남습니다. 현재 **Apple Silicon(arm64) 전용**입니다.
 
 ### 시스템 요구사항
 - **Windows** 10/11 (64bit) 또는 **macOS** (Apple Silicon, 14 Sonoma+ 권장)

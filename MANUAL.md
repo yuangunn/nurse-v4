@@ -14,8 +14,8 @@
 
 ### 설치 버전 (권장)
 
-1. **NurseScheduler_Setup_v4.14.1.exe** 다운로드 (Windows) — macOS는 `NurseScheduler_v4_mac_arm64.dmg`
-2. 실행 → 설치 마법사 진행
+1. **NurseScheduler_Setup_v(버전).exe** 다운로드 (Windows) — macOS는 `NurseScheduler_v4_mac_arm64.dmg`
+2. 실행 → 설치 마법사 진행. 업데이트도 새 설치 파일을 그대로 실행합니다 — 옛 판은 알아서 지우고 데이터는 남습니다.
 3. 바탕화면 또는 시작메뉴의 **NurseScheduler** 바로가기 클릭
 
 ### 포터블 버전
@@ -28,9 +28,12 @@
 - GitHub Releases: https://github.com/yuangunn/nurse-v4/releases
 
 ### macOS (Apple Silicon)
-1. **NurseScheduler_v4_mac_arm64.dmg** 다운로드 → 열면 나오는 앱을 옆의 **응용 프로그램** 폴더로 끌어 넣기
-2. 첫 실행 시 **우클릭 → 열기** (미서명 앱이라 1회 허용 필요). '손상되었기 때문에 열 수 없습니다'가 나오면 터미널에서
-   `xattr -dr com.apple.quarantine /Applications/NurseScheduler.app` 를 한 번 실행한 뒤 다시 엽니다.
+1. **NurseScheduler_v4_mac_arm64.dmg** 다운로드 → 열면 나오는 앱을 옆의 **응용 프로그램** 폴더로 끌어 넣기.
+   업데이트라면 앱을 먼저 끄고(⌘Q) 끌어 넣은 뒤 **대치**를 누릅니다 — 「둘 다 유지」는 옛 앱이 그대로 남습니다. 데이터는 앱 밖에 있어 남습니다.
+2. 미서명 앱이라 **설치·업데이트할 때마다** 한 번 허용해야 합니다. 터미널에서
+   `xattr -dr com.apple.quarantine /Applications/NurseScheduler.app` 를 실행한 뒤 엽니다.
+   (터미널 대신: 한 번 열어 막힌 뒤 시스템 설정 → 개인정보 보호 및 보안 → **그래도 열기**. macOS 15 부터 우클릭 → 열기로는 안 되고,
+   '손상되었기 때문에 열 수 없습니다'가 나오면 터미널 방법만 됩니다.)
 
 ### 시스템 요구사항
 - Windows 10/11 (64bit) 또는 macOS (Apple Silicon, 14 Sonoma+ 권장)

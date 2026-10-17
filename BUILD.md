@@ -40,7 +40,8 @@ build.bat
 
 > 태그(`vX.Y.Z`) push 시 GitHub Actions(`.github/workflows/release.yml`)가 두 플랫폼을 자동
 > 빌드해 릴리스에 업로드합니다. macOS 빌드는 유료 Apple Developer 계정이 없어 **미서명(ad-hoc)**
-> 이며, 사용자는 첫 실행 시 우클릭→열기로 한 번 허용해야 합니다(현재 Apple Silicon 전용).
+> 이며, 사용자는 설치·업데이트할 때마다 `xattr -dr com.apple.quarantine` 이나 시스템 설정의 '그래도 열기'로 허용해야 합니다
+> (macOS 15 부터 우클릭→열기로는 안 됨, 현재 Apple Silicon 전용).
 
 ## 산출물
 
