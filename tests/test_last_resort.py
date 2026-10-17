@@ -209,7 +209,7 @@ def test_relax_prefers_last_resort_over_off_teukgeun(solver, relax):
 
 @pytest.mark.parametrize("solver", ["highs", "cpsat"])
 def test_relax_moves_leave_wish_before_off_teukgeun(solver):
-    """오프특근은 가장 나중 (2026-10-03 원근 결정) — 원티드를 풀어야 하는 달엔 휴가 원티드까지
+    """오프특근은 가장 나중 (2026-10-03 사용자 결정) — 원티드를 풀어야 하는 달엔 휴가 원티드까지
     먼저 푼다. 3/1~3/7 · 2명 · 낮만. a1 의 3/3 V 원티드를 지키면 누군가 그 주 OF 를 반납해야
     한다(오프특근). a1 의 3/6 OF 원티드(낮 2명 필요한 날)가 strict 를 실패시키는 장치다."""
     d = [1, 2, 1, 1, 2, 2, 1]
@@ -227,7 +227,7 @@ def test_relax_moves_leave_wish_before_off_teukgeun(solver):
 @pytest.mark.parametrize("solver", ["highs", "cpsat"])
 @pytest.mark.parametrize("code", ["공", "특"])
 def test_relax_keeps_fixed_date_leave_over_off_teukgeun(solver, code):
-    """날이 정해진 휴가는 오프특근보다 먼저 지킨다 (2026-10-03 원근 결정, 결정 1-35) —
+    """날이 정해진 휴가는 오프특근보다 먼저 지킨다 (2026-10-03 사용자 결정, 결정 1-35) —
     "경가·조가 등으로 휴무가 갑자기 많아지면 남은 근무자들이 오프를 줄여가며 근무를 뛴다"(제1원칙 3).
     위 V 시험과 같은 표에서 V 자리만 공·특으로 바꾸면, 휴가는 그대로 두고 a1 이 그 주 OF 를 반납한다."""
     d = [1, 2, 1, 1, 2, 2, 1]

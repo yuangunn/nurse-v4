@@ -288,11 +288,6 @@
           <input type="number" x-model.number="fontSize" min="8" max="30" style="width:4em;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);color:var(--text);font-size:0.8rem;text-align:center" @change="setFontSize(fontSize)">
           <span style="font-size:0.7rem;color:var(--text-sub)">(개발자: 8~30px, 일반: 16~24px)</span>
         </div>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.8rem;color:var(--text)">
-          <input type="checkbox" :checked="showHospitalLogo" @change="toggleHospitalLogo()"/>
-          사이드바에 병원 로고 표시
-          <span style="font-size:0.7rem;color:var(--text-sub)">(용인세브란스병원)</span>
-        </label>
       </div>
     </div>
 
@@ -895,7 +890,7 @@
   </template>
 
   <!-- 만드는 중 — 진행 한 줄(답을 찾았는지·가장 좋은 답과 차이·정체) + 계산 기록. 서랍은 표가 없으면 열리지 않고
-       v4.13 상태 줄이 옛 '생성 중' 카드의 진행을 가져가지 않아, 만드는 동안 볼 곳이 없었다 (2026-10-16 원근).
+       v4.13 상태 줄이 옛 '생성 중' 카드의 진행을 가져가지 않아, 만드는 동안 볼 곳이 없었다 (2026-10-16 사용자).
        목록(x-for)을 품으므로 x-show (결정 2-21) -->
   <div class="rlive fs-hide rdesk-only" data-rd="live-log" x-show="generating" x-cloak>
     <div class="rlive-head"><span x-text="rdLiveProgress"></span>

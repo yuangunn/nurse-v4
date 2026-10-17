@@ -135,11 +135,6 @@ function app() {
     devMasterPw:'',
     devMasterPwConfirm:'',
     devDbInfo:null, // DB 경로/크기
-    showHospitalLogo:localStorage.getItem('showHospitalLogo')==='true', // 기본 숨김
-    toggleHospitalLogo(){
-      this.showHospitalLogo=!this.showHospitalLogo;
-      localStorage.setItem('showHospitalLogo',this.showHospitalLogo);
-    },
 
     // ── UX 개선 ──
     showPreBonusSettings:false,     // 사전입력 완화 차등 보너스 설정 패널
