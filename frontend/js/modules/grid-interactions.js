@@ -171,13 +171,14 @@ window.GridInteractionsModule = function() {
           if(maxCN&&runN>maxCN&&!flagN&&dk>=firstKey){flagN=true;notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)}까지 연속 야간 ${runN}일 — 최대 ${maxCN}일 (확정으로 수용)`})}
         }
 
-        // N→휴무→D 금지 (noNOD) — 세 칸 모두 선입력일 때 확정
+        // N→휴무→D 금지 (noNOD) — 세 칸 모두 선입력일 때 확정. 휴무는 V·생·법 같은 휴가도 (엔진 OFF_SHIFTS)
         if(r.noNOD){
+          const offSet=new Set(this.shifts.filter(s=>s.period==='rest'||s.period==='leave').map(s=>s.code));
           for(let i=0;i+2<days.length;i++){
             const dk3=this.dayKey(days[i+2]);
             if(dk3<firstKey)continue; // 전월 내부 완결 윈도우 — 솔버 미적용
             const c1=eff[this.dayKey(days[i])],c2=eff[this.dayKey(days[i+1])],c3=eff[dk3];
-            if(c1&&c2&&c3&&nightSet.has(c1)&&restSet.has(c2)&&daySet.has(c3))
+            if(c1&&c2&&c3&&nightSet.has(c1)&&offSet.has(c2)&&daySet.has(c3))
               notes.push({nid,dk:dk3,msg:`${nurse.name}: ${fmtD(days[i])}~${fmtD(days[i+2])} N→휴무→D 패턴 (확정으로 수용)`});
           }
         }

@@ -261,7 +261,7 @@ class _HighsConstraintsMixin:
                             )
 
     def _c_nod_pattern(self, prob, x):
-        """N→휴무→D 금지: N/NC 다음날 REST_SHIFTS(OF, 주 등) 중 하나, 그 다음날 D/DC 금지"""
+        """N→휴무→D 금지: N/NC 다음날 쉬는 날(OF·주 + V·생·법 같은 휴가 — OFF_SHIFTS), 그 다음날 D/DC 금지"""
         first_of_month = date(self.year, self.month, 1)
         x = self._training_view(x)    # 독립한 신규의 트레이닝 날 = 그날 한 근무
         pin = self._pin_view()        # 사실-클램프 + 트레이닝 날 (자기 사전입력·프리셉터 확정 칸)
@@ -281,7 +281,7 @@ class _HighsConstraintsMixin:
                     vn_const = not isinstance(vn, pulp.LpVariable)
                     if vn_const and vn != 1:
                         continue
-                    for rs in self.REST_SHIFTS:
+                    for rs in self.OFF_SHIFTS:
                         vr = x[nid][d + 1][rs]
                         vr_const = not isinstance(vr, pulp.LpVariable)
                         if vr_const and vr != 1:

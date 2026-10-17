@@ -1274,7 +1274,7 @@ class _HighsDiagnosisMixin:
                             continue
                         s0, s1, s2 = prev_nurse[d0], prev_nurse[d1], prev_nurse[d2]
                         if (s0 in self.NIGHT_SHIFTS and
-                                s1 in self.REST_SHIFTS and
+                                s1 in self.OFF_SHIFTS and
                                 s2 in self.DAY_SHIFTS + self.DAY1_SHIFTS):
                             nod_found.append(f"    · {nurse['name']}: {d0}({s0}) → {d1}({s1}) → {d2}({s2})")
                 lines.append("  [원인] N→OF→D 금지 규칙 충돌 (야간전담 + 일반 간호사 패턴)")

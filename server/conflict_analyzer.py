@@ -713,7 +713,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                     model.Add(vc + vr <= 1).OnlyEnforceIf(day_lit)
 
     def _g_nod(self, model, x, gate):
-        """N→OF→D 금지 — per nurse 1 리터럴."""
+        """N→휴무→D 금지(휴무 = OFF_SHIFTS, V·생·법 포함) — per nurse 1 리터럴."""
         x = self._training_view(x)    # 독립한 신규의 트레이닝 날 = 그날 한 근무 (솔버 패리티)
         _, pin = self._gate_pins()
         first = date(self.year, self.month, 1)
@@ -730,7 +730,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                     vn = x[nid][d][ns]
                     if isinstance(vn, int) and vn != 1:
                         continue
-                    for rs in self.REST_SHIFTS:
+                    for rs in self.OFF_SHIFTS:
                         vr = x[nid][d + 1][rs]
                         if isinstance(vr, int) and vr != 1:
                             continue

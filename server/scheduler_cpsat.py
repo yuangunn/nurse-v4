@@ -840,7 +840,7 @@ class CpSatScheduler(_SchedulerBase):
                             model.Add(v1 + v2 <= 1)
 
     def _cs_nod_pattern(self, model, x):
-        """N→휴무→D 금지 (vn+vr+vd<=2)."""
+        """N→휴무→D 금지 (vn+vr+vd<=2) — 휴무는 OFF_SHIFTS (V·생·법 같은 휴가 포함)."""
         first_of_month = date(self.year, self.month, 1)
         x = self._training_view(x)    # 독립한 신규의 트레이닝 날 = 그날 한 근무 (HiGHS 패리티)
         pin = self._pin_view()        # 사실-클램프 + 트레이닝 날 (자기 사전입력·프리셉터 확정 칸)
@@ -859,7 +859,7 @@ class CpSatScheduler(_SchedulerBase):
                     vn_const = isinstance(vn, int)
                     if vn_const and vn != 1:
                         continue
-                    for rs in self.REST_SHIFTS:
+                    for rs in self.OFF_SHIFTS:
                         vr = x[nid][d + 1][rs]
                         vr_const = isinstance(vr, int)
                         if vr_const and vr != 1:
