@@ -483,6 +483,9 @@ function app() {
       this.$watch('activeTab',()=>appbar.classList.remove('condensed'));
       // 옛 '저장' 탭 별칭 — 어디서든 activeTab='saved' 를 넣으면 근무표 탭 + 저장 서랍으로 (M7-D)
       this.$watch('activeTab',v=>{if(v==='saved')this.openSavedDrawer()});
+      // 달을 바꾸면 그 달 기준으로 라인트·신호등을 다시 — 예전엔 지난 달의 '만들 수 없어요' 이유가 남았다 (2026-10-17)
+      this.$watch('month',()=>this._checkViolations());
+      this.$watch('year',()=>this._checkViolations());
     },
     // 첫 화면: 명부가 있으면 사전입력(매달의 시작점), 없으면 ⚙ 설정(첫 1회). 폰은 오늘. — M7-D
     _pickLandingTab(){

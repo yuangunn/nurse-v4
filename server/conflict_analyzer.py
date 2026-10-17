@@ -593,20 +593,6 @@ class _ConflictAnalyzer(CpSatScheduler):
                 lit = gate(f"{self._fmt_nurse_label(nurse)} 나이트킵은 야간만", nid=nid, kind="keeper")
                 for v in only:
                     model.Add(v == 0).OnlyEnforceIf(lit)
-            # 5일 중 야간 3일 이하 — 월 경계에 걸친 윈도우 포함 (엔진과 같다)
-            w_lo = max(0, month_idxs[0] - 4)
-            w_hi = min(self.T - 5, month_idxs[-1])
-            wins = []
-            for start in range(w_lo, w_hi + 1):
-                window = range(start, start + 5)
-                if pin and all(pin.get((nid, d)) for d in window):
-                    continue
-                cap = max(3, sum(1 for d in window if pin.get((nid, d)) in self.NIGHT_SHIFTS))
-                wins.append((window, cap))
-            if wins:
-                lit = gate(f"{self._fmt_nurse_label(nurse)} 나이트킵 5일 중 야간 3일 이하", nid=nid, kind="keeper")
-                for window, cap in wins:
-                    model.Add(sum(x[nid][d][sc] for d in window for sc in self.NIGHT_SHIFTS) <= cap).OnlyEnforceIf(lit)
 
     def _g_menstrual(self, model, x, gate):
         if "생" not in self.ALL_SHIFTS:
@@ -811,10 +797,8 @@ class _ConflictAnalyzer(CpSatScheduler):
         first = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
-            if nurse.get("is_night_shift"):
-                continue
             lit = None
-            from_ = self._rules_from(nurse, first)   # 엔진(_cs_rest_after_night)과 같다
+            from_ = self._rules_from(nurse, first)   # 엔진(_cs_rest_after_night)과 같다 — 나이트킵도
             for d in range(self.T - min_consec):
                 night_terms = [x[nid][d + i][s] for i in range(min_consec)
                                for s in self.NIGHT_SHIFTS if not isinstance(x[nid][d + i][s], int)]
@@ -838,7 +822,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                     if pin.get((nid, rest_d)):
                         continue   # 사실-클램프: 확정된 휴식일 칸은 사람이 고른 그대로
                     work_vars = [x[nid][rest_d][s] for s in self.WORK_SHIFTS
-                                 if s not in self.NIGHT_SHIFTS and not isinstance(x[nid][rest_d][s], int)]
+                                 if (k > 0 or s not in self.NIGHT_SHIFTS) and not isinstance(x[nid][rest_d][s], int)]
                     if not work_vars:
                         continue
                     if lit is None:

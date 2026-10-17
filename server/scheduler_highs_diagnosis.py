@@ -290,15 +290,13 @@ class _HighsDiagnosisMixin:
 
     def _scan_pre_rest_after_night(self, min_consec: int, rest_days: int):
         """사전입력만으로 '연속 야간 후 휴무' 위반인 셀 검출.
-        연속 야간(≥min_consec) 사전입력 뒤 rest_days 안에 비야간 근무가
-        사전입력돼 있으면 — 사이 빈 칸을 솔버가 어떻게 채워도 위반이다.
+        연속 야간(≥min_consec) 사전입력 뒤 rest_days 안에 근무가 사전입력돼 있으면(첫날은 비야간,
+        둘째 날부터는 N 도 — 엔진과 같다) 사이 빈 칸을 솔버가 어떻게 채워도 위반이다. 나이트킵도 같다.
         Returns: [{'nurse_id','nurse_label','night_seq','work_date','work_iso','work_shift'}]"""
         out = []
         night = set(self.NIGHT_SHIFTS)
         work_non_night = set(self.WORK_SHIFTS) - night
         for nurse in self.nurses:
-            if nurse.get("is_night_shift"):
-                continue  # 야간전담은 규칙 제외
             nid = nurse["id"]
             pres = [self.prev.get(nid, {}).get(dt.strftime("%Y-%m-%d"), "")
                     for dt in self.all_dates]
@@ -312,7 +310,7 @@ class _HighsDiagnosisMixin:
                         rd = d + k
                         if rd >= self.T:
                             break
-                        if pres[rd] in work_non_night:
+                        if pres[rd] in (work_non_night | night if k else work_non_night):
                             seq = "→".join(
                                 self.all_dates[i].strftime("%m/%d")
                                 for i in range(d - run, d))

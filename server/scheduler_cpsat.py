@@ -922,7 +922,7 @@ class CpSatScheduler(_SchedulerBase):
                 model.Add(sum(x[nid][d][s] for d in window for s in self.NIGHT_SHIFTS) <= max_nights)
 
     def _cs_rest_after_night(self, model, x):
-        """연속 야간(min_consec) 후 rest_days 일간 근무 불가.
+        """연속 야간(min_consec) 후 rest_days 일간 근무 불가 — 둘째 휴무일부터는 N 도 근무, 나이트킵도 같다.
         lhs = ΣN(d..d+mc-1) - ΣN(next) + ΣW(rest_d) <= min_consec (HiGHS _c_rest_after_night 대응)."""
         min_consec = getattr(self.rules, 'restAfterNightMinConsec', 2)
         rest_days = getattr(self.rules, 'restAfterNightDays', 2)
@@ -930,8 +930,6 @@ class CpSatScheduler(_SchedulerBase):
         x = self._training_view(x)    # 독립한 신규의 트레이닝 날 연속 야간 뒤도 쉰다 (HiGHS 패리티)
         for nurse in self.nurses:
             nid = nurse["id"]
-            if nurse.get("is_night_shift"):
-                continue
             from_ = self._rules_from(nurse, first_of_month)
             for d in range(self.T - min_consec):
                 night_terms = [x[nid][d + i][s] for i in range(min_consec)
@@ -956,7 +954,7 @@ class CpSatScheduler(_SchedulerBase):
                     if self._pin.get((nid, rest_d)):
                         continue  # 사실-클램프: 확정된 휴식일 셀은 사용자 선택 그대로
                     work_vars = [x[nid][rest_d][s] for s in self.WORK_SHIFTS
-                                 if s not in self.NIGHT_SHIFTS and not isinstance(x[nid][rest_d][s], int)]
+                                 if (k > 0 or s not in self.NIGHT_SHIFTS) and not isinstance(x[nid][rest_d][s], int)]
                     if not work_vars:
                         continue
                     lhs = sum(night_terms) + night_fixed
@@ -1046,7 +1044,7 @@ class CpSatScheduler(_SchedulerBase):
                 model.Add(sum(next_m) <= self._tail_saeng_cap(nurse, next_idx))
 
     def _cs_night_shift_nurses(self, model, x):
-        """야간전담: N/NC만, 5일 윈도우<=3, 당월 정확 14일. (생휴 강제 없음 — ≤1 상한만)"""
+        """야간전담: N/NC만, 당월 정확 14일 — 야간 뒤 휴무는 _cs_rest_after_night 가 일반과 같게. (생휴 강제 없음 — ≤1 상한만)"""
         night_nurses = [n for n in self.nurses if n.get("is_night_shift")]
         if not night_nurses:
             return
@@ -1071,16 +1069,6 @@ class CpSatScheduler(_SchedulerBase):
                     v = x[nid][d].get(s)
                     if v is not None and not isinstance(v, int):
                         model.Add(v == 0)
-            # 5일 윈도우 ≤3 — 월 경계에 걸친 윈도우도 검사 (HiGHS 패리티)
-            w_lo = max(0, month_idxs[0] - 4)
-            w_hi = min(self.T - 5, month_idxs[-1])
-            for start in range(w_lo, w_hi + 1):
-                window = range(start, start + 5)
-                if all(self._pin.get((nid, d)) for d in window):
-                    continue  # 사실-클램프
-                w_cap = max(3, self._pin_nurse_count(nid, window, self.NIGHT_SHIFTS))
-                model.Add(sum(x[nid][d][s] for d in window
-                              for s in self.NIGHT_SHIFTS) <= w_cap)
             # 야간 일수 — 재적 비례 + N 가용일 클램프 (공용 헬퍼, HiGHS 패리티)
             #   + 사실-클램프 (확정분 초과 시 실측 존중, 자유 일수 내 달성 가능치로)
             pin_n = self._pin_nurse_count(nid, month_idxs, self.NIGHT_SHIFTS)
