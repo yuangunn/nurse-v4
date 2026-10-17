@@ -206,7 +206,7 @@ html.is-electron .titlebar {
   background: var(--paper);
   position: relative;
 }
-/* 상단 3px Severance navy ribbon (제목표시줄 바로 아래) */
+/* 상단 3px navy ribbon (제목표시줄 바로 아래) */
 .app-shell::before {
   content: ''; position: fixed; top: var(--titlebar-h, 0px); left: 0; right: 0;
   height: 3px; background: var(--accent);

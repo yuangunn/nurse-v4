@@ -337,7 +337,7 @@ async function main() {
     A.closeWizard(); return out;`);
   // 요일별 필요 인원 단계는 없다 — 완성된 근무표를 받으므로 인원을 재지 않는다 (2026-09-27, 결정 2-28)
   // 환영(파일 만들기)이 0단계다 — 처음 켠 사람이 환영 카드 → 시작 화면 → 마법사로 세 번 갈아타지 않게 (2026-09-27)
-  // 병동을 고른 다음은 그 병동 예시로 먼저 해 보기 (2026-10-10 원근 "온보딩에서 병동 고르고 예시파일로 어떻게 하는지 알아보기를 유도")
+  // 병동을 고른 다음은 그 병동 예시로 먼저 해 보기 (2026-10-10 사용자 "온보딩에서 병동 고르고 예시파일로 어떻게 하는지 알아보기를 유도")
   eq('마법사 단계 순서', wiz.map(w => w.id),
     ['hello', 'ward', 'demo', 'scheme', 'paste', 'codes', 'caps', 'done']);
   ok('단계마다 본문이 그려진다 (패널 id 가 어긋나면 빈다)',
@@ -2687,7 +2687,7 @@ async function main() {
     A.startWizard(A.WIZ.findIndex(w=>w.id==='caps'));
     out.wiz=[!!document.querySelector('#wizBody .grpStrip'), document.querySelectorAll('#wizBody .grpChip').length, !!document.querySelector('#wizBody .grpStrip button[onclick^="pickAdmin"]')];
     A.closeWizard();
-    // ── 고친 날부터 (2026-10-09 원근) — 그룹원을 넣고 빼거나 스위치를 바꾸면 그 날부터 바뀌고 지난 날 배정은 그대로 ──
+    // ── 고친 날부터 (2026-10-09 사용자) — 그룹원을 넣고 빼거나 스위치를 바꾸면 그 날부터 바뀌고 지난 날 배정은 그대로 ──
     { const D3='2026-09-08', J=x=>JSON.stringify(x), Dp=['가선임','나선임','다선임','라선임','자신규'];
       A.store.ovr={}; A.store.unit={}; A.store.groupLog=[];
       for(const n of A.store.order){ A.store.cells[n]={}; for(const d of [D1,D2,D3]) A.store.cells[n][d]=Dp.includes(n)?'D':'E'; }
@@ -2798,7 +2798,7 @@ async function main() {
   eq('저장 → 다시 열기 — 그룹·배정 그대로', v37.trip, [true, true]);
   ok('파일 안 스냅샷(이전 상태로 되돌리기)에 그룹이 든다', v37.hist);
 
-  // ── 38. 그룹의 가능 근무·주지 않을 방 (2026-10-09 원근: "그룹별 가능근무 수정, 그룹별 배정하지 않을 방을 지정") ─────────────
+  // ── 38. 그룹의 가능 근무·주지 않을 방 (2026-10-09 사용자: "그룹별 가능근무 수정, 그룹별 배정하지 않을 방을 지정") ─────────────
   // 그룹원 각자 설정 위에 더한다(가능 근무 = 개인 ∩ 그룹, 주지 않을 방 = 개인 ∪ 그룹). 고친 날부터 — 지난 배정은 그대로.
   // 인계 피하기를 끈 그룹·그룹원 하나인 그룹도 기록된다(예전 기록 모양은 인계 피하기 그룹만 봤다). 호실을 고치면 기록 속 그룹의 방도 따라간다
   step('38 그룹의 가능 근무·주지 않을 방');
@@ -2953,7 +2953,7 @@ async function main() {
   eq('저장 → 다시 열기 — 그룹 제한·배정 그대로', v38.trip, [true, true]);
   eq('다른 소속(SU)은 그룹 제한을 쓰지 않는다', v38.su, [true, []]);
 
-  // ── 39. 예시로 둘러보기 (2026-10-09 원근: "병동별 예시 js 파일을 추가하고 근무표도 임의로 채워서 한번 사용할수 있게") ─────────
+  // ── 39. 예시로 둘러보기 (2026-10-09 사용자: "병동별 예시 js 파일을 추가하고 근무표도 임의로 채워서 한번 사용할수 있게") ─────────
   // 예시는 메모리에서만 연다 — 데이터 파일·IndexedDB·localStorage 에 아무것도 쓰지 않는다. 우리 병동 파일을 보다가 열었으면
   // 끝낼 때 그 파일로 그대로 돌아온다. 예시 파일(store.example)은 어느 길로 열어도(파일 고르기·끌어다 놓기·백업 불러오기·옆 파일)
   // 연결하지 않고 예시로 연다 — 고친 것이 예시 파일에 쌓이지 않게. 실제 파일 창은 못 띄우므로 같은 모양의 가짜 핸들을 쓴다.
@@ -3102,7 +3102,7 @@ async function main() {
   eq('예시에서 [우리 병동 파일 만들기] — 예시 끝, 빈 새 파일(예시 표시 없음), 병동 단계', v39.make, [false, 'file', 0, true, 'ward']);
   eq('도움말 주제·시작 화면 단추', v39.help, [true, true]);
 
-  // ── 40. 처음 설정의 예시 단계 + 예시 수정 알림 띠 (2026-10-10 원근: "온보딩으로 할 때 병동 고르고 예시파일로 어떻게 하는지 알아보기를
+  // ── 40. 처음 설정의 예시 단계 + 예시 수정 알림 띠 (2026-10-10 사용자: "온보딩으로 할 때 병동 고르고 예시파일로 어떻게 하는지 알아보기를
   // 유도 — 예시파일로는 자동연동 안 되게, 예시파일로 수정할 때는 위에 알림 뱃지(예시파일 수정 중으로 연동이 되지 않는다)") ─────────
   // 병동 단계 다음이 '고른 병동 예시로 먼저 해 볼까요?' — 열면 마법사는 닫히고, 예시를 끝내면 우리 병동 파일로 돌아와 방 구성부터.
   // 예시를 보는 동안 어디에도 쓰지 않고(파일·IndexedDB·localStorage), 저장 중에 예시가 열려도 예시가 우리 병동 파일에 들어가지 않는다.
@@ -3226,7 +3226,7 @@ async function main() {
   eq('예시 중 다른 파일을 열면 — 우리 파일로 먼저 돌아오고 되돌리기 기록은 새 파일에 안 따라감', v40.swapFile, [true, true, false, '61', 0, false, true]);
 
   // ── 41. 손으로 바꿀 때 사유 (2026-10-11, 결정 2-51) ─────────────────────────────────────
-  // 원근: "어싸인 방배정 변경이나 어싸인 간호사 변경시 사유를 꼭 작성할 수 있게 — 왜 바꿨는지를 모르니까 보기가 힘들다".
+  // 사용자: "어싸인 방배정 변경이나 어싸인 간호사 변경시 사유를 꼭 작성할 수 있게 — 왜 바꿨는지를 모르니까 보기가 힘들다".
   // 배정표에서 눌러 연 창에서만 사유를 받는다 — 비우면 안 바뀌고, 그만두면 아무것도 안 바뀌며, 되돌리기 한 번에 사유까지 돌아간다.
   step('41 손으로 바꿀 때 사유');
   const v41 = await ev(`return (async()=>{ const A=window.__app, D='2026-09-06', out={}, J=x=>JSON.stringify(x);
@@ -3269,7 +3269,7 @@ async function main() {
     out.direct=[J((A.store.ovr[D]||{}).D),seatKeys()];
     await openName('최씨'); [...document.querySelectorAll('#pick button')].find(b=>b.getAttribute('onclick')==='pickChoose(null)').click(); await wait(20);
     out.auto=[modalOn(),J(A.store.ovr),J(A.store.why)];
-    // ⑤ 근무 바꾸기는 묻지 않는다 — 근무를 바꾸는 것은 지금처럼 바로 (원근이 고른 범위 '자리·방만')
+    // ⑤ 근무 바꾸기는 묻지 않는다 — 근무를 바꾸는 것은 지금처럼 바로 (사용자가 고른 범위 '자리·방만')
     s=setup('101'); await openName('정디');
     [...document.querySelectorAll('#pick .shl button')].find(b=>b.textContent.trim()==='OF').click(); await wait(20);
     out.shift=[modalOn(),A.store.cells['정디'][D],J(A.store.why),document.querySelector('#wkWhy').style.display];

@@ -1,0 +1,4 @@
+#!/bin/sh
+# 커밋 메시지는 이력에 남는다 — 병원 이름·실명이 있으면 막는다 (scripts/privacy_check.py)
+PY=$(command -v python3 || command -v python) || { echo "commit-msg: python 이 없어 개인정보 검사를 못 했다" >&2; exit 1; }
+exec "$PY" scripts/privacy_check.py --msg "$1"

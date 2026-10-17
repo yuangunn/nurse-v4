@@ -165,7 +165,7 @@ try {
     return {이름:t?t.querySelectorAll('td.nm').length:0, 카드:!!o&&o.classList.contains('demo')&&getComputedStyle(o).display!=='none'};`);
   ok('예시 근무표로 배정표가 찼다', ex.이름 > 40, JSON.stringify(ex));
   ok('배정표 옆에 예시 카드', ex.카드, JSON.stringify(ex));
-  // 고치면 맨 위에 '예시 파일 수정 중 — 연동되지 않습니다' 띠 (원근 2026-10-10)
+  // 고치면 맨 위에 '예시 파일 수정 중 — 연동되지 않습니다' 띠 (사용자 2026-10-10)
   eq('열기만 해서는 띠가 없다', await ev(`return getComputedStyle(document.querySelector('#demoBar')).display`), 'none');
   await ev(`const A=window.__app; A.toggleCap(A.store.order[3],'DC'); return 1`);
   eq('고치면 위에 띠 — 파일이 없으면 \'어느 파일과도 연동되지 않습니다\'', await ev(`const b=document.querySelector('#demoBar');

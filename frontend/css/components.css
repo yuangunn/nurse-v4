@@ -768,29 +768,6 @@ input[type="number"]::-webkit-outer-spin-button {
   @page { size: A3 landscape; margin: 10mm; }
 }
 
-/* ── 용인세브란스병원 로고 (사이드바 하단) ───────────────────── */
-.hospital-logo {
-  margin: 0 10px;
-  padding: 0;
-  background: transparent;
-  text-align: center;
-  line-height: 0;
-}
-.hospital-logo img {
-  width: auto;
-  max-width: 100%;
-  height: auto;
-  min-height: 80px;
-  max-height: 120px;
-  object-fit: contain;
-  display: block;
-  margin: 0 auto;
-}
-@media print {
-  .hospital-logo { display: none !important; }
-}
-
-
 /* ── 드롭다운 메뉴 (툴바 묶음: 내보내기·가져오기·자동 채움·⋯) — M7 ─────────── */
 .menu-pop { position: absolute; top: 100%; left: 0; z-index: 60; min-width: 190px; padding: 4px; margin-top: 4px;
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.12);

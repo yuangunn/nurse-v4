@@ -1,0 +1,36 @@
+name: Privacy
+
+# 공개 저장소 — PR 제목·본문, 커밋 메시지, 더한 줄에 병원 이름·실명이 없는지 본다 (CLAUDE.md '공개 저장소', 2026-10-17).
+# 말 목록은 시크릿 PRIVACY_PATTERNS (한 줄에 정규식 하나) — 리포에 두면 목록 자체가 공개된다.
+# 찾은 말은 찍지 않고 자리만 찍는다. 시크릿이 없으면 실패한다(--require).
+# PR 본문만 고쳐도 다시 돌도록 edited 를 넣었다 — 테스트(test.yml)와 나눈 이유.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: PR 제목·본문
+        if: github.event_name == 'pull_request'
+        env:
+          PRIVACY_PATTERNS: ${{ secrets.PRIVACY_PATTERNS }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" | python3 scripts/privacy_check.py --require --stdin PR
+      - name: 커밋 메시지·더한 줄
+        env:
+          PRIVACY_PATTERNS: ${{ secrets.PRIVACY_PATTERNS }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/privacy_check.py --require --range "$BASE..$HEAD"
