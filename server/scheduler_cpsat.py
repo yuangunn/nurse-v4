@@ -854,24 +854,13 @@ class CpSatScheduler(_SchedulerBase):
                 if (pin.get((nid, d)) and pin.get((nid, d + 1))
                         and pin.get((nid, d + 2))):
                     continue  # 사실-클램프: 세 셀 모두 확정
-                for ns in self.NIGHT_SHIFTS:
-                    vn = x[nid][d][ns]
-                    vn_const = isinstance(vn, int)
-                    if vn_const and vn != 1:
-                        continue
-                    for rs in self.OFF_SHIFTS:
-                        vr = x[nid][d + 1][rs]
-                        vr_const = isinstance(vr, int)
-                        if vr_const and vr != 1:
-                            continue
-                        for ds in self.DAY_SHIFTS:
-                            vd = x[nid][d + 2][ds]
-                            vd_const = isinstance(vd, int)
-                            if vd_const and vd != 1:
-                                continue
-                            if vn_const and vr_const and vd_const:
-                                continue  # 전부 사용자 고정 — 사용자 입력 존중
-                            model.Add(vn + vr + vd <= 2)
+                # 하루 한 근무라 세 합은 각각 0/1 — N·쉼·D 가 다 서는 것만 막는다 (HiGHS 패리티)
+                terms = ([x[nid][d][s] for s in self.NIGHT_SHIFTS]
+                         + [x[nid][d + 1][s] for s in self.OFF_SHIFTS]
+                         + [x[nid][d + 2][s] for s in self.DAY_SHIFTS])
+                if all(isinstance(v, int) for v in terms):
+                    continue  # 전부 사용자 고정 — 사용자 입력 존중
+                model.Add(sum(terms) <= 2)
 
     def _cs_max_consecutive_work(self, model, x, max_days: int):
         """최대 연속 근무 — longRunLastResort 면 한도+1 은 슬랙+감점, 한도+2 윈도우에서

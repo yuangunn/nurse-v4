@@ -726,23 +726,14 @@ class _ConflictAnalyzer(CpSatScheduler):
                     continue
                 if pin.get((nid, d)) and pin.get((nid, d + 1)) and pin.get((nid, d + 2)):
                     continue   # 사실-클램프: 세 칸 다 사람이 넣은 것
-                for ns in self.NIGHT_SHIFTS:
-                    vn = x[nid][d][ns]
-                    if isinstance(vn, int) and vn != 1:
-                        continue
-                    for rs in self.OFF_SHIFTS:
-                        vr = x[nid][d + 1][rs]
-                        if isinstance(vr, int) and vr != 1:
-                            continue
-                        for ds in self.DAY_SHIFTS:
-                            vd = x[nid][d + 2][ds]
-                            if isinstance(vd, int) and vd != 1:
-                                continue
-                            if isinstance(vn, int) and isinstance(vr, int) and isinstance(vd, int):
-                                continue
-                            if lit is None:
-                                lit = gate(f"{self._fmt_nurse_label(nurse)} N→휴무→D 금지", nid=nid, kind="sequence")
-                            model.Add(vn + vr + vd <= 2).OnlyEnforceIf(lit)
+                terms = ([x[nid][d][s] for s in self.NIGHT_SHIFTS]
+                         + [x[nid][d + 1][s] for s in self.OFF_SHIFTS]
+                         + [x[nid][d + 2][s] for s in self.DAY_SHIFTS])
+                if all(isinstance(v, int) for v in terms):
+                    continue
+                if lit is None:
+                    lit = gate(f"{self._fmt_nurse_label(nurse)} N→휴무→D 금지", nid=nid, kind="sequence")
+                model.Add(sum(terms) <= 2).OnlyEnforceIf(lit)   # 엔진과 같은 합 꼴
 
     def _g_consecutive_work(self, model, x, gate):
         """최대 연속 근무 — per nurse 1 리터럴. 마지막 수단(제1원칙 13)이 켜져 있으면
