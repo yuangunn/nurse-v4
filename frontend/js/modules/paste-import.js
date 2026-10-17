@@ -664,7 +664,7 @@ window.PasteImportModule = function() {
     // 올린 번표엔 누가 그 달 나이트킵이었는지 적혀 있지 않다. 지난달 야간(compute_prev_month_nights)은 저장본의
     // 명부로 나이트킵 달을 빼므로, 그대로 두면 나이트킵의 14회가 다음 달 홀짝월 합산에 들어가 그 사람만 야간을
     // 못 받는다 (제1원칙 7). 그 달 근무가 전부 N 이고 10회 이상이면 저장본 명부에만 나이트킵으로 적는다 — 명부는 그대로.
-    // ponytail: 101병동 1~10월 나이트킵은 늘 N 14, 일반은 N 6 이하 — 다른 병동에서 어긋나면 기준을 고친다.
+    // ponytail: 실제 번표 1~10월 나이트킵은 늘 N 14, 일반은 N 6 이하 — 다른 병동에서 어긋나면 기준을 고친다.
     _uploadNurses(schedule,y,m){
       const ym=`${y}-${String(m).padStart(2,'0')}`;
       const WORK=['DC','D','D1','EC','E','중','NC','N'];
