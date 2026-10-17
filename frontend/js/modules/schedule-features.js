@@ -208,13 +208,15 @@ window.ScheduleFeaturesModule = function() {
       if(!prev){this.toast(`${py}년 ${pm}월 저장된 근무표가 없습니다`,'error');return}
       const data=await this.api('GET',`/api/schedules/${prev.id}`);
       const schedule=data.data.schedule||{};
-      // 마지막 주기의 데이터를 현재 달 사전입력에 이월
+      // 이 달 표에 보이는 날만 이월 — 1일 앞 지난달 칸(11월이면 10/25~10/31, 기록)과
+      // 지난달 표 끝에 붙어 이미 정해진 이 달 초 며칠(9월 표의 10/1~10/3) 둘 다.
+      // 예전엔 뒤쪽만 옮겨 앞 칸이 늘 비었고, 말일이 토요일인 달(10월) 다음엔 '이월할 데이터가 없습니다'였다.
       let count=0;
-      const monthPrefix=`${this.year}-${String(this.month).padStart(2,'0')}-`;
+      const keys=this._cycleDateKeys();
+      this._pushUndo();
       for(const[nid,days]of Object.entries(schedule)){
         for(const[dk,shift]of Object.entries(days)){
-          // 이전달 스케줄에서 현재 달에 해당하는 overflow 날짜만
-          if(!dk.startsWith(monthPrefix))continue;
+          if(!keys.has(dk))continue;
           if(!this.prevSchedule[nid])this.prevSchedule[nid]={};
           this.prevSchedule[nid][dk]=shift;count++;
         }

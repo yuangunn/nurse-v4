@@ -688,7 +688,7 @@
         <div x-show="open" x-cloak @click.outside="open=false" class="rmenu" data-rd="menu-import">
           <button @click="openPastePrev();open=false" class="rmenu-item" title="복사한 사전입력 표를 그대로 넣습니다. 두 달치 표도 그대로 들어갑니다."><b>엑셀 표 붙여넣기</b><small>복사한 사전입력 표를 그대로 넣습니다</small></button>
           <button @click="openPastePrev('wish');open=false" class="rmenu-item" title="팀즈 희망 근무 시트를 ‘가능하면’ 조건으로 넣습니다. 확정이 아니라 못 들어간 희망은 다음 달에 먼저 반영됩니다."><b>위시 시트 붙여넣기</b><small>팀즈 희망 근무를 ‘가능하면’ 조건으로 넣습니다</small></button>
-          <button @click="loadPrevMonthSchedule();open=false" class="rmenu-item" :title="`지난달 저장 근무표에서 ${month===1?12:month-1}월 말 근무를 앞 칸에 채웁니다. 이어지는 근무 규칙을 지키는 데 쓰입니다.`"><b>지난달 표 이어오기</b><small x-text="`${month===1?12:month-1}월 말 근무를 앞 4칸에 채웁니다`"></small></button>
+          <button @click="loadPrevMonthSchedule();open=false" class="rmenu-item" :title="`지난달 저장 근무표에서 ${month===1?12:month-1}월 말 근무를 앞 칸에 채웁니다. 이어지는 근무 규칙을 지키는 데 쓰입니다.`"><b>지난달 표 이어오기</b><small x-text="`${month===1?12:month-1}월 말 근무를 앞 칸에 채웁니다`"></small></button>
         </div>
       </div>
       <div class="rmenu-host" x-data="{open:false}">
@@ -1744,7 +1744,7 @@
       <span class="text-dim" x-text="`${pastePrev.grid.length}행 × ${Math.max(...pastePrev.grid.map(r=>r.length))||0}열`"></span>
       <span x-show="pastePrev.matches" class="text-dim">·</span>
       <span x-show="pastePrev.matches" class="text-blue"
-            x-text="`이름 매칭 ${pastePrev.matches?.nameRow?.filter(x=>x.matched).length||0}/${pastePrev.matches?.nameRow?.length||0}, 날짜 매칭 ${pastePrev.matches?.dateCol?.filter(x=>x.matched).length||0}/${pastePrev.matches?.dateCol?.length||0}`"></span>
+            x-text="`이름 매칭 ${pastePrev.matches?.nameRow?.filter(x=>x.matched).length||0}/${pastePrev.matches?.nameRow?.filter(x=>x.name).length||0}, 날짜 매칭 ${pastePrev.matches?.dateCol?.filter(x=>x.matched).length||0}/${pastePrev.matches?.dateCol?.filter(x=>x.raw).length||0}`"></span>
       <span x-show="pastePrev.matches?.dateFrom" x-cloak class="text-dim font-mono"
             x-text="`날짜 해석: ${pastePrev.matches?.dateFrom} ~ ${pastePrev.matches?.dateTo}`"></span>
     </div>
@@ -1892,7 +1892,8 @@
 </div>
     </div>
     <div class="rmodal-foot">
-      <span class="rmodal-note">넣은 뒤에도 <b>되돌리기</b>로 취소할 수 있어요.</span>
+      <span class="rmodal-note" x-show="pastePrev.target!=='saved'">넣은 뒤에도 <b>되돌리기</b>로 취소할 수 있어요.</span>
+      <span class="rmodal-note" x-show="pastePrev.target==='saved'" x-cloak>잘못 올렸으면 <b>저장 목록</b>에서 지우세요.</span>
       <button @click="closePastePrev()" class="rbtn rbtn-secondary" title="넣지 않고 닫습니다.">취소</button>
       <button @click="applyPastePrev()" :disabled="pastePrev.batch ? !pastePrev.batch.rows.some(r=>r.checked&&r.count>0&&r.m) : (!pastePrev.diff || (pastePrev.target==='saved' ? !pastePrev.diff.matched_all.length : (!pastePrev.diff.will_set.length && !pastePrev.diff.will_clear.length)))" class="rbtn rbtn-primary" :title="pastePrev.target==='saved'?'알아본 표를 저장 목록에 넣습니다.':`알아본 ${pastePrev.matches?.nameRow?.filter(x=>x.matched).length||0}명 × ${pastePrev.matches?.dateCol?.filter(x=>x.matched).length||0}일을 표에 넣습니다. 이미 있던 칸은 덮어씁니다.`" x-text="pastePrev.batch ? `${pastePrev.batch.rows.filter(r=>r.checked&&r.count>0&&r.m).length}개 월 일괄 저장` : (pastePrev.target==='saved'?'근무표로 저장':'표에 넣기')"></button>
     </div>

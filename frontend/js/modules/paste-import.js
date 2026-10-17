@@ -79,6 +79,11 @@ window.PasteImportModule = function() {
       const flex={'D/E':'D/E','E/D':'D/E','DE':'D/E','ED':'D/E','E/N':'E/N','N/E':'E/N','EN':'E/N','NE':'E/N',
         'D/N':'D/N','N/D':'D/N','DN':'D/N','ND':'D/N','N제외':'N제외','N빼고':'N제외'}[raw.replace(/\s+/g,'').toUpperCase()];
       if(flex)return flex;
+      // 신규 트레이닝 날 '/D'·'/E'·'/N'… (traineeShifts 와 같은 표기) — 프리셉터 근무를 따라가는 칸
+      if(raw.startsWith('/')){
+        const c=this._normalizeShiftCode(raw.slice(1));
+        return['D','E','N','주','OF','D1','생'].includes(c)?'/'+c:undefined;
+      }
       // 정확한 코드 일치 (대소문자 무시)
       const exact=this.shifts.find(sh=>sh.code===raw)||this.shifts.find(sh=>sh.code.toLowerCase()===raw.toLowerCase());
       if(exact)return exact.code;
@@ -206,23 +211,44 @@ window.PasteImportModule = function() {
 
       // 요일 행 감지 — 날짜 행 아래 둘째 행에 월/화/수…가 오는 시트 형식 지원.
       // 셀의 80% 이상이 요일 토큰이면 데이터 행이 아니라 헤더로 보고 무시한다.
+      // 숫자 행도 같다 — 병동 번표 아래 'D·E·N·근무자수·D차지' 줄은 사람이 아니라 날마다 센 인원이다.
       const WEEKDAY_TOKENS=new Set(['월','화','수','목','금','토','일','요일']);
-      const isWeekdayRow=(row,startC)=>{
-        const cells=(row||[]).slice(startC).map(c=>(c||'').trim().replace(/[()]/g,'')).filter(Boolean);
-        if(cells.length<3)return false;
-        return cells.filter(c=>WEEKDAY_TOKENS.has(c)).length/cells.length>=0.8;
-      };
+      const cellsOf=(row,cols)=>cols.map(c=>(row?.[c]||'').trim().replace(/[()]/g,'')).filter(Boolean);
+      const mostly=(cells,test)=>cells.length>=3&&cells.filter(test).length/cells.length>=0.8;
+      const ncols=Math.max(0,...grid.map(rw=>rw.length));
 
       const tryMatch=(useNameCol,useDateRow)=>{
-        const startR=useDateRow?1:0;
         const startC=useNameCol?1:0;
-        let nameMatches=0,dateMatches=0;
+        let nameMatches=0,dateMatches=0,headerR=-1;
         const nameRow=[];
         const dateCol=[];
 
+        if(useDateRow){
+          // 날짜 줄 = 위쪽 몇 줄 중 서로 다른 날짜가 가장 많은 줄. 병동 번표는 제목('2026년 1월 번표(1월 1일~…)')·
+          // 주기 줄이 날짜 위에 있고, 병합된 제목이 칸마다 퍼져 첫 줄을 날짜로 읽으면 한 달이 1일 하루로 접힌다.
+          // 같으면 위 줄 — 날짜가 하나도 없으면 첫 줄 (예전과 같다).
+          let best={r:0,raws:[],resolved:[],distinct:-1};
+          for(let r=0;r<Math.min(grid.length,10);r++){
+            const raws=[];
+            for(let c=startC;c<ncols;c++)raws.push((grid[r][c]||'').trim());
+            const resolved=this._resolveHeaderDates(raws.map(x=>this._parseDateCell(x)),anchorY,anchorM);
+            const distinct=new Set(resolved.filter(Boolean)).size;
+            if(distinct>best.distinct)best={r,raws,resolved,distinct};
+          }
+          headerR=best.r;
+          for(let k=0;k<best.raws.length;k++){
+            const dk=best.resolved[k];
+            dateCol.push({c:startC+k,raw:best.raws[k],dk,matched:!!dk});
+            if(dk)dateMatches++;
+          }
+        }
         if(useNameCol){
-          for(let r=startR;r<grid.length;r++){
-            if(isWeekdayRow(grid[r],startC)){
+          // 요일·숫자 줄은 날짜 칸만 본다 (오른쪽 'D·E·N·OF…총근무' 집계 칸이 섞이면 80% 를 못 넘는다)
+          const dataCols=dateCol.some(x=>x.matched)?dateCol.filter(x=>x.matched).map(x=>x.c)
+            :Array.from({length:Math.max(0,ncols-startC)},(_,k)=>startC+k);
+          for(let r=headerR+1;r<grid.length;r++){
+            const cells=cellsOf(grid[r],dataCols);
+            if(mostly(cells,c=>WEEKDAY_TOKENS.has(c))||mostly(cells,c=>/^\d+(\.\d+)?$/.test(c))){
               nameRow.push({r,name:'',nurseId:null,matched:false,weekdayHeader:true});
               continue;
             }
@@ -233,22 +259,7 @@ window.PasteImportModule = function() {
             if(n)nameMatches++;
           }
         }
-        if(useDateRow){
-          const ncols=Math.max(...grid.map(rw=>rw.length));
-          const raws=[],parsed=[];
-          for(let c=startC;c<ncols;c++){
-            const raw=(grid[0][c]||'').trim();
-            raws.push(raw);
-            parsed.push(this._parseDateCell(raw));
-          }
-          const resolved=this._resolveHeaderDates(parsed,anchorY,anchorM);
-          for(let k=0;k<raws.length;k++){
-            const dk=resolved[k];
-            dateCol.push({c:startC+k,raw:raws[k],dk,matched:!!dk});
-            if(dk)dateMatches++;
-          }
-        }
-        return{useNameCol,useDateRow,nameMatches,dateMatches,nameRow,dateCol,score:nameMatches*2+dateMatches};
+        return{useNameCol,useDateRow,headerR,nameMatches,dateMatches,nameRow,dateCol,score:nameMatches*2+dateMatches};
       };
 
       let best;
@@ -272,7 +283,6 @@ window.PasteImportModule = function() {
       const willClear=[];
       const matchedAll=[]; // 인식된 모든 (간호사,날짜,코드) — 위시/저장탭 업로드용 (prev 비교 무관)
       const unrecognized=new Set();
-      const startR=best.useDateRow?1:0;
       const startC=best.useNameCol?1:0;
 
       // 날짜 헤더 없는 경우: 당월 1일부터 시작해서 데이터 매핑
@@ -651,6 +661,21 @@ window.PasteImportModule = function() {
       this.closePastePrev();
     },
 
+    // 올린 번표엔 누가 그 달 나이트킵이었는지 적혀 있지 않다. 지난달 야간(compute_prev_month_nights)은 저장본의
+    // 명부로 나이트킵 달을 빼므로, 그대로 두면 나이트킵의 14회가 다음 달 홀짝월 합산에 들어가 그 사람만 야간을
+    // 못 받는다 (제1원칙 7). 그 달 근무가 전부 N 이고 10회 이상이면 저장본 명부에만 나이트킵으로 적는다 — 명부는 그대로.
+    // ponytail: 101병동 1~10월 나이트킵은 늘 N 14, 일반은 N 6 이하 — 다른 병동에서 어긋나면 기준을 고친다.
+    _uploadNurses(schedule,y,m){
+      const ym=`${y}-${String(m).padStart(2,'0')}`;
+      const WORK=['DC','D','D1','EC','E','중','NC','N'];
+      return this.nurses.map(n=>{
+        const cs=Object.entries(schedule[n.id]||{}).filter(([dk])=>dk.startsWith(ym)).map(([,c])=>c);
+        const nights=cs.filter(c=>c==='N'||c==='NC').length;
+        if(nights<10||nights!==cs.filter(c=>WORK.includes(c)).length)return n;
+        return{...n,night_months:{...(n.night_months||{}),[ym]:true}};
+      });
+    },
+
     // ── 저장탭 멀티시트 일괄 업로드: 체크된 시트를 각각 월별 근무표로 저장 ──
     async _applyBatchSaved(){
       const rows=(this.pastePrev.batch?.rows||[]).filter(r=>r.checked&&r.count>0&&r.y&&r.m);
@@ -667,7 +692,7 @@ window.PasteImportModule = function() {
           const schedule={};
           for(const it of res.diff.matched_all)(schedule[it.nid]=schedule[it.nid]||{})[it.dk]=it.code;
           await this.api('POST','/api/schedules',{
-            year:row.y,month:row.m,nurses:this.nurses,requirements:this.requirements,rules:this.rules,
+            year:row.y,month:row.m,nurses:this._uploadNurses(schedule,row.y,row.m),requirements:this.requirements,rules:this.rules,
             schedule,name:`${row.y}년 ${row.m}월 (업로드)`,
             prev_day_reqs:this._reqFromSchedule(schedule),
           });
@@ -701,7 +726,7 @@ window.PasteImportModule = function() {
       const loading=this.toast('저장 중...','loading');
       try{
         await this.api('POST','/api/schedules',{
-          year:y,month:m,nurses:this.nurses,requirements:this.requirements,rules:this.rules,
+          year:y,month:m,nurses:this._uploadNurses(schedule,y,m),requirements:this.requirements,rules:this.rules,
           schedule,name,
           // 이 표의 실제 인원수를 일별 필요 인원으로 함께 저장 —
           // 불러온 뒤 재조정/재생성할 때 설정 기본값 대신 이 표가 기준이 되게

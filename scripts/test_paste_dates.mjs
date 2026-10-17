@@ -123,3 +123,87 @@ for (const [raw, code] of [['D/E', 'D/E'], ['E/D', 'D/E'], ['de', 'D/E'], ['E/N'
   assert.equal(norm(raw), code, raw);
 assert.equal(norm('D/X'), undefined);
 console.log('paste-dates: 병동 표기 정규화 통과');
+
+// ── 병동 번표 시트 그대로 올리기 (2026-10-17, 101병동 1~10월 번표 형식 — 이름은 가명) ──
+// 제목(병합이 칸마다 퍼진다)·주기 줄이 날짜 위에, 요일 줄 오른쪽엔 집계 머리, 아래엔 날마다 센 인원 줄.
+// 예전엔 첫 줄(제목 '…(10월 4일~…)')을 날짜로 읽어 한 달이 하루로 접혔고, 인원 줄이 '명부에 없는 이름'으로 떴다.
+mod.shifts = ['DC','D','D1','EC','E','중','NC','N','OF','주','P1','V','생','특','공','법','병','경가','조가','산전']
+  .map((code) => ({ code }));
+Object.assign(mod, {
+  nurses: [{ id: 'a', name: '간호01' }, { id: 'b', name: '간호02' }],
+  prevSchedule: {},
+  scheduleDays: [],
+  isOverflow: () => false,
+  dayKey: (d) => d.toISOString().slice(0, 10),
+  _cycleDateKeys: () => new Set(),
+});
+{
+  const title = '2026년 10월 번표(10월 4일~ 10월 31일)';
+  const grid = [
+    Array(9).fill(title),
+    ['', '4주기', '4주기', '4주기', '1주기', '1주기', '1주기', '1주기'],
+    ['', ...[1, 2, 3, 4, 5, 6, 7].map((d) => `2026-10-0${d}`)],
+    ['', '목', '금', '토', '일', '월', '화', '수', 'D', 'E', 'N', 'OF', '총근무'],
+    ['간호01', 'D', 'E', 'N', 'OF', '주', '/D', 'D', '3', '1', '1', '1', '5'],
+    ['간호02 ', 'N', 'N', 'OF', 'OF', 'D', 'D', '특V', '2', '0', '2', '2', '4'],
+    ['퇴사자', 'D', 'D', 'D', 'D', 'D', 'D', 'D', '7', '0', '0', '0', '7'],
+    ['D', '2', '1', '0', '0', '2', '1', '2'],
+    ['근무자수', '3', '3', '1', '0', '3', '2', '2'],
+    ['E차치', '1', '1', '0', '0', '0', '0', '0'],
+  ];
+  const r = mod._matchGrid(grid, { anchorY: 2026, anchorM: 10, mode: 'auto', target: 'saved' });
+  assert.equal(r.best.headerR, 2);
+  assert.equal(r.best.dateFrom, '2026-10-01');
+  assert.equal(r.best.dateTo, '2026-10-07');
+  assert.deepEqual(r.diff.unmatchedNames, ['퇴사자']);
+  assert.deepEqual(r.diff.unrecognized, []);
+  assert.equal(r.diff.matched_all.length, 14);
+  assert.equal(new Set(r.diff.matched_all.map((x) => x.dk)).size, 7);
+  assert.equal(r.diff.matched_all.find((x) => x.nid === 'a' && x.dk === '2026-10-06').code, '/D');
+  assert.equal(r.diff.matched_all.find((x) => x.nid === 'b' && x.dk === '2026-10-07').code, '특');
+}
+// 첫 줄이 날짜인 붙여넣기는 예전 그대로
+{
+  const r = mod._matchGrid([['', '1', '2', '3'], ['간호01', 'D', 'E', 'N']],
+    { anchorY: 2026, anchorM: 10, mode: 'auto', target: 'prev' });
+  assert.equal(r.best.headerR, 0);
+  assert.deepEqual(r.diff.matched_all.map((x) => x.dk + x.code), ['2026-10-01D', '2026-10-02E', '2026-10-03N']);
+}
+// 신규 트레이닝 날 표기
+assert.equal(norm('/D'), '/D');
+assert.equal(norm('/off'), '/OF');
+assert.equal(norm('/V'), undefined);
+// 올린 번표의 나이트킵: 그 달 근무가 전부 N 이고 10회 넘으면 저장본 명부에만 적는다 (제1원칙 7)
+{
+  const sched = { a: {}, b: {} };
+  for (let d = 1; d <= 28; d++) {
+    const dk = `2026-10-${String(d).padStart(2, '0')}`;
+    sched.a[dk] = d % 2 ? 'N' : 'OF';                     // N 14
+    sched.b[dk] = d % 4 === 0 ? 'N' : d % 4 === 1 ? 'D' : 'OF';   // N 7 + D
+  }
+  sched.a['2026-11-01'] = 'D';                             // 다른 달 근무는 세지 않는다
+  const ns = mod._uploadNurses(sched, 2026, 10);
+  assert.deepEqual(ns[0].night_months, { '2026-10': true });
+  assert.equal(ns[1], mod.nurses[1]);
+  assert.equal(mod.nurses[0].night_months, undefined);     // 명부는 그대로
+}
+console.log('paste-dates: 병동 번표 시트 올리기 통과');
+
+// ── 지난달 표 이어오기: 1일 앞 지난달 칸까지 (11월이면 10/25~10/31) ──
+eval(readFileSync(new URL('../frontend/js/modules/schedule-features.js', import.meta.url), 'utf8'));
+{
+  const sf = window.ScheduleFeaturesModule();
+  const keys = new Set();
+  for (let t = Date.UTC(2026, 9, 25); t <= Date.UTC(2026, 11, 5); t += 864e5) keys.add(new Date(t).toISOString().slice(0, 10));
+  Object.assign(sf, {
+    year: 2026, month: 11, prevSchedule: { a: { '2026-11-03': 'V' } },
+    _cycleDateKeys: () => keys, _pushUndo() {}, toast() {},
+    async api(_m, p) {
+      return p === '/api/schedules' ? [{ id: 7, year: 2026, month: 10 }]
+        : { data: { schedule: { a: { '2026-10-10': 'E', '2026-10-25': 'D', '2026-10-31': 'N' } } } };
+    },
+  });
+  await sf.loadPrevMonthSchedule();
+  assert.deepEqual(sf.prevSchedule.a, { '2026-11-03': 'V', '2026-10-25': 'D', '2026-10-31': 'N' });
+}
+console.log('paste-dates: 지난달 표 이어오기 통과');
