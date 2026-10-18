@@ -1,5 +1,5 @@
 /* ────────────────────────────────────────────────────────────────────────────
- * 스케줄 기능 — CSV/인쇄 내보내기·스케줄 비교·수동편집 추적·월간 요약·이전달 연동·희망근무 입력·다중 솔버 비교·템플릿·간호사 CSV 입출력
+ * 스케줄 기능 — 엑셀/인쇄 내보내기·스케줄 비교·수동편집 추적·월간 요약·이전달 연동·희망근무 입력·다중 솔버 비교·템플릿·간호사 CSV 입출력
  *
  * 사용: app() 반환 객체에 `...ScheduleFeaturesModule()` 로 스프레드. 모든 메서드는 this.* 사용.
  * ─────────────────────────────────────────────────────────────────────────── */
@@ -50,28 +50,28 @@ window.ScheduleFeaturesModule = function() {
     },
 
     // ═══ 1. 엑셀 내보내기 ═══════════════════════════════════
-    exportToCSV(){
-      if(!this.schedule||!Object.keys(this.schedule).length)return;
-      const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
-      const dayNames=['일','월','화','수','목','금','토'];
-      let csv='\uFEFF'; // BOM for Korean
-      // 헤더
-      csv+='이름,그룹,'+days.map(d=>`${d.getMonth()+1}/${d.getDate()}(${dayNames[d.getDay()]})`).join(',')+',D,E,N,휴무\n';
-      // 데이터
-      for(const nurse of this.nurses){
-        // 병동 번표처럼 차지는 표시하지 않는다 (화면의 '차지 숨기기'와 상관없이 늘 D/E/N)
-        const shifts=days.map(d=>this.plainShift(this.schedule[nurse.id]?.[this.dayKey(d)]||''));
-        const dCnt=this.countShifts(nurse.id,['DC','D']);
-        const eCnt=this.countShifts(nurse.id,['EC','E']);
-        const nCnt=this.countShifts(nurse.id,['NC','N']);
-        const restCnt=this.countShifts(nurse.id,['OF','주']);
-        csv+=`${nurse.name},${nurse.group},${shifts.join(',')},${dCnt},${eCnt},${nCnt},${restCnt}\n`;
-      }
-      const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');
-      a.href=url;a.download=`근무표_${this.year}년${this.month}월.csv`;
-      a.click();URL.revokeObjectURL(url);
+    // 병동 번표 모양 xlsx (서버 _build_schedule_xlsx) — 그 달에 걸친 주 전부라 '근무표 파일 올리기'로 다시 올릴 수 있다
+    async exportToXlsx(){
+      if(!this.schedule||!Object.keys(this.schedule).length){ this.toast('근무표가 없습니다','error'); return }
+      try{
+        const res=await fetch('/api/schedules/export.xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this._xlsxBody())});
+        if(!res.ok){ const d=(await res.json().catch(()=>null))?.detail; throw new Error(typeof d==='string'?d:'내보내기 실패') }
+        const url=URL.createObjectURL(await res.blob());
+        const a=document.createElement('a');
+        a.href=url;a.download=`근무표_${this.year}년${this.month}월.xlsx`;
+        document.body.appendChild(a);a.click();
+        document.body.removeChild(a);URL.revokeObjectURL(url);
+      }catch(e){this.toast(e.message||'내보내기 실패','error')}
+    },
+    // 날짜 = 1일이 든 주의 일요일부터 화면 끝까지 (병동 번표 11월 = 11/1~12/5, 12월 = 11/29~1/2).
+    // 1일이 일요일이면 엔진이 이어 보려고 앞에 붙인 지난달 한 주(11월 화면의 10/25~10/31)는 뺀다.
+    // 칸은 인쇄와 같다 — 차지 없이 D/E/N (rdPrintCode), 전입 전·전출 뒤는 빈칸.
+    _xlsxBody(){
+      const first=new Date(this.year,this.month-1,1);first.setDate(1-first.getDay());
+      const days=this.scheduleDays.filter(d=>d>=first);
+      return{year:this.year,month:this.month,title:`${this.year}년 ${this.month}월 ${this.rdWard} 근무표`,
+        days:days.map(d=>this.dayKey(d)),holidays:this.holidays||[],
+        rows:this.nurses.map(n=>[n.name,...days.map(d=>this.isNurseInactive(n,d)?'':this.rdPrintCode(n,d))])};
     },
 
     // ═══ 2. 인쇄 ═══════════════════════════════════════════

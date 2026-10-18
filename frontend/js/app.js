@@ -116,7 +116,7 @@ function app() {
         schedule: this.generating ? 'solving…' :
                   (sched ? (this.mipGapPercent!=null ? `gap ${this.mipGapPercent.toFixed(1)}%` : '생성 완료')
                          : '생성 전'),
-        saved: savedN ? `${savedN}건 저장됨` : 'CSV · 인쇄',   // 저장 탭은 근무표 탭 서랍이 됐지만 요약은 남긴다
+        saved: savedN ? `${savedN}건 저장됨` : '엑셀 · 인쇄',   // 저장 탭은 근무표 탭 서랍이 됐지만 요약은 남긴다
       };
     },
 
