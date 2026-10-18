@@ -1,7 +1,7 @@
 // 차지 표시 검증 — node scripts/test_charge_plain.mjs
 // 병동 번표에는 누가 차지인지 나오지 않는다 (2026-10-03 병동 확인).
 //  · 인쇄(rdPrintCode)·엑셀(_xlsxBody)은 '차지 숨기기'와 상관없이 늘 D/E/N
-//  · 엑셀은 그 달에 걸친 주 전부 (11월 → 11/1~12/5)
+//  · 엑셀은 그 달에 걸친 주 전부 (11월 → 11/1~12/5), 화면·인쇄의 '이달' 계는 그 달 칸만
 //  · 화면은 '차지 숨기기' 토글을 따른다 (Ctrl+P 로 바로 찍을 때는 _printPlain)
 //  · 어싸인용 복사는 DC/EC/NC 그대로 — 배정표가 이것으로 차지를 안다
 import assert from 'node:assert/strict';
@@ -12,6 +12,7 @@ global.localStorage = { getItem: () => null, setItem() {} };
 require('../frontend/js/modules/settings-defs.js');
 require('../frontend/js/modules/schedule-features.js');
 require('../frontend/js/modules/redesign.js');
+require('../frontend/js/modules/view-helpers.js');
 
 const days = [1, 2, 3, 4].map((d) => new Date(2026, 9, d));
 const dk = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -94,5 +95,11 @@ assert.equal(sent.url, '/api/schedules/export.xlsx');
 assert.equal(sent.method, 'POST');
 assert.deepEqual(JSON.parse(sent.body), body);
 assert.equal(saved, '근무표_2026년12월.xlsx');
+
+// 화면·인쇄의 '이달' 계 — 생성 결과에 든 앞뒤 주기 칸은 세지 않는다
+const vh = window.ViewHelpersModule();
+const sc = { year: 2026, month: 11, schedule: { a: { '2026-10-31': 'D', '2026-11-01': 'D', '2026-11-30': 'DC', '2026-12-01': 'D' } } };
+assert.equal(vh.countShifts.call(sc, 'a', ['DC', 'D']), 2);
+assert.equal(vh.countShifts.call(sc, 'x', ['D']), 0);
 
 console.log('charge-plain: 모든 검증 통과');

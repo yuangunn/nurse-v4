@@ -19,7 +19,8 @@ window.ViewHelpersModule = function() {
     },
     getCycleClass(cycle){return['cy-1','cy-2','cy-3','cy-4'][cycle-1]},
     isCycleStart(day){return((this._daysSinceRef(day)%7)+7)%7===0},
-    countShifts(nurseId,shifts){if(!this.schedule[nurseId])return 0;return Object.values(this.schedule[nurseId]).filter(v=>shifts.includes(v)).length},
+    // 이달 칸만 센다 — 생성 결과에는 앞뒤 주기 칸(11월이면 10/25~10/31·12/1~12/5)도 들어 있다 (화면·인쇄의 '이달' 계)
+    countShifts(nurseId,shifts){const ym=`${this.year}-${String(this.month).padStart(2,'0')}-`;return Object.entries(this.schedule?.[nurseId]||{}).filter(([k,v])=>k.startsWith(ym)&&shifts.includes(v)).length},
     // 배점 규칙별 득점 합산 (생성 리포트의 점수 분해 — 백엔드 nurse_score_details 재사용)
     get ruleScoreSummary(){
       const agg={};
