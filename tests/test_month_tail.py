@@ -181,6 +181,22 @@ def test_charge_seniority_applies_on_tail_days(engine):
 
 
 @pytest.mark.parametrize("engine", ["highs", "cpsat"])
+def test_charge_goes_to_senior_even_when_senior_typed_plain_d(engine):
+    """선임 간호01 이 12/2 에 D 를 넣어 뒀다(병동 번표엔 차지 표시가 없다). 넣은 D 는 DC 로 올라갈 수 있으므로 그날 차지는
+    시니어리티대로 간호01 — 예전엔 넣은 D 를 '고정 D'로 보고 선임 규칙을 건너뛰어 후임(위시)에게 차지를 줬다."""
+    from server.models import ScoringRule
+    prev = {"a0": {"2026-12-02": "D"}, "a1": {"2026-12-02": "EC"}, "a2": {"2026-12-02": "E"},
+            "a3": {"2026-12-02": "NC"}, "a4": {"2026-12-02": "주"}, "a6": {"2026-12-02": "OF"}}
+    req = _request(prev, scoring_rules=[ScoringRule(name="위시", rule_type="wish", params={}, score=50)])
+    req.nurses[5].wishes = {"2026-12-02": "DC"}
+    cls = _engine(engine, date(2026, 11, 29), date(2026, 12, 5))
+    r = cls(req).solve()
+    assert r["success"], r.get("message")
+    sch = r["schedule"]
+    assert (sch["a0"]["2026-12-02"], sch["a5"]["2026-12-02"]) == ("DC", "D"), (sch["a0"], sch["a5"])
+
+
+@pytest.mark.parametrize("engine", ["highs", "cpsat"])
 def test_per_day_requirement_on_tail_day_is_used(engine):
     """끝에 붙은 12/3 에 날짜별 인원(D1)을 넣으면 그날 낮 근무는 1명 — 예전엔 꼬리 며칠의 날짜별 인원을 버렸다."""
     prev = {f"a{i}": {_iso(date(2026, 11, 29) + timedelta(days=i)): "주"} for i in range(7)}

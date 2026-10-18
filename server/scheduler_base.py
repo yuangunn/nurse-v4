@@ -840,6 +840,11 @@ class _SchedulerBase:
                               and self.prev.get(n["id"], {}).get(dt_str) in up
                               for n in self.nurses):
                 j_fixed = None
+        # 엄격(사실)에서도 사전입력 D·E·N 은 차지로 올라갈 수 있다(_PRE_FLEX — 변수 도메인과 같다). 병동 번표엔 누가 차지인지
+        # 나오지 않으므로(제1원칙 11) 그 날 차지는 앱이 시니어리티대로 정한다. 예전엔 선임이 D 를 넣어 두면 그 짝을 건너뛰어
+        # 엔진이 후임에게 차지를 줬다 (11월 생성 5건 — 겹치는 주 11/29 포함, 2026-10-18).
+        if j_fixed and not getattr(self, "_pre_soft", False) and len(self._PRE_FLEX.get(j_fixed, ())) > 1:
+            j_fixed = None
         return j_fixed
 
     def _night_dedicated_in(self, nid: str, year: int, month: int) -> bool:
