@@ -281,8 +281,7 @@ class _ConflictAnalyzer(CpSatScheduler):
         date_key = dt.strftime('%Y-%m-%d')
         req_dict = self.req.model_dump()
         base = req_dict.get(WEEKDAY_KEYS[dt.weekday()], {})
-        is_cur = (dt.month == self.month and dt.year == self.year)
-        ovr = self.per_day_req.get(date_key, {}) if is_cur else {}
+        ovr = self.per_day_req.get(date_key, {})   # 그 날짜에 — 끝에 붙은 며칠도 (엔진과 같다, 2026-10-18)
         return {**base, **ovr} if ovr else base
 
     # ── 신호등 한 줄 요약 ─────────────────────────────────────────────────────
@@ -688,9 +687,10 @@ class _ConflictAnalyzer(CpSatScheduler):
                         eligible_pairs.append((i_nurse["id"], j_nurse["id"], charge_s, regulars))
         nurse_by_id = {n["id"]: n for n in self.nurses}
         pin, _ = self._gate_pins()
+        first = date(self.year, self.month, 1)
         for d, dt in enumerate(self.all_dates):
-            if dt.month != self.month:
-                continue
+            if dt < first:
+                continue   # 지난달 칸은 기록 — 끝에 붙은 다음 달 며칠은 건다 (엔진과 같다, 2026-10-18)
             dt_str = dt.strftime("%Y-%m-%d")
             is_holiday = dt_str in self.holidays
             day_lit = None

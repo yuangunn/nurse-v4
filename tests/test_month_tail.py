@@ -129,6 +129,96 @@ def test_next_month_keeper_is_not_held_to_one_of_on_keeper_days(engine):
     assert not [d for d in TAIL if a6[d] == "생"], a6             # 꼬리 생은 미리 넣은 것만
 
 
+# ── ⑦ 다음 달이랑 이어지는 주기는 다음 달의 첫 주처럼 (2026-10-18) ──────────────────────────
+# 사용자: "11월 12월 겹치는 주의 나이트 킵이 오프로만 배정되는 버그 … 앞 주기는 넘어오는거 그대로 받는다고 쳐도
+# 다음 달이랑 이어지는 주기는 최대한 완벽하게". 끝 주는 다음 달이 그대로 넘겨받는 사실이다.
+
+@pytest.mark.parametrize("engine", ["highs", "cpsat"])
+def test_next_month_keeper_works_nights_on_tail_days(engine):
+    """8명 · 매일 D2 E2 N1 → 그 주 쉬어야 할 칸 56 − 35 = 21 = 주휴 8 + 일반 7명 OF 7 + 간호08 의 6칸.
+    간호08 은 12월 나이트킵 — 12/1~12/5 엔 N·쉬는 것만, 그날 OF 상한은 없다. 예전엔 남는 휴무가 전부 그 사람의
+    OF 로 가서 닷새 내내 OF 였다(11월 실제 생성). 나이트킵은 달력 달로 14회라 그 닷새 몫은 14×5/31 → 2회 —
+    대신 쉬는 칸 둘은 다른 사람의 12월 몫 V 로 간다(실제 번표도 겹치는 주에 V·생을 쓴다)."""
+    prev = {f"a{i}": {_iso(date(2026, 11, 30) + timedelta(days=i)): "주"} for i in range(6)}
+    prev["a6"] = {"2026-11-29": "주"}
+    prev["a7"] = {"2026-11-29": "주"}
+    cls = _engine(engine, date(2026, 11, 29), date(2026, 12, 5))
+    r = cls(_request(prev, n=8, keeper={"a7": {"2026-12": True}})).solve()
+    assert r["success"], r.get("message")
+    a7 = r["schedule"]["a7"]
+    assert all(a7[d] in ("N", "NC", "OF", "V", "생", "주") for d in TAIL), a7     # 나이트킵의 날은 야간·쉬는 것만
+    assert sum(1 for d in TAIL if a7[d] in ("N", "NC")) >= 2, a7
+
+
+@pytest.mark.parametrize("engine", ["highs", "cpsat"])
+def test_tail_keeper_share_never_overrides_pre_input(engine):
+    """다음 달 나이트킵이 꼬리 며칠에 쉬는 칸을 미리 넣었으면 몫은 남은 칸만큼만 — 넣은 칸은 그대로다."""
+    prev = {f"a{i}": {_iso(date(2026, 11, 30) + timedelta(days=i)): "주"} for i in range(6)}
+    prev["a6"] = {"2026-11-29": "주"}
+    prev["a7"] = {"2026-11-29": "주", "2026-12-01": "OF", "2026-12-02": "OF", "2026-12-03": "OF", "2026-12-04": "OF"}
+    cls = _engine(engine, date(2026, 11, 29), date(2026, 12, 5))
+    r = cls(_request(prev, n=8, keeper={"a7": {"2026-12": True}})).solve()
+    assert r["success"], r.get("message")
+    a7 = r["schedule"]["a7"]
+    assert [a7[d] for d in TAIL[:4]] == ["OF"] * 4, a7
+    assert a7["2026-12-05"] in ("N", "NC"), a7                      # 남은 하루로 몫(2)에 다가간다
+
+
+@pytest.mark.parametrize("engine", ["highs", "cpsat"])
+def test_charge_seniority_applies_on_tail_days(engine):
+    """12/2 낮 근무는 간호01(가장 선임)·간호06 둘뿐이다. 간호06 이 DC 를 원해도(위시) 선임이 같은 시간대
+    일반 D 면 후임은 차지가 될 수 없다 — 예전엔 이 규칙이 생성 달에만 걸려 끝 주엔 후임 차지가 나왔다."""
+    from server.models import ScoringRule
+    prev = {"a1": {"2026-12-02": "EC"}, "a2": {"2026-12-02": "E"}, "a3": {"2026-12-02": "NC"},
+            "a4": {"2026-12-02": "주"}, "a6": {"2026-12-02": "OF"}}
+    req = _request(prev, scoring_rules=[ScoringRule(name="위시", rule_type="wish", params={}, score=50)])
+    req.nurses[5].wishes = {"2026-12-02": "DC"}
+    cls = _engine(engine, date(2026, 11, 29), date(2026, 12, 5))
+    r = cls(req).solve()
+    assert r["success"], r.get("message")
+    sch = r["schedule"]
+    assert (sch["a0"]["2026-12-02"], sch["a5"]["2026-12-02"]) == ("DC", "D"), (sch["a0"], sch["a5"])
+
+
+@pytest.mark.parametrize("engine", ["highs", "cpsat"])
+def test_per_day_requirement_on_tail_day_is_used(engine):
+    """끝에 붙은 12/3 에 날짜별 인원(D1)을 넣으면 그날 낮 근무는 1명 — 예전엔 꼬리 며칠의 날짜별 인원을 버렸다."""
+    prev = {f"a{i}": {_iso(date(2026, 11, 29) + timedelta(days=i)): "주"} for i in range(7)}
+    cls = _engine(engine, date(2026, 11, 29), date(2026, 12, 5))
+    r = cls(_request(prev, per_day_requirements={"2026-12-03": {"D": 1, "E": 2, "N": 1}})).solve()
+    assert r["success"], r.get("message")
+    assert sum(1 for row in r["schedule"].values() if row.get("2026-12-03") in ("D", "DC")) == 1
+
+
+def test_score_windows_cover_tail_days_and_the_first_day_seam():
+    """배점 항목(D→N·퐁당·연속)은 생성 달 + 끝에 붙은 다음 달 며칠에 — 지난달 마지막 날과 1일의 이음새도.
+    지난달 안에 갇힌 쌍은 기록이라 넣지 않는다."""
+    s = _full({})
+    idx = {_iso(d): i for i, d in enumerate(s.all_dates)}
+    pairs = {(s.all_dates[a], s.all_dates[b]) for a, b in s._score_windows(2)}
+    assert (date(2026, 10, 31), date(2026, 11, 1)) in pairs
+    assert (date(2026, 11, 30), date(2026, 12, 1)) in pairs
+    assert (date(2026, 12, 4), date(2026, 12, 5)) in pairs
+    assert (date(2026, 10, 30), date(2026, 10, 31)) not in pairs
+    assert s._score_days() == list(range(idx["2026-11-01"], idx["2026-12-05"] + 1))
+    assert [s.all_dates[d] for d in s._tail_idxs()] == [date(2026, 12, i) for i in range(1, 6)]
+    # 이음새는 그 사람의 지난달 칸이 기록(사전입력)일 때만 — 기록 없는 칸은 숨은 변수라 배점하지 않는다
+    seam = (idx["2026-10-31"], idx["2026-11-01"])
+    s2 = _full({"a0": {"2026-10-31": "D"}})
+    assert s2._score_window_ok("a0", seam) and not s2._score_window_ok("a1", seam)
+    assert s2._score_window_ok("a1", (idx["2026-11-30"], idx["2026-12-01"]))
+
+
+def test_confirmed_full_table_keeps_tail_cells_in_schedule():
+    """빈칸 없는 완성된 표를 그대로 확정할 때도 끝에 붙은 며칠은 결과 표(schedule)에 — 다음 달 '지난달 표
+    이어오기'와 내보내기가 schedule 을 쓴다. 예전엔 생성 달만 담아 끝 주가 빠졌다."""
+    first = date(2026, 11, 29)
+    prev = {f"a{i}": {_iso(first + timedelta(days=k)): ("주" if k == i else "D") for k in range(7)} for i in range(7)}
+    s = _engine("highs", first, date(2026, 12, 5))(_request(prev))
+    sch = s._confirm_pinned_result()["schedule"]
+    assert all(sch[f"a{i}"].get(d) for i in range(7) for d in TAIL), sch
+
+
 # ── ④ 1일 앞 지난달 칸은 사전입력이 있는 칸만 낸다 ────────────────────────────────────
 
 @pytest.mark.parametrize("engine", ["highs", "cpsat"])
@@ -202,14 +292,16 @@ def test_rest_supply_boundary_week_counts_keeper_days_like_the_engine():
     assert (w["demand"], w["supply"]) == (21, 18), w
 
 
-def test_rest_supply_ignores_per_day_requirements_on_tail_days():
-    """날짜별 인원은 생성 달 안에만 걸린다(인원 제약과 같다) — 끝에 붙은 며칠에 남은 값은 산술도 보지 않는다."""
+def test_rest_supply_uses_per_day_requirements_on_tail_days():
+    """날짜별 인원은 그 날짜에 건다 — 끝에 붙은 다음 달 며칠도 (인원 제약과 같다, 2026-10-18). 예전엔 꼬리 며칠의
+    날짜별 인원을 엔진도 산술도 버리고 요일 기본으로 셌다. 12/1~12/5 를 하루 3명(D1 E1 N1)으로 줄이면 그 닷새는
+    하루 2명씩 더 쉬어야 한다 → 쉬어야 할 칸 +10."""
     prev = _used_month_leave({"a0": {"2026-11-29": "주"}, "a1": {"2026-11-30": "주"}}, 8)
     base = next(w for w in _full(prev).rest_supply_shortfall() if w["start"] == "2026-11-29")
     odd = {d: {"D": 1, "E": 1, "N": 1} for d in TAIL}
     w = next(w for w in _full(prev, per_day_requirements=odd).rest_supply_shortfall()
              if w["start"] == "2026-11-29")
-    assert w == base, (w, base)
+    assert (w["demand"], w["supply"]) == (base["demand"] + 10, base["supply"]), (w, base)
 
 
 # ── 주휴가 빠진 완전한 주 — 생성 결과 안내 (주마다 한 줄 · 아직 안 넣은 사람은 한 줄) ──────

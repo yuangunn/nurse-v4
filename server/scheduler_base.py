@@ -52,6 +52,11 @@ _LONG_RUN_PENALTY = 3000          # 연속 근무 한도를 하루 넘김
 _LONG_RUN_WEEKEND_RELIEF = 500    # 그 연속 안의 토·일·공휴일 하루마다 덜 깎는다
 _LONG_RUN_MIN_PENALTY = 1500
 _RARE_TRANSITION_PENALTY = 2000   # E→D1 · 중→D
+# 끝에 붙은 다음 달 며칠 — 다음 달 나이트킵의 야간 몫이 하나 모자랄 때 (2026-10-18, _tail_keeper_targets).
+# 꼬리 V(-500)보다 커서 남는 휴무를 나이트킵 OF 가 아니라 다른 사람의 V 로 돌리고, 근무 원티드를 깨고 V 를 주는 값
+# (완화 500 + V 500)보다 작아서 완화를 켜도 원티드를 깨면서까지 채우지 않는다. 하드가 아니라서 꼬리 N 자리를
+# 다른 사람이 이미 다 넣었어도 생성은 막히지 않는다.
+_TAIL_KEEPER_SHORT_PENALTY = 700
 
 def timeoff_class(code: str) -> str:
     """사전입력 코드의 보호 등급: 'leave' | 'off' | 'juhu' | 'work'.
@@ -1392,8 +1397,8 @@ class _SchedulerBase:
                     work_need += sum(1 for c in facts if c in den)
                     continue
                 base = req_dict.get(WEEKDAY_KEYS[dt.weekday()], {})
-                # 날짜별 인원은 생성 달 안만 — 인원 제약(_c_daily_requirements)과 같게, 끝에 붙은 며칠은 요일 기본
-                ovr = self.per_day_req.get(dt.strftime("%Y-%m-%d"), {}) if dt <= last_day else {}
+                # 날짜별 인원은 그 날짜에 — 끝에 붙은 다음 달 며칠도 (인원 제약 _c_daily_requirements 와 같다, 2026-10-18)
+                ovr = self.per_day_req.get(dt.strftime("%Y-%m-%d"), {})
                 dr = {**base, **ovr} if ovr else base
                 for pp, codes in periods:
                     if pp not in dr:
@@ -1738,6 +1743,63 @@ class _SchedulerBase:
             if self._effective_pre(nurse, dt, pre[iso], iso in self.holidays) == code:
                 n += 1
         return n
+
+    def _tail_idxs(self) -> list:
+        """생성 달 뒤에 붙은 다음 달 며칠 (끝 주 안)."""
+        last = self._month_last_day()
+        return [d for d, dt in enumerate(self.all_dates) if dt > last]
+
+    def _score_days(self) -> list:
+        """배점 항목(전환·연속·패턴·주말·공휴일)을 거는 날 — 생성 달 + 끝에 붙은 다음 달 며칠 (2026-10-18).
+
+        끝 주는 다음 달이 그대로 넘겨받는 사실이 된다(병동 11월 번표 = 11/1~12/5). 예전엔 배점이 생성 달에만 걸려
+        꼬리 며칠은 D→N·퐁당 같은 감점이 하나도 없이 아무렇게나 채워졌다. 공정성(달 횟수)·V·생 같은 달 예산 항목은 달 기준 그대로."""
+        first = date(self.year, self.month, 1)
+        return [d for d, dt in enumerate(self.all_dates) if dt >= first]
+
+    def _score_windows(self, n: int) -> list:
+        """연속 n일 창 — 마지막 날이 _score_days 안. 1일 앞 지난달 칸(기록)과 1일의 이음새도 이 달이 정하므로 넣는다
+        (사람마다 그 지난달 칸이 기록일 때만 — _score_window_ok)."""
+        return [[e - n + 1 + k for k in range(n)] for e in self._score_days() if e - n + 1 >= 0]
+
+    def _score_window_ok(self, nid: str, window) -> bool:
+        """창에 든 지난달 칸이 그 사람의 기록(사전입력)인가. 기록이 없는 지난달 칸은 이음새 규칙을 잇는 숨은 변수라
+        (결과에 내지 않는다) 거기에 배점을 걸면 지어낸 값이 1일 배정을 끌고 간다."""
+        first = date(self.year, self.month, 1)
+        pre = self.prev.get(nid, {})
+        return all(self.all_dates[d] >= first or pre.get(self.all_dates[d].strftime("%Y-%m-%d"))
+                   for d in window)
+
+    def _tail_keeper_targets(self) -> list:
+        """끝에 붙은 다음 달 며칠의 다음 달 나이트킵 야간 몫 — [(nurse, tail_idxs, 몫)] (2026-10-18).
+
+        나이트킵은 달력 달로 14회다 (실제 번표 1~10월 20/20 달 — 앞 달 번표에 실린 그 달 첫 며칠의 야간도 14회에 든다).
+        끝 주엔 이 몫이 없고 나이트킵의 날 OF 는 상한이 없어서, 남는 휴무가 다음 달 나이트킵 OF 로 몰렸다
+        (11월 생성: 12월 나이트킵 둘이 12/1~12/5 내내 OF — 사용자 "버그"). 실제 번표는 다음 달 나이트킵이 그 며칠에
+        이미 야간을 선다 (첫 5일 평균 2.8회, 3일 넘는 겹침에서 전부 OF 인 적 없음).
+        몫 = 14 × 그 며칠 / 다음 달 날수 (`_night_dedicated_quota`, 12/1~5 → 2). 사람이 넣은 칸은 그대로 — 넣은 N 은 몫에 들고,
+        넣은 다른 칸은 비우지 않는다 (완화에서도 원티드는 몫보다 먼저). 몫은 목적함수 감점으로만 건다 (_TAIL_KEEPER_SHORT_PENALTY)."""
+        tail = self._tail_idxs()
+        if not tail:
+            return []
+        import calendar
+        nxt = self.all_dates[tail[0]]
+        dim = calendar.monthrange(nxt.year, nxt.month)[1]
+        out = []
+        for nurse in self.nurses:
+            if not self._keeper_on(nurse, nxt):
+                continue
+            active, target = self._night_dedicated_quota(nurse, tail, dim)
+            if active <= 0 or target <= 0:
+                continue
+            pre = self.prev.get(nurse["id"], {})
+            keys = [(d, self.all_dates[d].strftime("%Y-%m-%d")) for d in tail]
+            pre_n = sum(1 for _, k in keys if pre.get(k) in self.NIGHT_SHIFTS)
+            free = sum(1 for d, k in keys if self._nurse_active_idx(nurse, d) and not pre.get(k))
+            eff = min(max(target, pre_n), pre_n + free)
+            if eff > 0:
+                out.append((nurse, tail, eff))
+        return out
 
     def _tail_saeng_cap(self, nurse, next_idx) -> int:
         """생성 달 뒤에 붙은 다음 달 며칠의 생 상한 — 미리 넣은 생의 수만큼 (자유 생 0).
@@ -2123,11 +2185,11 @@ class _SchedulerBase:
                 if not code or not self._nurse_active_on(nurse, dt):
                     continue
                 extended.setdefault(nid, {})[dt_str] = code
-                if dt.month == self.month and dt.year == self.year:
-                    schedule.setdefault(nid, {})[dt_str] = code
+                # 끝에 붙은 다음 달 며칠도 결과 표에 — 솔버 결과(_extract_solution)와 같게. 예전엔 생성 달만 담아
+                # 다음 달 '지난달 표 이어오기'와 내보내기에서 끝 주가 빠졌다 (2026-10-18)
+                schedule.setdefault(nid, {})[dt_str] = code
         # 신규의 트레이닝 날도 솔버 결과와 같게 '/'+프리셉터 근무 (자기 사전입력이 있으면 그것)
-        self._fill_trainee_cells(schedule, [dt for dt in self.all_dates
-                                            if dt.month == self.month and dt.year == self.year])
+        self._fill_trainee_cells(schedule, self.all_dates)
         self._fill_trainee_cells(extended, self.all_dates)
         nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
         notes = self._pinned_rule_notes(extended)
