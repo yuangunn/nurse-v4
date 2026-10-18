@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.15.2 (2026-10-18, N→휴무→D 금지에 V·생·법 같은 휴가도 · v4.15.1 야간 뒤 휴무를 병동 규칙대로 — 2연속 뒤 이틀 온전히·나이트킵도 같음·'5일 중 3일' 뺌)
+**최신**: v4.16.0 (2026-10-18, 다음 달로 이어지는 주기를 다음 달의 첫 주처럼 — 다음 달 나이트킵 야간 몫·차지 선임·날짜별 인원·배점 · 근무표 엑셀(xlsx) 내보내기, 그 달에 걸친 주 전부)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -60,10 +60,11 @@ Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 �
     (2026-10-03, 101병동 실제 번표의 공휴일 OF 15건이 모두 그 달 나이트킵). 공휴일 OF 금지는
     일반 간호사에게만 건다. **나이트킵에게 주는 것은 N·V·생·OF 뿐** (사용자, 같은 날 — 미리 넣은 주휴는 그대로).
     **나이트킵은 달력 달로 맡는다** (실제 번표 5~10월 경계 모두: 9월 나이트킵은 10/1~10/3 에 D·E, 10월 나이트킵은 그 사흘에 N)
-    — 근무표 끝에 붙은 다음 달 며칠은 그 달 나이트킵 기준 (결정 1-33).
+    — 근무표 끝에 붙은 다음 달 며칠은 그 달 나이트킵 기준 (결정 1-33). 그 며칠의 야간도 그 달 14회에 든다 — 다음 달 나이트킵은
+    끝 주에 이미 야간을 선다(실제 번표 첫 5일 평균 2.8회). 엔진은 몫(14×그 며칠/그 달 날수)을 감점으로 건다 (결정 1-47).
 11. **병동 번표에는 누가 차지인지 나오지 않는다** (2026-10-03). 번표 아래 'D차지' 줄 숫자는 그날
     **차지를 맡을 수 있는 사람 수**다. 앱 안에서는 DC/EC/NC 를 그대로 쓰고(어싸인용 복사도 그대로),
-    인쇄·엑셀(CSV)만 늘 D/E/N 으로 낸다.
+    인쇄·엑셀(xlsx)만 늘 D/E/N 으로 낸다.
 12. **병원 휴일** (101병동, 매년): 5/1 근로자의 날 · 5/9 의료원 설립일 · 7/17 제헌절 · 7/21 노조 설립일.
     법정공휴일처럼 '법'으로 쉰다. 병동마다 다를 수 있어 설정 → 규칙에서 고친다.
     번표 표기: 특V = 특별휴가(특) · 경가/조가 = 경사·조사 휴가 · 공가 = 공 · 산전 = 산전검진 · OFF = OF.
@@ -217,7 +218,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.15.2.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.16.0.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -299,7 +300,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | **사전입력 사실-클램프** | 확정(사전입력) 셀은 검증 대상이 아니라 **주어진 사실** — 제약에 걸리는 셀이 전부 확정이면 그 제약은 스킵(일 전체·인접 쌍·윈도우·주 전체 확정, 완전 확정 날은 변수 리터럴화), 확정+자유 혼합 카운트 제약은 상한을 `max(규칙, 확정분)`으로 클램프(자유 셀이 위반을 더 늘리는 건 금지). 부분 확정("2주차까지만 꽉 채움")도 동일 작동. 규칙 차이는 성공 결과에 `pinned_notes` 안내만. 완화(allow_pre_relax) 명시 시엔 클램프 OFF(완화 우선). 완전 확정 표 폴백(`pinned_confirmed`)은 타임아웃 안전망으로 유지. 결정 1-15 |
 | 월 최대 야간 | 기본 월 6회 (수면OFF 임계) |
 | 홀짝월 합산 야간 | 전월+당월 ≤ 11회 (선택적). **나이트킵 달의 야간은 합산 제외** (제1원칙 7) — 전월N 자동 인수인계(`compute_prev_month_nights`)와 엔진 `_two_month_rhs` 양쪽에서 뺀다 |
-| **야간전담 규칙** | N/NC만 배정, 당월 정확히 14일 근무, 야간 뒤 휴무는 일반과 같다(제1원칙 15 — 예전 '5일 중 3일'은 뺐다) (생휴 강제 없음 — 월 ≤1 상한만). **나이트킵인지는 날짜가 속한 달로**(`_keeper_on`) — 생성 범위 끝의 다음 달 며칠은 그 달 나이트킵에게 N/NC·쉬는 것만(`_keeper_forbids`, 사전입력은 사실), 이번 달만 나이트킵인 사람은 그 며칠 일반 간호사(다음 달도 나이트킵·상시 야간전담이면 그대로 나이트킵) (결정 1-33) |
+| **야간전담 규칙** | N/NC만 배정, 당월 정확히 14일 근무, 야간 뒤 휴무는 일반과 같다(제1원칙 15 — 예전 '5일 중 3일'은 뺐다) (생휴 강제 없음 — 월 ≤1 상한만). **나이트킵인지는 날짜가 속한 달로**(`_keeper_on`) — 생성 범위 끝의 다음 달 며칠은 그 달 나이트킵에게 N/NC·쉬는 것만(`_keeper_forbids`, 사전입력은 사실), 이번 달만 나이트킵인 사람은 그 며칠 일반 간호사(다음 달도 나이트킵·상시 야간전담이면 그대로 나이트킵) (결정 1-33) **끝에 붙은 다음 달 며칠**: 다음 달 나이트킵은 그 며칠 몫(14×며칠/그 달 날수, 12/1~5 → 2)을 목적함수 감점 700으로 — 사람이 넣은 칸은 그대로 (`_tail_keeper_targets`, 결정 1-47) |
 | **임산부 모성보호** | `is_pregnant`+`pregnancy`{early,late} 설정 시: ①P1 구간 완전 포함 주마다 P1 정확히 1회(부분 주 ≤1) ②임신 전 구간 `[early.start~late.end]` N/NC 금지 ③임신-중-달 생(生) 면제(배정 금지) ④임산부 달엔 야간전담 자동 해제. P1은 임산부+구간 또는 사전입력 P1에서만 허용(그 외 변수 0). HiGHS·CP-SAT·conflict_analyzer 패리티. 헬퍼: `_preg_window_on`/`_preg_span_on`/`_preg_active_in_month`/`_preg_forbids`/`_preg_effective_pre` (scheduler_base) |
 | 전입/전출 재적 | start_date ≤ d ≤ end_date 범위에서만 배정 |
 | **셀 잠금** | `locked_cells[nurse][date]=true`인 셀은 완화 모드에서도 사전입력 고정. 단 잠긴 D·E·N 은 같은 시간대 차지(DC·EC·NC)로 올릴 수 있다 — 번표엔 차지 표시가 없다(제1원칙 11, `_locked_domain`, 결정 1-34). 사람이 고른 차지·지난달 기록·나이트킵의 야간 외 근무는 글자 그대로. 승격되는 잠긴 칸끼리는 시니어리티대로(선임이 차지) |
@@ -448,6 +449,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 | DELETE | `/api/nurses/{id}` | 삭제 + **저장본 캐스케이드 정리** |
 | GET | `/api/nurses/template.xlsx` | 명부 엑셀 템플릿 (드롭다운·안내 시트, 기본) — `/template`은 CSV 호환용 |
 | GET | `/api/nurses/export.xlsx` | 현재 간호사 엑셀 내보내기 (기본) — `/export`는 CSV 호환용 |
+| POST | `/api/schedules/export.xlsx` | 근무표 엑셀 — 그 달에 걸친 주 전부, 병동 번표 모양(제목·주기·날짜·요일 · 그 달 계 · 날마다 인원, 값만) (결정 1-48) |
 | POST | `/api/nurses/import` | 명부 일괄 등록/업데이트 — xlsx(매직 바이트 자동 감지)·CSV 모두 허용 |
 | GET/POST | `/api/rules` | 규칙 |
 | GET/POST | `/api/requirements` | 요일별 필요 인원 |
@@ -545,9 +547,11 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
      (완성 번표를 xlsx/csv 업로드 또는 붙여넣기로 저장 목록에 추가, 솔버 안 돌림, 표 역산 일별 인원 함께 저장;
      연간 번표처럼 시트가 여러 개면 년월을 감지해 매핑 표 → 월별 저장본 일괄 생성).
      코드 어디서든 `activeTab='saved'` 를 넣으면 별칭 워처가 이 서랍을 연다.
-   - **📤 내보내기** 메뉴: CSV · 인쇄 · **📋 어싸인용 복사**(`copyScheduleTsv`: 이름 + 날짜 + 근무 표를
+   - **📤 내보내기** 메뉴: **엑셀 파일**(`exportToXlsx` → `POST /api/schedules/export.xlsx`, 병동 번표 모양 — 그 달에 걸친 주 전부:
+     11월 → 11/1~12/5, 12월 → 11/29~1/2 · 합계는 수식이 아니라 값이라 '근무표 파일 올리기'로 다시 올라간다, 결정 1-48) · 인쇄 ·
+     **📋 어싸인용 복사**(`copyScheduleTsv`: 이름 + 날짜 + 근무 표를
      클립보드로 → 어싸인 배정표(standalone)에 그대로 붙여넣는다)
-   - **인쇄·CSV 는 늘 D/E/N** (`plainShift` — 병동 번표에 차지 표시 없음, 제1원칙 11). 더보기의 '차지 숨기기'는
+   - **인쇄·엑셀은 늘 D/E/N** (`plainShift` — 병동 번표에 차지 표시 없음, 제1원칙 11). 더보기의 '차지 숨기기'는
      화면 전용이고, Ctrl+P 로 바로 찍을 때도 `beforeprint` 가 `_printPlain` 을 켠다. **어싸인용 복사만 DC/EC/NC 그대로**
      — 배정표가 그것으로 차지를 안다. 검증 `node scripts/test_charge_plain.mjs`
    - 주의(⚡) 목록은 **규칙 한도를 넘긴 것만** (연속 근무·월 야간, 나이트킵 제외) — 주말 근무 횟수 같은
@@ -1023,10 +1027,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.15.2.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.16.0.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.15.2.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.16.0.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -1121,10 +1125,11 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.15.2 기준)
+## 알려진 주의사항 (v4.16.0 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
-- 소프트 제약 보조변수는 당월 날짜 쌍에만 적용 (문제 크기 최소화)
+- 배점 보조변수(전환·연속·패턴·주말·공휴일)는 생성 달 + 끝에 붙은 다음 달 며칠 + 1일 이음새(그 사람의 지난달 칸이 기록일 때)에 —
+  `_score_days`/`_score_windows`/`_score_window_ok` (결정 1-47). 공정성·V·생·법 같은 달 예산 항목은 생성 달만
 - solver timeLimit: 프론트 설정 가능 (기본 20분, 최대 60분)
 - 일별 인원 제약 `==` (정확히 일치, 초과 불가)
 - `__pycache__` 구버전 캐시 오류 시: 서버 종료 후 `server/__pycache__` 삭제
