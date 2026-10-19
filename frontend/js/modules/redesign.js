@@ -64,7 +64,7 @@ window.RedesignModule = function() {
     // 셀 팝업이 열린 동안 키보드 입력 — 팝업 힌트('D E N V O 로 바로 입력 · Del 지우기')가 약속하는 동작.
     // 전역 keydown 은 팝업이 열리면 격자 입력을 건너뛰므로 여기서 같은 표를 쓴다 (단일·다중 선택 공용).
     rdPopupKey(e){
-      const se=this.shiftEdit; if(!se.open||se.mode==='schedule') return;
+      const se=this.shiftEdit; if(!se.open||se.mode==='schedule') return;   // 여러 칸(prev_multi·sched_multi)은 받는다
       const t=document.activeElement; if(t&&(['INPUT','TEXTAREA','SELECT'].includes(t.tagName)||t.isContentEditable)) return;
       if(e.ctrlKey||e.metaKey||e.altKey) return;
       const apply=code=>{ e.preventDefault(); this.applyShiftEditWithUndo(code); };
@@ -354,7 +354,7 @@ window.RedesignModule = function() {
       return {work:ord(work,WORK_ORDER), rest:ord(rest,REST_ORDER), flex};
     },
     get rdPopCurrent(){
-      const n=this.shiftEdit.nurse, d=this.shiftEdit.day; if(!n||!d||this.shiftEdit.mode==='prev_multi') return '';
+      const n=this.shiftEdit.nurse, d=this.shiftEdit.day; if(!n||!d||this.shiftEdit.mode==='prev_multi'||this.shiftEdit.mode==='sched_multi') return '';
       return this.shiftEdit.mode==='prev' ? this.getPrevShift(n.id, d) : (this._getShift(n.id, d)||'');
     },
     rdPlacePopup(){
@@ -366,7 +366,12 @@ window.RedesignModule = function() {
         // 팝업은 position:fixed — 칸의 뷰포트 좌표 기준 오른쪽에, 안 들어가면 왼쪽에, 아래가 모자라면 위로 올린다
         // 높이는 실제 팝업에서 잰다 — 사전입력 팝업은 원티드 줄이 더 있어 근무표 팝업보다 길다
         const pop=document.querySelector('[data-rd=cell-popup]');
-        const r=el.getBoundingClientRect(), W=372, H=Math.min(Math.max(pop?.offsetHeight||0, 470), window.innerHeight-16);
+        let r=el.getBoundingClientRect();
+        if(se.anchorEnd){   // 여러 칸 — 고른 범위 전체를 피한다
+          const e2=[...document.querySelectorAll(`[data-cell="${se.anchorEnd.nid}|${se.anchorEnd.dk}"]`)].find(x=>x.offsetParent);
+          if(e2){ const b=e2.getBoundingClientRect(); r={left:Math.min(r.left,b.left), right:Math.max(r.right,b.right), top:Math.min(r.top,b.top), bottom:Math.max(r.bottom,b.bottom)}; }
+        }
+        const W=372, H=Math.min(Math.max(pop?.offsetHeight||0, 470), window.innerHeight-16);
         let left=r.right+8, top=r.top-8;
         if(left+W>window.innerWidth-8) left=r.left-W-8;
         if(left<8) left=8;
@@ -410,7 +415,7 @@ window.RedesignModule = function() {
         wrap.style.setProperty('--col-w', Math.max(28, Math.min(44, Math.floor((wrap.clientWidth-name-sums-2)/days)))+'px');
       }
     },
-    rdPopPick(code){ if(this.shiftEdit.mode==='prev_multi') this.applyMultiShiftEdit(code); else this.applyShiftEditWithUndo(code); },
+    rdPopPick(code){ this.applyShiftEditWithUndo(code); },   // 여러 칸이면 applyMultiShiftEdit 로
     rdCellTipPre(nurse, day){
       const inact=this.isNurseInactive(nurse, day); if(inact) return inact==='before' ? '전입 전 — 배정하지 않습니다' : '전출 후 — 배정하지 않습니다';
       const code=this.getPrevShift(nurse.id, day); const m=day.getMonth()+1, d=day.getDate();

@@ -99,6 +99,7 @@ window.ScheduleFeaturesModule = function() {
     _originalSchedule:null,
     trackEdits(){
       this._originalSchedule=JSON.parse(JSON.stringify(this.schedule));
+      this._schedUndo=[];this._schedRedo=[];   // 새 표 — 앞 표로 되돌리지 않는다
       this.checkScheduleViolations();
     },
     isManuallyEdited(nurseId,day){

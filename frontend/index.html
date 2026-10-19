@@ -704,7 +704,7 @@
         <button @click="open=!open" class="rbtn rbtn-secondary" :data-rd="activeTab==='preinput'?'btn-more':null" title="메모 표시 · 단축키 안내 · 전체화면 · 다른 달 정리 · 표 초기화를 엽니다. 초기화는 한 번 더 확인합니다."><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12h.01 M19 12h.01 M5 12h.01"/></svg>더보기</button>
         <div x-show="open" x-cloak @click.outside="open=false" class="rmenu right">
           <button @click="showNotes=!showNotes" class="rmenu-item" :class="showNotes?'is-on':''" title="메모가 적힌 칸에 점을 표시합니다. 메모 내용은 칸 위에 마우스를 올리면 보입니다."><b>메모 표시 켜기/끄기</b><small x-text="showNotes?'지금 켜짐 — 메모 칸에 점이 보입니다':'지금 꺼짐'"></small></button>
-          <button @click="showShortcutHelp=true;open=false" class="rmenu-item" title="키보드로 빠르게 넣는 법과 마우스 조작을 봅니다."><b>단축키 안내</b><small>D E N V O 키 · 방향키 · Ctrl+Z</small></button>
+          <button @click="showShortcutHelp=true;open=false" class="rmenu-item" title="키보드로 빠르게 넣는 법과 마우스 조작을 봅니다."><b>단축키 안내</b><small>D E N V O 키 · Ctrl+C/V · 방향키 · Ctrl+Z</small></button>
           <button @click="tableFullscreen=!tableFullscreen;open=false" class="rmenu-item" title="표만 화면 가득 보여 줍니다. Esc로 돌아옵니다."><b>전체화면</b><small>표만 크게 봅니다 · Esc로 돌아오기</small></button>
           <button @click="gridFit=!gridFit" class="rmenu-item" :class="gridFit?'is-on':''" title="칸을 좁혀 앞뒤 주까지 한 달을 옆으로 넘기지 않고 한 화면에 봅니다. 다시 누르면 원래 너비로 돌아옵니다."><b>칸 좁게 — 한 달을 한 화면에</b><small x-text="gridFit?'지금 켜짐 — 옆으로 넘기지 않아도 됩니다':'지금 꺼짐'"></small></button>
           <div class="rmenu-sep"></div>
@@ -736,16 +736,16 @@
       </thead>
       <tbody @mouseover="rdHoverCol($event)" @mouseleave="rdHoverCol($event,true)">
         <template x-for="(nurse,nIdx) in nurses" :key="nurse.id"><tr :class="[nurse.is_trainee?'trainee-row':'',rdGroupStart(nurses,nIdx)?'group-start':'']">
-          <td class="rt-name" @contextmenu.prevent="setCopySource(nurse.id)" :title="nurse.name+(nurse.is_trainee?' · 신규간호사':'')+' — 오른쪽 클릭하면 이 줄을 복사해 다른 사람에게 붙일 수 있습니다'">
+          <td class="rt-name" @mousedown="gridDownRow('preinput',nIdx,$event)" @mouseover="gridOverRow('preinput',nIdx)" @contextmenu.prevent="setCopySource(nurse.id)" :title="nurse.name+(nurse.is_trainee?' · 신규간호사':'')+' — 누르거나 끌어서 줄을 고릅니다 · 오른쪽 클릭하면 이 줄을 복사해 다른 사람에게 붙일 수 있습니다'">
             <b x-text="nurse.name"></b><small x-text="nurse.group"></small>
             <span x-show="copySource===nurse.id" class="copy-tag">복사됨</span>
             <button x-show="copySource&&copySource!==nurse.id" @click="pasteRow(nurse.id)" class="paste-tag" title="복사한 줄을 이 사람에게 붙여 넣습니다.">붙여넣기</button>
           </td>
           <template x-for="(day,dIdx) in scheduleDays" :key="dayKey(day)">
             <td class="rt-cell" :data-cell="nurse.id+'|'+dayKey(day)" :data-shift="getPrevShift(nurse.id,day)||null"
-                :class="[day.getDay()===6?'sat':'',day.getDay()===0?'sun':'',isCycleStart(day)&&day.getDate()!==1?'cycle-start':'',isOverflow(day)?'overflow':'',hasViolation(nurse.id,day)?'g-violation':'',hasPinNote(nurse.id,day)?'g-pinnote':'',isDragSelected(nurse.id,day)?'g-drag-sel':'',isFocused(nIdx,dIdx)?'is-focused':'',isNurseInactive(nurse,day)?'is-absent':'',!getPrevShift(nurse.id,day)&&hasWish(nurse.id,day)?'is-wish':'']"
+                :class="[day.getDay()===6?'sat':'',day.getDay()===0?'sun':'',isCycleStart(day)&&day.getDate()!==1?'cycle-start':'',isOverflow(day)?'overflow':'',hasViolation(nurse.id,day)?'g-violation':'',hasPinNote(nurse.id,day)?'g-pinnote':'',isSel('preinput',nIdx,dIdx)?'is-sel':'',isFocused(nIdx,dIdx)?'is-focused':'',isNurseInactive(nurse,day)?'is-absent':'',!getPrevShift(nurse.id,day)&&hasWish(nurse.id,day)?'is-wish':'']"
                 :title="rdCellTipPre(nurse,day)"
-                @mousedown="onCellMouseDown(nurse,day,$event)" @mouseover="onCellMouseOver(nurse,day)" @click="focusCell(nIdx,dIdx)" @dblclick="openPrevEdit(nurse,day)" @contextmenu.prevent="openNote(nurse.id,day)">
+                @mousedown="gridDown('preinput',nIdx,dIdx,$event)" @mouseover="gridOver('preinput',nIdx,dIdx)" @click="gridClick($event)&&openPrevEdit(nurse,day)" @contextmenu.prevent="openNote(nurse.id,day)">
               <span x-text="isNurseInactive(nurse,day)?'':(getPrevShift(nurse.id,day)||(hasWish(nurse.id,day)?'★':''))" :class="!getPrevShift(nurse.id,day)&&hasWish(nurse.id,day)?'wish':''"></span>
               <span x-show="isLocked(nurse.id,day)" class="lock"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11h14v10H5z M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
               <span x-show="showNotes&&hasNote(nurse.id,day)" class="memo"></span>
@@ -955,11 +955,11 @@
         </thead>
         <tbody @mouseover="rdHoverCol($event)" @mouseleave="rdHoverCol($event,true)">
           <template x-for="(nurse,ni) in rdPhoneNurses" :key="nurse.id"><tr :class="[nurse.is_trainee?'trainee-row':'',nurse.id===myNurseId?'me':'',rdGroupStart(rdPhoneNurses,ni)?'group-start':'']">
-            <td class="rt-name" :title="nurse.name+(nurse.is_trainee?' · 신규간호사':'')"><b x-text="nurse.name"></b><small x-text="nurse.group"></small></td>
-            <template x-for="day in scheduleDays" :key="dayKey(day)">
+            <td class="rt-name" @mousedown="gridDownRow('schedule',ni,$event)" @mouseover="gridOverRow('schedule',ni)" :title="nurse.name+(nurse.is_trainee?' · 신규간호사':'')+' — 누르거나 끌어서 줄을 고릅니다'"><b x-text="nurse.name"></b><small x-text="nurse.group"></small></td>
+            <template x-for="(day,di) in scheduleDays" :key="dayKey(day)">
               <td class="rt-cell" :data-cell="nurse.id+'|'+dayKey(day)" :data-shift="colorByShift&&!isNurseInactive(nurse,day)?(displayShift(nurse.id,day)||null):null"
-                  :class="[day.getDay()===6?'sat':'',day.getDay()===0?'sun':'',isCycleStart(day)&&day.getDate()!==1?'cycle-start':'',isOverflow(day)?'overflow':'',isRelaxed(nurse.id,day)?'is-relaxed':'',isManuallyEdited(nurse.id,day)?'is-edited':'',isReadjustPin(nurse.id,day)?'g-pin':'',isReadjustChanged(nurse.id,day)?'g-readj':'',hasScheduleViolation(nurse.id,day)?'g-violation':'',isNurseInactive(nurse,day)?'is-absent':'']"
-                  :title="rdCellTipSched(nurse,day)" @click="openShiftEdit(nurse,day)">
+                  :class="[day.getDay()===6?'sat':'',day.getDay()===0?'sun':'',isCycleStart(day)&&day.getDate()!==1?'cycle-start':'',isOverflow(day)?'overflow':'',isRelaxed(nurse.id,day)?'is-relaxed':'',isManuallyEdited(nurse.id,day)?'is-edited':'',isReadjustPin(nurse.id,day)?'g-pin':'',isReadjustChanged(nurse.id,day)?'g-readj':'',hasScheduleViolation(nurse.id,day)?'g-violation':'',isNurseInactive(nurse,day)?'is-absent':'',isSel('schedule',ni,di)?'is-sel':'',_sel&&_sel.tab==='schedule'&&_sel.r1===ni&&_sel.c1===di?'is-focused':'']"
+                  :title="rdCellTipSched(nurse,day)" @mousedown="gridDown('schedule',ni,di,$event)" @mouseover="gridOver('schedule',ni,di)" @click="gridClick($event)&&openShiftEdit(nurse,day)">
                 <span x-text="isNurseInactive(nurse,day)?'':displayShift(nurse.id,day)"></span>
                 <span x-show="isLocked(nurse.id,day)" class="lock"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11h14v10H5z M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
                 <span x-show="hasNote(nurse.id,day)" class="memo"></span>
@@ -1488,27 +1488,27 @@
 <!-- ═══ 셀 팝업 — 17코드 두 묶음 + 잠금·메모·지우기 (사전입력·근무표 공용, 화면 고정 좌표) ═══ -->
 <div x-show="shiftEdit.open" x-cloak class="rpop rd-fixed" data-rd="cell-popup" :style="`left:${cellPop.left}px;top:${cellPop.top}px`" x-effect="if(shiftEdit.open)rdPlacePopup()" @keydown.window="rdPopupKey($event)" @keydown.escape.window="shiftEdit.open=false" role="dialog" aria-label="근무 선택">
   <div class="rpop-head">
-    <div><b x-text="shiftEdit.nurse?(shiftEdit.nurse.name||''):''"></b><span x-text="shiftEdit.mode==='prev_multi'?shiftEdit.dateLabel:(shiftEdit.day?rdDayLabel(shiftEdit.day):'')"></span><span x-show="shiftEdit.mode==='prev'&&shiftEdit.nurse&&isTraineeInTraining(shiftEdit.nurse,shiftEdit.day)" style="font-size:var(--fs-min);color:var(--sh-생-fg);margin-left:6px">신규</span><span x-show="shiftEdit.mode==='schedule'" style="font-size:var(--fs-min);color:var(--ink-2);margin-left:6px">근무표 고치기</span></div>
+    <div><b x-text="shiftEdit.nurse?(shiftEdit.nurse.name||''):''"></b><span x-text="(shiftEdit.mode==='prev_multi'||shiftEdit.mode==='sched_multi')?shiftEdit.dateLabel:(shiftEdit.day?rdDayLabel(shiftEdit.day):'')"></span><span x-show="shiftEdit.mode==='prev'&&shiftEdit.nurse&&isTraineeInTraining(shiftEdit.nurse,shiftEdit.day)" style="font-size:var(--fs-min);color:var(--sh-생-fg);margin-left:6px">신규</span><span x-show="shiftEdit.mode==='schedule'||shiftEdit.mode==='sched_multi'" style="font-size:var(--fs-min);color:var(--ink-2);margin-left:6px">근무표 고치기</span></div>
     <button @click="shiftEdit.open=false" class="rpop-close" data-rd="popup-close" title="닫기 (Esc)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18 M6 6l12 12"/></svg></button>
   </div>
   <div class="rpop-group">근무</div>
-  <div class="rpop-grid"><template x-for="s in rdPopCodes.work" :key="'pw'+s"><button @click="shiftEdit.mode==='prev_multi'?applyMultiShiftEdit(s):applyShiftEditWithUndo(s)" class="rpop-code" :class="rdPopCurrent===s?'is-current':''" :data-shift="s.replace('/','')" :title="rdShiftTip(s.replace('/',''))" :style="s.startsWith('/')?'opacity:0.7;font-style:italic':''"><b x-text="s"></b><small x-text="rdCodeName(s.replace('/',''))"></small></button></template></div>
+  <div class="rpop-grid"><template x-for="s in rdPopCodes.work" :key="'pw'+s"><button @click="rdPopPick(s)" class="rpop-code" :class="rdPopCurrent===s?'is-current':''" :data-shift="s.replace('/','')" :title="rdShiftTip(s.replace('/',''))" :style="s.startsWith('/')?'opacity:0.7;font-style:italic':''"><b x-text="s"></b><small x-text="rdCodeName(s.replace('/',''))"></small></button></template></div>
   <div class="rpop-group">휴무 · 휴가</div>
-  <div class="rpop-grid"><template x-for="s in rdPopCodes.rest" :key="'pr'+s"><button @click="shiftEdit.mode==='prev_multi'?applyMultiShiftEdit(s):applyShiftEditWithUndo(s)" class="rpop-code" :class="rdPopCurrent===s?'is-current':''" :data-shift="s.replace('/','')" :title="rdShiftTip(s.replace('/',''))" :style="s.startsWith('/')?'opacity:0.7;font-style:italic':''"><b x-text="s"></b><small x-text="rdCodeName(s.replace('/',''))"></small></button></template></div>
+  <div class="rpop-grid"><template x-for="s in rdPopCodes.rest" :key="'pr'+s"><button @click="rdPopPick(s)" class="rpop-code" :class="rdPopCurrent===s?'is-current':''" :data-shift="s.replace('/','')" :title="rdShiftTip(s.replace('/',''))" :style="s.startsWith('/')?'opacity:0.7;font-style:italic':''"><b x-text="s"></b><small x-text="rdCodeName(s.replace('/',''))"></small></button></template></div>
   <div x-show="rdPopCodes.flex.length" class="rpop-group">원티드 — 둘 중 하나 · 야간만 빼고</div>
-  <div x-show="rdPopCodes.flex.length" class="rpop-grid"><template x-for="s in rdPopCodes.flex" :key="'pf'+s"><button @click="shiftEdit.mode==='prev_multi'?applyMultiShiftEdit(s):applyShiftEditWithUndo(s)" class="rpop-code" :class="rdPopCurrent===s?'is-current':''" :data-shift="s" :title="s==='N제외'?'야간(N)만 아니면 됩니다. 쉬어도 됩니다.':rdCodeName(s)+' 중 아무거나 됩니다. 근무표를 만들 때 고릅니다.'"><b x-text="s"></b><small x-text="rdCodeName(s)"></small></button></template></div>
+  <div x-show="rdPopCodes.flex.length" class="rpop-grid"><template x-for="s in rdPopCodes.flex" :key="'pf'+s"><button @click="rdPopPick(s)" class="rpop-code" :class="rdPopCurrent===s?'is-current':''" :data-shift="s" :title="s==='N제외'?'야간(N)만 아니면 됩니다. 쉬어도 됩니다.':rdCodeName(s)+' 중 아무거나 됩니다. 근무표를 만들 때 고릅니다.'"><b x-text="s"></b><small x-text="rdCodeName(s)"></small></button></template></div>
   <div class="rpop-actions">
     <button x-show="shiftEdit.mode==='prev'&&shiftEdit.nurse" @click="toggleLock(shiftEdit.nurse.id,shiftEdit.day);shiftEdit.open=false" class="rbtn" data-rd="pop-lock" :title="isLocked(shiftEdit.nurse?.id,shiftEdit.day)?'잠금을 풉니다. 완화하면 바뀔 수 있습니다.':'이 칸을 잠급니다. 완화를 켜도 절대 바뀌지 않습니다.'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11h14v10H5z M7 11V7a5 5 0 0 1 10 0v4"/></svg><span x-text="isLocked(shiftEdit.nurse?.id,shiftEdit.day)?'잠금 해제':'잠금'"></span></button>
     <button x-show="shiftEdit.mode==='prev'&&shiftEdit.nurse" @click="openNote(shiftEdit.nurse.id,shiftEdit.day);shiftEdit.open=false" class="rbtn" data-rd="pop-memo" title="이 칸에 사연을 적어 둡니다. 근무표에도 함께 보입니다."><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9Z M15 3v4a2 2 0 0 0 2 2h4"/></svg>메모</button>
-    <button x-show="shiftEdit.mode!=='schedule'" @click="shiftEdit.mode==='prev_multi'?applyMultiShiftEdit('__CLEAR__'):applyShiftEditWithUndo('__CLEAR__')" class="rbtn rbtn-danger" data-rd="pop-clear" title="이 칸을 비웁니다. 빈칸은 자동 배정이 채웁니다.">지우기</button>
-    <button x-show="shiftEdit.mode==='schedule'" @click="shiftEdit.open=false" class="rbtn" title="바꾸지 않고 닫습니다.">닫기</button>
+    <button x-show="shiftEdit.mode==='prev'||shiftEdit.mode==='prev_multi'" @click="rdPopPick('__CLEAR__')" class="rbtn rbtn-danger" data-rd="pop-clear" title="이 칸을 비웁니다. 빈칸은 자동 배정이 채웁니다.">지우기</button>
+    <button x-show="shiftEdit.mode==='schedule'||shiftEdit.mode==='sched_multi'" @click="shiftEdit.open=false" class="rbtn" title="바꾸지 않고 닫습니다.">닫기</button>
   </div>
   <div x-show="shiftEdit.mode==='prev'&&shiftEdit.nurse" class="rpop-wish">
     <span class="lbl">희망(가능하면):</span>
     <template x-for="w in ['OFF','D','E','N']" :key="'wsh'+w"><button @click="setWishAndSave(shiftEdit.nurse.id,shiftEdit.day,w)" class="rbtn" :class="getWish(shiftEdit.nurse?.id,shiftEdit.day)===w?'on':''" x-text="'★'+w" :title="`이날 ${w==='OFF'?'쉬고 싶다':w+' 근무를 하고 싶다'}는 희망을 적어 둡니다. 확정이 아니라 가능하면 반영됩니다.`"></button></template>
     <button x-show="getWish(shiftEdit.nurse?.id,shiftEdit.day)" @click="setWishAndSave(shiftEdit.nurse.id,shiftEdit.day,null)" class="rbtn" title="희망을 지웁니다.">해제</button>
   </div>
-  <div class="rpop-hint" x-show="shiftEdit.mode!=='schedule'">키보드: <b>D E N V O</b> 로 바로 입력 · <b>Del</b> 지우기</div>
+  <div class="rpop-hint" x-show="shiftEdit.mode!=='schedule'">키보드: <b>D E N V O</b> 로 바로 입력<span x-show="shiftEdit.mode!=='sched_multi'"> · <b>Del</b> 지우기</span></div>
 </div>
 
 <!-- ═══ 모달: 주휴 옵션 ═══════════════════════════════════ -->
@@ -2311,20 +2311,26 @@
         <table class="tbl">
           <tbody>
             <tr><td class="font-mono text-xs"><kbd>?</kbd></td><td>단축키 도움말 토글</td></tr>
-            <tr><td class="font-mono text-xs"><kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd></td><td>사전입력 셀 이동</td></tr>
-            <tr><td class="font-mono text-xs"><kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>V</kbd> <kbd>O</kbd> <kbd>W</kbd></td><td>사전입력 직접 입력 (O=OF, W=주)</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd></td><td>칸 이동 (사전입력·근무표)</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>Shift</kbd>+<kbd>←↑↓→</kbd></td><td>고른 범위 넓히기</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>D</kbd> <kbd>E</kbd> <kbd>N</kbd> <kbd>V</kbd> <kbd>O</kbd> <kbd>W</kbd></td><td>고른 칸에 바로 입력 (O=OF, W=주) — 여러 칸이면 모두</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>Ctrl+C</kbd> <kbd>Ctrl+X</kbd> <kbd>Ctrl+V</kbd></td><td>고른 칸 복사·잘라내기·붙여넣기 — 엑셀과 칸 묶음을 주고받습니다. 한 칸을 복사해 여러 칸에 붙이면 모두 채웁니다</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>Ctrl+A</kbd></td><td>표 전체 고르기</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>Enter</kbd> · <kbd>Esc</kbd></td><td>고른 칸 팝업 열기 · 선택 풀기</td></tr>
             <tr><td class="font-mono text-xs"><kbd>ㅈ</kbd> <kbd>ㅂ</kbd> <kbd>ㅃ</kbd> <kbd>ㅅ</kbd> <kbd>ㅌ</kbd> <kbd>ㄱ</kbd></td><td>한글 자판: 주 · 병 · 법 · 생 · 특 · 공</td></tr>
             <tr><td class="font-mono text-xs"><kbd>ㄲ</kbd> <kbd>ㅉ</kbd> <kbd>ㅆ</kbd></td><td>한글 자판 Shift: 경가 · 조가 · 산전</td></tr>
-            <tr><td class="font-mono text-xs"><kbd>Del</kbd></td><td>사전입력 셀 삭제</td></tr>
+            <tr><td class="font-mono text-xs"><kbd>Del</kbd></td><td>사전입력 칸 비우기 (근무표 칸은 비울 수 없어요)</td></tr>
             <tr><td class="font-mono text-xs"><kbd>Ctrl+Z</kbd></td><td>되돌리기</td></tr>
             <tr><td class="font-mono text-xs"><kbd>Ctrl+Shift+Z</kbd></td><td>다시 실행</td></tr>
             <tr><td class="font-mono text-xs"><kbd>F5</kbd></td><td>새로고침</td></tr>
             <tr><td class="font-mono text-xs"><kbd>F11</kbd></td><td>브라우저 전체화면</td></tr>
-            <tr><td colspan="2" class="text-xs text-dim" style="padding-top:8px;font-weight:600">마우스 (사전입력 그리드)</td></tr>
-            <tr><td class="text-xs">더블클릭</td><td>셀 편집 팝업 열기</td></tr>
+            <tr><td colspan="2" class="text-xs text-dim" style="padding-top:8px;font-weight:600">마우스 (사전입력·근무표 표)</td></tr>
+            <tr><td class="text-xs">클릭</td><td>칸 팝업 열기</td></tr>
             <tr><td class="text-xs">우클릭 (셀)</td><td>메모 + 완화 시 고정 토글</td></tr>
             <tr><td class="text-xs">우클릭 (날짜 헤더)</td><td>법정공휴일 지정/해제</td></tr>
-            <tr><td class="text-xs">드래그</td><td>여러 셀 선택 → 근무 일괄 지정</td></tr>
+            <tr><td class="text-xs">드래그</td><td>네모 범위로 여러 칸 고르기 → 근무 한 번에 (근무표도)</td></tr>
+            <tr><td class="text-xs">Shift+클릭</td><td>고른 범위 넓히기</td></tr>
+            <tr><td class="text-xs">이름 칸 누르기·끌기</td><td>여러 사람 줄을 통째로 고르기</td></tr>
             <tr><td class="text-xs">이름 우클릭</td><td>해당 행 복사(다른 간호사에 붙여넣기)</td></tr>
             <tr><td class="text-xs">⛶ 버튼</td><td>표 전체화면 보기 (사전입력·근무표 탭)</td></tr>
           </tbody>
@@ -2359,18 +2365,20 @@
     <div class="font-bold text-lg mb-4 text-bright">키보드 단축키</div>
     <table class="tbl">
       <tbody>
-        <tr><td class="font-mono text-blue">← → ↑ ↓</td><td>셀 이동 (사전입력)</td></tr>
-        <tr><td class="font-mono text-blue">D E N V</td><td>근무 직접 입력</td></tr>
+        <tr><td class="font-mono text-blue">← → ↑ ↓</td><td>칸 이동 (사전입력·근무표)</td></tr>
+        <tr><td class="font-mono text-blue">Shift+방향키</td><td>고른 범위 넓히기</td></tr>
+        <tr><td class="font-mono text-blue">D E N V O</td><td>고른 칸에 근무 입력 (여러 칸이면 모두)</td></tr>
         <tr><td class="font-mono text-blue">ㄲ ㅉ ㅆ</td><td>경가 · 조가 · 산전 (한글 Shift)</td></tr>
-        <tr><td class="font-mono text-blue">Del / Backspace</td><td>셀 삭제</td></tr>
+        <tr><td class="font-mono text-blue">Ctrl+C / X / V</td><td>고른 칸 복사·잘라내기·붙여넣기 (엑셀과 주고받기)</td></tr>
+        <tr><td class="font-mono text-blue">Del / Backspace</td><td>사전입력 칸 비우기</td></tr>
         <tr><td class="font-mono text-blue">Ctrl+Z</td><td>되돌리기</td></tr>
         <tr><td class="font-mono text-blue">Ctrl+Shift+Z</td><td>다시 실행</td></tr>
         <tr><td class="font-mono text-blue">?</td><td>이 도움말 열기/닫기</td></tr>
       </tbody>
     </table>
     <div class="text-xs text-dim mt-3">
-      <p>사전입력 탭: 셀 클릭으로 포커스 → 방향키로 이동 → 키보드로 근무 입력</p>
-      <p class="mt-1">셀 더블클릭: 근무 선택 모달 열기</p>
+      <p>사전입력·근무표: 칸 클릭(팝업) · 끌어서 여러 칸 · 이름 칸을 끌어 여러 사람 줄 → 근무 키·Ctrl+V 로 한 번에</p>
+      <p class="mt-1">Enter: 고른 칸 팝업 열기 · Esc: 선택 풀기 · Ctrl+A: 표 전체</p>
       <p class="mt-1">이름 우클릭: 행 복사 / 셀 우클릭: 메모</p>
     </div>
     <button @click="showShortcutHelp=false" class="btn btn-ghost w-full btn-sm mt-4" title="닫습니다.">닫기</button>
