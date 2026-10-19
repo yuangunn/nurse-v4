@@ -86,4 +86,15 @@ const sets = (a) => a.pastePrev.diff.will_set.map((x) => `${x.nid}${+x.dk.slice(
   a.pastePrev.target = 'saved'; a._matchPasteGrid();
   assert.equal(a.pastePreview.rows[0].cells[dk(2)].st, 'set', '완성 근무표는 모두 넣을 칸');
 }
+// ⑤ '첫 칸 = 이름'·'첫 줄 = 날짜'를 끄고 붙이면 표에서 고른 범위의 왼쪽 위부터 — 끈 끝 칸에서 시작했다 (리뷰 2026-10-19)
+{
+  const a = make(); a.activeTab = 'preinput';
+  const c0 = a.scheduleDays.findIndex((d) => a.dayKey(d) === dk(1));
+  a.gridDown('preinput', 0, c0, { button: 0, shiftKey: false }); a.gridOver('preinput', 1, c0 + 2); a.gridUp();
+  a.shiftEdit.open = false;
+  a.openPastePrev('prev');
+  a.pastePrev.mode = 'manual'; a.pastePrev.hasNameCol = false; a.pastePrev.hasDateRow = false;
+  paste(a, [['D', 'N']]);
+  assert.equal(sets(a), 'a1D a2N', '간호01 의 3/1·3/2 — 끈 끝 칸(간호02, 3/3)이 아니라');
+}
 console.log('test_paste_fix: OK');

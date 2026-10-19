@@ -140,4 +140,48 @@ const days0 = (a) => a.scheduleDays.findIndex((d) => a.dayKey(d) === dk(1));   /
   a.gridCopy(ev({ tagName: 'TD' }), true);                   // 잘라내기 = 복사 + 비우기
   assert.equal(got, 'E'); assert.equal(a.prevSchedule.a[dk(1)], undefined);
 }
+// ⑨ 근무표 복사는 저장된 코드 그대로 — '차지 숨기기'(기본 켜짐) 화면값이면 DC·NC 가 D·N 으로 붙어 차지가 사라졌다 (리뷰 2026-10-19)
+{
+  const a = make(); a.activeTab = 'schedule'; const c0 = days0(a);
+  a.hideCharge = true;
+  a.schedule = { a: { [dk(1)]: 'DC', [dk(2)]: 'NC' } };
+  assert.equal(a.displayShift('a', a.scheduleDays[c0]), 'D', '화면은 차지를 숨긴다');
+  assert.equal(a._gridTsv({ tab: 'schedule', rA: 0, rB: 0, cA: c0, cB: c0 + 1 }), 'DC\tNC');
+}
+// ⑩ 표가 키를 받는 때 — 포커스가 단추·입력 칸이면, 다른 창이 열려 있으면 받지 않는다 (단추 Enter 가 칸 팝업을 열었다)
+{
+  const a = make(); const c0 = days0(a);
+  a._setSel('preinput', 0, c0);
+  const body = {}; global.document.body = body;
+  global.document.activeElement = body;
+  assert.equal(a._gridKeysOn(), true);
+  global.document.activeElement = { closest: (q) => (q.includes('button') ? {} : null) };
+  assert.equal(a._gridKeysOn(), false, '단추에 포커스');
+  global.document.activeElement = body;
+  global.document.querySelectorAll = (q) => (q.includes('aria-modal') ? [{ getClientRects: () => [1] }] : []);
+  assert.equal(a._gridKeysOn(), false, '창이 열려 있다');
+  global.document.querySelectorAll = (q) => (q.includes('aria-modal') ? [{ getClientRects: () => [] }] : []);
+  assert.equal(a._gridKeysOn(), true, '닫힌 창(display:none)은 보지 않는다');
+  a.activeTab = 'schedule';
+  assert.equal(a._gridKeysOn(), false, '고른 칸이 다른 탭');
+  global.document.querySelectorAll = () => []; delete global.document.activeElement;
+}
+// ⑪ 다른 표가 들어오면 근무표 되돌리기·고른 칸을 비운다 — 저장본 불러오기·병동 바꾸기 뒤 Ctrl+Z 가 앞 표를 되살렸다 (리뷰 2026-10-19)
+{
+  const a = make(); a.activeTab = 'schedule'; const c0 = days0(a);
+  a.schedule = { a: { [dk(1)]: 'D' } }; a.trackEdits();
+  a._setSel('schedule', 0, c0); a.gridKey(key('e'));
+  assert.equal(a._schedUndo.length, 1);
+  a.api = async () => ({ data: { year: 2026, month: 3, nurses: a.nurses, schedule: { b: { [dk(1)]: 'N' } } } });
+  await a.loadSaved(7);
+  assert.deepEqual([a._schedUndo.length, a._sel], [0, null]);
+  a.schedUndo();
+  assert.deepEqual(a.schedule, { b: { [dk(1)]: 'N' } }, '불러온 표 그대로');
+  assert.equal(a.getManualEditCount(), 0, '불러온 표가 고친 칸 기준');
+  a._setSel('schedule', 0, c0); a.gridKey(key('d'));
+  a.api = async (m, path) => (path === '/api/profiles/open' ? { ok: true } : {});
+  a._closeCurrentProfile = async () => {}; a._initApp = async () => {};
+  await a.switchToProfile({ id: 'p2', has_password: false });
+  assert.deepEqual([a._schedUndo.length, a._sel, a._originalSchedule], [0, null, null]);
+}
 console.log('test_grid_select: OK');

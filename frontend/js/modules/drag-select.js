@@ -7,7 +7,7 @@
  *
  * 사용: app() 반환 객체에 `...DragSelectModule()` 로 스프레드.
  * 의존: this._sel, _isDragging, _dragCells, nurses, rdPhoneNurses, scheduleDays, prevSchedule, schedule, shiftEdit,
- *       dayKey(), isNurseInactive(), getPrevShift(), displayShift(), _normalizeShiftCode(), _pushUndo(), undo(), redo(),
+ *       dayKey(), isNurseInactive(), getPrevShift(), _getShift(), _normalizeShiftCode(), _pushUndo(), undo(), redo(),
  *       _checkViolations(), checkScheduleViolations(), openPrevEdit(), openShiftEdit(), rdPlacePopup(), toast()
  * ─────────────────────────────────────────────────────────────────────────── */
 window.DragSelectModule = function() {
@@ -35,7 +35,6 @@ window.DragSelectModule = function() {
     },
     _setSel(tab, r0, c0, r1 = r0, c1 = c0) {
       this._sel = { tab, r0, c0, r1, c1 };
-      if (tab === 'preinput') this._focusedCell = { nIdx: r1, dIdx: c1 };   // 가져오기 창의 '커서에서 붙이기'가 쓴다
     },
     focusCell(nIdx, dIdx) { if (!this._isDragging) this._setSel('preinput', nIdx, dIdx); },
     isFocused(nIdx, dIdx) { const s = this._sel; return !!s && s.tab === 'preinput' && s.r1 === nIdx && s.c1 === dIdx; },
@@ -58,13 +57,11 @@ window.DragSelectModule = function() {
       if (e.shiftKey && this._sel && this._sel.tab === tab) this._sel = { ...this._sel, c0: 0, c1: last, r1: r };
       else this._setSel(tab, r, 0, r, last);
       this._isDragging = true; this._dragRows = true; this._dragMoved = false;
-      e.preventDefault();                     // 이름 글자가 끌려 선택되지 않게
     },
     gridOver(tab, r, c) {
       const s = this._sel;
       if (!this._isDragging || this._dragRows || !s || s.tab !== tab || (s.r1 === r && s.c1 === c)) return;
       this._sel = { ...s, r1: r, c1: c }; this._dragMoved = true;
-      if (tab === 'preinput') this._focusedCell = { nIdx: r, dIdx: c };
     },
     gridOverRow(tab, r) {
       const s = this._sel;
@@ -143,7 +140,21 @@ window.DragSelectModule = function() {
       if (this.checkScheduleViolations) this.checkScheduleViolations();
     },
 
-    // ── 키보드 (전역 keydown 이 팝업·입력 칸이 없을 때 넘긴다) ──
+    // 다른 표가 들어오면(병동 바꾸기·저장본 불러오기·달 바꾸기) 근무표 되돌리기와 고른 칸을 비운다 —
+    // 남겨 두면 Ctrl+Z 가 앞 병동·앞 표를 통째로 되살렸고, 고른 칸 번호는 다른 사람·날을 가리켰다 (리뷰 2026-10-19)
+    _resetGridHistory() { this._schedUndo = []; this._schedRedo = []; this._sel = null; },
+    // 표가 키·복사·붙이기를 받는 때 — 고른 칸이 이 탭에 있고, 팝업·창이 닫혀 있고, 포커스가 입력 칸·단추에 없을 때.
+    // (단추에서 Enter 가 칸 팝업을, 열린 창 뒤에서 D·Del 이 표를 바꿨다 — 리뷰 2026-10-19)
+    _gridKeysOn() {
+      const tab = this.activeTab;
+      if ((tab !== 'preinput' && tab !== 'schedule') || !this._sel || this._sel.tab !== tab) return false;
+      if (this.shiftEdit?.open || this.noteEdit?.open || this.juhuOptionModal?.open || this.pastePrev?.open) return false;
+      const ae = document.activeElement;
+      if (ae && ae !== document.body && ae.closest?.('input,textarea,select,button,a[href],summary,[contenteditable="true"],[role=button],[role=menuitem],[role=tab]')) return false;
+      return ![...document.querySelectorAll('[aria-modal="true"]')].some(el => el.getClientRects().length);
+    },
+
+    // ── 키보드 (전역 keydown 이 _gridKeysOn 일 때 넘긴다) ──
     _keyCode(e) {
       const key = (e.key || '').toUpperCase();
       return CODE_KEYS[key] || HANGUL_KEYS[e.key] || ((this.shifts || []).find(s => s.code.toUpperCase() === key) || {}).code || null;
@@ -167,11 +178,10 @@ window.DragSelectModule = function() {
         const [dr, dc] = arrows[k];
         const r = clamp(s.r1 + dr, 0, rows.length - 1), c = clamp(s.c1 + dc, 0, days.length - 1);
         if (e.shiftKey) this._sel = { ...s, r1: r, c1: c }; else this._setSel(tab, r, c);
-        if (tab === 'preinput') this._focusedCell = { nIdx: r, dIdx: c };
         this._scrollSelIntoView();
         e.preventDefault(); return true;
       }
-      if (k === 'Escape') { this._sel = null; if (tab === 'preinput') this._focusedCell = null; return true; }
+      if (k === 'Escape') { this._sel = null; return true; }
       if (k === 'Enter') {
         const q = this._selRect();
         if (this._selCount() > 1) this._openMultiEdit(q);
@@ -201,11 +211,9 @@ window.DragSelectModule = function() {
 
     // ── 엑셀과 칸 묶음 주고받기 (탭으로 칸, 줄바꿈으로 줄) ──
     _gridClipOk(e) {
-      const tab = this.activeTab, t = e && e.target;
-      if (!this._sel || this._sel.tab !== tab || (tab !== 'preinput' && tab !== 'schedule')) return false;
-      if (this.shiftEdit?.open || this.noteEdit?.open || this.juhuOptionModal?.open || this.pastePrev?.open) return false;
+      const t = e && e.target;
       if (t && (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable)) return false;
-      return true;
+      return this._gridKeysOn();
     },
     _parseTsv(text) {
       let t = String(text || '').replace(/\r\n?/g, '\n');
@@ -220,7 +228,8 @@ window.DragSelectModule = function() {
         const vals = [];
         for (let c = q.cA; c <= q.cB; c++) {
           const day = days[c];
-          const v = !day || this.isNurseInactive(nurse, day) ? '' : (q.tab === 'schedule' ? this.displayShift(nurse.id, day) : this.getPrevShift(nurse.id, day));
+          // 저장된 코드 그대로 — 화면값(displayShift)은 '차지 숨기기'면 DC·EC·NC 가 D·E·N 이라 다시 붙이면 차지가 사라졌다 (리뷰 2026-10-19)
+          const v = !day || this.isNurseInactive(nurse, day) ? '' : (q.tab === 'schedule' ? this._getShift(nurse.id, day) : this.getPrevShift(nurse.id, day));
           vals.push(v && v !== '__CLEAR__' ? v : '');
         }
         lines.push(vals.join('\t'));

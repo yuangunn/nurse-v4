@@ -35,7 +35,8 @@ function app() {
     },
     schedule:{}, extendedSchedule:{},
     generating:false, continuing:false,
-    gridFit:(()=>{try{return localStorage.getItem('ns_grid_fit')==='1'}catch(e){return false}})(),   // 칸 좁게 — 한 달을 한 화면에 (더보기) generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,
+    gridFit:(()=>{try{return localStorage.getItem('ns_grid_fit')==='1'}catch(e){return false}})(),   // 칸 좁게 — 한 달을 한 화면에 (더보기)
+    generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,
     generateTimer:null, sseSource:null, solverLogs:[], showLogPanel:false,
     solveProgress:{gap_percent:null,nodes:0,has_solution:false,is_running:false},
     stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, juhuBlockLock:true, unlimitedV:false, relaxedCells:{},
@@ -78,7 +79,6 @@ function app() {
     feas:null, _feasSeq:0, _feasTimer:null, // 실시간 생성 가능성 신호등 (/api/feasibility)
     _dragStart:null, _dragCells:[], _isDragging:false,
     _sel:null, _dragRows:false, _dragMoved:false, _rowSelHinted:false, _schedUndo:[], _schedRedo:[],   // 표 칸 선택 (drag-select.js)
-    _focusedCell:null, // {nIdx, dIdx}
     lockedCells:{}, // nurseId → {dateKey: true}
     cellNotes:{},   // nurseId → {dateKey: 'text'}
     showNotes:false, noteEdit:{open:false,nurseId:'',dk:'',text:''},
@@ -461,7 +461,7 @@ function app() {
           if(e.key==='?'&&!e.ctrlKey&&!e.metaKey&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){this.showShortcutHelp=!this.showShortcutHelp;e.preventDefault();return}
           const _isTyping=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||document.activeElement?.isContentEditable;
           const _gridTab=this.activeTab==='preinput'||this.activeTab==='schedule';
-          if(_gridTab&&this._sel&&this._sel.tab===this.activeTab&&!this.shiftEdit.open&&!this.noteEdit.open&&!this.juhuOptionModal.open&&!this.pastePrev?.open&&!_isTyping&&this.gridKey(e))return;
+          if(this._gridKeysOn()&&this.gridKey(e))return;
           if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&_gridTab&&!_isTyping&&!this.pastePrev?.open){
             if(this.activeTab==='preinput'){e.shiftKey?this.redo():this.undo()}else{e.shiftKey?this.schedRedo():this.schedUndo()}
             e.preventDefault()}
@@ -479,9 +479,9 @@ function app() {
       }
       this._setupHeaderCondense();
       this.$watch('gridFit',v=>{try{localStorage.setItem('ns_grid_fit',v?'1':'0')}catch(e){}});
-      // 달이 바뀌면 고른 칸 번호가 다른 날을 가리킨다 — 선택을 푼다 (그대로 두면 Ctrl+V 가 엉뚱한 날에 붙었다)
-      this.$watch('month',()=>{this._sel=null;this._focusedCell=null});
-      this.$watch('year',()=>{this._sel=null;this._focusedCell=null});
+      // 달이 바뀌면 고른 칸 번호가 다른 날을 가리킨다 — 선택·근무표 되돌리기를 비운다 (그대로 두면 Ctrl+V 가 엉뚱한 날에 붙었다)
+      this.$watch('month',()=>this._resetGridHistory());
+      this.$watch('year',()=>this._resetGridHistory());
       window.addEventListener('resize',()=>{if(this.gridFit)this.rdFitColumnsSoon()});
       window.__rdState=(screen,state)=>this.rdApplyState(screen,state);   // design/handoff/check 검증용 상태 진입
     },

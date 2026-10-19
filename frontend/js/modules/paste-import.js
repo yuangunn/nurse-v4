@@ -441,7 +441,8 @@ window.PasteImportModule = function() {
         hasNameCol:this.pastePrev.hasNameCol,
         hasDateRow:this.pastePrev.hasDateRow,
         target:this.pastePrev.target,
-        focusedCell:this._focusedCell,
+        // '커서에서 붙이기'는 표에서 고른 범위의 왼쪽 위부터 (표에 바로 Ctrl+V 와 같다)
+        focusedCell:(q=>q&&q.tab==='preinput'?{nIdx:q.rA,dIdx:q.cA}:null)(this._selRect?.()),
         nameMap:this.pastePrev.nameMap,
       });
       if(this.pastePrev.mode==='auto'){
