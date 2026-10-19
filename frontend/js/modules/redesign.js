@@ -64,7 +64,7 @@ window.RedesignModule = function() {
     // 셀 팝업이 열린 동안 키보드 입력 — 팝업 힌트('D E N V O 로 바로 입력 · Del 지우기')가 약속하는 동작.
     // 전역 keydown 은 팝업이 열리면 격자 입력을 건너뛰므로 여기서 같은 표를 쓴다 (단일·다중 선택 공용).
     rdPopupKey(e){
-      const se=this.shiftEdit; if(!se.open||se.mode==='schedule') return;
+      const se=this.shiftEdit; if(!se.open||se.mode==='schedule') return;   // 여러 칸(prev_multi·sched_multi)은 받는다
       const t=document.activeElement; if(t&&(['INPUT','TEXTAREA','SELECT'].includes(t.tagName)||t.isContentEditable)) return;
       if(e.ctrlKey||e.metaKey||e.altKey) return;
       const apply=code=>{ e.preventDefault(); this.applyShiftEditWithUndo(code); };
@@ -354,7 +354,7 @@ window.RedesignModule = function() {
       return {work:ord(work,WORK_ORDER), rest:ord(rest,REST_ORDER), flex};
     },
     get rdPopCurrent(){
-      const n=this.shiftEdit.nurse, d=this.shiftEdit.day; if(!n||!d||this.shiftEdit.mode==='prev_multi') return '';
+      const n=this.shiftEdit.nurse, d=this.shiftEdit.day; if(!n||!d||this.shiftEdit.mode==='prev_multi'||this.shiftEdit.mode==='sched_multi') return '';
       return this.shiftEdit.mode==='prev' ? this.getPrevShift(n.id, d) : (this._getShift(n.id, d)||'');
     },
     rdPlacePopup(){
@@ -366,7 +366,12 @@ window.RedesignModule = function() {
         // 팝업은 position:fixed — 칸의 뷰포트 좌표 기준 오른쪽에, 안 들어가면 왼쪽에, 아래가 모자라면 위로 올린다
         // 높이는 실제 팝업에서 잰다 — 사전입력 팝업은 원티드 줄이 더 있어 근무표 팝업보다 길다
         const pop=document.querySelector('[data-rd=cell-popup]');
-        const r=el.getBoundingClientRect(), W=372, H=Math.min(Math.max(pop?.offsetHeight||0, 470), window.innerHeight-16);
+        let r=el.getBoundingClientRect();
+        if(se.anchorEnd){   // 여러 칸 — 고른 범위 전체를 피한다
+          const e2=[...document.querySelectorAll(`[data-cell="${se.anchorEnd.nid}|${se.anchorEnd.dk}"]`)].find(x=>x.offsetParent);
+          if(e2){ const b=e2.getBoundingClientRect(); r={left:Math.min(r.left,b.left), right:Math.max(r.right,b.right), top:Math.min(r.top,b.top), bottom:Math.max(r.bottom,b.bottom)}; }
+        }
+        const W=372, H=Math.min(Math.max(pop?.offsetHeight||0, 470), window.innerHeight-16);
         let left=r.right+8, top=r.top-8;
         if(left+W>window.innerWidth-8) left=r.left-W-8;
         if(left<8) left=8;
@@ -384,7 +389,33 @@ window.RedesignModule = function() {
       if(over>0) el.style.left=`${-Math.round(Math.min(over, Math.max(0, r.left-M)))}px`;
       el.style.maxHeight=`${Math.max(240, Math.floor(window.innerHeight-r.top-M))}px`;
     },
-    rdPopPick(code){ if(this.shiftEdit.mode==='prev_multi') this.applyMultiShiftEdit(code); else this.applyShiftEditWithUndo(code); },
+    // ── 표 가독성 (2026-10-19) ──
+    // 그룹(A·B·C)이 바뀌는 줄 — 굵은 가로선으로 묶음을 나눈다
+    rdGroupStart(list, i){ return i>0 && (list[i-1]?.group||'')!==(list[i]?.group||''); },
+    // 마우스가 있는 칸의 날짜 머리를 표시 — 표가 넓어 위 날짜를 찾기 어려웠다. 움직일 때마다 표를 다시 그리지 않게 Alpine 상태 대신 DOM 클래스
+    rdHoverCol(e, leave){
+      const tbl=e?.currentTarget?.closest('table'); if(!tbl) return;
+      const td=leave?null:e.target.closest?.('td[data-cell]'); const dk=td?td.dataset.cell.split('|')[1]:'';
+      if(tbl.dataset.hoverDk===dk) return;
+      tbl.querySelectorAll('th.rt-day.is-hover').forEach(th=>th.classList.remove('is-hover'));
+      if(dk) tbl.querySelector(`th.rt-day[data-dk="${dk}"]`)?.classList.add('is-hover');
+      tbl.dataset.hoverDk=dk;
+    },
+    // 칸 좁게 — 앞뒤 주까지 한 달(42칸)을 옆으로 넘기지 않고 한 화면에. 노트북 폭(1680)에서 34칸만 보였다 (2026-10-19)
+    // 칸 너비 = (표 너비 − 이름 칸 − 합계 칸) / 날 수, 28~44px. 꺼지면 토큰 값(44px)으로
+    rdFitColumnsSoon(){ clearTimeout(this._fitTimer); this._fitTimer=setTimeout(()=>this.rdFitColumns(), 30); },
+    rdFitColumns(){
+      for(const wrap of document.querySelectorAll('.rtable-wrap')){
+        const tbl=wrap.querySelector(':scope > .rtable');
+        if(!this.gridFit||!tbl){ wrap.style.removeProperty('--col-w'); continue; }
+        if(!wrap.clientWidth) continue;   // 숨은 탭 — 보일 때 다시 잰다
+        const name=tbl.querySelector('.rt-name-h')?.offsetWidth||160;
+        const sums=[...tbl.querySelectorAll('.rt-sum-h')].reduce((a,th)=>a+(th.offsetParent?th.offsetWidth:0),0);
+        const days=(this.scheduleDays||[]).length||1;
+        wrap.style.setProperty('--col-w', Math.max(28, Math.min(44, Math.floor((wrap.clientWidth-name-sums-2)/days)))+'px');
+      }
+    },
+    rdPopPick(code){ this.applyShiftEditWithUndo(code); },   // 여러 칸이면 applyMultiShiftEdit 로
     rdCellTipPre(nurse, day){
       const inact=this.isNurseInactive(nurse, day); if(inact) return inact==='before' ? '전입 전 — 배정하지 않습니다' : '전출 후 — 배정하지 않습니다';
       const code=this.getPrevShift(nurse.id, day); const m=day.getMonth()+1, d=day.getDate();

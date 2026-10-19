@@ -366,17 +366,30 @@ window.MiscFeaturesModule = function() {
     },
 
     // ═══ 간호사 순서 드래그 정렬 ═════════════════════════
+    // 순서 칸을 끌어 놓기 — 끈 사람이 골라져 있으면 고른 사람 모두를 지금 순서대로 함께 옮긴다.
+    // 아래로 끌면 놓은 줄 뒤에, 위로 끌면 앞에 (한 명일 때와 같다).
     _dragNurseIdx:null,
+    _dropNurseIdx:null,
     onNurseDragStart(idx){this._dragNurseIdx=idx},
-    onNurseDragOver(idx,event){event.preventDefault()},
+    onNurseDragOver(idx,event){event.preventDefault();if(this._dragNurseIdx!==null)this._dropNurseIdx=idx},
+    onNurseDragEnd(){this._dragNurseIdx=null;this._dropNurseIdx=null},
+    rdDropCls(idx){
+      const f=this._dragNurseIdx;
+      return f===null||this._dropNurseIdx!==idx||f===idx?'':f<idx?'drop-after':'drop-before';
+    },
     onNurseDrop(idx){
-      if(this._dragNurseIdx===null||this._dragNurseIdx===idx)return;
-      const moved=this.nurses.splice(this._dragNurseIdx,1)[0];
-      this.nurses.splice(idx,0,moved);
-      this._dragNurseIdx=null;
+      const from=this._dragNurseIdx;
+      this.onNurseDragEnd();
+      if(from===null||from===idx)return;
+      const sel=this.selectedNurseMap,dragged=this.nurses[from],target=this.nurses[idx];
+      const group=sel[dragged.id]?this.nurses.filter(n=>sel[n.id]):[dragged];
+      if(group.includes(target))return;
+      const rest=this.nurses.filter(n=>!group.includes(n));
+      rest.splice(rest.indexOf(target)+(from<idx?1:0),0,...group);
+      this.nurses.splice(0,this.nurses.length,...rest);
       // 서버에 순서 저장
       this.api('POST','/api/nurses/reorder',{order:this.nurses.map(n=>n.id)}).catch(()=>{});
-      this.toast('간호사 순서가 변경되었습니다','info');
+      this.toast(group.length>1?`${group.length}명 순서를 함께 옮겼어요`:'간호사 순서가 변경되었습니다','info');
     },
 
     // ═══ 8. 공정성 대시보드 (간이 버전) ══════════════════

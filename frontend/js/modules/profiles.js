@@ -76,6 +76,7 @@ window.ProfilesModule = function() {
         this.lockedCells={};this.cellNotes={};this.holidays=[];
         this.prevDayReqs={};this.prevMonthNights={};this.relaxedCells={};
         this.solverLogs=[];this._undoStack=[];this._redoStack=[];
+        this._resetGridHistory();this._originalSchedule=null;   // 근무표 되돌리기·고른 칸·고친 칸 기준도 (앞 병동 표가 되살아났다)
         await this._initApp();
       }catch(e){this.profileError=e.message||'서버 오류'}
     },

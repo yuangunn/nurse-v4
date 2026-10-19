@@ -175,19 +175,28 @@ body.rd .rhh-row .rhh-name { flex: 1; min-width: 0; max-width: 360px; }
 body.rd .rroster td.name input, body.rd body.rd .rroster td.grp input { height: 40px; border: 0; background: transparent; font: inherit; font-size: var(--fs-body); font-weight: var(--fw-label); color: var(--ink); padding: 0 6px; border-radius: 8px; box-shadow: none; width: 100%; min-width: 4ch; }
 body.rd .rroster td.grp input { width: 4em; font-weight: var(--fw-body); }
 .rroster td.name input:focus, .rroster td.grp input:focus { background: var(--card-warm); outline: 2px solid var(--focus); }
-.rroster .drag { color: var(--rule-strong); font-size: var(--fs-min); margin-right: 4px; }
-.rroster .shift-chip { height: 32px; min-width: 34px; padding: 0 8px; border: 0; border-radius: 7px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-strong); cursor: pointer; }
-.rroster .shift-chip.off { background: var(--card); color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule); opacity: 0.85; }
+.rroster .drag { color: var(--ink-2); font-size: var(--fs-min); margin-right: 4px; }
+.rroster .drag svg { vertical-align: -2px; }
+.rroster .shift-chip, .rbulk .shift-chip { height: 32px; min-width: 34px; padding: 0 8px; border: 0; border-radius: 7px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-strong); cursor: pointer; }
+.rroster .shift-chip.off, .rbulk .shift-chip.off { background: var(--card); color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule); opacity: 0.85; }
 .rroster .chips { display: flex; gap: 4px; }
 .rroster .nk { height: 32px; padding: 0 10px; border: 0; border-radius: 8px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); cursor: pointer; background: var(--card); color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .rroster .nk.on { background: var(--warn-bg); color: var(--warn); box-shadow: none; }
 .rroster .nk.other { color: var(--ink-2); background: var(--warn-bg); }
 .rroster .gender { height: 36px; min-width: 40px; border: 0; border-radius: 8px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); cursor: pointer; background: var(--paper); color: var(--ink); }
 .rroster .note { font-size: var(--fs-cell); color: var(--ink-2); }
-.rroster .rbtn-edit { height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--ink); }
+.rroster .rbtn-edit { white-space: nowrap; height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--ink); }
 .rroster .rbtn-edit svg { width: 14px; height: 14px; }
+/* 체크 칸은 누른 채 끌어 여러 명 고르기, 순서 칸은 끌어 옮기기 (끈 사람이 골라져 있으면 고른 사람 모두) */
+.rroster td.pick { text-align: center; cursor: pointer; }
+.rroster td.order { text-align: center; color: var(--ink-2); cursor: grab; white-space: nowrap; }
+.rroster tr.drop-before td { box-shadow: inset 0 3px 0 var(--focus); }
+.rroster tr.drop-after td { box-shadow: inset 0 -3px 0 var(--focus); }
+/* 일괄 바의 근무 칩 — 바 배경이 D 색이라 테두리로 구분, 일부만 켜진 근무는 점선 */
+.rbulk .shift-chip { box-shadow: inset 0 0 0 1.5px var(--rule-strong); }
+.rbulk .shift-chip.some { outline: 2px dashed currentColor; outline-offset: -5px; }
 .rroster input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--ink); cursor: pointer; }
-.rbulk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-radius: 12px; background: var(--sh-D-bg); font-size: var(--fs-sub); }
+.rbulk { position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-radius: 12px 12px 0 0; background: var(--sh-D-bg); box-shadow: 0 -6px 16px rgba(15, 17, 21, 0.12); font-size: var(--fs-sub); }
 .rbulk .rbtn { height: 40px; }
 .rbulk input { height: 40px; width: 6em; }
 
@@ -260,15 +269,33 @@ body.rd .rnum input { width: 52px; height: var(--target); border: 0; background:
 .rpaste-kinds { display: flex; gap: 8px; font-size: var(--fs-sub); font-weight: var(--fw-body); align-items: center; }
 .rpaste-kinds label { padding: 6px 12px; border-radius: 999px; background: var(--paper); color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; height: 40px; }
 .rpaste-kinds label input { position: absolute; opacity: 0; width: 0; height: 0; }
-.rpaste-kinds label.on { background: var(--ink); color: #fff; }
+.rpaste-kinds label.on { background: var(--ink); color: var(--card); }
 .rpaste-kinds .file { margin-left: auto; }
 body.rd textarea.rpaste-box, .rpaste-box { border-radius: 12px; background: var(--card-warm); box-shadow: inset 0 0 0 1.5px var(--rule-strong); padding: 14px 16px; min-height: 150px; font-size: var(--fs-cell); font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--ink); line-height: 1.7; width: 100%; resize: vertical; border: 0; }
 .rpaste-box:focus { outline: 3px solid var(--focus); outline-offset: 2px; }
 .rpaste-opts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--fs-sub); color: var(--ink-2); }
 .rpaste-opts .rcheck { height: 40px; }
-.rpaste-details { max-height: 32vh; overflow: auto; font-size: var(--fs-sub); }
-.rpaste-details table { font-size: var(--fs-sub); }
-.rpaste-details .pill { font-size: var(--fs-min); }
+/* 가져오기 — 이름 맞추기 · 근무 표기 (고르면 다시 맞춘다) */
+.rpaste-fix { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; font-size: var(--fs-sub); }
+.rpaste-fix > b { width: 100%; font-weight: var(--fw-label); }
+.rpaste-map { display: inline-flex; align-items: center; gap: 8px; }
+.rpaste-map .raw { padding: 4px 10px; border-radius: 8px; background: var(--paper); font-weight: var(--fw-label); }
+.rpaste-map .raw.warn { background: var(--warn-bg); color: var(--warn); }
+.rpaste-map .code { padding: 4px 10px; border-radius: 8px; }
+body.rd .rpaste-map select { height: 40px; font-size: var(--fs-sub); }
+/* 가져오기 미리보기 — 사람 × 날짜 칸. 바뀌는 칸은 근무 색, 이미 같은 칸은 흐리게, 비우는 칸은 줄 긋기, 모르는 표기는 노랗게 */
+.rpaste-scroll { max-height: 42vh; overflow: auto; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--rule); }
+.rpaste-preview table { border-collapse: separate; border-spacing: 0; font-size: var(--fs-min); }
+.rpaste-preview th, .rpaste-preview td { height: 30px; min-width: 30px; padding: 0 2px; text-align: center; border-bottom: 1px solid var(--rule-soft); white-space: nowrap; font-weight: var(--fw-strong); }
+.rpaste-preview thead th { position: sticky; top: 0; z-index: 1; background: var(--card); color: var(--ink-2); font-weight: var(--fw-label); }
+.rpaste-preview .nm { position: sticky; left: 0; z-index: 1; background: var(--card); text-align: left; padding: 0 10px; font-size: var(--fs-sub); font-weight: var(--fw-label); }
+.rpaste-preview thead th.nm { z-index: 2; }
+.rpaste-preview .st-same { opacity: 0.45; }
+.rpaste-preview .st-clear { color: var(--ink-2); text-decoration: line-through; }
+.rpaste-preview .st-unknown { background: var(--warn-bg); color: var(--warn); box-shadow: inset 0 0 0 1.5px var(--warn); }
+.rpaste-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: var(--fs-min); color: var(--ink-2); }
+.rpaste-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.rpaste-legend i { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 22px; border-radius: 5px; font-style: normal; font-weight: var(--fw-strong); }
 .rmodal .legacy { font-size: var(--fs-sub); }
 
 /* 인쇄 미리보기 */
@@ -325,7 +352,7 @@ body.rd textarea.rpaste-box, .rpaste-box { border-radius: 12px; background: var(
 .rphone-head .date span { font-size: var(--fs-h2); font-weight: var(--fw-label); color: var(--down-deep); }
 .rphone-head .meta { font-size: var(--fs-cell); font-weight: var(--fw-body); color: var(--ink-2); margin-top: 4px; }
 .rphone-body { flex: 1; overflow: auto; padding: 18px 22px 100px; display: flex; flex-direction: column; gap: 22px; }
-.rmy { background: var(--ink); color: #fff; border-radius: 16px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.rmy { background: var(--ink-surface); color: #fff; border-radius: 16px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
 .rmy .lbl { font-size: var(--fs-min); font-weight: var(--fw-label); color: #DCE0E6; display: flex; align-items: center; gap: 8px; }
 body.rd .rmy .lbl .rbtn-primary { margin-left: auto; height: 40px; padding: 0 14px; border-radius: 999px; background: #fff; color: var(--ink); font-size: var(--fs-min); }
 body.rd .rmy .lbl .rbtn-primary:hover { background: #EDEFF3; }
@@ -350,7 +377,7 @@ body.rd .rmy .pick button.on { background: #fff; color: var(--ink); }
 .rduty .empty { font-size: var(--fs-cell); color: var(--ink-2); padding: 4px 0; }
 .rphone-filters { display: flex; gap: 8px; padding: 8px 12px; overflow-x: auto; }
 .rphone-filters button { height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); white-space: nowrap; cursor: pointer; color: var(--ink); }
-.rphone-filters button.on { background: var(--ink); color: #fff; box-shadow: none; }
+.rphone-filters button.on { background: var(--ink); color: var(--card); box-shadow: none; }
 .rbottom { display: none; position: fixed; bottom: 0; left: 0; right: 0; height: 78px; background: var(--card); border-top: 1px solid var(--rule); z-index: 50; grid-template-columns: repeat(4, 1fr); padding: 6px 8px 14px; }
 @media (max-width: 767px) { .rbottom { display: grid; } }
 .rbottom button { border: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font: inherit; font-size: var(--fs-min); font-weight: var(--fw-body); color: var(--ink-2); border-radius: 10px; position: relative; cursor: pointer; }
@@ -427,15 +454,15 @@ body.rd input[type="date"].rinput { font-size: var(--fs-sub); height: 44px; min-
 body.rd .rmodal .legacy input[type="number"], body.rd .rmodal .legacy input[type="text"] { height: 40px; }
 body.rd .rmodal .legacy .card-sm { border-radius: 10px; box-shadow: inset 0 0 0 1px var(--rule); padding: 10px 12px; }
 body.rd .rmodal .legacy .text-xs, body.rd .rmodal .legacy .text-sm { font-size: var(--fs-sub) !important; }
-.rpaste-details .card-sm { border-radius: 10px; box-shadow: inset 0 0 0 1px var(--rule); padding: 10px 12px; margin-bottom: 8px; }
 .rstatus .relaxed-note .rbtn-sm { margin-left: 6px; }
 .rdrawer-body .rrow .rbtn-sm { height: 40px; white-space: nowrap; }
 body.rd .rhdr-ver { font-size: var(--fs-min); }
 .trainee-row .rt-name { border-left: 3px solid var(--sh-생-fg); }
-.trainee-row .rt-cell span:first-child { font-style: italic; opacity: 0.75; }
+.trainee-row .rt-cell span:first-child { font-style: italic; }
+.rtable .trainee-row td { opacity: 1; }   /* 옛 표의 0.6 이 겹쳐 신규 줄이 0.45 로 흐렸다 — 기울임·이름 칸 분홍 선으로 구분 */
 
-/* ── 검사(spec.json) 자기모순 보정 — 활성 단계 부제는 어두운 칩 위 글자지만 금지색 #D4D9E0 대신 #DCE0E6 (눈으로는 같다) ── */
-body.rd .rstep.is-active .rstep-sub { color: #DCE0E6; }
+/* ── 검사(spec.json) 자기모순 보정 — 활성 단계 부제는 칩 위 글자라 금지색(#D4D9E0) 대신 칩 반대색(--card)을 살짝 흐리게 ── */
+body.rd .rstep.is-active .rstep-sub { color: var(--card); opacity: 0.85; }   /* 고정 #DCE0E6 은 다크(밝은 바탕)에서 사라졌다 */
 
 /* ── 1366×768 병동 모니터: 체크 라벨이 두 줄로 접히지 않게 ── */
 body.rd .rcheck { white-space: nowrap; }
@@ -447,5 +474,5 @@ body.rd .rphone-ym button { width: 48px; height: 48px; border: 0; border-radius:
 .rphone-ym b { font-size: 22px; font-weight: var(--fw-strong); letter-spacing: -0.02em; }
 .rphone-filters { display: flex; gap: 8px; padding: 4px 12px 10px; overflow-x: auto; }
 body.rd .rphone-filters button { flex: none; height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); color: var(--ink); font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); }
-body.rd .rphone-filters button.on { background: var(--ink); color: #fff; box-shadow: none; }
+body.rd .rphone-filters button.on { background: var(--ink); color: var(--card); box-shadow: none; }
 body.rd .rphone-filters button[disabled] { color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule); }

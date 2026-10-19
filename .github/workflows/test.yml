@@ -114,6 +114,9 @@ jobs:
           node scripts/test_manager_check.mjs
           node scripts/test_trainee_days.mjs
           node scripts/test_continue_search.mjs
+          node scripts/test_grid_select.mjs
+          node scripts/test_roster_bulk.mjs
+          node scripts/test_paste_fix.mjs
           node scripts/test_juhu_rotation.mjs
           node scripts/verify_holidays.mjs
 

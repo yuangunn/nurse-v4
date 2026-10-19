@@ -30,13 +30,14 @@ window.PasteImportModule = function() {
       anchorM:null,
       anchorTouched:false,
       saveName:'',
+      nameMap:{},       // 명부에서 못 찾은 이름 → 사용자가 고른 간호사 id
     },
     openPastePrev(target){
       this.pastePrev={
         open:true,rawText:'',grid:[],mode:'auto',target:target||'prev',
         hasNameCol:true,hasDateRow:true,matches:null,diff:null,
         sheets:null,sheetIdx:0,fileName:'',batch:null,
-        anchorY:this.year,anchorM:this.month,anchorTouched:false,saveName:'',
+        anchorY:this.year,anchorM:this.month,anchorTouched:false,saveName:'',nameMap:{},
       };
       this.$nextTick&&this.$nextTick(()=>{
         const ta=document.getElementById('paste-prev-textarea');
@@ -98,7 +99,73 @@ window.PasteImportModule = function() {
         const cand=this.shifts.find(sh=>sh.code.toUpperCase()===raw.toUpperCase());
         if(cand)return cand.code;
       }
+      // 가져오기 창에서 사용자가 읽는 법을 정해 둔 표기 (근무 정의에 있는 코드만)
+      const ua=this.pasteAlias?.[raw.toLowerCase()];
+      if(ua&&this.shifts.some(sh=>sh.code===ua))return ua;
       return undefined;  // 인식 불가
+    },
+
+    // 모르는 근무 표기를 어떻게 읽을지 고르면 기억한다 — 이 창과 표에 바로 붙이기(Ctrl+V) 모두에 쓴다.
+    // ponytail: 이 컴퓨터(localStorage)에만 — 병동(프로필)마다 표기가 갈리면 프로필 설정으로 옮긴다
+    pasteAlias:(()=>{try{return JSON.parse(localStorage.getItem('ns_paste_alias'))||{}}catch(e){return{}}})(),
+    setPasteAlias(raw,code){
+      const m={...this.pasteAlias},k=String(raw).trim().toLowerCase();
+      if(code)m[k]=code;else delete m[k];
+      this.pasteAlias=m;
+      try{localStorage.setItem('ns_paste_alias',JSON.stringify(m))}catch(e){}
+      this._matchPasteGrid();
+    },
+    get pasteAliasUsed(){
+      // 이번 표에 쓰인 기억한 표기 — 잊기 단추와 함께 보여 준다
+      const seen=new Set();
+      for(const row of this.pastePrev.grid)for(const c of row)seen.add(String(c).trim().toLowerCase());
+      return Object.entries(this.pasteAlias).filter(([k])=>seen.has(k)).map(([raw,code])=>({raw,code}));
+    },
+
+    // 붙인 이름 ↔ 명부 이름 — 앞 '*'(게스트 데이터)와 띄어쓰기는 보지 않는다 ('박 민지' = '박민지')
+    _nameKey(s){return String(s||'').replace(/^\*+/,'').replace(/\s+/g,'')},
+    // 명부에서 못 찾은 이름은 누구인지 고를 수 있다. 고른 줄도 계속 보여 바꾸거나 풀 수 있게
+    get pasteNameRows(){
+      return(this.pastePrev.matches?.nameRow||[]).filter(x=>x.name&&!x.weekdayHeader&&(!x.matched||x.mapped));
+    },
+    pasteNameChoices(raw){
+      // 다른 줄이 이미 맞춘 사람은 빼고, 이름이 겹치는 사람을 먼저
+      const taken=new Set((this.pastePrev.matches?.nameRow||[]).filter(x=>x.matched&&x.name!==raw).map(x=>x.nurseId));
+      const k=this._nameKey(raw);
+      const near=n=>{const nk=this._nameKey(n.name);return!!(k&&nk&&(nk.includes(k)||k.includes(nk)))};
+      const free=this.nurses.filter(n=>!taken.has(n.id));
+      return[...free.filter(near),...free.filter(n=>!near(n))];
+    },
+    setPasteName(raw,nid){
+      const m={...this.pastePrev.nameMap};
+      if(nid)m[raw]=nid;else delete m[raw];
+      this.pastePrev.nameMap=m;
+      this._matchPasteGrid();
+    },
+
+    // 미리보기 — 긴 바뀜 목록 대신 사람 × 날짜 칸으로. 바뀌는 칸 · 이미 같은 칸 · 비우는 칸 · 모르는 표기
+    get pastePreview(){
+      const d=this.pastePrev.diff;if(!d)return null;
+      const prev=this.pastePrev.target==='prev',rows={},days=new Set();
+      const put=(it,v)=>{(rows[it.nid]=rows[it.nid]||{})[it.dk]=v;days.add(it.dk)};
+      for(const it of d.matched_all)put(it,{code:it.code,st:prev?'same':'set'});
+      if(prev){
+        for(const it of d.will_set)put(it,{code:it.newShift,old:it.oldShift,st:'set'});
+        for(const it of d.will_clear)put(it,{old:it.oldShift,st:'clear'});
+      }
+      for(const it of d.unknown_cells||[])put(it,{raw:it.raw,st:'unknown'});
+      const dks=[...days].sort();
+      return{
+        days:dks.map((dk,i)=>({dk,label:i&&dks[i-1].slice(0,7)===dk.slice(0,7)?String(+dk.slice(8)):`${+dk.slice(5,7)}/${+dk.slice(8)}`})),
+        rows:this.nurses.filter(n=>rows[n.id]).map(n=>({id:n.id,name:n.name,cells:rows[n.id]})),
+      };
+    },
+    pasteCellText(c){return!c?'':c.st==='clear'?c.old:c.st==='unknown'?c.raw:c.code},
+    pasteCellTip(name,dk,c){
+      if(!c)return`${name} · ${dk} — 빈칸 (그대로)`;
+      const what={set:this.pastePrev.target==='prev'?`${c.old||'빈칸'} → ${c.code}`:`${c.code} 넣음`,same:`${c.code} — 이미 같아 그대로`,
+        clear:`${c.old} → 비움`,unknown:`‘${c.raw}’ — 모르는 표기라 건너뜀`}[c.st];
+      return`${name} · ${dk} — ${what}`;
     },
 
     // ── 날짜 헤더 해석 (멀티월) ────────────────────────────────
@@ -206,8 +273,9 @@ window.PasteImportModule = function() {
       const anchorY=opts.anchorY;
       const anchorM=opts.anchorM;
       const days=this.scheduleDays;
-      const nurseByName={};
-      for(const n of this.nurses)nurseByName[(n.name||'').trim()]=n;
+      const nurseByName={},nurseById={};
+      for(const n of this.nurses){nurseByName[this._nameKey(n.name)]=n;nurseById[n.id]=n}
+      const nameMap=opts.nameMap||{};
 
       // 요일 행 감지 — 날짜 행 아래 둘째 행에 월/화/수…가 오는 시트 형식 지원.
       // 셀의 80% 이상이 요일 토큰이면 데이터 행이 아니라 헤더로 보고 무시한다.
@@ -253,9 +321,9 @@ window.PasteImportModule = function() {
               continue;
             }
             const raw=(grid[r][0]||'').trim();
-            const stripped=raw.replace(/^\*+/,'').trim();  // 게스트모드 데이터의 '*' 접두 제거
-            const n=nurseByName[raw]||nurseByName[stripped];
-            nameRow.push({r,name:raw,nurseId:n?.id||null,matched:!!n});
+            const mapped=nurseById[nameMap[raw]];
+            const n=mapped||(raw?nurseByName[this._nameKey(raw)]:null);
+            nameRow.push({r,name:raw,nurseId:n?.id||null,matched:!!n,mapped:!!mapped});
             if(n)nameMatches++;
           }
         }
@@ -283,6 +351,7 @@ window.PasteImportModule = function() {
       const willClear=[];
       const matchedAll=[]; // 인식된 모든 (간호사,날짜,코드) — 위시/저장탭 업로드용 (prev 비교 무관)
       const unrecognized=new Set();
+      const unknownCells=[];  // 모르는 표기 칸 (미리보기에 노랗게)
       const startC=best.useNameCol?1:0;
 
       // 날짜 헤더 없는 경우: 당월 1일부터 시작해서 데이터 매핑
@@ -308,7 +377,7 @@ window.PasteImportModule = function() {
               // 명시적으로 비우기
               if(oldShift)willClear.push({nid,name:nameInfo.name,dk:ci.dk,oldShift});
             }else if(code===undefined){
-              if(cell)unrecognized.add(cell);
+              if(cell){unrecognized.add(cell);unknownCells.push({nid,name:nameInfo.name,dk:ci.dk,raw:cell})}
             }else{
               matchedAll.push({nid,name:nameInfo.name,dk:ci.dk,code});
               if(code!==oldShift)willSet.push({nid,name:nameInfo.name,dk:ci.dk,oldShift,newShift:code});
@@ -331,7 +400,7 @@ window.PasteImportModule = function() {
             if(code===null){
               if(oldShift)willClear.push({nid:nurse.id,name:nurse.name,dk,oldShift});
             }else if(code===undefined){
-              if(cell)unrecognized.add(cell);
+              if(cell){unrecognized.add(cell);unknownCells.push({nid:nurse.id,name:nurse.name,dk,raw:cell})}
             }else{
               matchedAll.push({nid:nurse.id,name:nurse.name,dk,code});
               if(code!==oldShift)willSet.push({nid:nurse.id,name:nurse.name,dk,oldShift,newShift:code});
@@ -357,7 +426,7 @@ window.PasteImportModule = function() {
       }
       const months=Object.keys(monthCnt).sort().map(ym=>({ym,label:`${+ym.slice(0,4)}년 ${+ym.slice(5,7)}월`,count:monthCnt[ym]}));
 
-      const diff={will_set:willSet,will_clear:willClear,matched_all:matchedAll,unrecognized:[...unrecognized],unmatchedNames,unmatchedDates,months,outsideCycle};
+      const diff={will_set:willSet,will_clear:willClear,matched_all:matchedAll,unrecognized:[...unrecognized],unknown_cells:unknownCells,unmatchedNames,unmatchedDates,months,outsideCycle};
       return{best,diff,hasNameCol:best.useNameCol,hasDateRow:best.useDateRow};
     },
 
@@ -372,7 +441,9 @@ window.PasteImportModule = function() {
         hasNameCol:this.pastePrev.hasNameCol,
         hasDateRow:this.pastePrev.hasDateRow,
         target:this.pastePrev.target,
-        focusedCell:this._focusedCell,
+        // '커서에서 붙이기'는 표에서 고른 범위의 왼쪽 위부터 (표에 바로 Ctrl+V 와 같다)
+        focusedCell:(q=>q&&q.tab==='preinput'?{nIdx:q.rA,dIdx:q.cA}:null)(this._selRect?.()),
+        nameMap:this.pastePrev.nameMap,
       });
       if(this.pastePrev.mode==='auto'){
         this.pastePrev.hasNameCol=r.hasNameCol;

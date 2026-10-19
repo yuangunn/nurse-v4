@@ -267,46 +267,8 @@ window.GridInteractionsModule = function() {
     // onCellMouseDown/Over/Up, isDragSelected, applyMultiShiftEdit 는
     // modules/drag-select.js 로 이동.
 
-    // ── 키보드 네비게이션 ──────────────────────────────────
-    onGridKeyDown(event){
-      if(!this._focusedCell)return;
-      const{nIdx,dIdx}=this._focusedCell;
-      const days=this.scheduleDays;
-      let newN=nIdx,newD=dIdx;
-
-      if(event.key==='ArrowRight'){newD=Math.min(days.length-1,dIdx+1);event.preventDefault()}
-      else if(event.key==='ArrowLeft'){newD=Math.max(0,dIdx-1);event.preventDefault()}
-      else if(event.key==='ArrowDown'){newN=Math.min(this.nurses.length-1,nIdx+1);event.preventDefault()}
-      else if(event.key==='ArrowUp'){newN=Math.max(0,nIdx-1);event.preventDefault()}
-      else if(event.key==='Delete'||event.key==='Backspace'){
-        const nurse=this.nurses[nIdx];const dk=this.dayKey(days[dIdx]);
-        if(nurse&&this.prevSchedule[nurse.id]?.[dk]){this._pushUndo();delete this.prevSchedule[nurse.id][dk];this._checkViolations()}
-        event.preventDefault();return;
-      }
-      else if(event.key.toLowerCase()==='z'&&(event.ctrlKey||event.metaKey)){event.shiftKey?this.redo():this.undo();event.preventDefault();return}
-      else{
-        // 근무코드 직접 입력 (ㅂ=병가, ㅃ(Shift+ㅂ)=법정공휴일 — 객체 리터럴 중복 키로
-        // '병' 입력이 불가능하고 ㅂ가 '법'을 입력하던 버그 수정)
-        // 쌍자음 = Shift: ㄲ 경가 · ㅉ 조가 · ㅆ 산전 (redesign.js rdPopupKey 와 같은 표)
-        const key=event.key.toUpperCase();
-        const shiftMap={'D':'D','E':'E','N':'N','V':'V','O':'OF','W':'주'};
-        const hangulMap={'ㅈ':'주','ㅂ':'병','ㅃ':'법','ㅅ':'생','ㅌ':'특','ㄱ':'공','ㄲ':'경가','ㅉ':'조가','ㅆ':'산전'};
-        let code=shiftMap[key]||hangulMap[event.key];
-        if(!code){
-          const match=this.shifts.find(s=>s.code.toUpperCase()===key);
-          if(match)code=match.code;
-        }
-        if(code){
-          const nurse=this.nurses[nIdx];const dk=this.dayKey(days[dIdx]);
-          if(nurse){this._pushUndo();if(!this.prevSchedule[nurse.id])this.prevSchedule[nurse.id]={};this.prevSchedule[nurse.id][dk]=code;this._checkViolations()}
-          event.preventDefault();return;
-        }
-        return;
-      }
-      this._focusedCell={nIdx:newN,dIdx:newD};
-    },
-    focusCell(nIdx,dIdx){this._focusedCell={nIdx,dIdx}},
-    isFocused(nIdx,dIdx){return this._focusedCell?.nIdx===nIdx&&this._focusedCell?.dIdx===dIdx},
+    // ── 키보드 네비게이션 · 칸 선택 · 복사/붙여넣기 ─────────
+    // gridKey / focusCell / isFocused / gridCopy / gridPaste 는 modules/drag-select.js (사전입력·근무표 공용).
 
     // ── 셀 잠금 ────────────────────────────────────────────
     toggleLock(nurseId,day){
@@ -386,12 +348,12 @@ window.GridInteractionsModule = function() {
 
     // ── 사전입력 편집 래핑 (undo 지원) ────────────────────
     applyShiftEditWithUndo(shift){
-      this._pushUndo();
-      if(this.shiftEdit.mode==='prev_multi'){
-        this.applyMultiShiftEdit(shift);return;
+      if(this.shiftEdit.mode==='prev_multi'||this.shiftEdit.mode==='sched_multi'){
+        this.applyMultiShiftEdit(shift);return;     // 되돌리기는 _gridWrite 가 한 번
       }
+      if(this.shiftEdit.mode==='schedule'){this._schedPush();this.applyShiftEdit(shift);this.rdSaved=false;return}   // 근무표 되돌리기 스택 · 저장 버튼이 '저장'으로 돌아온다
+      this._pushUndo();
       this.applyShiftEdit(shift);
-      if(this.shiftEdit.mode==='schedule') this.rdSaved=false;   // 고친 칸은 아직 저장 전 — 저장 버튼이 '저장'으로 돌아온다
       this._checkViolations();
     },
 

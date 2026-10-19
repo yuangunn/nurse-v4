@@ -77,6 +77,25 @@ window.NurseManageModule = function() {
       else{const m={};for(const n of this.nurses)m[n.id]=true;this.selectedNurseMap=m}
     },
     clearNurseSelection(){this.selectedNurseMap={}},
+    // 체크 칸을 누른 채 끌면 지나간 줄을 모두 첫 줄과 같은 상태로 (켜며 끌면 켜고, 끄며 끌면 끈다).
+    // Shift+누르기 = 앞서 누른 줄부터 여기까지 켜기. 놓기는 app.js 의 mouseup.
+    _rosterPaint:null,
+    _rosterAnchor:null,
+    rosterSelDown(idx,e){
+      if(e.button!==0)return;
+      e.preventDefault();                              // 끄는 동안 글자가 잡히지 않게
+      const id=this.nurses[idx].id,a=this.nurses.findIndex(n=>n.id===this._rosterAnchor);
+      const range=e.shiftKey&&a>=0;
+      this._rosterPaint={from:range?a:idx,on:range||!this.selectedNurseMap[id],base:{...this.selectedNurseMap}};
+      if(!range)this._rosterAnchor=id;
+      this.rosterSelOver(idx);
+    },
+    rosterSelOver(idx){
+      const p=this._rosterPaint;if(!p)return;
+      const m={...p.base};
+      for(let i=Math.min(p.from,idx);i<=Math.max(p.from,idx);i++){const id=this.nurses[i].id;if(p.on)m[id]=true;else delete m[id]}
+      this.selectedNurseMap=m;
+    },
 
     async _saveNurseInline(nurse,patch){
       // 낙관적 갱신 + 서버 저장
@@ -161,6 +180,23 @@ window.NurseManageModule = function() {
       }
       this.toast(`${ids.length}명 ${this.month}월 야간전담 ${on?'설정':'해제'}`,'info');
       this.clearNurseSelection();
+    },
+    // 할 수 있는 근무 — 고른 사람이 모두 켜져 있으면 모두 끄고, 아니면 모두 켠다.
+    // 고른 상태는 그대로 둬 여러 칩을 이어 누를 수 있다.
+    bulkShiftState(s){
+      const ns=this.nurses.filter(n=>this.selectedNurseMap[n.id]);
+      const k=ns.filter(n=>(n.capable_shifts||[]).includes(s)).length;
+      return k===ns.length?'':k?'some':'off';
+    },
+    async bulkToggleShift(s){
+      const ns=this.nurses.filter(n=>this.selectedNurseMap[n.id]);
+      if(!ns.length)return;
+      const on=this.bulkShiftState(s)!=='';
+      for(const n of ns){
+        const cs=n.capable_shifts||[];
+        if(cs.includes(s)!==on)await this._saveNurseInline(n,{capable_shifts:on?[...cs,s]:cs.filter(x=>x!==s)});
+      }
+      this.toast(`${ns.length}명 ${s} ${on?'켬':'끔'}`,'info');
     },
     _bulkDeleteConfirm:false,
     _bulkDeleteTimer:null,

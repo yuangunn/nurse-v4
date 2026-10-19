@@ -184,8 +184,9 @@
         {
           "sel": "[data-rd=table] tfoot tr:first-of-type td:first-of-type",
           "textIncludes": "D 필요 인원",
-          "background": "#EEF3FE",
-          "color": "#1B4FC3",
+          "background": "#DCE6FB",
+          "color": "#1A47B5",
+          "$comment_2": "가독성 (2026-10-19, 사용자 \"근무표는 잘 안보여\"): 근무 배경 밝기에 층을 둔다 — 쉬는 날 흰 바탕, 낮·저녁 한 단계, 야간 가장 진하게 (redesign-tokens.css 주석). 글자 대비 4.8:1 이상.",
           "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
         },
         {
@@ -356,12 +357,14 @@
         },
         {
           "sel": "[data-rd=table] tbody td[data-shift=N]",
-          "background": "#EFEBFB",
-          "color": "#5B3FB0"
+          "background": "#DCD3F5",
+          "color": "#4A2E9F",
+          "$comment": "가독성 (2026-10-19, 사용자 \"근무표는 잘 안보여\"): 근무 배경 밝기에 층을 둔다 — 쉬는 날 흰 바탕, 낮·저녁 한 단계, 야간 가장 진하게 (redesign-tokens.css 주석). 글자 대비 4.8:1 이상."
         },
         {
           "sel": "[data-rd=table] tbody td.is-edited",
-          "outline": "2px solid #C7384A"
+          "outline": "2px solid #2563EB",
+          "$comment": "가독성 (2026-10-19): 손으로 고친 칸은 파랑 — 빨강 2px 는 규칙 위반(g-violation)과 같아 고친 칸인지 틀린 칸인지 구별되지 않았다."
         },
         {
           "sel": "[data-rd=table] tfoot tr:first-of-type td:first-of-type",

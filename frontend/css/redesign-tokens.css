@@ -70,16 +70,19 @@
   /* ── 모션 ── */
   --motion: 150ms;
 
-  /* ── 근무 코드 17종 (배경 / 글자) — 브리프 표 그대로 ── */
-  --sh-DC-bg:#E2ECFD; --sh-DC-fg:#1B4FC3;
-  --sh-D-bg: #EEF3FE; --sh-D-fg: #1B4FC3;
-  --sh-D1-bg:#F0F6FF; --sh-D1-fg:#2563EB;
-  --sh-EC-bg:#FCE3E5; --sh-EC-fg:#C7384A;
-  --sh-E-bg: #FEEFEF; --sh-E-fg: #C7384A;
-  --sh-중-bg: #FBF3E2; --sh-중-fg: #B7791F;
-  --sh-NC-bg:#E7E0F8; --sh-NC-fg:#5B3FB0;
-  --sh-N-bg: #EFEBFB; --sh-N-fg: #5B3FB0;
-  --sh-OF-bg:#F2F3F5; --sh-OF-fg:#6B7280;   /* 브리프 #8A93A1 → 대비 4.6:1 로 살짝 진하게 */
+  /* ── 근무 코드 17종 (배경 / 글자) ──
+     가독성 (2026-10-19, 사용자 "근무표는 잘 안보여"): 배경 밝기가 모두 95% 안팎이라 표가 하얗게 떠 근무를 색으로 훑을 수 없었다.
+     밝기에 층을 둔다 — 쉬는 날(OF)은 흰 바탕으로 물러나고, 낮·저녁은 한 단계, 야간이 가장 진하다(인쇄의 N 회색 채움과 같은 순서).
+     차지는 그보다 한 단계 더. 글자 대비는 모두 4.8:1 이상 (중 3.3 → 4.9, E 4.6 → 5.0, OF 4.4 → 4.8). */
+  --sh-DC-bg:#C8D8F8; --sh-DC-fg:#163D9C;
+  --sh-D-bg: #DCE6FB; --sh-D-fg: #1A47B5;
+  --sh-D1-bg:#E6EFFF; --sh-D1-fg:#1D4ED8;
+  --sh-EC-bg:#F6C8CF; --sh-EC-fg:#96202F;
+  --sh-E-bg: #FADCE0; --sh-E-fg: #B02A3E;
+  --sh-중-bg: #F7E9C9; --sh-중-fg: #8A5A10;
+  --sh-NC-bg:#CBBDEF; --sh-NC-fg:#3C2386;
+  --sh-N-bg: #DCD3F5; --sh-N-fg: #4A2E9F;
+  --sh-OF-bg:#FFFFFF; --sh-OF-fg:#6B7280;   /* 쉬는 날은 흰 바탕 — 근무가 먼저 보인다 */
   --sh-주-bg: #EDEFF3; --sh-주-fg: #4A5160;
   --sh-P1-bg:#E3F4F4; --sh-P1-fg:#2C7A7B;
   --sh-V-bg: #ECF7F0; --sh-V-fg: #1F8A5B;
@@ -99,7 +102,9 @@
   --sat-fg:#1B4FC3; --sat-bg:#EEF3FE;
   --sun-fg:#C7384A; --sun-bg:#FEEFEF;
   --hol-fg:#C7384A; --hol-bg:#FDEEE5;
-  --overflow-opacity: 0.45;   /* 전월 말·익월 초 열 */
+  --overflow-opacity: 0.8;    /* 전월 말·익월 초 열 — 0.45 는 글자 대비 2.1:1 이라 읽히지 않았다 (지난달 기록·다음 달 칸도 읽어야 한다) */
+  --row-hover: #EEF2F8;       /* 마우스를 올린 줄의 이름 칸 */
+  --ink-surface: #0F1115;     /* 알림·말풍선·내 근무 카드처럼 늘 어두운 바탕 — --ink 는 다크에서 밝아져 흰 글자가 사라졌다 */
 }
 
 
@@ -134,4 +139,6 @@ html.dark {
   --sh-법-bg:#2C1D10; --sh-법-fg:#F0A070;
   --cy1-bg:#16203A; --cy1-fg:#8AA8FF; --cy2-bg:#10261C; --cy2-fg:#4FD08A; --cy3-bg:#1E1838; --cy3-fg:#B79CFF; --cy4-bg:#2C2310; --cy4-fg:#E0A93B;
   --sat-fg:#8AA8FF; --sat-bg:#16203A; --sun-fg:#FF8A92; --sun-bg:#2C141A; --hol-fg:#F0A070; --hol-bg:#2C1D10;
+  --row-hover:#252C38;
+  --ink-surface:#2A303C;
 }

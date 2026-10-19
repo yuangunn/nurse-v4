@@ -38,7 +38,7 @@
 - **모바일 대응** — 휴대폰에선 '오늘 근무 현황'(시간대별 배정/요구, 듀티별 근무자) 중심 화면과 하단 탭으로 조회에 최적화됩니다.
 - **다크 모드 · 키보드 입력** — 방향키로 셀을 옮기고 `D E N V O` 키로 근무를 직접 입력해 사전입력이 빠릅니다.
 - **셀 잠금 + 메모** — 특정 셀을 고정(완화 시에도 유지)하거나 메모를 남길 수 있어, 보수교육·원내교육 같은 확정 일정을 안전하게 표시합니다.
-- **드래그 다중 선택 + 40단계 실행 취소** — 여러 셀을 한 번에 지정하고 `Ctrl+Z` / `Ctrl+Shift+Z`로 되돌리거나 다시 실행합니다.
+- **엑셀처럼 칸 고르기 + 40단계 실행 취소** — 사전입력·근무표에서 끌어서 여러 칸(이름 칸을 끌면 여러 사람 줄)을 고르고 근무 키·`Ctrl+C`/`Ctrl+V`로 한 번에 채웁니다. `Ctrl+Z` / `Ctrl+Shift+Z`로 되돌리거나 다시 실행합니다 (근무표는 따로).
 - **도움말 · 접근성** — 사용법 도움말, 엑셀 붙여넣기 형식 안내, 스크린리더용 ARIA 라벨을 제공합니다.
 
 ### 🧮 자동 근무표 생성
@@ -51,7 +51,7 @@
 - **인원 분석 + 주휴 추천** — 날짜별 인원 과부족을 히트맵으로 보여주고, 최적의 주휴 배분을 자동 계산해 사전입력에 한 번에 적용합니다.
 
 ### 📥 데이터 관리
-- **엑셀 표 붙여넣기** — 기존 엑셀 근무표의 표 영역을 그대로 붙여넣으면 이름·날짜를 자동으로 인식해 사전입력에 채웁니다.
+- **엑셀 표 붙여넣기** — 기존 엑셀 근무표의 표 영역을 그대로 붙여넣으면 이름·날짜를 자동으로 인식해 사전입력에 채웁니다. 사람 × 날짜 칸으로 미리 보고, 못 찾은 이름은 명부의 누구인지 고르고, 모르는 근무 표기는 읽는 법을 기억합니다.
 - **한국 공휴일 자동 입력** — 버튼 한 번으로 해당 월의 법정공휴일을 채웁니다. 설날·추석·부처님오신날은 **음력(KASI 한국천문연구원 기준)을 자동 변환**하고, 3일 연휴와 **대체공휴일까지 규칙대로 계산**합니다(2025~2050년 지원, 그 외 연도는 직접 지정 안내). 선거일 등 임시공휴일은 내장 목록으로 함께 입력되며, 공휴일은 OFF 금지·휴가 보상 같은 근무표 규칙에 그대로 반영됩니다.
 - **간호사 즉시 편집 + 일괄 작업** — 셀 클릭으로 바로 수정하고, 여러 명을 골라 그룹·성별·야간전담·삭제를 한 번에 처리합니다.
 - **CSV 일괄 등록** — UTF-8/CP949 인코딩을 자동 감지하고, 미리보기로 변경 사항을 확인한 뒤 적용합니다.
@@ -66,19 +66,19 @@
 
 ## 다운로드
 
-> **최신 버전: v4.17.0** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
+> **최신 버전: v4.18.0** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
 
 #### 🪟 Windows
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_Setup_v4.17.0.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.17.0/NurseScheduler_Setup_v4.17.0.exe) | 설치 마법사 (권장) | ~166 MB |
-| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.17.0/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~244 MB |
+| [**NurseScheduler_Setup_v4.18.0.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.18.0/NurseScheduler_Setup_v4.18.0.exe) | 설치 마법사 (권장) | ~166 MB |
+| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.18.0/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~244 MB |
 
 #### 🍎 macOS (Apple Silicon)
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_v4_mac_arm64.dmg**](https://github.com/yuangunn/nurse-v4/releases/download/v4.17.0/NurseScheduler_v4_mac_arm64.dmg) | 디스크 이미지 (권장) | ~226 MB |
-| [**NurseScheduler_v4_mac_arm64.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.17.0/NurseScheduler_v4_mac_arm64.zip) | 포터블 (.app) | ~200 MB |
+| [**NurseScheduler_v4_mac_arm64.dmg**](https://github.com/yuangunn/nurse-v4/releases/download/v4.18.0/NurseScheduler_v4_mac_arm64.dmg) | 디스크 이미지 (권장) | ~226 MB |
+| [**NurseScheduler_v4_mac_arm64.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.18.0/NurseScheduler_v4_mac_arm64.zip) | 포터블 (.app) | ~200 MB |
 
 > 🍎 macOS 빌드는 미서명(ad-hoc)이라 **설치·업데이트할 때마다** 터미널에서 `xattr -dr com.apple.quarantine /Applications/NurseScheduler.app` 를 한 번 실행해야 열립니다 (또는 한 번 열어 막힌 뒤 시스템 설정 → 개인정보 보호 및 보안 → **그래도 열기** — macOS 15 부터 우클릭 → 열기로는 안 됩니다). 업데이트는 앱을 끄고 dmg 에서 다시 끌어 넣은 뒤 **대치**를 누르면 되고, 데이터는 그대로 남습니다. 현재 **Apple Silicon(arm64) 전용**입니다.
 
@@ -99,7 +99,7 @@
 | 4 | **스케줄** | "생성" 클릭 → 솔버 자동 생성 (5~20분) |
 | 5 | **저장** | 엑셀(xlsx)/인쇄 내보내기, 저장 탭에서 불러오기 |
 
-**키보드**: `← ↑ ↓ →` 이동 · `D/E/N/V/O` 직접 입력 · `Del` 삭제 · `Ctrl+Z` 되돌리기 · `?` 전체 단축키
+**키보드**: `← ↑ ↓ →` 이동 · `Shift+방향키` 범위 · `D/E/N/V/O/W` 직접 입력 · `Del` 비우기 · `Ctrl+C/V` 엑셀과 주고받기 · `Ctrl+Z` 되돌리기 · `?` 전체 단축키
 
 > 상세 사용법은 [MANUAL.md](MANUAL.md)를 참고하세요.
 
@@ -126,7 +126,7 @@
 ```cmd
 build.bat
 ```
-결과물: `dist/installer/NurseScheduler_Setup_v4.17.0.exe`, `dist/NurseScheduler_v4_portable.zip`
+결과물: `dist/installer/NurseScheduler_Setup_v4.18.0.exe`, `dist/NurseScheduler_v4_portable.zip`
 
 **macOS** (사전: Python 3.11, Node.js 20 — Node 24는 패키징 단계 크래시)
 ```bash
