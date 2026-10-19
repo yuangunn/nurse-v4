@@ -706,6 +706,7 @@
           <button @click="showNotes=!showNotes" class="rmenu-item" :class="showNotes?'is-on':''" title="메모가 적힌 칸에 점을 표시합니다. 메모 내용은 칸 위에 마우스를 올리면 보입니다."><b>메모 표시 켜기/끄기</b><small x-text="showNotes?'지금 켜짐 — 메모 칸에 점이 보입니다':'지금 꺼짐'"></small></button>
           <button @click="showShortcutHelp=true;open=false" class="rmenu-item" title="키보드로 빠르게 넣는 법과 마우스 조작을 봅니다."><b>단축키 안내</b><small>D E N V O 키 · 방향키 · Ctrl+Z</small></button>
           <button @click="tableFullscreen=!tableFullscreen;open=false" class="rmenu-item" title="표만 화면 가득 보여 줍니다. Esc로 돌아옵니다."><b>전체화면</b><small>표만 크게 봅니다 · Esc로 돌아오기</small></button>
+          <button @click="gridFit=!gridFit" class="rmenu-item" :class="gridFit?'is-on':''" title="칸을 좁혀 앞뒤 주까지 한 달을 옆으로 넘기지 않고 한 화면에 봅니다. 다시 누르면 원래 너비로 돌아옵니다."><b>칸 좁게 — 한 달을 한 화면에</b><small x-text="gridFit?'지금 켜짐 — 옆으로 넘기지 않아도 됩니다':'지금 꺼짐'"></small></button>
           <div class="rmenu-sep"></div>
           <button @click="clearPrevOtherMonths();open=false" class="rmenu-item" title="지금 보는 달 주기 밖의 사전입력을 지웁니다. 한 번 더 확인합니다."><b>다른 달 정리</b><small>이 달 주기 밖 입력을 지웁니다</small></button>
           <button @click="rdClearPrev()" class="rmenu-item danger" title="이 달의 사전입력을 모두 비웁니다. 한 번 더 누르면 지워지고, 되돌릴 수 없어요."><b x-text="rdArmed('clearPrev')?'한 번 더 누르면 지웁니다 · 되돌릴 수 없어요':'표 초기화'"></b><small x-show="!rdArmed('clearPrev')">한 번 더 확인합니다</small></button>
@@ -716,7 +717,7 @@
   <!-- data-rd 표식은 검사(design/handoff/check)용 — 사전입력·근무표에 같은 이름이 있으면 보이는 탭에서만 붙인다 -->
   <!-- 표 (툴바 바로 아래 — 사이에 아무것도 두지 않는다) -->
   <div class="rtable-wrap" :data-rd="activeTab==='preinput'?'table-wrap':null" x-show="nurses.length>0">
-    <table class="rtable" :data-rd="activeTab==='preinput'?'table':null">
+    <table class="rtable" :class="gridFit?'is-fit':''" :data-rd="activeTab==='preinput'?'table':null" x-effect="gridFit;activeTab;scheduleDays.length;rdFitColumnsSoon()">
       <thead>
         <tr>
           <th class="rt-corner">주기</th>
@@ -725,7 +726,7 @@
         </tr>
         <tr>
           <th class="rt-name-h">이름</th>
-          <template x-for="day in scheduleDays" :key="dayKey(day)"><th class="rt-day" :class="[day.getDay()===6?'sat':'',day.getDay()===0?'sun':'',isHoliday(day)?'hol':'',isCycleStart(day)&&day.getDate()!==1?'cycle-start':'',isOverflow(day)?'overflow':'',dayKey(day)===todayKey()?'today':'']" @contextmenu.prevent="markHoliday(day)" :title="rdDayLabel(day)+(isHoliday(day)?' · 법정공휴일':'')+' — 오른쪽 클릭으로 공휴일 지정/해제'">
+          <template x-for="day in scheduleDays" :key="dayKey(day)"><th class="rt-day" :data-dk="dayKey(day)" :class="[day.getDay()===6?'sat':'',day.getDay()===0?'sun':'',isHoliday(day)?'hol':'',isCycleStart(day)&&day.getDate()!==1?'cycle-start':'',isOverflow(day)?'overflow':'',dayKey(day)===todayKey()?'today':'']" @contextmenu.prevent="markHoliday(day)" :title="rdDayLabel(day)+(isHoliday(day)?' · 법정공휴일':'')+' — 오른쪽 클릭으로 공휴일 지정/해제'">
             <div class="d" x-text="day.getDate()"></div><div class="w" x-text="isHoliday(day)?'법':rdWeekday(day.getDay())"></div>
           </th></template>
           <th class="rt-sum-h" title="이 사람에게 입력된 칸 수">입력<br>수</th>
@@ -733,8 +734,8 @@
           <th x-show="rules.maxNightTwoMonth" class="rt-sum-h" style="color:var(--sh-N-fg)" title="지난달 야간 수 — 홀짝월 합산 규칙에 씁니다. 자동 채움 → 전월 야간 수 계산으로 채워집니다">전월<br>N</th>
         </tr>
       </thead>
-      <tbody>
-        <template x-for="(nurse,nIdx) in nurses" :key="nurse.id"><tr :class="nurse.is_trainee?'trainee-row':''">
+      <tbody @mouseover="rdHoverCol($event)" @mouseleave="rdHoverCol($event,true)">
+        <template x-for="(nurse,nIdx) in nurses" :key="nurse.id"><tr :class="[nurse.is_trainee?'trainee-row':'',rdGroupStart(nurses,nIdx)?'group-start':'']">
           <td class="rt-name" @contextmenu.prevent="setCopySource(nurse.id)" :title="nurse.name+(nurse.is_trainee?' · 신규간호사':'')+' — 오른쪽 클릭하면 이 줄을 복사해 다른 사람에게 붙일 수 있습니다'">
             <b x-text="nurse.name"></b><small x-text="nurse.group"></small>
             <span x-show="copySource===nurse.id" class="copy-tag">복사됨</span>
@@ -871,6 +872,7 @@
           <div class="rmenu-sep"></div>
           <label class="rcheck" title="켜면 화면에서 차지(DC/EC/NC)를 D/E/N으로만 보여 줍니다. 인쇄·엑셀은 늘 D/E/N입니다."><input type="checkbox" x-model="hideCharge"/><span class="box"></span>차지 숨기기</label>
           <label class="rcheck" title="근무 코드별 색을 켜고 끕니다. 흑백으로 보고 싶을 때 끄세요."><input type="checkbox" x-model="colorByShift"/><span class="box"></span>색 켜기/끄기</label>
+          <label class="rcheck" title="칸을 좁혀 앞뒤 주까지 한 달을 옆으로 넘기지 않고 한 화면에 봅니다."><input type="checkbox" x-model="gridFit"/><span class="box"></span>칸 좁게 — 한 달을 한 화면에</label>
           <div style="padding:6px 12px"><div class="sub" style="font-size:var(--fs-min);color:var(--ink-2);margin-bottom:4px">그룹만 보기</div>
             <select x-model="groupFilter" title="한 그룹만 골라서 봅니다."><option value="all">전체 그룹</option><template x-for="g in nurseGroups" :key="g"><option :value="g" x-text="g+'그룹'"></option></template></select></div>
         </div>
@@ -932,7 +934,7 @@
   <!-- 표 -->
   <template x-if="rdSched">
     <div class="rtable-wrap" :data-rd="activeTab==='schedule'?'table-wrap':null">
-      <table class="rtable" :data-rd="activeTab==='schedule'?'table':null">
+      <table class="rtable" :class="gridFit?'is-fit':''" :data-rd="activeTab==='schedule'?'table':null" x-effect="gridFit;activeTab;scheduleDays.length;rdFitColumnsSoon()">
         <thead>
           <tr>
             <th class="rt-corner">주기</th>
@@ -941,7 +943,7 @@
           </tr>
           <tr>
             <th class="rt-name-h">이름</th>
-            <template x-for="day in scheduleDays" :key="dayKey(day)"><th class="rt-day" :class="[day.getDay()===6?'sat':'',day.getDay()===0?'sun':'',isHoliday(day)?'hol':'',isCycleStart(day)&&day.getDate()!==1?'cycle-start':'',isOverflow(day)?'overflow':'',dayKey(day)===todayKey()?'today':'']" :title="rdDayLabel(day)+(isHoliday(day)?' · 법정공휴일':'')"><div class="d" x-text="day.getDate()"></div><div class="w" x-text="isHoliday(day)?'법':rdWeekday(day.getDay())"></div></th></template>
+            <template x-for="day in scheduleDays" :key="dayKey(day)"><th class="rt-day" :data-dk="dayKey(day)" :class="[day.getDay()===6?'sat':'',day.getDay()===0?'sun':'',isHoliday(day)?'hol':'',isCycleStart(day)&&day.getDate()!==1?'cycle-start':'',isOverflow(day)?'overflow':'',dayKey(day)===todayKey()?'today':'']" :title="rdDayLabel(day)+(isHoliday(day)?' · 법정공휴일':'')"><div class="d" x-text="day.getDate()"></div><div class="w" x-text="isHoliday(day)?'법':rdWeekday(day.getDay())"></div></th></template>
             <th class="rt-sum-h" style="color:var(--sh-D-fg)" title="이달 낮 근무 수">D</th>
             <th class="rt-sum-h" style="color:var(--sh-E-fg)" title="이달 저녁 근무 수">E</th>
             <th class="rt-sum-h" style="color:var(--sh-N-fg)" title="이달 야간 근무 수">N</th>
@@ -951,8 +953,8 @@
             <th class="rt-sum-h" title="자동 배정 점수 — 누르면 어떤 규칙에서 얼마를 받았는지 보입니다">점</th>
           </tr>
         </thead>
-        <tbody>
-          <template x-for="nurse in rdPhoneNurses" :key="nurse.id"><tr :class="[nurse.is_trainee?'trainee-row':'',nurse.id===myNurseId?'me':'']">
+        <tbody @mouseover="rdHoverCol($event)" @mouseleave="rdHoverCol($event,true)">
+          <template x-for="(nurse,ni) in rdPhoneNurses" :key="nurse.id"><tr :class="[nurse.is_trainee?'trainee-row':'',nurse.id===myNurseId?'me':'',rdGroupStart(rdPhoneNurses,ni)?'group-start':'']">
             <td class="rt-name" :title="nurse.name+(nurse.is_trainee?' · 신규간호사':'')"><b x-text="nurse.name"></b><small x-text="nurse.group"></small></td>
             <template x-for="day in scheduleDays" :key="dayKey(day)">
               <td class="rt-cell" :data-cell="nurse.id+'|'+dayKey(day)" :data-shift="colorByShift&&!isNurseInactive(nurse,day)?(displayShift(nurse.id,day)||null):null"

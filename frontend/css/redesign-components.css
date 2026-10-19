@@ -129,12 +129,23 @@
   font-weight: var(--fw-label); font-size: var(--fs-cell); cursor: pointer; position: relative; background: var(--card); color: var(--ink); }
 .rt-cell.sat { background: #F7FAFF; } .rt-cell.sun { background: #FFF8F8; }   /* 빈 셀의 토/일 배경 */
 .rt-cell.is-selected { outline: 3px solid var(--ink); outline-offset: -3px; }
-.rt-cell.is-edited   { outline: 2px solid var(--err); outline-offset: -2px; }    /* 손으로 고친 셀 */
+.rt-cell.is-edited   { outline: 2px solid var(--focus); outline-offset: -2px; }  /* 손으로 고친 셀 — 파랑 (빨강은 규칙 위반 g-violation 하나만) */
 .rt-cell.is-relaxed  { outline: 2px dashed var(--ink); outline-offset: -2px; }   /* 완화로 뒤집힌 셀 */
 .rt-cell.is-absent   { background: repeating-linear-gradient(45deg, #fff 0 3px, #E4E7EC 3px 6px); color: var(--disabled-fg); }
-.rt-cell .lock { position: absolute; top: 2px; right: 2px; width: 9px; height: 9px; }
-.rt-cell .memo { position: absolute; left: 3px; bottom: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
+.rt-cell .lock { position: absolute; top: 2px; right: 2px; width: 11px; height: 11px; }
+.rt-cell .lock svg { width: 11px; height: 11px; }
+.rt-cell .memo { position: absolute; left: 3px; bottom: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); }
 .rt-cell .trainee { font-style: italic; opacity: 0.7; }
+/* 가독성 (2026-10-19) — 줄 따라가기·그룹 경계·날짜 찾기 */
+.rtable tbody tr:hover > td { box-shadow: inset 0 1px 0 var(--ink-2), inset 0 -1px 0 var(--ink-2); }   /* 마우스를 올린 줄 */
+.rtable tbody tr:hover > .rt-name { background: var(--row-hover); }
+.rtable tbody tr.group-start > td { border-top: 2px solid var(--rule-strong); }   /* 그룹(A·B·C)이 바뀌는 줄 */
+.rt-day.is-hover { box-shadow: inset 0 -4px 0 var(--focus); }                   /* 마우스가 있는 칸의 날짜 */
+.rt-day.today.is-hover { box-shadow: inset 0 3px 0 var(--ink), inset 0 -4px 0 var(--focus); }
+/* 칸 좁게 — 한 달을 한 화면에 (더보기). 칸 너비는 rdFitColumns 가 --col-w 로 정한다 */
+.rtable.is-fit .rt-sum-h, .rtable.is-fit .rt-sum { min-width: 34px; }
+.rtable.is-fit .rt-cell, .rtable.is-fit .rt-foot { font-size: var(--fs-min); letter-spacing: -0.03em; }
+.rtable.is-fit .rt-day > .d { font-size: var(--fs-min); }
 .rt-sum { height: var(--row-h); text-align: center; font-size: var(--fs-cell); font-weight: var(--fw-body); color: var(--ink-2); border-bottom: 1px solid var(--rule-soft); }
 .rt-sum:first-of-type { border-left: 2px solid var(--rule-strong); }
 .rt-sum.d { color: var(--sh-D-fg); font-weight: var(--fw-label); } .rt-sum.e { color: var(--sh-E-fg); font-weight: var(--fw-label); } .rt-sum.n { color: var(--sh-N-fg); font-weight: var(--fw-label); }
@@ -151,6 +162,7 @@
 [data-shift="NC"] { background: var(--sh-NC-bg) !important; color: var(--sh-NC-fg) !important; }
 [data-shift="N"]  { background: var(--sh-N-bg) !important;  color: var(--sh-N-fg) !important; }
 [data-shift="OF"] { background: var(--sh-OF-bg) !important; color: var(--sh-OF-fg) !important; }
+:not(td)[data-shift="OF"] { box-shadow: inset 0 0 0 1px var(--rule); }   /* 흰 바탕 OF 배지·단추가 카드에 묻히지 않게 (표 칸은 격자선이 있다) */
 [data-shift="주"] { background: var(--sh-주-bg) !important; color: var(--sh-주-fg) !important; }
 [data-shift="P1"] { background: var(--sh-P1-bg) !important; color: var(--sh-P1-fg) !important; }
 [data-shift="V"]  { background: var(--sh-V-bg) !important;  color: var(--sh-V-fg) !important; }
@@ -171,6 +183,7 @@
 .rpop-code { height: 44px; border: 0; border-radius: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; font: inherit; cursor: pointer; }
 .rpop-code b { font-size: var(--fs-sub); font-weight: var(--fw-strong); }
 .rpop-code small { font-size: 13px; font-weight: var(--fw-body); opacity: 0.9; }   /* 팝업 내부 보조 라벨만 13px 허용 */
+.rpop-code { box-shadow: inset 0 0 0 1px var(--rule); }   /* OF 는 흰 바탕이라(가독성 2026-10-19) 테두리가 없으면 단추로 안 보인다 */
 .rpop-code.is-current { box-shadow: inset 0 0 0 2.5px var(--ink); }
 .rpop-actions { display: flex; gap: 6px; border-top: 1px solid var(--rule); padding-top: 12px; }
 .rpop-actions .rbtn { flex: 1; height: 44px; padding: 0; justify-content: center; background: var(--paper); font-size: var(--fs-sub); }

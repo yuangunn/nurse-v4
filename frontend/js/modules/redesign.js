@@ -384,6 +384,32 @@ window.RedesignModule = function() {
       if(over>0) el.style.left=`${-Math.round(Math.min(over, Math.max(0, r.left-M)))}px`;
       el.style.maxHeight=`${Math.max(240, Math.floor(window.innerHeight-r.top-M))}px`;
     },
+    // ── 표 가독성 (2026-10-19) ──
+    // 그룹(A·B·C)이 바뀌는 줄 — 굵은 가로선으로 묶음을 나눈다
+    rdGroupStart(list, i){ return i>0 && (list[i-1]?.group||'')!==(list[i]?.group||''); },
+    // 마우스가 있는 칸의 날짜 머리를 표시 — 표가 넓어 위 날짜를 찾기 어려웠다. 움직일 때마다 표를 다시 그리지 않게 Alpine 상태 대신 DOM 클래스
+    rdHoverCol(e, leave){
+      const tbl=e?.currentTarget?.closest('table'); if(!tbl) return;
+      const td=leave?null:e.target.closest?.('td[data-cell]'); const dk=td?td.dataset.cell.split('|')[1]:'';
+      if(tbl.dataset.hoverDk===dk) return;
+      tbl.querySelectorAll('th.rt-day.is-hover').forEach(th=>th.classList.remove('is-hover'));
+      if(dk) tbl.querySelector(`th.rt-day[data-dk="${dk}"]`)?.classList.add('is-hover');
+      tbl.dataset.hoverDk=dk;
+    },
+    // 칸 좁게 — 앞뒤 주까지 한 달(42칸)을 옆으로 넘기지 않고 한 화면에. 노트북 폭(1680)에서 34칸만 보였다 (2026-10-19)
+    // 칸 너비 = (표 너비 − 이름 칸 − 합계 칸) / 날 수, 28~44px. 꺼지면 토큰 값(44px)으로
+    rdFitColumnsSoon(){ clearTimeout(this._fitTimer); this._fitTimer=setTimeout(()=>this.rdFitColumns(), 30); },
+    rdFitColumns(){
+      for(const wrap of document.querySelectorAll('.rtable-wrap')){
+        const tbl=wrap.querySelector(':scope > .rtable');
+        if(!this.gridFit||!tbl){ wrap.style.removeProperty('--col-w'); continue; }
+        if(!wrap.clientWidth) continue;   // 숨은 탭 — 보일 때 다시 잰다
+        const name=tbl.querySelector('.rt-name-h')?.offsetWidth||160;
+        const sums=[...tbl.querySelectorAll('.rt-sum-h')].reduce((a,th)=>a+(th.offsetParent?th.offsetWidth:0),0);
+        const days=(this.scheduleDays||[]).length||1;
+        wrap.style.setProperty('--col-w', Math.max(28, Math.min(44, Math.floor((wrap.clientWidth-name-sums-2)/days)))+'px');
+      }
+    },
     rdPopPick(code){ if(this.shiftEdit.mode==='prev_multi') this.applyMultiShiftEdit(code); else this.applyShiftEditWithUndo(code); },
     rdCellTipPre(nurse, day){
       const inact=this.isNurseInactive(nurse, day); if(inact) return inact==='before' ? '전입 전 — 배정하지 않습니다' : '전출 후 — 배정하지 않습니다';

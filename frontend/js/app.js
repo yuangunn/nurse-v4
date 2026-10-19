@@ -34,7 +34,8 @@ function app() {
       hospitalHolidays:[{md:'05-01',name:'근로자의 날'},{md:'05-09',name:'의료원 설립일'},{md:'07-17',name:'제헌절'},{md:'07-21',name:'노조 설립일'}],
     },
     schedule:{}, extendedSchedule:{},
-    generating:false, continuing:false, generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,
+    generating:false, continuing:false,
+    gridFit:(()=>{try{return localStorage.getItem('ns_grid_fit')==='1'}catch(e){return false}})(),   // 칸 좁게 — 한 달을 한 화면에 (더보기) generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,
     generateTimer:null, sseSource:null, solverLogs:[], showLogPanel:false,
     solveProgress:{gap_percent:null,nodes:0,has_solution:false,is_running:false},
     stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, juhuBlockLock:true, unlimitedV:false, relaxedCells:{},
@@ -465,6 +466,8 @@ function app() {
       window.addEventListener('beforeunload',()=>{this._saveFullState();this._closeCurrentProfile()});
       document.addEventListener('mouseup',()=>{if(this._isDragging)this.onCellMouseUp()});
       this._setupHeaderCondense();
+      this.$watch('gridFit',v=>{try{localStorage.setItem('ns_grid_fit',v?'1':'0')}catch(e){}});
+      window.addEventListener('resize',()=>{if(this.gridFit)this.rdFitColumnsSoon()});
       window.__rdState=(screen,state)=>this.rdApplyState(screen,state);   // design/handoff/check 검증용 상태 진입
     },
 

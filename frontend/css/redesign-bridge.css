@@ -432,7 +432,8 @@ body.rd .rmodal .legacy .text-xs, body.rd .rmodal .legacy .text-sm { font-size: 
 .rdrawer-body .rrow .rbtn-sm { height: 40px; white-space: nowrap; }
 body.rd .rhdr-ver { font-size: var(--fs-min); }
 .trainee-row .rt-name { border-left: 3px solid var(--sh-생-fg); }
-.trainee-row .rt-cell span:first-child { font-style: italic; opacity: 0.75; }
+.trainee-row .rt-cell span:first-child { font-style: italic; }
+.rtable .trainee-row td { opacity: 1; }   /* 옛 표의 0.6 이 겹쳐 신규 줄이 0.45 로 흐렸다 — 기울임·이름 칸 분홍 선으로 구분 */
 
 /* ── 검사(spec.json) 자기모순 보정 — 활성 단계 부제는 어두운 칩 위 글자지만 금지색 #D4D9E0 대신 #DCE0E6 (눈으로는 같다) ── */
 body.rd .rstep.is-active .rstep-sub { color: #DCE0E6; }
