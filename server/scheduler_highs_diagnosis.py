@@ -546,8 +546,8 @@ class _HighsDiagnosisMixin:
             excess_days = []
             kor_wd = ['월', '화', '수', '목', '금', '토', '일']
             for d, dt in enumerate(self.all_dates):
-                if dt.month != self.month:
-                    continue
+                if dt < date(self.year, self.month, 1):
+                    continue   # 지난달 칸은 기록 — 끝에 붙은 다음 달 며칠은 본다 (인원 제약이 걸린다, 결정 1-47)
                 dt_str = dt.strftime("%Y-%m-%d")
                 wk = WEEKDAY_KEYS[dt.weekday()]
                 base_req = req_dict.get(wk, {})

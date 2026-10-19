@@ -235,6 +235,69 @@ def test_confirmed_full_table_keeps_tail_cells_in_schedule():
     assert all(sch[f"a{i}"].get(d) for i in range(7) for d in TAIL), sch
 
 
+def test_confirmed_table_with_blank_tail_says_so():
+    """생성 달만 다 차 있고 끝 며칠이 빈 표를 대체 경로로 확정하면 '빈칸 없이'라고만 하지 않는다 — 빈 꼬리 칸을 알린다."""
+    first = date(2026, 11, 29)
+    prev = {f"a{i}": {"2026-11-29": "D" if i else "주", "2026-11-30": "주" if i == 1 else "E"} for i in range(7)}
+    s = _engine("highs", first, date(2026, 12, 5))(_request(prev))
+    msg = s._confirm_pinned_result()["message"]
+    assert "12/01~12/05" in msg and "35칸은 비어" in msg, msg
+
+
+def test_diagnosis_names_an_impossible_tail_day():
+    """끝에 붙은 12/03 에 사람보다 많은 인원(13명)을 넣으면 진단이 그 날짜를 댄다 — 예전엔 생성 달만 훑어
+    '일자별 합계로는 특정 못 함'이었다."""
+    cls = _engine("highs", date(2026, 11, 29), date(2026, 12, 5))
+    r = cls(_request({}, per_day_requirements={"2026-12-03": {"D": 5, "E": 5, "N": 3}})).solve()
+    assert not r["success"]
+    assert "12/03" in r["message"], r["message"][-600:]
+
+
+def test_pinned_notes_compare_tail_day_staffing():
+    """확정된 날(칸이 다 찬 날)의 인원이 기준과 다르면 생성 뒤 참고 목록에 — 끝에 붙은 며칠도."""
+    s = _engine("highs", date(2026, 11, 29), date(2026, 12, 5))(_request({}))
+    day = ["D", "D", "D", "E", "N", "주", "OF"]                      # 12/03: D3 E1 N1 (기준 D2 E2 N1)
+    sched = {f"a{i}": {"2026-12-03": day[i]} for i in range(7)}
+    notes = " ".join(s._pinned_rule_notes(sched))
+    assert "12/03" in notes and "D 3명" in notes, notes
+
+
+def test_staffing_precheck_covers_tail_days_and_merges_partial_overrides():
+    """인원 사전 점검: 끝에 붙은 12/03 에 셋이 V 면 4명뿐(필요 5) → 경고. 날짜별 인원은 요일 기본에 덮어쓴다 —
+    한 시간대만 넣은 값({D: 6})이 나머지 시간대를 지우면 부족을 못 본다."""
+    from server.api import _validate_staffing
+    leave, rest = ["V", "생"], ["OF", "주"]
+    prev = {f"a{i}": {"2026-12-03": "V"} for i in range(3)}
+    w = _validate_staffing(_request(prev), leave, rest) or ""
+    assert "12/03" in w, w
+    w2 = _validate_staffing(_request({}, per_day_requirements={"2026-11-10": {"D": 6}}), leave, rest) or ""
+    assert "11/10" in w2 and "필요 9명" in w2, w2
+
+
+@pytest.mark.parametrize("engine", ["highs", "cpsat"])
+def test_relax_mode_keeper_day_wishes_do_not_shrink_the_tail_share(engine):
+    """완화를 켜면 12월 나이트킵의 12/1~12/4 D 원티드는 나이트킵이라 지킬 수 없어 풀린다 — 그 칸도 몫(2회)을 채울
+    수 있는 칸이다. 예전엔 '사람이 넣은 칸'으로 세어 몫이 0 이 되어 닷새 내내 OF 였다."""
+    prev = {f"a{i}": {_iso(date(2026, 11, 30) + timedelta(days=i)): "주"} for i in range(6)}
+    prev["a6"] = {"2026-11-29": "주"}
+    prev["a7"] = {"2026-11-29": "OF", "2026-12-01": "D", "2026-12-02": "D", "2026-12-03": "D",
+                  "2026-12-04": "D", "2026-12-05": "주"}
+    cls = _engine(engine, date(2026, 11, 29), date(2026, 12, 5))
+    r = cls(_request(prev, n=8, keeper={"a7": {"2026-12": True}}, allow_pre_relax=True)).solve()
+    assert r["success"], r.get("message")
+    a7 = r["schedule"]["a7"]
+    assert sum(1 for d in TAIL[:4] if a7[d] in ("N", "NC")) >= 2, a7
+
+
+def test_score_card_counts_tail_and_seam_windows_like_the_engine():
+    """근무자 점수표(배점 분해)도 엔진 목적함수와 같은 창 — 11/30 D → 12/01 N 은 D→N 감점에 든다."""
+    from server.models import ScoringRule
+    s = _full({}, scoring_rules=[ScoringRule(name="D→N", rule_type="transition",
+                                             params={"from": "day", "to": "night"}, score=-30)])
+    scores, _ = s._compute_nurse_scores({"a0": {"2026-11-30": "D", "2026-12-01": "N"}})
+    assert scores["a0"] == -30, scores
+
+
 # ── ④ 1일 앞 지난달 칸은 사전입력이 있는 칸만 낸다 ────────────────────────────────────
 
 @pytest.mark.parametrize("engine", ["highs", "cpsat"])

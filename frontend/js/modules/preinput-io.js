@@ -53,9 +53,13 @@ window.PreinputIoModule = function() {
           const p=P[code]; if(!p)continue;
           (counts[dk]=counts[dk]||{D:0,E:0,N:0})[p]++;
         }
-      const dks=Object.keys(counts);
-      if(!dks.length){this.toast('사전입력에 D/E/N 근무가 없습니다','warn');return}
-      if(!confirm(`${dks.length}일의 필요 인원을 지금 입력된 근무표의 실제 인원수로 고정합니다.\n(설정의 요일별 기본값 대신 이 표가 기준이 됩니다)\n\n계속할까요?`))return;
+      // 칸이 다 찬 날만 — 원티드 몇 칸만 있는 날(끝에 붙은 다음 달 며칠 등)을 세면 그 수가 그날 필요 인원으로 고정된다
+      // (엔진은 끝 며칠의 날짜별 인원도 건다, 결정 1-47)
+      const all=Object.keys(counts);
+      const dks=all.filter(dk=>this._dayColumnFull(this.prevSchedule,dk,this.nurses));
+      if(!dks.length){this.toast(all.length?'칸이 다 찬 날이 없습니다 — 빈칸 없는 날만 그 표대로 고정합니다':'사전입력에 D/E/N 근무가 없습니다','warn');return}
+      const skipped=all.length-dks.length;
+      if(!confirm(`${dks.length}일의 필요 인원을 지금 입력된 근무표의 실제 인원수로 고정합니다.${skipped?`\n(빈칸이 있는 ${skipped}일은 건너뜁니다)`:''}\n(설정의 요일별 기본값 대신 이 표가 기준이 됩니다)\n\n계속할까요?`))return;
       this._pushUndo&&this._pushUndo();
       for(const dk of dks)this.prevDayReqs[dk]={...counts[dk]};
       this._checkViolations&&this._checkViolations();

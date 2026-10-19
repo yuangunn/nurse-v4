@@ -105,6 +105,7 @@ jobs:
           node scripts/test_preinput_lint.mjs
           node scripts/test_night_badge.mjs
           node scripts/test_charge_plain.mjs
+          node scripts/test_day_reqs.mjs
           node scripts/test_hospital_holidays.mjs
           node scripts/test_manager_check.mjs
           node scripts/test_trainee_days.mjs

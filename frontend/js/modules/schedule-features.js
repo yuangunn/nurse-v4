@@ -135,7 +135,8 @@ window.ScheduleFeaturesModule = function() {
       }
       return out;
     },
-    // 근무표에서 일별 D/E/N 인원 역산 — 재조정 시 이 표의 인원수가 기준 (설정 기본값 무시)
+    // 근무표에서 일별 D/E/N 인원 역산 — 재조정 시 이 표의 인원수가 기준 (설정 기본값 무시).
+    // 칸이 다 찬 날만 — 빈 꼬리 며칠(완성된 표 확정 경로)을 세면 그 적은 수가 그날 인원으로 걸린다 (결정 1-47)
     _reqFromSchedule(sched){
       const P={DC:'D',D:'D',EC:'E',E:'E',NC:'N',N:'N'};
       const out={};
@@ -144,7 +145,14 @@ window.ScheduleFeaturesModule = function() {
           const p=P[code]; if(!p)continue;
           (out[dk]=out[dk]||{D:0,E:0,N:0})[p]++;
         }
+      const rows=Object.keys(sched||{}).map(id=>this.nurses?.find(n=>n.id===id)||{id});
+      for(const dk of Object.keys(out))if(!this._dayColumnFull(sched,dk,rows))delete out[dk];
       return out;
+    },
+    // 그 날 칸이 다 찼나 — 그 날 재적하는 사람(rows) 모두 코드가 있다
+    _dayColumnFull(sched,dk,rows){
+      const[y,m,d]=dk.split('-').map(Number);const day=new Date(y,m-1,d);
+      return (rows||[]).every(n=>this.isNurseInactive(n,day)||!!sched?.[n.id]?.[dk]);
     },
     isReadjustPin(nurseId,day){return !!this.readjustPins[nurseId]?.[this.dayKey(day)]},
     isReadjustChanged(nurseId,day){return !!this.readjustChanged[nurseId]?.[this.dayKey(day)]},

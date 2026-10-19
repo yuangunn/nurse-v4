@@ -1515,10 +1515,6 @@ def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts
     weekday_keys = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
     year, month = request.year, request.month
     first = _date(year, month, 1)
-    if month == 12:
-        last = _date(year + 1, 1, 1) - _td(days=1)
-    else:
-        last = _date(year, month + 1, 1) - _td(days=1)
 
     req_dict = request.requirements.model_dump()
     off_shifts = leave_shifts + rest_shifts
@@ -1535,11 +1531,12 @@ def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts
             in_training[nurse.id] = lt.strftime("%Y-%m-%d") if lt else "9999-12-31"
 
     cur = first
-    while cur <= last:
+    while cur <= g1:   # 끝에 붙은 다음 달 며칠도 — 엔진이 그날 인원을 건다 (결정 1-47)
         dt_str = cur.strftime("%Y-%m-%d")
         weekday_key = weekday_keys[cur.weekday()]
         per_day = request.per_day_requirements or {}
-        day_req = per_day.get(dt_str) or req_dict.get(weekday_key, {})
+        # 날짜별 인원은 요일 기본에 덮어쓴다 (엔진과 같다 — 한 시간대만 넣은 값도 있다)
+        day_req = {**req_dict.get(weekday_key, {}), **(per_day.get(dt_str) or {})}
 
         unavailable = sum(
             1 for nurse in request.nurses

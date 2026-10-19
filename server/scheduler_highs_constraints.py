@@ -758,8 +758,8 @@ class _HighsConstraintsMixin:
                                 wish_date = date.fromisoformat(ds)
                             else:
                                 wish_date = date(self.year, self.month, int(ds))
-                            if wish_date not in self.date_to_idx:
-                                continue
+                            if wish_date not in self.date_to_idx or wish_date < date(self.year, self.month, 1):
+                                continue   # 지난달 칸은 기록 — 거기 남은 위시가 숨은 변수를 끌면 1일 배정이 흔들린다
                             d = self.date_to_idx[wish_date]
                             if wish_shift == "OFF":
                                 terms.append(wsc * pulp.lpSum(

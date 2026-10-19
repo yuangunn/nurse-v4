@@ -94,7 +94,8 @@ class _ConflictAnalyzer(CpSatScheduler):
         # 빈칸 없는 완성된 표는 만들기에서 그대로 근무표로 확정된다(_confirm_pinned_result) —
         # 신호등도 같은 답을 해야 한다. 앱 규칙과 다른 곳은 만든 뒤 '참고' 목록으로 나온다.
         # (완화를 켜면 엔진이 표를 고쳐 보려 하므로 이 지름길을 쓰지 않는다)
-        if not self.allow_pre_relax and self._fully_pinned():
+        # 끝에 붙은 다음 달 며칠이 비어 있으면 그 며칠은 엔진이 채운다 — 지름길 없이 실제로 판정한다 (2026-10-19)
+        if not self.allow_pre_relax and self._fully_pinned() and not self._blank_tail_cells():
             return {**out, "status": "feasible", "conflicts": [], "pinned_table": True}
         # 쉴 코드 수급 산술 (M4-P1) — 솔버를 돌리기 전에 확정 판정이 나온다.
         # 수요 하한 vs 공급 상한이라 부족이 나오면 무조건 infeasible.
