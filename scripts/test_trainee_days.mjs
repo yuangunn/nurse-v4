@@ -116,6 +116,15 @@ assert.deepEqual(a.scheduleWarnings, [], JSON.stringify(a.scheduleWarnings));
 delete a.prevSchedule.p1;
 assert.equal(a.scheduleWarnings.length, 1, JSON.stringify(a.scheduleWarnings));
 
+// ── 야간 월 한도 경고는 그 달 칸만 센다 — 결과 표에 든 끝 주(다음 달)·1일 앞(지난달) 야간은 빼고 (엔진 _c_max_night_per_month 와 같게)
+//  (2026-10-19, 11월 생성: 12월 나이트킵의 12/1~5 야간까지 세어 '야간 7회 (월 한도 6회)'가 다섯 명에게 떴다)
+a = make({ rules: { maxNightPerMonth: true, maxNightPerMonthCount: 6 },
+  rows: { p1: ['N', 'N', 'OF', 'OF', 'N', 'N', 'OF', 'OF', 'N', 'N'] } });
+Object.assign(a.schedule.p1, { '2026-02-27': 'N', '2026-02-28': 'N', '2026-04-01': 'N', '2026-04-02': 'N' });
+assert.deepEqual(a.scheduleWarnings.filter((w) => /야간/.test(w.msg)), [], JSON.stringify(a.scheduleWarnings));
+a.schedule.p1[dk(13)] = 'N';
+assert.match(a.scheduleWarnings.find((w) => /야간/.test(w.msg)).msg, /야간 7회 \(월 한도 6회\)/);
+
 // ── 재조정 — 생성이 낸 신규 '/' 칸은 보내지 않는다(엔진이 프리셉터를 따라 다시 채운다). 넣은 '/' 원티드·고친 칸은 보낸다 ──
 //  (2026-10-19 검토: 생성이 낸 '/EC' 를 신규가 넣은 원티드로 읽어, 프리셉터를 D 로 고쳐도 신규는 '/EC' 그대로였다)
 a = make({ prev: { t9: { [dk(1)]: '/OF', [dk(5)]: '/D' } },

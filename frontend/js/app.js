@@ -317,7 +317,8 @@ function app() {
         const mk=`${this.year}-${String(this.month).padStart(2,'0')}`;
         const nm=nurse.night_months||{};
         const nightKeep=Object.keys(nm).length?!!nm[mk]:!!nurse.is_night_shift;
-        const nCount=Object.values(sched).filter(v=>nightCodes.includes(v)).length;
+        // 그 달 칸만 — 결과 표엔 끝에 붙은 다음 달 며칠·1일 앞 지난달 칸도 들어 있다 (엔진 _c_max_night_per_month 와 같게)
+        const nCount=Object.entries(sched).filter(([k,v])=>k.startsWith(mk)&&nightCodes.includes(v)).length;
         const nightLimit=(r.maxNightPerMonth&&r.maxNightPerMonthCount)||7;
         if(!nightKeep&&nCount>nightLimit)warns.push({type:'warn',nurse:nurse.name,msg:`야간 ${nCount}회 (월 한도 ${nightLimit}회)`});
         // 주말 근무 횟수 경고는 뺐다 — 정상 근무표에서도 병동 절반에게 매달 뜨던 통계라
