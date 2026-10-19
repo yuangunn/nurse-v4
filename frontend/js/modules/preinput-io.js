@@ -21,7 +21,18 @@ window.PreinputIoModule = function() {
     },
     clearPrevSchedule(confirmed){if(!confirmed&&!this.confirmReset())return;const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(!keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>!keys.has(h));this._clearCellMeta(keys,true)},
     clearPrevOtherMonths(){if(!confirm(`${this.year}년 ${this.month}월 주기 이외의 데이터를 정리합니다. 계속하시겠습니까?`))return;const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(!keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>keys.has(h));this._clearCellMeta(keys,false)},
-    countPrevEntries(){return Object.values(this.prevSchedule).reduce((s,v)=>s+Object.keys(v).length,0)},
+    // 이 화면 주기(앞뒤 달 칸 포함)의 사전입력 칸 수. monthCells 면 rdCells 와 같은 칸만 — 이 달 칸, 신규의 트레이닝 날 빼고.
+    // 예전엔 다른 달 사전입력까지 세어 상태 줄이 '772 / 566칸 입력'이었다 (2026-10-19)
+    countPrevEntries(monthCells=false){
+      const days=(this.scheduleDays||[]).filter(d=>!monthCells||!this.isOverflow(d));
+      let n=0;
+      for(const nurse of (this.nurses||[])){
+        const row=this.prevSchedule?.[nurse.id];
+        if(!row)continue;
+        for(const d of days)if(row[this.dayKey(d)]&&!(monthCells&&nurse.is_trainee&&this.isTraineeInTraining(nurse,d)))n++;
+      }
+      return n;
+    },
     countNursePrev(nurseId){return Object.keys(this.prevSchedule[nurseId]||{}).length},
 
     // ── 일별 필요인원 오버라이드 ──────────────────────────────

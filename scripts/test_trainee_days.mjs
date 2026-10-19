@@ -63,6 +63,12 @@ assert.equal(a.rdCells, 31 + 28);
 assert.match(a.stepperSummary.preinput, / \/ 59 셀$/);
 a = make({ end: null });
 assert.equal(a.rdCells, 31);
+//  · 입력 칸 수도 같은 칸만 — 다른 달 사전입력·앞뒤 달 칸·트레이닝 날은 빼고 ('772 / 566칸 입력' 이던 것, 2026-10-19)
+a = make({ prev: { p1: { [dk(1)]: 'OF', [dk(2)]: 'D', '2026-02-28': 'E', '2026-04-01': 'N', '2026-05-03': 'D' },
+  t9: { [dk(2)]: '/E', [dk(5)]: 'OF' } } });
+assert.equal(a.countPrevEntries(true), 3);
+assert.equal(a.countPrevEntries(), 6);                          // 주기 전체 (2/28·4/1 앞뒤 달 칸, 트레이닝 날 포함 — 5/3 은 밖)
+assert.match(a.stepperSummary.preinput, /^3 \/ 59 셀$/);
 a = make({ end: '2026-02-20' });
 assert.equal(a.rdCells, 62);
 
@@ -109,6 +115,15 @@ assert.deepEqual(a.scheduleWarnings, [], JSON.stringify(a.scheduleWarnings));
 //  · 프리셉터 E 를 엔진이 놓았으면 신규의 '/E' 사전입력이 있어도 센다 (엔진 manager_check 와 같게)
 delete a.prevSchedule.p1;
 assert.equal(a.scheduleWarnings.length, 1, JSON.stringify(a.scheduleWarnings));
+
+// ── 야간 월 한도 경고는 그 달 칸만 센다 — 결과 표에 든 끝 주(다음 달)·1일 앞(지난달) 야간은 빼고 (엔진 _c_max_night_per_month 와 같게)
+//  (2026-10-19, 11월 생성: 12월 나이트킵의 12/1~5 야간까지 세어 '야간 7회 (월 한도 6회)'가 다섯 명에게 떴다)
+a = make({ rules: { maxNightPerMonth: true, maxNightPerMonthCount: 6 },
+  rows: { p1: ['N', 'N', 'OF', 'OF', 'N', 'N', 'OF', 'OF', 'N', 'N'] } });
+Object.assign(a.schedule.p1, { '2026-02-27': 'N', '2026-02-28': 'N', '2026-04-01': 'N', '2026-04-02': 'N' });
+assert.deepEqual(a.scheduleWarnings.filter((w) => /야간/.test(w.msg)), [], JSON.stringify(a.scheduleWarnings));
+a.schedule.p1[dk(13)] = 'N';
+assert.match(a.scheduleWarnings.find((w) => /야간/.test(w.msg)).msg, /야간 7회 \(월 한도 6회\)/);
 
 // ── 재조정 — 생성이 낸 신규 '/' 칸은 보내지 않는다(엔진이 프리셉터를 따라 다시 채운다). 넣은 '/' 원티드·고친 칸은 보낸다 ──
 //  (2026-10-19 검토: 생성이 낸 '/EC' 를 신규가 넣은 원티드로 읽어, 프리셉터를 D 로 고쳐도 신규는 '/EC' 그대로였다)
