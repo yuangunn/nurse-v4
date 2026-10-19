@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.16.0 (2026-10-19, 다음 달로 이어지는 주기를 다음 달의 첫 주처럼 — 다음 달 나이트킵 야간 몫·차지 선임·날짜별 인원·배점 · 신규가 '/'로 넣은 원티드 · 근무표 엑셀(xlsx) 내보내기, 그 달에 걸친 주 전부)
+**최신**: v4.17.0 (2026-10-19, 이어 찾기 — 시간이 다 됐는데 차이가 목표보다 크면 그 표에서 한 번 더 찾기 · 만드는 동안 진행·차이 보이기 · 야간 월 한도 거짓 경고·사전입력 칸 수 고침. v4.16.0 = 다음 달로 이어지는 주기 · 신규 '/' 원티드 · 엑셀 내보내기)
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -218,7 +218,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.16.0.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.17.0.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -461,7 +461,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 | Method | Path | 설명 |
 |---|---|---|
 | POST | `/api/estimate` | 예상 소요시간 |
-| POST | `/api/generate` | 스케줄 생성 (사전검증 → 솔버 → 완화 → 진단) |
+| POST | `/api/generate` | 스케줄 생성 (사전검증 → 솔버 → 완화 → 진단). 결과에 `objective`·`mip_dual_bound`(감점 점수, 낮을수록 좋다)·`model_fingerprint`·`engine`. 이어 찾기는 `warm_start`(앞 표)·`prev_bound`·`prev_fingerprint` 를 보낸다 — 같은 모델이면 하한을 이어 써서 차이를 잰다 (결정 1-50) |
 | POST | `/api/generate/stop` | `cancelSolve` 신호 |
 | GET | `/api/generate/progress` | 2초 폴링용 진행 상황 |
 | GET | `/api/generate/stream` | SSE 실시간 로그 + 진행 스트리밍 |
@@ -1027,10 +1027,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.16.0.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.17.0.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.16.0.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.17.0.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -1125,7 +1125,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.16.0 기준)
+## 알려진 주의사항 (v4.17.0 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 배점 보조변수(전환·연속·패턴·주말·공휴일)는 생성 달 + 끝에 붙은 다음 달 며칠 + 1일 이음새(그 사람의 지난달 칸이 기록일 때)에 —

@@ -305,7 +305,7 @@
       <span class="rhdr-mark" aria-hidden="true"></span>
       <span class="rhdr-name" data-rd="brand-name">NurseScheduler</span>
       <span class="rhdr-meta" x-text="`${rdWard} 병동 · 간호사 ${nurses.length}명`"></span>
-      <span class="rhdr-ver" @click="trackVersionClick()" title="버전 정보. 다섯 번 누르면 개발자 설정이 켜집니다.">v4.16.0</span>
+      <span class="rhdr-ver" @click="trackVersionClick()" title="버전 정보. 다섯 번 누르면 개발자 설정이 켜집니다.">v4.17.0</span>
     </div>
     <div class="rym" title="대상 년월 — 사전입력·분석·근무표 모든 화면에 함께 적용됩니다">
       <button @click="prevMonth()" data-rd="ym-prev" title="한 달 앞으로 갑니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
@@ -883,7 +883,7 @@
     <div class="rstatus fs-hide rdesk-only" data-rd="status" :class="rdStatus?.kind" aria-live="polite">
       <span class="dot"></span><span x-text="rdStatus?.text"></span>
       <template x-if="rdStatus?.running"><div class="rprogress"><i :style="`width:${estimatedSeconds?Math.min(100,Math.round(generateElapsed/estimatedSeconds*100)):35}%`"></i></div></template>
-      <template x-if="rdStatus?.running"><button @click="stopGenerate()" :disabled="stopRequested" class="rbtn rbtn-sm rbtn-secondary" data-rd="btn-stop" style="margin-left:auto" title="지금까지 찾은 답이 있으면 그것을 보여 주고 멈춥니다."><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg><span x-text="stopRequested?'멈추는 중':'멈추기'"></span></button></template>
+      <template x-if="rdStatus?.running"><button @click="stopGenerate()" :disabled="stopRequested" class="rbtn rbtn-sm rbtn-secondary" data-rd="btn-stop" style="margin-left:auto" title="지금까지 찾은 답이 있으면 그것을 보여 주고 멈춥니다."><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg><span x-text="stopRequested?'멈추는 중':(continuing?'멈추고 지금 표 쓰기':'멈추기')"></span></button></template>
       <template x-if="rdStatus?.relaxed"><span class="relaxed-note"><i></i>점선 칸 = 사전입력과 다르게 배정된 칸</span></template>
       <template x-if="rdEdited>0&&!generating"><span class="relaxed-note"><span x-text="`손으로 고친 칸 ${rdEdited}개`"></span><button @click="readjustSchedule()" class="rbtn rbtn-sm rbtn-secondary" title="고친 칸은 그대로 잠그고, 인원·규칙이 다시 맞도록 나머지를 최소한으로 다시 맞춥니다.">고친 대로 다시 맞추기</button><span x-show="readjustSummary" x-text="readjustSummary"></span></span></template>
     </div>
@@ -2333,7 +2333,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.16.0 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.17.0 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">기본 계산 방식 · 다른 계산 방식 듀얼 자동 배정 · 완전 오프라인</p>
         <p class="text-dim text-xs mt-1">모성보호(임산부 P1) · 최소 침습 완화 · 왜 안 되는지 자세히 보기</p>

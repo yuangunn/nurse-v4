@@ -298,6 +298,7 @@ class _SchedulerBase:
         self.locked_cells = request.locked_cells or {}  # {nurse_id: {date_str: true}} — 완화 시에도 고정
         self.mip_gap = request.mip_gap
         self.time_limit = request.time_limit
+        self.warm_start = getattr(request, "warm_start", None) or {}   # 이어 찾기 — 앞 실행이 낸 표 (결정 1-50)
         # 법정공휴일: 범위 좁히기는 _build_date_range() 뒤에서 (생성 주기 기준)
         self.holidays = set(request.holidays or [])
         self.allow_pre_relax = request.allow_pre_relax
@@ -551,6 +552,22 @@ class _SchedulerBase:
                 if self.prev.get(pid, {}).get(iso) or not self._nurse_active_on(active[pid], dt):
                     continue
                 out.append((pid, d, sorted(self._PRE_FLEX.get(base, {base}))))
+        return out
+
+    def _mip_start_pairs(self, x, is_var) -> list:
+        """이어 찾기 — 앞 실행이 낸 표(warm_start)의 칸을 시작해로: [(변수, 0|1)] (결정 1-50).
+        근무표 칸만 준다 — 배점·슬랙 변수는 솔버가 채운다(HiGHS 는 일부만 받은 시작해를 스스로 채우고, CP-SAT 은 힌트로 쓴다).
+        신규의 '/' 칸(트레이닝 날은 변수가 아니다)·모르는 코드·없는 사람은 건너뛴다."""
+        out = []
+        for nurse in self.nurses:
+            row = self.warm_start.get(nurse["id"]) or {}
+            for d, dt in enumerate(self.all_dates):
+                code = row.get(dt.strftime("%Y-%m-%d"))
+                if not code or code not in self.ALL_SHIFTS:
+                    continue
+                for s, v in x[nurse["id"]][d].items():
+                    if is_var(v):
+                        out.append((v, 1 if s == code else 0))
         return out
 
     def _trainee_pair_notes(self, sched: Dict[str, Dict[str, str]]) -> List[str]:

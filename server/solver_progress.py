@@ -41,17 +41,50 @@ _last_sample_t: float = 0.0
 _rec_last_gap = None
 _rec_has_sol: bool = False
 _rec_improve_t = None     # 마지막 개선 시각(경과초)
+_prev_bound = None        # 이어 찾기 — 앞 실행의 하한(감점 점수)·모델 지문. 같은 모델의 진행 차이만 그것과 합쳐 잰다 (결정 1-50)
+_prev_fp = None
 _MAX_EVENTS = 5000
 
 
 def _reset_recorder_locked():
-    global _run_t0, _last_sample_t, _rec_last_gap, _rec_has_sol, _rec_improve_t
+    global _run_t0, _last_sample_t, _rec_last_gap, _rec_has_sol, _rec_improve_t, _prev_bound, _prev_fp
     _events.clear()
     _run_t0 = time.monotonic()
     _last_sample_t = 0.0
     _rec_last_gap = None
     _rec_has_sol = False
     _rec_improve_t = None
+    _prev_bound = _prev_fp = None
+
+
+def combined_gap(primal: float, dual: float, prev_bound=None):
+    """(차이 %, 하한) — 차이 = (답 − 하한) / 답, 감점 점수(낮을수록 좋다) 기준. 하한은 이번 하한과 앞 실행 하한 중 큰 것.
+    다시 찾으면 하한이 처음부터 다시 쌓여, 앞 하한을 안 합치면 같은 표인데도 차이가 커 보였다 (실제 11월 8.8% → 10.7%)."""
+    lb = dual if prev_bound is None else max(dual, prev_bound)
+    return round(max(0.0, primal - lb) / max(1.0, abs(primal)) * 100, 2), lb
+
+
+def set_prev_bound(bound, fingerprint=None) -> None:
+    """이어 찾기 — 이번 생성의 진행 차이를 앞 실행의 하한과 합쳐 잰다 (begin 뒤에 부른다, 결정 1-50)."""
+    global _prev_bound, _prev_fp
+    with _lock:
+        _prev_bound = float(bound) if bound is not None and fingerprint else None
+        _prev_fp = fingerprint if _prev_bound is not None else None
+
+
+def prev_fingerprint():
+    """이어 찾기 중이면 앞 실행의 모델 지문 — HiGHS 어댑터가 이번 모델 지문을 잴지 정한다."""
+    return _prev_fp
+
+
+def _carry(p: dict) -> dict:
+    """어댑터 진행에 앞 실행의 하한을 합친다 — 답·하한·모델 지문을 알려 주고 그 지문이 앞 실행과 같을 때만.
+    (완화 1단계처럼 다른 모델을 풀 때 합치면 늘 0% 라 '가장 좋은 답이에요'가 떴다, 리뷰 2026-10-19)"""
+    pb, primal, dual = _prev_bound, p.get("primal"), p.get("dual")
+    if (pb is not None and primal is not None and dual is not None and p.get("has_solution")
+            and p.get("fingerprint") == _prev_fp):
+        p["gap_percent"] = combined_gap(primal, dual, pb)[0]
+    return p
 
 
 def record_event(kind: str, **kw):
@@ -205,7 +238,7 @@ def get_progress() -> dict:
         best = None
         for a in items:
             try:
-                p = dict(a.progress())
+                p = _carry(dict(a.progress()))
             except Exception:
                 continue
             if best is None:

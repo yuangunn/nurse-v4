@@ -34,7 +34,7 @@ function app() {
       hospitalHolidays:[{md:'05-01',name:'근로자의 날'},{md:'05-09',name:'의료원 설립일'},{md:'07-17',name:'제헌절'},{md:'07-21',name:'노조 설립일'}],
     },
     schedule:{}, extendedSchedule:{},
-    generating:false, generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,
+    generating:false, continuing:false, generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,
     generateTimer:null, sseSource:null, solverLogs:[], showLogPanel:false,
     solveProgress:{gap_percent:null,nodes:0,has_solution:false,is_running:false},
     stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, juhuBlockLock:true, unlimitedV:false, relaxedCells:{},
@@ -571,13 +571,14 @@ function app() {
     // #13 스케줄 자동 저장
     async _autoSaveSchedule(){
       if(!this.schedule||!Object.keys(this.schedule).length)return;
+      // 저장할 본문은 기다리기 전에 만든다 — 그 사이 이어 찾기(결정 1-50)가 계산 기록을 비워 빈 기록이 저장됐다 (리뷰 2026-10-19)
+      // 수동 저장(saveSchedule)과 동일한 스키마 — 이전 payload는 ScheduleSave 필수 필드가 없어 항상 422로 무음 실패했다.
+      const name=`자동저장 ${this.year}-${String(this.month).padStart(2,'0')}`, year=this.year, month=this.month;
+      const body={year,month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights,relaxed_cells:this.relaxedCells};
       try{
-        const name=`자동저장 ${this.year}-${String(this.month).padStart(2,'0')}`;
         // 같은 달 자동저장본은 하나만 — 이전 것을 지우고 새로 넣는다 (사용자 결정 2026-09-06 "자동저장 붙이자")
-        try{ const list=await this.api('GET','/api/schedules'); for(const s of (list||[])){ if(s.name===name&&+s.year===+this.year&&+s.month===+this.month) await this.api('DELETE',`/api/schedules/${s.id}`); } }catch(e){}
-        // 수동 저장(saveSchedule)과 동일한 스키마 — 이전 payload는 ScheduleSave
-        // 필수 필드가 없어 항상 422로 무음 실패했다.
-        await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights,relaxed_cells:this.relaxedCells});
+        try{ const list=await this.api('GET','/api/schedules'); for(const s of (list||[])){ if(s.name===name&&+s.year===+year&&+s.month===+month) await this.api('DELETE',`/api/schedules/${s.id}`); } }catch(e){}
+        await this.api('POST','/api/schedules',body);
         this.rdSaved=true;
         this.toast('근무표 자동 저장됨','info');
         this.loadSavedList();
@@ -605,6 +606,12 @@ function app() {
       return Math.round(filled/total*100);
     },
 
+    // 새로고침 복구 — 이어 찾기(결정 1-50) 결과가 앞 표보다 낫지 않으면 적용·자동저장하지 않는다 (앞 표 자동저장본을 지웠다)
+    _contNotBetter(result){
+      if(!result||!result.continued||result.improved)return false;
+      this.statusOk=true;this.statusMessage='🔁 이어 찾기에서 더 좋은 표가 없어 저장된 표를 그대로 둡니다.';
+      return true;
+    },
     async _checkPendingGenerate(){
       try{
         const res=await this.api('GET','/api/generate/result');
@@ -625,11 +632,11 @@ function app() {
           this._recoverPoll=setInterval(async()=>{
             const pollRef=this._recoverPoll;
             try{const r=await this.api('GET','/api/generate/result');
-              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];this.managerCheck=result.manager_check||[];this.vReport=result.v_report||null;this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.managerCheck||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':((this.managerCheck||[]).length?'warn':(this.vReport&&this.vReport.total?'v':'summary'));this.rdDoneAt=new Date();this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
+              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;if(this._contNotBetter(result))return;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];this.managerCheck=result.manager_check||[];this.vReport=result.v_report||null;this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.managerCheck||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':((this.managerCheck||[]).length?'warn':(this.vReport&&this.vReport.total?'v':'summary'));this.rdDoneAt=new Date();this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
             }catch(e){}
           },2000);
         }else if(res.status==='done'&&res.result){
-          const result=res.result;this.statusOk=result.success;this.statusMessage=result.message+'\n(이전 생성 결과 복원됨)';
+          const result=res.result;if(this._contNotBetter(result))return;this.statusOk=result.success;this.statusMessage=result.message+'\n(이전 생성 결과 복원됨)';
           this.generationReport=result.generation_report||null;
           this.wishReport=result.wish_report||null;
           this.offTeukgeun=result.off_teukgeun||[];this.managerCheck=result.manager_check||[];this.vReport=result.v_report||null;

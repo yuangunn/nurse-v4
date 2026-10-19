@@ -8,14 +8,16 @@ window.SolverModule = function() {
     // 계산 기록 두 곳 — 만드는 중 상태 줄 아래(#liveLogPanel)·서랍(#logPanel) — 을 맨 아래 줄로 (새로고침 복구 app.js 도 쓴다)
     _scrollLogs(){ this.$nextTick(()=>{ for(const el of document.querySelectorAll('#logPanel,#liveLogPanel')) el.scrollTop=el.scrollHeight; }); },
     // ── 스케줄 생성 ──────────────────────────────────────────
-    // patch: 재조정 등에서 payload 일부를 덮어쓸 때 사용 (_readjust 플래그는 전송 전 제거)
+    // patch: 재조정 등에서 payload 일부를 덮어쓸 때 사용 (_readjust·_cont 플래그는 전송 전 제거)
+    // _cont: 이어 찾기(결정 1-50) — 앞 표·안내를 그대로 둔 채 그 표에서 다시 찾고, 더 좋은 표가 나올 때만 바꾼다
     async generate(patch){
       if(this.nurses.length===0){this.toast('간호사를 먼저 등록해주세요','error');return}
-      const {_readjust,...payloadPatch}=patch||{};
+      const {_readjust,_cont,...payloadPatch}=patch||{};
       if(this._recoverPoll){clearInterval(this._recoverPoll);this._recoverPoll=null}
-      this.generating=true;this.stopRequested=false;this.mipGapPercent=null;this.scheduleStopped=false;this.rdSaved=false;
-      this.diagResult=null;this.fixResult=null;
-      this.statusMessage='';this.estimatedSeconds=0;this.generateStartTime=Date.now();this.generateElapsed=0;
+      this.generating=true;this.continuing=!!_cont;this.stopRequested=false;
+      if(!_cont){this.mipGapPercent=null;this.scheduleStopped=false;this.rdSaved=false;this.diagResult=null;this.fixResult=null;this.statusMessage=''}
+      this.estimatedSeconds=0;this.generateStartTime=Date.now();this.generateElapsed=0;
+      let next=null;
       this.generateTimer=setInterval(()=>{this.generateElapsed=Math.floor((Date.now()-this.generateStartTime)/1000)},1000);
       this.solveProgress={gap_percent:null,nodes:0,has_solution:false,is_running:false};
       this.solverLogs=[];this._logSeq=0;
@@ -31,6 +33,9 @@ window.SolverModule = function() {
       this.api('POST','/api/estimate',payload).then(est=>{if(est&&est.estimated_seconds)this.estimatedSeconds=est.estimated_seconds}).catch(()=>{});
       try{
         const result=await this.api('POST','/api/generate',payload);
+        // 이어 찾는 동안 손으로 고친 칸이 있으면 그 표를 그대로 둔다 — 바꾸면 고친 칸이 말없이 사라졌다 (리뷰 2026-10-19)
+        const edited=_cont&&(this._originalSchedule?this.getManualEditCount():0)>0;
+        if(_cont&&(edited||!this._contBetter(result))){this._contKeep(result,_cont,edited);return}
         this.statusOk=result.success;this.statusMessage=result.message;
         this.generationReport=result.generation_report||null;
         this.wishReport=result.wish_report||null;
@@ -61,9 +66,42 @@ window.SolverModule = function() {
           }
           this.trackEdits();
           if(!_readjust){this.readjustPins={};this.readjustChanged={};this.readjustSummary=''}
-          if(result.warning){this.statusMessage=result.warning+'\n\n'+this.statusMessage;this.statusOk=false}}
-      }catch(e){this.statusOk=false;this.statusMessage='서버 오류: '+e.message}
-      finally{this.generating=false;this.stopRequested=false;if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generateFinalElapsed=this.generateElapsed}
+          if(result.warning){this.statusMessage=result.warning+'\n\n'+this.statusMessage;this.statusOk=false}
+          if(_cont)this.statusMessage+=`\n\n🔁 이어 찾기로 더 좋은 표를 찾아 바꿔 저장했습니다${_cont.gap!=null&&this.mipGapPercent!=null?` (가장 좋은 답과 ${_cont.gap}% → ${this.mipGapPercent}% 차이)`:''}.`;
+          else if(!_readjust&&!this.stopRequested&&this._wantsContinue(result)){
+            this.statusMessage+=`\n\n🔁 가장 좋은 답과 ${result.mip_gap_percent}% 차이라 목표(${Math.round(this.mipGap*1000)/10}%)보다 큽니다 — 지금 표를 저장해 두고 이 표에서 한 번 더 찾습니다. 멈추면 지금 표를 씁니다.`;
+            // 첫 요청을 그대로 다시 — 그동안 달·설정을 바꿨어도 같은 문제를 잇는다. 레이스면 이긴 엔진으로 (엔진마다 목적식이 달라 견줄 수 없다)
+            const solver=payload.solver==='race'&&result.engine?(result.engine==='CP-SAT'?'cpsat':'highs'):payload.solver;
+            next={...payload,solver,warm_start:result.extended_schedule||result.schedule,prev_bound:result.mip_dual_bound??null,
+              prev_fingerprint:result.model_fingerprint||null,prev_objective:result.objective??null,
+              _cont:{objective:result.objective??null,fingerprint:result.model_fingerprint||null,gap:result.mip_gap_percent,message:this.statusMessage,ok:this.statusOk}};
+          }}
+      }catch(e){if(_cont)this._contKeep(null,_cont);else{this.statusOk=false;this.statusMessage='서버 오류: '+e.message}}
+      finally{this.generating=false;this.continuing=false;this.stopRequested=false;if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generateFinalElapsed=this.generateElapsed;
+        if(next)setTimeout(()=>this.generate(next),0)}
+    },
+    // ── 이어 찾기 (결정 1-50) — 시간이 다 됐는데 차이가 목표(설정 mipGap)보다 크면 그 표에서 한 번 더 찾는다 ──
+    // 실제 11월: 20분 8.8% → 같은 탐색을 60분까지 이으면 3.4%, 20분 표에서 다시 찾으면 41분에 1.9% (다시 찾는 쪽이 나았다)
+    _wantsContinue(r){
+      return !!r&&r.success&&!r.stopped&&!r.pinned_confirmed&&r.mip_gap_percent!=null&&r.mip_gap_percent>this.mipGap*100+1e-9;
+    },
+    // 더 좋은 표인가 — 서버가 같은 모델(지문)에서 감점이 낮은지 가려 단 improved (새로고침 복구도 같은 표시를 쓴다)
+    _contBetter(r){
+      return !!(r&&r.success&&r.improved);
+    },
+    // 앞 표를 그대로 둔다 — 같은 모델의 하한이 더 올랐으면 앞 표의 차이를 그만큼 줄여 보여 준다
+    _contKeep(r,c,edited){
+      this.statusOk=c.ok;
+      let g=c.gap;
+      if(r&&r.success&&c.objective!=null&&r.mip_dual_bound!=null&&r.model_fingerprint&&r.model_fingerprint===c.fingerprint){
+        g=Math.round(Math.max(0,c.objective-r.mip_dual_bound)/Math.max(1,Math.abs(c.objective))*10000)/100;
+      }
+      this.mipGapPercent=g;
+      this.statusMessage=c.message+(edited
+        ? `\n\n🔁 이어 찾는 동안 손으로 고친 칸이 있어 고친 표를 그대로 둡니다${r&&r.improved?' (이어 찾기에서 나온 표는 쓰지 않았습니다)':''}.`
+        : r&&r.success
+        ? `\n\n🔁 이어 찾기에서 더 좋은 표는 없었습니다 — 지금 표 그대로${g!=null?` (가장 좋은 답과 ${g}% 안쪽)`:''}.`
+        : `\n\n🔁 이어 찾기를 끝내지 못해 지금 표를 그대로 둡니다.`);
     },
     // 완화 카드 제목 — "원티드 미반영 N건 (메모 있는 셀 M건)"
     relaxedSummaryLabel(){

@@ -22,6 +22,16 @@ from .scheduler_base import (_SchedulerBase, WEEKDAY_KEYS, timeoff_class, _OFF_T
                              _TRAINEE_PAIR_BONUS)
 
 
+def _proto_fingerprint(model) -> str:
+    """CP-SAT 모델 지문 (힌트 빼고) — 이어 찾기가 앞 실행의 하한을 이어 써도 되는지 가른다 (결정 1-50)."""
+    import hashlib
+    from ortools.sat import cp_model_pb2
+    p = cp_model_pb2.CpModelProto()
+    p.CopyFrom(model.Proto())
+    p.ClearField("solution_hint")
+    return hashlib.sha1(p.SerializeToString(deterministic=True)).hexdigest()[:16]
+
+
 class _CpSatProgress:
     """solver_progress 어댑터 — CP-SAT 진행/취소 상태."""
     def __init__(self):
@@ -29,6 +39,8 @@ class _CpSatProgress:
         self.gap_percent = None
         self.nodes = 0
         self.has_solution = False
+        self.primal = self.dual = None   # 감점 점수(낮을수록 좋다) — 이어 찾기 진행이 앞 하한과 합쳐 차이를 잰다
+        self.fingerprint = None          # 이 풀이의 모델 지문 — 앞 실행과 같은 모델일 때만 하한을 합친다
         self.solver = None  # cancel() 시 즉시 stop_search 호출용
 
     def cancel(self):
@@ -46,7 +58,8 @@ class _CpSatProgress:
 
     def progress(self) -> dict:
         return {"gap_percent": self.gap_percent, "nodes": self.nodes,
-                "has_solution": self.has_solution, "is_running": True}
+                "has_solution": self.has_solution, "is_running": True,
+                "primal": self.primal, "dual": self.dual, "fingerprint": self.fingerprint}
 
 
 class _CpSatCb(cp_model.CpSolverSolutionCallback):
@@ -61,6 +74,7 @@ class _CpSatCb(cp_model.CpSolverSolutionCallback):
         ov = self.ObjectiveValue()
         bound = self.BestObjectiveBound()
         self._p.has_solution = True
+        self._p.primal, self._p.dual = -ov, -bound     # 최대화 → 감점 점수 (HiGHS 와 같은 쪽)
         denom = max(1.0, abs(ov))
         self._p.gap_percent = round(abs(bound - ov) / denom * 100, 2)
         self._p.nodes = int(self.NumBranches())
@@ -78,6 +92,31 @@ class _CpSatCb(cp_model.CpSolverSolutionCallback):
 
 
 class CpSatScheduler(_SchedulerBase):
+    def _apply_hints(self, model, x) -> int:
+        """이어 찾기 — 앞 실행이 낸 표의 칸을 CP-SAT 힌트로 (결정 1-50). 넣은 힌트 수."""
+        pairs = self._mip_start_pairs(x, lambda v: isinstance(v, cp_model.IntVar)) if self.warm_start else []
+        for v, b in pairs:
+            model.AddHint(v, b)
+        return len(pairs)
+
+    @staticmethod
+    def _cp_info(solver, fingerprint) -> dict:
+        """목적값·하한을 감점 점수로(최대화의 부호를 바꿔 HiGHS 와 같은 쪽 — 낮을수록 좋다) + 모델 지문 (결정 1-50)."""
+        import math
+        out = {"engine": "CP-SAT", "model_fingerprint": fingerprint}
+        try:
+            ov, bd = float(solver.ObjectiveValue()), float(solver.BestObjectiveBound())
+        except Exception:
+            return out
+        if math.isfinite(ov):
+            out["objective"] = -ov
+            if math.isfinite(bd):
+                out["mip_dual_bound"] = -bd
+                # 차이도 끝난 뒤 값으로 — 콜백 값은 마지막 해를 찾은 때의 것이라 Optimal 로 끝나도 수억 % 로 남아
+                # 끝난 문제를 이어 찾았다 (리뷰 2026-10-19)
+                out["mip_gap_percent"] = round(abs(bd - ov) / max(1.0, abs(ov)) * 100, 2)
+        return out
+
     def solve(self) -> Dict:
         if not self.nurses:
             return {"success": False, "message": "간호사가 등록되지 않았습니다.", "schedule": {}}
@@ -92,6 +131,8 @@ class CpSatScheduler(_SchedulerBase):
         obj_terms = self._build_objective_cpsat(model, x)
         if obj_terms:
             model.Maximize(sum(obj_terms))
+        fingerprint = _proto_fingerprint(model)
+        self._apply_hints(model, x)                     # 이어 찾기 — 앞 실행이 낸 표 (결정 1-50)
 
         # ── Solve (진행/중지/로그 콜백 — HiGHS 패리티) ──────────────────────
         from . import solver_progress
@@ -131,6 +172,7 @@ class CpSatScheduler(_SchedulerBase):
             pass
         cb = _CpSatCb(prog, _log_sink)
         prog.solver = solver  # cancel() → stop_search() 즉시 중단 경로
+        prog.fingerprint = fingerprint
         solver_progress.register(prog)
         # 모델 빌드 중 눌린 중지는 register가 cancel()로 전달하지만, Solve 시작
         # 전의 stop_search()는 no-op이므로 여기서 플래그를 직접 확인한다
@@ -156,6 +198,7 @@ class CpSatScheduler(_SchedulerBase):
                 "mip_gap_percent": prog.gap_percent if prog.gap_percent is not None else 0.0,
                 "message": f"근무표가 생성되었습니다. (CP-SAT 상태: {label})",
                 "estimated_seconds": self.estimate_seconds(),
+                **self._cp_info(solver, fingerprint),
             })
         if status == cp_model.INFEASIBLE:
             # 사전입력 완화 재시도 (HiGHS 패리티 — 최소 침습).
@@ -335,6 +378,7 @@ class CpSatScheduler(_SchedulerBase):
         x, pre_keeps = self._build_vars_relaxed(model)
         self._apply_hard_constraints(model, x)
         self._cs_juhu_block_dow(model, x)
+        self._apply_hints(model, x)                     # 이어 찾기 — 1단계·2단계 모두 (결정 1-50)
         # 주휴 재배치 시 주당 주휴 ≤1 (HiGHS weekly_juhu 패리티 — 나이트킵 포함, 나이트킵의 날·일반의 날 각각)
         # + 사전입력 주휴가 있던 주는 옮겨도 없애지 않는다 (제1원칙 3, 결정 1-36 — HiGHS 패리티)
         _juhu_drop = []
@@ -437,6 +481,7 @@ class CpSatScheduler(_SchedulerBase):
             model.Maximize(sum(obj_terms) if obj_terms else 0)
             stage2_gap = float(self.mip_gap)
         from . import solver_progress
+        fingerprint = _proto_fingerprint(model)
         prog = _CpSatProgress()
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = float(self.time_limit)
@@ -452,6 +497,7 @@ class CpSatScheduler(_SchedulerBase):
                 pass
         cb = _CpSatCb(prog, _relax_log_sink)
         prog.solver = solver
+        prog.fingerprint = fingerprint
         solver_progress.register(prog)
         if prog.cancelled:
             solver_progress.unregister(prog)
@@ -510,6 +556,7 @@ class CpSatScheduler(_SchedulerBase):
             "mip_gap_percent": prog.gap_percent if prog.gap_percent is not None else 0.0,
             "message": f"근무표가 생성되었습니다. (CP-SAT 완화)\n{relax_msg}",
             "estimated_seconds": self.estimate_seconds(),
+            **self._cp_info(solver, fingerprint),
         })
 
     # ── 변수 도메인 (HiGHS solve()의 변수 생성 블록과 동일 규칙) ──────────────

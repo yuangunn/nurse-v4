@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 import json
+import math
 import queue
 import logging
 import traceback
@@ -40,9 +41,10 @@ try:
 
         진행은 MIP 콜백이 남긴 값(snap)으로 — highspy 1.8 의 getInfoValue 는 풀이가 끝나야 갱신돼, 도중엔 지난 값을
         돌려줬다(앱의 진행 줄이 20분 내내 '조건을 정리하는 중', 2026-10-19)."""
-        def __init__(self, highs, snap):
+        def __init__(self, highs, snap, fingerprint=None):
             self._h = highs
             self._snap = snap
+            self._fp = fingerprint     # 이어 찾기 중일 때만 — 앞 실행과 같은 모델이면 진행 차이에 앞 하한을 합친다
 
         def cancel(self):
             try:
@@ -54,10 +56,13 @@ try:
             import math
             out = {"gap_percent": None, "nodes": 0, "has_solution": False, "is_running": True}
             s = dict(self._snap)
-            gap, primal = s.get("gap"), s.get("primal")
+            gap, primal, dual = s.get("gap"), s.get("primal"), s.get("dual")
             if gap is not None and primal is not None and math.isfinite(gap) and math.isfinite(primal):
                 out["gap_percent"] = round(gap * 100, 2)
                 out["has_solution"] = True
+                if dual is not None and math.isfinite(dual):
+                    out["primal"], out["dual"] = primal, dual    # 감점 점수 — 이어 찾기 진행이 앞 하한과 합친다
+                    out["fingerprint"] = self._fp
             out["nodes"] = int(s.get("nodes") or 0)
             return out
 
@@ -100,7 +105,8 @@ try:
 
             def _on_mip(event):
                 d = event.data_out
-                snap.update(gap=float(d.mip_gap), primal=float(d.mip_primal_bound), nodes=int(d.mip_node_count))
+                snap.update(gap=float(d.mip_gap), primal=float(d.mip_primal_bound), dual=float(d.mip_dual_bound),
+                            nodes=int(d.mip_node_count))
             try:
                 self.cbMipLogging.subscribe(_on_mip)
                 self.cbMipImprovingSolution.subscribe(_on_mip)
@@ -110,7 +116,14 @@ try:
             # HandleUserInterrupt=True 필수: 이 플래그가 있어야 cancelSolve()가
             # MIP 인터럽트 콜백을 활성화하여 솔버를 실제로 중단할 수 있음
             self.HandleUserInterrupt = True
-            _hadapter = _HighsAdapter(self, snap)
+            fp = None
+            if solver_progress.prev_fingerprint():          # 이어 찾기 중 — 이 모델이 앞 실행과 같은지 (진행 차이 합치기)
+                try:
+                    from .scheduler import highs_fingerprint
+                    fp = highs_fingerprint(self)
+                except Exception:
+                    pass
+            _hadapter = _HighsAdapter(self, snap, fp)
             solver_progress.register(_hadapter)
             try:
                 result = super().run()
@@ -1648,6 +1661,37 @@ def get_generate_progress():
     return solver_progress.get_progress()
 
 
+def _carry_bound(result: dict, request: GenerateRequest) -> None:
+    """이어 찾기 — 같은 모델(지문)이면 앞 실행의 하한을 이어 써서 차이를 잰다 (결정 1-50).
+    다시 찾으면 하한은 처음부터 다시 쌓여, 그대로 두면 같은 표인데도 앞 실행보다 차이가 커 보였다."""
+    import math
+    obj, lb = result.get("objective"), result.get("mip_dual_bound")
+    if (request.prev_bound is None or not request.prev_fingerprint or obj is None or lb is None
+            or request.prev_fingerprint != result.get("model_fingerprint")
+            or not (math.isfinite(obj) and math.isfinite(lb))):
+        return
+    result["mip_gap_percent"], result["mip_dual_bound"] = solver_progress.combined_gap(obj, lb, request.prev_bound)
+
+
+def _drop_non_finite(result: dict) -> None:
+    """inf·nan 은 JSON 에 못 싣는다 — 실으면 이 응답과 새로고침 복구(/api/generate/result)가 500 이었다 (리뷰 2026-10-19)."""
+    for k in [k for k, v in result.items() if isinstance(v, float) and not math.isfinite(v)]:
+        result.pop(k)
+
+
+def _mark_continuation(result: dict, request: GenerateRequest) -> None:
+    """이어 찾기 결과 표시 — improved: 같은 모델(지문)에서 앞 표보다 감점이 낮은가 (결정 1-50).
+    화면과 새로고침 복구가 이것으로 표를 바꿀지 가른다 — 모델이 다르면(완화 경로가 갈리거나 엔진이 다르면) 목적식이 달라 견주지 않는다."""
+    import math
+    obj = result.get("objective")
+    result["continued"] = True
+    result["improved"] = bool(
+        result.get("success") and obj is not None and math.isfinite(obj)
+        and request.prev_objective is not None and request.prev_fingerprint
+        and request.prev_fingerprint == result.get("model_fingerprint")
+        and obj < request.prev_objective - 1e-6)
+
+
 def _run_race(request: GenerateRequest) -> dict:
     """두 엔진 레이스 — HiGHS와 CP-SAT를 동시 실행, 먼저 성공한 쪽을 채택하고
     패자는 즉시 중지(cancel_all_adapters, 사용자 취소 플래그는 건드리지 않음).
@@ -1743,6 +1787,7 @@ def generate(request: GenerateRequest):
         # 편차를 줄이도록 누적 오프셋을 자동 주입 (저장본 파생 — 별도 기록 불필요)
         fair_ctx = _attach_fairness_offsets(request)
         _attach_prev_juhu(request)
+        solver_progress.set_prev_bound(request.prev_bound, request.prev_fingerprint)   # 이어 찾기 — 같은 모델의 진행 차이를 앞 하한과 합친다
         if request.solver == "race":
             result = _run_race(request)
         elif request.solver == "cpsat":
@@ -1757,6 +1802,10 @@ def generate(request: GenerateRequest):
             import math
             if math.isfinite(_last_mip_gap):
                 result["mip_gap_percent"] = round(_last_mip_gap * 100, 2)
+        _carry_bound(result, request)
+        if request.warm_start:
+            _mark_continuation(result, request)
+        _drop_non_finite(result)
         if solver_progress.is_cancelled() and result.get("success"):
             result["stopped"] = True
 
