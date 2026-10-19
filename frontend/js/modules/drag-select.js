@@ -283,7 +283,7 @@ window.DragSelectModule = function() {
       this._sel = { tab: q.tab, r0: q.rA, c0: q.cA, r1: clamp(q.rA + h - 1, 0, rows.length - 1), c1: clamp(q.cA + w - 1, 0, days.length - 1) };
       const parts = [`${n - cleared}칸 넣었어요`];
       if (cleared) parts.push(`${cleared}칸 비움`);
-      if (unknown.size) parts.push(`모르는 표기 ${[...unknown].slice(0, 3).join(', ')}${unknown.size > 3 ? ' 등' : ''}은 건너뛰었어요`);
+      if (unknown.size) parts.push(`모르는 표기 ${[...unknown].slice(0, 3).join(', ')}${unknown.size > 3 ? ' 등' : ''} 건너뜀`);
       if (skipped) parts.push(`전입 전·전출 뒤 ${skipped}칸 건너뜀`);
       if (h > 1 && q.rA + h > rows.length || q.cA + w > days.length) parts.push('표 밖으로 나간 칸은 버렸어요');
       this.toast(parts.join(' · ') + (n ? ' (Ctrl+Z 로 되돌리기)' : ''), n ? 'success' : 'info', 5000);

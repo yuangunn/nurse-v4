@@ -275,9 +275,27 @@ body.rd textarea.rpaste-box, .rpaste-box { border-radius: 12px; background: var(
 .rpaste-box:focus { outline: 3px solid var(--focus); outline-offset: 2px; }
 .rpaste-opts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--fs-sub); color: var(--ink-2); }
 .rpaste-opts .rcheck { height: 40px; }
-.rpaste-details { max-height: 32vh; overflow: auto; font-size: var(--fs-sub); }
-.rpaste-details table { font-size: var(--fs-sub); }
-.rpaste-details .pill { font-size: var(--fs-min); }
+/* 가져오기 — 이름 맞추기 · 근무 표기 (고르면 다시 맞춘다) */
+.rpaste-fix { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; font-size: var(--fs-sub); }
+.rpaste-fix > b { width: 100%; font-weight: var(--fw-label); }
+.rpaste-map { display: inline-flex; align-items: center; gap: 8px; }
+.rpaste-map .raw { padding: 4px 10px; border-radius: 8px; background: var(--paper); font-weight: var(--fw-label); }
+.rpaste-map .raw.warn { background: var(--warn-bg); color: var(--warn); }
+.rpaste-map .code { padding: 4px 10px; border-radius: 8px; }
+body.rd .rpaste-map select { height: 40px; font-size: var(--fs-sub); }
+/* 가져오기 미리보기 — 사람 × 날짜 칸. 바뀌는 칸은 근무 색, 이미 같은 칸은 흐리게, 비우는 칸은 줄 긋기, 모르는 표기는 노랗게 */
+.rpaste-scroll { max-height: 42vh; overflow: auto; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--rule); }
+.rpaste-preview table { border-collapse: separate; border-spacing: 0; font-size: var(--fs-min); }
+.rpaste-preview th, .rpaste-preview td { height: 30px; min-width: 30px; padding: 0 2px; text-align: center; border-bottom: 1px solid var(--rule-soft); white-space: nowrap; font-weight: var(--fw-strong); }
+.rpaste-preview thead th { position: sticky; top: 0; z-index: 1; background: var(--card); color: var(--ink-2); font-weight: var(--fw-label); }
+.rpaste-preview .nm { position: sticky; left: 0; z-index: 1; background: var(--card); text-align: left; padding: 0 10px; font-size: var(--fs-sub); font-weight: var(--fw-label); }
+.rpaste-preview thead th.nm { z-index: 2; }
+.rpaste-preview .st-same { opacity: 0.45; }
+.rpaste-preview .st-clear { color: var(--ink-2); text-decoration: line-through; }
+.rpaste-preview .st-unknown { background: var(--warn-bg); color: var(--warn); box-shadow: inset 0 0 0 1.5px var(--warn); }
+.rpaste-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: var(--fs-min); color: var(--ink-2); }
+.rpaste-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.rpaste-legend i { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 22px; border-radius: 5px; font-style: normal; font-weight: var(--fw-strong); }
 .rmodal .legacy { font-size: var(--fs-sub); }
 
 /* 인쇄 미리보기 */
@@ -436,7 +454,6 @@ body.rd input[type="date"].rinput { font-size: var(--fs-sub); height: 44px; min-
 body.rd .rmodal .legacy input[type="number"], body.rd .rmodal .legacy input[type="text"] { height: 40px; }
 body.rd .rmodal .legacy .card-sm { border-radius: 10px; box-shadow: inset 0 0 0 1px var(--rule); padding: 10px 12px; }
 body.rd .rmodal .legacy .text-xs, body.rd .rmodal .legacy .text-sm { font-size: var(--fs-sub) !important; }
-.rpaste-details .card-sm { border-radius: 10px; box-shadow: inset 0 0 0 1px var(--rule); padding: 10px 12px; margin-bottom: 8px; }
 .rstatus .relaxed-note .rbtn-sm { margin-left: 6px; }
 .rdrawer-body .rrow .rbtn-sm { height: 40px; white-space: nowrap; }
 body.rd .rhdr-ver { font-size: var(--fs-min); }

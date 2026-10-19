@@ -48,7 +48,7 @@ const days0 = (a) => a.scheduleDays.findIndex((d) => a.dayKey(d) === dk(1));   /
   assert.deepEqual(r.unknown, ['XX']);
   assert.equal(r.cleared, 1); assert.equal(r.skipped, 1);
   assert.deepEqual(a._sel, { tab: 'preinput', r0: 0, c0, r1: 2, c1: c0 + 5 }, '넣은 범위를 고른다');
-  assert.match(a.toasts.at(-1), /칸 넣었어요 · 1칸 비움 · 모르는 표기 XX은 건너뛰었어요 · 전입 전·전출 뒤 1칸 건너뜀/);
+  assert.match(a.toasts.at(-1), /칸 넣었어요 · 1칸 비움 · 모르는 표기 XX 건너뜀 · 전입 전·전출 뒤 1칸 건너뜀/);
   a.undo();                                                  // 한 번에 되돌린다
   assert.deepEqual(a.prevSchedule, { b: { [dk(2)]: 'V' } });
 }

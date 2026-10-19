@@ -1630,7 +1630,7 @@
 <!-- ═══ 붙여넣기 모달 — 종류 3택 + 파일에서 읽기 + 인식 결과 한 문장 + 표에 넣기 (design/handoff) ═══ -->
 <template x-if="pastePrev.open">
 <div class="rmodal-bg" role="dialog" aria-modal="true" @click.self="closePastePrev()" @keydown.escape.window="closePastePrev()">
-  <div class="rmodal" data-rd="paste-modal" style="width:760px;max-width:95vw;max-height:92vh">
+  <div class="rmodal" data-rd="paste-modal" :style="(pastePrev.grid.length?'width:1080px':'width:760px')+';max-width:95vw;max-height:92vh'">
     <div class="rmodal-head">
       <div><div class="rmodal-title" x-text="pastePrev.target==='saved'?'근무표 파일 올리기':(pastePrev.target==='wish'?'위시 시트 붙여넣기':'엑셀 표 붙여넣기')"></div><div class="rmodal-desc">엑셀이나 팀즈에서 표를 복사(Ctrl+C)한 뒤 아래 칸을 누르고 붙이기(Ctrl+V) 하세요. 이름과 날짜는 자동으로 알아봅니다.</div></div>
       <button @click="closePastePrev()" class="rmodal-close" data-rd="modal-close" title="닫기 (Esc). 붙여 넣은 내용은 사라집니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18 M6 6l12 12"/></svg></button>
@@ -1651,11 +1651,6 @@
       <span class="text-sub font-semibold ml-2">저장 이름:</span>
       <input type="text" x-model="pastePrev.saveName" :placeholder="`${pastePrev.anchorY}년 ${pastePrev.anchorM}월 (업로드)`" style="width:11em"/>
       <span class="text-dim">날짜에 월이 있으면 표에서 자동 감지합니다</span>
-    </div>
-    <div x-show="pastePrev.target==='wish'" x-cloak class="text-xs text-amber mb-2">
-      위시 시트를 그대로 붙여넣으세요. 휴무 계열(OF·연차 등)은 '쉬고 싶음(OFF)' 희망으로 저장되어
-      <strong>가능하면 반영</strong>됩니다(확정 아님). 미반영자는 다음 달 생성에서 자동 가중됩니다.
-      둘째 행이 요일(월~일)이어도 자동으로 무시합니다.
     </div>
 </div>
       <div class="rpaste-opts" x-show="pastePrev.fileName||(pastePrev.sheets?.length||0)>1">
@@ -1722,174 +1717,65 @@
         <div class="rbanner" :class="(pastePrev.diff?.unmatchedNames?.length||pastePrev.diff?.unrecognized?.length)?'warn':'ok'">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z M12 9v4 M12 17h.01"/></svg>
           <span style="flex:1"><b x-text="`${pastePrev.matches?.nameRow?.filter(x=>x.matched).length||0}명 · ${pastePrev.matches?.dateCol?.filter(x=>x.matched).length||0}일`"></b>을 알아봤습니다.
-            <span x-show="pastePrev.diff?.unmatchedNames?.length" x-text="` ‘${(pastePrev.diff?.unmatchedNames||[]).join(', ')}’은 명부에 없어 건너뜁니다. 이름이 바뀌었다면 설정 → 명부에서 고친 뒤 다시 붙이세요.`"></span>
-            <span x-show="pastePrev.diff?.unrecognized?.length" x-text="` 모르는 근무 ‘${(pastePrev.diff?.unrecognized||[]).join(', ')}’은 그 칸만 건너뜁니다.`"></span>
+            <span x-show="pastePrev.target==='prev'" x-text="` 바뀌는 칸 ${pastePrev.diff?.will_set?.length||0}${pastePrev.diff?.will_clear?.length?` · 비우는 칸 ${pastePrev.diff.will_clear.length}`:''}.`"></span>
+            <span x-show="pastePrev.target!=='prev'" x-cloak x-text="` 넣을 칸 ${pastePrev.diff?.matched_all?.length||0}.`"></span>
+            <span x-show="(pastePrev.diff?.months?.length||0)>1" x-text="` (${(pastePrev.diff?.months||[]).map(x=>`${+x.ym.slice(5,7)}월 ${x.count}`).join(' · ')})`"></span>
+            <span x-show="pastePrev.diff?.unmatchedNames?.length||pastePrev.diff?.unrecognized?.length" x-text="' '+[pastePrev.diff?.unmatchedNames?.length?`명부에서 못 찾은 이름 ${pastePrev.diff.unmatchedNames.length}개`:'',pastePrev.diff?.unrecognized?.length?`모르는 근무 표기 ${pastePrev.diff.unrecognized.length}개`:''].filter(Boolean).join(' · ')+'는 아래에서 고르세요. 고르지 않으면 건너뜁니다.'"></span>
             <span x-show="pastePrev.target!=='saved'&&pastePrev.diff?.outsideCycle>0" x-text="` 지금 보는 달 밖 날짜 ${pastePrev.diff?.outsideCycle}칸도 함께 들어갑니다.`"></span></span>
           <button x-show="pastePrev.diff?.unmatchedNames?.length" @click="addUnmatchedNurses()" class="rbtn rbtn-sm rbtn-secondary" title="명부에 없는 이름을 간호사로 추가하고 다시 맞춥니다. 한 번 더 확인합니다.">간호사로 추가하고 다시 맞추기</button>
         </div>
       </template>
-      <div class="rpaste-details" x-show="pastePrev.diff">    <!-- 모드 선택 -->
-    <div class="flex flex-wrap items-center gap-3 mb-2 text-xs" x-show="pastePrev.grid.length">
-      <label class="flex items-center gap-1.5 cursor-pointer">
-        <input type="checkbox" :checked="pastePrev.hasNameCol"
-               @change="pastePrev.hasNameCol=$event.target.checked; pastePrev.mode='manual'; _matchPasteGrid()"/>
-        <span>첫 컬럼 = 이름</span>
-      </label>
-      <label class="flex items-center gap-1.5 cursor-pointer">
-        <input type="checkbox" :checked="pastePrev.hasDateRow"
-               @change="pastePrev.hasDateRow=$event.target.checked; pastePrev.mode='manual'; _matchPasteGrid()"/>
-        <span>첫 행 = 날짜</span>
-      </label>
-      <span class="text-dim">|</span>
-      <span class="text-dim" x-text="`${pastePrev.grid.length}행 × ${Math.max(...pastePrev.grid.map(r=>r.length))||0}열`"></span>
-      <span x-show="pastePrev.matches" class="text-dim">·</span>
-      <span x-show="pastePrev.matches" class="text-blue"
-            x-text="`이름 매칭 ${pastePrev.matches?.nameRow?.filter(x=>x.matched).length||0}/${pastePrev.matches?.nameRow?.filter(x=>x.name).length||0}, 날짜 매칭 ${pastePrev.matches?.dateCol?.filter(x=>x.matched).length||0}/${pastePrev.matches?.dateCol?.filter(x=>x.raw).length||0}`"></span>
-      <span x-show="pastePrev.matches?.dateFrom" x-cloak class="text-dim font-mono"
-            x-text="`날짜 해석: ${pastePrev.matches?.dateFrom} ~ ${pastePrev.matches?.dateTo}`"></span>
-    </div>
-
-    <!-- 결과 요약 배지 -->
-    <div class="flex flex-wrap gap-2 mb-2 text-xs" x-show="pastePrev.diff">
-      <span x-show="pastePrev.target!=='saved'" class="pill" style="background:rgba(34,197,94,0.15);color:#22c55e">
-        ✏ 변경 <strong x-text="pastePrev.diff?.will_set.length"></strong>건
-      </span>
-      <span x-show="pastePrev.target==='saved'" x-cloak class="pill" style="background:rgba(34,197,94,0.15);color:#22c55e">
-        📥 인식 <strong x-text="pastePrev.diff?.matched_all?.length||0"></strong>건
-      </span>
-      <span x-show="pastePrev.target!=='saved'&&pastePrev.diff?.will_clear.length" class="pill" style="background:rgba(239,68,68,0.15);color:#ef4444">
-        🗑 비움 <strong x-text="pastePrev.diff?.will_clear.length"></strong>건
-      </span>
-      <template x-for="mo in pastePrev.diff?.months||[]" :key="'mo'+mo.ym">
-        <span class="pill" style="background:rgba(59,130,246,0.12);color:var(--t-blue)">
-          📅 <span x-text="`${mo.label} ${mo.count}건`"></span>
-        </span>
+      <template x-if="pastePrev.diff&&!pastePrev.batch&&pasteNameRows.length">
+        <div class="rpaste-fix" data-rd="paste-names">
+          <b>이름 맞추기</b>
+          <template x-for="row in pasteNameRows" :key="'nm'+row.r">
+            <label class="rpaste-map"><span class="raw" x-text="row.name"></span><span aria-hidden="true">→</span>
+              <select @change="setPasteName(row.name,$event.target.value)" :title="`‘${row.name}’이 명부의 누구인지 고릅니다. 고르지 않으면 이 줄은 건너뜁니다.`">
+                <option value="">명부에 없음 — 건너뛰기</option>
+                <template x-for="n in pasteNameChoices(row.name)" :key="'nmo'+row.r+n.id"><option :value="n.id" :selected="n.id===pastePrev.nameMap[row.name]" x-text="n.name"></option></template>
+              </select></label>
+          </template>
+        </div>
       </template>
-      <span x-show="pastePrev.diff?.unrecognized.length" class="pill" style="background:rgba(245,158,11,0.15);color:#f59e0b">
-        ⚠ 미인식 코드 <strong x-text="pastePrev.diff?.unrecognized.length"></strong>종
-      </span>
-      <span x-show="pastePrev.diff?.unmatchedNames.length" class="pill" style="background:rgba(245,158,11,0.15);color:#f59e0b">
-        매칭 실패 이름 <strong x-text="pastePrev.diff?.unmatchedNames.length"></strong>
-      </span>
-    </div>
-
-    <!-- 당월 주기 밖 날짜 안내 (멀티월 붙여넣기) -->
-    <div x-show="pastePrev.target!=='saved'&&pastePrev.diff?.outsideCycle>0" x-cloak
-         class="text-xs text-amber mb-2">
-      🗓 지금 보는 달 주기 밖 날짜 <strong x-text="pastePrev.diff?.outsideCycle"></strong>건 포함 —
-      함께 적용되며, 해당 년월로 이동하면 보입니다.
-    </div>
-
-    <!-- 상세 -->
-    <div x-show="pastePrev.diff" style="flex:1;overflow-y:auto;min-height:0;padding-right:4px">
-      <template x-if="pastePrev.target==='saved'&&pastePrev.diff?.matched_all?.length">
-        <div class="mb-2">
-          <div class="text-xs font-semibold mb-1" style="color:#22c55e">📥 저장될 근무</div>
-          <div style="max-height:36vh;overflow-y:auto">
-            <table class="text-xs" style="width:100%;border-collapse:collapse">
-              <thead>
-                <tr class="text-dim" style="text-align:left">
-                  <th style="padding:2px 6px">이름</th>
-                  <th style="padding:2px 6px">날짜</th>
-                  <th style="padding:2px 6px">근무</th>
-                </tr>
-              </thead>
-              <tbody>
-                <template x-for="(it,i) in pastePrev.diff.matched_all" :key="'sv'+i">
-                  <tr style="background:rgba(34,197,94,0.05)">
-                    <td style="padding:2px 6px" class="font-medium" x-text="it.name"></td>
-                    <td style="padding:2px 6px" class="font-mono text-dim" x-text="it.dk"></td>
-                    <td style="padding:2px 6px" class="font-mono font-bold text-blue" x-text="it.code"></td>
-                  </tr>
-                </template>
-              </tbody>
+      <template x-if="pastePrev.diff&&!pastePrev.batch&&(pastePrev.diff.unrecognized.length||pasteAliasUsed.length)">
+        <div class="rpaste-fix" data-rd="paste-codes">
+          <b>근무 표기</b>
+          <template x-for="raw in pastePrev.diff.unrecognized" :key="'uk'+raw">
+            <label class="rpaste-map"><span class="raw warn" x-text="raw"></span><span aria-hidden="true">→</span>
+              <select @change="setPasteAlias(raw,$event.target.value)" :title="`‘${raw}’을 어떤 근무로 읽을지 고릅니다. 고르면 기억해 다음 붙여넣기와 표에 바로 붙이기에도 씁니다.`">
+                <option value="">모름 — 그 칸 건너뛰기</option>
+                <template x-for="sh in shifts" :key="'uko'+raw+sh.code"><option :value="sh.code" x-text="sh.code+(sh.name&&sh.name!==sh.code?' · '+sh.name:'')"></option></template>
+              </select></label>
+          </template>
+          <template x-for="a in pasteAliasUsed" :key="'ua'+a.raw">
+            <span class="rpaste-map"><span class="raw" x-text="a.raw"></span><span aria-hidden="true">→</span><b :data-shift="a.code" class="code" x-text="a.code"></b>
+              <button @click="setPasteAlias(a.raw,'')" class="rbtn rbtn-sm rbtn-quiet" :title="`‘${a.raw}’을 ${a.code}(으)로 읽던 것을 잊습니다. 다시 모르는 표기가 됩니다.`">잊기</button></span>
+          </template>
+        </div>
+      </template>
+      <template x-if="pastePreview?.rows.length">
+        <div class="rpaste-preview" data-rd="paste-preview">
+          <div class="rpaste-scroll">
+            <table>
+              <thead><tr><th class="nm">이름</th><template x-for="d in pastePreview.days" :key="'pd'+d.dk"><th x-text="d.label" :title="d.dk"></th></template></tr></thead>
+              <tbody><template x-for="row in pastePreview.rows" :key="'pr'+row.id"><tr>
+                <td class="nm" x-text="row.name"></td>
+                <template x-for="d in pastePreview.days" :key="'pc'+row.id+d.dk"><td :class="'st-'+(row.cells[d.dk]?.st||'none')" :data-shift="['set','same'].includes(row.cells[d.dk]?.st)?row.cells[d.dk].code:null" :title="pasteCellTip(row.name,d.dk,row.cells[d.dk])" x-text="pasteCellText(row.cells[d.dk])"></td></template>
+              </tr></template></tbody>
             </table>
           </div>
-        </div>
-      </template>
-
-      <template x-if="pastePrev.target!=='saved'&&pastePrev.diff?.will_set.length">
-        <div class="mb-2">
-          <div class="text-xs font-semibold mb-1" style="color:#22c55e">✏ 적용 예정</div>
-          <div style="max-height:36vh;overflow-y:auto">
-            <table class="text-xs" style="width:100%;border-collapse:collapse">
-              <thead>
-                <tr class="text-dim" style="text-align:left">
-                  <th style="padding:2px 6px">이름</th>
-                  <th style="padding:2px 6px">날짜</th>
-                  <th style="padding:2px 6px">기존</th>
-                  <th style="padding:2px 6px">→ 새 값</th>
-                </tr>
-              </thead>
-              <tbody>
-                <template x-for="(it,i) in pastePrev.diff.will_set" :key="'ps'+i">
-                  <tr style="background:rgba(34,197,94,0.05)">
-                    <td style="padding:2px 6px" class="font-medium" x-text="it.name"></td>
-                    <td style="padding:2px 6px" class="font-mono text-dim" x-text="it.dk"></td>
-                    <td style="padding:2px 6px" class="font-mono text-dim" x-text="it.oldShift||'(빈칸)'"></td>
-                    <td style="padding:2px 6px" class="font-mono font-bold text-blue" x-text="it.newShift"></td>
-                  </tr>
-                </template>
-              </tbody>
-            </table>
+          <div class="rpaste-legend">
+            <span x-show="pastePrev.target==='prev'"><i class="st-set" data-shift="D">D</i>바뀌는 칸</span>
+            <span x-show="pastePrev.target==='prev'"><i class="st-same" data-shift="D">D</i>이미 같은 칸</span>
+            <span x-show="pastePrev.target==='prev'"><i class="st-clear">D</i>비우는 칸</span>
+            <span x-show="pastePrev.target!=='prev'" x-cloak><i class="st-set" data-shift="D">D</i>넣을 칸</span>
+            <span><i class="st-unknown">?</i>모르는 표기 — 건너뜀</span>
           </div>
         </div>
       </template>
-
-      <template x-if="pastePrev.target!=='saved'&&pastePrev.diff?.will_clear.length">
-        <div class="mb-2">
-          <div class="text-xs font-semibold mb-1" style="color:#ef4444">🗑 비움 예정</div>
-          <div style="max-height:20vh;overflow-y:auto">
-            <template x-for="(it,i) in pastePrev.diff.will_clear" :key="'pc'+i">
-              <div class="text-xs flex gap-3" style="padding:2px 6px;background:rgba(239,68,68,0.05)">
-                <span class="font-medium" x-text="it.name"></span>
-                <span class="font-mono text-dim" x-text="it.dk"></span>
-                <span class="font-mono text-dim line-through" x-text="it.oldShift"></span>
-              </div>
-            </template>
-          </div>
-        </div>
+      <template x-if="pastePrev.diff&&!pastePreview?.rows.length">
+        <div class="rempty-desc" style="text-align:center;padding:12px 0" x-text="pastePrev.matches?.nameRow?.some(x=>x.matched)?'넣을 칸이 없습니다 — 날짜 줄을 확인하세요.':'알아본 사람이 없습니다 — 첫 칸에 이름이 있는지, 이름이 명부와 같은지 확인하세요.'"></div>
       </template>
-
-      <template x-if="pastePrev.diff?.unrecognized.length">
-        <div class="mb-2 card-sm" style="border-left:3px solid var(--amber);padding:6px 10px">
-          <div class="text-xs font-semibold text-amber mb-1">⚠ 인식 못한 근무 코드 (해당 셀은 건너뜀)</div>
-          <div class="flex flex-wrap gap-1.5 text-xs font-mono">
-            <template x-for="(c,i) in pastePrev.diff.unrecognized" :key="'un'+i">
-              <span class="pill" style="background:rgba(245,158,11,0.1)" x-text="c"></span>
-            </template>
-          </div>
-        </div>
-      </template>
-
-      <template x-if="pastePrev.diff?.unmatchedNames.length">
-        <div class="mb-2 card-sm" style="border-left:3px solid var(--amber);padding:6px 10px">
-          <div class="flex items-center justify-between gap-2 mb-1">
-            <div class="text-xs font-semibold text-amber">⚠ 간호사 목록에 없는 이름 — 이대로 적용하면 이 사람들은 빠집니다</div>
-            <button @click="addUnmatchedNurses()" class="btn btn-xs btn-primary" style="white-space:nowrap" title="명부에 없는 이름을 간호사로 추가하고 다시 맞춥니다.">
-              ＋ 간호사로 추가하고 다시 맞추기
-            </button>
-          </div>
-          <div class="flex flex-wrap gap-1.5 text-xs">
-            <template x-for="(n,i) in pastePrev.diff.unmatchedNames" :key="'unn'+i">
-              <span class="pill" style="background:rgba(245,158,11,0.1)" x-text="n"></span>
-            </template>
-          </div>
-        </div>
-      </template>
-
-      <template x-if="pastePrev.target!=='saved' && pastePrev.diff && !pastePrev.diff.will_set.length && !pastePrev.diff.will_clear.length">
-        <div class="text-center text-dim py-6 text-sm">
-          변경 사항이 없습니다.
-        </div>
-      </template>
-      <template x-if="pastePrev.target==='saved' && pastePrev.diff && !pastePrev.diff.matched_all.length">
-        <div class="text-center text-dim py-6 text-sm">
-          인식된 근무가 없습니다 — 이름·날짜 매칭을 확인하세요.
-        </div>
-      </template>
-    </div>
-</div>
     </div>
     <div class="rmodal-foot">
       <span class="rmodal-note" x-show="pastePrev.target!=='saved'">넣은 뒤에도 <b>되돌리기</b>로 취소할 수 있어요.</span>
