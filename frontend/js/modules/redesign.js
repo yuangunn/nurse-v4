@@ -127,7 +127,7 @@ window.RedesignModule = function() {
 
     // ── 사전입력 신호등 한 줄 ──
     get rdSignal(){
-      const n=this.countPrevEntries(), total=this.rdCells;
+      const n=this.countPrevEntries(true), total=this.rdCells;   // 분모와 같은 칸 — 이 달 칸, 신규 트레이닝 날 빼고
       if(!n) return {kind:'empty', dot:'none', text:'아직 비어 있어요 — 먼저 주휴를 넣거나', link:{label:'분석에서 주휴 추천 받기', act:'analysis'}};
       if((this.prevViolations||[]).length) return {kind:'fail', dot:'err', text:`이대로는 만들 수 없어요 — ${this.prevViolations[0].msg}`, link:{label:'자세히', act:'detail'}};
       const short=(this.staffingAlerts&&this.staffingAlerts.short)||[];

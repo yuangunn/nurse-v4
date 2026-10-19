@@ -63,6 +63,12 @@ assert.equal(a.rdCells, 31 + 28);
 assert.match(a.stepperSummary.preinput, / \/ 59 셀$/);
 a = make({ end: null });
 assert.equal(a.rdCells, 31);
+//  · 입력 칸 수도 같은 칸만 — 다른 달 사전입력·앞뒤 달 칸·트레이닝 날은 빼고 ('772 / 566칸 입력' 이던 것, 2026-10-19)
+a = make({ prev: { p1: { [dk(1)]: 'OF', [dk(2)]: 'D', '2026-02-28': 'E', '2026-04-01': 'N', '2026-05-03': 'D' },
+  t9: { [dk(2)]: '/E', [dk(5)]: 'OF' } } });
+assert.equal(a.countPrevEntries(true), 3);
+assert.equal(a.countPrevEntries(), 6);                          // 주기 전체 (2/28·4/1 앞뒤 달 칸, 트레이닝 날 포함 — 5/3 은 밖)
+assert.match(a.stepperSummary.preinput, /^3 \/ 59 셀$/);
 a = make({ end: '2026-02-20' });
 assert.equal(a.rdCells, 62);
 

@@ -104,7 +104,7 @@ function app() {
     },
     get stepperSummary(){
       const nurseN = (this.nurses||[]).length;
-      const prevN = this.countPrevEntries();
+      const prevN = this.countPrevEntries(true);   // 분모(rdCells)와 같은 칸
       const totalCells = this.rdCells;   // 신규는 트레이닝 날만 뺀다 (달 중간에 독립하면 그 뒤는 센다)
       const warns = (this.scheduleWarnings||[]).length;
       const sched = this.schedule && Object.keys(this.schedule).length>0;
