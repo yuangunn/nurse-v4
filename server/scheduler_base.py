@@ -345,22 +345,26 @@ class _SchedulerBase:
         # prev_schedule 정규화:
         #  1) 유효한 nurse_id (현 간호사 목록 + 트레이니)만 통과 — 삭제된 간호사(유령) 제거
         #  2) 당월 날짜 범위만 통과 — 범위 밖 날짜 무시
-        #  3) "/" 접두어는 트레이니 표시용이라 스트립 (프리셉터 근무가 자동 적용)
+        #  3) 신규의 "/" 칸은 지운다 — 프리셉터 근무가 자동 적용, 넣은 '/' 원티드는 아래 _trainee_typed 가 따로 읽는다.
+        #     신규가 아닌 사람(표시를 끈 사람·붙여넣기로 더한 사람)의 '/E' 는 그날 E — 버리면 지난달 '/E' 다음 1일이 D 가 됐다 (2026-10-19)
         valid_dates = set(dt.strftime("%Y-%m-%d") for dt in self.all_dates)
         # 법정공휴일은 '생성 주기 범위' 안의 날짜만 사용한다 — 당월만 필터하면
         # 월경계 주에 걸린 익월 공휴일(신정·설날·삼일절)을 못 봐서 ① 그 날에
         # OF/V/생을 배정해 버리고 ② 오프특근 판정에서도 빠진다. (2026-08-20)
         self.holidays = set(h for h in self.holidays if h in valid_dates)
         valid_nurse_ids = set(n["id"] for n in self._all_nurses)
-        def _normalize_pre(s: str) -> str:
+        trainee_ids = {t["id"] for t in self._trainees}
+        def _normalize_pre(s: str, nid: str) -> str:
             if not s:
                 return s
             if s.startswith("/"):
-                return ""
+                if nid in trainee_ids:
+                    return ""
+                s = s[1:]
             return _PRE_ALIAS.get(s, s)
         self.prev = {
-            nid: {dt: _normalize_pre(s) for dt, s in days.items()
-                  if dt in valid_dates and _normalize_pre(s)}
+            nid: {dt: _normalize_pre(s, nid) for dt, s in days.items()
+                  if dt in valid_dates and _normalize_pre(s, nid)}
             for nid, days in self.prev.items()
             if nid in valid_nurse_ids
         }
@@ -531,6 +535,7 @@ class _SchedulerBase:
         out = []
         work = set(self.WORK_SHIFTS)
         active = {n["id"]: n for n in self.nurses}
+        first = date(self.year, self.month, 1)     # 지난달 기록은 지난 일 — 프리셉터의 숨은 지난달 변수를 끌지 않는다
         for t in self._trainees:
             pid = t.get("preceptor_id")
             if not pid or pid == t["id"] or pid not in active:
@@ -541,7 +546,7 @@ class _SchedulerBase:
                     continue
                 dt = date.fromisoformat(iso)
                 d = self.date_to_idx.get(dt)
-                if d is None or (last is not None and dt > last) or not self._nurse_active_on(t, dt):
+                if d is None or dt < first or (last is not None and dt > last) or not self._nurse_active_on(t, dt):
                     continue
                 if self.prev.get(pid, {}).get(iso) or not self._nurse_active_on(active[pid], dt):
                     continue
@@ -552,10 +557,11 @@ class _SchedulerBase:
         """신규가 넣은 '/' 근무와 프리셉터 근무가 다른 날 — 참고 목록 (넣은 칸은 그대로 냈다)."""
         notes = []
         name = {n["id"]: n.get("name", n["id"]) for n in list(self.nurses) + list(self._trainees)}
+        first = f"{self.year:04d}-{self.month:02d}-01"
         for t in self._trainees:
             pid = t.get("preceptor_id")
             for iso, base in sorted(getattr(self, "_trainee_typed", {}).get(t["id"], {}).items()):
-                if base not in self.WORK_SHIFTS or not pid:
+                if base not in self.WORK_SHIFTS or not pid or iso < first:
                     continue
                 pc = sched.get(pid, {}).get(iso) or ""
                 if pc not in self._PRE_FLEX.get(base, {base}):
@@ -638,6 +644,8 @@ class _SchedulerBase:
             return not (nurse.get("is_pregnant") and self._preg_window_on(nid, dt))
         if not nurse.get("is_pregnant"):
             return False
+        if pre and s == pre and dt < date(self.year, self.month, 1):
+            return False          # 지난달 칸은 기록 — 임신 달 생 빼기는 생성 달부터 (결정 1-30 의 공휴일 OF 와 같다)
         if s in self.NIGHT_SHIFTS and self._preg_span_on(nid, dt):
             return True
         if s == "생" and nid in self._preg_in_month:
@@ -647,8 +655,8 @@ class _SchedulerBase:
     def _preg_effective_pre(self, nurse: dict, dt: date, pre: str):
         """임산부 모성보호로 무시해야 할 사전입력(야간/생)은 None으로 — 솔버가 유효 근무 선택.
         (사전입력 N을 임산부에게 강제하면 야간 면제와 충돌해 infeasible이 되므로 드롭.)"""
-        if not pre or not nurse.get("is_pregnant"):
-            return pre
+        if not pre or not nurse.get("is_pregnant") or dt < date(self.year, self.month, 1):
+            return pre            # 지난달 칸은 기록
         nid = nurse["id"]
         if pre in self.NIGHT_SHIFTS and self._preg_span_on(nid, dt):
             return None
@@ -1680,6 +1688,14 @@ class _SchedulerBase:
         dow_kr = "월화수목금토일"
         # 나이트킵의 날만 뺀다 — 날짜가 속한 달로 (_keeper_on): 11월 나이트킵이 12/1~ 에 받은 V 도 설명한다
         regular = list(self.nurses)
+        # 끝에 붙은 다음 달 며칠에 다음 달 나이트킵이 야간 몫을 서면 그만큼 다른 사람이 그 주에 쉰다 (결정 1-47) — 그 주 V 의 이유
+        tail = set(self._tail_idxs())
+        keeper_tail = []
+        for nurse, idxs, _ in (self._tail_keeper_targets() if tail else []):
+            nn = sum(1 for d in idxs if schedule.get(nurse["id"], {}).get(
+                self.all_dates[d].strftime("%Y-%m-%d")) in self.NIGHT_SHIFTS)
+            if nn:
+                keeper_tail.append(f"{name_of[nurse['id']]} {nn}회")
         weeks_out, total = [], 0
         for wi, (ws, we) in enumerate(self.weeks):
             idxs = [d for d in range(ws, we + 1) if self.all_dates[d] >= first_of_month]
@@ -1746,6 +1762,9 @@ class _SchedulerBase:
             if missing:
                 hints.append(f"주휴가 없는 {', '.join(missing)} — 이 주에 주휴를 넣으면 그만큼 V가 줄어듭니다 "
                              f"(분석 탭 주휴 추천 → 사전입력에 적용).")
+            if keeper_tail and tail & set(idxs):
+                hints.append(f"다음 달 나이트킵({', '.join(keeper_tail)})이 {self._week_span(sorted(tail))} 야간 몫을 서서 "
+                             "그만큼 다른 사람이 이 주에 쉽니다 — 실제 번표도 그 며칠에 야간을 섭니다. 그 칸을 사전입력하면 넣은 대로 둡니다.")
             hints.append(f"남는 날 {v_days}에 연차·휴가 원티드를 먼저 받으면 V가 사람이 원한 날로 갑니다.")
             if not missing:
                 hints.append("주휴 요일을 주 안에서 옮기는 것은 주간 총량을 바꾸지 못합니다 — 요일별 필요 인원을 "
@@ -1912,11 +1931,13 @@ class _SchedulerBase:
             return 0
         first = date(self.year, self.month, 1)
         own = self.prev.get(nurse["id"], {})
+        typed = getattr(self, "_trainee_typed", {}).get(nurse["id"], {})   # '/OF'·'/생'도 그날 신규 자기 휴무 (_fill_trainee_cells)
         trainee = next((t for t in self._trainees if t["id"] == nurse["id"]), None)
         n = 0
         for d in day_idxs:
             dt = self.all_dates[d]
-            if not (first <= dt < indep) or own.get(dt.strftime("%Y-%m-%d")) != code:
+            iso = dt.strftime("%Y-%m-%d")
+            if not (first <= dt < indep) or (own.get(iso) or typed.get(iso)) != code:
                 continue
             if trainee is None or self._nurse_active_on(trainee, dt):
                 n += 1
@@ -1969,7 +1990,8 @@ class _SchedulerBase:
                 if self.all_dates[ws] >= first and self.all_dates[we] > last]
         if not tail:
             return []
-        work = set(self.WORK_SHIFTS)
+        de = set(self.DAY_SHIFTS + self.EVENING_SHIFTS) | {None}    # 낮·저녁 자리 (None = 빈칸)
+        night = set(self.NIGHT_SHIFTS)
         req_dict = self.req.model_dump()
         wk = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
@@ -1984,7 +2006,7 @@ class _SchedulerBase:
             if not self._nurse_active_on(nurse, dt):
                 return False
             c = self.prev.get(nurse["id"], {}).get(dt.strftime("%Y-%m-%d"))
-            return not c or c in work
+            return c in de or c in night          # D1·중을 넣은 사람은 D·E·N 자리가 아니다
 
         def is_juhu(nid, iso):
             if self.prev.get(nid, {}).get(iso) == "주":
@@ -2040,8 +2062,10 @@ class _SchedulerBase:
                     continue
                 if d not in spare:
                     free = [n for n in self.nurses if free_for_work(n, dt)]
-                    # 그날 나이트킵은 야간만 받는다 — 낮·저녁 자리엔 세지 않는다 (끝 며칠의 다음 달 나이트킵 포함)
-                    day_side = sum(1 for n in free if not self._keeper_on(n, dt))
+                    # 그날 나이트킵은 야간만 받는다 — 낮·저녁 자리엔 세지 않는다 (끝 며칠의 다음 달 나이트킵 포함).
+                    # 그날 N·D1·중을 넣은 사람도 낮·저녁 자리가 아니다
+                    day_side = sum(1 for n in free if not self._keeper_on(n, dt)
+                                   and self.prev.get(n["id"], {}).get(iso) in de)
                     spare[d] = min(len(free) - need(dt), day_side - need(dt, ("D", "E")))
                 if spare[d] <= 0:
                     continue
@@ -2165,7 +2189,10 @@ class _SchedulerBase:
             result["missing_juhu"] = mj
             result["message"] += ("\n\n📌 주휴가 없는 주가 있습니다 — 그 주는 V·오프특근으로 메워졌을 수 있습니다:\n"
                                   + "\n".join("  · " + t for t in self.missing_juhu_lines(mj)))
-        # 주휴가 빠진 주에 같은 블록 요일로 넣은 주휴 (결정 1-41) — 사전입력엔 없던 칸이라 알린다
+        return self._attach_auto_juhu(result)
+
+    def _attach_auto_juhu(self, result: Dict) -> Dict:
+        """주휴가 빠진 주에 같은 블록 요일로 넣은 주휴 (결정 1-41) — 사전입력엔 없던 칸이라 알린다 (확정 경로도)."""
         aj = [a for a in (getattr(self, "auto_juhu", None) or [])
               if (result.get("schedule") or {}).get(a["nurse_id"], {}).get(a["date"], "주") == "주"]
         if aj:
@@ -2286,7 +2313,7 @@ class _SchedulerBase:
                 msg += f"\n  · … 외 {len(notes) - 12}건"
         else:
             msg += "\n앱 규칙 기준으로도 차이가 없습니다."
-        return {
+        return self._attach_auto_juhu({
             "success": True,
             "schedule": schedule,
             "extended_schedule": extended,
@@ -2296,7 +2323,7 @@ class _SchedulerBase:
             "pinned_confirmed": True,
             "pinned_notes": notes,
             "estimated_seconds": 0,
-        }
+        })
 
     def _pinned_rule_notes(self, sched: Dict[str, Dict[str, str]]) -> List[str]:
         """확정 표가 앱 규칙과 다른 지점 목록 (정보 제공용 — 어떤 것도 강제하지 않음)."""

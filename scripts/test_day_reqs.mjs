@@ -29,6 +29,15 @@ assert.equal(ctx._dayColumnFull(sched, '2026-11-30', nurses), true);
 assert.equal(ctx._dayColumnFull(sched, '2026-12-02', nurses), false);
 assert.equal(ctx._dayColumnFull(sched, '2026-12-03', nurses), true);
 
+// 트레이닝 중인 신규 칸은 비어도 다 찬 날 — 그날 신규는 프리셉터를 따른다 (엔진·rdCells 와 같게). 독립한 뒤엔 칸이 있어야 한다
+{
+  const rows = [nurses[0], nurses[1], { id: 't', name: '신규01', is_trainee: true, training_end_date: '2026-11-30' }];
+  ctx.scheduleDays = [new Date(2026, 10, 30), new Date(2026, 11, 1)];
+  const s = { a: { '2026-11-30': 'D', '2026-12-01': 'D' }, b: { '2026-11-30': 'E', '2026-12-01': 'E' } };
+  assert.equal(ctx._dayColumnFull(s, '2026-11-30', rows), true);
+  assert.equal(ctx._dayColumnFull(s, '2026-12-01', rows), false);
+}
+
 // 재조정 역산 — 다 찬 날만
 assert.deepEqual(ctx._reqFromSchedule(sched), {
   '2026-11-30': { D: 1, E: 1, N: 1 }, '2026-12-03': { D: 1, E: 1, N: 0 } });

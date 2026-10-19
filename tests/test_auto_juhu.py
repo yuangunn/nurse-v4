@@ -196,3 +196,22 @@ def test_next_month_keepers_are_not_day_side_capacity():
     nurses = [Nurse(id=f"a{i}", name=f"간호{i + 1:02d}", group="A", gender="female", capable_shifts=CAPS,
                     seniority=i, night_months={"2026-12": True} if i >= 6 else {}) for i in range(8)]
     assert len(_added(NurseScheduler(_request(prev, nurses=nurses)))) == 2
+
+
+@pytest.mark.parametrize("engine", ["highs", "cpsat"])
+def test_pre_entered_night_is_not_day_side_capacity(engine):
+    """12/02 에 간호06(일반)이 N 을 넣었다 — 그날 낮·저녁 자리엔 세지 않는다. 예전엔 세어서 블록 요일(수) 주휴를
+    간호01·간호02 둘 다 넣었고, 낮·저녁(D2 E2)에 셋만 남아 두 엔진 모두 생성이 막혔다 (2026-10-19 검토)."""
+    from .test_month_tail import _engine
+    prev = {}
+    for nid in ("a0", "a1"):
+        _juhu_on(prev, nid, BLOCK_WEEKS[1:3], 3)
+    for nid, iso in (("a2", "2026-12-01"), ("a3", "2026-12-03"), ("a4", "2026-12-04"), ("a5", "2026-11-29")):
+        prev.setdefault(nid, {})[iso] = "주"
+    prev["a5"]["2026-12-02"] = "N"
+    nurses = [Nurse(id=f"a{i}", name=f"간호{i + 1:02d}", group="A", gender="female", capable_shifts=CAPS,
+                    seniority=i, night_months={"2026-12": True} if i >= 6 else {}) for i in range(8)]
+    s = _engine(engine, date(2026, 11, 29), date(2026, 12, 5))(_request(prev, nurses=nurses))
+    assert len(_added(s)) == 1, s.auto_juhu
+    r = s.solve()
+    assert r["success"], r.get("message")

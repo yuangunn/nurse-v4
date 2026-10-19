@@ -79,10 +79,10 @@ window.PasteImportModule = function() {
       const flex={'D/E':'D/E','E/D':'D/E','DE':'D/E','ED':'D/E','E/N':'E/N','N/E':'E/N','EN':'E/N','NE':'E/N',
         'D/N':'D/N','N/D':'D/N','DN':'D/N','ND':'D/N','N제외':'N제외','N빼고':'N제외'}[raw.replace(/\s+/g,'').toUpperCase()];
       if(flex)return flex;
-      // 신규 트레이닝 날 '/D'·'/E'·'/N'… (traineeShifts 와 같은 표기) — 프리셉터 근무를 따라가는 칸
+      // 신규 트레이닝 날 '/D'·'/E'·'/N'… — 앱이 낸 '/V'·'/법'(프리셉터가 쉰 날)도 다시 올라가게 정의된 근무 코드면 다 받는다
       if(raw.startsWith('/')){
         const c=this._normalizeShiftCode(raw.slice(1));
-        return['D','E','N','주','OF','D1','생'].includes(c)?'/'+c:undefined;
+        return (this.shifts||[]).some(sh=>sh.code===c)?'/'+c:undefined;
       }
       // 정확한 코드 일치 (대소문자 무시)
       const exact=this.shifts.find(sh=>sh.code===raw)||this.shifts.find(sh=>sh.code.toLowerCase()===raw.toLowerCase());

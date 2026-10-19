@@ -149,10 +149,11 @@ window.ScheduleFeaturesModule = function() {
       for(const dk of Object.keys(out))if(!this._dayColumnFull(sched,dk,rows))delete out[dk];
       return out;
     },
-    // 그 날 칸이 다 찼나 — 그 날 재적하는 사람(rows) 모두 코드가 있다
+    // 그 날 칸이 다 찼나 — 그 날 재적하는 사람(rows) 모두 코드가 있다. 트레이닝 중인 신규 칸은 없어도 된다
+    // (프리셉터를 따르는 칸 — 엔진·rdCells 도 세지 않는다)
     _dayColumnFull(sched,dk,rows){
       const[y,m,d]=dk.split('-').map(Number);const day=new Date(y,m-1,d);
-      return (rows||[]).every(n=>this.isNurseInactive(n,day)||!!sched?.[n.id]?.[dk]);
+      return (rows||[]).every(n=>this.isNurseInactive(n,day)||(n.is_trainee&&this.isTraineeInTraining(n,day))||!!sched?.[n.id]?.[dk]);
     },
     isReadjustPin(nurseId,day){return !!this.readjustPins[nurseId]?.[this.dayKey(day)]},
     isReadjustChanged(nurseId,day){return !!this.readjustChanged[nurseId]?.[this.dayKey(day)]},
@@ -166,8 +167,15 @@ window.ScheduleFeaturesModule = function() {
       const locked=JSON.parse(JSON.stringify(this.lockedCells||{}));
       const prevPayload={};
       for(const[nid,days]of Object.entries(this.schedule)){
-        for(const[dk,v]of Object.entries(days||{})){
+        for(let[dk,v]of Object.entries(days||{})){
           if(!v||v==='__CLEAR__')continue;
+          // 신규의 '/' 칸은 엔진이 프리셉터를 따라 다시 채운다 — 고친 칸이 아니면 사전입력에 넣은 '/' 원티드(넣은 값)만 보낸다
+          // (엔진은 '/' 칸을 신규가 넣은 원티드로 읽는다 — 생성이 낸 '/EC' 를 보내면 프리셉터를 고쳐도 따라가지 않는다)
+          if(v.startsWith('/')&&!pins[nid]?.[dk]){
+            const o=this.prevSchedule?.[nid]?.[dk];
+            if(typeof o!=='string'||!o.startsWith('/'))continue;
+            v=o;
+          }
           (prevPayload[nid]=prevPayload[nid]||{})[dk]=v;
           if(pins[nid]?.[dk])(locked[nid]=locked[nid]||{})[dk]=true;
         }

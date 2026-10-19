@@ -178,8 +178,9 @@ class _HighsConstraintsMixin:
             dt_str = dt.strftime("%Y-%m-%d")
             is_holiday = dt_str in self.holidays
             for nid_i, nid_j, charge_s, regulars in eligible_pairs:
-                # 사실-클램프: 두 셀 모두 확정이면 사용자 배치 그대로
-                if self._pin.get((nid_i, d)) and self._pin.get((nid_j, d)):
+                # 사실-클램프: 후임이 그 차지를 직접 넣었고 선임 칸도 넣은 것이면 사용자 배치 그대로. 둘 다 D 처럼
+                # 차지 표시 없이 넣었으면 누가 차지로 올라갈지는 시니어리티대로 (2026-10-19 — 건너뛰어 후임이 차지였다)
+                if self._pin.get((nid_i, d)) == charge_s and self._pin.get((nid_j, d)):
                     continue
                 # 선임 j의 '유효' 사전입력으로 게이팅 (공용 헬퍼 — 변수 생성과
                 # 동일하게 공휴일 OF·임산부 드롭 + 완화 모드 잠금 처리)

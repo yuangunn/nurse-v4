@@ -110,4 +110,21 @@ assert.deepEqual(a.scheduleWarnings, [], JSON.stringify(a.scheduleWarnings));
 delete a.prevSchedule.p1;
 assert.equal(a.scheduleWarnings.length, 1, JSON.stringify(a.scheduleWarnings));
 
+// ── 재조정 — 생성이 낸 신규 '/' 칸은 보내지 않는다(엔진이 프리셉터를 따라 다시 채운다). 넣은 '/' 원티드·고친 칸은 보낸다 ──
+//  (2026-10-19 검토: 생성이 낸 '/EC' 를 신규가 넣은 원티드로 읽어, 프리셉터를 D 로 고쳐도 신규는 '/EC' 그대로였다)
+a = make({ prev: { t9: { [dk(1)]: '/OF', [dk(5)]: '/D' } },
+  rows: { p1: ['D', 'EC', 'OF', 'E', 'DC'], t9: ['/OF', '/EC', '/OF', '/E', '/DC'] } });
+a._originalSchedule = JSON.parse(JSON.stringify(a.schedule));
+a.schedule.p1[dk(2)] = 'D';
+a.schedule.t9[dk(4)] = '/D';
+let sent = null;
+a.generate = async (patch) => { sent = patch; a.statusOk = false; };
+await a.readjustSchedule();
+assert.equal(sent.prev_schedule.p1[dk(2)], 'D');
+assert.equal(sent.prev_schedule.t9[dk(1)], '/OF');
+assert.equal(sent.prev_schedule.t9[dk(2)], undefined);
+assert.equal(sent.prev_schedule.t9[dk(3)], undefined);
+assert.equal(sent.prev_schedule.t9[dk(4)], '/D');
+assert.equal(sent.prev_schedule.t9[dk(5)], '/D');               // 넣은 '/D' — 프리셉터 DC 를 따라 '/DC' 로 나와도 넣은 값으로
+
 console.log('test_trainee_days: OK');

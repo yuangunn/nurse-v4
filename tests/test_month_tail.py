@@ -148,6 +148,9 @@ def test_next_month_keeper_works_nights_on_tail_days(engine):
     a7 = r["schedule"]["a7"]
     assert all(a7[d] in ("N", "NC", "OF", "V", "생", "주") for d in TAIL), a7     # 나이트킵의 날은 야간·쉬는 것만
     assert sum(1 for d in TAIL if a7[d] in ("N", "NC")) >= 2, a7
+    # 그만큼 생긴 V 는 V 설명에 이유가 나온다 (제1원칙 8 — 2026-10-19 검토: 힌트가 나이트킵을 말하지 않았다)
+    for w in (r.get("v_report") or {}).get("weeks", []):
+        assert any("다음 달 나이트킵(간호08" in h for h in w["hints"]), w["hints"]
 
 
 @pytest.mark.parametrize("engine", ["highs", "cpsat"])
@@ -181,12 +184,17 @@ def test_charge_seniority_applies_on_tail_days(engine):
 
 
 @pytest.mark.parametrize("engine", ["highs", "cpsat"])
-def test_charge_goes_to_senior_even_when_senior_typed_plain_d(engine):
+@pytest.mark.parametrize("junior_typed", [False, True])
+def test_charge_goes_to_senior_even_when_senior_typed_plain_d(engine, junior_typed):
     """선임 간호01 이 12/2 에 D 를 넣어 뒀다(병동 번표엔 차지 표시가 없다). 넣은 D 는 DC 로 올라갈 수 있으므로 그날 차지는
-    시니어리티대로 간호01 — 예전엔 넣은 D 를 '고정 D'로 보고 선임 규칙을 건너뛰어 후임(위시)에게 차지를 줬다."""
+    시니어리티대로 간호01 — 예전엔 넣은 D 를 '고정 D'로 보고 선임 규칙을 건너뛰어 후임(위시)에게 차지를 줬다.
+    후임도 D 를 넣었으면 같다 — 둘 다 넣은 칸이라고 건너뛰어 후임이 차지였다 (2026-10-19 검토). 후임이 DC 를 직접 넣었을 때만 그대로."""
     from server.models import ScoringRule
     prev = {"a0": {"2026-12-02": "D"}, "a1": {"2026-12-02": "EC"}, "a2": {"2026-12-02": "E"},
             "a3": {"2026-12-02": "NC"}, "a4": {"2026-12-02": "주"}, "a6": {"2026-12-02": "OF"}}
+    if junior_typed:                     # 그날 한 칸(간호07)은 비워 둔다 — 다 찬 날은 차지 구성도 표 그대로
+        prev["a5"] = {"2026-12-02": "D"}
+        del prev["a6"]
     req = _request(prev, scoring_rules=[ScoringRule(name="위시", rule_type="wish", params={}, score=50)])
     req.nurses[5].wishes = {"2026-12-02": "DC"}
     cls = _engine(engine, date(2026, 11, 29), date(2026, 12, 5))
@@ -242,6 +250,19 @@ def test_confirmed_table_with_blank_tail_says_so():
     s = _engine("highs", first, date(2026, 12, 5))(_request(prev))
     msg = s._confirm_pinned_result()["message"]
     assert "12/01~12/05" in msg and "35칸은 비어" in msg, msg
+
+
+def test_confirmed_table_reports_auto_juhu():
+    """대체 경로로 확정할 때도 끝 주에 블록 요일로 넣은 주휴를 알린다 — 사전입력에 없던 칸이 다음 달의 사실이 된다
+    (2026-10-19 검토: 간호03 12/01 '주'를 내면서 auto_juhu·안내가 없었다)."""
+    first = date(2026, 11, 29)
+    prev = {f"a{i}": {"2026-11-29": "D" if i else "주", "2026-11-30": "주" if i == 1 else "E"} for i in range(7)}
+    s = _engine("highs", first, date(2026, 12, 5))(
+        _request(prev, prev_juhu_dates={"a2": ["2026-11-10", "2026-11-17", "2026-11-24"]}))
+    assert {(a["nurse_id"], a["date"]) for a in s.auto_juhu} == {("a2", "2026-12-01")}
+    r = s._confirm_pinned_result()
+    assert r["schedule"]["a2"]["2026-12-01"] == "주"
+    assert r.get("auto_juhu") == s.auto_juhu and "12/01(화) 간호03" in r["message"], r["message"]
 
 
 def test_diagnosis_names_an_impossible_tail_day():
@@ -461,3 +482,35 @@ def test_missing_juhu_notice_names_an_independent_trainee_once():
     for d in ("2026-11-02", "2026-11-09"):
         sched["t1"][d] = "/D"
     assert s._missing_juhu_weeks(sched)["none"] == ["신규01"]
+
+
+def test_trainee_lead_day_slash_cells_do_not_pull_the_preceptor():
+    """신규의 지난달 기록 '/N'(10/30·10/31)은 지난 일이다 — 기록 없는 프리셉터 지난달 칸에 짝 보너스를 걸지 않고,
+    '같이 일할 사람을 정해 주세요' 메모도 내지 않는다 (2026-10-19 검토: 숨은 지난달 변수가 11/1 배정을 끌었다)."""
+    nurses = [Nurse(id=f"a{i}", name=f"간호{i + 1:02d}", group="A", gender="female",
+                    capable_shifts=CAPS, seniority=i) for i in range(4)]
+    nurses.append(Nurse(id="t0", name="신규01", group="A", gender="female", capable_shifts=CAPS, seniority=9,
+                        is_trainee=True, training_end_date="2026-11-03", preceptor_id="a1"))
+    req = Requirements()
+    for day in ("mon", "tue", "wed", "thu", "fri", "sat", "sun"):
+        setattr(req, day, DayRequirement(D=1, E=1, N=1))
+    prev = {"t0": {"2026-10-30": "/N", "2026-10-31": "/N", "2026-11-02": "/D"}}
+    s = NurseScheduler(GenerateRequest(year=2026, month=11, nurses=nurses, requirements=req, rules=Rules(),
+                                       prev_schedule=prev, shifts=PROD_SHIFTS, time_limit=10))
+    assert [s.all_dates[d] for _, d, _ in s._trainee_pair_targets()] == [date(2026, 11, 2)]
+    notes = s._trainee_pair_notes({"a1": {"2026-11-02": "E"}})
+    assert notes and all("10/" not in t for t in notes), notes
+
+
+@pytest.mark.parametrize("engine", ["highs", "cpsat"])
+def test_pregnancy_saeng_drop_leaves_last_months_record_alone(engine):
+    """임신이 11/10 에 시작해도 지난달 기록 10/27 '생'은 그대로 — 임신 달 생 빼기는 생성 달부터다
+    (2026-10-19 검토: 1일 앞 기록이 OF 로 바뀌어 나왔다. 지난달 공휴일 OF 를 지키는 것과 같다, 결정 1-30)."""
+    prev = {"a5": {"2026-10-26": "D", "2026-10-27": "생", "2026-10-28": "E"}}
+    req = _request(prev)
+    req.nurses[5] = Nurse(id="a5", name="간호06", group="A", gender="female", capable_shifts=CAPS, seniority=5,
+                          is_pregnant=True, pregnancy={"early": {"start": "2026-11-10", "end": "2027-01-31"}})
+    r = _engine(engine, date(2026, 10, 25), date(2026, 11, 7))(req).solve()
+    assert r["success"], r.get("message")
+    row = (r.get("extended_schedule") or {}).get("a5") or r["schedule"]["a5"]
+    assert row.get("2026-10-27") == "생", row

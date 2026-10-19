@@ -696,8 +696,8 @@ class _ConflictAnalyzer(CpSatScheduler):
             is_holiday = dt_str in self.holidays
             day_lit = None
             for nid_i, nid_j, charge_s, regulars in eligible_pairs:
-                if pin.get((nid_i, d)) and pin.get((nid_j, d)):
-                    continue   # 사실-클램프: 두 칸 다 사람이 넣은 것 (엔진 _cs_charge_seniority 와 같게)
+                if pin.get((nid_i, d)) == charge_s and pin.get((nid_j, d)):
+                    continue   # 사실-클램프: 후임이 그 차지를 직접 넣었다 (엔진 _cs_charge_seniority 와 같게)
                 # 솔버와 동일한 '유효 사전입력' 게이팅 (공용 헬퍼)
                 jf = self._seniority_jfixed(nurse_by_id[nid_j], dt, dt_str, is_holiday)
                 if jf and jf != charge_s:
