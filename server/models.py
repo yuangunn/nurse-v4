@@ -147,9 +147,11 @@ class GenerateRequest(BaseModel):
     prev_juhu_dates: Optional[Dict[str, List[str]]] = None
     # 이어 찾기 (결정 1-50) — 앞 실행이 낸 표 {nurse_id: {date: code}} 를 시작해로 다시 찾는다.
     # prev_bound·prev_fingerprint: 앞 실행의 하한(감점 점수)과 모델 지문 — 같은 모델이면 하한을 이어 써서 차이를 잰다.
+    # prev_objective: 앞 표의 감점 점수 — 서버가 결과에 improved(같은 모델에서 더 낮은가)를 단다 (새로고침 복구도 이것으로 가른다)
     warm_start: Optional[Dict[str, Dict[str, str]]] = None
     prev_bound: Optional[float] = None
     prev_fingerprint: Optional[str] = None
+    prev_objective: Optional[float] = None
 
 
 class ScheduleSave(BaseModel):

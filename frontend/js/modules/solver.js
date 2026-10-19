@@ -33,7 +33,9 @@ window.SolverModule = function() {
       this.api('POST','/api/estimate',payload).then(est=>{if(est&&est.estimated_seconds)this.estimatedSeconds=est.estimated_seconds}).catch(()=>{});
       try{
         const result=await this.api('POST','/api/generate',payload);
-        if(_cont&&!this._contBetter(result,_cont)){this._contKeep(result,_cont);return}
+        // 이어 찾는 동안 손으로 고친 칸이 있으면 그 표를 그대로 둔다 — 바꾸면 고친 칸이 말없이 사라졌다 (리뷰 2026-10-19)
+        const edited=_cont&&(this._originalSchedule?this.getManualEditCount():0)>0;
+        if(_cont&&(edited||!this._contBetter(result))){this._contKeep(result,_cont,edited);return}
         this.statusOk=result.success;this.statusMessage=result.message;
         this.generationReport=result.generation_report||null;
         this.wishReport=result.wish_report||null;
@@ -68,7 +70,10 @@ window.SolverModule = function() {
           if(_cont)this.statusMessage+=`\n\n🔁 이어 찾기로 더 좋은 표를 찾아 바꿔 저장했습니다${_cont.gap!=null&&this.mipGapPercent!=null?` (가장 좋은 답과 ${_cont.gap}% → ${this.mipGapPercent}% 차이)`:''}.`;
           else if(!_readjust&&!this.stopRequested&&this._wantsContinue(result)){
             this.statusMessage+=`\n\n🔁 가장 좋은 답과 ${result.mip_gap_percent}% 차이라 목표(${Math.round(this.mipGap*1000)/10}%)보다 큽니다 — 지금 표를 저장해 두고 이 표에서 한 번 더 찾습니다. 멈추면 지금 표를 씁니다.`;
-            next={warm_start:result.extended_schedule||result.schedule,prev_bound:result.mip_dual_bound??null,prev_fingerprint:result.model_fingerprint||null,
+            // 첫 요청을 그대로 다시 — 그동안 달·설정을 바꿨어도 같은 문제를 잇는다. 레이스면 이긴 엔진으로 (엔진마다 목적식이 달라 견줄 수 없다)
+            const solver=payload.solver==='race'&&result.engine?(result.engine==='CP-SAT'?'cpsat':'highs'):payload.solver;
+            next={...payload,solver,warm_start:result.extended_schedule||result.schedule,prev_bound:result.mip_dual_bound??null,
+              prev_fingerprint:result.model_fingerprint||null,prev_objective:result.objective??null,
               _cont:{objective:result.objective??null,fingerprint:result.model_fingerprint||null,gap:result.mip_gap_percent,message:this.statusMessage,ok:this.statusOk}};
           }}
       }catch(e){if(_cont)this._contKeep(null,_cont);else{this.statusOk=false;this.statusMessage='서버 오류: '+e.message}}
@@ -80,21 +85,21 @@ window.SolverModule = function() {
     _wantsContinue(r){
       return !!r&&r.success&&!r.stopped&&!r.pinned_confirmed&&r.mip_gap_percent!=null&&r.mip_gap_percent>this.mipGap*100+1e-9;
     },
-    // 더 좋은 표인가 — 감점 점수(objective, 낮을수록 좋다)로. 견줄 수 없으면 새 표 (엔진이 앞 표에서 출발했다)
-    _contBetter(r,c){
-      if(!r||!r.success)return false;
-      if(r.objective==null||c.objective==null)return true;
-      return r.objective<c.objective-1e-6;
+    // 더 좋은 표인가 — 서버가 같은 모델(지문)에서 감점이 낮은지 가려 단 improved (새로고침 복구도 같은 표시를 쓴다)
+    _contBetter(r){
+      return !!(r&&r.success&&r.improved);
     },
     // 앞 표를 그대로 둔다 — 같은 모델의 하한이 더 올랐으면 앞 표의 차이를 그만큼 줄여 보여 준다
-    _contKeep(r,c){
+    _contKeep(r,c,edited){
       this.statusOk=c.ok;
       let g=c.gap;
       if(r&&r.success&&c.objective!=null&&r.mip_dual_bound!=null&&r.model_fingerprint&&r.model_fingerprint===c.fingerprint){
         g=Math.round(Math.max(0,c.objective-r.mip_dual_bound)/Math.max(1,Math.abs(c.objective))*10000)/100;
       }
       this.mipGapPercent=g;
-      this.statusMessage=c.message+(r&&r.success
+      this.statusMessage=c.message+(edited
+        ? `\n\n🔁 이어 찾는 동안 손으로 고친 칸이 있어 고친 표를 그대로 둡니다${r&&r.improved?' (이어 찾기에서 나온 표는 쓰지 않았습니다)':''}.`
+        : r&&r.success
         ? `\n\n🔁 이어 찾기에서 더 좋은 표는 없었습니다 — 지금 표 그대로${g!=null?` (가장 좋은 답과 ${g}% 안쪽)`:''}.`
         : `\n\n🔁 이어 찾기를 끝내지 못해 지금 표를 그대로 둡니다.`);
     },

@@ -40,6 +40,7 @@ class _CpSatProgress:
         self.nodes = 0
         self.has_solution = False
         self.primal = self.dual = None   # 감점 점수(낮을수록 좋다) — 이어 찾기 진행이 앞 하한과 합쳐 차이를 잰다
+        self.fingerprint = None          # 이 풀이의 모델 지문 — 앞 실행과 같은 모델일 때만 하한을 합친다
         self.solver = None  # cancel() 시 즉시 stop_search 호출용
 
     def cancel(self):
@@ -58,7 +59,7 @@ class _CpSatProgress:
     def progress(self) -> dict:
         return {"gap_percent": self.gap_percent, "nodes": self.nodes,
                 "has_solution": self.has_solution, "is_running": True,
-                "primal": self.primal, "dual": self.dual}
+                "primal": self.primal, "dual": self.dual, "fingerprint": self.fingerprint}
 
 
 class _CpSatCb(cp_model.CpSolverSolutionCallback):
@@ -101,11 +102,20 @@ class CpSatScheduler(_SchedulerBase):
     @staticmethod
     def _cp_info(solver, fingerprint) -> dict:
         """목적값·하한을 감점 점수로(최대화의 부호를 바꿔 HiGHS 와 같은 쪽 — 낮을수록 좋다) + 모델 지문 (결정 1-50)."""
+        import math
+        out = {"engine": "CP-SAT", "model_fingerprint": fingerprint}
         try:
-            return {"engine": "CP-SAT", "objective": -float(solver.ObjectiveValue()),
-                    "mip_dual_bound": -float(solver.BestObjectiveBound()), "model_fingerprint": fingerprint}
+            ov, bd = float(solver.ObjectiveValue()), float(solver.BestObjectiveBound())
         except Exception:
-            return {}
+            return out
+        if math.isfinite(ov):
+            out["objective"] = -ov
+            if math.isfinite(bd):
+                out["mip_dual_bound"] = -bd
+                # 차이도 끝난 뒤 값으로 — 콜백 값은 마지막 해를 찾은 때의 것이라 Optimal 로 끝나도 수억 % 로 남아
+                # 끝난 문제를 이어 찾았다 (리뷰 2026-10-19)
+                out["mip_gap_percent"] = round(abs(bd - ov) / max(1.0, abs(ov)) * 100, 2)
+        return out
 
     def solve(self) -> Dict:
         if not self.nurses:
@@ -162,6 +172,7 @@ class CpSatScheduler(_SchedulerBase):
             pass
         cb = _CpSatCb(prog, _log_sink)
         prog.solver = solver  # cancel() → stop_search() 즉시 중단 경로
+        prog.fingerprint = fingerprint
         solver_progress.register(prog)
         # 모델 빌드 중 눌린 중지는 register가 cancel()로 전달하지만, Solve 시작
         # 전의 stop_search()는 no-op이므로 여기서 플래그를 직접 확인한다
@@ -486,6 +497,7 @@ class CpSatScheduler(_SchedulerBase):
                 pass
         cb = _CpSatCb(prog, _relax_log_sink)
         prog.solver = solver
+        prog.fingerprint = fingerprint
         solver_progress.register(prog)
         if prog.cancelled:
             solver_progress.unregister(prog)

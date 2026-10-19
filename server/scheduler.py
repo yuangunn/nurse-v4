@@ -61,15 +61,41 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
     def _highs_info(prob) -> dict:
         """풀이 뒤 목적값·하한(감점 점수 — pulp 의 최대화를 HiGHS 는 부호를 바꿔 최소화한다, 낮을수록 좋다)과 모델 지문.
         이어 찾기가 앞 표와 견주고 하한을 이어 쓴다 (결정 1-50)."""
+        import math
         h = getattr(prob, "solverModel", None)
         if h is None:
             return {}
+        out = {"engine": "HiGHS"}
         try:
             info = h.getInfo()
-            return {"engine": "HiGHS", "objective": float(info.objective_function_value),
-                    "mip_dual_bound": float(info.mip_dual_bound), "model_fingerprint": highs_fingerprint(h)}
+            # 해 없이 멈춘 풀이면 목적값 inf, 루트 LP 전에 멈추면 하한 -inf — JSON 이 못 실어 500 이 났다 (리뷰 2026-10-19)
+            vals = {"objective": float(info.objective_function_value), "mip_dual_bound": float(info.mip_dual_bound),
+                    "mip_gap_percent": round(float(info.mip_gap) * 100, 2)}
+            if math.isfinite(vals["objective"]):
+                out.update({k: v for k, v in vals.items() if math.isfinite(v)})
         except Exception:
-            return {}
+            return out
+        try:
+            out["model_fingerprint"] = highs_fingerprint(h)
+        except Exception:
+            pass
+        return out
+
+    @staticmethod
+    def _highs_no_solution(prob) -> bool:
+        """마지막 HiGHS 풀이에 해가 없다고 확실할 때만 True — 중지(kInterrupt)를 pulp 가 못 읽으면 prob.status 가 앞 단계
+        (완화 1단계)의 'Optimal' 로 남고 변수값이 0 이라, 그대로 두면 빈 근무표가 '성공'으로 나갔다 (리뷰 2026-10-19)."""
+        h = getattr(prob, "solverModel", None)
+        try:
+            return h is not None and h.getInfo().primal_solution_status != 2   # 2 = kSolutionStatusFeasible
+        except Exception:
+            return False
+
+    @staticmethod
+    def _stopped_result() -> Dict:
+        """중지 요청으로 표 없이 끝남 — '제한 시간 안에 못 만들었다'·원인 진단이 아니다."""
+        return {"success": False, "schedule": {}, "extended_schedule": {},
+                "message": "중지 요청으로 멈췄습니다 — 그때까지 찾은 표가 없습니다."}
 
     def _warm_highs(self, x, **kw) -> "_WarmHiGHS":
         """HiGHS 솔버 — 이어 찾기면 앞 표를 시작해로 (없으면 보통 pulp.HiGHS 와 같다)."""
@@ -237,6 +263,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             v.varValue is not None and v.varValue > 0.5
             for v in _free_vars
         )
+        if (status_str in ("Optimal", "Feasible") or has_solution) and self._highs_no_solution(prob):
+            status_str, has_solution = "Not Solved", False
 
         if status_str in ("Optimal", "Feasible") or (has_solution and status_str != "Infeasible"):
             schedule, extended = self._extract_solution(x, lambda v: pulp.value(v))
@@ -261,6 +289,9 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             # ── 완전 확정 표: 검증 거부 대신 그대로 확정 (+규칙 차이 안내) ──
             if self._fully_pinned():
                 return self._confirm_pinned_result()
+            from . import solver_progress
+            if solver_progress.is_cancelled():       # 완화 중 멈춤 — 진단을 돌리지 않는다
+                return self._stopped_result()
             if getattr(self, "_relax_timed_out", False):
                 return self._relax_timeout_result()
             # 즉시 판정된 Infeasible → 진단 실행 (각 단계 10초 이내)
@@ -287,6 +318,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                     return relax_result
             if self._fully_pinned():
                 return self._confirm_pinned_result()
+            if solver_progress.is_cancelled():
+                return self._stopped_result()
             if getattr(self, "_relax_timed_out", False):
                 return self._relax_timeout_result()
             return {
@@ -603,6 +636,9 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             v.varValue is not None and v.varValue > 0.5
             for v in _free_vars_r
         )
+        # 1단계와 같은 prob — 2단계가 첫 해 전에 멈추면 1단계의 'Optimal' 이 남는다. 마지막 풀이에 해가 있을 때만 결과로 쓴다
+        if (status_str in ("Optimal", "Feasible") or has_solution) and self._highs_no_solution(prob):
+            status_str, has_solution = "Not Solved", False
 
 
         if status_str in ("Optimal", "Feasible") or (has_solution and status_str != "Infeasible"):
