@@ -468,7 +468,7 @@ function app() {
         });
       }
       window.addEventListener('beforeunload',()=>{this._saveFullState();this._closeCurrentProfile()});
-      document.addEventListener('mouseup',()=>{if(this._isDragging)this.gridUp()});
+      document.addEventListener('mouseup',()=>{if(this._isDragging)this.gridUp();this._rosterPaint=null});
       // 표 칸 ↔ 엑셀 (Ctrl+C·X·V) — 고른 칸이 있고 입력 칸·팝업이 아닐 때만 (drag-select.js).
       // init 이 두 번 불려도 한 번만 건다 — 겹치면 붙여넣기 한 번에 되돌리기가 두 번 쌓였다
       if(!window._nsClipBound){

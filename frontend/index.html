@@ -372,7 +372,7 @@
         <div style="text-align:center;font-size:var(--fs-h2);font-weight:var(--fw-strong)">엑셀(xlsx)/CSV 파일을 여기에 놓으세요<div style="font-size:var(--fs-sub);font-weight:var(--fw-body);color:var(--ink-2)">xlsx 자동 인식 · CSV 는 한글 인코딩 자동 감지</div></div>
       </div>
       <div class="rsec-head">
-        <div><div class="rsec-title" data-rd="roster-title">간호사 명부 <span class="n" x-text="nurses.length+'명'"></span></div><div class="rsec-sub">위에서부터 시니어 순서입니다. 줄을 끌어 순서를 바꿀 수 있어요.</div></div>
+        <div><div class="rsec-title" data-rd="roster-title">간호사 명부 <span class="n" x-text="nurses.length+'명'"></span></div><div class="rsec-sub">위에서부터 시니어 순서입니다. 순서 칸을 끌어 옮기고, 체크 칸을 끌어 여러 명을 고르면 함께 옮기거나 한 번에 고칠 수 있어요.</div></div>
         <div class="rsec-actions">
           <div class="rmenu-host" x-data="{open:false}">
             <button @click="open=!open" class="rbtn rbtn-secondary" data-rd="btn-roster-excel" title="엑셀 템플릿 내려받기 · 엑셀/CSV 가져오기 · 엑셀로 내보내기 · 명부 템플릿 저장"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z M14 2v4a2 2 0 0 0 2 2h4 M8 13h8 M8 17h8"/></svg>엑셀로 명부 관리<svg class="caret" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
@@ -394,28 +394,11 @@
         <button @click="downloadNurseTemplate()" class="rbtn rbtn-sm rbtn-secondary" title="드롭다운·안내 시트가 든 엑셀 템플릿을 내려받습니다.">엑셀 템플릿 내려받기</button>
         <button @click="show=false;localStorage.setItem('ns_settings_guide_hid','1')" class="rbtn rbtn-sm rbtn-quiet" title="이 안내를 다시 보지 않습니다.">닫기</button>
       </div>
-      <div x-show="selectedNurseCount>0" x-cloak class="rbulk">
-        <b x-text="selectedNurseCount+'명 선택됨'"></b>
-        <span>그룹:</span>
-        <template x-for="g in nurseGroupChoices" :key="'bg'+g"><button @click="bulkSetGroup(g)" class="rbtn rbtn-sm rbtn-secondary" :title="`선택한 간호사를 그룹 ‘${g}’(으)로 바꿉니다.`" x-text="g"></button></template>
-        <input type="text" x-model="_bulkGroupInput" maxlength="3" placeholder="새 그룹" @keydown.enter.prevent="bulkSetGroup()" title="새 그룹 이름을 적고 + 를 누르세요."/>
-        <button @click="bulkSetGroup()" class="rbtn rbtn-sm rbtn-secondary" :disabled="!_bulkGroupInput.trim()" title="적은 이름의 새 그룹으로 바꿉니다.">+ 새 그룹</button>
-        <span>성별:</span>
-        <button @click="bulkSetGender('female')" class="rbtn rbtn-sm rbtn-secondary" title="선택한 간호사를 여성으로 바꿉니다.">여</button>
-        <button @click="bulkSetGender('male')" class="rbtn rbtn-sm rbtn-secondary" title="선택한 간호사를 남성으로 바꿉니다.">남</button>
-        <span x-text="month+'월 야간전담:'"></span>
-        <button @click="bulkSetNightThisMonth(true)" class="rbtn rbtn-sm rbtn-secondary" :title="`선택한 간호사를 ${month}월 야간전담으로 켭니다.`">켜기</button>
-        <button @click="bulkSetNightThisMonth(false)" class="rbtn rbtn-sm rbtn-secondary" :title="`선택한 간호사의 ${month}월 야간전담을 끕니다.`">끄기</button>
-        <span style="margin-left:auto;display:flex;gap:6px">
-          <button @click="bulkDelete()" class="rbtn rbtn-sm" :class="_bulkDeleteConfirm?'rbtn-danger-confirm':'rbtn-danger'" x-text="_bulkDeleteConfirm?'한 번 더 누르면 지웁니다 · 되돌릴 수 없어요':'선택 삭제'" title="선택한 간호사를 명부에서 지웁니다. 한 번 더 눌러야 지워집니다."></button>
-          <button @click="clearNurseSelection()" class="rbtn rbtn-sm rbtn-quiet" title="선택을 모두 풉니다.">선택 해제</button>
-        </span>
-      </div>
       <datalist id="bulk-group-list"><template x-for="g in nurseGroupChoices" :key="g"><option :value="g"></option></template></datalist>
       <div style="flex:1;min-height:0;background:var(--card);border-radius:12px 12px 0 0;box-shadow:var(--shadow-card);overflow:auto">
         <table class="rroster" data-rd="roster">
           <thead><tr>
-            <th style="width:40px;text-align:center"><input type="checkbox" :checked="allNursesSelected" @change="toggleAllNurseSelect()" :indeterminate="selectedNurseCount>0&&!allNursesSelected" title="여러 명을 골라 그룹·성별·야간전담을 한 번에 바꿉니다"/></th>
+            <th style="width:40px;text-align:center"><input type="checkbox" :checked="allNursesSelected" @change="toggleAllNurseSelect()" :indeterminate="selectedNurseCount>0&&!allNursesSelected" title="모두 고르기 · 풀기. 체크 칸을 끌어 여러 명을 골라 그룹·성별·할 수 있는 근무·야간전담을 한 번에 바꿉니다"/></th>
             <th style="width:44px;text-align:center">순서</th>
             <th style="min-width:120px">이름</th>
             <th style="width:70px">그룹</th>
@@ -427,9 +410,9 @@
           </tr></thead>
           <tbody>
             <template x-for="(nurse,idx) in nurses" :key="nurse.id">
-              <tr draggable="true" @dragstart="onNurseDragStart(idx)" @dragover="onNurseDragOver(idx,$event)" @drop="onNurseDrop(idx)" :class="isNurseSelected(nurse.id)?'row-selected':''" style="cursor:grab">
-                <td style="text-align:center"><input type="checkbox" :checked="isNurseSelected(nurse.id)" @change="toggleNurseSelect(nurse.id)" :title="nurse.name+' 선택'"/></td>
-                <td style="text-align:center;color:var(--ink-2)"><span class="drag"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12h.01 M9 5h.01 M9 19h.01 M15 12h.01 M15 5h.01 M15 19h.01"/></svg></span><span x-text="idx+1"></span></td>
+              <tr @dragover="onNurseDragOver(idx,$event)" @drop="onNurseDrop(idx)" @mouseover="rosterSelOver(idx)" :class="[isNurseSelected(nurse.id)?'row-selected':'',rdDropCls(idx)]">
+                <td class="pick" @mousedown="rosterSelDown(idx,$event)" title="누른 채 위아래로 끌면 여러 명을 한 번에 고르거나 풉니다. Shift+누르기는 앞서 누른 줄부터 여기까지."><input type="checkbox" :checked="isNurseSelected(nurse.id)" @click="$event.detail?$event.preventDefault():toggleNurseSelect(nurse.id)" :title="nurse.name+' 선택'"/></td>
+                <td class="order" draggable="true" @dragstart="onNurseDragStart(idx)" @dragend="onNurseDragEnd()" :title="isNurseSelected(nurse.id)&&selectedNurseCount>1?`끌어서 고른 ${selectedNurseCount}명의 순서를 함께 옮깁니다.`:'끌어서 순서를 바꿉니다. 여러 명을 고른 뒤 끌면 함께 옮겨집니다.'"><span class="drag"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12h.01 M9 5h.01 M9 19h.01 M15 12h.01 M15 5h.01 M15 19h.01"/></svg></span><span x-text="idx+1"></span></td>
                 <td class="name"><input type="text" :value="nurse.name" @blur="inlineRename(nurse, $event.target.value)" @keydown.enter.prevent="$event.target.blur()" placeholder="이름" title="이름을 바로 고칠 수 있습니다. Enter 로 저장."/></td>
                 <td class="grp"><input type="text" :value="nurse.group" list="bulk-group-list" maxlength="3" @blur="inlineSetGroup(nurse, $event.target.value)" @keydown.enter.prevent="$event.target.blur()" placeholder="A" title="그룹을 바로 고칠 수 있습니다."/></td>
                 <td><button @click="inlineToggleGender(nurse)" class="gender" :style="nurse.gender==='female'?'background:var(--sh-생-bg);color:var(--sh-생-fg)':'background:var(--sh-D-bg);color:var(--sh-D-fg)'" x-text="nurse.gender==='female'?'여':'남'" title="누르면 성별이 바뀝니다. 여성만 생리휴가가 배정됩니다."></button></td>
@@ -442,6 +425,26 @@
             <tr x-show="nurses.length===0"><td colspan="9"><div class="rempty" style="margin:0;box-shadow:none;border-radius:0"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75"/></svg><div class="rempty-title">아직 간호사가 없어요</div><div class="rempty-desc">오른쪽 위 <b>간호사 추가</b>로 한 명씩 넣거나, 엑셀 템플릿을 채워 이 화면에 끌어다 놓으세요.</div></div></td></tr>
           </tbody>
         </table>
+        <!-- 표 아래·스크롤 안에 붙는다 — 위에 두면 고르는 순간 바가 생기며 줄이 밀려 끌던 자리가 어긋났다 -->
+        <div x-show="selectedNurseCount>0" x-cloak class="rbulk">
+          <b x-text="selectedNurseCount+'명 선택됨'"></b>
+          <span>그룹:</span>
+          <template x-for="g in nurseGroupChoices" :key="'bg'+g"><button @click="bulkSetGroup(g)" class="rbtn rbtn-sm rbtn-secondary" :title="`선택한 간호사를 그룹 ‘${g}’(으)로 바꿉니다.`" x-text="g"></button></template>
+          <input type="text" x-model="_bulkGroupInput" maxlength="3" placeholder="새 그룹" @keydown.enter.prevent="bulkSetGroup()" title="새 그룹 이름을 적고 + 를 누르세요."/>
+          <button @click="bulkSetGroup()" class="rbtn rbtn-sm rbtn-secondary" :disabled="!_bulkGroupInput.trim()" title="적은 이름의 새 그룹으로 바꿉니다.">+ 새 그룹</button>
+          <span>성별:</span>
+          <button @click="bulkSetGender('female')" class="rbtn rbtn-sm rbtn-secondary" title="선택한 간호사를 여성으로 바꿉니다.">여</button>
+          <button @click="bulkSetGender('male')" class="rbtn rbtn-sm rbtn-secondary" title="선택한 간호사를 남성으로 바꿉니다.">남</button>
+          <span>할 수 있는 근무:</span>
+          <template x-for="s in allWorkShifts" :key="'bs'+s"><button type="button" @click="bulkToggleShift(s)" class="shift-chip" :class="bulkShiftState(s)" :data-shift="bulkShiftState(s)==='off'?null:s" x-text="s" :title="rdShiftTip(s)+' — '+({'':'고른 사람 모두 켜짐 · 누르면 모두 끔',some:'일부만 켜짐 · 누르면 모두 켬',off:'모두 꺼짐 · 누르면 모두 켬'})[bulkShiftState(s)]"></button></template>
+          <span x-text="month+'월 야간전담:'"></span>
+          <button @click="bulkSetNightThisMonth(true)" class="rbtn rbtn-sm rbtn-secondary" :title="`선택한 간호사를 ${month}월 야간전담으로 켭니다.`">켜기</button>
+          <button @click="bulkSetNightThisMonth(false)" class="rbtn rbtn-sm rbtn-secondary" :title="`선택한 간호사의 ${month}월 야간전담을 끕니다.`">끄기</button>
+          <span style="margin-left:auto;display:flex;gap:6px">
+            <button @click="bulkDelete()" class="rbtn rbtn-sm" :class="_bulkDeleteConfirm?'rbtn-danger-confirm':'rbtn-danger'" x-text="_bulkDeleteConfirm?'한 번 더 누르면 지웁니다 · 되돌릴 수 없어요':'선택 삭제'" title="선택한 간호사를 명부에서 지웁니다. 한 번 더 눌러야 지워집니다."></button>
+            <button @click="clearNurseSelection()" class="rbtn rbtn-sm rbtn-quiet" title="선택을 모두 풉니다.">선택 해제</button>
+          </span>
+        </div>
       </div>
     </section>
 

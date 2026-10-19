@@ -175,9 +175,10 @@ body.rd .rhh-row .rhh-name { flex: 1; min-width: 0; max-width: 360px; }
 body.rd .rroster td.name input, body.rd body.rd .rroster td.grp input { height: 40px; border: 0; background: transparent; font: inherit; font-size: var(--fs-body); font-weight: var(--fw-label); color: var(--ink); padding: 0 6px; border-radius: 8px; box-shadow: none; width: 100%; min-width: 4ch; }
 body.rd .rroster td.grp input { width: 4em; font-weight: var(--fw-body); }
 .rroster td.name input:focus, .rroster td.grp input:focus { background: var(--card-warm); outline: 2px solid var(--focus); }
-.rroster .drag { color: var(--rule-strong); font-size: var(--fs-min); margin-right: 4px; }
-.rroster .shift-chip { height: 32px; min-width: 34px; padding: 0 8px; border: 0; border-radius: 7px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-strong); cursor: pointer; }
-.rroster .shift-chip.off { background: var(--card); color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule); opacity: 0.85; }
+.rroster .drag { color: var(--ink-2); font-size: var(--fs-min); margin-right: 4px; }
+.rroster .drag svg { vertical-align: -2px; }
+.rroster .shift-chip, .rbulk .shift-chip { height: 32px; min-width: 34px; padding: 0 8px; border: 0; border-radius: 7px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-strong); cursor: pointer; }
+.rroster .shift-chip.off, .rbulk .shift-chip.off { background: var(--card); color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule); opacity: 0.85; }
 .rroster .chips { display: flex; gap: 4px; }
 .rroster .nk { height: 32px; padding: 0 10px; border: 0; border-radius: 8px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); cursor: pointer; background: var(--card); color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .rroster .nk.on { background: var(--warn-bg); color: var(--warn); box-shadow: none; }
@@ -186,8 +187,16 @@ body.rd .rroster td.grp input { width: 4em; font-weight: var(--fw-body); }
 .rroster .note { font-size: var(--fs-cell); color: var(--ink-2); }
 .rroster .rbtn-edit { height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--ink); }
 .rroster .rbtn-edit svg { width: 14px; height: 14px; }
+/* 체크 칸은 누른 채 끌어 여러 명 고르기, 순서 칸은 끌어 옮기기 (끈 사람이 골라져 있으면 고른 사람 모두) */
+.rroster td.pick { text-align: center; cursor: pointer; }
+.rroster td.order { text-align: center; color: var(--ink-2); cursor: grab; white-space: nowrap; }
+.rroster tr.drop-before td { box-shadow: inset 0 3px 0 var(--focus); }
+.rroster tr.drop-after td { box-shadow: inset 0 -3px 0 var(--focus); }
+/* 일괄 바의 근무 칩 — 바 배경이 D 색이라 테두리로 구분, 일부만 켜진 근무는 점선 */
+.rbulk .shift-chip { box-shadow: inset 0 0 0 1.5px var(--rule-strong); }
+.rbulk .shift-chip.some { outline: 2px dashed currentColor; outline-offset: -5px; }
 .rroster input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--ink); cursor: pointer; }
-.rbulk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-radius: 12px; background: var(--sh-D-bg); font-size: var(--fs-sub); }
+.rbulk { position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-radius: 12px 12px 0 0; background: var(--sh-D-bg); box-shadow: 0 -6px 16px rgba(15, 17, 21, 0.12); font-size: var(--fs-sub); }
 .rbulk .rbtn { height: 40px; }
 .rbulk input { height: 40px; width: 6em; }
 
