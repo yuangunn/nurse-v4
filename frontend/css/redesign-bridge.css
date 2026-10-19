@@ -185,7 +185,7 @@ body.rd .rroster td.grp input { width: 4em; font-weight: var(--fw-body); }
 .rroster .nk.other { color: var(--ink-2); background: var(--warn-bg); }
 .rroster .gender { height: 36px; min-width: 40px; border: 0; border-radius: 8px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); cursor: pointer; background: var(--paper); color: var(--ink); }
 .rroster .note { font-size: var(--fs-cell); color: var(--ink-2); }
-.rroster .rbtn-edit { height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--ink); }
+.rroster .rbtn-edit { white-space: nowrap; height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--ink); }
 .rroster .rbtn-edit svg { width: 14px; height: 14px; }
 /* 체크 칸은 누른 채 끌어 여러 명 고르기, 순서 칸은 끌어 옮기기 (끈 사람이 골라져 있으면 고른 사람 모두) */
 .rroster td.pick { text-align: center; cursor: pointer; }
@@ -269,7 +269,7 @@ body.rd .rnum input { width: 52px; height: var(--target); border: 0; background:
 .rpaste-kinds { display: flex; gap: 8px; font-size: var(--fs-sub); font-weight: var(--fw-body); align-items: center; }
 .rpaste-kinds label { padding: 6px 12px; border-radius: 999px; background: var(--paper); color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; height: 40px; }
 .rpaste-kinds label input { position: absolute; opacity: 0; width: 0; height: 0; }
-.rpaste-kinds label.on { background: var(--ink); color: #fff; }
+.rpaste-kinds label.on { background: var(--ink); color: var(--card); }
 .rpaste-kinds .file { margin-left: auto; }
 body.rd textarea.rpaste-box, .rpaste-box { border-radius: 12px; background: var(--card-warm); box-shadow: inset 0 0 0 1.5px var(--rule-strong); padding: 14px 16px; min-height: 150px; font-size: var(--fs-cell); font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--ink); line-height: 1.7; width: 100%; resize: vertical; border: 0; }
 .rpaste-box:focus { outline: 3px solid var(--focus); outline-offset: 2px; }
@@ -352,7 +352,7 @@ body.rd .rpaste-map select { height: 40px; font-size: var(--fs-sub); }
 .rphone-head .date span { font-size: var(--fs-h2); font-weight: var(--fw-label); color: var(--down-deep); }
 .rphone-head .meta { font-size: var(--fs-cell); font-weight: var(--fw-body); color: var(--ink-2); margin-top: 4px; }
 .rphone-body { flex: 1; overflow: auto; padding: 18px 22px 100px; display: flex; flex-direction: column; gap: 22px; }
-.rmy { background: var(--ink); color: #fff; border-radius: 16px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.rmy { background: var(--ink-surface); color: #fff; border-radius: 16px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
 .rmy .lbl { font-size: var(--fs-min); font-weight: var(--fw-label); color: #DCE0E6; display: flex; align-items: center; gap: 8px; }
 body.rd .rmy .lbl .rbtn-primary { margin-left: auto; height: 40px; padding: 0 14px; border-radius: 999px; background: #fff; color: var(--ink); font-size: var(--fs-min); }
 body.rd .rmy .lbl .rbtn-primary:hover { background: #EDEFF3; }
@@ -377,7 +377,7 @@ body.rd .rmy .pick button.on { background: #fff; color: var(--ink); }
 .rduty .empty { font-size: var(--fs-cell); color: var(--ink-2); padding: 4px 0; }
 .rphone-filters { display: flex; gap: 8px; padding: 8px 12px; overflow-x: auto; }
 .rphone-filters button { height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); white-space: nowrap; cursor: pointer; color: var(--ink); }
-.rphone-filters button.on { background: var(--ink); color: #fff; box-shadow: none; }
+.rphone-filters button.on { background: var(--ink); color: var(--card); box-shadow: none; }
 .rbottom { display: none; position: fixed; bottom: 0; left: 0; right: 0; height: 78px; background: var(--card); border-top: 1px solid var(--rule); z-index: 50; grid-template-columns: repeat(4, 1fr); padding: 6px 8px 14px; }
 @media (max-width: 767px) { .rbottom { display: grid; } }
 .rbottom button { border: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font: inherit; font-size: var(--fs-min); font-weight: var(--fw-body); color: var(--ink-2); border-radius: 10px; position: relative; cursor: pointer; }
@@ -461,8 +461,8 @@ body.rd .rhdr-ver { font-size: var(--fs-min); }
 .trainee-row .rt-cell span:first-child { font-style: italic; }
 .rtable .trainee-row td { opacity: 1; }   /* 옛 표의 0.6 이 겹쳐 신규 줄이 0.45 로 흐렸다 — 기울임·이름 칸 분홍 선으로 구분 */
 
-/* ── 검사(spec.json) 자기모순 보정 — 활성 단계 부제는 어두운 칩 위 글자지만 금지색 #D4D9E0 대신 #DCE0E6 (눈으로는 같다) ── */
-body.rd .rstep.is-active .rstep-sub { color: #DCE0E6; }
+/* ── 검사(spec.json) 자기모순 보정 — 활성 단계 부제는 칩 위 글자라 금지색(#D4D9E0) 대신 칩 반대색(--card)을 살짝 흐리게 ── */
+body.rd .rstep.is-active .rstep-sub { color: var(--card); opacity: 0.85; }   /* 고정 #DCE0E6 은 다크(밝은 바탕)에서 사라졌다 */
 
 /* ── 1366×768 병동 모니터: 체크 라벨이 두 줄로 접히지 않게 ── */
 body.rd .rcheck { white-space: nowrap; }
@@ -474,5 +474,5 @@ body.rd .rphone-ym button { width: 48px; height: 48px; border: 0; border-radius:
 .rphone-ym b { font-size: 22px; font-weight: var(--fw-strong); letter-spacing: -0.02em; }
 .rphone-filters { display: flex; gap: 8px; padding: 4px 12px 10px; overflow-x: auto; }
 body.rd .rphone-filters button { flex: none; height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); color: var(--ink); font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); }
-body.rd .rphone-filters button.on { background: var(--ink); color: #fff; box-shadow: none; }
+body.rd .rphone-filters button.on { background: var(--ink); color: var(--card); box-shadow: none; }
 body.rd .rphone-filters button[disabled] { color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule); }

@@ -104,6 +104,7 @@
   --hol-fg:#C7384A; --hol-bg:#FDEEE5;
   --overflow-opacity: 0.8;    /* 전월 말·익월 초 열 — 0.45 는 글자 대비 2.1:1 이라 읽히지 않았다 (지난달 기록·다음 달 칸도 읽어야 한다) */
   --row-hover: #EEF2F8;       /* 마우스를 올린 줄의 이름 칸 */
+  --ink-surface: #0F1115;     /* 알림·말풍선·내 근무 카드처럼 늘 어두운 바탕 — --ink 는 다크에서 밝아져 흰 글자가 사라졌다 */
 }
 
 
@@ -139,4 +140,5 @@ html.dark {
   --cy1-bg:#16203A; --cy1-fg:#8AA8FF; --cy2-bg:#10261C; --cy2-fg:#4FD08A; --cy3-bg:#1E1838; --cy3-fg:#B79CFF; --cy4-bg:#2C2310; --cy4-fg:#E0A93B;
   --sat-fg:#8AA8FF; --sat-bg:#16203A; --sun-fg:#FF8A92; --sun-bg:#2C141A; --hol-fg:#F0A070; --hol-bg:#2C1D10;
   --row-hover:#252C38;
+  --ink-surface:#2A303C;
 }

@@ -61,7 +61,7 @@
 .rstep.is-active { background: var(--ink); color: var(--card); }
 .rstep.is-active .rstep-num { background: var(--card); color: var(--ink); border: 0; }
 .rstep.is-active .rstep-name { font-weight: var(--fw-strong); }
-.rstep.is-active .rstep-sub { color: #D4D9E0; }
+.rstep.is-active .rstep-sub { color: var(--card); opacity: 0.85; }   /* 고정 #D4D9E0 은 다크(밝은 바탕)에서 사라졌다 */
 .rstep.is-done .rstep-num { background: var(--ok-bg); color: var(--ok); border: 0; }
 .rstep-gear { gap: 10px; font-size: var(--fs-body); font-weight: var(--fw-label); }
 .rstep-gear .done-tag { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-min); font-weight: var(--fw-body); color: var(--ok); }
@@ -127,7 +127,8 @@
 .rt-name > small { font-size: var(--fs-min); font-weight: var(--fw-body); color: var(--ink-2); margin-left: 6px; }
 .rt-cell { height: var(--row-h); text-align: center; border-bottom: 1px solid var(--rule-soft); border-left: 1px solid var(--rule-soft);
   font-weight: var(--fw-label); font-size: var(--fs-cell); cursor: pointer; position: relative; background: var(--card); color: var(--ink); }
-.rt-cell.sat { background: #F7FAFF; } .rt-cell.sun { background: #FFF8F8; }   /* 빈 셀의 토/일 배경 */
+/* 빈 셀의 토/일 배경 — 밝은 모드는 예전 그대로(#F7FAFF·#FFF8F8), 다크는 어두운 토·일 색 (고정 색이라 다크에서 칸이 하얗게 떴다) */
+.rt-cell.sat { background: color-mix(in srgb, var(--sat-bg) 45%, var(--card)); } .rt-cell.sun { background: color-mix(in srgb, var(--sun-bg) 45%, var(--card)); }
 .rt-cell.is-selected { outline: 3px solid var(--ink); outline-offset: -3px; }
 .rt-cell.is-edited   { outline: 2px solid var(--focus); outline-offset: -2px; }  /* 손으로 고친 셀 — 파랑 (빨강은 규칙 위반 g-violation 하나만) */
 .rt-cell.is-relaxed  { outline: 2px dashed var(--ink); outline-offset: -2px; }   /* 완화로 뒤집힌 셀 */
@@ -225,17 +226,17 @@ html.dark .rt-cell.is-sel { box-shadow: inset 0 0 0 100px rgba(138,168,255,0.24)
 .rmodal-note { margin-right: auto; font-size: var(--fs-sub); color: var(--ink-2); }
 
 /* ── 토스트 (되돌리기 포함) ── */
-.rtoast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 90; background: var(--ink); color: #fff; border-radius: 12px;
+.rtoast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 90; background: var(--ink-surface); color: #fff; border-radius: 12px;
   padding: 12px 12px 12px 18px; display: flex; align-items: center; gap: 16px; box-shadow: var(--shadow-toast); font-size: var(--fs-body); font-weight: var(--fw-body); }
 .rtoast > svg { width: 20px; height: 20px; color: #4FD08A; }
 .rtoast .rbtn { height: 40px; padding: 0 14px; background: #2A2E36; color: #fff; font-size: var(--fs-sub); }
 .rtoast .rbtn:hover { background: #3A404A; }
 
 /* ── 툴팁 ── 0.3초 지연 · 포커스에도 · 최대 2줄 · 잉크 배경. (title 속성은 그대로 두고 커스텀 툴팁이 title 을 읽는다) */
-.rtip { position: absolute; z-index: 95; max-width: 380px; background: var(--ink); color: #fff; border-radius: 10px; padding: 10px 14px;
+.rtip { position: absolute; z-index: 95; max-width: 380px; background: var(--ink-surface); color: #fff; border-radius: 10px; padding: 10px 14px;
   font-size: var(--fs-sub); line-height: 1.5; font-weight: var(--fw-body); pointer-events: none; }
 .rtip .note { color: #B8BFC9; }   /* "[주의 한 마디]" 부분 */
-.rtip::before { content: ""; position: absolute; top: -6px; left: 36px; width: 12px; height: 12px; background: var(--ink); transform: rotate(45deg); }
+.rtip::before { content: ""; position: absolute; top: -6px; left: 36px; width: 12px; height: 12px; background: var(--ink-surface); transform: rotate(45deg); }
 
 /* ── 배너 ── */
 .rbanner { border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; font-size: var(--fs-body); font-weight: var(--fw-body); }
