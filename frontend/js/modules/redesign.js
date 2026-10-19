@@ -166,6 +166,10 @@ window.RedesignModule = function() {
       if(this.generating){
         const rem=this.estimatedSeconds ? Math.max(0, this.estimatedSeconds-this.generateElapsed) : 0;
         const t = rem ? this.rdEta(rem)+' 남음' : (this.estimatedSeconds ? '예상보다 오래 걸리지만 멈춘 게 아니에요' : '잠시만요');
+        if(this.continuing){   // 이어 찾기 (결정 1-50) — 앞 표는 저장돼 있고 화면에 그대로다
+          const g=this.mipGapPercent;
+          return {kind:'warn', running:true, text:`지금 표는 저장했어요${g!=null?` (가장 좋은 답과 ${Math.round(g*10)/10}% 차이)`:''} · 그 표에서 더 좋은 표를 찾는 중… ${t} · 멈추면 지금 표를 씁니다`};
+        }
         return {kind:'warn', running:true, text:`근무표를 만드는 중… ${t}`};
       }
       if(!this.rdSched) return null;

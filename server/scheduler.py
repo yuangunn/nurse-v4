@@ -21,7 +21,60 @@ from .scheduler_highs_diagnosis import _HighsDiagnosisMixin
 from .scheduler_base import WEEKDAY_KEYS, _DEFAULT_SHIFTS  # noqa: E402,F401 (하위호환)
 
 
+class _WarmHiGHS(pulp.HiGHS):
+    """이어 찾기 — 앞 실행이 낸 표를 MIP 시작해로 넘기는 HiGHS (결정 1-50).
+
+    pulp.HiGHS 엔 warmStart 가 없다. buildSolverModel 이 변수 번호(index)를 단 뒤, 풀기 직전에 setSolution 으로
+    근무표 칸만 준다 — HiGHS 가 나머지 변수를 채워 그 표에서 출발한다 (실제 11월: 0.6초, 'MIP start solution is feasible').
+    시작해가 이 모델에 맞지 않으면 HiGHS 가 버리고 처음부터 푼다."""
+
+    def __init__(self, start=None, **kw):
+        super().__init__(**kw)
+        self._start = start or []
+
+    def callSolver(self, lp):
+        # 모델에 실린 변수만 (buildSolverModel 이 index 를 단다 — 어떤 제약에도 안 든 변수는 모델에 없다)
+        start = [(v.index, b) for v, b in self._start if getattr(v, "index", None) is not None]
+        if start:
+            import numpy as np
+            idx = np.array([i for i, _ in start], dtype=np.int32)
+            val = np.array([float(b) for _, b in start], dtype=np.float64)
+            lp.solverModel.setSolution(len(idx), idx, val)
+        super().callSolver(lp)
+
+
+def highs_fingerprint(h) -> str:
+    """HiGHS 모델 지문 — 비용·변수/제약 범위·계수가 같으면 같다. 이어 찾기가 앞 실행의 하한을 이어 써도 되는지 가른다."""
+    import hashlib
+    import numpy as np
+    lp = h.getLp()
+    m = lp.a_matrix_
+    hs = hashlib.sha1()
+    for arr in (lp.col_cost_, lp.col_lower_, lp.col_upper_, lp.row_lower_, lp.row_upper_, m.start_, m.index_, m.value_):
+        hs.update(np.asarray(arr, dtype=float).tobytes())
+    return hs.hexdigest()[:16]
+
+
 class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBase):
+
+    @staticmethod
+    def _highs_info(prob) -> dict:
+        """풀이 뒤 목적값·하한(감점 점수 — pulp 의 최대화를 HiGHS 는 부호를 바꿔 최소화한다, 낮을수록 좋다)과 모델 지문.
+        이어 찾기가 앞 표와 견주고 하한을 이어 쓴다 (결정 1-50)."""
+        h = getattr(prob, "solverModel", None)
+        if h is None:
+            return {}
+        try:
+            info = h.getInfo()
+            return {"engine": "HiGHS", "objective": float(info.objective_function_value),
+                    "mip_dual_bound": float(info.mip_dual_bound), "model_fingerprint": highs_fingerprint(h)}
+        except Exception:
+            return {}
+
+    def _warm_highs(self, x, **kw) -> "_WarmHiGHS":
+        """HiGHS 솔버 — 이어 찾기면 앞 표를 시작해로 (없으면 보통 pulp.HiGHS 와 같다)."""
+        start = self._mip_start_pairs(x, lambda v: isinstance(v, pulp.LpVariable)) if self.warm_start else None
+        return _WarmHiGHS(start=start, msg=False, **kw)
 
     def _c_juhu_block_dow(self, prob, x):
         """주휴를 재배치할 때도 **한 블록(4주기) 안에서는 같은 요일**을 지킨다.
@@ -170,11 +223,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                              vars=prob.numVariables(), cons=prob.numConstraints())
         except Exception:
             pass
-        solver = pulp.HiGHS(
-            timeLimit=self.time_limit,
-            mip_rel_gap=self.mip_gap,
-            msg=False,
-        )
+        solver = self._warm_highs(x, timeLimit=self.time_limit, mip_rel_gap=self.mip_gap)
         try:
             status = prob.solve(solver)
         except Exception:
@@ -201,6 +250,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 "nurse_score_details": nurse_score_details,
                 "message": f"근무표가 생성되었습니다. (상태: {label})",
                 "estimated_seconds": self.estimate_seconds(),
+                **self._highs_info(prob),
             })
         elif status_str == "Infeasible":
             # ── 사전입력 완화 재시도 ────────────────────────────────────
@@ -498,8 +548,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             if lr:
                 bonus_expr = bonus_expr - pulp.lpSum(pen * sl for pen, sl in lr)
             prob.setObjective(bonus_expr)
-            stage1 = pulp.HiGHS(timeLimit=max(30, int(self.time_limit) // 3),
-                                mip_rel_gap=0.0, msg=False)
+            stage1 = self._warm_highs(x, timeLimit=max(30, int(self.time_limit) // 3), mip_rel_gap=0.0)
             try:
                 prob.solve(stage1)
             except Exception:
@@ -513,8 +562,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 best_keep = int(round(pulp.value(bonus_expr) or 0))
                 prob += bonus_expr >= best_keep, "keep_bonus_floor"
                 prob.setObjective(obj)
-                solver = pulp.HiGHS(timeLimit=self.time_limit,
-                                    mip_rel_gap=self.mip_gap, msg=False)
+                solver = self._warm_highs(x, timeLimit=self.time_limit, mip_rel_gap=self.mip_gap)
             else:
                 # 폴백: dom 가중 단일 솔브 — 사전순 지배 스케일.
                 # 배점 상한: 이진 변수는 |계수|, 정수 보조변수(night_range·v2/v3
@@ -537,11 +585,10 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 dom = int(scoring_bound // max(1, bonus_gcd)) + 2
                 prob.setObjective(obj + dom * bonus_expr)
                 # 가중 방식에선 gap=0 필수 — 상대 갭만큼 보존이 희생될 수 있음
-                solver = pulp.HiGHS(timeLimit=self.time_limit,
-                                    mip_rel_gap=0.0, msg=False)
+                solver = self._warm_highs(x, timeLimit=self.time_limit, mip_rel_gap=0.0)
         else:
             prob.setObjective(obj)
-            solver = pulp.HiGHS(timeLimit=self.time_limit, mip_rel_gap=self.mip_gap, msg=False)
+            solver = self._warm_highs(x, timeLimit=self.time_limit, mip_rel_gap=self.mip_gap)
         try:
             prob.solve(solver)
         except Exception:
@@ -610,6 +657,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 "charge_promotions": charge_promotions,
                 "message": f"근무표가 생성되었습니다. (상태: {label})\n{relax_msg}",
                 "estimated_seconds": self.estimate_seconds(),
+                **self._highs_info(prob),
             })
         # 완화해도 해를 못 찾음 — 시간이 모자랐는지(진단 대신 시간 안내) 정말 안 되는지
         self._relax_timed_out = (status_str != "Infeasible" and not _sp.is_cancelled()

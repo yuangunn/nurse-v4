@@ -54,10 +54,12 @@ try:
             import math
             out = {"gap_percent": None, "nodes": 0, "has_solution": False, "is_running": True}
             s = dict(self._snap)
-            gap, primal = s.get("gap"), s.get("primal")
+            gap, primal, dual = s.get("gap"), s.get("primal"), s.get("dual")
             if gap is not None and primal is not None and math.isfinite(gap) and math.isfinite(primal):
                 out["gap_percent"] = round(gap * 100, 2)
                 out["has_solution"] = True
+                if dual is not None and math.isfinite(dual):
+                    out["primal"], out["dual"] = primal, dual    # 감점 점수 — 이어 찾기 진행이 앞 하한과 합친다
             out["nodes"] = int(s.get("nodes") or 0)
             return out
 
@@ -100,7 +102,8 @@ try:
 
             def _on_mip(event):
                 d = event.data_out
-                snap.update(gap=float(d.mip_gap), primal=float(d.mip_primal_bound), nodes=int(d.mip_node_count))
+                snap.update(gap=float(d.mip_gap), primal=float(d.mip_primal_bound), dual=float(d.mip_dual_bound),
+                            nodes=int(d.mip_node_count))
             try:
                 self.cbMipLogging.subscribe(_on_mip)
                 self.cbMipImprovingSolution.subscribe(_on_mip)
@@ -1648,6 +1651,18 @@ def get_generate_progress():
     return solver_progress.get_progress()
 
 
+def _carry_bound(result: dict, request: GenerateRequest) -> None:
+    """이어 찾기 — 같은 모델(지문)이면 앞 실행의 하한을 이어 써서 차이를 잰다 (결정 1-50).
+    다시 찾으면 하한은 처음부터 다시 쌓여, 그대로 두면 같은 표인데도 앞 실행보다 차이가 커 보였다."""
+    import math
+    obj, lb = result.get("objective"), result.get("mip_dual_bound")
+    if (request.prev_bound is None or not request.prev_fingerprint or obj is None or lb is None
+            or request.prev_fingerprint != result.get("model_fingerprint")
+            or not (math.isfinite(obj) and math.isfinite(lb))):
+        return
+    result["mip_gap_percent"], result["mip_dual_bound"] = solver_progress.combined_gap(obj, lb, request.prev_bound)
+
+
 def _run_race(request: GenerateRequest) -> dict:
     """두 엔진 레이스 — HiGHS와 CP-SAT를 동시 실행, 먼저 성공한 쪽을 채택하고
     패자는 즉시 중지(cancel_all_adapters, 사용자 취소 플래그는 건드리지 않음).
@@ -1743,6 +1758,7 @@ def generate(request: GenerateRequest):
         # 편차를 줄이도록 누적 오프셋을 자동 주입 (저장본 파생 — 별도 기록 불필요)
         fair_ctx = _attach_fairness_offsets(request)
         _attach_prev_juhu(request)
+        solver_progress.set_prev_bound(request.prev_bound)   # 이어 찾기 — 진행 차이를 앞 실행 하한과 합쳐 잰다
         if request.solver == "race":
             result = _run_race(request)
         elif request.solver == "cpsat":
@@ -1757,6 +1773,7 @@ def generate(request: GenerateRequest):
             import math
             if math.isfinite(_last_mip_gap):
                 result["mip_gap_percent"] = round(_last_mip_gap * 100, 2)
+        _carry_bound(result, request)
         if solver_progress.is_cancelled() and result.get("success"):
             result["stopped"] = True
 

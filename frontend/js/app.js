@@ -34,7 +34,7 @@ function app() {
       hospitalHolidays:[{md:'05-01',name:'근로자의 날'},{md:'05-09',name:'의료원 설립일'},{md:'07-17',name:'제헌절'},{md:'07-21',name:'노조 설립일'}],
     },
     schedule:{}, extendedSchedule:{},
-    generating:false, generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,
+    generating:false, continuing:false, generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,
     generateTimer:null, sseSource:null, solverLogs:[], showLogPanel:false,
     solveProgress:{gap_percent:null,nodes:0,has_solution:false,is_running:false},
     stopRequested:false, mipGap:0.02, generateTimeout:20, allowPreRelax:false, allowJuhuRelax:false, juhuBlockLock:true, unlimitedV:false, relaxedCells:{},

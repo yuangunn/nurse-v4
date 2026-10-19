@@ -145,6 +145,11 @@ class GenerateRequest(BaseModel):
     # 지난달 주휴 날짜 {nurse_id: ['YYYY-MM-DD', …]} — 직전 달 최신 저장본에서 서버가 자동으로 채운다.
     # 달이 4주 블록 중간에서 시작하면 그 블록의 주휴 요일을 이어받는다 (주휴 이동 허용 + 블록 잠금, 결정 1-37).
     prev_juhu_dates: Optional[Dict[str, List[str]]] = None
+    # 이어 찾기 (결정 1-50) — 앞 실행이 낸 표 {nurse_id: {date: code}} 를 시작해로 다시 찾는다.
+    # prev_bound·prev_fingerprint: 앞 실행의 하한(감점 점수)과 모델 지문 — 같은 모델이면 하한을 이어 써서 차이를 잰다.
+    warm_start: Optional[Dict[str, Dict[str, str]]] = None
+    prev_bound: Optional[float] = None
+    prev_fingerprint: Optional[str] = None
 
 
 class ScheduleSave(BaseModel):
