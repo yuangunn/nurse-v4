@@ -8,7 +8,8 @@ from datetime import date
 
 import pulp
 
-from .scheduler_base import WEEKDAY_KEYS, _OFF_TEUKGEUN_PENALTY, _RARE_TRANSITION_PENALTY, _TAIL_KEEPER_SHORT_PENALTY
+from .scheduler_base import (WEEKDAY_KEYS, _OFF_TEUKGEUN_PENALTY, _RARE_TRANSITION_PENALTY, _TAIL_KEEPER_SHORT_PENALTY,
+                             _TRAINEE_PAIR_BONUS)
 
 
 class _HighsConstraintsMixin:
@@ -882,6 +883,10 @@ class _HighsConstraintsMixin:
             prob += short >= eff - pulp.lpSum(x[nid][d][s] for d in tail for s in self.NIGHT_SHIFTS), \
                 f"tail_keeper_{nid}"
             terms.append(-_TAIL_KEEPER_SHORT_PENALTY * short)
+
+        # ── 신규가 '/D·/E·/N' 으로 넣은 날 — 프리셉터도 그 근무로 (_trainee_pair_targets, 2026-10-19) ──
+        for pid, d, codes in self._trainee_pair_targets():
+            terms.append(_TRAINEE_PAIR_BONUS * pulp.lpSum(x[pid][d][s] for s in codes if s in x[pid][d]))
 
         # ── V 무제한 모드: 점진적 페널티 (1번째 -500, 2번째 -1000, 3번째+ -5000) ──
         if self.unlimited_v and "V" in self.ALL_SHIFTS:

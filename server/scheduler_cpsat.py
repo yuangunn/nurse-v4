@@ -18,7 +18,8 @@ from ortools.sat.python import cp_model
 
 from .models import GenerateRequest
 from .scheduler_base import (_SchedulerBase, WEEKDAY_KEYS, timeoff_class, _OFF_TEUKGEUN_PENALTY,
-                             _RARE_TRANSITION_PENALTY, _FIXED_DATE_LEAVE, _TAIL_KEEPER_SHORT_PENALTY)
+                             _RARE_TRANSITION_PENALTY, _FIXED_DATE_LEAVE, _TAIL_KEEPER_SHORT_PENALTY,
+                             _TRAINEE_PAIR_BONUS)
 
 
 class _CpSatProgress:
@@ -1281,6 +1282,10 @@ class CpSatScheduler(_SchedulerBase):
             short = model.NewIntVar(0, eff, f"tail_keeper_short_{nid}")
             model.Add(short >= eff - sum(x[nid][d][s] for d in tail for s in self.NIGHT_SHIFTS))
             terms.append(-_TAIL_KEEPER_SHORT_PENALTY * short)
+
+        # 신규가 '/D·/E·/N' 으로 넣은 날 — 프리셉터도 그 근무로 (HiGHS 패리티)
+        for pid, d, codes in self._trainee_pair_targets():
+            terms.append(_TRAINEE_PAIR_BONUS * lin([x[pid][d][s] for s in codes if s in x[pid][d]]))
 
         # V 무제한 모드 점진 페널티
         if self.unlimited_v and "V" in self.ALL_SHIFTS:

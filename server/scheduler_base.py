@@ -57,6 +57,10 @@ _RARE_TRANSITION_PENALTY = 2000   # E→D1 · 중→D
 # (완화 500 + V 500)보다 작아서 완화를 켜도 원티드를 깨면서까지 채우지 않는다. 하드가 아니라서 꼬리 N 자리를
 # 다른 사람이 이미 다 넣었어도 생성은 막히지 않는다.
 _TAIL_KEEPER_SHORT_PENALTY = 700
+# 신규가 트레이닝 날 '/D·/E·/N' 으로 넣은 원티드 — 프리셉터도 그 근무면 더하는 점수 (같이 일한다, 2026-10-19).
+# 근무 원티드 보존 점수(완화 500)와 비슷한 무게 — 꼬리 V(-500)보다 커서 엄격에선 맞출 수 있으면 맞추고, 프리셉터 칸에
+# 사람이 넣은 근무는 건드리지 않는다(그때는 결과에 넣은 그대로 내고 참고 목록에 알린다).
+_TRAINEE_PAIR_BONUS = 550
 
 def timeoff_class(code: str) -> str:
     """사전입력 코드의 보호 등급: 'leave' | 'off' | 'juhu' | 'work'.
@@ -375,6 +379,16 @@ class _SchedulerBase:
         }
         # 끝 주에 주휴가 빠졌으면 블록 요일로 채운다 (결정 1-41). 신호등·두 엔진·진단이 같은 prev 를 본다.
         self.auto_juhu: List[Dict] = self._fill_missing_juhu(raw_prev)
+        # 신규가 '/'로 넣은 원티드 — 트레이닝 날 근무('/D·/E·/N', 프리셉터와 같이) 또는 그날 자기 휴무('/OF·/주·/생') (2026-10-19).
+        # 위 정규화는 '/' 칸을 지운다(프리셉터 근무를 따르는 칸). 휴무는 프리셉터를 따르면 안 되고(신규 혼자 쉬는 날),
+        # 근무는 프리셉터를 그 근무로 끈다(_trainee_pair_targets). 예전엔 둘 다 프리셉터 근무로 덮였다 — 11월: /OF → /E, /D → /OF.
+        self._trainee_typed: Dict[str, Dict[str, str]] = {}
+        for t in self._trainees:
+            for iso, raw in (raw_prev.get(t["id"]) or {}).items():
+                if iso in valid_dates and isinstance(raw, str) and raw.startswith("/"):
+                    base = _PRE_ALIAS.get(raw[1:], raw[1:])
+                    if base in self.ALL_SHIFTS:
+                        self._trainee_typed.setdefault(t["id"], {})[iso] = base
 
     # ── 날짜 범위 계산 ────────────────────────────────────────────────────────
 
@@ -466,13 +480,15 @@ class _SchedulerBase:
             trainee = by_id[nid]
             pid = trainee.get("preceptor_id")
             own = self.prev.get(nid, {})
+            typed = getattr(self, "_trainee_typed", {}).get(nid, {})
             cells = dict(x[nid])
             for d, dt in enumerate(self.all_dates):
                 if dt >= indep:
                     break
                 if not self._nurse_active_on(trainee, dt):
                     continue   # 자기 전입 전·전출 후
-                code = own.get(dt.strftime("%Y-%m-%d"))
+                iso = dt.strftime("%Y-%m-%d")
+                code = own.get(iso) or typed.get(iso)      # 넣은 '/' 근무·휴무도 그날 실제로 한 것
                 if code:
                     cells[d] = {s: (1 if s == code else 0) for s in self.ALL_SHIFTS}
                 elif pid and pid != nid and pid in x:
@@ -497,33 +513,82 @@ class _SchedulerBase:
                 continue
             pid = trainee.get("preceptor_id")
             own = self.prev.get(nid, {})
+            typed = getattr(self, "_trainee_typed", {}).get(nid, {})
             for d, dt in enumerate(self.all_dates):
                 if dt >= indep:
                     break
                 if not self._nurse_active_on(trainee, dt):
                     continue
-                code = own.get(dt.strftime("%Y-%m-%d")) or (pin.get((pid, d)) if pid and pid != nid else None)
+                iso = dt.strftime("%Y-%m-%d")
+                code = own.get(iso) or typed.get(iso) or (pin.get((pid, d)) if pid and pid != nid else None)
                 if code:
                     out[(nid, d)] = code
         return out
+
+    def _trainee_pair_targets(self) -> list:
+        """신규가 트레이닝 날 '/D·/E·/N' 으로 넣은 날 — [(프리셉터 id, 날 인덱스, 맞는 코드들)] (2026-10-19).
+        프리셉터 칸에 사람이 넣은 게 있으면 그대로 둔다(대상 아님). 목적함수가 _TRAINEE_PAIR_BONUS 로 끈다."""
+        out = []
+        work = set(self.WORK_SHIFTS)
+        active = {n["id"]: n for n in self.nurses}
+        for t in self._trainees:
+            pid = t.get("preceptor_id")
+            if not pid or pid == t["id"] or pid not in active:
+                continue
+            last = self._train_last.get(t["id"])
+            for iso, base in getattr(self, "_trainee_typed", {}).get(t["id"], {}).items():
+                if base not in work:
+                    continue
+                dt = date.fromisoformat(iso)
+                d = self.date_to_idx.get(dt)
+                if d is None or (last is not None and dt > last) or not self._nurse_active_on(t, dt):
+                    continue
+                if self.prev.get(pid, {}).get(iso) or not self._nurse_active_on(active[pid], dt):
+                    continue
+                out.append((pid, d, sorted(self._PRE_FLEX.get(base, {base}))))
+        return out
+
+    def _trainee_pair_notes(self, sched: Dict[str, Dict[str, str]]) -> List[str]:
+        """신규가 넣은 '/' 근무와 프리셉터 근무가 다른 날 — 참고 목록 (넣은 칸은 그대로 냈다)."""
+        notes = []
+        name = {n["id"]: n.get("name", n["id"]) for n in list(self.nurses) + list(self._trainees)}
+        for t in self._trainees:
+            pid = t.get("preceptor_id")
+            for iso, base in sorted(getattr(self, "_trainee_typed", {}).get(t["id"], {}).items()):
+                if base not in self.WORK_SHIFTS or not pid:
+                    continue
+                pc = sched.get(pid, {}).get(iso) or ""
+                if pc not in self._PRE_FLEX.get(base, {base}):
+                    dt = date.fromisoformat(iso)
+                    notes.append(f"신규 {name.get(t['id'])} {dt.month}/{dt.day} '/{base}' — 프리셉터 {name.get(pid, pid)} 는 "
+                                 f"그날 {pc or '빈칸'} (같이 일할 사람을 정해 주세요)")
+        return notes
 
     def _fill_trainee_cells(self, table: Dict, dates) -> None:
         """결과 표에 신규의 트레이닝 날을 채운다 — 자기 사전입력('/' 아닌 코드)이 있으면 그것,
         없으면 프리셉터 근무 + '/' 접두어. 독립한 뒤 칸(엔진이 배정)은 건드리지 않는다.
         table 의 프리셉터 줄을 읽는다 (당월만 담은 표·범위 전체 표 각각에)."""
+        off = set(self.REST_SHIFTS + self.LEAVE_SHIFTS)
         for trainee in self._trainees:
             tid = trainee["id"]
             pid = trainee.get("preceptor_id")
             last = self._train_last.get(tid)
             src = table.get(pid, {}) if pid and pid != tid else {}
             own = self.prev.get(tid, {})
+            typed = getattr(self, "_trainee_typed", {}).get(tid, {})
             for dt in dates:
                 if last is not None and dt > last:
                     continue
                 if not self._nurse_active_on(trainee, dt):
                     continue
                 dt_str = dt.strftime("%Y-%m-%d")
-                code = own.get(dt_str) or ("/" + src[dt_str] if src.get(dt_str) else "")
+                code = own.get(dt_str)
+                if not code:
+                    t, pc = typed.get(dt_str), src.get(dt_str)
+                    if t and (t in off or not pc or pc not in self._PRE_FLEX.get(t, {t})):
+                        code = "/" + t       # 넣은 휴무, 또는 프리셉터와 다른 근무 — 넣은 그대로 (참고 목록에 알린다)
+                    elif pc:
+                        code = "/" + pc
                 if code:
                     table.setdefault(tid, {})[dt_str] = code
 
@@ -2088,6 +2153,12 @@ class _SchedulerBase:
             result["v_report"] = vr
             result["message"] += (
                 f"\n\n🧾 연차(V) 자동 배정 {vr['total']}건 — 이유와 줄이는 방법은 표 아래 📋 리포트에 있습니다.")
+        # 신규가 넣은 '/' 근무가 프리셉터 근무와 다른 날 — 넣은 그대로 냈다 (2026-10-19)
+        tn = self._trainee_pair_notes(result.get("schedule") or {})
+        if tn:
+            result["trainee_notes"] = tn
+            result["message"] += (f"\n\n📌 신규가 넣은 근무와 프리셉터 근무가 다른 날 {len(tn)}건 — 넣은 그대로 냈습니다:\n"
+                                  + "\n".join("  · " + t for t in tn[:8]))
         # 주휴가 빠진 완전한 주 — 끝에 붙은 다음 달 며칠 포함 (안내만, 생성은 그대로)
         mj = self._missing_juhu_weeks(result.get("schedule") or {})
         if mj["weeks"] or mj["none"]:
@@ -2194,7 +2265,7 @@ class _SchedulerBase:
         self._fill_trainee_cells(schedule, self.all_dates)
         self._fill_trainee_cells(extended, self.all_dates)
         nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
-        notes = self._pinned_rule_notes(extended)
+        notes = self._pinned_rule_notes(extended) + self._trainee_pair_notes(extended)
         blank = self._blank_tail_cells()
         if blank:
             # 생성 달만 다 차 있고 끝 며칠이 빈 표 — 그 며칠은 규칙대로 채울 수 없었다(솔버 실패 뒤 대체 경로).

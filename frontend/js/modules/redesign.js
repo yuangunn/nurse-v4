@@ -81,8 +81,8 @@ window.RedesignModule = function() {
       const days=(this.scheduleDays||[]).filter(d=>!this.isOverflow(d));
       return (this.nurses||[]).reduce((a,n)=>a+(n.is_trainee?days.filter(d=>!this.isTraineeInTraining(n,d)).length:days.length), 0);
     },
-    // 지키지 못한 신규의 트레이닝 날 사전입력 — 트레이닝 날 칸은 자기 사전입력('/' 아닌 코드)이 이기고
-    // '/' 칸은 프리셉터 근무를 따른다. '/E' 를 넣었는데 프리셉터가 D 면 그 칸은 바뀐 것이다 (상태 줄이 '모두 지켰어요'라 하지 않게)
+    // 지키지 못한 신규의 트레이닝 날 사전입력 — 엔진은 넣은 '/' 휴무를 그대로, '/' 근무는 프리셉터를 그 근무로 끌고
+    // 끝내 다르면 넣은 그대로 낸다(2026-10-19). 그래도 결과가 넣은 칸과 다르면 센다 (상태 줄이 '모두 지켰어요'라 하지 않게)
     get rdTraineeChanged(){
       if(!this.rdSched) return 0;
       let n=0;

@@ -162,6 +162,38 @@ def test_own_rest_on_training_day_wins_over_preceptor_copy(engine):
     assert not r.get("relaxed_cells")
 
 
+# ── 신규가 '/'로 넣은 원티드 (2026-10-19) — 11월: /OF → /E, /D → /OF 로 조용히 덮였다 ─────────────
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_slash_rest_is_the_trainees_own_day_off(engine):
+    """트레이닝 날 '/OF' 는 신규 혼자 쉬는 날 — 프리셉터가 그날 일해도 신규는 쉰다 (예전엔 '/D' 로 덮였다)."""
+    r = engine(_request(prev={"t0": {"2026-03-02": "/OF"}, "a1": {"2026-03-02": "D"}})).solve()
+    assert r["success"], r["message"]
+    assert r["schedule"]["t0"]["2026-03-02"] == "/OF", r["schedule"]["t0"]
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_slash_work_pulls_the_preceptor_to_that_shift(engine):
+    """'/D' 를 넣은 날은 프리셉터도 D 가 되게 한다 — 같이 일한다. 간호01 이 그날 D 를 바라도(위시 50) 프리셉터 쪽이
+    먼저다 (예전엔 위시대로 프리셉터가 E, 신규는 '/E' 로 덮였다)."""
+    req = _request(prev={"t0": {"2026-03-02": "/D"}})
+    req.nurses[0].wishes = {"2026-03-02": "D"}
+    r = engine(req).solve()
+    assert r["success"], r["message"]
+    assert r["schedule"]["a1"]["2026-03-02"] in ("D", "DC"), r["schedule"]["a1"]
+    assert r["schedule"]["t0"]["2026-03-02"] in ("/D", "/DC"), r["schedule"]["t0"]
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_slash_work_against_preceptors_own_rest_is_kept_and_noted(engine):
+    """프리셉터가 그날 주휴를 넣었으면 그대로 두고, 신규가 넣은 '/E' 도 그대로 낸다 — 같이 일할 사람을 정하라고 알린다."""
+    r = engine(_request(prev={"t0": {"2026-03-02": "/E"}, "a1": {"2026-03-02": "주"}},
+                        per_day={"2026-03-02": {"D": 1, "E": 0, "N": 0}})).solve()
+    assert r["success"], r["message"]
+    assert (r["schedule"]["a1"]["2026-03-02"], r["schedule"]["t0"]["2026-03-02"]) == ("주", "/E")
+    assert any("같이 일할 사람" in t for t in r.get("trainee_notes", [])), r.get("trainee_notes")
+
+
 @pytest.mark.parametrize("engine", ENGINES)
 def test_slash_preinput_after_end_date_extends_training(engine):
     """끝나는 날(3/3) 뒤 3/4 에 '/E' — 3/4 도 트레이닝, 3/5 부터 독립."""
