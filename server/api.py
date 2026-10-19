@@ -641,6 +641,119 @@ def nurse_export_xlsx():
     )
 
 
+def _build_schedule_xlsx(body: dict) -> bytes:
+    """근무표 xlsx — 병동 번표 모양: 제목 · 주기 · 날짜 · 요일 머리줄, 간호사 줄 + 그 달 계, 날마다 인원 줄.
+    body = {year, month, title?, days: [ISO…], holidays?: [ISO…], rows: [[이름, 코드…]…]}.
+    days 는 그 달에 걸친 일~토 주 전부(11월 → 11/1~12/5), 코드는 클라이언트가 인쇄처럼 D/E/N 으로 바꿔 보낸다 (rdPrintCode).
+    계는 수식이 아니라 값: openpyxl 은 수식 결과를 저장하지 못해 이 파일을 다시 올리면(_parse_xlsx_sheets, data_only)
+    수식 칸이 비고 'D·근무자수' 줄이 명부에 없는 이름으로 뜬다 (결정 1-44 ②). 숫자뿐인 줄은 붙여넣기가 건너뛴다."""
+    import io
+    from datetime import date
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    from .scheduler_base import _SchedulerBase
+
+    y, m = int(body["year"]), int(body["month"])
+    days = [date.fromisoformat(s) for s in body["days"]]
+    if not (1 <= m <= 12 and days):
+        raise ValueError("년월이나 날짜가 없습니다")
+    nd, c0 = len(days), 2                                      # B열부터 날짜
+    rows = [[str(r[0])] + [str(c or "") for c in (list(r[1:]) + [""] * nd)[:nd]] for r in body["rows"]]
+    hol = set(body.get("holidays") or [])
+    in_m = [i for i, d in enumerate(days) if (d.year, d.month) == (y, m)]
+    totals = ("D", "E", "N", "중", "OF", "법", "생", "V", "주", "근무")
+    t0 = c0 + nd                                               # 그 달 계 첫 칸
+    last = t0 + len(totals) - 1
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{m}월"
+    norm, bold = Font(name="맑은 고딕", size=9), Font(name="맑은 고딕", size=9, bold=True)
+    red = Font(name="맑은 고딕", size=9, bold=True, color="FFFF0000")
+    mid = Alignment(horizontal="center", vertical="center")
+    gray = PatternFill("solid", fgColor="FFEDEDED")
+
+    def put(r, c, v, font=bold):
+        cell = ws.cell(r, c, v)
+        if isinstance(v, str) and v.startswith("="):
+            cell.data_type = "s"                               # '=' 로 시작하는 이름이 수식이 되지 않게
+        cell.font, cell.alignment = font, mid
+        return cell
+
+    def merge(r, c1, c2):
+        if c2 > c1:
+            ws.merge_cells(start_row=r, start_column=c1, end_row=r, end_column=c2)
+
+    put(1, 1, f"{body.get('title') or f'{y}년 {m}월 근무표'} "
+              f"({days[0].month}월 {days[0].day}일~{days[-1].month}월 {days[-1].day}일)",
+        Font(name="맑은 고딕", size=12, bold=True))
+    merge(1, 1, last)
+    ref = _SchedulerBase._CYCLE_REF                            # 화면 getCycleNum 과 같은 기준일·산식
+    for i in range(0, nd, 7):
+        put(2, c0 + i, f"{(days[i] - ref).days % 28 // 7 + 1}주기")
+        merge(2, c0 + i, min(c0 + i + 6, t0 - 1))
+    put(2, t0, f"{m}월 계")
+    merge(2, t0, last)
+    put(4, 1, "이름")
+    for i, d in enumerate(days):
+        f = red if d.weekday() == 6 or d.isoformat() in hol else bold
+        for cell in (put(3, c0 + i, d, f), put(4, c0 + i, "월화수목금토일"[d.weekday()], f)):
+            if i not in in_m:
+                cell.fill = gray                               # 앞뒤 달 칸 (겹치는 주기)
+        ws.cell(3, c0 + i).number_format = 'm"/"d'
+        ws.column_dimensions[get_column_letter(c0 + i)].width = 4.3
+    for j, t in enumerate(totals):
+        put(4, t0 + j, t)
+        ws.column_dimensions[get_column_letter(t0 + j)].width = 4.5
+    ws.column_dimensions["A"].width = 9
+
+    for k, row in enumerate(rows):
+        put(5 + k, 1, row[0])
+        for i, code in enumerate(row[1:]):
+            put(5 + k, c0 + i, code or None, norm)
+        mc = [row[1 + i].lstrip("/") for i in in_m]            # 그 달 칸만 · 신규 '/D' 는 자기 줄에서 D 로 센다
+        vals = [mc.count(t) for t in totals[:-1]] + [sum(map(mc.count, ("D", "E", "N", "중", "D1")))]
+        for j, v in enumerate(vals):
+            put(5 + k, t0 + j, v, norm)
+    rs = 5 + len(rows)
+    work = ("D", "E", "N", "중")                                # 병동 번표 아래 줄 — D1·신규 '/D' 는 세지 않는다
+    for j, lab in enumerate(work + ("근무자수",)):
+        put(rs + j, 1, lab)
+        for i in range(nd):
+            codes = [row[1 + i] for row in rows]
+            put(rs + j, c0 + i, sum(map(codes.count, work)) if lab == "근무자수" else codes.count(lab), norm)
+
+    edge = Border(left=Side(style="medium"))                   # 주 경계(일요일 왼쪽) · 계 칸 왼쪽
+    for c in [c0 + i for i, d in enumerate(days) if d.weekday() == 6] + [t0]:
+        for r in range(2, rs + len(work) + 1):
+            ws.cell(r, c).border = edge
+    ws.freeze_panes = "B5"
+    ws.page_setup.orientation, ws.page_setup.paperSize = "landscape", ws.PAPERSIZE_A4
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.fitToHeight = 0                              # 가로 한 장에 맞추고 세로는 사람 수대로
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@app.post("/api/schedules/export.xlsx")   # GET·DELETE /api/schedules/{schedule_id} 보다 먼저 선언 — 메서드도 달라 겹치지 않는다
+def schedule_export_xlsx(body: dict):
+    """근무표 엑셀 내보내기 — 그 달에 걸친 주 전부, 병동 번표 모양. '근무표 파일 올리기'로 다시 올릴 수 있다."""
+    from fastapi.responses import Response
+    from openpyxl.utils.exceptions import IllegalCharacterError
+
+    try:
+        content = _build_schedule_xlsx(body)
+    except (KeyError, TypeError, ValueError, IndexError, IllegalCharacterError) as e:
+        raise HTTPException(400, f"근무표 형식이 맞지 않습니다: {e}")
+    return Response(
+        content=content,
+        media_type=_XLSX_MEDIA,
+        headers={"Content-Disposition": 'attachment; filename="schedule.xlsx"'},
+    )
+
+
 # ── CSV 파싱 헬퍼 (preview / import 양쪽에서 사용) ─────────────────────
 
 _CSV_ENCODINGS = ("utf-8-sig", "cp949", "euc-kr", "utf-8")
@@ -1402,10 +1515,6 @@ def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts
     weekday_keys = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
     year, month = request.year, request.month
     first = _date(year, month, 1)
-    if month == 12:
-        last = _date(year + 1, 1, 1) - _td(days=1)
-    else:
-        last = _date(year, month + 1, 1) - _td(days=1)
 
     req_dict = request.requirements.model_dump()
     off_shifts = leave_shifts + rest_shifts
@@ -1422,11 +1531,12 @@ def _validate_staffing(request: GenerateRequest, leave_shifts: list, rest_shifts
             in_training[nurse.id] = lt.strftime("%Y-%m-%d") if lt else "9999-12-31"
 
     cur = first
-    while cur <= last:
+    while cur <= g1:   # 끝에 붙은 다음 달 며칠도 — 엔진이 그날 인원을 건다 (결정 1-47)
         dt_str = cur.strftime("%Y-%m-%d")
         weekday_key = weekday_keys[cur.weekday()]
         per_day = request.per_day_requirements or {}
-        day_req = per_day.get(dt_str) or req_dict.get(weekday_key, {})
+        # 날짜별 인원은 요일 기본에 덮어쓴다 (엔진과 같다 — 한 시간대만 넣은 값도 있다)
+        day_req = {**req_dict.get(weekday_key, {}), **(per_day.get(dt_str) or {})}
 
         unavailable = sum(
             1 for nurse in request.nurses

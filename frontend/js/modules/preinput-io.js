@@ -53,9 +53,13 @@ window.PreinputIoModule = function() {
           const p=P[code]; if(!p)continue;
           (counts[dk]=counts[dk]||{D:0,E:0,N:0})[p]++;
         }
-      const dks=Object.keys(counts);
-      if(!dks.length){this.toast('사전입력에 D/E/N 근무가 없습니다','warn');return}
-      if(!confirm(`${dks.length}일의 필요 인원을 지금 입력된 근무표의 실제 인원수로 고정합니다.\n(설정의 요일별 기본값 대신 이 표가 기준이 됩니다)\n\n계속할까요?`))return;
+      // 칸이 다 찬 날만 — 원티드 몇 칸만 있는 날(끝에 붙은 다음 달 며칠 등)을 세면 그 수가 그날 필요 인원으로 고정된다
+      // (엔진은 끝 며칠의 날짜별 인원도 건다, 결정 1-47)
+      const all=Object.keys(counts);
+      const dks=all.filter(dk=>this._dayColumnFull(this.prevSchedule,dk,this.nurses));
+      if(!dks.length){this.toast(all.length?'칸이 다 찬 날이 없습니다 — 빈칸 없는 날만 그 표대로 고정합니다':'사전입력에 D/E/N 근무가 없습니다','warn');return}
+      const skipped=all.length-dks.length;
+      if(!confirm(`${dks.length}일의 필요 인원을 지금 입력된 근무표의 실제 인원수로 고정합니다.${skipped?`\n(빈칸이 있는 ${skipped}일은 건너뜁니다)`:''}\n(설정의 요일별 기본값 대신 이 표가 기준이 됩니다)\n\n계속할까요?`))return;
       this._pushUndo&&this._pushUndo();
       for(const dk of dks)this.prevDayReqs[dk]={...counts[dk]};
       this._checkViolations&&this._checkViolations();
@@ -147,7 +151,7 @@ window.PreinputIoModule = function() {
       await this.loadSavedList();this.toast('저장되었습니다','info');
     },
     async loadSavedList(){this.savedSchedules=await this.api('GET','/api/schedules')},
-    async loadSaved(id){const data=await this.api('GET',`/api/schedules/${id}`);this.year=data.data.year||data.year;this.month=data.data.month||data.month;this.nurses=data.data.nurses||[];this.requirements=data.data.requirements||this.requirements;this.rules=data.data.rules||this.rules;this.schedule=data.data.schedule||{};this.prevSchedule=data.data.prev_schedule||{};this.nurseScores=data.data.nurse_scores||{};this.nurseScoreDetails=data.data.nurse_score_details||{};this.lockedCells=data.data.locked_cells||{};this.cellNotes=data.data.cell_notes||{};this.holidays=data.data.holidays||this.holidays;this.prevDayReqs=data.data.prev_day_reqs||{};this.prevMonthNights=data.data.prev_month_nights||{};const log=data.data.solver_log||'';if(log){this.solverLogs=log.split('\n').map((m,i)=>({id:i+1,msg:m}))}this.activeTab='schedule'},
+    async loadSaved(id){const data=await this.api('GET',`/api/schedules/${id}`);this.year=data.data.year||data.year;this.month=data.data.month||data.month;this.nurses=data.data.nurses||[];this.requirements=data.data.requirements||this.requirements;this.rules=data.data.rules||this.rules;this.schedule=data.data.schedule||{};this.extendedSchedule={};this.prevSchedule=data.data.prev_schedule||{};this.nurseScores=data.data.nurse_scores||{};this.nurseScoreDetails=data.data.nurse_score_details||{};this.lockedCells=data.data.locked_cells||{};this.cellNotes=data.data.cell_notes||{};this.holidays=data.data.holidays||this.holidays;this.prevDayReqs=data.data.prev_day_reqs||{};this.prevMonthNights=data.data.prev_month_nights||{};const log=data.data.solver_log||'';if(log){this.solverLogs=log.split('\n').map((m,i)=>({id:i+1,msg:m}))}this.activeTab='schedule'},
     async deleteSaved(id){if(!confirm('삭제하시겠습니까?'))return;await this.api('DELETE',`/api/schedules/${id}`);await this.loadSavedList()},
 
     // ── 사전입력 저장 ────────────────────────────────────────

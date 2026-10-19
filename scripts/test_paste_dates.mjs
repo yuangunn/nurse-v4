@@ -172,7 +172,7 @@ Object.assign(mod, {
 // 신규 트레이닝 날 표기
 assert.equal(norm('/D'), '/D');
 assert.equal(norm('/off'), '/OF');
-assert.equal(norm('/V'), undefined);
+assert.equal(norm('/V'), '/V');
 // 올린 번표의 나이트킵: 그 달 근무가 전부 N 이고 10회 넘으면 저장본 명부에만 적는다 (제1원칙 7)
 {
   const sched = { a: {}, b: {} };

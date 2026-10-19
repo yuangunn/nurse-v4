@@ -173,3 +173,45 @@ def test_generated_tail_week_gets_block_juhu_and_is_reported(engine):
     assert "같은 주기(1~4주기) 요일로 주휴를 넣었습니다 7칸" in r["message"], r["message"][-600:]
     assert "12/01(화) 간호03" in r["message"]
     assert not r.get("missing_juhu"), r.get("missing_juhu")
+
+
+def test_tail_per_day_requirement_sizes_the_fill():
+    """끝 주의 날짜별 인원도 그 날짜에 건다(결정 1-47) — 주휴를 채울 때도 같은 수로 센다. 8명 모두 수요일 블록이라
+    12/02(수)에 주휴를 넣는데, 그날 낮 근무를 3명으로 올려 두면(그날 6명 근무) 넣을 수 있는 건 둘이다.
+    예전엔 요일 기본(5명)으로 세어 셋을 넣어 그날 인원을 못 채우고 생성이 실패했다."""
+    prev = {}
+    for i in range(8):
+        _juhu_on(prev, f"a{i}", BLOCK_WEEKS[:3], 3)
+    assert len(_added(NurseScheduler(_request(prev, n=8)))) == 3
+    s = NurseScheduler(_request(prev, n=8, per_day_requirements={"2026-12-02": {"D": 3}}))
+    assert len(_added(s)) == 2 and all(d == "2026-12-02" for _, d in _added(s)), s.auto_juhu
+
+
+def test_next_month_keepers_are_not_day_side_capacity():
+    """12월 나이트킵 둘은 12/02 에 야간만 받는다 — 낮·저녁 자리(D2 E2)엔 일반 6명만 있다. 주휴를 셋 넣으면
+    낮·저녁에 셋만 남아 인원을 못 채운다 → 둘만 넣는다 (예전엔 나이트킵까지 세어 셋)."""
+    prev = {}
+    for i in range(6):
+        _juhu_on(prev, f"a{i}", BLOCK_WEEKS[:3], 3)
+    nurses = [Nurse(id=f"a{i}", name=f"간호{i + 1:02d}", group="A", gender="female", capable_shifts=CAPS,
+                    seniority=i, night_months={"2026-12": True} if i >= 6 else {}) for i in range(8)]
+    assert len(_added(NurseScheduler(_request(prev, nurses=nurses)))) == 2
+
+
+@pytest.mark.parametrize("engine", ["highs", "cpsat"])
+def test_pre_entered_night_is_not_day_side_capacity(engine):
+    """12/02 에 간호06(일반)이 N 을 넣었다 — 그날 낮·저녁 자리엔 세지 않는다. 예전엔 세어서 블록 요일(수) 주휴를
+    간호01·간호02 둘 다 넣었고, 낮·저녁(D2 E2)에 셋만 남아 두 엔진 모두 생성이 막혔다 (2026-10-19 검토)."""
+    from .test_month_tail import _engine
+    prev = {}
+    for nid in ("a0", "a1"):
+        _juhu_on(prev, nid, BLOCK_WEEKS[1:3], 3)
+    for nid, iso in (("a2", "2026-12-01"), ("a3", "2026-12-03"), ("a4", "2026-12-04"), ("a5", "2026-11-29")):
+        prev.setdefault(nid, {})[iso] = "주"
+    prev["a5"]["2026-12-02"] = "N"
+    nurses = [Nurse(id=f"a{i}", name=f"간호{i + 1:02d}", group="A", gender="female", capable_shifts=CAPS,
+                    seniority=i, night_months={"2026-12": True} if i >= 6 else {}) for i in range(8)]
+    s = _engine(engine, date(2026, 11, 29), date(2026, 12, 5))(_request(prev, nurses=nurses))
+    assert len(_added(s)) == 1, s.auto_juhu
+    r = s.solve()
+    assert r["success"], r.get("message")

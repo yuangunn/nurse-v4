@@ -94,7 +94,8 @@ class _ConflictAnalyzer(CpSatScheduler):
         # 빈칸 없는 완성된 표는 만들기에서 그대로 근무표로 확정된다(_confirm_pinned_result) —
         # 신호등도 같은 답을 해야 한다. 앱 규칙과 다른 곳은 만든 뒤 '참고' 목록으로 나온다.
         # (완화를 켜면 엔진이 표를 고쳐 보려 하므로 이 지름길을 쓰지 않는다)
-        if not self.allow_pre_relax and self._fully_pinned():
+        # 끝에 붙은 다음 달 며칠이 비어 있으면 그 며칠은 엔진이 채운다 — 지름길 없이 실제로 판정한다 (2026-10-19)
+        if not self.allow_pre_relax and self._fully_pinned() and not self._blank_tail_cells():
             return {**out, "status": "feasible", "conflicts": [], "pinned_table": True}
         # 쉴 코드 수급 산술 (M4-P1) — 솔버를 돌리기 전에 확정 판정이 나온다.
         # 수요 하한 vs 공급 상한이라 부족이 나오면 무조건 infeasible.
@@ -281,8 +282,7 @@ class _ConflictAnalyzer(CpSatScheduler):
         date_key = dt.strftime('%Y-%m-%d')
         req_dict = self.req.model_dump()
         base = req_dict.get(WEEKDAY_KEYS[dt.weekday()], {})
-        is_cur = (dt.month == self.month and dt.year == self.year)
-        ovr = self.per_day_req.get(date_key, {}) if is_cur else {}
+        ovr = self.per_day_req.get(date_key, {})   # 그 날짜에 — 끝에 붙은 며칠도 (엔진과 같다, 2026-10-18)
         return {**base, **ovr} if ovr else base
 
     # ── 신호등 한 줄 요약 ─────────────────────────────────────────────────────
@@ -688,15 +688,16 @@ class _ConflictAnalyzer(CpSatScheduler):
                         eligible_pairs.append((i_nurse["id"], j_nurse["id"], charge_s, regulars))
         nurse_by_id = {n["id"]: n for n in self.nurses}
         pin, _ = self._gate_pins()
+        first = date(self.year, self.month, 1)
         for d, dt in enumerate(self.all_dates):
-            if dt.month != self.month:
-                continue
+            if dt < first:
+                continue   # 지난달 칸은 기록 — 끝에 붙은 다음 달 며칠은 건다 (엔진과 같다, 2026-10-18)
             dt_str = dt.strftime("%Y-%m-%d")
             is_holiday = dt_str in self.holidays
             day_lit = None
             for nid_i, nid_j, charge_s, regulars in eligible_pairs:
-                if pin.get((nid_i, d)) and pin.get((nid_j, d)):
-                    continue   # 사실-클램프: 두 칸 다 사람이 넣은 것 (엔진 _cs_charge_seniority 와 같게)
+                if pin.get((nid_i, d)) == charge_s and pin.get((nid_j, d)):
+                    continue   # 사실-클램프: 후임이 그 차지를 직접 넣었다 (엔진 _cs_charge_seniority 와 같게)
                 # 솔버와 동일한 '유효 사전입력' 게이팅 (공용 헬퍼)
                 jf = self._seniority_jfixed(nurse_by_id[nid_j], dt, dt_str, is_holiday)
                 if jf and jf != charge_s:

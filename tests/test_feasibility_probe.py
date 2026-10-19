@@ -60,12 +60,14 @@ def test_probe_no_nurses(build_request):
 # ── 완성된 번표 · 한 줄 요약 (2026-10-16) ───────────────────────────────────
 
 def _full_table(nurses, year=2026, month=3):
-    """빈칸 없는 한 달 표 — 앱 규칙(인원·OF 주 1회)과 일부러 다르게."""
-    import calendar
+    """빈칸 없는 표 — 그 달 + 끝에 붙은 다음 달 며칠(3월이면 4/1~4/4)까지, 앱 규칙(인원·OF 주 1회)과 일부러 다르게."""
+    from datetime import timedelta
+    from server.scheduler_base import generation_bounds
     from datetime import date
     pat = ["D", "E", "N", "OF", "주", "D", "OF"]
-    days = calendar.monthrange(year, month)[1]
-    return {n.id: {date(year, month, k + 1).isoformat(): pat[(i + k) % 7] for k in range(days)}
+    first, end = date(year, month, 1), generation_bounds(year, month)[1]
+    days = [first + timedelta(days=k) for k in range((end - first).days + 1)]
+    return {n.id: {d.isoformat(): pat[(i + k) % 7] for k, d in enumerate(days)}
             for i, n in enumerate(nurses)}
 
 
@@ -78,6 +80,11 @@ def test_probe_full_table_is_feasible(build_request, small_nurses):
     assert res["status"] == "feasible" and res.get("pinned_table"), res
     # 완화를 켜면 엔진이 표를 고쳐 보려 한다 — 지름길을 쓰지 않는다
     req.allow_pre_relax = True
+    assert not check_feasibility(req).get("pinned_table")
+    # 끝에 붙은 다음 달 며칠이 비면 그 며칠은 엔진이 채운다 — 지름길 없이 실제로 판정 (2026-10-19)
+    req.allow_pre_relax = False
+    for row in req.prev_schedule.values():
+        row.pop("2026-04-04", None)
     assert not check_feasibility(req).get("pinned_table")
 
 

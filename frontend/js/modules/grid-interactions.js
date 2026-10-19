@@ -200,8 +200,8 @@ window.GridInteractionsModule = function() {
       const wkKeys2=['sun','mon','tue','wed','thu','fri','sat'];
       const periodOf={day:'D',evening:'E',night:'N'};
       for(const day of days){
-        if(this.isOverflow(day))continue;
         const dk=this.dayKey(day);
+        if(dk<firstKey)continue;   // 지난달 칸은 기록 — 끝에 붙은 다음 달 며칠은 엔진이 인원을 건다 (결정 1-47)
         const req={...(this.requirements?.[wkKeys2[day.getDay()]]||{}),...(this.prevDayReqs?.[dk]||{})};
         const cnt={D:[],E:[],N:[]};
         for(const n of this.nurses){
@@ -235,9 +235,10 @@ window.GridInteractionsModule = function() {
       const restLeave=this.shifts.filter(s=>s.period==='rest'||s.period==='leave').map(s=>s.code);
       const wkKeys=['sun','mon','tue','wed','thu','fri','sat'];
       const short=[],tight=[];
+      const firstKey=`${this.year}-${String(this.month).padStart(2,'0')}-01`;
       for(const day of this.scheduleDays){
-        if(this.isOverflow(day))continue;
         const dk=this.dayKey(day);
+        if(dk<firstKey)continue;   // 지난달 칸은 기록 — 끝에 붙은 다음 달 며칠도 본다 (엔진과 같다)
         const base=this.requirements?.[wkKeys[day.getDay()]]||{};
         const ovr=this.prevDayReqs?.[dk]||{};
         const req={...base,...ovr};

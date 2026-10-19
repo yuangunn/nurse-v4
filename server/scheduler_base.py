@@ -52,6 +52,15 @@ _LONG_RUN_PENALTY = 3000          # 연속 근무 한도를 하루 넘김
 _LONG_RUN_WEEKEND_RELIEF = 500    # 그 연속 안의 토·일·공휴일 하루마다 덜 깎는다
 _LONG_RUN_MIN_PENALTY = 1500
 _RARE_TRANSITION_PENALTY = 2000   # E→D1 · 중→D
+# 끝에 붙은 다음 달 며칠 — 다음 달 나이트킵의 야간 몫이 하나 모자랄 때 (2026-10-18, _tail_keeper_targets).
+# 꼬리 V(-500)보다 커서 남는 휴무를 나이트킵 OF 가 아니라 다른 사람의 V 로 돌리고, 근무 원티드를 깨고 V 를 주는 값
+# (완화 500 + V 500)보다 작아서 완화를 켜도 원티드를 깨면서까지 채우지 않는다. 하드가 아니라서 꼬리 N 자리를
+# 다른 사람이 이미 다 넣었어도 생성은 막히지 않는다.
+_TAIL_KEEPER_SHORT_PENALTY = 700
+# 신규가 트레이닝 날 '/D·/E·/N' 으로 넣은 원티드 — 프리셉터도 그 근무면 더하는 점수 (같이 일한다, 2026-10-19).
+# 근무 원티드 보존 점수(완화 500)와 비슷한 무게 — 꼬리 V(-500)보다 커서 엄격에선 맞출 수 있으면 맞추고, 프리셉터 칸에
+# 사람이 넣은 근무는 건드리지 않는다(그때는 결과에 넣은 그대로 내고 참고 목록에 알린다).
+_TRAINEE_PAIR_BONUS = 550
 
 def timeoff_class(code: str) -> str:
     """사전입력 코드의 보호 등급: 'leave' | 'off' | 'juhu' | 'work'.
@@ -336,22 +345,26 @@ class _SchedulerBase:
         # prev_schedule 정규화:
         #  1) 유효한 nurse_id (현 간호사 목록 + 트레이니)만 통과 — 삭제된 간호사(유령) 제거
         #  2) 당월 날짜 범위만 통과 — 범위 밖 날짜 무시
-        #  3) "/" 접두어는 트레이니 표시용이라 스트립 (프리셉터 근무가 자동 적용)
+        #  3) 신규의 "/" 칸은 지운다 — 프리셉터 근무가 자동 적용, 넣은 '/' 원티드는 아래 _trainee_typed 가 따로 읽는다.
+        #     신규가 아닌 사람(표시를 끈 사람·붙여넣기로 더한 사람)의 '/E' 는 그날 E — 버리면 지난달 '/E' 다음 1일이 D 가 됐다 (2026-10-19)
         valid_dates = set(dt.strftime("%Y-%m-%d") for dt in self.all_dates)
         # 법정공휴일은 '생성 주기 범위' 안의 날짜만 사용한다 — 당월만 필터하면
         # 월경계 주에 걸린 익월 공휴일(신정·설날·삼일절)을 못 봐서 ① 그 날에
         # OF/V/생을 배정해 버리고 ② 오프특근 판정에서도 빠진다. (2026-08-20)
         self.holidays = set(h for h in self.holidays if h in valid_dates)
         valid_nurse_ids = set(n["id"] for n in self._all_nurses)
-        def _normalize_pre(s: str) -> str:
+        trainee_ids = {t["id"] for t in self._trainees}
+        def _normalize_pre(s: str, nid: str) -> str:
             if not s:
                 return s
             if s.startswith("/"):
-                return ""
+                if nid in trainee_ids:
+                    return ""
+                s = s[1:]
             return _PRE_ALIAS.get(s, s)
         self.prev = {
-            nid: {dt: _normalize_pre(s) for dt, s in days.items()
-                  if dt in valid_dates and _normalize_pre(s)}
+            nid: {dt: _normalize_pre(s, nid) for dt, s in days.items()
+                  if dt in valid_dates and _normalize_pre(s, nid)}
             for nid, days in self.prev.items()
             if nid in valid_nurse_ids
         }
@@ -370,6 +383,16 @@ class _SchedulerBase:
         }
         # 끝 주에 주휴가 빠졌으면 블록 요일로 채운다 (결정 1-41). 신호등·두 엔진·진단이 같은 prev 를 본다.
         self.auto_juhu: List[Dict] = self._fill_missing_juhu(raw_prev)
+        # 신규가 '/'로 넣은 원티드 — 트레이닝 날 근무('/D·/E·/N', 프리셉터와 같이) 또는 그날 자기 휴무('/OF·/주·/생') (2026-10-19).
+        # 위 정규화는 '/' 칸을 지운다(프리셉터 근무를 따르는 칸). 휴무는 프리셉터를 따르면 안 되고(신규 혼자 쉬는 날),
+        # 근무는 프리셉터를 그 근무로 끈다(_trainee_pair_targets). 예전엔 둘 다 프리셉터 근무로 덮였다 — 11월: /OF → /E, /D → /OF.
+        self._trainee_typed: Dict[str, Dict[str, str]] = {}
+        for t in self._trainees:
+            for iso, raw in (raw_prev.get(t["id"]) or {}).items():
+                if iso in valid_dates and isinstance(raw, str) and raw.startswith("/"):
+                    base = _PRE_ALIAS.get(raw[1:], raw[1:])
+                    if base in self.ALL_SHIFTS:
+                        self._trainee_typed.setdefault(t["id"], {})[iso] = base
 
     # ── 날짜 범위 계산 ────────────────────────────────────────────────────────
 
@@ -461,13 +484,15 @@ class _SchedulerBase:
             trainee = by_id[nid]
             pid = trainee.get("preceptor_id")
             own = self.prev.get(nid, {})
+            typed = getattr(self, "_trainee_typed", {}).get(nid, {})
             cells = dict(x[nid])
             for d, dt in enumerate(self.all_dates):
                 if dt >= indep:
                     break
                 if not self._nurse_active_on(trainee, dt):
                     continue   # 자기 전입 전·전출 후
-                code = own.get(dt.strftime("%Y-%m-%d"))
+                iso = dt.strftime("%Y-%m-%d")
+                code = own.get(iso) or typed.get(iso)      # 넣은 '/' 근무·휴무도 그날 실제로 한 것
                 if code:
                     cells[d] = {s: (1 if s == code else 0) for s in self.ALL_SHIFTS}
                 elif pid and pid != nid and pid in x:
@@ -492,33 +517,84 @@ class _SchedulerBase:
                 continue
             pid = trainee.get("preceptor_id")
             own = self.prev.get(nid, {})
+            typed = getattr(self, "_trainee_typed", {}).get(nid, {})
             for d, dt in enumerate(self.all_dates):
                 if dt >= indep:
                     break
                 if not self._nurse_active_on(trainee, dt):
                     continue
-                code = own.get(dt.strftime("%Y-%m-%d")) or (pin.get((pid, d)) if pid and pid != nid else None)
+                iso = dt.strftime("%Y-%m-%d")
+                code = own.get(iso) or typed.get(iso) or (pin.get((pid, d)) if pid and pid != nid else None)
                 if code:
                     out[(nid, d)] = code
         return out
+
+    def _trainee_pair_targets(self) -> list:
+        """신규가 트레이닝 날 '/D·/E·/N' 으로 넣은 날 — [(프리셉터 id, 날 인덱스, 맞는 코드들)] (2026-10-19).
+        프리셉터 칸에 사람이 넣은 게 있으면 그대로 둔다(대상 아님). 목적함수가 _TRAINEE_PAIR_BONUS 로 끈다."""
+        out = []
+        work = set(self.WORK_SHIFTS)
+        active = {n["id"]: n for n in self.nurses}
+        first = date(self.year, self.month, 1)     # 지난달 기록은 지난 일 — 프리셉터의 숨은 지난달 변수를 끌지 않는다
+        for t in self._trainees:
+            pid = t.get("preceptor_id")
+            if not pid or pid == t["id"] or pid not in active:
+                continue
+            last = self._train_last.get(t["id"])
+            for iso, base in getattr(self, "_trainee_typed", {}).get(t["id"], {}).items():
+                if base not in work:
+                    continue
+                dt = date.fromisoformat(iso)
+                d = self.date_to_idx.get(dt)
+                if d is None or dt < first or (last is not None and dt > last) or not self._nurse_active_on(t, dt):
+                    continue
+                if self.prev.get(pid, {}).get(iso) or not self._nurse_active_on(active[pid], dt):
+                    continue
+                out.append((pid, d, sorted(self._PRE_FLEX.get(base, {base}))))
+        return out
+
+    def _trainee_pair_notes(self, sched: Dict[str, Dict[str, str]]) -> List[str]:
+        """신규가 넣은 '/' 근무와 프리셉터 근무가 다른 날 — 참고 목록 (넣은 칸은 그대로 냈다)."""
+        notes = []
+        name = {n["id"]: n.get("name", n["id"]) for n in list(self.nurses) + list(self._trainees)}
+        first = f"{self.year:04d}-{self.month:02d}-01"
+        for t in self._trainees:
+            pid = t.get("preceptor_id")
+            for iso, base in sorted(getattr(self, "_trainee_typed", {}).get(t["id"], {}).items()):
+                if base not in self.WORK_SHIFTS or not pid or iso < first:
+                    continue
+                pc = sched.get(pid, {}).get(iso) or ""
+                if pc not in self._PRE_FLEX.get(base, {base}):
+                    dt = date.fromisoformat(iso)
+                    notes.append(f"신규 {name.get(t['id'])} {dt.month}/{dt.day} '/{base}' — 프리셉터 {name.get(pid, pid)} 는 "
+                                 f"그날 {pc or '빈칸'} (같이 일할 사람을 정해 주세요)")
+        return notes
 
     def _fill_trainee_cells(self, table: Dict, dates) -> None:
         """결과 표에 신규의 트레이닝 날을 채운다 — 자기 사전입력('/' 아닌 코드)이 있으면 그것,
         없으면 프리셉터 근무 + '/' 접두어. 독립한 뒤 칸(엔진이 배정)은 건드리지 않는다.
         table 의 프리셉터 줄을 읽는다 (당월만 담은 표·범위 전체 표 각각에)."""
+        off = set(self.REST_SHIFTS + self.LEAVE_SHIFTS)
         for trainee in self._trainees:
             tid = trainee["id"]
             pid = trainee.get("preceptor_id")
             last = self._train_last.get(tid)
             src = table.get(pid, {}) if pid and pid != tid else {}
             own = self.prev.get(tid, {})
+            typed = getattr(self, "_trainee_typed", {}).get(tid, {})
             for dt in dates:
                 if last is not None and dt > last:
                     continue
                 if not self._nurse_active_on(trainee, dt):
                     continue
                 dt_str = dt.strftime("%Y-%m-%d")
-                code = own.get(dt_str) or ("/" + src[dt_str] if src.get(dt_str) else "")
+                code = own.get(dt_str)
+                if not code:
+                    t, pc = typed.get(dt_str), src.get(dt_str)
+                    if t and (t in off or not pc or pc not in self._PRE_FLEX.get(t, {t})):
+                        code = "/" + t       # 넣은 휴무, 또는 프리셉터와 다른 근무 — 넣은 그대로 (참고 목록에 알린다)
+                    elif pc:
+                        code = "/" + pc
                 if code:
                     table.setdefault(tid, {})[dt_str] = code
 
@@ -568,6 +644,8 @@ class _SchedulerBase:
             return not (nurse.get("is_pregnant") and self._preg_window_on(nid, dt))
         if not nurse.get("is_pregnant"):
             return False
+        if pre and s == pre and dt < date(self.year, self.month, 1):
+            return False          # 지난달 칸은 기록 — 임신 달 생 빼기는 생성 달부터 (결정 1-30 의 공휴일 OF 와 같다)
         if s in self.NIGHT_SHIFTS and self._preg_span_on(nid, dt):
             return True
         if s == "생" and nid in self._preg_in_month:
@@ -577,8 +655,8 @@ class _SchedulerBase:
     def _preg_effective_pre(self, nurse: dict, dt: date, pre: str):
         """임산부 모성보호로 무시해야 할 사전입력(야간/생)은 None으로 — 솔버가 유효 근무 선택.
         (사전입력 N을 임산부에게 강제하면 야간 면제와 충돌해 infeasible이 되므로 드롭.)"""
-        if not pre or not nurse.get("is_pregnant"):
-            return pre
+        if not pre or not nurse.get("is_pregnant") or dt < date(self.year, self.month, 1):
+            return pre            # 지난달 칸은 기록
         nid = nurse["id"]
         if pre in self.NIGHT_SHIFTS and self._preg_span_on(nid, dt):
             return None
@@ -835,6 +913,11 @@ class _SchedulerBase:
                               and self.prev.get(n["id"], {}).get(dt_str) in up
                               for n in self.nurses):
                 j_fixed = None
+        # 엄격(사실)에서도 사전입력 D·E·N 은 차지로 올라갈 수 있다(_PRE_FLEX — 변수 도메인과 같다). 병동 번표엔 누가 차지인지
+        # 나오지 않으므로(제1원칙 11) 그 날 차지는 앱이 시니어리티대로 정한다. 예전엔 선임이 D 를 넣어 두면 그 짝을 건너뛰어
+        # 엔진이 후임에게 차지를 줬다 (11월 생성 5건 — 겹치는 주 11/29 포함, 2026-10-18).
+        if j_fixed and not getattr(self, "_pre_soft", False) and len(self._PRE_FLEX.get(j_fixed, ())) > 1:
+            j_fixed = None
         return j_fixed
 
     def _night_dedicated_in(self, nid: str, year: int, month: int) -> bool:
@@ -993,6 +1076,9 @@ class _SchedulerBase:
         month_days_count = _cal.monthrange(self.year, self.month)[1]
         month_dates = [date(self.year, self.month, d) for d in range(1, month_days_count + 1)]
         dt_keys = [dt.strftime("%Y-%m-%d") for dt in month_dates]
+        # 전환·연속·패턴·주말·공휴일은 목적함수와 같은 날 (생성 달 + 끝에 붙은 다음 달 며칠) — 달 예산·위시는 dt_keys
+        score_dates = [self.all_dates[d] for d in self._score_days()]
+        score_keys = [dt.strftime("%Y-%m-%d") for dt in score_dates]
 
         scores = {nurse["id"]: 0 for nurse in self.nurses}
         details: Dict[str, list] = {nurse["id"]: [] for nurse in self.nurses}
@@ -1020,49 +1106,25 @@ class _SchedulerBase:
                             scores[nid] += sc
                             counts[nid] += 1
 
-            elif rt == "transition":
-                from_shifts = set(self._resolve_group(p.get("from", "")))
-                to_shifts   = set(self._resolve_group(p.get("to", "")))
-                if not from_shifts or not to_shifts:
+            elif rt in ("transition", "consecutive_same", "pattern"):
+                # 목적함수와 같은 창 — 생성 달 + 끝에 붙은 다음 달 며칠 + 1일 이음새(지난달 칸이 기록일 때) (결정 1-47)
+                if rt == "transition":
+                    groups = [set(self._resolve_group(p.get("from", ""))), set(self._resolve_group(p.get("to", "")))]
+                elif rt == "consecutive_same":
+                    groups = [set(self._resolve_group(p.get("period", "")))] * 2
+                else:
+                    groups = [set(self._resolve_group(g)) for g in p.get("pattern", [])]
+                if len(groups) < 2 or any(not g for g in groups):
                     continue
+                windows = self._score_windows(len(groups))
                 for nurse in self.nurses:
                     nid = nurse["id"]
                     ns = schedule.get(nid, {})
-                    for i in range(len(dt_keys) - 1):
-                        s1 = ns.get(dt_keys[i], "")
-                        s2 = ns.get(dt_keys[i + 1], "")
-                        if s1 in from_shifts and s2 in to_shifts:
-                            scores[nid] += sc
-                            counts[nid] += 1
-
-            elif rt == "consecutive_same":
-                period_shifts = set(self._resolve_group(p.get("period", "")))
-                if not period_shifts:
-                    continue
-                for nurse in self.nurses:
-                    nid = nurse["id"]
-                    ns = schedule.get(nid, {})
-                    for i in range(len(dt_keys) - 1):
-                        s1 = ns.get(dt_keys[i], "")
-                        s2 = ns.get(dt_keys[i + 1], "")
-                        if s1 in period_shifts and s2 in period_shifts:
-                            scores[nid] += sc
-                            counts[nid] += 1
-
-            elif rt == "pattern":
-                pattern = p.get("pattern", [])
-                n_steps = len(pattern)
-                if n_steps < 2:
-                    continue
-                groups = [set(self._resolve_group(g)) for g in pattern]
-                if any(not g for g in groups):
-                    continue
-                for nurse in self.nurses:
-                    nid = nurse["id"]
-                    ns = schedule.get(nid, {})
-                    for i in range(len(dt_keys) - n_steps + 1):
-                        window_shifts = [ns.get(dt_keys[i + k], "") for k in range(n_steps)]
-                        if all(window_shifts[k] in groups[k] for k in range(n_steps)):
+                    for w in windows:
+                        if not self._score_window_ok(nid, w):
+                            continue
+                        if all(ns.get(self.all_dates[d].strftime("%Y-%m-%d"), "") in groups[k]
+                               for k, d in enumerate(w)):
                             scores[nid] += sc
                             counts[nid] += 1
 
@@ -1098,7 +1160,7 @@ class _SchedulerBase:
                 for nurse in self.nurses:
                     nid = nurse["id"]
                     ns = schedule.get(nid, {})
-                    for dk in dt_keys:
+                    for dk in score_keys:
                         if dk in self.holidays and ns.get(dk, "") in work_set:
                             scores[nid] += sc
                             counts[nid] += 1
@@ -1108,8 +1170,8 @@ class _SchedulerBase:
                 for nurse in self.nurses:
                     nid = nurse["id"]
                     ns = schedule.get(nid, {})
-                    for i, dk in enumerate(dt_keys):
-                        dt = month_dates[i]
+                    for i, dk in enumerate(score_keys):
+                        dt = score_dates[i]
                         wd = dt.weekday()
                         assigned = ns.get(dk, "")
                         for slot in slots:
@@ -1124,10 +1186,10 @@ class _SchedulerBase:
             elif rt == "holiday_off":
                 for nurse in self.nurses:
                     nid = nurse["id"]
-                    if nurse.get("is_night_shift"):
-                        continue
                     ns = schedule.get(nid, {})
-                    for dk in dt_keys:
+                    for i, dk in enumerate(score_keys):
+                        if self._keeper_on(nurse, score_dates[i]):
+                            continue   # 나이트킵은 공휴일에도 OF — 날짜가 속한 달로 (목적함수와 같다)
                         if dk in self.holidays and ns.get(dk, "") == "OF":
                             scores[nid] += sc
                             counts[nid] += 1
@@ -1392,8 +1454,8 @@ class _SchedulerBase:
                     work_need += sum(1 for c in facts if c in den)
                     continue
                 base = req_dict.get(WEEKDAY_KEYS[dt.weekday()], {})
-                # 날짜별 인원은 생성 달 안만 — 인원 제약(_c_daily_requirements)과 같게, 끝에 붙은 며칠은 요일 기본
-                ovr = self.per_day_req.get(dt.strftime("%Y-%m-%d"), {}) if dt <= last_day else {}
+                # 날짜별 인원은 그 날짜에 — 끝에 붙은 다음 달 며칠도 (인원 제약 _c_daily_requirements 와 같다, 2026-10-18)
+                ovr = self.per_day_req.get(dt.strftime("%Y-%m-%d"), {})
                 dr = {**base, **ovr} if ovr else base
                 for pp, codes in periods:
                     if pp not in dr:
@@ -1626,6 +1688,14 @@ class _SchedulerBase:
         dow_kr = "월화수목금토일"
         # 나이트킵의 날만 뺀다 — 날짜가 속한 달로 (_keeper_on): 11월 나이트킵이 12/1~ 에 받은 V 도 설명한다
         regular = list(self.nurses)
+        # 끝에 붙은 다음 달 며칠에 다음 달 나이트킵이 야간 몫을 서면 그만큼 다른 사람이 그 주에 쉰다 (결정 1-47) — 그 주 V 의 이유
+        tail = set(self._tail_idxs())
+        keeper_tail = []
+        for nurse, idxs, _ in (self._tail_keeper_targets() if tail else []):
+            nn = sum(1 for d in idxs if schedule.get(nurse["id"], {}).get(
+                self.all_dates[d].strftime("%Y-%m-%d")) in self.NIGHT_SHIFTS)
+            if nn:
+                keeper_tail.append(f"{name_of[nurse['id']]} {nn}회")
         weeks_out, total = [], 0
         for wi, (ws, we) in enumerate(self.weeks):
             idxs = [d for d in range(ws, we + 1) if self.all_dates[d] >= first_of_month]
@@ -1692,6 +1762,9 @@ class _SchedulerBase:
             if missing:
                 hints.append(f"주휴가 없는 {', '.join(missing)} — 이 주에 주휴를 넣으면 그만큼 V가 줄어듭니다 "
                              f"(분석 탭 주휴 추천 → 사전입력에 적용).")
+            if keeper_tail and tail & set(idxs):
+                hints.append(f"다음 달 나이트킵({', '.join(keeper_tail)})이 {self._week_span(sorted(tail))} 야간 몫을 서서 "
+                             "그만큼 다른 사람이 이 주에 쉽니다 — 실제 번표도 그 며칠에 야간을 섭니다. 그 칸을 사전입력하면 넣은 대로 둡니다.")
             hints.append(f"남는 날 {v_days}에 연차·휴가 원티드를 먼저 받으면 V가 사람이 원한 날로 갑니다.")
             if not missing:
                 hints.append("주휴 요일을 주 안에서 옮기는 것은 주간 총량을 바꾸지 못합니다 — 요일별 필요 인원을 "
@@ -1738,6 +1811,78 @@ class _SchedulerBase:
             if self._effective_pre(nurse, dt, pre[iso], iso in self.holidays) == code:
                 n += 1
         return n
+
+    def _blank_tail_cells(self) -> list:
+        """끝에 붙은 다음 달 며칠 중 사전입력이 없는 재적 칸 [(nid, iso)] — 완성된 표 확정·신호등 지름길이 본다."""
+        out = []
+        for d in self._tail_idxs():
+            dt = self.all_dates[d]
+            iso = dt.strftime("%Y-%m-%d")
+            out += [(n["id"], iso) for n in self.nurses
+                    if self._nurse_active_on(n, dt) and not self.prev.get(n["id"], {}).get(iso)]
+        return out
+
+    def _tail_idxs(self) -> list:
+        """생성 달 뒤에 붙은 다음 달 며칠 (끝 주 안)."""
+        last = self._month_last_day()
+        return [d for d, dt in enumerate(self.all_dates) if dt > last]
+
+    def _score_days(self) -> list:
+        """배점 항목(전환·연속·패턴·주말·공휴일)을 거는 날 — 생성 달 + 끝에 붙은 다음 달 며칠 (2026-10-18).
+
+        끝 주는 다음 달이 그대로 넘겨받는 사실이 된다(병동 11월 번표 = 11/1~12/5). 예전엔 배점이 생성 달에만 걸려
+        꼬리 며칠은 D→N·퐁당 같은 감점이 하나도 없이 아무렇게나 채워졌다. 공정성(달 횟수)·V·생 같은 달 예산 항목은 달 기준 그대로."""
+        first = date(self.year, self.month, 1)
+        return [d for d, dt in enumerate(self.all_dates) if dt >= first]
+
+    def _score_windows(self, n: int) -> list:
+        """연속 n일 창 — 마지막 날이 _score_days 안. 1일 앞 지난달 칸(기록)과 1일의 이음새도 이 달이 정하므로 넣는다
+        (사람마다 그 지난달 칸이 기록일 때만 — _score_window_ok)."""
+        return [[e - n + 1 + k for k in range(n)] for e in self._score_days() if e - n + 1 >= 0]
+
+    def _score_window_ok(self, nid: str, window) -> bool:
+        """창에 든 지난달 칸이 그 사람의 기록(사전입력)인가. 기록이 없는 지난달 칸은 이음새 규칙을 잇는 숨은 변수라
+        (결과에 내지 않는다) 거기에 배점을 걸면 지어낸 값이 1일 배정을 끌고 간다."""
+        first = date(self.year, self.month, 1)
+        pre = self.prev.get(nid, {})
+        return all(self.all_dates[d] >= first or pre.get(self.all_dates[d].strftime("%Y-%m-%d"))
+                   for d in window)
+
+    def _tail_keeper_targets(self) -> list:
+        """끝에 붙은 다음 달 며칠의 다음 달 나이트킵 야간 몫 — [(nurse, tail_idxs, 몫)] (2026-10-18).
+
+        나이트킵은 달력 달로 14회다 (실제 번표 1~10월 20/20 달 — 앞 달 번표에 실린 그 달 첫 며칠의 야간도 14회에 든다).
+        끝 주엔 이 몫이 없고 나이트킵의 날 OF 는 상한이 없어서, 남는 휴무가 다음 달 나이트킵 OF 로 몰렸다
+        (11월 생성: 12월 나이트킵 둘이 12/1~12/5 내내 OF — 사용자 "버그"). 실제 번표는 다음 달 나이트킵이 그 며칠에
+        이미 야간을 선다 (첫 5일 평균 2.8회, 3일 넘는 겹침에서 전부 OF 인 적 없음).
+        몫 = 14 × 그 며칠 / 다음 달 날수 (`_night_dedicated_quota`, 12/1~5 → 2). 사람이 넣은 칸은 그대로 — 넣은 N 은 몫에 들고,
+        넣은 다른 칸은 비우지 않는다 (완화에서도 원티드는 몫보다 먼저). 몫은 목적함수 감점으로만 건다 (_TAIL_KEEPER_SHORT_PENALTY)."""
+        tail = self._tail_idxs()
+        if not tail:
+            return []
+        import calendar
+        nxt = self.all_dates[tail[0]]
+        dim = calendar.monthrange(nxt.year, nxt.month)[1]
+        out = []
+        for nurse in self.nurses:
+            if not self._keeper_on(nurse, nxt):
+                continue
+            active, target = self._night_dedicated_quota(nurse, tail, dim)
+            if active <= 0 or target <= 0:
+                continue
+            pre = self.prev.get(nurse["id"], {})
+            locked = self.locked_cells.get(nurse["id"], {})
+            keys = [(d, self.all_dates[d].strftime("%Y-%m-%d")) for d in tail]
+            pre_n = sum(1 for _, k in keys if pre.get(k) in self.NIGHT_SHIFTS)
+            # 완화를 켜면 나이트킵이 못 받는 D·E 원티드(잠그지 않은 칸)는 지켜지지 않고 풀린다 — 그 칸도 몫을 채울 수 있다.
+            # 쉬는 원티드·잠긴 칸은 그대로 (몫이 원티드와 다투지 않는다)
+            free = sum(1 for d, k in keys if self._nurse_active_idx(nurse, d)
+                       and (not pre.get(k) or (self.allow_pre_relax and not locked.get(k)
+                                               and self._keeper_forbids(nurse, self.all_dates[d], pre[k]))))
+            eff = min(max(target, pre_n), pre_n + free)
+            if eff > 0:
+                out.append((nurse, tail, eff))
+        return out
 
     def _tail_saeng_cap(self, nurse, next_idx) -> int:
         """생성 달 뒤에 붙은 다음 달 며칠의 생 상한 — 미리 넣은 생의 수만큼 (자유 생 0).
@@ -1786,11 +1931,13 @@ class _SchedulerBase:
             return 0
         first = date(self.year, self.month, 1)
         own = self.prev.get(nurse["id"], {})
+        typed = getattr(self, "_trainee_typed", {}).get(nurse["id"], {})   # '/OF'·'/생'도 그날 신규 자기 휴무 (_fill_trainee_cells)
         trainee = next((t for t in self._trainees if t["id"] == nurse["id"]), None)
         n = 0
         for d in day_idxs:
             dt = self.all_dates[d]
-            if not (first <= dt < indep) or own.get(dt.strftime("%Y-%m-%d")) != code:
+            iso = dt.strftime("%Y-%m-%d")
+            if not (first <= dt < indep) or (own.get(iso) or typed.get(iso)) != code:
                 continue
             if trainee is None or self._nurse_active_on(trainee, dt):
                 n += 1
@@ -1843,22 +1990,23 @@ class _SchedulerBase:
                 if self.all_dates[ws] >= first and self.all_dates[we] > last]
         if not tail:
             return []
-        work = set(self.WORK_SHIFTS)
+        de = set(self.DAY_SHIFTS + self.EVENING_SHIFTS) | {None}    # 낮·저녁 자리 (None = 빈칸)
+        night = set(self.NIGHT_SHIFTS)
         req_dict = self.req.model_dump()
         wk = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
-        def need(dt):
+        def need(dt, periods=("D", "E", "N")):
             iso = dt.strftime("%Y-%m-%d")
             base = req_dict.get(wk[dt.weekday()], {}) or {}
-            ovr = self.per_day_req.get(iso, {}) if (dt.year, dt.month) == (self.year, self.month) else {}
-            r = {**base, **(ovr or {})}
-            return sum(max(0, int(r.get(p) or 0)) for p in ("D", "E", "N"))
+            # 날짜별 인원은 그 날짜에 — 끝에 붙은 다음 달 며칠도 (엔진과 같다, 결정 1-47)
+            r = {**base, **(self.per_day_req.get(iso) or {})}
+            return sum(max(0, int(r.get(p) or 0)) for p in periods)
 
         def free_for_work(nurse, dt):
             if not self._nurse_active_on(nurse, dt):
                 return False
             c = self.prev.get(nurse["id"], {}).get(dt.strftime("%Y-%m-%d"))
-            return not c or c in work
+            return c in de or c in night          # D1·중을 넣은 사람은 D·E·N 자리가 아니다
 
         def is_juhu(nid, iso):
             if self.prev.get(nid, {}).get(iso) == "주":
@@ -1913,7 +2061,12 @@ class _SchedulerBase:
                         or locked.get(iso) or self._keeper_on(nurse, dt)):
                     continue
                 if d not in spare:
-                    spare[d] = sum(1 for n in self.nurses if free_for_work(n, dt)) - need(dt)
+                    free = [n for n in self.nurses if free_for_work(n, dt)]
+                    # 그날 나이트킵은 야간만 받는다 — 낮·저녁 자리엔 세지 않는다 (끝 며칠의 다음 달 나이트킵 포함).
+                    # 그날 N·D1·중을 넣은 사람도 낮·저녁 자리가 아니다
+                    day_side = sum(1 for n in free if not self._keeper_on(n, dt)
+                                   and self.prev.get(n["id"], {}).get(iso) in de)
+                    spare[d] = min(len(free) - need(dt), day_side - need(dt, ("D", "E")))
                 if spare[d] <= 0:
                     continue
                 spare[d] -= 1
@@ -2024,13 +2177,22 @@ class _SchedulerBase:
             result["v_report"] = vr
             result["message"] += (
                 f"\n\n🧾 연차(V) 자동 배정 {vr['total']}건 — 이유와 줄이는 방법은 표 아래 📋 리포트에 있습니다.")
+        # 신규가 넣은 '/' 근무가 프리셉터 근무와 다른 날 — 넣은 그대로 냈다 (2026-10-19)
+        tn = self._trainee_pair_notes(result.get("schedule") or {})
+        if tn:
+            result["trainee_notes"] = tn
+            result["message"] += (f"\n\n📌 신규가 넣은 근무와 프리셉터 근무가 다른 날 {len(tn)}건 — 넣은 그대로 냈습니다:\n"
+                                  + "\n".join("  · " + t for t in tn[:8]))
         # 주휴가 빠진 완전한 주 — 끝에 붙은 다음 달 며칠 포함 (안내만, 생성은 그대로)
         mj = self._missing_juhu_weeks(result.get("schedule") or {})
         if mj["weeks"] or mj["none"]:
             result["missing_juhu"] = mj
             result["message"] += ("\n\n📌 주휴가 없는 주가 있습니다 — 그 주는 V·오프특근으로 메워졌을 수 있습니다:\n"
                                   + "\n".join("  · " + t for t in self.missing_juhu_lines(mj)))
-        # 주휴가 빠진 주에 같은 블록 요일로 넣은 주휴 (결정 1-41) — 사전입력엔 없던 칸이라 알린다
+        return self._attach_auto_juhu(result)
+
+    def _attach_auto_juhu(self, result: Dict) -> Dict:
+        """주휴가 빠진 주에 같은 블록 요일로 넣은 주휴 (결정 1-41) — 사전입력엔 없던 칸이라 알린다 (확정 경로도)."""
         aj = [a for a in (getattr(self, "auto_juhu", None) or [])
               if (result.get("schedule") or {}).get(a["nurse_id"], {}).get(a["date"], "주") == "주"]
         if aj:
@@ -2123,16 +2285,26 @@ class _SchedulerBase:
                 if not code or not self._nurse_active_on(nurse, dt):
                     continue
                 extended.setdefault(nid, {})[dt_str] = code
-                if dt.month == self.month and dt.year == self.year:
-                    schedule.setdefault(nid, {})[dt_str] = code
+                # 끝에 붙은 다음 달 며칠도 결과 표에 — 솔버 결과(_extract_solution)와 같게. 예전엔 생성 달만 담아
+                # 다음 달 '지난달 표 이어오기'와 내보내기에서 끝 주가 빠졌다 (2026-10-18)
+                schedule.setdefault(nid, {})[dt_str] = code
         # 신규의 트레이닝 날도 솔버 결과와 같게 '/'+프리셉터 근무 (자기 사전입력이 있으면 그것)
-        self._fill_trainee_cells(schedule, [dt for dt in self.all_dates
-                                            if dt.month == self.month and dt.year == self.year])
+        self._fill_trainee_cells(schedule, self.all_dates)
         self._fill_trainee_cells(extended, self.all_dates)
         nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
-        notes = self._pinned_rule_notes(extended)
-        msg = ("✅ 사전입력이 빈칸 없이 확정되어 있어 표를 그대로 근무표로 확정했습니다.\n"
-               "(완성된 표는 검증 대상이 아니라 주어진 사실로 취급 — 솔버가 표를 바꾸지 않음)")
+        notes = self._pinned_rule_notes(extended) + self._trainee_pair_notes(extended)
+        blank = self._blank_tail_cells()
+        if blank:
+            # 생성 달만 다 차 있고 끝 며칠이 빈 표 — 그 며칠은 규칙대로 채울 수 없었다(솔버 실패 뒤 대체 경로).
+            # 예전엔 '빈칸 없이'라고만 하고 비워 둔 채 확정해, 다음 달 이어오기·내보내기에 빈 꼬리가 갔다 (2026-10-19)
+            tail = self._tail_idxs()
+            span = self._week_span([tail[0], tail[-1]])
+            msg = ("✅ 생성 달은 사전입력이 빈칸 없이 확정되어 있어 표를 그대로 근무표로 확정했습니다.\n"
+                   f"⚠ 끝에 붙은 다음 달 며칠({span}) {len(blank)}칸은 비어 있습니다 — 그 며칠을 규칙대로 채울 수 없어"
+                   " 비워 두었습니다. 직접 넣거나 다음 달 근무표에서 정하세요.")
+        else:
+            msg = ("✅ 사전입력이 빈칸 없이 확정되어 있어 표를 그대로 근무표로 확정했습니다.\n"
+                   "(완성된 표는 검증 대상이 아니라 주어진 사실로 취급 — 솔버가 표를 바꾸지 않음)")
         if notes:
             shown = notes[:12]
             msg += ("\n\n📋 앱 규칙 기준으로 다른 부분 (참고용 — 표는 그대로 유지됨):\n"
@@ -2141,7 +2313,7 @@ class _SchedulerBase:
                 msg += f"\n  · … 외 {len(notes) - 12}건"
         else:
             msg += "\n앱 규칙 기준으로도 차이가 없습니다."
-        return {
+        return self._attach_auto_juhu({
             "success": True,
             "schedule": schedule,
             "extended_schedule": extended,
@@ -2151,7 +2323,7 @@ class _SchedulerBase:
             "pinned_confirmed": True,
             "pinned_notes": notes,
             "estimated_seconds": 0,
-        }
+        })
 
     def _pinned_rule_notes(self, sched: Dict[str, Dict[str, str]]) -> List[str]:
         """확정 표가 앱 규칙과 다른 지점 목록 (정보 제공용 — 어떤 것도 강제하지 않음)."""
@@ -2171,8 +2343,8 @@ class _SchedulerBase:
                       "N": set(self.NIGHT_SHIFTS)}
         diffs = []
         for dt in self.all_dates:
-            if dt.month != self.month or dt.year != self.year:
-                continue
+            if dt < first_of_month:
+                continue   # 지난달 칸은 기록 — 끝에 붙은 다음 달 며칠은 본다 (엔진이 그날 인원을 건다, 결정 1-47)
             dt_str = dt.strftime("%Y-%m-%d")
             active = [n for n in self.nurses if self._nurse_active_on(n, dt)]
             if not active or not all(sched.get(n["id"], {}).get(dt_str) for n in active):

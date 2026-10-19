@@ -18,7 +18,8 @@ from ortools.sat.python import cp_model
 
 from .models import GenerateRequest
 from .scheduler_base import (_SchedulerBase, WEEKDAY_KEYS, timeoff_class, _OFF_TEUKGEUN_PENALTY,
-                             _RARE_TRANSITION_PENALTY, _FIXED_DATE_LEAVE)
+                             _RARE_TRANSITION_PENALTY, _FIXED_DATE_LEAVE, _TAIL_KEEPER_SHORT_PENALTY,
+                             _TRAINEE_PAIR_BONUS)
 
 
 class _CpSatProgress:
@@ -640,8 +641,8 @@ class CpSatScheduler(_SchedulerBase):
             date_key = dt.strftime('%Y-%m-%d')
             weekday_key = WEEKDAY_KEYS[dt.weekday()]
             base_req = req_dict.get(weekday_key, {})
-            is_cur = (dt.month == self.month and dt.year == self.year)
-            override = self.per_day_req.get(date_key, {}) if is_cur else {}
+            # 날짜별 인원은 그 날짜에 — 끝에 붙은 다음 달 며칠도 (예전엔 생성 달만, 2026-10-18)
+            override = self.per_day_req.get(date_key, {})
             day_req = {**base_req, **override} if override else base_req
             if self._day_all_pinned(d, dt):
                 continue  # 사실-클램프: 확정된 날은 인원 검증 스킵 (HiGHS 패리티)
@@ -668,8 +669,8 @@ class CpSatScheduler(_SchedulerBase):
             date_key = dt.strftime('%Y-%m-%d')
             weekday_key = WEEKDAY_KEYS[dt.weekday()]
             base_req = req_dict.get(weekday_key, {})
-            is_cur = (dt.month == self.month and dt.year == self.year)
-            override = self.per_day_req.get(date_key, {}) if is_cur else {}
+            # 날짜별 인원은 그 날짜에 — 끝에 붙은 다음 달 며칠도 (예전엔 생성 달만, 2026-10-18)
+            override = self.per_day_req.get(date_key, {})
             day_req = {**base_req, **override} if override else base_req
             if self._day_all_pinned(d, dt):
                 continue  # 사실-클램프: 확정된 날의 차지 구성은 표 그대로
@@ -979,14 +980,16 @@ class CpSatScheduler(_SchedulerBase):
                         continue
                     eligible_pairs.append((i_nurse["id"], j_nurse["id"], charge_s, regulars))
         nurse_by_id = {n["id"]: n for n in self.nurses}
+        first_of_month = date(self.year, self.month, 1)
         for d, dt in enumerate(self.all_dates):
-            if dt.month != self.month:
-                continue
+            if dt < first_of_month:
+                continue   # 지난달 칸은 기록 — 끝에 붙은 다음 달 며칠은 건다 (HiGHS 패리티, 2026-10-18)
             dt_str = dt.strftime("%Y-%m-%d")
             is_holiday = dt_str in self.holidays
             for nid_i, nid_j, charge_s, regulars in eligible_pairs:
-                # 사실-클램프: 두 셀 모두 확정이면 사용자 배치 그대로
-                if self._pin.get((nid_i, d)) and self._pin.get((nid_j, d)):
+                # 사실-클램프: 후임이 그 차지를 직접 넣었고 선임 칸도 넣은 것이면 사용자 배치 그대로 (HiGHS 패리티 —
+                # 둘 다 차지 표시 없이 넣었으면 시니어리티대로)
+                if self._pin.get((nid_i, d)) == charge_s and self._pin.get((nid_j, d)):
                     continue
                 # 선임 j의 '유효' 사전입력으로 게이팅 (공용 헬퍼 — HiGHS 패리티)
                 j_fixed = self._seniority_jfixed(nurse_by_id[nid_j], dt, dt_str, is_holiday)
@@ -1075,9 +1078,9 @@ class CpSatScheduler(_SchedulerBase):
         terms = []
         month_days = [d for d, dt in enumerate(self.all_dates)
                       if dt.month == self.month and dt.year == self.year]
-        month_day_pairs = [(month_days[i], month_days[i + 1])
-                           for i in range(len(month_days) - 1)
-                           if month_days[i + 1] == month_days[i] + 1]
+        # 전환·연속·패턴·주말·공휴일 항목은 끝에 붙은 다음 달 며칠과 1일 이음새까지 (HiGHS 패리티, 2026-10-18)
+        score_days = self._score_days()
+        score_pairs = [(w[0], w[1]) for w in self._score_windows(2)]
         ub_nights = max(1, len(month_days))
 
         def lin(expr_list):
@@ -1107,7 +1110,9 @@ class CpSatScheduler(_SchedulerBase):
                     continue
                 for nurse in self.nurses:
                     nid = nurse["id"]
-                    for d, d1 in month_day_pairs:
+                    for d, d1 in score_pairs:
+                        if not self._score_window_ok(nid, (d, d1)):
+                            continue
                         f_sum = lin([x[nid][d][s] for s in from_shifts if s in self.ALL_SHIFTS])
                         t_sum = lin([x[nid][d1][s] for s in to_shifts if s in self.ALL_SHIFTS])
                         v = model.NewBoolVar(f"tr{rid}_{nid}_{d}")
@@ -1122,7 +1127,9 @@ class CpSatScheduler(_SchedulerBase):
                     continue
                 for nurse in self.nurses:
                     nid = nurse["id"]
-                    for d, d1 in month_day_pairs:
+                    for d, d1 in score_pairs:
+                        if not self._score_window_ok(nid, (d, d1)):
+                            continue
                         g1 = lin([x[nid][d][s] for s in period_shifts if s in self.ALL_SHIFTS])
                         g2 = lin([x[nid][d1][s] for s in period_shifts if s in self.ALL_SHIFTS])
                         v = model.NewBoolVar(f"cs{rid}_{nid}_{d}")
@@ -1141,14 +1148,10 @@ class CpSatScheduler(_SchedulerBase):
                     continue
                 for nurse in self.nurses:
                     nid = nurse["id"]
-                    for start_d in month_days:
-                        window = [start_d + k for k in range(n_steps)]
-                        if any(w >= len(self.all_dates) for w in window):
+                    for window in self._score_windows(n_steps):
+                        if not self._score_window_ok(nid, window):
                             continue
-                        if any(w not in month_days for w in window):
-                            continue
-                        if window[-1] != window[0] + n_steps - 1:
-                            continue
+                        start_d = window[0]
                         sums = [lin([x[nid][window[k]][s] for s in groups[k] if s in self.ALL_SHIFTS])
                                 for k in range(n_steps)]
                         v = model.NewBoolVar(f"pat{rid}_{nid}_{start_d}")
@@ -1170,8 +1173,8 @@ class CpSatScheduler(_SchedulerBase):
                                 wish_date = date.fromisoformat(ds)
                             else:
                                 wish_date = date(self.year, self.month, int(ds))
-                            if wish_date not in self.date_to_idx:
-                                continue
+                            if wish_date not in self.date_to_idx or wish_date < date(self.year, self.month, 1):
+                                continue   # 지난달 칸은 기록 — 거기 남은 위시가 숨은 변수를 끌면 1일 배정이 흔들린다
                             d = self.date_to_idx[wish_date]
                             if wish_shift == "OFF":
                                 terms.append(wsc * lin([x[nid][d][s] for s in self.REST_SHIFTS + self.LEAVE_SHIFTS]))
@@ -1234,7 +1237,7 @@ class CpSatScheduler(_SchedulerBase):
             elif rt == "holiday_work":
                 for nurse in self.nurses:
                     nid = nurse["id"]
-                    for d in month_days:
+                    for d in score_days:
                         if self.all_dates[d].strftime("%Y-%m-%d") in self.holidays:
                             for s in self.WORK_SHIFTS:
                                 terms.append(sc * x[nid][d][s])
@@ -1243,7 +1246,7 @@ class CpSatScheduler(_SchedulerBase):
                 slots = p.get("slots", [])
                 for nurse in self.nurses:
                     nid = nurse["id"]
-                    for d in month_days:
+                    for d in score_days:
                         wd = self.all_dates[d].weekday()
                         for slot in slots:
                             if wd == slot.get("weekday"):
@@ -1258,9 +1261,9 @@ class CpSatScheduler(_SchedulerBase):
                 if "OF" in self.ALL_SHIFTS:
                     for nurse in self.nurses:
                         nid = nurse["id"]
-                        if nurse.get("is_night_shift"):
-                            continue
-                        for d in month_days:
+                        for d in score_days:
+                            if self._keeper_on(nurse, self.all_dates[d]):
+                                continue   # 나이트킵은 공휴일에도 OF — 날짜가 속한 달로 (HiGHS 패리티)
                             if self.all_dates[d].strftime("%Y-%m-%d") in self.holidays:
                                 terms.append(sc * x[nid][d]["OF"])
 
@@ -1273,6 +1276,17 @@ class CpSatScheduler(_SchedulerBase):
                 nid = nurse["id"]
                 for d in overflow_days:
                     terms.append(-500 * x[nid][d]["V"])
+
+        # 다음 달 나이트킵 — 끝에 붙은 며칠의 야간 몫 (HiGHS 패리티, _tail_keeper_targets)
+        for nurse, tail, eff in self._tail_keeper_targets():
+            nid = nurse["id"]
+            short = model.NewIntVar(0, eff, f"tail_keeper_short_{nid}")
+            model.Add(short >= eff - sum(x[nid][d][s] for d in tail for s in self.NIGHT_SHIFTS))
+            terms.append(-_TAIL_KEEPER_SHORT_PENALTY * short)
+
+        # 신규가 '/D·/E·/N' 으로 넣은 날 — 프리셉터도 그 근무로 (HiGHS 패리티)
+        for pid, d, codes in self._trainee_pair_targets():
+            terms.append(_TRAINEE_PAIR_BONUS * lin([x[pid][d][s] for s in codes if s in x[pid][d]]))
 
         # V 무제한 모드 점진 페널티
         if self.unlimited_v and "V" in self.ALL_SHIFTS:

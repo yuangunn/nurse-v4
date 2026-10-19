@@ -7,7 +7,7 @@ name: Tests
 # 빠져 11건이 안 돌고도 초록으로 보였다 (2026-08-24, requirements-dev.txt 신설).
 #
 # 범위: pytest 전체 + JS 검증 5종. 여기 있는 것 중 긴 솔버 작업은 없다
-# (한 줄로 돌리면 ~5분 — 아래 pytest 는 4개 러너에 나눠 ~2분). 12개월 이월 시뮬 같은 무거운 건
+# (한 줄로 돌리면 ~5분 — 아래 pytest 는 러너 다섯에 나눠 ~2분). 12개월 이월 시뮬 같은 무거운 건
 # scripts/sim_chain.py 쪽이고 pytest 밖이라 CI 에 넣지 않는다.
 #
 # Python 3.11 고정 — highspy/ortools 휠 (release.yml 과 동일).
@@ -45,12 +45,16 @@ jobs:
             args: tests/test_constraints.py
           - group: juhu_block
             args: tests/test_juhu_block.py
+          # 끝 주(다음 달로 이어지는 주기) — CP-SAT 꼬리 테스트가 늘어 'rest' 가 1.6배가 됐다 (2026-10-19)
+          - group: month_tail
+            args: tests/test_month_tail.py
           - group: rest
             args: >-
               tests
               --ignore=tests/test_v_report.py
               --ignore=tests/test_constraints.py
               --ignore=tests/test_juhu_block.py
+              --ignore=tests/test_month_tail.py
     steps:
       - uses: actions/checkout@v4
 
@@ -79,7 +83,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: 네 그룹이 모두 통과했는지
+      - name: 그룹이 모두 통과했는지
         run: |
           if [ "${{ needs.pytest-group.result }}" != "success" ]; then
             echo "::error::pytest 그룹 중 실패한 것이 있습니다 (${{ needs.pytest-group.result }})"
@@ -105,6 +109,7 @@ jobs:
           node scripts/test_preinput_lint.mjs
           node scripts/test_night_badge.mjs
           node scripts/test_charge_plain.mjs
+          node scripts/test_day_reqs.mjs
           node scripts/test_hospital_holidays.mjs
           node scripts/test_manager_check.mjs
           node scripts/test_trainee_days.mjs

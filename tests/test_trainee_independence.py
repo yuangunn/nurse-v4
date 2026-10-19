@@ -162,6 +162,47 @@ def test_own_rest_on_training_day_wins_over_preceptor_copy(engine):
     assert not r.get("relaxed_cells")
 
 
+# ── 신규가 '/'로 넣은 원티드 (2026-10-19) — 11월: /OF → /E, /D → /OF 로 조용히 덮였다 ─────────────
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_slash_rest_is_the_trainees_own_day_off(engine):
+    """트레이닝 날 '/OF' 는 신규 혼자 쉬는 날 — 프리셉터가 그날 일해도 신규는 쉰다 (예전엔 '/D' 로 덮였다)."""
+    r = engine(_request(prev={"t0": {"2026-03-02": "/OF"}, "a1": {"2026-03-02": "D"}})).solve()
+    assert r["success"], r["message"]
+    assert r["schedule"]["t0"]["2026-03-02"] == "/OF", r["schedule"]["t0"]
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_slash_work_pulls_the_preceptor_to_that_shift(engine):
+    """'/D' 를 넣은 날은 프리셉터도 D 가 되게 한다 — 같이 일한다. 간호01 이 그날 D 를 바라도(위시 50) 프리셉터 쪽이
+    먼저다 (예전엔 위시대로 프리셉터가 E, 신규는 '/E' 로 덮였다)."""
+    req = _request(prev={"t0": {"2026-03-02": "/D"}})
+    req.nurses[0].wishes = {"2026-03-02": "D"}
+    r = engine(req).solve()
+    assert r["success"], r["message"]
+    assert r["schedule"]["a1"]["2026-03-02"] in ("D", "DC"), r["schedule"]["a1"]
+    assert r["schedule"]["t0"]["2026-03-02"] in ("/D", "/DC"), r["schedule"]["t0"]
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_slash_work_against_preceptors_own_rest_is_kept_and_noted(engine):
+    """프리셉터가 그날 주휴를 넣었으면 그대로 두고, 신규가 넣은 '/E' 도 그대로 낸다 — 같이 일할 사람을 정하라고 알린다."""
+    r = engine(_request(prev={"t0": {"2026-03-02": "/E"}, "a1": {"2026-03-02": "주"}},
+                        per_day={"2026-03-02": {"D": 1, "E": 0, "N": 0}})).solve()
+    assert r["success"], r["message"]
+    assert (r["schedule"]["a1"]["2026-03-02"], r["schedule"]["t0"]["2026-03-02"]) == ("주", "/E")
+    assert any("같이 일할 사람" in t for t in r.get("trainee_notes", [])), r.get("trainee_notes")
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_slash_cell_of_a_nurse_who_is_not_a_trainee_is_that_shift(engine):
+    """신규가 아닌 사람의 '/OF' 는 그날 OF — 신규 표시를 끈 사람·붙여넣기로 더한 사람의 '/' 칸을 예전엔 조용히 버렸다
+    (2026-10-19 검토: 보통 간호사 3/5 '/OF' 가 NC 로 나왔고, 지난달 '/E' 다음 1일이 D 가 됐다)."""
+    r = engine(_request(prev={"a0": {"2026-03-05": "/OF"}}, extra=True)).solve()
+    assert r["success"], r.get("message")
+    assert r["schedule"]["a0"]["2026-03-05"] == "OF", r["schedule"]["a0"]
+
+
 @pytest.mark.parametrize("engine", ENGINES)
 def test_slash_preinput_after_end_date_extends_training(engine):
     """끝나는 날(3/3) 뒤 3/4 에 '/E' — 3/4 도 트레이닝, 3/5 부터 독립."""
@@ -283,10 +324,12 @@ def test_wish_report_skips_training_days():
 
 
 @pytest.mark.parametrize("engine", ENGINES)
-def test_training_day_of_counts_toward_that_weeks_of(engine):
+@pytest.mark.parametrize("slash", ["", "/"])
+def test_training_day_of_counts_toward_that_weeks_of(engine, slash):
     """주 OF 1회는 달력 주 기준 — 트레이닝 날(3/1)에 병동이 넣은 OF 가 있으면 독립한 날(3/4~3/7)엔 OF 를 더 받지 않는다.
-    11월 실제: 11/01 OF(트레이닝 날, 병동이 넣음) + 엔진 11/06 OF = 한 주에 OF 둘 (11월 한 달 다시 돌려 보기에서 발견)."""
-    req = _request(prev={"t0": {"2026-03-01": "OF"}}, extra=True, rules={"weeklyOff": True})
+    11월 실제: 11/01 OF(트레이닝 날, 병동이 넣음) + 엔진 11/06 OF = 한 주에 OF 둘 (11월 한 달 다시 돌려 보기에서 발견).
+    신규가 '/OF' 로 넣어도 같다 — 그날 신규 혼자 쉬는 OF 다 (2026-10-19 검토: '/OF' 에 더해 3/4 OF)."""
+    req = _request(prev={"t0": {"2026-03-01": slash + "OF"}}, extra=True, rules={"weeklyOff": True})
     req = req.model_copy(update={"scoring_rules": [
         ScoringRule(name="V", rule_type="specific_shift", params={"shift_code": "V", "condition": "all"},
                     score=-500)]})
@@ -297,7 +340,7 @@ def test_training_day_of_counts_toward_that_weeks_of(engine):
     r = s.solve()
     assert r["success"], r.get("message")
     t = r["schedule"]["t0"]
-    assert t["2026-03-01"] == "OF"
+    assert t["2026-03-01"] == slash + "OF"
     assert [d for d in DAYS[3:] if t.get(d) == "OF"] == [], t
     # 트레이닝 날 OF 가 없으면 독립한 날에 하나까지
     s2 = engine(_request(extra=True, rules={"weeklyOff": True}))
@@ -307,10 +350,11 @@ def test_training_day_of_counts_toward_that_weeks_of(engine):
 
 @pytest.mark.parametrize("engine", ENGINES)
 @pytest.mark.parametrize("code, rules", [("생", {}), ("V", {"maxVPerMonth": 1})])
-def test_training_day_leave_counts_toward_the_month(engine, code, rules):
+@pytest.mark.parametrize("slash", ["", "/"])
+def test_training_day_leave_counts_toward_the_month(engine, code, rules, slash):
     """생·V 월 한도도 달력 달 기준 — 신규가 트레이닝 날(3/2)에 넣은 생·V 가 있으면 독립한 뒤 또 받지 않는다.
-    2026-10-16 검토: 생 보상(+80)이 있으면 3/2 생에 더해 3/5 생을 또 받았다 (V 도 같다)."""
-    req = _request(prev={"t0": {"2026-03-02": code}}, extra=True,
+    2026-10-16 검토: 생 보상(+80)이 있으면 3/2 생에 더해 3/5 생을 또 받았다 (V 도 같다). '/생'·'/V' 로 넣어도 같다."""
+    req = _request(prev={"t0": {"2026-03-02": slash + code}}, extra=True,
                    per_day={dk: {"D": 1, "E": 1, "N": 0} for dk in DAYS}, rules=rules)
     req = req.model_copy(update={"scoring_rules": [
         ScoringRule(name=code, rule_type="specific_shift", params={"shift_code": code, "condition": "all"},
@@ -323,7 +367,7 @@ def test_training_day_leave_counts_toward_the_month(engine, code, rules):
     r = s.solve()
     assert r["success"], r.get("message")
     t = r["schedule"]["t0"]
-    assert t["2026-03-02"] == code
+    assert t["2026-03-02"] == slash + code
     assert [d for d in DAYS[3:] if t.get(d) == code] == [], t
     # 다른 사람은 그대로 한 번까지
     a2 = next(n for n in s.nurses if n["id"] == "a2")

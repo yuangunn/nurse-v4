@@ -152,7 +152,7 @@ window.SettingsDefsModule = function() {
       return{background:s.color_bg,color:s.color_text};
     },
     // 스케줄 탭용 셀 스타일
-    // hideCharge = 화면 전용. 인쇄·CSV 는 늘 D/E/N (병동 번표에는 누가 차지인지 나오지 않는다 — 2026-10-03 병동 확인).
+    // hideCharge = 화면 전용. 인쇄·엑셀은 늘 D/E/N (병동 번표에는 누가 차지인지 나오지 않는다 — 2026-10-03 병동 확인).
     // _printPlain = Ctrl+P 로 화면을 바로 인쇄할 때 잠깐 켜진다 (redesign.js beforeprint).
     hideCharge:true, _printPlain:false, colorByShift:true, showCompareMenu:false, showMobileMore:false,
     // 전입/전출 범위 체크

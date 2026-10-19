@@ -8,7 +8,8 @@ from datetime import date
 
 import pulp
 
-from .scheduler_base import WEEKDAY_KEYS, _OFF_TEUKGEUN_PENALTY, _RARE_TRANSITION_PENALTY
+from .scheduler_base import (WEEKDAY_KEYS, _OFF_TEUKGEUN_PENALTY, _RARE_TRANSITION_PENALTY, _TAIL_KEEPER_SHORT_PENALTY,
+                             _TRAINEE_PAIR_BONUS)
 
 
 class _HighsConstraintsMixin:
@@ -79,8 +80,8 @@ class _HighsConstraintsMixin:
             date_key = dt.strftime('%Y-%m-%d')
             weekday_key = WEEKDAY_KEYS[dt.weekday()]
             base_req = req_dict.get(weekday_key, {})
-            is_cur = (dt.month == self.month and dt.year == self.year)
-            override = self.per_day_req.get(date_key, {}) if is_cur else {}
+            # 날짜별 인원은 그 날짜에 — 끝에 붙은 다음 달 며칠도 (예전엔 생성 달만, 2026-10-18)
+            override = self.per_day_req.get(date_key, {})
             day_req = {**base_req, **override} if override else base_req
             # 사실-클램프: 날 전체가 확정이면 그 날은 사실 — 인원 검증 스킵.
             # 일부만 확정이면 확정분만큼 요구를 상향 (확정 셀 수용 + 자유 셀이 잔여 충족)
@@ -115,8 +116,8 @@ class _HighsConstraintsMixin:
             date_key = dt.strftime('%Y-%m-%d')
             weekday_key = WEEKDAY_KEYS[dt.weekday()]
             base_req = req_dict.get(weekday_key, {})
-            is_cur = (dt.month == self.month and dt.year == self.year)
-            override = self.per_day_req.get(date_key, {}) if is_cur else {}
+            # 날짜별 인원은 그 날짜에 — 끝에 붙은 다음 달 며칠도 (예전엔 생성 달만, 2026-10-18)
+            override = self.per_day_req.get(date_key, {})
             day_req = {**base_req, **override} if override else base_req
             if self._day_all_pinned(d, dt):
                 continue  # 사실-클램프: 확정된 날의 차지 구성은 표 그대로
@@ -170,14 +171,16 @@ class _HighsConstraintsMixin:
                     eligible_pairs.append((nid_i, nid_j, charge_s, regulars))
 
         nurse_by_id = {n["id"]: n for n in self.nurses}
+        first_of_month = date(self.year, self.month, 1)
         for d, dt in enumerate(self.all_dates):
-            if dt.month != self.month:
-                continue
+            if dt < first_of_month:
+                continue   # 지난달 칸은 기록 — 끝에 붙은 다음 달 며칠은 건다 (예전엔 생성 달만, 2026-10-18)
             dt_str = dt.strftime("%Y-%m-%d")
             is_holiday = dt_str in self.holidays
             for nid_i, nid_j, charge_s, regulars in eligible_pairs:
-                # 사실-클램프: 두 셀 모두 확정이면 사용자 배치 그대로
-                if self._pin.get((nid_i, d)) and self._pin.get((nid_j, d)):
+                # 사실-클램프: 후임이 그 차지를 직접 넣었고 선임 칸도 넣은 것이면 사용자 배치 그대로. 둘 다 D 처럼
+                # 차지 표시 없이 넣었으면 누가 차지로 올라갈지는 시니어리티대로 (2026-10-19 — 건너뛰어 후임이 차지였다)
+                if self._pin.get((nid_i, d)) == charge_s and self._pin.get((nid_j, d)):
                     continue
                 # 선임 j의 '유효' 사전입력으로 게이팅 (공용 헬퍼 — 변수 생성과
                 # 동일하게 공휴일 OF·임산부 드롭 + 완화 모드 잠금 처리)
@@ -655,12 +658,12 @@ class _HighsConstraintsMixin:
         """
         terms = []
 
-        # 당월 날짜 인덱스 목록
+        # 당월 날짜 — 달 예산(V·생·법)·공정성(달 횟수) 항목
         month_days = [d for d, dt in enumerate(self.all_dates)
                       if dt.month == self.month and dt.year == self.year]
-        month_day_pairs = [(month_days[i], month_days[i+1])
-                           for i in range(len(month_days) - 1)
-                           if month_days[i+1] == month_days[i] + 1]
+        # 전환·연속·패턴·주말·공휴일 항목은 끝에 붙은 다음 달 며칠과 1일 이음새까지 (_score_days, 2026-10-18)
+        score_days = self._score_days()
+        score_pairs = [(w[0], w[1]) for w in self._score_windows(2)]
 
         for rule in self.scoring_rules:
             rt  = rule.rule_type
@@ -687,7 +690,9 @@ class _HighsConstraintsMixin:
                     continue
                 for nurse in self.nurses:
                     nid = nurse["id"]
-                    for d, d1 in month_day_pairs:
+                    for d, d1 in score_pairs:
+                        if not self._score_window_ok(nid, (d, d1)):
+                            continue
                         f_sum = pulp.lpSum(x[nid][d][s]  for s in from_shifts if s in self.ALL_SHIFTS)
                         t_sum = pulp.lpSum(x[nid][d1][s] for s in to_shifts   if s in self.ALL_SHIFTS)
                         tag = f"tr{rid}_{nid}_{d}"
@@ -703,7 +708,9 @@ class _HighsConstraintsMixin:
                     continue
                 for nurse in self.nurses:
                     nid = nurse["id"]
-                    for d, d1 in month_day_pairs:
+                    for d, d1 in score_pairs:
+                        if not self._score_window_ok(nid, (d, d1)):
+                            continue
                         g1 = pulp.lpSum(x[nid][d][s]  for s in period_shifts if s in self.ALL_SHIFTS)
                         g2 = pulp.lpSum(x[nid][d1][s] for s in period_shifts if s in self.ALL_SHIFTS)
                         tag = f"cs{rid}_{nid}_{d}"
@@ -723,15 +730,10 @@ class _HighsConstraintsMixin:
                     continue
                 for nurse in self.nurses:
                     nid = nurse["id"]
-                    for start_d in month_days:
-                        # 연속 n_steps 날짜가 모두 당월 연속일인지 확인
-                        window = [start_d + k for k in range(n_steps)]
-                        if any(w >= len(self.all_dates) for w in window):
+                    for window in self._score_windows(n_steps):
+                        if not self._score_window_ok(nid, window):
                             continue
-                        if any(w not in month_days for w in window):
-                            continue
-                        if window[-1] != window[0] + n_steps - 1:
-                            continue
+                        start_d = window[0]
                         sums = [
                             pulp.lpSum(x[nid][window[k]][s]
                                        for s in groups[k] if s in self.ALL_SHIFTS)
@@ -758,8 +760,8 @@ class _HighsConstraintsMixin:
                                 wish_date = date.fromisoformat(ds)
                             else:
                                 wish_date = date(self.year, self.month, int(ds))
-                            if wish_date not in self.date_to_idx:
-                                continue
+                            if wish_date not in self.date_to_idx or wish_date < date(self.year, self.month, 1):
+                                continue   # 지난달 칸은 기록 — 거기 남은 위시가 숨은 변수를 끌면 1일 배정이 흔들린다
                             d = self.date_to_idx[wish_date]
                             if wish_shift == "OFF":
                                 terms.append(wsc * pulp.lpSum(
@@ -829,7 +831,7 @@ class _HighsConstraintsMixin:
                 # 법정공휴일 근무 보상: 공휴일에 근무(WORK_SHIFTS)하면 가점
                 for nurse in self.nurses:
                     nid = nurse["id"]
-                    for d in month_days:
+                    for d in score_days:
                         dt = self.all_dates[d]
                         if dt.strftime("%Y-%m-%d") in self.holidays:
                             for s in self.WORK_SHIFTS:
@@ -841,7 +843,7 @@ class _HighsConstraintsMixin:
                 slots = p.get("slots", [])
                 for nurse in self.nurses:
                     nid = nurse["id"]
-                    for d in month_days:
+                    for d in score_days:
                         dt = self.all_dates[d]
                         wd = dt.weekday()  # 0=월 ~ 6=일
                         for slot in slots:
@@ -858,10 +860,10 @@ class _HighsConstraintsMixin:
                 if "OF" in self.ALL_SHIFTS:
                     for nurse in self.nurses:
                         nid = nurse["id"]
-                        if nurse.get("is_night_shift"):
-                            continue
-                        for d in month_days:
+                        for d in score_days:
                             dt = self.all_dates[d]
+                            if self._keeper_on(nurse, dt):
+                                continue   # 나이트킵은 공휴일에도 OF (제1원칙 10) — 날짜가 속한 달로
                             if dt.strftime("%Y-%m-%d") in self.holidays:
                                 terms.append(sc * x[nid][d]["OF"])
 
@@ -874,6 +876,18 @@ class _HighsConstraintsMixin:
                 nid = nurse["id"]
                 for d in overflow_days:
                     terms.append(-500 * x[nid][d]["V"])
+
+        # ── 다음 달 나이트킵 — 끝에 붙은 며칠의 야간 몫 (_tail_keeper_targets, 2026-10-18) ──
+        for nurse, tail, eff in self._tail_keeper_targets():
+            nid = nurse["id"]
+            short = pulp.LpVariable(f"tail_keeper_short_{nid}", lowBound=0)
+            prob += short >= eff - pulp.lpSum(x[nid][d][s] for d in tail for s in self.NIGHT_SHIFTS), \
+                f"tail_keeper_{nid}"
+            terms.append(-_TAIL_KEEPER_SHORT_PENALTY * short)
+
+        # ── 신규가 '/D·/E·/N' 으로 넣은 날 — 프리셉터도 그 근무로 (_trainee_pair_targets, 2026-10-19) ──
+        for pid, d, codes in self._trainee_pair_targets():
+            terms.append(_TRAINEE_PAIR_BONUS * pulp.lpSum(x[pid][d][s] for s in codes if s in x[pid][d]))
 
         # ── V 무제한 모드: 점진적 페널티 (1번째 -500, 2번째 -1000, 3번째+ -5000) ──
         if self.unlimited_v and "V" in self.ALL_SHIFTS:

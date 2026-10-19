@@ -66,19 +66,19 @@
 
 ## 다운로드
 
-> **최신 버전: v4.15.2** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
+> **최신 버전: v4.16.0** | [전체 릴리스 목록](https://github.com/yuangunn/nurse-v4/releases) · [변경 이력](CHANGELOG.md)
 
 #### 🪟 Windows
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_Setup_v4.15.2.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.15.2/NurseScheduler_Setup_v4.15.2.exe) | 설치 마법사 (권장) | ~166 MB |
-| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.15.2/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~244 MB |
+| [**NurseScheduler_Setup_v4.16.0.exe**](https://github.com/yuangunn/nurse-v4/releases/download/v4.16.0/NurseScheduler_Setup_v4.16.0.exe) | 설치 마법사 (권장) | ~166 MB |
+| [**NurseScheduler_v4_portable.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.16.0/NurseScheduler_v4_portable.zip) | 포터블 (설치 불필요) | ~244 MB |
 
 #### 🍎 macOS (Apple Silicon)
 | 파일 | 용도 | 크기 |
 |------|------|:----:|
-| [**NurseScheduler_v4_mac_arm64.dmg**](https://github.com/yuangunn/nurse-v4/releases/download/v4.15.2/NurseScheduler_v4_mac_arm64.dmg) | 디스크 이미지 (권장) | ~226 MB |
-| [**NurseScheduler_v4_mac_arm64.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.15.2/NurseScheduler_v4_mac_arm64.zip) | 포터블 (.app) | ~200 MB |
+| [**NurseScheduler_v4_mac_arm64.dmg**](https://github.com/yuangunn/nurse-v4/releases/download/v4.16.0/NurseScheduler_v4_mac_arm64.dmg) | 디스크 이미지 (권장) | ~226 MB |
+| [**NurseScheduler_v4_mac_arm64.zip**](https://github.com/yuangunn/nurse-v4/releases/download/v4.16.0/NurseScheduler_v4_mac_arm64.zip) | 포터블 (.app) | ~200 MB |
 
 > 🍎 macOS 빌드는 미서명(ad-hoc)이라 **설치·업데이트할 때마다** 터미널에서 `xattr -dr com.apple.quarantine /Applications/NurseScheduler.app` 를 한 번 실행해야 열립니다 (또는 한 번 열어 막힌 뒤 시스템 설정 → 개인정보 보호 및 보안 → **그래도 열기** — macOS 15 부터 우클릭 → 열기로는 안 됩니다). 업데이트는 앱을 끄고 dmg 에서 다시 끌어 넣은 뒤 **대치**를 누르면 되고, 데이터는 그대로 남습니다. 현재 **Apple Silicon(arm64) 전용**입니다.
 
@@ -97,7 +97,7 @@
 | 2 | **사전입력** | 주휴 → 연차 → 생휴 → 희망 근무 입력 (빈 칸 = 자동) |
 | 3 | **분석** | 인원 과부족 확인 + 주휴 추천 → "사전입력에 적용" |
 | 4 | **스케줄** | "생성" 클릭 → 솔버 자동 생성 (5~20분) |
-| 5 | **저장** | CSV/인쇄 내보내기, 저장 탭에서 불러오기 |
+| 5 | **저장** | 엑셀(xlsx)/인쇄 내보내기, 저장 탭에서 불러오기 |
 
 **키보드**: `← ↑ ↓ →` 이동 · `D/E/N/V/O` 직접 입력 · `Del` 삭제 · `Ctrl+Z` 되돌리기 · `?` 전체 단축키
 
@@ -126,7 +126,7 @@
 ```cmd
 build.bat
 ```
-결과물: `dist/installer/NurseScheduler_Setup_v4.15.2.exe`, `dist/NurseScheduler_v4_portable.zip`
+결과물: `dist/installer/NurseScheduler_Setup_v4.16.0.exe`, `dist/NurseScheduler_v4_portable.zip`
 
 **macOS** (사전: Python 3.11, Node.js 20 — Node 24는 패키징 단계 크래시)
 ```bash
