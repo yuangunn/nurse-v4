@@ -305,7 +305,7 @@
       <span class="rhdr-mark" aria-hidden="true"></span>
       <span class="rhdr-name" data-rd="brand-name">NurseScheduler</span>
       <span class="rhdr-meta" x-text="`${rdWard} 병동 · 간호사 ${nurses.length}명`"></span>
-      <span class="rhdr-ver" @click="trackVersionClick()" title="버전 정보. 다섯 번 누르면 개발자 설정이 켜집니다.">v4.17.0</span>
+      <span class="rhdr-ver" @click="trackVersionClick()" title="버전 정보. 다섯 번 누르면 개발자 설정이 켜집니다.">v4.18.0</span>
     </div>
     <div class="rym" title="대상 년월 — 사전입력·분석·근무표 모든 화면에 함께 적용됩니다">
       <button @click="prevMonth()" data-rd="ym-prev" title="한 달 앞으로 갑니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
@@ -2115,7 +2115,7 @@
         <div>
           <h4 class="font-semibold text-bright">설정 (헤더 톱니바퀴)</h4>
           <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
-            <li>간호사 추가/수정/삭제 (드래그로 순서 변경)</li>
+            <li>간호사 추가/수정/삭제 (순서 칸을 끌어 순서 변경 · 체크 칸을 끌어 여러 명 고르기 → 함께 옮기기·한 번에 고치기)</li>
             <li>엑셀 템플릿 내려받기 → 엑셀에서 편집 → 일괄 가져오기</li>
             <li>요일별 D/E/N 필요 인원 설정</li>
             <li>하드 제약 (연속 근무, 역순 전환 금지 등)</li>
@@ -2127,7 +2127,7 @@
           <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
             <li>셀 클릭 → 근무 선택 팝업</li>
             <li>키보드 직접 입력: D/E/N/V/O(=OF)/W(=주) + 방향키 이동</li>
-            <li>드래그 선택: 여러 셀을 드래그 후 한 번에 채우기</li>
+            <li>드래그 선택: 여러 칸을 끌어 고른 뒤 한 번에 채우기 · Ctrl+C/V 로 엑셀과 칸 묶음 주고받기</li>
             <li>주휴 클릭 시 자동 배분 옵션 (로테이션/고정/이번만)</li>
             <li>날짜 우클릭: 법정공휴일 지정</li>
           </ul>
@@ -2183,7 +2183,7 @@
         </div>
         <div>
           <h4 class="font-semibold text-bright">❓ 차지(차지) 순서는 어떻게 결정되나요?</h4>
-          <p class="text-xs mt-1">간호사 목록 순서(위=선임, 아래=후임)가 시니어리티입니다. 드래그로 순서를 변경하세요. 선임이 DC/EC/NC(차지)를 우선 배정받습니다.</p>
+          <p class="text-xs mt-1">간호사 목록 순서(위=선임, 아래=후임)가 시니어리티입니다. 순서 칸을 끌어 순서를 바꾸세요. 선임이 DC/EC/NC(차지)를 우선 배정받습니다.</p>
         </div>
         <div>
           <h4 class="font-semibold text-bright">❓ 다크 모드는 어디서?</h4>
@@ -2230,7 +2230,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.17.0 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.18.0 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">기본 계산 방식 · 다른 계산 방식 듀얼 자동 배정 · 완전 오프라인</p>
         <p class="text-dim text-xs mt-1">모성보호(임산부 P1) · 최소 침습 완화 · 왜 안 되는지 자세히 보기</p>
