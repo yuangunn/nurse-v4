@@ -36,9 +36,13 @@ try:
     _OrigHighs = _highspy_mod.Highs
 
     class _HighsAdapter:
-        """solver_progress 어댑터 — HiGHS 라이브 인스턴스 래핑 (cancel/progress)."""
-        def __init__(self, highs):
+        """solver_progress 어댑터 — HiGHS 라이브 인스턴스 래핑 (cancel/progress).
+
+        진행은 MIP 콜백이 남긴 값(snap)으로 — highspy 1.8 의 getInfoValue 는 풀이가 끝나야 갱신돼, 도중엔 지난 값을
+        돌려줬다(앱의 진행 줄이 20분 내내 '조건을 정리하는 중', 2026-10-19)."""
+        def __init__(self, highs, snap):
             self._h = highs
+            self._snap = snap
 
         def cancel(self):
             try:
@@ -49,16 +53,12 @@ try:
         def progress(self) -> dict:
             import math
             out = {"gap_percent": None, "nodes": 0, "has_solution": False, "is_running": True}
-            try:
-                status, gap = self._h.getInfoValue("mip_gap")
-                if status.value == 0 and math.isfinite(float(gap)):
-                    out["gap_percent"] = round(float(gap) * 100, 2)
-                    out["has_solution"] = True
-                status2, nodes = self._h.getInfoValue("mip_node_count")
-                if status2.value == 0:
-                    out["nodes"] = int(nodes)
-            except Exception:
-                pass
+            s = dict(self._snap)
+            gap, primal = s.get("gap"), s.get("primal")
+            if gap is not None and primal is not None and math.isfinite(gap) and math.isfinite(primal):
+                out["gap_percent"] = round(gap * 100, 2)
+                out["has_solution"] = True
+            out["nodes"] = int(s.get("nodes") or 0)
             return out
 
     # 솔버 로그 패턴 → 사용자 행동 힌트 (run당 키별 1회만)
@@ -95,11 +95,22 @@ try:
                 self.cbLogging.subscribe(_on_log)
             except Exception:
                 pass
+            # 진행 — MIP 로그 줄·더 나은 답마다 콜백이 지금 값을 넘긴다 (output_flag 가 켜져 있어야 로그 콜백이 온다)
+            snap: dict = {}
+
+            def _on_mip(event):
+                d = event.data_out
+                snap.update(gap=float(d.mip_gap), primal=float(d.mip_primal_bound), nodes=int(d.mip_node_count))
+            try:
+                self.cbMipLogging.subscribe(_on_mip)
+                self.cbMipImprovingSolution.subscribe(_on_mip)
+            except Exception:
+                pass
             self.setOptionValue("output_flag", True)
             # HandleUserInterrupt=True 필수: 이 플래그가 있어야 cancelSolve()가
             # MIP 인터럽트 콜백을 활성화하여 솔버를 실제로 중단할 수 있음
             self.HandleUserInterrupt = True
-            _hadapter = _HighsAdapter(self)
+            _hadapter = _HighsAdapter(self, snap)
             solver_progress.register(_hadapter)
             try:
                 result = super().run()

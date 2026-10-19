@@ -72,3 +72,42 @@ def test_generation_runs_table(tmp_path, monkeypatch):
     note, recent = db.insert_generation_run(row)
     assert recent and recent[0]["solver"] == "highs"
     assert db.list_generation_runs(5)[0]["nurse_count"] == 18
+
+
+def test_highs_progress_is_live_during_the_solve():
+    """HiGHS 진행(답을 찾았는지·차이·경우 수)은 풀이 도중에 보여야 한다 — highspy 1.8 의 getInfoValue 는 풀이가 끝나야
+    갱신돼, 앱의 진행 줄이 20분 내내 '조건을 정리하는 중'이었다 (2026-10-19, 실제 11월 생성). 콜백이 남긴 값을 쓴다."""
+    import threading
+    import time
+
+    import numpy as np
+
+    import server.api  # noqa: F401 — highspy.Highs 를 _TrackableHighs 로 바꾼다
+    import highspy
+
+    rng = np.random.default_rng(7)
+    n, m = 240, 40
+    h = highspy.Highs()
+    for i in range(n):
+        h.addCol(-float(rng.integers(10, 99)), 0, 1, 0, [], [])
+        h.changeColIntegrality(i, highspy.HighsVarType.kInteger)
+    for _ in range(m):
+        idx = rng.choice(n, 60, replace=False).astype(np.int32)
+        w = rng.integers(5, 60, size=60).astype(float)
+        h.addRow(-highspy.kHighsInf, float(w.sum() * 0.3), 60, idx, w)
+    h.setOptionValue("time_limit", 4.0)
+    h.setOptionValue("mip_rel_gap", 0.0)
+    sp.clear()
+    sp.begin()
+    seen = []
+    t = threading.Thread(target=h.run)
+    t.start()
+    while t.is_alive():
+        p = sp.get_progress()
+        if p.get("is_running") and p.get("has_solution"):
+            seen.append(p)
+        time.sleep(0.2)
+    t.join()
+    sp.end()
+    assert seen, "풀이 도중 진행에 답이 한 번도 안 보였다"
+    assert any(p["gap_percent"] is not None and p["nodes"] > 0 for p in seen), seen[-1]
