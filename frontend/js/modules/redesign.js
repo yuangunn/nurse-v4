@@ -503,15 +503,19 @@ window.RedesignModule = function() {
     // ── 커스텀 툴팁 (title 을 읽어 0.3초 뒤 표시, 포커스에도) ──
     _rdTipInit(){
       if(window._rdTipBound) return; window._rdTipBound=true;
-      const tip=document.createElement('div'); tip.className='rtip'; tip.hidden=true; tip.setAttribute('role','tooltip'); document.body.appendChild(tip);
+      const tip=document.createElement('div'); tip.className='rtip'; tip.id='rd-tip'; tip.hidden=true; tip.setAttribute('role','tooltip'); document.body.appendChild(tip);
       let timer=null, cur=null;
       const fmt=t=>{ const parts=String(t).trim().split(/(?<=[.。])\s+/).filter(Boolean); if(parts.length>=2){ const last=parts.pop(); return esc(parts.join(' '))+' <span class="note">'+esc(last)+'</span>'; } return esc(t); };
       const place=el=>{ const r=el.getBoundingClientRect(); tip.style.left='0px'; tip.style.top='0px'; const tw=Math.min(380, tip.offsetWidth||380);
         let left=r.left+window.scrollX-24; if(left+tw>window.innerWidth-12) left=window.innerWidth-12-tw; if(left<8) left=8;
         let top=r.bottom+window.scrollY+8; if(top+tip.offsetHeight>window.innerHeight+window.scrollY-8) top=r.top+window.scrollY-tip.offsetHeight-8;
         tip.style.left=left+'px'; tip.style.top=top+'px'; };
-      const show=el=>{ const t=el.getAttribute('title'); if(!t) return; el.setAttribute('data-rd-tip', t); el.removeAttribute('title'); cur=el; tip.innerHTML=fmt(t); tip.hidden=false; place(el); };
-      const hide=()=>{ clearTimeout(timer); timer=null; if(cur){ const t=cur.getAttribute('data-rd-tip'); if(t&&!cur.getAttribute('title')) cur.setAttribute('title', t); cur.removeAttribute('data-rd-tip'); } cur=null; tip.hidden=true; };
+      // title 을 지우면 접근 가능한 이름·설명도 사라진다 (리뷰 2026-10-21) — 보이는 동안 옮겨 두고 닫을 때 넣은 것만 뺀다.
+      // 이름이 title 뿐이면(아이콘 단추·라벨 없는 입력 칸) aria-label, 아니면 이 말풍선을 설명(aria-describedby)으로
+      const named=el=>el.hasAttribute('aria-label')||el.hasAttribute('aria-labelledby')||el.labels?.length>0
+        ||(!/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)&&!!String(el.innerText??el.textContent??'').trim());   // 입력 칸의 글자(고르기 칸의 보기)는 이름이 아니다
+      const show=el=>{ const t=el.getAttribute('title'); if(!t) return; const a=named(el)?'aria-describedby':'aria-label'; if(!el.hasAttribute(a)){ el.setAttribute(a, a==='aria-label'?t:tip.id); el.setAttribute('data-rd-tip-aria', a); } el.setAttribute('data-rd-tip', t); el.removeAttribute('title'); cur=el; tip.innerHTML=fmt(t); tip.hidden=false; place(el); };
+      const hide=()=>{ clearTimeout(timer); timer=null; if(cur){ const t=cur.getAttribute('data-rd-tip'); if(t&&!cur.getAttribute('title')) cur.setAttribute('title', t); cur.removeAttribute('data-rd-tip'); const a=cur.getAttribute('data-rd-tip-aria'); if(a){ cur.removeAttribute(a); cur.removeAttribute('data-rd-tip-aria'); } } cur=null; tip.hidden=true; };
       document.addEventListener('mouseover', e=>{ const el=e.target.closest&&e.target.closest('[title]'); if(!el){ return; } if(el===cur) return; hide(); timer=setTimeout(()=>show(el), 300); });
       document.addEventListener('mouseout', e=>{ const el=e.target.closest&&e.target.closest('[title],[data-rd-tip]'); if(!el) return; if(e.relatedTarget&&el.contains(e.relatedTarget)) return; hide(); });
       document.addEventListener('focusin', e=>{ const el=e.target.closest&&e.target.closest('[title]'); if(!el) return; hide(); show(el); });

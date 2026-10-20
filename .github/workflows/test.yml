@@ -118,6 +118,7 @@ jobs:
           node scripts/test_roster_bulk.mjs
           node scripts/test_paste_fix.mjs
           node scripts/test_juhu_rotation.mjs
+          node scripts/test_frontend_edit.mjs
           node scripts/verify_holidays.mjs
 
       # 어싸인 원칙 — 배정 엔진을 '모든 배치를 다 따져 본 정답'과 견준다 (원칙 ①~④ 켜고 끄기 16가지 ×

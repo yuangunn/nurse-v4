@@ -76,7 +76,8 @@ window.NurseManageModule = function() {
       if(this.allNursesSelected)this.selectedNurseMap={};
       else{const m={};for(const n of this.nurses)m[n.id]=true;this.selectedNurseMap=m}
     },
-    clearNurseSelection(){this.selectedNurseMap={}},
+    // Shift 기준·'한 번 더 누르면 지웁니다' 대기까지 — 병동 전환도 이걸 부른다 (새 병동도 같은 시드 id 라 고르지 않은 줄이 골라져 있었다)
+    clearNurseSelection(){this.selectedNurseMap={};this._rosterAnchor=null;this._bulkDeleteConfirm=false;clearTimeout(this._bulkDeleteTimer)},
     // 체크 칸을 누른 채 끌면 지나간 줄을 모두 첫 줄과 같은 상태로 (켜며 끌면 켜고, 끄며 끌면 끈다).
     // Shift+누르기 = 앞서 누른 줄부터 여기까지 켜기. 놓기는 app.js 의 mouseup.
     _rosterPaint:null,

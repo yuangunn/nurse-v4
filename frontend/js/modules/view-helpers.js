@@ -11,10 +11,11 @@ window.ViewHelpersModule = function() {
     _CYCLE_REF:new Date(2026,2,1),
     _daysSinceRef(day){return Math.round((day-this._CYCLE_REF)/86400000)},
     getCycleNum(day){const d=this._daysSinceRef(day);return Math.floor(((d%28)+28)%28/7)+1},
+    // key 는 그 주 첫날 날짜 전체 — '일' 숫자만이면 평년 3월(2/22·3/22)에 겹쳐 x-for 가 깨졌다 (리뷰 2026-10-21)
     getCycleSpans(){
       const days=this.scheduleDays;if(!days.length)return[];
-      const result=[];let cur={cycle:this.getCycleNum(days[0]),count:0,key:days[0].getDate()};
-      for(const d of days){const c=this.getCycleNum(d);if(c!==cur.cycle){result.push(cur);cur={cycle:c,count:0,key:d.getDate()}}cur.count++}
+      const result=[];let cur={cycle:this.getCycleNum(days[0]),count:0,key:this.dayKey(days[0])};
+      for(const d of days){const c=this.getCycleNum(d);if(c!==cur.cycle){result.push(cur);cur={cycle:c,count:0,key:this.dayKey(d)}}cur.count++}
       result.push(cur);return result;
     },
     getCycleClass(cycle){return['cy-1','cy-2','cy-3','cy-4'][cycle-1]},

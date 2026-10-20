@@ -18,7 +18,7 @@ window.PasteImportModule = function() {
       target:'prev',    // 'prev'=사전입력(확정) | 'wish'=희망근무(소프트 ★) | 'saved'=저장탭 업로드
       hasNameCol:true,
       hasDateRow:true,
-      matches:null,     // {nameRow:[{r,name,nurseId,matched}], dateCol:[{c,raw,dk,matched}], dateFrom, dateTo}
+      matches:null,     // {nameRow:[{r,name,mapKey,nurseId,matched,mapped}], dateCol:[{c,raw,dk,matched}], dateFrom, dateTo}
       diff:null,        // {will_set, will_clear, matched_all, unrecognized, unmatchedNames, unmatchedDates, months, outsideCycle}
       // 파일 업로드 (엑셀/CSV → 서버 파싱 → grid)
       sheets:null,      // [{name, rows}] — /api/parse-table-file 결과
@@ -30,7 +30,7 @@ window.PasteImportModule = function() {
       anchorM:null,
       anchorTouched:false,
       saveName:'',
-      nameMap:{},       // 명부에서 못 찾은 이름 → 사용자가 고른 간호사 id
+      nameMap:{},       // 명부에서 못 찾은(같은 이름이 여럿인) 줄의 mapKey(이름, 같은 이름 줄은 '이름#몇 번째') → 사용자가 고른 간호사 id
     },
     openPastePrev(target){
       this.pastePrev={
@@ -128,9 +128,9 @@ window.PasteImportModule = function() {
     get pasteNameRows(){
       return(this.pastePrev.matches?.nameRow||[]).filter(x=>x.name&&!x.weekdayHeader&&(!x.matched||x.mapped));
     },
-    pasteNameChoices(raw){
-      // 다른 줄이 이미 맞춘 사람은 빼고, 이름이 겹치는 사람을 먼저
-      const taken=new Set((this.pastePrev.matches?.nameRow||[]).filter(x=>x.matched&&x.name!==raw).map(x=>x.nurseId));
+    pasteNameChoices(raw,key=raw){
+      // 다른 줄이 이미 맞춘 사람은 빼고, 이름이 겹치는 사람을 먼저 (key = 그 줄의 mapKey — 같은 이름 줄끼리도 서로 뺀다)
+      const taken=new Set((this.pastePrev.matches?.nameRow||[]).filter(x=>x.matched&&x.mapKey!==key).map(x=>x.nurseId));
       const k=this._nameKey(raw);
       const near=n=>{const nk=this._nameKey(n.name);return!!(k&&nk&&(nk.includes(k)||k.includes(nk)))};
       const free=this.nurses.filter(n=>!taken.has(n.id));
@@ -273,8 +273,9 @@ window.PasteImportModule = function() {
       const anchorY=opts.anchorY;
       const anchorM=opts.anchorM;
       const days=this.scheduleDays;
-      const nurseByName={},nurseById={};
-      for(const n of this.nurses){nurseByName[this._nameKey(n.name)]=n;nurseById[n.id]=n}
+      // 명부에 같은 이름이 둘 이상이면 null — 이름으로 맞추지 않는다 (예전엔 뒤 사람이 두 줄을 다 받고 앞 사람 줄은 버려졌다)
+      const nurseByName=Object.create(null),nurseById={};
+      for(const n of this.nurses){const k=this._nameKey(n.name);nurseByName[k]=k in nurseByName?null:n;nurseById[n.id]=n}
       const nameMap=opts.nameMap||{};
 
       // 요일 행 감지 — 날짜 행 아래 둘째 행에 월/화/수…가 오는 시트 형식 지원.
@@ -320,10 +321,19 @@ window.PasteImportModule = function() {
               nameRow.push({r,name:'',nurseId:null,matched:false,weekdayHeader:true});
               continue;
             }
-            const raw=(grid[r][0]||'').trim();
-            const mapped=nurseById[nameMap[raw]];
-            const n=mapped||(raw?nurseByName[this._nameKey(raw)]:null);
-            nameRow.push({r,name:raw,nurseId:n?.id||null,matched:!!n,mapped:!!mapped});
+            nameRow.push({r,name:(grid[r][0]||'').trim()});
+          }
+          // 같은 이름 줄이 여럿이거나 명부에 같은 이름이 둘 이상이면 '이름 맞추기'에서 줄마다 고른다 —
+          // 고른 사람은 이름으로 기억하되 같은 이름 줄은 몇 번째 줄인지까지 (mapKey)
+          const byKey=new Map();
+          for(const x of nameRow)if(x.name){const k=this._nameKey(x.name);byKey.set(k,[...(byKey.get(k)||[]),x])}
+          for(const x of nameRow){
+            if(x.weekdayHeader)continue;
+            const same=byKey.get(this._nameKey(x.name))||[x];
+            x.mapKey=same.length>1?`${x.name}#${same.indexOf(x)+1}`:x.name;
+            const mapped=nurseById[nameMap[x.mapKey]];
+            const n=mapped||(x.name&&same.length===1?nurseByName[this._nameKey(x.name)]:null);
+            Object.assign(x,{nurseId:n?.id||null,matched:!!n,mapped:!!mapped});
             if(n)nameMatches++;
           }
         }
