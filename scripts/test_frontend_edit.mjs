@@ -215,4 +215,17 @@ const run = (a, expr, locals) => new Function('a', 'l', `with(a){with(l){${expr}
   global.document.querySelectorAll = (q) => (q.includes('aria-modal') ? overlays.filter((t) => t.includes('aria-modal="true"') && t.includes('profileSwitchModal')).map(() => ({ getClientRects: () => [1] })) : []);
   assert.equal(a._gridKeysOn(), false, '프로필 전환 창이 열려 있으면 표는 키를 받지 않는다');
 }
+// ⑪ 메뉴 '전월 야간 수 계산'(autoFillPrevMonthNights)도 되돌리기 기록 — 없으면 앞 칸 Ctrl+Z 가 가져온 전월 N 을 말없이 지웠다
+{
+  const a = make();
+  a._setSel('preinput', 0, a.scheduleDays.findIndex((d) => a.dayKey(d) === dk(3)));
+  a.gridKey(key('v'));
+  let linted = 0; a._checkViolations = () => { linted++; };
+  a.api = async () => ({ a: 5 });
+  await a.autoFillPrevMonthNights();
+  assert.deepEqual([a.prevMonthNights, linted], [{ a: 5 }, 1], '가져온 뒤 라인트(2개월 야간 합산)도 다시 본다');
+  const undo = () => a.gridKey(key('z', { ctrlKey: true }));
+  undo(); assert.deepEqual([a.prevMonthNights, a.prevSchedule], [{}, { a: { [dk(3)]: 'V' } }], '전월 N 만 되돌린다');
+  undo(); assert.deepEqual(a.prevSchedule, {});
+}
 console.log('test_frontend_edit: OK');

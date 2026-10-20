@@ -119,7 +119,9 @@ window.MiscFeaturesModule = function() {
         const r=await this.api('GET',`/api/prev_month_nights?year=${this.year}&month=${this.month}`);
         const ids=Object.keys(r||{});
         if(!ids.length){this.toast('직전 달 저장 근무표가 없습니다 — 저장 탭에서 전월 확정본을 먼저 저장해 두면 자동 계산됩니다','warn',5000);return}
+        this._pushUndo();   // 스냅숏에 pm 이 들어 있다 — 기록 없이 덮으면 앞 칸 Ctrl+Z 가 이것까지 지웠다
         this.prevMonthNights={...this.prevMonthNights,...r};
+        this._checkViolations&&this._checkViolations();   // 2개월 야간 합산 라인트
         this.toast(`🌙 전월N ${ids.length}명 자동 입력 (직전 달 저장본의 N/NC 집계)`,'info',4000);
       }catch(e){this.toast('전월N 자동 계산 실패','error')}
     },
