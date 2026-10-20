@@ -1064,6 +1064,8 @@ class _SchedulerBase:
             "rest":       self.REST_SHIFTS,
             "leave":      self.LEAVE_SHIFTS,
             "rest_leave": self.REST_SHIFTS + self.LEAVE_SHIFTS,
+            # 야간이 아닌 날 (낮·저녁·휴무·휴가) — 단독 나이트 감점 [non_night, night, non_night] (결정 1-55)
+            "non_night":  [s for s in self.ALL_SHIFTS if s not in self.NIGHT_SHIFTS],
             "any":        self.ALL_SHIFTS,
         }
         if group.startswith("specific:"):

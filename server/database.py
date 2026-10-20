@@ -206,6 +206,7 @@ def init_db():
 
         # 법정공휴일 + 주말 배점 규칙 마이그레이션
         _migrate_holiday_weekend_rules(conn)
+        _migrate_single_night_rule(conn)
 
         # 임부휴무(P1) 근무 코드 마이그레이션 (기존 DB에 없을 경우 추가)
         conn.execute(
@@ -874,6 +875,7 @@ def _seed_scoring_rules(conn: sqlite3.Connection):
         ("주말 경감근무 보상",       "weekend_work",     json.dumps({"slots": [{"weekday": 5, "periods": ["evening", "night"]}, {"weekday": 6, "periods": ["day"]}]}), +20, 1, 15),
         ("공휴일 OFF 페널티",        "holiday_off",      json.dumps({}),                                                    -500, 1, 16),
         ("주말·공휴일 근무 공평성",  "weekend_fairness", json.dumps({}),                                                     -30, 1, 17),
+        _SINGLE_NIGHT_RULE,
     ]
     conn.executemany(
         "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
@@ -934,6 +936,27 @@ def _migrate_holiday_weekend_rules(conn: sqlite3.Connection):
             "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
             ("주말·공휴일 근무 공평성", "weekend_fairness", json.dumps({}), -30, 1, 17)
         )
+
+
+# 단독 나이트 — 앞뒤 날이 야간이 아닌 야간 하루에 경미한 감점 (2026-10-20, 사용자 "1나이트는 그렇게까지 바람직하진 않아", 결정 1-55).
+# 실제 번표 1~10월: 일반 간호사 야간 602회 중 단독 87회(14%) — 금지가 아니라 경미하게. 퐁당퐁당(-20)의 절반.
+_SINGLE_NIGHT_RULE = ("단독 나이트 감점", "pattern", json.dumps({"pattern": ["non_night", "night", "non_night"]}), -10, 1, 18)
+
+
+def _migrate_single_night_rule(conn: sqlite3.Connection):
+    """기존 DB 에 단독 나이트 감점을 한 번만 넣는다 (PRAGMA user_version 1) — 사용자가 지운 규칙을 다음 실행 때 되살리지 않게
+    (퐁당퐁당은 이름으로 찾아 없으면 늘 다시 넣는다)."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 1:
+        return
+    has = conn.execute(
+        "SELECT COUNT(*) FROM scoring_rules WHERE rule_type='pattern' AND params LIKE '%non_night%'"
+    ).fetchone()[0]
+    if not has:
+        conn.execute(
+            "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
+            _SINGLE_NIGHT_RULE,
+        )
+    conn.execute("PRAGMA user_version = 1")
 
 
 # ── Scoring Rules CRUD ────────────────────────────────────────────────────────
