@@ -190,8 +190,10 @@ def test_build_wish_report_marks_off_wish_filled_by_leave():
 def test_relax_ledger_counts_overridden_wanted_not_flex(tmp_path, monkeypatch):
     """완화 이력 원장: 저장본의 prev_schedule 대 schedule 차이에서 '뒤집힌 원티드'만 센다 —
     차지 승격(D→DC)과 주휴는 제외, relaxed_cells 가 있으면 그것을 우선 (M6 P2①)."""
+    # database 에 DB_PATH 는 없다 — 예전 setattr(raising=False) 는 아무것도 바꾸지 못해 실제 기본 DB 의 저장본을 지웠다
+    monkeypatch.setenv("APPDATA", str(tmp_path))
     from server import database as db
-    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "t.db"), raising=False)
+    assert db.get_db_path().startswith(str(tmp_path))
     db.init_db()
     with db.get_conn() as conn:
         conn.execute("DELETE FROM schedules")
