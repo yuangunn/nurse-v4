@@ -19,7 +19,7 @@ window.PreinputIoModule = function() {
         }
       }
     },
-    clearPrevSchedule(confirmed){if(!confirmed&&!this.confirmReset())return;const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(!keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>!keys.has(h));this._clearCellMeta(keys,true)},
+    clearPrevSchedule(confirmed){if(!confirmed&&!this.confirmReset())return;const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(!keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>!keys.has(h));this._clearCellMeta(keys,true);this._checkViolations&&this._checkViolations()},
     clearPrevOtherMonths(){if(!confirm(`${this.year}년 ${this.month}월 주기 이외의 데이터를 정리합니다. 계속하시겠습니까?`))return;const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(!keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>keys.has(h));this._clearCellMeta(keys,false)},
     // 이 화면 주기(앞뒤 달 칸 포함)의 사전입력 칸 수. monthCells 면 rdCells 와 같은 칸만 — 이 달 칸, 신규의 트레이닝 날 빼고.
     // 예전엔 다른 달 사전입력까지 세어 상태 줄이 '772 / 566칸 입력'이었다 (2026-10-19)
@@ -95,9 +95,12 @@ window.PreinputIoModule = function() {
       const label=`${day.getMonth()+1}/${day.getDate()}(${dn[day.getDay()]})`;
       if(this.isHoliday(day)){if(!confirm(`${label} 법정공휴일 지정을 해제합니다. 계속하시겠습니까?`))return;this.holidays=this.holidays.filter(h=>h!==k)}
       else{if(!confirm(`${label}을(를) 법정공휴일로 지정합니다.\n이 날에 각 간호사에게 개별적으로 '법'을 배정할 수 있습니다. 계속하시겠습니까?`))return;this.holidays.push(k)}
+      this._checkViolations&&this._checkViolations();
     },
 
     // ── 주휴 자동배분 ────────────────────────────────────────
+    // 1일 앞(지난달) 칸은 기록이라 채우지 않는다 — 분석의 주휴 추천과 같다 (analysis.js). 주기·요일은 그 주까지 보고 고른 뒤에 거른다.
+    // 예전엔 11월이면 10/25~10/31 의 실제 기록(N 등)을 '주'로 덮었다 (2026-10-21)
     autoFillJuhu(nurse,baseDay){
       const nid=nurse.id;const dayNames=['일','월','화','수','목','금','토'];
       const baseWi=Math.floor(this._daysSinceRef(baseDay)/7);
@@ -107,13 +110,15 @@ window.PreinputIoModule = function() {
         const period=Math.floor(wi/4);const expectedW=((W-(period-basePeriod))%7+7)%7;
         const match=this.scheduleDays.find(day=>Math.floor(this._daysSinceRef(day)/7)===wi&&day.getDay()===expectedW);
         if(match)toFill.push({day:match,cycle:(wi%4)+1,dow:expectedW})}
-      toFill.sort((a,b)=>a.day-b.day);
-      const preview=toFill.map(f=>`${f.cycle}주기: ${f.day.getDate()}일(${dayNames[f.dow]})`).join('\n');
+      const first=new Date(this.year,this.month-1,1);
+      const fill=toFill.filter(f=>f.day>=first).sort((a,b)=>a.day-b.day);
+      const preview=fill.map(f=>`${f.cycle}주기: ${f.day.getMonth()+1}/${f.day.getDate()}(${dayNames[f.dow]})`).join('\n');   // 끝에 붙은 다음 달 며칠도 있어 달까지
       if(!confirm(`${nurse.name}의 주휴를 아래와 같이 입력합니다:\n\n${preview}\n\n이미 입력된 날은 덮어씁니다. 계속하시겠습니까?`)){this.shiftEdit.open=false;return}
       this._pushUndo();
       if(!this.prevSchedule[nid])this.prevSchedule[nid]={};
-      for(const{day}of toFill)this.prevSchedule[nid][this.dayKey(day)]='주';
+      for(const{day}of fill)this.prevSchedule[nid][this.dayKey(day)]='주';
       this.shiftEdit.open=false;
+      this._checkViolations&&this._checkViolations();
     },
     // 고정 요일 자동배분 (로테이션 없이 매주 같은 요일)
     autoFillJuhuFixed(nurse,baseDay){
@@ -126,10 +131,15 @@ window.PreinputIoModule = function() {
         const match=this.scheduleDays.find(day=>Math.floor(this._daysSinceRef(day)/7)===wi&&day.getDay()===W);
         if(match)toFill.push({day:match,cycle:(wi%4)+1,dow:W});
       }
-      toFill.sort((a,b)=>a.day-b.day);
+      const first=new Date(this.year,this.month-1,1);
+      const fill=toFill.filter(f=>f.day>=first).sort((a,b)=>a.day-b.day);
+      // 다른 값(V 등)이 있는 칸은 묻고 덮는다 — 순환 채우기처럼 (예전엔 연차가 말없이 '주'가 됐다)
+      const over=fill.map(f=>this.dayKey(f.day)).filter(k=>{const v=this.prevSchedule[nid]?.[k];return v&&v!=='주'});
+      if(over.length&&!confirm(`${nurse.name}의 ${over.map(k=>`${+k.slice(5,7)}/${+k.slice(8)} ${this.prevSchedule[nid][k]}`).join(', ')}을(를) 주로 바꿉니다. 계속하시겠습니까?`))return;
       this._pushUndo();
       if(!this.prevSchedule[nid])this.prevSchedule[nid]={};
-      for(const{day}of toFill)this.prevSchedule[nid][this.dayKey(day)]='주';
+      for(const{day}of fill)this.prevSchedule[nid][this.dayKey(day)]='주';
+      this._checkViolations&&this._checkViolations();
     },
     // 이 셀만 주휴 배정
     fillJuhuSingle(nurse,day){
@@ -137,6 +147,7 @@ window.PreinputIoModule = function() {
       this._pushUndo();
       if(!this.prevSchedule[nid])this.prevSchedule[nid]={};
       this.prevSchedule[nid][dk]='주';
+      this._checkViolations&&this._checkViolations();
     },
 
     // ── 다음 달 이월 ──────────────────────────────────────
@@ -162,7 +173,11 @@ window.PreinputIoModule = function() {
       await this.loadSavedList();this.toast('저장되었습니다','info');
     },
     async loadSavedList(){this.savedSchedules=await this.api('GET','/api/schedules')},
-    async loadSaved(id){const data=await this.api('GET',`/api/schedules/${id}`);this.year=data.data.year||data.year;this.month=data.data.month||data.month;this.nurses=data.data.nurses||[];this.requirements=data.data.requirements||this.requirements;this.rules=data.data.rules||this.rules;this.schedule=data.data.schedule||{};this.extendedSchedule={};this.prevSchedule=data.data.prev_schedule||{};this.nurseScores=data.data.nurse_scores||{};this.nurseScoreDetails=data.data.nurse_score_details||{};this.lockedCells=data.data.locked_cells||{};this.cellNotes=data.data.cell_notes||{};this.holidays=data.data.holidays||this.holidays;this.prevDayReqs=data.data.prev_day_reqs||{};this.prevMonthNights=data.data.prev_month_nights||{};const log=data.data.solver_log||'';if(log){this.solverLogs=log.split('\n').map((m,i)=>({id:i+1,msg:m}))}this.activeTab='schedule';this._resetGridHistory();this.trackEdits()},   // 불러온 표가 새 기준 — Ctrl+Z 로 앞 표가 되살아나지 않게
+    // 저장본은 근무표만 보여 준다 — 명부·규칙·인원·사전입력(모든 달이 한 덩어리)·잠금·메모는 지금 것 그대로.
+    // 예전엔 저장본 시점 것으로 통째로 바꿔, 9월 표를 열어 보기만 해도 11월 사전입력이 사라지고 9월 명부(임신·전출 전)로 생성됐다 (2026-10-21)
+    async loadSaved(id){const data=await this.api('GET',`/api/schedules/${id}`);const d=data.data||{};this.year=d.year||data.year;this.month=d.month||data.month;this.schedule=d.schedule||{};this.extendedSchedule={};this.relaxedCells=d.relaxed_cells||{};this.nurseScores=d.nurse_scores||{};this.nurseScoreDetails=d.nurse_score_details||{};const log=d.solver_log||'';if(log){this.solverLogs=log.split('\n').map((m,i)=>({id:i+1,msg:m}))}this.activeTab='schedule';this._resetGridHistory();this.trackEdits();   // 불러온 표가 새 기준 — Ctrl+Z 로 앞 표가 되살아나지 않게
+      const gone=Object.keys(this.schedule).filter(nid=>!this.nurses.some(n=>n.id===nid)).length;
+      if(gone)this.toast(`이 저장본의 ${gone}명은 지금 명부에 없어 표에 나오지 않습니다`,'info',5000)},
     async deleteSaved(id){if(!confirm('삭제하시겠습니까?'))return;await this.api('DELETE',`/api/schedules/${id}`);await this.loadSavedList()},
 
     // ── 사전입력 저장 ────────────────────────────────────────
@@ -174,7 +189,9 @@ window.PreinputIoModule = function() {
       this.prevSaveName='';await this.loadPrevSavesList();
     },
     async loadPrevFromServer(id){
-      const result=await this.api('GET',`/api/prev_schedules/${id}`);this.year=result.year;this.month=result.month;
+      const result=await this.api('GET',`/api/prev_schedules/${id}`);
+      this._pushUndo();   // 보관본은 모든 달 사전입력을 통째로 바꾼다 — 불러오기 바로 앞 상태를 Ctrl+Z 로 (예전엔 마지막 편집이 영영 사라졌다)
+      this.year=result.year;this.month=result.month;
       if(result.data&&result.data.schedule!==undefined){
         this.prevSchedule=result.data.schedule;
         this.prevDayReqs=result.data.day_reqs||{};
@@ -187,6 +204,8 @@ window.PreinputIoModule = function() {
         this.lockedCells={};this.cellNotes={};
       }
       this.prevSavePanel=false;
+      this._checkViolations&&this._checkViolations();
+      this.rdUndoToast&&this.rdUndoToast('사전입력 보관본을 불러왔습니다.');
     },
     async deletePrevSave(id){if(!confirm('삭제하시겠습니까?'))return;await this.api('DELETE',`/api/prev_schedules/${id}`);await this.loadPrevSavesList()},
 

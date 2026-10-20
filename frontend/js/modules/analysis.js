@@ -494,6 +494,7 @@ window.AnalysisModule = function() {
         }
       }
       if(count===0){this.toast('이미 모든 주휴가 반영되어 있습니다','info');return}
+      this._checkViolations&&this._checkViolations();   // 신호등·인원 경고도 다시 — 예전엔 다음 편집 전까지 '만들 수 있어요'가 남았다
       // 적용 후 자동 재분석 + 사전입력 탭으로 이동
       this.runAnalysis();
       this.toast(`${count}건의 주휴가 사전입력에 적용되었습니다. 분석이 자동으로 갱신됩니다.`,'info',5000);
