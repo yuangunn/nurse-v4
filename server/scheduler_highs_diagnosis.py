@@ -25,14 +25,16 @@ class _HighsDiagnosisMixin:
         rules = [(label, set(g1), set(g2))
                  for label, g1, g2, soft in self._transition_rules() if not soft]
         found = []
+        first = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
             prev = self.prev.get(nid, {})
+            from_ = self._rules_from(nurse, first)
             for d in range(self.T - 1):
                 dt1 = self.all_dates[d]
                 dt2 = self.all_dates[d + 1]
-                # 적어도 하나는 당월에 속해야 의미 있음
-                if dt1.month != self.month and dt2.month != self.month:
+                # 모델(_c_forbidden_transitions)과 같은 범위 — 지난달 안에 갇힌 쌍만 빼고 끝에 붙은 다음 달 며칠도 본다
+                if dt2 < from_:
                     continue
                 s1 = prev.get(dt1.strftime("%Y-%m-%d"))
                 s2 = prev.get(dt2.strftime("%Y-%m-%d"))
@@ -65,19 +67,22 @@ class _HighsDiagnosisMixin:
         max_w = self.rules.maxConsecutiveWorkDays + (1 if self._soft_long_run() else 0)
         max_n = self.rules.maxConsecutiveNightDays
         work_runs, night_runs = [], []
+        first = date(self.year, self.month, 1)
 
-        def _flush_w(label, run):
-            if run and len(run) > max_w and self.rules.maxConsecutiveWork:
+        def _flush_w(label, run, end):
+            # 지난달 안에서 끝난 연속은 기록 — 모델처럼 이번 달(독립한 신규는 독립한 날)부터
+            if run and len(run) > max_w and self.rules.maxConsecutiveWork and self.all_dates[end] >= from_:
                 work_runs.append({"nurse_label": label, "days": run, "len": len(run)})
 
-        def _flush_n(label, run):
-            if run and len(run) > max_n and self.rules.maxConsecutiveNight:
+        def _flush_n(label, run, end):
+            if run and len(run) > max_n and self.rules.maxConsecutiveNight and self.all_dates[end] >= from_:
                 night_runs.append({"nurse_label": label, "days": run, "len": len(run)})
 
         for nurse in self.nurses:
             nid = nurse["id"]
             label = self._fmt_nurse_label(nurse)
             prev = self.prev.get(nid, {})
+            from_ = self._rules_from(nurse, first)
             run_w, run_n = [], []
             for d in range(self.T):
                 dt = self.all_dates[d]
@@ -88,15 +93,15 @@ class _HighsDiagnosisMixin:
                     if s in night_set:
                         run_n.append((dt.strftime("%m/%d"), wk, s))
                     else:
-                        _flush_n(label, run_n)
+                        _flush_n(label, run_n, d - 1)
                         run_n = []
                 else:
-                    _flush_w(label, run_w)
+                    _flush_w(label, run_w, d - 1)
                     run_w = []
-                    _flush_n(label, run_n)
+                    _flush_n(label, run_n, d - 1)
                     run_n = []
-            _flush_w(label, run_w)
-            _flush_n(label, run_n)
+            _flush_w(label, run_w, self.T - 1)
+            _flush_n(label, run_n, self.T - 1)
         return {"work_runs": work_runs, "night_runs": night_runs}
 
     def _scan_pre_code_excess(self, code: str, limit: int) -> list:
@@ -231,10 +236,11 @@ class _HighsDiagnosisMixin:
                 duty_pairs.append(("N", charge_n, [c for c in self.NIGHT_SHIFTS if c != charge_n]))
 
         out = []
+        first = date(self.year, self.month, 1)
         for d in range(self.T):
             dt = self.all_dates[d]
-            if dt.month != self.month:
-                continue
+            if dt < first:
+                continue   # 지난달 칸은 기록 — 끝에 붙은 다음 달 며칠은 본다 (모델 _c_charge_seniority 와 같다)
             dt_str = dt.strftime("%Y-%m-%d")
             for duty_label, ccode, regular in duty_pairs:
                 charges = []
@@ -257,6 +263,23 @@ class _HighsDiagnosisMixin:
                             "senior_labels": [self._fmt_nurse_label(n) for n in seniors_on_duty],
                         })
         return out
+
+    def _scan_pre_nod_patterns(self) -> list:
+        """사전입력만으로 생긴 N→휴무→D — 모델(_c_nod_pattern)과 같은 범위: 셋째 날은 D·DC 만(D1 은 막지 않는다),
+        지난달 안에 갇힌 창은 기록이라 뺀다 (예전엔 둘 다 원인으로 냈다). Returns: 표시 줄 목록."""
+        found = []
+        first = date(self.year, self.month, 1)
+        keys = [dt.strftime("%Y-%m-%d") for dt in self.all_dates]
+        for nurse in self.nurses:
+            pre = self.prev.get(nurse["id"], {})
+            from_ = self._rules_from(nurse, first)
+            for i in range(self.T - 2):
+                if self.all_dates[i + 2] < from_:
+                    continue
+                s0, s1, s2 = (pre.get(k) for k in keys[i:i + 3])
+                if s0 in self.NIGHT_SHIFTS and s1 in self.OFF_SHIFTS and s2 in self.DAY_SHIFTS:
+                    found.append(f"    · {nurse['name']}: {keys[i]}({s0}) → {keys[i + 1]}({s1}) → {keys[i + 2]}({s2})")
+        return found
 
     def _rank_cells_by_violation_count(self, participations: list) -> list:
         """
@@ -296,8 +319,10 @@ class _HighsDiagnosisMixin:
         out = []
         night = set(self.NIGHT_SHIFTS)
         work_non_night = set(self.WORK_SHIFTS) - night
+        first = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
+            from_ = self._rules_from(nurse, first)   # 지난달 안의 휴식일은 기록 — 모델(_c_rest_after_night)과 같다
             pres = [self.prev.get(nid, {}).get(dt.strftime("%Y-%m-%d"), "")
                     for dt in self.all_dates]
             run = 0
@@ -310,6 +335,8 @@ class _HighsDiagnosisMixin:
                         rd = d + k
                         if rd >= self.T:
                             break
+                        if self.all_dates[rd] < from_:
+                            continue
                         if pres[rd] in (work_non_night | night if k else work_non_night):
                             seq = "→".join(
                                 self.all_dates[i].strftime("%m/%d")
@@ -380,6 +407,8 @@ class _HighsDiagnosisMixin:
             False = 증명된 Infeasible.
             10초 내 판정 실패('Not Solved')를 실패로 취급하면 큰 문제에서 멀쩡한
             단계가 원인으로 지목된다 — 증명된 Infeasible만 원인으로 본다."""
+            if self._halted():
+                return True   # 중지·레이스 패자 — 새 풀이를 시작하지 않는다 (이 진단은 버려진다)
             try:
                 prob.solve(QUICK)
             except Exception:
@@ -410,7 +439,7 @@ class _HighsDiagnosisMixin:
                     is_night = self._keeper_on(nurse, dt)   # 날짜가 속한 달의 나이트킵 (solve() 동일)
                     # 유효 사전입력 — solve()와 동일 (공용 헬퍼)
                     pre = self._effective_pre(nurse, dt, pre, is_holiday)
-                    pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
+                    pre_flex = self._pre_domain(nurse, pre)   # solve() 동일 — 자격 있는 차지 승격만
                     xx[nid][d] = {}
                     # 전입/전출 범위 밖: 전부 0 — solve()와 동일. 누락 시 전출
                     # 간호사가 진단 모델에서 공급으로 계산돼 광범위 오진이 난다.
@@ -456,6 +485,9 @@ class _HighsDiagnosisMixin:
             return xx
 
         lines = ["근무표 생성 실패 - 원인 진단 결과:"]
+        # 사실-클램프(엄격)에선 사전입력만으로 끝나는 위반은 모델이 사실로 받아 원인이 아니다 (결정 1-15) — 사전입력 스캔은
+        # 클램프가 꺼졌을 때(완화)만. 켜진 채로 훑으면 면제된 칸을 '[원인]'·셀 기여도·이동 칩으로 짚었다 (리뷰 2026-10-20)
+        scan = not self._pin
 
         # 셀 점프용 앵커 — 정밀 충돌 분석(anchored)과 동일 스키마로 수집해
         # 프론트의 '충돌 위치로 이동' 칩 UI를 그대로 재사용한다
@@ -504,7 +536,7 @@ class _HighsDiagnosisMixin:
                     if s["period"] in ("day", "evening", "night")
                 )
                 cap_bad = []
-                for nurse in self.nurses:
+                for nurse in (self.nurses if scan else []):   # 확정 칸은 자격 검사를 건너뛴다 (사실)
                     nid = nurse["id"]
                     nname = nurse["name"]
                     capable = set(nurse.get("capable_shifts", self.WORK_SHIFTS))
@@ -548,6 +580,8 @@ class _HighsDiagnosisMixin:
             for d, dt in enumerate(self.all_dates):
                 if dt < date(self.year, self.month, 1):
                     continue   # 지난달 칸은 기록 — 끝에 붙은 다음 달 며칠은 본다 (인원 제약이 걸린다, 결정 1-47)
+                if self._pin and self._day_all_pinned(d, dt):
+                    continue   # 다 확정인 날은 사실 — 모델이 인원을 걸지 않는다
                 dt_str = dt.strftime("%Y-%m-%d")
                 wk = WEEKDAY_KEYS[dt.weekday()]
                 base_req = req_dict.get(wk, {})
@@ -566,8 +600,8 @@ class _HighsDiagnosisMixin:
                         f"    {dt.strftime('%m/%d')}({kor_wd[dt.weekday()]}): "
                         f"필요 {needed}명, 가용 {avail}명")
                     _anchor(f"{dt.strftime('%m/%d')} 인원 부족", iso=dt_str)
-                # 초과: 요구보다 많은 사전입력 근무 (특히 요구 0명인 날의 근무)
-                for p_, shifts_ in period_shift_map.items():
+                # 초과: 요구보다 많은 사전입력 근무 (특히 요구 0명인 날의 근무) — 클램프는 확정분만큼 요구를 올린다
+                for p_, shifts_ in (period_shift_map.items() if scan else ()):
                     if p_ not in day_req:
                         continue
                     req_n = max(0, int(day_req.get(p_) or 0))
@@ -618,7 +652,7 @@ class _HighsDiagnosisMixin:
         self._c_forbidden_transitions(p, x)
         p += 0
         if not _try(p):
-            transitions = self._scan_pre_forbidden_transitions()
+            transitions = self._scan_pre_forbidden_transitions() if scan else []
             if transitions:
                 lines.append(f"  [원인] 사전입력에 물리적으로 불가능한 근무 전환 — 총 {len(transitions)}건")
                 hard = ", ".join(lb for lb, _g1, _g2, soft in self._transition_rules() if not soft)
@@ -670,7 +704,7 @@ class _HighsDiagnosisMixin:
             # ── 원인 1: 같은 주에 OF 또는 주휴 중복 사전입력 ─────────────────
             dup_found = []
             first_of_month = date(self.year, self.month, 1)
-            for wi, (ws, we) in enumerate(self.weeks):
+            for wi, (ws, we) in enumerate(self.weeks if scan else []):   # 클램프는 확정 OF 만큼 주 상한을 올린다
                 # 이전달 overflow 제외
                 week_dates = [self.all_dates[d].strftime("%Y-%m-%d")
                               for d in range(ws, we + 1)
@@ -809,7 +843,7 @@ class _HighsDiagnosisMixin:
                 lines.append("  [원인] 임산부 P1(임부휴무) 주 1회 의무가 다른 제약과 충돌합니다.")
                 first_of_month = date(self.year, self.month, 1)
                 direct = []
-                for nurse in pregnant:
+                for nurse in (pregnant if scan else []):   # 다 확정인 주는 모델이 P1 의무를 걸지 않는다
                     nid, nname = nurse["id"], nurse["name"]
                     for wi, (ws, we) in enumerate(self.weeks):
                         win = [d for d in range(ws, we + 1)
@@ -848,13 +882,15 @@ class _HighsDiagnosisMixin:
         self._c_forbidden_transitions(p, x)
         if self.rules.weeklyOff:
             self._c_weekly_off(p, x)
+        self._c_pregnancy_p1_weekly(p, x)   # 앞 단계(5.5)를 다 품어야 처음 막힌 단계가 원인이다
         if self.rules.maxConsecutiveWork:
             self._c_max_consecutive_work(p, x, self.rules.maxConsecutiveWorkDays)
         if self.rules.maxConsecutiveNight:
             self._c_max_consecutive_night(p, x, self.rules.maxConsecutiveNightDays)
         p += 0
         if not _try(p):
-            runs = self._scan_pre_consecutive_runs()
+            runs = (self._scan_pre_consecutive_runs() if scan
+                    else {"work_runs": [], "night_runs": []})
             wruns = runs["work_runs"]
             nruns = runs["night_runs"]
             extra = (" — 파트장 확인 하에 하루 더까지 허용해도"
@@ -915,7 +951,7 @@ class _HighsDiagnosisMixin:
                 lines.append(
                     f"  [원인] '연속 야간 후 휴무' 규칙 충돌 "
                     f"(현재 설정: {min_consec}연속 야간 후 {rest_days}일 휴무)")
-                viol = self._scan_pre_rest_after_night(min_consec, rest_days)
+                viol = self._scan_pre_rest_after_night(min_consec, rest_days) if scan else []
                 if viol:
                     lines.append("  사전입력에서 직접 충돌 — 연속 야간 직후 근무가 박혀 있는 셀:")
                     for v in viol[:8]:
@@ -953,7 +989,7 @@ class _HighsDiagnosisMixin:
         self._c_max_v_per_month(p, x)
         p += 0
         if not _try(p):
-            over = self._scan_pre_code_excess("V", self.rules.maxVPerMonth)
+            over = self._scan_pre_code_excess("V", self.rules.maxVPerMonth) if scan else []
             lines.append(
                 f"  [원인] V(연차) 사전입력이 월 최대 {self.rules.maxVPerMonth}회 한도를 초과했습니다."
             )
@@ -1208,7 +1244,7 @@ class _HighsDiagnosisMixin:
         self._c_charge_seniority(p, x)
         p += 0
         if not _try(p):
-            seniors = self._scan_pre_charge_seniority_conflicts()
+            seniors = self._scan_pre_charge_seniority_conflicts() if scan else []
             lines.append("  [원인] Charge 시니어리티 제약 충돌")
             lines.append("  (Charge는 같은 듀티에서 가장 선임에게만 — 더 선임이 일반 근무로 사전입력되어 있으면 후임은 Charge 불가)")
             if seniors:
@@ -1255,28 +1291,7 @@ class _HighsDiagnosisMixin:
             self._c_nod_pattern(p, x)
             p += 0
             if not _try(p):
-                # 사전입력 중 N→OF→D 패턴 탐색
-                nod_found = []
-                for nurse in self.nurses:
-                    nid = nurse["id"]
-                    prev_nurse = self.prev.get(nid, {})
-                    dates_sorted = sorted(prev_nurse.keys())
-                    for i in range(len(dates_sorted) - 2):
-                        d0, d1, d2 = dates_sorted[i], dates_sorted[i+1], dates_sorted[i+2]
-                        # 실제 연속 3일인지 확인
-                        try:
-                            dt0 = date.fromisoformat(d0)
-                            dt1 = date.fromisoformat(d1)
-                            dt2 = date.fromisoformat(d2)
-                        except (ValueError, TypeError):
-                            continue
-                        if (dt1 - dt0).days != 1 or (dt2 - dt1).days != 1:
-                            continue
-                        s0, s1, s2 = prev_nurse[d0], prev_nurse[d1], prev_nurse[d2]
-                        if (s0 in self.NIGHT_SHIFTS and
-                                s1 in self.OFF_SHIFTS and
-                                s2 in self.DAY_SHIFTS + self.DAY1_SHIFTS):
-                            nod_found.append(f"    · {nurse['name']}: {d0}({s0}) → {d1}({s1}) → {d2}({s2})")
+                nod_found = self._scan_pre_nod_patterns() if scan else []
                 lines.append("  [원인] N→OF→D 금지 규칙 충돌 (야간전담 + 일반 간호사 패턴)")
                 if nod_found:
                     lines.append("  사전입력에서 발견된 N→OF→D 패턴:")
@@ -1294,7 +1309,7 @@ class _HighsDiagnosisMixin:
         self._c_menstrual_leave(p, x)
         p += 0
         if not _try(p):
-            issues = self._scan_pre_menstrual_issues()
+            issues = self._scan_pre_menstrual_issues() if scan else []
             lines.append("  [원인] 생리휴가(생) 제약 충돌")
             if issues:
                 lines.append("  사전입력에서 직접 충돌하는 항목:")
@@ -1326,7 +1341,7 @@ class _HighsDiagnosisMixin:
             p += 0
             if not _try(p):
                 max_n = self.rules.maxNightPerMonthCount
-                over = self._scan_pre_night_excess(max_n)
+                over = self._scan_pre_night_excess(max_n) if scan else []
                 lines.append(f"  [원인] 월 최대 야간 {max_n}회 제약 충돌")
                 if over:
                     lines.append("  사전입력에서 N(야간) 횟수가 한도 초과인 정규 간호사:")
@@ -1356,7 +1371,7 @@ class _HighsDiagnosisMixin:
             p += 0
             if not _try(p):
                 lim = self.rules.maxNightTwoMonthCount
-                over = self._scan_pre_two_month_night_excess(lim)
+                over = self._scan_pre_two_month_night_excess(lim) if scan else []
                 lines.append(f"  [원인] 홀짝월 합산 야간 {lim}회 제약 충돌")
                 if over:
                     lines.append("  전월 야간 + 당월 사전입력 야간이 합산 한도를 초과한 간호사:")
