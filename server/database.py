@@ -2,12 +2,26 @@ import sqlite3
 import json
 import os
 import sys
+import threading
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 
+class ProfileClosed(RuntimeError):
+    """프로필을 닫은 뒤 온 DB 접근 — 닫힌 병동 경로에 빈 스텁 .db 를 만들지 않게 거부한다."""
+
+
+# 지금 DB — api 가 프로필을 열면 open_db(경로), 닫으면 close_db(). 프로필을 연 적 없으면 기본 DB.
+_profile_db: Optional[str] = None
+_closed = False
+_busy = 0                      # 지금 DB 의 with get_conn() 블록 수 — 닫기가 쓰는 중에 찍지 않게
+_cv = threading.Condition()
+
+
 def get_db_path() -> str:
     """DB 파일 경로 반환 (EXE 번들 또는 개발 환경 모두 대응)"""
+    if _profile_db:
+        return _profile_db
     app_data = os.environ.get("APPDATA", "")
     if app_data:
         db_dir = Path(app_data) / "NurseScheduler"
@@ -20,15 +34,64 @@ def get_db_path() -> str:
     return str(db_dir / "nurse_scheduler.db")
 
 
-def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(get_db_path())
+def open_db(path: Optional[str]) -> None:
+    """지금 DB 를 프로필 DB 로 바꾼다 (닫힌 표지를 걷는다). None 이면 기본 DB — 서버가 켜질 때."""
+    global _profile_db, _closed
+    with _cv:
+        _profile_db, _closed = path, False
+
+
+def close_db(timeout: float = 1.5) -> None:
+    """프로필을 닫기(암호화) 전 — 새 DB 접근을 막고 쓰는 중인 연결이 끝나길 잠깐 기다린다.
+    안 막으면 늦게 온 요청(생성 끝의 이력 쓰기·새로고침·틀린 비밀번호로 전환한 뒤의 편집)이 지운 평문 자리에
+    빈 스텁 .db 를 만들었고, 다음 열기가 그것을 진짜로 써서 예시 명부를 시드한 뒤 진짜 .db.enc 를 덮었다."""
+    global _closed
+    with _cv:
+        _closed = True
+        # ponytail: 시간을 넘기면 그냥 찍는다 — Electron 이 닫기를 2초만 기다린다. 1.5초 넘게 쥐는 쓰기는 없다
+        _cv.wait_for(lambda: _busy == 0, timeout)
+
+
+def _release():
+    global _busy
+    with _cv:
+        _busy -= 1
+        _cv.notify_all()
+
+
+class _Conn(sqlite3.Connection):
+    """지금 DB 연결 — with 블록이 끝나면 커밋하고 닫은 뒤 '쓰는 중'에서 뺀다."""
+    def __exit__(self, *exc):
+        try:
+            return super().__exit__(*exc)
+        finally:
+            self.close()
+            _release()
+
+
+def get_conn(path: Optional[str] = None) -> sqlite3.Connection:
+    """지금 DB 연결 — with 로만 쓴다 (블록 동안 '쓰는 중'으로 센다). 프로필을 닫은 뒤엔 ProfileClosed.
+    path 는 init_db 가 새 프로필·게스트 DB 를 만들 때만 (없으면 만든다)."""
+    global _busy
+    if path:
+        conn = sqlite3.connect(path)
+    else:
+        with _cv:
+            if _closed:
+                raise ProfileClosed("열린 프로필이 없습니다 — 프로필을 다시 열어 주세요.")
+            _busy += 1
+        try:
+            conn = sqlite3.connect(get_db_path(), factory=_Conn)
+        except BaseException:
+            _release()
+            raise
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db():
-    """테이블 초기화"""
-    with get_conn() as conn:
+def init_db(path: Optional[str] = None):
+    """테이블 초기화 — path 를 주면 그 파일 (새 프로필·게스트 DB)"""
+    with get_conn(path) as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS nurses (
                 id TEXT PRIMARY KEY,

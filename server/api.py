@@ -23,6 +23,9 @@ from .scheduler import NurseScheduler
 # ── 현재 활성 프로필 ──────────────────────────────────────────────────────────
 _current_profile_id: Optional[str] = None
 _current_profile_password: Optional[str] = None
+# 프로필 열기·닫기·만들기·지우기·비밀번호를 한 줄로 — 겹치면(앱을 끌 때 창과 main 이 함께 닫기 등)
+# 서로의 암호화·profiles.json 쓰기를 덮는다
+_profile_lock = threading.Lock()
 
 # ── HiGHS 인스턴스 추적 (중지 기능용) ────────────────────────────────────────
 # PuLP의 HiGHS 솔버가 내부적으로 생성하는 highspy.Highs 인스턴스를 가로채
@@ -170,7 +173,8 @@ async def _no_cache_static(request, call_next):
 @app.on_event("startup")
 def startup():
     prof.init_default_profiles()
-    # 기본 DB 초기화 (프로필 전환 전 폴백)
+    # 기본 DB 초기화 (프로필 전환 전 폴백) — 켜질 때 열린 프로필은 없다
+    db.open_db(None)
     db.init_db()
     # 직전 비정상 종료로 남은 게스트 임시 DB 정리
     try:
@@ -184,17 +188,33 @@ def startup():
 @app.on_event("shutdown")
 def shutdown():
     """서버 종료 시 열린 프로필을 닫아 재암호화 보장 (graceful 종료 경로)."""
-    global _current_profile_id, _current_profile_password
-    if _current_profile_id:
+    with _profile_lock:
         try:
-            prof.close_profile(_current_profile_id, _current_profile_password or "")
+            _close_current()
         except Exception:
             pass
+
+
+# ── 프로필 API ────────────────────────────────────────────────────────────────
+
+def _close_current():
+    """열린 프로필을 닫는다 (_profile_lock 안에서) — DB 접근부터 막고 쓰는 중인 요청을 기다린 뒤 재암호화.
+    돌던 생성은 멈추지 않는다 — 새로고침(F5)으로 닫혀도 같은 병동을 다시 열면 결과를 이어 받는다(새로고침 복구).
+    닫힌 동안 끝난 생성의 이력 쓰기는 ProfileClosed 로 거부된다."""
+    global _current_profile_id, _current_profile_password
+    if _current_profile_id:
+        db.close_db()
+        prof.close_profile(_current_profile_id, _current_profile_password or "")
         _current_profile_id = None
         _current_profile_password = None
 
 
-# ── 프로필 API ────────────────────────────────────────────────────────────────
+@app.exception_handler(db.ProfileClosed)
+def _profile_closed(request, exc):
+    """닫힌 프로필 화면에서 온 요청 — 알림에 '다시 열어 주세요'가 뜨게 (500 대신)."""
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
 
 @app.get("/api/profiles")
 def get_profiles():
@@ -213,7 +233,8 @@ def create_profile(body: dict):
     is_guest = body.get("is_guest", False)
     if not profile_id or not name:
         raise HTTPException(400, "프로필 ID와 이름을 입력해주세요.")
-    result = prof.create_profile(profile_id, name, password, is_guest)
+    with _profile_lock:
+        result = prof.create_profile(profile_id, name, password, is_guest)
     if not result.get("ok"):
         raise HTTPException(400, result.get("error", "프로필 생성 실패"))
     return result
@@ -234,37 +255,30 @@ def open_profile(body: dict):
         if not prof.verify_master_password(master_pw):
             return {"ok": False, "error": "마스터 비밀번호가 틀렸습니다."}
 
-    # 같은 프로필 재오픈이면 먼저 닫아 .db.enc를 최신화한 뒤 다시 연다.
-    if _current_profile_id and _current_profile_id == profile_id:
-        prof.close_profile(_current_profile_id, _current_profile_password or "")
-        _current_profile_id = None
-        _current_profile_password = None
+    with _profile_lock:
+        # 대상 프로필을 먼저 검증·복호화하고, 성공했을 때에만 현재 프로필을 닫는다 — 틀리면 지금 프로필은 열린 그대로.
+        # 같은 프로필을 다시 열면(새로고침) 닫지 않고 이어 쓴다 (예전엔 먼저 닫은 뒤에야 비밀번호를 봐서, 틀리면
+        # 닫힌 병동 화면의 다음 요청이 빈 스텁 DB를 만들었다).
+        result = prof.open_profile(profile_id, password)
+        if not result.get("ok"):
+            return result
 
-    # 대상 프로필을 먼저 검증·복호화하고, 성공했을 때에만 현재 프로필을 닫는다.
-    # (실패 시 현재 프로필을 닫아버리면 평문이 사라진 상태로 전역이 옛 경로를
-    #  가리켜, 이후 요청이 빈 스텁 DB를 만들고 close가 그것을 재암호화한다.)
-    result = prof.open_profile(profile_id, password)
-    if not result.get("ok"):
-        return result
+        if _current_profile_id != profile_id:
+            _close_current()
 
-    if _current_profile_id:
-        prof.close_profile(_current_profile_id, _current_profile_password or "")
+        # DB 경로 전환
+        db.open_db(result["db_path"])
+        _current_profile_id = profile_id
+        _current_profile_password = password if not result.get("is_guest") else ""
+        db.init_db()
 
-    # DB 경로 전환
-    db_path = result["db_path"]
-    db.get_db_path = lambda: db_path
-    db.init_db()
-
-    # 한 번 열릴 때 유령 간호사 참조 정리 (과거 데이터 호환)
-    try:
-        removed = db.cleanup_orphan_nurse_refs()
-        if removed:
-            print(f"[cleanup] {removed} orphan nurse references removed from saved data")
-    except Exception as e:
-        print(f"[cleanup] failed: {e}")
-
-    _current_profile_id = profile_id
-    _current_profile_password = password if not result.get("is_guest") else ""
+        # 한 번 열릴 때 유령 간호사 참조 정리 (과거 데이터 호환)
+        try:
+            removed = db.cleanup_orphan_nurse_refs()
+            if removed:
+                print(f"[cleanup] {removed} orphan nurse references removed from saved data")
+        except Exception as e:
+            print(f"[cleanup] failed: {e}")
 
     return {"ok": True, "profile_id": profile_id,
             "is_guest": result.get("is_guest", False)}
@@ -272,22 +286,22 @@ def open_profile(body: dict):
 
 @app.post("/api/profiles/close")
 def close_profile():
-    global _current_profile_id, _current_profile_password
-    if _current_profile_id:
-        prof.close_profile(_current_profile_id, _current_profile_password or "")
-        _current_profile_id = None
-        _current_profile_password = None
+    with _profile_lock:
+        _close_current()
     return {"ok": True}
 
 
 @app.delete("/api/profiles/{profile_id}")
 def delete_profile(profile_id: str):
     global _current_profile_id, _current_profile_password
-    # 현재 열린 프로필이면 먼저 close 상태로 전환 (삭제 중 암호화 시도 방지)
-    if _current_profile_id == profile_id:
-        _current_profile_id = None
-        _current_profile_password = None
-    result = prof.delete_profile(profile_id)
+    with _profile_lock:
+        # 현재 열린 프로필이면 먼저 close 상태로 전환 (삭제 중 암호화 시도 방지) — DB 접근도 막는다
+        # (안 막으면 늦은 요청이 지운 자리에 빈 스텁 DB를 만들었다)
+        if _current_profile_id == profile_id:
+            db.close_db()
+            _current_profile_id = None
+            _current_profile_password = None
+        result = prof.delete_profile(profile_id)
     if not result.get("ok"):
         raise HTTPException(400, result.get("error"))
     return result
@@ -305,20 +319,30 @@ def change_profile_password(body: dict):
         if prof.has_master_password():
             if not prof.verify_master_password(body.get("master_password", "")):
                 raise HTTPException(403, "마스터 비밀번호가 필요합니다.")
-        result = prof.force_reset_password(profile_id)
+        with _profile_lock:
+            result = prof.force_reset_password(profile_id)
         if not result.get("ok"):
             raise HTTPException(400, result.get("error"))
         return result
     if not new_password:
         raise HTTPException(400, "새 비밀번호를 입력해주세요.")
-    result = prof.change_password(profile_id, old_password, new_password,
-                                  is_open=(_current_profile_id == profile_id))
+    global _current_profile_password
+    with _profile_lock:
+        is_open = _current_profile_id == profile_id
+        if is_open:
+            # 바꾸는 동안 평문을 암호화해 지웠다 되살린다 — 그 사이 요청은 막고, 쓰는 중이면 기다린다
+            path = db.get_db_path()
+            db.close_db()
+        try:
+            result = prof.change_password(profile_id, old_password, new_password, is_open=is_open)
+        finally:
+            if is_open:
+                db.open_db(path)
+        # 현재 열린 프로필이면 비밀번호 업데이트
+        if is_open and result.get("ok"):
+            _current_profile_password = new_password
     if not result.get("ok"):
         raise HTTPException(400, result.get("error"))
-    # 현재 열린 프로필이면 비밀번호 업데이트
-    global _current_profile_password
-    if _current_profile_id == profile_id:
-        _current_profile_password = new_password
     return result
 
 
