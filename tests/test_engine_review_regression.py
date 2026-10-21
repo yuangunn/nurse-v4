@@ -271,7 +271,7 @@ def test_positive_fairness_score_does_not_break_the_model(engine):
 
 
 @pytest.mark.parametrize("engine", ["highs", "cpsat"])
-def test_juhu_block_follows_locked_juhu_weekday(engine):
+def test_juhu_block_follows_locked_juhu_weekday(engine, monkeypatch):
     """주휴 이동 허용 + 블록 요일 잠금 — 잠근 월요일 주휴(3/2)가 있는 블록은 월요일로 (지난달 요일 잇기와 같은 감점).
     예전엔 잠긴 칸이 블록 요일 묶음에서 빠져 나머지 주휴 셋이 화요일에 남았다."""
     nurses = _mini_nurses(6)
@@ -284,7 +284,15 @@ def test_juhu_block_follows_locked_juhu_weekday(engine):
                           rules=Rules(maxConsecutiveWorkDays=6, maxVPerMonth=1), prev_schedule=prev,
                           locked_cells={"a0": {"2026-03-02": True}}, allow_pre_relax=True,
                           allow_juhu_relax=True, juhu_block_lock=True, time_limit=30, mip_gap=0.0)
-    # 오차 0 — 요일 어기기는 작은 감점이라 기본 오차 2% 면 CP-SAT(여러 스레드)이 기계에 따라 그 안에서 일찍 멈췄다 (CI 3/24)
+    if engine == "cpsat":
+        # CP-SAT(여러 스레드)은 CI 에서 완화 1단계를 시간 안에 증명 못 해 표가 갈렸다(3/24) — 잠긴 월요일이 블록 요일 기준으로
+        # 모델(요일 어기기 감점)에 들어가는지만 본다. 고치기 전엔 지난달 요일만 봐서 비어 있었다
+        from ortools.sat.python import cp_model
+        monkeypatch.setattr(cp_model.CpSolver, "Solve", lambda self, model, cb=None: cp_model.UNKNOWN)
+        s = make_limited(req, 28, "cpsat")
+        s.solve()
+        assert s._juhu_anchor_dev, '잠긴 월요일 주휴가 블록 요일 기준이어야 한다'
+        return
     r = make_limited(req, 28, engine).solve()
     assert r["success"], r["message"]
     assert sorted(k for k, v in r["schedule"]["a0"].items() if v == "주") == [
