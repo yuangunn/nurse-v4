@@ -32,14 +32,22 @@ window.DevToolsModule = function() {
       }catch(e){this.devDbInfo=null}
     },
 
+    // 마스터 비밀번호가 있으면 서버가 확인한다 — 예전엔 보내지 않아 늘 403 이었다 (리뷰 2026-10-21)
+    devResetMasterPw:'',
     async devResetProfilePassword(profileId){
       const name=this.profiles.find(p=>p.id===profileId)?.name||profileId;
+      if(this.hasMasterPassword&&!this.devResetMasterPw){this.toast('마스터 비밀번호를 입력해주세요','error');return}
       if(!confirm(`"${name}" 프로필의 비밀번호를 초기화하시겠습니까?`))return;
       try{
-        await this.api('POST','/api/profiles/change-password',{id:profileId,old_password:'',new_password:'',force_reset:true});
+        await this.api('POST','/api/profiles/change-password',{id:profileId,old_password:'',new_password:'',force_reset:true,master_password:this.devResetMasterPw});
+        this.devResetMasterPw='';
         this.toast(`${name} 비밀번호 초기화 완료`);
         await this._loadProfiles();
-      }catch(e){this.toast(e.message||'초기화 실패','error')}
+      }catch(e){
+        let msg='초기화 실패';
+        try{msg=JSON.parse(e.message).detail||msg}catch(_){}
+        this.toast(msg,'error');
+      }
     },
 
     devClearLocalStorage(){

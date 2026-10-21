@@ -115,7 +115,7 @@
 </div>
 
 <!-- 프로필 생성 모달 -->
-<div :style="profileCreateModal.open?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileCreateModal.open=false">
+<div role="dialog" aria-modal="true" aria-label="새 프로필 만들기" :style="profileCreateModal.open?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileCreateModal.open=false">
   <div style="max-width:380px;width:90vw;background:var(--bg-card,#fff);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
     <h3 style="margin-bottom:16px;font-weight:700">새 프로필 만들기</h3>
     <div style="display:flex;flex-direction:column;gap:12px">
@@ -145,7 +145,7 @@
 </div>
 
 <!-- 비밀번호 변경 모달 -->
-<div :style="profileChangePwModal.open?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileChangePwModal.open=false">
+<div role="dialog" aria-modal="true" aria-label="비밀번호 변경" :style="profileChangePwModal.open?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileChangePwModal.open=false">
   <div style="max-width:350px;width:90vw;background:var(--bg-card,#fff);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
     <h3 style="margin-bottom:16px;font-weight:700">비밀번호 변경</h3>
     <div style="display:flex;flex-direction:column;gap:12px">
@@ -165,7 +165,7 @@
 </div>
 
 <!-- 프로필 전환 모달 -->
-<div x-cloak :style="profileSwitchModal?'position:fixed;inset:0;z-index:9998;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileSwitchModal=false">
+<div x-cloak role="dialog" aria-modal="true" aria-label="프로필 전환" :style="profileSwitchModal?'position:fixed;inset:0;z-index:9998;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileSwitchModal=false">
   <div style="width:420px;max-width:95vw;background:var(--bg-card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:16px;padding:28px;box-shadow:0 8px 32px rgba(0,0,0,0.15);position:relative">
     <button @click="profileSwitchModal=false" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.2rem;color:var(--text-sub,#6b7280);cursor:pointer;line-height:1" title="닫습니다.">&times;</button>
     <h3 style="margin-bottom:16px;font-weight:700;font-size:1.1rem">프로필 전환</h3>
@@ -204,7 +204,7 @@
 </div>
 
 <!-- 개발자 설정 모달 -->
-<div :style="devSettingsOpen?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="devSettingsOpen=false">
+<div role="dialog" aria-modal="true" aria-label="개발자 설정" :style="devSettingsOpen?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="devSettingsOpen=false">
   <div style="max-width:720px;width:95vw;max-height:85vh;overflow-y:auto;background:var(--modal-bg,var(--bg,#fff));color:var(--text,#1f2937);border:1px solid var(--border,#e5e7eb);border-radius:14px;padding:24px;box-shadow:var(--shadow-lg,0 8px 32px rgba(0,0,0,0.2))">
     <h3 style="margin-bottom:16px;font-weight:700;color:var(--text,#1f2937)">개발자 설정</h3>
 
@@ -237,6 +237,8 @@
         <!-- 프로필 비밀번호 초기화 -->
         <div style="margin-top:4px">
           <p style="font-size:14px;color:var(--text-sub);margin-bottom:4px">프로필 비밀번호 초기화:</p>
+          <input x-show="hasMasterPassword" type="password" x-model="devResetMasterPw" placeholder="마스터 비밀번호" aria-label="초기화에 쓸 마스터 비밀번호"
+                 style="width:100%;padding:6px 10px;margin-bottom:4px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card);color:var(--text);font-size:0.8rem">
           <div style="display:flex;gap:4px;flex-wrap:wrap">
             <template x-for="p in profiles.filter(p=>!p.is_guest&&p.has_password)" :key="p.id">
               <button @click="devResetProfilePassword(p.id)" class="btn btn-xs btn-ghost" style="font-size:14px" x-text="p.name" title="이 프로필의 비밀번호를 초기화합니다."></button>
@@ -756,14 +758,14 @@
           </template>
           <td class="rt-sum" x-text="countNursePrev(nurse.id)||''"></td>
           <td class="rt-sum n" x-text="countPrevNights(nurse.id)||''"></td>
-          <td x-show="rules.maxNightTwoMonth" class="rt-cell rt-input"><input type="number" min="0" max="15" :value="prevMonthNights[nurse.id]||''" @change="prevMonthNights[nurse.id]=parseInt($event.target.value)||0" placeholder="0" title="지난달 야간 수를 직접 적습니다."/></td>
+          <td x-show="rules.maxNightTwoMonth" class="rt-cell rt-input"><input type="number" min="0" max="15" :value="prevMonthNights[nurse.id]||''" @change="_pushUndo();prevMonthNights[nurse.id]=parseInt($event.target.value)||0;_checkViolations()" placeholder="0" title="지난달 야간 수를 직접 적습니다."/></td>
         </tr></template>
       </tbody>
       <tfoot>
         <template x-for="row in reqFooterRows" :key="row.type"><tr>
           <td class="rt-foot-label" :data-shift="row.type" x-text="row.type+' 필요 인원'"></td>
           <template x-for="day in scheduleDays" :key="'f'+row.type+day"><td class="rt-foot" :data-shift="row.type" :class="isOverflow(day)?'overflow':''">
-            <input type="text" inputmode="numeric" maxlength="2" :class="getPrevDayReq(day,row.type)!==null?'':'is-default'" :value="rdFootNeed(day,row.type)" @change="setPrevDayReq(day,row.type,$event.target.value)" @focus="$event.target.select()" :title="rdDayLabel(day)+' '+row.type+' 필요 인원 — 이 날만 바꾸려면 숫자를 고치세요. 설정 기본값과 같으면 옅게 보입니다'"/>
+            <input type="text" inputmode="numeric" maxlength="2" :class="getPrevDayReq(day,row.type)!==null?'':'is-default'" :value="rdFootNeed(day,row.type)" @change="_pushUndo();setPrevDayReq(day,row.type,$event.target.value);_checkViolations()" @focus="$event.target.select()" :title="rdDayLabel(day)+' '+row.type+' 필요 인원 — 이 날만 바꾸려면 숫자를 고치세요. 설정 기본값과 같으면 옅게 보입니다'"/>
           </td></template>
           <td class="rt-foot" :data-shift="row.type" :colspan="rules.maxNightTwoMonth?3:2"></td>
         </tr></template>
@@ -1730,9 +1732,9 @@
           <b>이름 맞추기</b>
           <template x-for="row in pasteNameRows" :key="'nm'+row.r">
             <label class="rpaste-map"><span class="raw" x-text="row.name"></span><span aria-hidden="true">→</span>
-              <select @change="setPasteName(row.name,$event.target.value)" :title="`‘${row.name}’이 명부의 누구인지 고릅니다. 고르지 않으면 이 줄은 건너뜁니다.`">
+              <select @change="setPasteName(row.mapKey,$event.target.value)" :title="`‘${row.name}’이 명부의 누구인지 고릅니다. 고르지 않으면 이 줄은 건너뜁니다.`">
                 <option value="">명부에 없음 — 건너뛰기</option>
-                <template x-for="n in pasteNameChoices(row.name)" :key="'nmo'+row.r+n.id"><option :value="n.id" :selected="n.id===pastePrev.nameMap[row.name]" x-text="n.name"></option></template>
+                <template x-for="n in pasteNameChoices(row.name,row.mapKey)" :key="'nmo'+row.r+n.id"><option :value="n.id" :selected="n.id===pastePrev.nameMap[row.mapKey]" x-text="n.name"></option></template>
               </select></label>
           </template>
         </div>
@@ -1990,7 +1992,7 @@
 
 
 <!-- ═══ 온보딩 슬라이드 ══════════════════════════════════ -->
-<div :style="showOnboarding?'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center':'display:none'">
+<div role="dialog" aria-modal="true" aria-label="처음 안내" :style="showOnboarding?'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center':'display:none'">
   <div style="width:520px;max-width:95vw;background:var(--bg-card,#fff);border-radius:16px;padding:32px;box-shadow:0 8px 40px rgba(0,0,0,0.25);position:relative">
     <!-- 슬라이드 내용 -->
     <div style="text-align:center;min-height:220px;display:flex;flex-direction:column;justify-content:center">

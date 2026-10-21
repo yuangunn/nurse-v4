@@ -119,7 +119,9 @@ window.MiscFeaturesModule = function() {
         const r=await this.api('GET',`/api/prev_month_nights?year=${this.year}&month=${this.month}`);
         const ids=Object.keys(r||{});
         if(!ids.length){this.toast('직전 달 저장 근무표가 없습니다 — 저장 탭에서 전월 확정본을 먼저 저장해 두면 자동 계산됩니다','warn',5000);return}
+        this._pushUndo();   // 스냅숏에 pm 이 들어 있다 — 기록 없이 덮으면 앞 칸 Ctrl+Z 가 이것까지 지웠다
         this.prevMonthNights={...this.prevMonthNights,...r};
+        this._checkViolations&&this._checkViolations();   // 2개월 야간 합산 라인트
         this.toast(`🌙 전월N ${ids.length}명 자동 입력 (직전 달 저장본의 N/NC 집계)`,'info',4000);
       }catch(e){this.toast('전월N 자동 계산 실패','error')}
     },
@@ -250,12 +252,13 @@ window.MiscFeaturesModule = function() {
       const v=[];
       const days=this.scheduleDays;
       const dayNames=['일','월','화','수','목','금','토'];
-      const eveningCodes=this.shifts.filter(s=>s.period==='evening'||s.period==='middle').map(s=>s.code);
-      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
-      const dayCodes=this.shifts.filter(s=>s.period==='day'||s.period==='day1').map(s=>s.code);
-      const middleSet=new Set(this.shifts.filter(s=>s.period==='middle').map(s=>s.code));
-      const day1Set=new Set(this.shifts.filter(s=>s.period==='day1').map(s=>s.code));
+      const P=p=>this.shifts.filter(s=>s.period===p).map(s=>s.code);
+      const E=P('evening'),M=P('middle'),N=P('night'),D=P('day'),D1=P('day1');
+      // 엔진 _transition_rules 9종 그대로 — E→중 이 빠져 손으로 고친 E→중 이 안 보였다 (리뷰 2026-10-21).
+      // E→D1·중→D 는 마지막 수단(제1원칙 13) — 켜져 있으면 위반 표시가 아니라 서랍 '주의'의 파트장 확인 필요로 알린다
       const softTr=(this.rules||{}).rareTransitionLastResort!==false;
+      const rules=[[E,D,'E→D'],[E,D1,'E→D1',softTr],[E,M,'E→중'],[N,E,'N→E'],[N,D,'N→D'],[N,D1,'N→D1'],[N,M,'N→중'],
+        [M,D,'중→D',softTr],[M,D1,'중→D1']].filter(r=>!r[3]);
       for(const nurse of this.nurses){
         const nid=nurse.id;
         for(let i=0;i<days.length-1;i++){
@@ -264,16 +267,8 @@ window.MiscFeaturesModule = function() {
           if(!s1||!s2)continue;
           const d1=days[i].getDate(),dn1=dayNames[days[i].getDay()];
           const d2=days[i+1].getDate(),dn2=dayNames[days[i+1].getDay()];
-          if(eveningCodes.includes(s1)&&dayCodes.includes(s2)){
-            // E→D1·중→D 는 마지막 수단(제1원칙 13) — 위반 표시가 아니라 서랍 '주의'의 파트장 확인 필요로 알린다
-            const rule=`${middleSet.has(s1)?'중':'E'}→${day1Set.has(s2)?'D1':'D'}`;
-            if(softTr&&(rule==='E→D1'||rule==='중→D'))continue;
-            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (${rule})`});
-          }
-          if(nightCodes.includes(s1)&&dayCodes.includes(s2))
-            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (N→D)`});
-          if(nightCodes.includes(s1)&&eveningCodes.includes(s2))
-            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (N→E)`});
+          for(const[a,b,rule]of rules)
+            if(a.includes(s1)&&b.includes(s2))v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (${rule})`});
         }
       }
       this.scheduleViolations=v;
