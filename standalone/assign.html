@@ -2011,8 +2011,10 @@ try{ const tb=document.querySelector('.topbar');
   new ResizeObserver(()=>document.documentElement.style.setProperty('--tbH',tb.offsetHeight+'px')).observe(tb); }catch(e){}
 try{ matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme); }catch(e){}
 applyTheme();
-const esc=s=>String(s).replace(/[<>&]/g,m=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]));
-const escA=s=>esc(s).replace(/"/g,'&quot;');   // 속성값용
+// 큰따옴표도 — 속성값(title·data-n·value)에 esc 를 쓴 곳이 많아, 붙여넣은 이름의 " 가 속성을 끝내고 onmouseover 같은 걸 열었다 (리뷰 2026-10-21)
+const esc=s=>String(s).replace(/[<>&"]/g,m=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[m]));
+const escA=esc;   // 속성값용 (esc 와 같다)
+const jsA=s=>esc(JSON.stringify(String(s)));   // onclick="f(${jsA(x)})" — 글자를 JS 문자열로 (따옴표·역슬래시 안전)
 const pad2=n=>String(n).padStart(2,'0');
 const isoOfD=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(d.getDate()+n);return x};
@@ -4903,10 +4905,10 @@ function renderRoomPick(){
       const keys=bedKeys(r), n=bedCount(r);
       const on=keys.every(k=>selKeys.includes(k)), some=!on&&keys.some(k=>selKeys.includes(k));
       const open=!!rpBedOpen[r];
-      return `<span class="rpRoom"><button class="${on?'on':some?'part':''}" onclick="toggleRoom('${esc(r)}')" title="${esc(roomShortRoom(r))}호 전체 — 누르면 방째로 넣고 뺍니다">${esc(roomShortRoom(r))}호</button>`+
-        (n>1?`<button class="rpSplit${open?' on':''}" onclick="toggleBedOpen('${esc(r)}')" title="${esc(roomShortRoom(r))}호를 병상으로 나눠서 고릅니다 (${n}병상)">⋮</button>`:'')+
+      return `<span class="rpRoom"><button class="${on?'on':some?'part':''}" onclick="toggleRoom(${jsA(r)})" title="${esc(roomShortRoom(r))}호 전체 — 누르면 방째로 넣고 뺍니다">${esc(roomShortRoom(r))}호</button>`+
+        (n>1?`<button class="rpSplit${open?' on':''}" onclick="toggleBedOpen(${jsA(r)})" title="${esc(roomShortRoom(r))}호를 병상으로 나눠서 고릅니다 (${n}병상)">⋮</button>`:'')+
         (open&&n>1?`<span class="rpBeds">${keys.map((k,i)=>
-          `<button class="${selKeys.includes(k)?'on':''}" onclick="toggleBed('${esc(r)}',${i+1})" title="${esc(roomShort(k))} 병상">${esc(roomShort(k))}</button>`).join('')}</span>`:'')+
+          `<button class="${selKeys.includes(k)?'on':''}" onclick="toggleBed(${jsA(r)},${i+1})" title="${esc(roomShort(k))} 병상">${esc(roomShort(k))}</button>`).join('')}</span>`:'')+
         `</span>`;
     }).join('')+
     (extra.length?`<div class="dim" style="margin-top:4px">직접 쓴 값: ${extra.map(t=>esc(roomShort(t))).join(', ')}</div>`:'')+
@@ -5273,7 +5275,8 @@ function buildPending(){
     for(let j=c0;j<width;j++){
       const iso=isoCols[j]; if(!iso) continue;
       const pc=parseCellRaw(row[j]);
-      if(pc===undefined){ const t=String(row[j]||'').trim(); if(t) unknown[t]=(unknown[t]||0)+1; continue; }
+      // 모르는 표기는 안내대로 빈칸으로 — 건너뛰면 다시 붙인 근무표에서 그 칸에 예전 근무가 남아 휴가인 사람이 배정됐다 (리뷰 2026-10-21)
+      if(pc===undefined){ const t=String(row[j]||'').trim(); if(t) unknown[t]=(unknown[t]||0)+1; byName[nm][iso]=''; continue; }
       const tx=pc?cellText(pc):'';
       byName[nm][iso]=tx; cells[iso]=tx;
       if(pc){ cnt++; if(!minIso||iso<minIso)minIso=iso; if(!maxIso||iso>maxIso)maxIso=iso; }
@@ -5324,6 +5327,11 @@ function buildPending(){
         이름 열까지 같이 복사하면 순서가 명부와 달라도 이름으로 맞춰 들어갑니다.</span>`);
     }
   }
+  // 이름 열이 있어도 같은 간호사(또는 같은 명부 이름으로 이어진 두 이름)가 두 줄이면 뒤 줄이 앞 줄을 덮는다 — 말없이 한 줄이 사라졌다 (리뷰 2026-10-21)
+  if(cx.hasNameCol){
+    const dupN=[...new Set(rows.filter((r,i)=>rows.findIndex(x=>x.nm===r.nm)!==i).map(r=>r.nm))];
+    if(dupN.length) mpParts.push(`<span style="color:var(--warn);font-weight:700">⚠ 같은 간호사가 두 줄에: ${esc(dupN.join(', '))} — 뒤 줄이 앞 줄을 덮습니다. 이름 연결을 확인하세요</span>`);
+  }
   if(mpParts.length){ mp.style.display='flex'; mp.innerHTML=mpParts.join(''); }
   else mp.style.display='none';
   // 명부 순서 — 고를 수 있는 선택지일 뿐 결정할 일은 아니라 결정 열 맨 아래
@@ -5371,15 +5379,15 @@ function buildPending(){
       `<div class="us">한 번 정해두면 다음부터 자동으로 인식합니다. 정하지 않으면 그 칸은 빈칸으로 들어갑니다.</div>`+
       unkKeys.slice(0,12).map(k=>{
         const cu=store.custom[k], al=store.alias[k];
-        const q=k.replace(/'/g,"\\'");
+        const q=jsA(k);
         return `<div class="ur"><span class="uc">${esc(k)}<i>${unknown[k]}칸</i></span>`+
-          `<button class="${cu&&cu.p==='rest'?'on':''}" onclick="mapUnknown('${q}','rest')">휴무로</button>`+
-          `<button class="${cu&&cu.p==='leave'?'on':''}" onclick="mapUnknown('${q}','leave')">휴가로</button>`+
-          `<select onchange="mapUnknown('${q}','alias',this.value)">`+
+          `<button class="${cu&&cu.p==='rest'?'on':''}" onclick="mapUnknown(${q},'rest')">휴무로</button>`+
+          `<button class="${cu&&cu.p==='leave'?'on':''}" onclick="mapUnknown(${q},'leave')">휴가로</button>`+
+          `<select onchange="mapUnknown(${q},'alias',this.value)">`+
             `<option value="">다른 근무로 바꾸기…</option>`+
             opts.map(o=>`<option value="${o}" ${al===o?'selected':''}>${o}</option>`).join('')+
           `</select>`+
-          (cu||al?`<button onclick="mapUnknown('${q}','')">되돌리기</button>`:'')+
+          (cu||al?`<button onclick="mapUnknown(${q},'')">되돌리기</button>`:'')+
           `</div>`;
       }).join('')+
       (unkKeys.length>12?`<div class="us">… 외 ${unkKeys.length-12}가지</div>`:'');
@@ -5482,7 +5490,7 @@ function confirmPaste(){
  * 큰따옴표로 감싸고** 안의 따옴표는 두 번 쓴다. 순진하게 \n 으로 자르면 줄바꿈이 든
  * 칸 하나가 표 전체를 찢는다 — 82병동 번표는 날짜 줄에 '잔↵여↵휴↵가' 칸이 있어
  * 42행이 74줄이 되고 명부에 메모 조각 4개만 남았다 (2026-09-21 재현). */
-function parseClipboard(txt){
+function parseClipboard(txt,sep='\t'){   // sep: 파일 끌어 놓기의 쉼표 CSV 도 같은 따옴표 처리로
   const rows=[]; let row=[],cell='',inQ=false,fresh=true;
   for(let i=0;i<txt.length;i++){
     const ch=txt[i];
@@ -5492,7 +5500,7 @@ function parseClipboard(txt){
       continue;
     }
     if(fresh&&ch==='"'){ inQ=true; fresh=false; continue; }
-    if(ch==='\t'){ row.push(cell); cell=''; fresh=true; continue; }
+    if(ch===sep){ row.push(cell); cell=''; fresh=true; continue; }
     if(ch==='\r') continue;
     if(ch==='\n'){ row.push(cell); rows.push(row); row=[]; cell=''; fresh=true; continue; }
     cell+=ch; fresh=false;
@@ -5544,11 +5552,15 @@ window.addEventListener('drop',async e=>{
     return;
   }
   if(/\.(csv|tsv|txt)$/i.test(f.name)){
-    const buf=await f.arrayBuffer();
-    let txt; try{ txt=new TextDecoder('utf-8',{fatal:true}).decode(buf) }
-    catch{ txt=new TextDecoder('euc-kr').decode(buf); }
+    const buf=await f.arrayBuffer(), b=new Uint8Array(buf.slice(0,2));
+    // 따옴표 칸(칸 안 줄바꿈·쉼표)을 붙여넣기처럼 읽는다 — 줄·쉼표로만 잘라 표가 찢어지고 날짜가 하루씩 밀렸다. UTF-16(엑셀 '유니코드 텍스트')도 (리뷰 2026-10-21)
+    let txt;
+    if(b[0]===0xFF&&b[1]===0xFE) txt=new TextDecoder('utf-16le').decode(buf);
+    else if(b[0]===0xFE&&b[1]===0xFF) txt=new TextDecoder('utf-16be').decode(buf);
+    else { try{ txt=new TextDecoder('utf-8',{fatal:true}).decode(buf) } catch{ txt=new TextDecoder('euc-kr').decode(buf); } }
+    txt=txt.replace(/^\ufeff/,'');
     const sep=txt.includes('\t')?'\t':',';
-    ingestGrid(txt.replace(/^﻿/,'').replace(/\r\n?/g,'\n').split('\n').filter(l=>l.trim()).map(l=>l.split(sep)));
+    ingestGrid(parseClipboard(txt,sep).filter(r=>r.some(c=>String(c).trim())));
     return;
   }
   toast('✗ '+f.name+' — .xlsx/.csv/.js/.json 만 가능합니다',4000);
@@ -6190,16 +6202,16 @@ const ADMIN_PANELS={
         `<tr class="hd"><th style="width:120px">표기</th><th style="width:420px">처리</th><th class="end"></th></tr>`+
         (keys.map(k=>{
           const cu=store.custom[k], al=store.alias[k], d=SH(k)||{bg:'var(--rule-soft)',fg:'var(--ink-3)'};
-          const q=k.replace(/'/g,"\\'");
+          const q=jsA(k);
           return `<tr><td><span class="capChip" style="background:${d.bg};color:${d.fg};min-width:4em;cursor:default">${esc(k)}</span></td>`+
             `<td><div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">`+
-            `<button class="segbtn${cu&&cu.p==='rest'?' on':''}" onclick="mapUnknown('${q}','rest')">휴무</button>`+
-            `<button class="segbtn${cu&&cu.p==='leave'?' on':''}" onclick="mapUnknown('${q}','leave')">휴가</button>`+
-            `<select onchange="mapUnknown('${q}','alias',this.value)" style="font-size:14px;min-height:34px">`+
+            `<button class="segbtn${cu&&cu.p==='rest'?' on':''}" onclick="mapUnknown(${q},'rest')">휴무</button>`+
+            `<button class="segbtn${cu&&cu.p==='leave'?' on':''}" onclick="mapUnknown(${q},'leave')">휴가</button>`+
+            `<select onchange="mapUnknown(${q},'alias',this.value)" style="font-size:14px;min-height:34px">`+
               `<option value="">다른 근무로…</option>`+
               opts.map(o=>`<option value="${o}" ${al===o?'selected':''}>${o}</option>`).join('')+
             `</select></div></td>`+
-            `<td class="end"><button class="segbtn danger" title="이 표기 지우기 — 다음 붙여넣기부터 다시 모르는 표기로 묻습니다" onclick="mapUnknown('${q}','')">✕</button></td></tr>`;
+            `<td class="end"><button class="segbtn danger" title="이 표기 지우기 — 다음 붙여넣기부터 다시 모르는 표기로 묻습니다" onclick="mapUnknown(${q},'')">✕</button></td></tr>`;
         }).join('')||`<tr><td colspan="3" class="note">정해 둔 표기가 없습니다. 근무표를 붙여넣을 때 모르는 표기가 나오면 여기에 쌓입니다.</td></tr>`);
     }},
   schemes:{title:'방 구성',
@@ -8501,11 +8513,8 @@ async function readXlsxGrid(u8,o={}){
   const xfsM=st.match(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/);
   if(xfsM) [...xfsM[1].matchAll(/<xf\b[^>]*\/?>/g)].forEach(m=>{
     const id=m[0].match(/numFmtId="(\d+)"/); xfIds.push(id?+id[1]:0); });
-  const isDateId=id=>{
-    if((id>=14&&id<=22)||(id>=45&&id<=47)) return true;
-    const c=custom[id]; if(!c) return false;
-    return /[ymd]/i.test(c.replace(/"[^"]*"/g,'').replace(/\[[^\]]*\]/g,''));
-  };
+  // 날짜 서식 판별은 양식 보기와 같은 xlIsDateFmt 하나로 — 한국어 엑셀 내장 날짜 서식(27~36·50~58)을 빼먹어 날짜 줄을 일련번호로 읽었다 (리뷰 2026-10-21)
+  const isDateId=id=>xlIsDateFmt(id,custom[id]);
   const rows={}; let maxC=0, cellsRead=0;
   for(const m of sx.matchAll(/<c r="([A-Z]+)(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)){
     const col=colIdx(m[1]), row=+m[2], attrs=m[3]||'', body=m[4]||'';
