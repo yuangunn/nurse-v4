@@ -157,6 +157,32 @@ for _subdir in ("css", "js", "lib", "fonts", "assets"):
         app.mount(f"/{_subdir}", StaticFiles(directory=str(_sub_path)), name=_subdir)
 
 
+# 이 서버는 이 컴퓨터의 앱 화면만 쓴다 — 웹페이지가 보낸 요청(CSRF)이나 DNS 리바인딩으로 다른 사이트가 열린 병동을
+# 닫거나 지우거나 내려받지 못하게, Host 는 127.0.0.1·localhost 만, 바꾸는 요청의 Origin 도 같은 곳만 (리뷰 2026-10-21).
+# testserver = FastAPI TestClient
+_LOCAL_HOSTS = {"127.0.0.1", "localhost", "testserver"}
+
+
+def _host_of(value: str) -> str:
+    v = (value or "").strip().lower()
+    if v.startswith("["):                      # [::1]:5757
+        return v[1:v.find("]")] if "]" in v else v
+    return v.rsplit(":", 1)[0] if v.count(":") == 1 else v
+
+
+@app.middleware("http")
+async def _local_only(request, call_next):
+    from fastapi.responses import JSONResponse
+    from urllib.parse import urlparse
+    if _host_of(request.headers.get("host", "")) not in _LOCAL_HOSTS | {"::1"}:
+        return JSONResponse(status_code=403, content={"detail": "이 컴퓨터의 앱 화면에서만 쓸 수 있습니다."})
+    origin = request.headers.get("origin")
+    if origin and request.method not in ("GET", "HEAD", "OPTIONS"):
+        if (urlparse(origin).hostname or "").lower() not in _LOCAL_HOSTS | {"::1"}:
+            return JSONResponse(status_code=403, content={"detail": "다른 사이트에서 온 요청은 받지 않습니다."})
+    return await call_next(request)
+
+
 # 개발 중 stylesheet/script 캐시로 인한 stale UI 방지 — 정적 파일에 no-cache
 @app.middleware("http")
 async def _no_cache_static(request, call_next):

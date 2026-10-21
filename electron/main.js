@@ -69,6 +69,12 @@ function startPythonServer() {
       console.log('[NurseScheduler] Python 프로세스 종료:', code);
       if (!serverPort) {
         reject(new Error(`Python 서버가 시작되지 못했습니다 (exit code ${code})`));
+      } else if (!shuttingDown) {
+        // 켜진 뒤 서버가 죽으면 창은 그대로인데 저장·생성이 조용히 실패했다 — 알리고 끈다 (리뷰 2026-10-21)
+        pythonProcess = null;
+        dialog.showErrorBox('NurseScheduler 엔진이 멈췄습니다',
+          `엔진 서버가 예기치 않게 종료됐습니다 (exit code ${code}).\n앱을 다시 실행해 주세요. 마지막으로 저장한 내용은 남아 있습니다.`);
+        app.quit();
       }
     });
 
@@ -130,6 +136,11 @@ function createWindow(port) {
     },
     show: false,
   });
+
+  // Windows 로그오프·재부팅·업데이트 재시작 — 창 닫기 경로를 안 거쳐 병동 DB 가 평문으로 남았다 (리뷰 2026-10-21).
+  // 서버 닫기(재암호화)는 보통 수십 ms 라 끝나기 전에 꺼질 일은 드물다
+  mainWindow.on('query-session-end', () => { shutdownOnce(); });
+  mainWindow.on('session-end', () => { shutdownOnce(); });
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -230,6 +241,12 @@ function requestProfileClose(timeoutMs = 2000) {
 }
 
 let shuttingDown = false;
+let shutdownPromise = null;
+// 종료는 한 번만 — 두 번째 종료(메뉴 종료 뒤 창 X 등)가 진행 중인 종료를 기다리지 않고 끝나 서버가 고아로 남았다 (리뷰 2026-10-21)
+function shutdownOnce() {
+  shuttingDown = true;
+  return shutdownPromise || (shutdownPromise = shutdownPython());
+}
 async function shutdownPython() {
   if (!pythonProcess) return;
   console.log('[NurseScheduler] 프로필 닫기 요청 후 Python 종료 중...');
@@ -241,18 +258,14 @@ async function shutdownPython() {
 }
 
 app.on('window-all-closed', async () => {
-  if (!shuttingDown) {
-    shuttingDown = true;
-    await shutdownPython();
-  }
+  await shutdownOnce();
   app.quit();
 });
 
 app.on('before-quit', (event) => {
-  if (pythonProcess && !shuttingDown) {
-    shuttingDown = true;
+  if (pythonProcess) {
     event.preventDefault();
-    shutdownPython().then(() => app.quit());
+    shutdownOnce().then(() => app.quit());
   }
 });
 
@@ -262,7 +275,7 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {   // 창을 닫고 종료를 기다리는 사이엔 파괴된 창이다
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
