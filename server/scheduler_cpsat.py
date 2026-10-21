@@ -71,6 +71,9 @@ class _CpSatCb(cp_model.CpSolverSolutionCallback):
         self._log = log_sink
 
     def on_solution_callback(self):
+        if self._p.cancelled:   # 멈춘 풀이(중지·레이스 패자)는 진행·기록을 남기지 않는다 — 다음 생성에 섞였다
+            self.StopSearch()
+            return
         ov = self.ObjectiveValue()
         bound = self.BestObjectiveBound()
         self._p.has_solution = True
@@ -87,11 +90,20 @@ class _CpSatCb(cp_model.CpSolverSolutionCallback):
         if self._log:
             self._log({"type": "log",
                        "msg": f"[CP-SAT] incumbent {ov:.0f} · bound {bound:.0f} · branches {self._p.nodes}"})
-        if self._p.cancelled:
-            self.StopSearch()
 
 
 class CpSatScheduler(_SchedulerBase):
+    @staticmethod
+    def _stopped_result() -> Dict:
+        from .scheduler import NurseScheduler   # 멈춤 문구는 HiGHS 와 한 곳에서
+        return NurseScheduler._stopped_result()
+
+    @staticmethod
+    def _halted(prog) -> bool:
+        """다음 풀이를 시작하지 않는다 — 이 풀이가 취소됐거나(중지·레이스 정리) 사용자 중지·레이스 패자."""
+        from . import solver_progress
+        return prog.cancelled or solver_progress.is_cancelled() or solver_progress.was_cancel_all()
+
     def _apply_hints(self, model, x) -> int:
         """이어 찾기 — 앞 실행이 낸 표의 칸을 CP-SAT 힌트로 (결정 1-50). 넣은 힌트 수."""
         pairs = self._mip_start_pairs(x, lambda v: isinstance(v, cp_model.IntVar)) if self.warm_start else []
@@ -178,8 +190,7 @@ class CpSatScheduler(_SchedulerBase):
         # 전의 stop_search()는 no-op이므로 여기서 플래그를 직접 확인한다
         if prog.cancelled:
             solver_progress.unregister(prog)
-            return {"success": False, "schedule": {}, "extended_schedule": {},
-                    "message": "중지 요청으로 생성이 취소되었습니다."}
+            return self._stopped_result()
         try:
             status = solver.Solve(model, cb)
         finally:
@@ -203,8 +214,7 @@ class CpSatScheduler(_SchedulerBase):
         if status == cp_model.INFEASIBLE:
             # 사전입력 완화 재시도 (HiGHS 패리티 — 최소 침습).
             # 취소(사용자 중지·레이스 패자)면 후속 솔브를 시작하지 않는다.
-            cancelled_now = (prog.cancelled or solver_progress.is_cancelled()
-                             or solver_progress.was_cancel_all())
+            cancelled_now = self._halted(prog)
             if self.allow_pre_relax and self._has_pre() and not cancelled_now:
                 relaxed = self._solve_relaxed()
                 if relaxed:
@@ -212,9 +222,12 @@ class CpSatScheduler(_SchedulerBase):
             # 완전 확정 표: 검증 거부 대신 그대로 확정 (HiGHS 패리티)
             if self._fully_pinned():
                 return self._confirm_pinned_result()
+            if solver_progress.is_cancelled():       # 완화 중 멈춤 — 진단을 돌리지 않는다 (HiGHS 패리티)
+                return self._stopped_result()
             if getattr(self, "_relax_timed_out", False):
                 return self._relax_timeout_result()
             msg = "CP-SAT: 제약을 모두 만족하는 근무표가 없습니다 (infeasible)."
+            anchored = []
             # 인라인 정밀분석은 단독 CP-SAT 모드에서만 — 레이스 패자의 분석은
             # 결과가 폐기되는데 분~수십 분 CPU를 태울 수 있고 취소도 안 된다.
             in_race = getattr(self._request, "solver", "") == "race"
@@ -224,19 +237,21 @@ class CpSatScheduler(_SchedulerBase):
                     diag = analyze_conflicts(self._request)
                     if diag.get("conflicts"):
                         msg += "\n\n[정밀 충돌 분석]\n" + diag["message"]
+                        anchored = diag.get("anchored") or []   # '충돌 위치로 이동' 칩 (HiGHS 패리티)
                 except Exception:
                     pass
-            return {"success": False, "schedule": {}, "extended_schedule": {}, "message": msg}
+            return {"success": False, "schedule": {}, "extended_schedule": {}, "message": msg,
+                    "anchored": anchored}
         # UNKNOWN(타임아웃·중단) — HiGHS의 'Not Solved' 완화 재시도와 패리티.
         # 사용자 중지·레이스 패자 취소면 제외 (취소 무시하고 새 솔브를 도는 셈).
-        if (self.allow_pre_relax and self._has_pre()
-                and not solver_progress.is_cancelled() and not prog.cancelled
-                and not solver_progress.was_cancel_all()):
+        if self.allow_pre_relax and self._has_pre() and not self._halted(prog):
             relaxed = self._solve_relaxed()
             if relaxed:
                 return relaxed
         if self._fully_pinned():
             return self._confirm_pinned_result()
+        if solver_progress.is_cancelled():
+            return self._stopped_result()
         if getattr(self, "_relax_timed_out", False):
             return self._relax_timeout_result()
         return {
@@ -360,7 +375,8 @@ class CpSatScheduler(_SchedulerBase):
                         x[nid][d][s] = 0
                 if pre:
                     flex = self._PRE_FLEX.get(pre, {pre})
-                    flex_vars = [x[nid][d][s] for s in flex if not isinstance(x[nid][d][s], int)]
+                    # 근무 목록에 없는 코드(설정에서 지운 휴가 등)는 변수가 없다 — 건너뛴다 (HiGHS 패리티)
+                    flex_vars = [x[nid][d][s] for s in flex if not isinstance(x[nid][d].get(s, 0), int)]
                     if flex_vars:
                         pre_keeps.append((nid, d, pre, flex_vars))
         # 원티드 D/E·N제외: 허용 근무 중 하나면 지킨 것 (잠긴 칸·지난달은 하드, HiGHS 패리티)
@@ -370,8 +386,8 @@ class CpSatScheduler(_SchedulerBase):
     def _solve_relaxed(self):
         """INFEASIBLE 시 사전입력을 소프트로 풀어 최소 침습 완화 재시도. 성공 시 결과, 실패 시 None."""
         model = cp_model.CpModel()
-        from . import solver_progress as _sp0
-        _sp0.record_event("relax_start", engine="CP-SAT")
+        from . import solver_progress
+        solver_progress.record_event("relax_start", engine="CP-SAT")
         # 제약 함수(시니어리티 게이팅 등)에 '사전입력=소프트' 모드임을 알림
         self._pre_soft = True
         self._pin = {}  # 사실-클램프 비활성 — 완화 모드에선 제약이 온전히 걸려야 함
@@ -447,6 +463,13 @@ class CpSatScheduler(_SchedulerBase):
         # 2단계: 그 수준을 하드로 고정하고 배점을 사용자 gap으로 최적화.
         # 1단계 미증명 시 dom 가중 단일 솔브(gap 0)로 폴백.
         stage2_gap = 0.0
+        def _relax_log_sink(item):
+            # 완화 구간 incumbent도 SSE 로그로 — 기존엔 None이라 곡선 공백
+            try:
+                from . import api
+                api._log_queue.put(item)
+            except Exception:
+                pass
         if keep_terms:
             model.Maximize(sum(keep_terms))
             s1 = cp_model.CpSolver()
@@ -454,8 +477,15 @@ class CpSatScheduler(_SchedulerBase):
             s1.parameters.relative_gap_limit = 0.0
             s1.parameters.num_workers = max(1, min(8, os.cpu_count() or 4))
             s1.parameters.random_seed = 1
-            st1 = s1.Solve(model)
-            if st1 == cp_model.INFEASIBLE:
+            # 1단계도 등록한다 — 중지·레이스 패자 정리(cancel_all)가 닿게 (HiGHS 는 모든 풀이가 등록된다)
+            p1 = _CpSatProgress()
+            p1.solver = s1
+            solver_progress.register(p1)
+            try:
+                st1 = None if self._halted(p1) else s1.Solve(model, _CpSatCb(p1, _relax_log_sink))
+            finally:
+                solver_progress.unregister(p1)
+            if st1 is None or p1.cancelled or st1 == cp_model.INFEASIBLE:   # 멈췄거나 완화로도 안 된다 — 2단계 없이
                 self._pre_soft = False
                 return None
             if st1 == cp_model.OPTIMAL:
@@ -480,7 +510,6 @@ class CpSatScheduler(_SchedulerBase):
         else:
             model.Maximize(sum(obj_terms) if obj_terms else 0)
             stage2_gap = float(self.mip_gap)
-        from . import solver_progress
         fingerprint = _proto_fingerprint(model)
         prog = _CpSatProgress()
         solver = cp_model.CpSolver()
@@ -488,18 +517,11 @@ class CpSatScheduler(_SchedulerBase):
         solver.parameters.relative_gap_limit = stage2_gap
         solver.parameters.num_workers = max(1, min(8, os.cpu_count() or 4))
         solver.parameters.random_seed = 1
-        def _relax_log_sink(item):
-            # 완화 구간 incumbent도 SSE 로그로 — 기존엔 None이라 곡선 공백
-            try:
-                from . import api
-                api._log_queue.put(item)
-            except Exception:
-                pass
         cb = _CpSatCb(prog, _relax_log_sink)
         prog.solver = solver
         prog.fingerprint = fingerprint
         solver_progress.register(prog)
-        if prog.cancelled:
+        if self._halted(prog):      # 단계 사이에 멈췄거나 레이스에서 졌다 (register 는 사용자 중지만 넘긴다)
             solver_progress.unregister(prog)
             self._pre_soft = False
             return None
@@ -783,6 +805,8 @@ class CpSatScheduler(_SchedulerBase):
                     model.Add(sum(p1_vars) <= bound)
 
     def _cs_max_v_per_month(self, model, x):
+        if "V" not in self.ALL_SHIFTS:
+            return   # 근무 설정에서 V 를 지웠다 — V 상한도 없다
         max_v = self.rules.maxVPerMonth
         first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
