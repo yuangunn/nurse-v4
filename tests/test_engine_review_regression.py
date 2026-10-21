@@ -270,7 +270,8 @@ def test_positive_fairness_score_does_not_break_the_model(engine):
     assert r["success"], r["message"]
 
 
-def test_juhu_block_follows_locked_juhu_weekday():
+@pytest.mark.parametrize("engine", ["highs", "cpsat"])
+def test_juhu_block_follows_locked_juhu_weekday(engine):
     """주휴 이동 허용 + 블록 요일 잠금 — 잠근 월요일 주휴(3/2)가 있는 블록은 월요일로 (지난달 요일 잇기와 같은 감점).
     예전엔 잠긴 칸이 블록 요일 묶음에서 빠져 나머지 주휴 셋이 화요일에 남았다."""
     nurses = _mini_nurses(6)
@@ -283,7 +284,7 @@ def test_juhu_block_follows_locked_juhu_weekday():
                           rules=Rules(maxConsecutiveWorkDays=6, maxVPerMonth=1), prev_schedule=prev,
                           locked_cells={"a0": {"2026-03-02": True}}, allow_pre_relax=True,
                           allow_juhu_relax=True, juhu_block_lock=True, time_limit=30)
-    r = make_limited(req, days=28).solve()
+    r = make_limited(req, 28, engine).solve()
     assert r["success"], r["message"]
     assert sorted(k for k, v in r["schedule"]["a0"].items() if v == "주") == [
         "2026-03-02", "2026-03-09", "2026-03-16", "2026-03-23"]

@@ -89,6 +89,7 @@ def test_stop_during_relax_says_stopped_without_analysis(monkeypatch):
         return None
 
     monkeypatch.setattr(CpSatScheduler, "_solve_relaxed", stopped_relax)
+    sp.begin()                              # 중지는 생성 수명주기 안에서만 참이다 (solver_progress.is_cancelled)
     r = make_limited(_relax_request(), 7, "cpsat").solve()
     assert not r["success"] and r["message"] == STOPPED, r["message"]
     assert not analyzed
@@ -101,6 +102,7 @@ def test_stop_before_the_first_solution_says_stopped(monkeypatch):
         return cp_model.UNKNOWN
 
     monkeypatch.setattr(cp_model.CpSolver, "Solve", stopped)
+    sp.begin()
     r = make_limited(_relax_request(), 7, "cpsat").solve()
     assert not r["success"] and r["message"] == STOPPED, r["message"]
 

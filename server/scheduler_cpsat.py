@@ -650,21 +650,21 @@ class CpSatScheduler(_SchedulerBase):
             return
         for nurse in self.nurses:
             nid = nurse["id"]   # 나이트킵의 날은 _juhu_block_items 가 날짜마다 뺀다 (HiGHS 패리티)
-            blocks = self._juhu_block_items(
-                nurse, x, lambda t: not isinstance(t, int))
-            anchor = self._juhu_anchor(nurse)
+            is_var = lambda t: not isinstance(t, int)
+            blocks = self._juhu_block_items(nurse, x, is_var)
+            anchors = self._juhu_block_dows(nurse, x, is_var)   # 지난달 요일·이번 달 잠긴 주휴 요일 (HiGHS 패리티)
             for blk, items in blocks.items():
                 dows = sorted({wd for _, wd, _ in items})
-                # 지난달 요일에 옮길 칸이 없으면 잇지 않는다 (HiGHS 패리티)
-                anchored = bool(anchor) and blk == anchor[0] and anchor[1] in dows
+                # 그 요일에 옮길 칸이 없으면 잇지 않는다 (HiGHS 패리티)
+                anchored = anchors.get(blk) in dows
                 if len(dows) <= 1:
                     continue
                 y = {wd: model.NewBoolVar(f"juhudow_{nid}_{blk}_{wd}") for wd in dows}
                 model.Add(sum(y.values()) <= 1)
                 for _d, wd, t in items:
                     model.Add(t <= y[wd])
-                if anchored:   # 지난달 요일이 아니면 감점 (HiGHS 패리티)
-                    self._juhu_anchor_dev += [y[wd] for wd in dows if wd != anchor[1]]
+                if anchored:   # 지난달·잠긴 주휴의 요일이 아니면 감점 (HiGHS 패리티)
+                    self._juhu_anchor_dev += [y[wd] for wd in dows if wd != anchors[blk]]
 
     # ── 선형 하드 제약 (각각 HiGHS _c_* 와 1:1) ──────────────────────────────
     def _cs_one_shift_per_day(self, model, x):
