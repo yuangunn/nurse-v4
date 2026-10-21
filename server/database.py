@@ -2,12 +2,26 @@ import sqlite3
 import json
 import os
 import sys
+import threading
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 
+class ProfileClosed(RuntimeError):
+    """프로필을 닫은 뒤 온 DB 접근 — 닫힌 병동 경로에 빈 스텁 .db 를 만들지 않게 거부한다."""
+
+
+# 지금 DB — api 가 프로필을 열면 open_db(경로), 닫으면 close_db(). 프로필을 연 적 없으면 기본 DB.
+_profile_db: Optional[str] = None
+_closed = False
+_busy = 0                      # 지금 DB 의 with get_conn() 블록 수 — 닫기가 쓰는 중에 찍지 않게
+_cv = threading.Condition()
+
+
 def get_db_path() -> str:
     """DB 파일 경로 반환 (EXE 번들 또는 개발 환경 모두 대응)"""
+    if _profile_db:
+        return _profile_db
     app_data = os.environ.get("APPDATA", "")
     if app_data:
         db_dir = Path(app_data) / "NurseScheduler"
@@ -20,15 +34,64 @@ def get_db_path() -> str:
     return str(db_dir / "nurse_scheduler.db")
 
 
-def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(get_db_path())
+def open_db(path: Optional[str]) -> None:
+    """지금 DB 를 프로필 DB 로 바꾼다 (닫힌 표지를 걷는다). None 이면 기본 DB — 서버가 켜질 때."""
+    global _profile_db, _closed
+    with _cv:
+        _profile_db, _closed = path, False
+
+
+def close_db(timeout: float = 1.5) -> None:
+    """프로필을 닫기(암호화) 전 — 새 DB 접근을 막고 쓰는 중인 연결이 끝나길 잠깐 기다린다.
+    안 막으면 늦게 온 요청(생성 끝의 이력 쓰기·새로고침·틀린 비밀번호로 전환한 뒤의 편집)이 지운 평문 자리에
+    빈 스텁 .db 를 만들었고, 다음 열기가 그것을 진짜로 써서 예시 명부를 시드한 뒤 진짜 .db.enc 를 덮었다."""
+    global _closed
+    with _cv:
+        _closed = True
+        # ponytail: 시간을 넘기면 그냥 찍는다 — Electron 이 닫기를 2초만 기다린다. 1.5초 넘게 쥐는 쓰기는 없다
+        _cv.wait_for(lambda: _busy == 0, timeout)
+
+
+def _release():
+    global _busy
+    with _cv:
+        _busy -= 1
+        _cv.notify_all()
+
+
+class _Conn(sqlite3.Connection):
+    """지금 DB 연결 — with 블록이 끝나면 커밋하고 닫은 뒤 '쓰는 중'에서 뺀다."""
+    def __exit__(self, *exc):
+        try:
+            return super().__exit__(*exc)
+        finally:
+            self.close()
+            _release()
+
+
+def get_conn(path: Optional[str] = None) -> sqlite3.Connection:
+    """지금 DB 연결 — with 로만 쓴다 (블록 동안 '쓰는 중'으로 센다). 프로필을 닫은 뒤엔 ProfileClosed.
+    path 는 init_db 가 새 프로필·게스트 DB 를 만들 때만 (없으면 만든다)."""
+    global _busy
+    if path:
+        conn = sqlite3.connect(path)
+    else:
+        with _cv:
+            if _closed:
+                raise ProfileClosed("열린 프로필이 없습니다 — 프로필을 다시 열어 주세요.")
+            _busy += 1
+        try:
+            conn = sqlite3.connect(get_db_path(), factory=_Conn)
+        except BaseException:
+            _release()
+            raise
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db():
-    """테이블 초기화"""
-    with get_conn() as conn:
+def init_db(path: Optional[str] = None):
+    """테이블 초기화 — path 를 주면 그 파일 (새 프로필·게스트 DB)"""
+    with get_conn(path) as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS nurses (
                 id TEXT PRIMARY KEY,
@@ -194,18 +257,21 @@ def init_db():
         if existing_scoring == 0:
             _seed_scoring_rules(conn)
 
-        # 퐁당퐁당 회피 규칙 마이그레이션 (기존 DB에 없을 경우 추가)
-        has_pondang = conn.execute(
-            "SELECT COUNT(*) FROM scoring_rules WHERE rule_type='pattern' AND name LIKE '%퐁당%'"
-        ).fetchone()[0]
-        if not has_pondang:
-            conn.execute(
-                "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
-                ("퐁당퐁당 회피", "pattern", json.dumps({"pattern": ["work", "rest_leave", "work"]}), -20, 1, 12)
-            )
-
-        # 법정공휴일 + 주말 배점 규칙 마이그레이션
-        _migrate_holiday_weekend_rules(conn)
+        # 옛 배점 규칙 마이그레이션(퐁당퐁당·법정공휴일/주말 5종)은 버전 1 전 DB 에서 한 번만 — 이름·유형으로 찾아
+        # 없으면 넣어서, 사용자가 지운 규칙이 열 때마다 켜진 채 되살아났고 이름을 바꾸면 하나 더 생겼다
+        if conn.execute("PRAGMA user_version").fetchone()[0] < 1:
+            # 퐁당퐁당 회피 규칙 마이그레이션 (기존 DB에 없을 경우 추가)
+            has_pondang = conn.execute(
+                "SELECT COUNT(*) FROM scoring_rules WHERE rule_type='pattern' AND name LIKE '%퐁당%'"
+            ).fetchone()[0]
+            if not has_pondang:
+                conn.execute(
+                    "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
+                    ("퐁당퐁당 회피", "pattern", json.dumps({"pattern": ["work", "rest_leave", "work"]}), -20, 1, 12)
+                )
+            # 법정공휴일 + 주말 배점 규칙 마이그레이션
+            _migrate_holiday_weekend_rules(conn)
+        _migrate_single_night_rule(conn)
 
         # 임부휴무(P1) 근무 코드 마이그레이션 (기존 DB에 없을 경우 추가)
         conn.execute(
@@ -542,6 +608,19 @@ def compute_fairness_ledger(year: int, month: int, months_back: int = 3) -> Dict
 # 사전입력 플렉스(D↔DC 등 차지 승격)는 '뒤집힘'이 아니다 — 원장 집계에서 제외
 _RELAX_FLEX = {"D": {"D", "DC"}, "DC": {"D", "DC"}, "E": {"E", "EC"}, "EC": {"E", "EC"},
                "N": {"N", "NC"}, "NC": {"N", "NC"}}
+_PERIOD_WORK = {"day": {"D", "DC"}, "evening": {"E", "EC"}, "night": _NIGHT_CODES}
+
+
+def _relax_kept(pre: str, got: str) -> bool:
+    """구버전 저장본(relaxed_cells 없음) 폴백 — 사전입력 pre 자리에 got 이 들어갔으면 지킨 것인가.
+    차지 승격·원티드 '둘 중 하나'·'N 빼고'(제1원칙 14)·번표 표기(OFF)를 엔진과 같게 본다 — 지켜 준 D/E·N제외 칸까지 셌다."""
+    from .scheduler_base import _FLEX_NOT, _FLEX_ONE_OF, _PRE_ALIAS
+    pre = _PRE_ALIAS.get(pre, pre)
+    if pre in _FLEX_NOT:
+        return got not in _NIGHT_CODES
+    if pre in _FLEX_ONE_OF:
+        return any(got in _PERIOD_WORK[p] for p in _FLEX_ONE_OF[pre])
+    return got == pre or got in _RELAX_FLEX.get(pre, set())
 
 
 def compute_relax_ledger(year: int, month: int, months_back: int = 3) -> Dict:
@@ -549,8 +628,9 @@ def compute_relax_ledger(year: int, month: int, months_back: int = 3) -> Dict:
 
     원티드(사전입력)에는 사연이 있다(제1원칙 8). 같은 사람의 원티드가 매달 완화로
     뒤집히면 다음 달엔 더 강하게 지켜야 한다 — 위시 거절 원장과 같은 파생 뷰 방식.
-    저장본에 `relaxed_cells`가 있으면 그것을, 없으면(구버전 저장본) `prev_schedule` 대
-    `schedule` 차이를 센다. 차지 승격(D→DC 등)과 주휴('주')는 뒤집힘으로 안 센다.
+    저장본에 `relaxed_cells`가 있으면(빈 {} 도) 그것을, 없으면(구버전 저장본) `prev_schedule` 대
+    `schedule` 차이를 센다. 차지 승격(D→DC 등)·지켜진 원티드 D/E·N제외·주휴('주')·신규 트레이닝 칸('/')은
+    뒤집힘으로 안 센다.
     Returns: {nurse_id: {"overridden": n, "months": k}}"""
     targets = []
     y, m = year, month
@@ -573,7 +653,7 @@ def compute_relax_ledger(year: int, month: int, months_back: int = 3) -> Dict:
                 continue
             prefix = f"{ty:04d}-{tm:02d}-"
             rc = data.get("relaxed_cells")
-            if isinstance(rc, dict) and rc:
+            if isinstance(rc, dict):   # 저장본에 있으면 빈 {} 도 믿는다 — 다 지켜진 달을 '차이'로 다시 세지 않게
                 for nid, cells in rc.items():
                     ent = ledger.setdefault(nid, {"overridden": 0, "months": 0})
                     ent["months"] += 1
@@ -592,10 +672,10 @@ def compute_relax_ledger(year: int, month: int, months_back: int = 3) -> Dict:
                 ent = ledger.setdefault(nid, {"overridden": 0, "months": 0})
                 ent["months"] += 1
                 for dk, pre in (pcells or {}).items():
-                    if not pre or not str(dk).startswith(prefix) or pre == "주":
-                        continue
+                    if not pre or not str(dk).startswith(prefix) or pre == "주" or pre.startswith("/"):
+                        continue   # 신규의 트레이닝 칸('/')은 완화 대상이 아니다 (위시 원장과 같게)
                     got = ns.get(dk)
-                    if not got or got == pre or got in _RELAX_FLEX.get(pre, set()):
+                    if not got or got.startswith("/") or _relax_kept(pre, got):
                         continue
                     ent["overridden"] += 1
     return {k: v for k, v in ledger.items() if v["overridden"]}
@@ -874,6 +954,7 @@ def _seed_scoring_rules(conn: sqlite3.Connection):
         ("주말 경감근무 보상",       "weekend_work",     json.dumps({"slots": [{"weekday": 5, "periods": ["evening", "night"]}, {"weekday": 6, "periods": ["day"]}]}), +20, 1, 15),
         ("공휴일 OFF 페널티",        "holiday_off",      json.dumps({}),                                                    -500, 1, 16),
         ("주말·공휴일 근무 공평성",  "weekend_fairness", json.dumps({}),                                                     -30, 1, 17),
+        _SINGLE_NIGHT_RULE,
     ]
     conn.executemany(
         "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
@@ -936,6 +1017,27 @@ def _migrate_holiday_weekend_rules(conn: sqlite3.Connection):
         )
 
 
+# 단독 나이트 — 앞뒤 날이 야간이 아닌 야간 하루에 경미한 감점 (2026-10-20, 사용자 "1나이트는 그렇게까지 바람직하진 않아", 결정 1-55).
+# 실제 번표 1~10월: 일반 간호사 야간 602회 중 단독 87회(14%) — 금지가 아니라 경미하게. 퐁당퐁당(-20)의 절반.
+_SINGLE_NIGHT_RULE = ("단독 나이트 감점", "pattern", json.dumps({"pattern": ["non_night", "night", "non_night"]}), -10, 1, 18)
+
+
+def _migrate_single_night_rule(conn: sqlite3.Connection):
+    """기존 DB 에 단독 나이트 감점을 한 번만 넣는다 (PRAGMA user_version 1) — 사용자가 지운 규칙을 다음 실행 때 되살리지 않게
+    (옛 마이그레이션도 버전 1 전에만 돈다 — init_db)."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 1:
+        return
+    has = conn.execute(
+        "SELECT COUNT(*) FROM scoring_rules WHERE rule_type='pattern' AND params LIKE '%non_night%'"
+    ).fetchone()[0]
+    if not has:
+        conn.execute(
+            "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
+            _SINGLE_NIGHT_RULE,
+        )
+    conn.execute("PRAGMA user_version = 1")
+
+
 # ── Scoring Rules CRUD ────────────────────────────────────────────────────────
 
 def list_scoring_rules() -> List[Dict]:
@@ -948,8 +1050,17 @@ def list_scoring_rules() -> List[Dict]:
             d = dict(r)
             d["params"] = json.loads(d["params"])
             d["enabled"] = bool(d["enabled"])
+            d["score"] = _int_score(d["score"])
             result.append(d)
         return result
+
+
+def _int_score(v) -> int:
+    """배점은 정수 — 예전 저장 경로가 소수(-0.5)·빈칸을 그대로 넣어, 읽을 때 ScoringRule 검증이 모든 생성을 500 으로 막았다."""
+    try:
+        return int(round(float(v)))
+    except (TypeError, ValueError, OverflowError):
+        return 0
 
 
 def save_scoring_rule(

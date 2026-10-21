@@ -92,14 +92,37 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             return False
 
     @staticmethod
+    def _highs_proved_optimal(prob) -> bool:
+        """마지막 HiGHS 풀이가 최적을 증명했나 — pulp 는 시간 제한(kTimeLimit)으로 끝난 풀이도 'Optimal' 로 읽는다."""
+        h = getattr(prob, "solverModel", None)
+        try:
+            import highspy
+            return h is not None and h.getModelStatus() == highspy.HighsModelStatus.kOptimal
+        except Exception:
+            return False
+
+    def _status_label(self, prob, status_str: str) -> str:
+        """결과 메시지의 상태 — 최적 증명이면 Optimal, 시간 제한으로 끝났으면 Feasible, 중지로 남은 해면 '중지'."""
+        if status_str not in ("Optimal", "Feasible"):
+            return "중지"
+        return "Optimal" if self._highs_proved_optimal(prob) else "Feasible"
+
+    @staticmethod
+    def _halted() -> bool:
+        """사용자 중지 또는 레이스 패자 취소(cancel_all) — 그 뒤엔 새 풀이를 시작하지 않는다 (결과는 버려지거나 중지)."""
+        from . import solver_progress
+        return solver_progress.is_cancelled() or solver_progress.was_cancel_all()
+
+    @staticmethod
     def _stopped_result() -> Dict:
         """중지 요청으로 표 없이 끝남 — '제한 시간 안에 못 만들었다'·원인 진단이 아니다."""
         return {"success": False, "schedule": {}, "extended_schedule": {},
                 "message": "중지 요청으로 멈췄습니다 — 그때까지 찾은 표가 없습니다."}
 
-    def _warm_highs(self, x, **kw) -> "_WarmHiGHS":
-        """HiGHS 솔버 — 이어 찾기면 앞 표를 시작해로 (없으면 보통 pulp.HiGHS 와 같다)."""
-        start = self._mip_start_pairs(x, lambda v: isinstance(v, pulp.LpVariable)) if self.warm_start else None
+    def _warm_highs(self, x, start=None, **kw) -> "_WarmHiGHS":
+        """HiGHS 솔버 — 시작해는 start(완화 1단계의 해), 없으면 이어 찾기의 앞 표 (둘 다 없으면 보통 pulp.HiGHS 와 같다)."""
+        if not start and self.warm_start:
+            start = self._mip_start_pairs(x, lambda v: isinstance(v, pulp.LpVariable))
         return _WarmHiGHS(start=start, msg=False, **kw)
 
     def _c_juhu_block_dow(self, prob, x):
@@ -108,22 +131,24 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         병동 관행: 1~4주기 동안 주휴 요일이 같고, 4주기→1주기로 넘어갈 때만 바뀐다.
         allow_juhu_relax 만 켜면 주당 ≤1 만 걸려서 주마다 요일이 흩어질 수 있었다.
         juhu_block_lock=False('주휴 이동 제한 풀기')면 걸지 않는다.
-        달이 블록 중간에서 시작하면 그 블록은 지난달 요일 그대로 (_juhu_anchor, 결정 1-37).
+        달이 블록 중간에서 시작하면 그 블록은 지난달 요일 그대로 (_juhu_anchor, 결정 1-37), 이번 달 잠긴 주휴가 있으면
+        그 요일 (_juhu_block_dows).
         """
         self._juhu_anchor_dev = []
         if not (self.allow_juhu_relax and self.juhu_block_lock):
             return
         if "주" not in self.ALL_SHIFTS:
             return
+        def is_var(t):
+            return isinstance(t, pulp.LpVariable)
         for nurse in self.nurses:
             nid = nurse["id"]   # 나이트킵의 날은 _juhu_block_items 가 날짜마다 뺀다 (결정 1-33)
-            blocks = self._juhu_block_items(
-                nurse, x, lambda t: isinstance(t, pulp.LpVariable))
-            anchor = self._juhu_anchor(nurse)
+            blocks = self._juhu_block_items(nurse, x, is_var)
+            anchors = self._juhu_block_dows(nurse, x, is_var)
             for blk, items in blocks.items():
                 dows = sorted({wd for _, wd, _ in items})
-                # 지난달 요일에 옮길 칸이 없으면(잠근 근무·재적 밖) 어느 요일이든 같은 감점이라 잇지 않는다
-                anchored = bool(anchor) and blk == anchor[0] and anchor[1] in dows
+                # 그 요일에 옮길 칸이 없으면(잠근 근무·재적 밖) 어느 요일이든 같은 감점이라 잇지 않는다
+                anchored = anchors.get(blk) in dows
                 if len(dows) <= 1:
                     continue
                 y = {wd: pulp.LpVariable(f"juhudow_{nid}_{blk}_{wd}", cat="Binary")
@@ -131,8 +156,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 prob += (pulp.lpSum(y.values()) <= 1, f"juhu_blk_one_{nid}_{blk}")
                 for d, wd, t in items:
                     prob += (t <= y[wd], f"juhu_blk_{nid}_{blk}_{d}")
-                if anchored:   # 지난달에 시작한 블록 — 지난달 요일이 아니면 감점 (완화 1단계)
-                    self._juhu_anchor_dev += [y[wd] for wd in dows if wd != anchor[1]]
+                if anchored:   # 지난달·잠긴 주휴의 요일이 아니면 감점 (완화 1단계)
+                    self._juhu_anchor_dev += [y[wd] for wd in dows if wd != anchors[blk]]
     def solve(self) -> Dict:
         if not self.nurses:
             return {"success": False, "message": "간호사가 등록되지 않았습니다.", "schedule": {}}
@@ -159,7 +184,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 is_night = self._keeper_on(nurse, dt)   # 날짜가 속한 달의 나이트킵 (다음 달 며칠 포함)
                 # 유효 사전입력 (공휴일 OF 드롭[일반 간호사] + 모성보호 드롭 — 공용 헬퍼)
                 pre = self._effective_pre(nurse, dt, pre, is_holiday)
-                pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
+                pre_flex = self._pre_domain(nurse, pre)   # 넣은 코드 + 자격 있는 차지 승격
                 # 사실-클램프: 날 전체가 확정이면 문자 그대로 (차지 승격 여지도 불필요 —
                 # 인원/차지 제약이 스킵되므로 플렉스를 남기면 임의 승격이 생긴다)
                 if pre and self._pin and self._day_all_pinned(d, dt):
@@ -269,7 +294,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         if status_str in ("Optimal", "Feasible") or (has_solution and status_str != "Infeasible"):
             schedule, extended = self._extract_solution(x, lambda v: pulp.value(v))
             nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
-            label = "중지" if status_str not in ("Optimal", "Feasible") else status_str
+            label = self._status_label(prob, status_str)
             return self._attach_pin_notes({
                 "success": True,
                 "schedule": schedule,
@@ -281,21 +306,22 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 **self._highs_info(prob),
             })
         elif status_str == "Infeasible":
-            # ── 사전입력 완화 재시도 ────────────────────────────────────
-            if self.allow_pre_relax and self._has_pre():
+            # ── 사전입력 완화 재시도 ── (중지·레이스 패자 뒤엔 새 풀이를 시작하지 않는다)
+            if self.allow_pre_relax and self._has_pre() and not self._halted():
                 relax_result = self._solve_with_relaxed_pre()
                 if relax_result:
                     return relax_result
             # ── 완전 확정 표: 검증 거부 대신 그대로 확정 (+규칙 차이 안내) ──
             if self._fully_pinned():
                 return self._confirm_pinned_result()
-            from . import solver_progress
-            if solver_progress.is_cancelled():       # 완화 중 멈춤 — 진단을 돌리지 않는다
+            if self._halted():       # 완화 중 멈춤·레이스 패자 — 진단(풀이 열몇 번)을 돌리지 않는다
                 return self._stopped_result()
             if getattr(self, "_relax_timed_out", False):
                 return self._relax_timeout_result()
             # 즉시 판정된 Infeasible → 진단 실행 (각 단계 10초 이내)
             diagnosis = self._diagnose_infeasibility()
+            if self._halted():       # 진단 도중 멈춤 — 단계를 건너뛴 진단은 원인이 아니다
+                return self._stopped_result()
             return {
                 "success": False,
                 "schedule": {},
@@ -558,6 +584,11 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         # '점수를 더 따려고' 사전입력을 바꾸는 일을 원천 차단한다. → 사전입력 변경은 오직
         # 실현가능성에 꼭 필요할 때만, 그리고 그때도 휴식<근무<휴가 순으로 최소한만 일어난다.
         obj = self._build_objective(prob, x)
+        if self._halted():       # 모델을 짓는 사이 중지·레이스 패자 — 새 풀이를 시작하지 않는다
+            self._pre_soft = False
+            self._relax_timed_out = False
+            return None
+        stopped = False
         if pre_bonus_terms:
             # ── 2단계 사전순 솔브 ────────────────────────────────────────────
             # 1단계: '사전입력 유지 보너스'만 최대화(gap 0) → 최소 침습 수준을
@@ -585,17 +616,24 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             try:
                 prob.solve(stage1)
             except Exception:
-                pass
+                pass    # 중지(kInterrupt)는 pulp 가 못 읽는다 — 그때까지 찾은 1단계 해는 변수값에 남는다
             s1_status = pulp.constants.LpStatus.get(prob.status, "Unknown")
             if s1_status == "Infeasible":
                 self._pre_soft = False
                 self._relax_timed_out = False
                 return None
-            if s1_status == "Optimal":
+            # 1단계 해(하드 제약을 다 지킨 표)가 다음 풀이의 시작해 — 2단계는 유지 수준을 못 박아 첫 해 찾기가 가장 어려운
+            # 꼴이라, 넘기지 않으면 1단계가 표를 찾고도 완화 전체가 '시간 초과'로 실패했다 (리뷰 2026-10-20)
+            seed = None if self._highs_no_solution(prob) else [
+                (v, v.varValue) for v in prob.variables() if v.varValue is not None]
+            if self._halted():
+                # 중지·레이스 패자 — 2단계를 시작하지 않고 1단계 표(있으면)를 '중지'로 낸다 (엄격의 중지와 같다)
+                solver, stopped = None, True
+            elif self._highs_proved_optimal(prob):   # 시간 제한으로 끝난 1단계는 증명이 아니다 — 폴백으로
                 best_keep = int(round(pulp.value(bonus_expr) or 0))
-                prob += bonus_expr >= best_keep, "keep_bonus_floor"
+                prob += bonus_expr >= best_keep - 0.5, "keep_bonus_floor"   # 값은 정수 — 부동소수 여유만
                 prob.setObjective(obj)
-                solver = self._warm_highs(x, timeLimit=self.time_limit, mip_rel_gap=self.mip_gap)
+                solver = self._warm_highs(x, start=seed, timeLimit=self.time_limit, mip_rel_gap=self.mip_gap)
             else:
                 # 폴백: dom 가중 단일 솔브 — 사전순 지배 스케일.
                 # 배점 상한: 이진 변수는 |계수|, 정수 보조변수(night_range·v2/v3
@@ -618,12 +656,13 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 dom = int(scoring_bound // max(1, bonus_gcd)) + 2
                 prob.setObjective(obj + dom * bonus_expr)
                 # 가중 방식에선 gap=0 필수 — 상대 갭만큼 보존이 희생될 수 있음
-                solver = self._warm_highs(x, timeLimit=self.time_limit, mip_rel_gap=0.0)
+                solver = self._warm_highs(x, start=seed, timeLimit=self.time_limit, mip_rel_gap=0.0)
         else:
             prob.setObjective(obj)
             solver = self._warm_highs(x, timeLimit=self.time_limit, mip_rel_gap=self.mip_gap)
         try:
-            prob.solve(solver)
+            if solver is not None:
+                prob.solve(solver)
         except Exception:
             pass
         finally:
@@ -669,7 +708,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                             charge_promotions += 1
             self._flex_relaxed(schedule, relaxed_cells)    # 못 지킨 원티드 D/E·N제외 (근무)
 
-            label = "중지" if status_str not in ("Optimal", "Feasible") else status_str
+            label = "중지" if stopped else self._status_label(prob, status_str)
             relax_count = sum(len(v) for v in relaxed_cells.values())
             work_changed = relax_count - timeoff_changed
             # 투명성: 무엇을 얼마나 바꿨는지 + 휴무(OFF·연차류) 변경은 별도 경고

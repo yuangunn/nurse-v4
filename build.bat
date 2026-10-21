@@ -57,7 +57,9 @@ if not exist node_modules (
 
 REM 5. Electron 패키지 빌드
 echo [5/6] Electron 앱 패키지 중...
-call node_modules\.bin\electron-packager.cmd . NurseScheduler --platform=win32 --arch=x64 --out=..\dist\electron --overwrite --app-version=4.0.0 --app-copyright="Hospital Nursing Team" --icon=..\build\icon.ico --extra-resource=..\dist\NurseScheduler
+REM exe 버전 정보는 package.json 의 버전 (예전엔 4.0.0 고정)
+for /f "delims=" %%v in ('node -p "require('./package.json').version"') do set APP_VER=%%v
+call node_modules\.bin\electron-packager.cmd . NurseScheduler --platform=win32 --arch=x64 --out=..\dist\electron --overwrite --app-version=%APP_VER% --app-copyright="Hospital Nursing Team" --icon=..\build\icon.ico --extra-resource=..\dist\NurseScheduler
 if errorlevel 1 (
     echo ✗ Electron 패키지 실패
     cd ..

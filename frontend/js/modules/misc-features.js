@@ -119,7 +119,9 @@ window.MiscFeaturesModule = function() {
         const r=await this.api('GET',`/api/prev_month_nights?year=${this.year}&month=${this.month}`);
         const ids=Object.keys(r||{});
         if(!ids.length){this.toast('직전 달 저장 근무표가 없습니다 — 저장 탭에서 전월 확정본을 먼저 저장해 두면 자동 계산됩니다','warn',5000);return}
+        this._pushUndo();   // 스냅숏에 pm 이 들어 있다 — 기록 없이 덮으면 앞 칸 Ctrl+Z 가 이것까지 지웠다
         this.prevMonthNights={...this.prevMonthNights,...r};
+        this._checkViolations&&this._checkViolations();   // 2개월 야간 합산 라인트
         this.toast(`🌙 전월N ${ids.length}명 자동 입력 (직전 달 저장본의 N/NC 집계)`,'info',4000);
       }catch(e){this.toast('전월N 자동 계산 실패','error')}
     },
@@ -250,12 +252,13 @@ window.MiscFeaturesModule = function() {
       const v=[];
       const days=this.scheduleDays;
       const dayNames=['일','월','화','수','목','금','토'];
-      const eveningCodes=this.shifts.filter(s=>s.period==='evening'||s.period==='middle').map(s=>s.code);
-      const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
-      const dayCodes=this.shifts.filter(s=>s.period==='day'||s.period==='day1').map(s=>s.code);
-      const middleSet=new Set(this.shifts.filter(s=>s.period==='middle').map(s=>s.code));
-      const day1Set=new Set(this.shifts.filter(s=>s.period==='day1').map(s=>s.code));
+      const P=p=>this.shifts.filter(s=>s.period===p).map(s=>s.code);
+      const E=P('evening'),M=P('middle'),N=P('night'),D=P('day'),D1=P('day1');
+      // 엔진 _transition_rules 9종 그대로 — E→중 이 빠져 손으로 고친 E→중 이 안 보였다 (리뷰 2026-10-21).
+      // E→D1·중→D 는 마지막 수단(제1원칙 13) — 켜져 있으면 위반 표시가 아니라 서랍 '주의'의 파트장 확인 필요로 알린다
       const softTr=(this.rules||{}).rareTransitionLastResort!==false;
+      const rules=[[E,D,'E→D'],[E,D1,'E→D1',softTr],[E,M,'E→중'],[N,E,'N→E'],[N,D,'N→D'],[N,D1,'N→D1'],[N,M,'N→중'],
+        [M,D,'중→D',softTr],[M,D1,'중→D1']].filter(r=>!r[3]);
       for(const nurse of this.nurses){
         const nid=nurse.id;
         for(let i=0;i<days.length-1;i++){
@@ -264,16 +267,8 @@ window.MiscFeaturesModule = function() {
           if(!s1||!s2)continue;
           const d1=days[i].getDate(),dn1=dayNames[days[i].getDay()];
           const d2=days[i+1].getDate(),dn2=dayNames[days[i+1].getDay()];
-          if(eveningCodes.includes(s1)&&dayCodes.includes(s2)){
-            // E→D1·중→D 는 마지막 수단(제1원칙 13) — 위반 표시가 아니라 서랍 '주의'의 파트장 확인 필요로 알린다
-            const rule=`${middleSet.has(s1)?'중':'E'}→${day1Set.has(s2)?'D1':'D'}`;
-            if(softTr&&(rule==='E→D1'||rule==='중→D'))continue;
-            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (${rule})`});
-          }
-          if(nightCodes.includes(s1)&&dayCodes.includes(s2))
-            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (N→D)`});
-          if(nightCodes.includes(s1)&&eveningCodes.includes(s2))
-            v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (N→E)`});
+          for(const[a,b,rule]of rules)
+            if(a.includes(s1)&&b.includes(s2))v.push({nid,dk:dk2,msg:`${nurse.name}: ${d1}${dn1} ${s1}→${d2}${dn2} ${s2} (${rule})`});
         }
       }
       this.scheduleViolations=v;
@@ -334,9 +329,15 @@ window.MiscFeaturesModule = function() {
     },
 
     // ═══ 최근 작업 복원 확장 ══════════════════════════════
+    // 사전입력·필요 인원·공휴일·잠금·메모·전월N 을 병동(프로필)마다 키 하나('ns_full_state:<id>')에 — 30초마다·창 닫을 때·병동 바꾸기 전.
+    // 늘 마지막 것 하나라 다시 열면 가장 새 것이 열린다. _lsPid = 지금 화면에 깔린 것이 어느 병동 것인가 — 프로필을 열고 복원하기 전·
+    // 프로필 고르는 화면·게스트는 null 이라 쓰지 않는다. 예전엔 병동 구분 없는 키 둘이라 다른 병동 것이 깔리고, 창 닫을 때만 쓰는 낡은 것이
+    // 30초 자동 보관보다 먼저 열리고, 프로필 화면에서 닫으면 빈 상태가 덮었다 (2026-10-21)
+    _lsPid:null,
     _saveFullState(){
+      if(!this._lsPid||this.profileScreen)return;
       try{
-        localStorage.setItem('ns_full_state',JSON.stringify({
+        localStorage.setItem('ns_full_state:'+this._lsPid,JSON.stringify({
           y:this.year,m:this.month,tab:this.activeTab,
           ps:this.prevSchedule,dr:this.prevDayReqs,hd:this.holidays,
           lk:this.lockedCells,nt:this.cellNotes,mn:this.prevMonthNights,
@@ -345,17 +346,27 @@ window.MiscFeaturesModule = function() {
       }catch(e){}
     },
     _restoreFullState(){
+      const pid=this.currentProfile;
+      this._lsPid=(this.profiles||[]).some(p=>p.id===pid&&p.is_guest)?null:pid;   // 게스트는 '종료 시 데이터 삭제' — 보관하지 않는다
+      if(!this._lsPid)return false;
       try{
-        const raw=localStorage.getItem('ns_full_state');
-        if(!raw)return false;
-        const d=JSON.parse(raw);
-        if(Date.now()-d.t>172800000)return false; // 48시간 초과 무시
+        const raw=localStorage.getItem('ns_full_state:'+pid);
+        const d=raw?JSON.parse(raw):this._legacyFullState();
+        if(!d)return false;
         if(Object.keys(this.prevSchedule).some(k=>Object.keys(this.prevSchedule[k]).length>0))return false;
         this.year=d.y;this.month=d.m;this.activeTab=d.tab||'preinput';
         this.prevSchedule=d.ps||{};this.prevDayReqs=d.dr||{};this.holidays=d.hd||[];
         this.lockedCells=d.lk||{};this.cellNotes=d.nt||{};this.prevMonthNights=d.mn||{};
         return true;
       }catch(e){return false}
+    },
+    // 예전 판의 병동 구분 없는 키 둘 — 그 사전입력의 사람이 이 병동 명부에 있으면 더 새 것을 한 번 이어받고 지운다 (판 올림에 작업을 잃지 않게)
+    _legacyFullState(){
+      const keys=['ns_full_state','ns_prev_autosave'];
+      const d=keys.map(k=>{try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}).filter(x=>x&&x.ps).sort((a,b)=>(b.t||0)-(a.t||0))[0];
+      if(!d||!Object.keys(d.ps).some(id=>(this.nurses||[]).some(n=>n.id===id)))return null;
+      for(const k of keys)localStorage.removeItem(k);
+      return d;
     },
 
     // ═══ PDF 내보내기 (인쇄 기반) ═════════════════════════
@@ -387,8 +398,10 @@ window.MiscFeaturesModule = function() {
       const rest=this.nurses.filter(n=>!group.includes(n));
       rest.splice(rest.indexOf(target)+(from<idx?1:0),0,...group);
       this.nurses.splice(0,this.nurses.length,...rest);
-      // 서버에 순서 저장
-      this.api('POST','/api/nurses/reorder',{order:this.nurses.map(n=>n.id)}).catch(()=>{});
+      // 순서 = 시니어리티 (결정 1-5) — 엔진의 차지 선임 규칙은 seniority 값을 본다. 서버는 ids 를 읽는다
+      // (예전엔 {order} 로 보내 아무것도 저장되지 않고, 이 값도 그대로라 차지가 옛 순서로 갔다 — 2026-10-21)
+      this.nurses.forEach((n,i)=>{n.seniority=i});
+      this.api('POST','/api/nurses/reorder',{ids:this.nurses.map(n=>n.id)}).catch(()=>this.toast('간호사 순서를 저장하지 못했습니다 — 다시 옮겨 주세요','error'));
       this.toast(group.length>1?`${group.length}명 순서를 함께 옮겼어요`:'간호사 순서가 변경되었습니다','info');
     },
 

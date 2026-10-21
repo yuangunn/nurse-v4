@@ -342,9 +342,9 @@ class _HighsConstraintsMixin:
                             and self._preg_window_on(nid, self.all_dates[d])]
                 if not win_days:
                     continue
-                p1_vars = [x[nid][d]["P1"] for d in win_days
-                           if isinstance(x[nid][d].get("P1"), pulp.LpVariable)]
-                if not p1_vars:
+                # 상수도 합에 넣는다 (주 OF 식처럼) — 완화의 잠긴 P1(상수 1)을 빼면 같은 주에 P1 을 하나 더 강제했다
+                p1_terms = [x[nid][d]["P1"] for d in win_days]
+                if not any(isinstance(t, pulp.LpVariable) for t in p1_terms):
                     continue
                 # 사실-클램프: 구간 전체 확정이면 스킵, 일부 확정이면 확정 P1만큼 상향
                 if all(self._pin.get((nid, d)) for d in win_days):
@@ -352,9 +352,9 @@ class _HighsConstraintsMixin:
                 bound = max(1, self._pin_nurse_count(nid, win_days, ("P1",)))
                 full_week = (we - ws + 1) == len(win_days)
                 if full_week and len(win_days) >= 7:
-                    prob += pulp.lpSum(p1_vars) == bound, f"preg_p1_{nid}_{ws}"
+                    prob += pulp.lpSum(p1_terms) == bound, f"preg_p1_{nid}_{ws}"
                 else:
-                    prob += pulp.lpSum(p1_vars) <= bound, f"preg_p1_{nid}_{ws}"
+                    prob += pulp.lpSum(p1_terms) <= bound, f"preg_p1_{nid}_{ws}"
 
     def _c_max_consecutive_work(self, prob, x, max_days: int):
         """최대 연속 근무일 제한 (전월 내부 완결 윈도우는 제외 — 역사 소급 금지).
@@ -496,6 +496,8 @@ class _HighsConstraintsMixin:
     def _c_max_v_per_month(self, prob, x):
         """V(연차) 당월 최대 사용 횟수 (hard constraint) + 익월에서 V 사용 금지
         unlimited_v=True일 때는 당월 V 상한 제거 (목적함수 페널티로 대체)"""
+        if "V" not in self.ALL_SHIFTS:
+            return   # 근무 정의에서 V 를 지웠으면 걸 칸이 없다 — x[..]["V"] KeyError 500 (CP-SAT 과 같게, 리뷰 2026-10-21)
         max_v = self.rules.maxVPerMonth
         for nurse in self.nurses:
             nid = nurse["id"]
@@ -633,8 +635,8 @@ class _HighsConstraintsMixin:
             #       + 사실-클램프: 확정분이 목표를 넘으면 실측 존중, 자유 일수가
             #       모자라면 달성 가능한 만큼만 요구 ──────────────────────────
             pin_n = self._pin_nurse_count(nid, month_idxs, self.NIGHT_SHIFTS)
-            free_days = sum(1 for d in month_idxs
-                            if self._nurse_active_idx(nurse, d) and not self._pin.get((nid, d)))
+            free_days = sum(1 for d in month_idxs     # 사실 칸(완화에선 잠긴 칸)은 자유 일수가 아니다
+                            if self._nurse_active_idx(nurse, d) and not self._fact_code(nurse, d))
             eff_target = min(max(night_target, pin_n), pin_n + free_days)
             night_sum = pulp.lpSum(
                 x[nid][d][s]
@@ -786,8 +788,11 @@ class _HighsConstraintsMixin:
                         )
                         for nurse in fairness_pool
                     }
-                    max_n = pulp.LpVariable(f"max_nights_{rid}", lowBound=0, cat="Integer")
-                    min_n = pulp.LpVariable(f"min_nights_{rid}", lowBound=0, cat="Integer")
+                    # 위 한계는 CP-SAT 과 같게 — 점수를 양수로 두면 range 를 끝없이 키워 모델이 무한대(→ '원인 불명' 실패)였다
+                    ub_fair = max(1, len(month_days)) + max(
+                        (int(self.fairness_offsets.get(n["id"], 0)) for n in fairness_pool), default=0)
+                    max_n = pulp.LpVariable(f"max_nights_{rid}", lowBound=0, upBound=ub_fair, cat="Integer")
+                    min_n = pulp.LpVariable(f"min_nights_{rid}", lowBound=0, upBound=ub_fair, cat="Integer")
                     for nurse in fairness_pool:
                         nid = nurse["id"]
                         # 공정성 원장: (직전 달 누적 + 당월)의 편차를 최소화 —
@@ -795,7 +800,7 @@ class _HighsConstraintsMixin:
                         off = int(self.fairness_offsets.get(nid, 0))
                         prob += max_n >= night_counts[nid] + off, f"max_n_{rid}_{nid}"
                         prob += min_n <= night_counts[nid] + off, f"min_n_{rid}_{nid}"
-                    range_var = pulp.LpVariable(f"night_range_{rid}", lowBound=0, cat="Integer")
+                    range_var = pulp.LpVariable(f"night_range_{rid}", lowBound=0, upBound=ub_fair, cat="Integer")
                     prob += range_var >= max_n - min_n, f"night_range_def_{rid}"
                     terms.append(sc * range_var)
 
@@ -815,15 +820,17 @@ class _HighsConstraintsMixin:
                         )
                         for nurse in fairness_pool
                     }
-                    max_w = pulp.LpVariable(f"max_wh_{rid}", lowBound=0, cat="Integer")
-                    min_w = pulp.LpVariable(f"min_wh_{rid}", lowBound=0, cat="Integer")
+                    ub_wh = len(burden_days) + max(     # 위 한계는 CP-SAT 과 같게 (night_fairness 와 같은 이유)
+                        (int(self.weekend_offsets.get(n["id"], 0)) for n in fairness_pool), default=0)
+                    max_w = pulp.LpVariable(f"max_wh_{rid}", lowBound=0, upBound=ub_wh, cat="Integer")
+                    min_w = pulp.LpVariable(f"min_wh_{rid}", lowBound=0, upBound=ub_wh, cat="Integer")
                     for nurse in fairness_pool:
                         nid = nurse["id"]
                         # 공정성 원장: 지난달 주말·공휴일을 많이 뛴 사람은 이번 달 적게 받는다
                         off = int(self.weekend_offsets.get(nid, 0))
                         prob += max_w >= wh_counts[nid] + off, f"max_wh_{rid}_{nid}"
                         prob += min_w <= wh_counts[nid] + off, f"min_wh_{rid}_{nid}"
-                    range_w = pulp.LpVariable(f"wh_range_{rid}", lowBound=0, cat="Integer")
+                    range_w = pulp.LpVariable(f"wh_range_{rid}", lowBound=0, upBound=ub_wh, cat="Integer")
                     prob += range_w >= max_w - min_w, f"wh_range_def_{rid}"
                     terms.append(sc * range_w)
 

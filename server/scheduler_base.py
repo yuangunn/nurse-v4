@@ -848,6 +848,15 @@ class _SchedulerBase:
             pre = None
         return self._preg_effective_pre(nurse, dt, pre)
 
+    def _pre_domain(self, nurse: dict, pre: str) -> set:
+        """엄격의 사전입력 칸 도메인 — 넣은 코드(사실) + 자격 있는 같은 시간대 차지 승격(_PRE_FLEX).
+        확정 칸은 자격 검사를 건너뛰어, 자격 없는 사람의 D 가 DC 로 올라가 차지를 맡았다 (리뷰 2026-10-20).
+        완화의 잠긴 칸(_locked_domain)과 같은 규칙 — 두 엔진·진단 공용."""
+        if not pre:
+            return set()
+        capable = set(nurse.get("capable_shifts", self.WORK_SHIFTS))
+        return {pre} | {s for s in self._PRE_FLEX.get(pre, ()) if s in capable}
+
     # ── 원티드 '둘 중 하나'·'N 빼고' (제1원칙 14) ─────────────────────────────
 
     def _has_pre(self) -> bool:
@@ -877,9 +886,12 @@ class _SchedulerBase:
         if not self.flex_pre:
             return keeps
         idx = {dt.strftime("%Y-%m-%d"): d for d, dt in enumerate(self.all_dates)}
-        first = date(self.year, self.month, 1)
+        first, last = date(self.year, self.month, 1), self._month_last_day()
+        elig = {s["code"] for s in self._shifts if s["period"] in ("day", "evening", "night")}
+        non_night = {s["code"] for s in self._shifts if s["period"] not in ("night", "rest", "leave")}
         for nurse in self.nurses:
             nid = nurse["id"]
+            capable = set(nurse.get("capable_shifts", self.WORK_SHIFTS))
             for dt_str, code in self.flex_pre.get(nid, {}).items():
                 d = idx.get(dt_str)
                 if d is None or nid not in x or not self._nurse_active_on(nurse, self.all_dates[d]):
@@ -889,6 +901,12 @@ class _SchedulerBase:
                 hard = (not soft or bool(self.locked_cells.get(nid, {}).get(dt_str))
                         or self.all_dates[d] < first)
                 if hard:
+                    # 그날 받을 수 있는 허용 근무가 없으면(자격·생성 달 나이트킵의 야간만) 원티드를 무시한다 — 하드로 묶으면
+                    # 그 칸에 놓을 근무가 없어 근무표 전체가 막혔다 (같은 칸의 확정 'D' 는 사실로 받는다, 리뷰 2026-10-20)
+                    keeper = first <= self.all_dates[d] <= last and self._keeper_on(nurse, self.all_dates[d])
+                    if not any(s in cell and not isinstance(cell[s], int) and not (s in elig and s not in capable)
+                               and not (keeper and s in non_night) for s in allowed):
+                        continue
                     for s in list(cell):
                         if s not in allowed:
                             cell[s] = 0
@@ -1064,6 +1082,8 @@ class _SchedulerBase:
             "rest":       self.REST_SHIFTS,
             "leave":      self.LEAVE_SHIFTS,
             "rest_leave": self.REST_SHIFTS + self.LEAVE_SHIFTS,
+            # 야간이 아닌 날 (낮·저녁·휴무·휴가) — 단독 나이트 감점 [non_night, night, non_night] (결정 1-55)
+            "non_night":  [s for s in self.ALL_SHIFTS if s not in self.NIGHT_SHIFTS],
             "any":        self.ALL_SHIFTS,
         }
         if group.startswith("specific:"):
@@ -1093,7 +1113,7 @@ class _SchedulerBase:
         month_days_count = _cal.monthrange(self.year, self.month)[1]
         month_dates = [date(self.year, self.month, d) for d in range(1, month_days_count + 1)]
         dt_keys = [dt.strftime("%Y-%m-%d") for dt in month_dates]
-        # 전환·연속·패턴·주말·공휴일은 목적함수와 같은 날 (생성 달 + 끝에 붙은 다음 달 며칠) — 달 예산·위시는 dt_keys
+        # 전환·연속·패턴·주말·공휴일·위시는 목적함수와 같은 날 (생성 달 + 끝에 붙은 다음 달 며칠) — 달 예산은 dt_keys
         score_dates = [self.all_dates[d] for d in self._score_days()]
         score_keys = [dt.strftime("%Y-%m-%d") for dt in score_dates]
 
@@ -1158,7 +1178,7 @@ class _SchedulerBase:
                                 dk = date.fromisoformat(ds).strftime("%Y-%m-%d")
                             else:
                                 dk = date(self.year, self.month, int(ds)).strftime("%Y-%m-%d")
-                            if dk not in dt_keys:
+                            if dk not in score_keys:   # 목적함수처럼 끝에 붙은 다음 달 며칠도 (지난달은 뺀다)
                                 continue
                             s = ns.get(dk, "")
                             granted = (
@@ -1316,6 +1336,25 @@ class _SchedulerBase:
                 last = dt
             dt += timedelta(days=1)
         return (blk, last.weekday()) if last else None
+
+    def _juhu_block_dows(self, nurse, x, is_var) -> dict:
+        """블록 → 그 블록 주휴가 따를 요일 (요일 어기기 감점 _juhu_anchor_pen 의 기준) — 양 엔진 공용.
+        지난달에 시작한 블록은 지난달 요일(_juhu_anchor, 결정 1-37). 아니면 이번 달 옮길 수 없는 주휴(잠긴 칸 — 상수 1)가
+        한 요일이면 그 요일: 블록 잠금이 자유 변수끼리만 묶어, 잠근 월요일 주휴 옆에서 나머지 주휴가 함께 화요일로 갔다
+        (리뷰 2026-10-20). 나이트킵의 날·재적 밖은 세지 않는다 (_juhu_block_items 와 같다)."""
+        first = date(self.year, self.month, 1)
+        fixed = {}
+        for d, dt in enumerate(self.all_dates):
+            if dt < first or not self._nurse_active_idx(nurse, d) or self._keeper_on(nurse, dt):
+                continue
+            t = x.get(nurse["id"], {}).get(d, {}).get("주")
+            if t is not None and not is_var(t) and t == 1:
+                fixed.setdefault(self._juhu_block(d), set()).add(dt.weekday())
+        out = {blk: min(wds) for blk, wds in fixed.items() if len(wds) == 1}
+        anchor = self._juhu_anchor(nurse)
+        if anchor:
+            out[anchor[0]] = anchor[1]
+        return out
 
     def _juhu_block_items(self, nurse, x, is_var):
         """블록 → [(날짜 인덱스, 파이썬 weekday, 주휴 변수)] — 양 엔진 공용 수집기.
@@ -1478,7 +1517,9 @@ class _SchedulerBase:
                     if pp not in dr:
                         unbounded = True      # 인원 제약이 없는 시간대 — 상한 없음
                         continue
-                    pinned = sum(1 for c in facts if c in codes) if clamp else 0
+                    # 완화를 켜도 잠긴 칸은 사실이다 — 엔진 인원 제약(_pin_day_period_count)과 같은 값
+                    pinned = (sum(1 for c in facts if c in codes) if clamp
+                              else sum(1 for n in act_n if self._locked_code(n, d) in codes))
                     work_need += max(int(dr.get(pp) or 0), pinned)
             if unbounded:
                 continue
@@ -1735,7 +1776,8 @@ class _SchedulerBase:
                         continue
                     active_all[nid] += 1
                     day["active"] += 1
-                    pinned = self._pin.get((nid, d)) == code
+                    # 사람이 넣은 칸 — 사전입력과 직접 견준다 (완화에선 _pin 이 비어 사전입력 V 를 자동 배정으로 셌다)
+                    pinned = self.prev.get(nid, {}).get(dk) == code
                     if code in work_codes:
                         day["work"] += 1
                         continue
@@ -1803,15 +1845,32 @@ class _SchedulerBase:
         active = [n for n in self.nurses if self._nurse_active_on(n, dt)]
         return bool(active) and all((n["id"], d) in self._pin for n in active)
 
+    def _locked_code(self, nurse, d):
+        """완화에서도 상수로 묶이는 칸(잠긴 칸·지난달 기록)의 유효 사전입력 — 재적 안만, 아니면 None."""
+        dt = self.all_dates[d]
+        iso = dt.strftime("%Y-%m-%d")
+        pre = self.prev.get(nurse["id"], {}).get(iso)
+        if (not pre or not self._nurse_active_on(nurse, dt)
+                or not (self.locked_cells.get(nurse["id"], {}).get(iso) or dt < date(self.year, self.month, 1))):
+            return None
+        return self._effective_pre(nurse, dt, pre, iso in self.holidays)
+
+    def _fact_code(self, nurse, d):
+        """사실 칸의 코드 — 사실-클램프(_pin)가 켜져 있으면 그것, 꺼져 있으면(완화) 잠긴 칸(_locked_code).
+        잠긴 칸은 완화에서도 상수라 인원·상한을 그 수 아래로 걸면 모델이 모순이다 — 엄격에서 되는 표가
+        완화를 켜면 통째로 실패했다 (잠긴 V 셋·한 주 OF 둘·필요 2명인 날 D 셋, 리뷰 2026-10-20)."""
+        return self._pin.get((nurse["id"], d)) if self._pin else self._locked_code(nurse, d)
+
     def _pin_day_period_count(self, d, codes) -> int:
-        """그 날 확정 셀 중 코드 그룹에 속하는 수 (D↔DC류 플렉스는 period 불변)."""
+        """그 날 사실 칸(_fact_code) 중 코드 그룹에 속하는 수 (D↔DC류 플렉스는 period 불변)."""
         codes = set(codes)
-        return sum(1 for n in self.nurses if self._pin.get((n["id"], d)) in codes)
+        return sum(1 for n in self.nurses if self._fact_code(n, d) in codes)
 
     def _pin_nurse_count(self, nid, day_idxs, codes) -> int:
-        """간호사 nid의 확정 셀 중 코드 그룹 개수 (day_idxs 범위)."""
+        """간호사 nid의 사실 칸(_fact_code) 중 코드 그룹 개수 (day_idxs 범위)."""
+        nurse = next((n for n in self.nurses if n["id"] == nid), None)
         codes = set(codes)
-        return sum(1 for d in day_idxs if self._pin.get((nid, d)) in codes)
+        return sum(1 for d in day_idxs if self._fact_code(nurse, d) in codes) if nurse else 0
 
     def _pre_code_count(self, nurse, day_idxs, code) -> int:
         """사전입력(유효 — _effective_pre)이 code 인 칸 수, 재적 안만 — strict·완화 모두.
@@ -1961,21 +2020,11 @@ class _SchedulerBase:
         return n
 
     def _cap_with_training(self, nurse, day_idxs, code: str, base: int, train_idxs=None) -> int:
-        """한도 base 인 x 합(day_idxs)의 상한 — 사실-클램프(확정분만큼 올림)에 트레이닝 날 자기 사전입력분
-        (train_idxs, 없으면 day_idxs)을 더해 센다. 트레이닝 날 것이 없으면 예전 그대로 max(base, 확정분).
-        완화에선 잠긴 칸(상수 1)이 모순이 되지 않게 그 수 아래로는 내리지 않는다.
+        """한도 base 인 x 합(day_idxs)의 상한 — 트레이닝 날 자기 사전입력분(train_idxs, 없으면 day_idxs)을 한도에서 빼고,
+        사실 칸(_fact_code — 엄격은 확정분, 완화는 잠긴 칸) 수 아래로는 내리지 않는다 (잠긴 칸은 완화에서도 상수 1).
         양 엔진·신호등이 같은 값을 쓴다 (주 OF·월 V·꼬리 V·월 생)."""
-        nid = nurse["id"]
-        pinned = self._pin_nurse_count(nid, day_idxs, (code,))
         used = self._train_own_count(nurse, day_idxs if train_idxs is None else train_idxs, code)
-        if not used:
-            return max(base, pinned)
-        pre, locked = self.prev.get(nid, {}), self.locked_cells.get(nid, {})
-        held = sum(1 for d in day_idxs
-                   if locked.get(self.all_dates[d].strftime("%Y-%m-%d"))
-                   and pre.get(self.all_dates[d].strftime("%Y-%m-%d")) == code
-                   and self._nurse_active_idx(nurse, d))
-        return max(base - used, pinned, held)
+        return max(base - used, self._pin_nurse_count(nurse["id"], day_idxs, (code,)))
 
     def _of_week_bound(self, nurse, ws: int, we: int, week_days: list) -> int:
         """그 주 일반의 날 OF 상한 — 확정 OF 수와 1 중 큰 것 (사실-클램프), 트레이닝 날 OF 만큼 1 에서 뺀다.

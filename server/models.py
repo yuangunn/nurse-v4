@@ -169,6 +169,7 @@ class ScheduleSave(BaseModel):
     nurse_score_details: Optional[Dict[str, Any]] = None
     locked_cells: Optional[Dict[str, Any]] = None
     cell_notes: Optional[Dict[str, Any]] = None
+    relaxed_cells: Optional[Dict[str, Any]] = None   # 완화로 뒤집힌 원티드 — 빠져 있어 원장이 늘 '차이'로 셌다
     holidays: Optional[List[str]] = None
     prev_day_reqs: Optional[Dict[str, Any]] = None
     prev_month_nights: Optional[Dict[str, Any]] = None

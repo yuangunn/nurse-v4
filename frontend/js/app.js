@@ -73,7 +73,7 @@ function app() {
     analysisResult:null, juhuRecommendation:null, analysisRunning:false,
     // ── 사전입력 향상 기능 ──
     _undoStack:[], _redoStack:[], _maxUndo:40,
-    _autoSaveTimer:null, _autoSaveKey:'ns_prev_autosave',
+    _autoSaveTimer:null,
     prevViolations:[], _violationSet:new Set(),
     prevPinNotes:[], _pinNoteSet:new Set(),   // 규칙과 다르지만 확정으로 수용되는 항목 (사실-클램프)
     feas:null, _feasSeq:0, _feasTimer:null, // 실시간 생성 가능성 신호등 (/api/feasibility)
@@ -423,7 +423,7 @@ function app() {
       return [{label:'D',shifts:d,color:'text-blue-700'},{label:'E',shifts:e,color:'text-green-700'},{label:'N',shifts:n,color:'text-amber-700'},{label:'휴무',shifts:r,color:'text-gray-600'}];
     },
     get periodGroups(){
-      const base=[{value:'work',label:'모든 근무'},{value:'day',label:'낮 근무 (D, DC, D1)'},{value:'evening',label:'저녁 근무 (E, EC, 중)'},{value:'night',label:'야간 근무 (N, NC)'},{value:'rest',label:'휴무 (OF, 주)'},{value:'leave',label:'휴가 (V, 생, 특...)'},{value:'rest_leave',label:'휴무/휴가'},{value:'any',label:'전체'}];
+      const base=[{value:'work',label:'모든 근무'},{value:'day',label:'낮 근무 (D, DC, D1)'},{value:'evening',label:'저녁 근무 (E, EC, 중)'},{value:'night',label:'야간 근무 (N, NC)'},{value:'rest',label:'휴무 (OF, 주)'},{value:'leave',label:'휴가 (V, 생, 특...)'},{value:'rest_leave',label:'휴무/휴가'},{value:'non_night',label:'야간 아닌 날 (낮·저녁·휴무·휴가)'},{value:'any',label:'전체'}];
       const specifics=this.shifts.map(s=>({value:`specific:${s.code}`,label:`특정: ${s.code} (${s.name})`}));
       return [...base,...specifics];
     },
@@ -467,7 +467,9 @@ function app() {
             e.preventDefault()}
         });
       }
-      window.addEventListener('beforeunload',()=>{this._saveFullState();this._closeCurrentProfile()});
+      // 만드는 중이면 프로필을 닫지 않는다 — 서버는 새로고침 복구용으로 계속 풀고, 끝나며 닫힌 프로필 자리에 빈 DB 를 만들어
+      // 다시 열 때 병동 데이터가 그것으로 덮였다 (앱 종료 때는 electron main 이 닫는다)
+      window.addEventListener('beforeunload',()=>{this._saveFullState();if(!this.generating)this._closeCurrentProfile()});
       document.addEventListener('mouseup',()=>{if(this._isDragging)this.gridUp();this._rosterPaint=null});
       // 표 칸 ↔ 엑셀 (Ctrl+C·X·V) — 고른 칸이 있고 입력 칸·팝업이 아닐 때만 (drag-select.js).
       // init 이 두 번 불려도 한 번만 건다 — 겹치면 붙여넣기 한 번에 되돌리기가 두 번 쌓였다
@@ -482,6 +484,7 @@ function app() {
       // 달이 바뀌면 고른 칸 번호가 다른 날을 가리킨다 — 선택·근무표 되돌리기를 비운다 (그대로 두면 Ctrl+V 가 엉뚱한 날에 붙었다)
       this.$watch('month',()=>this._resetGridHistory());
       this.$watch('year',()=>this._resetGridHistory());
+      this.$watch('unlimitedV',()=>this._queueFeasibility&&this._queueFeasibility());   // 'V 무제한'은 신호등 판정을 바꾼다
       window.addEventListener('resize',()=>{if(this.gridFit)this.rdFitColumnsSoon()});
       window.__rdState=(screen,state)=>this.rdApplyState(screen,state);   // design/handoff/check 검증용 상태 진입
     },
@@ -524,7 +527,7 @@ function app() {
       this._prevJuhuYM='';this.prevMonthJuhu={};   // 지난달 주휴 날짜는 프로필(병동)마다 — 같은 달이어도 다시 받는다
       await Promise.all([this.loadNurses(),this.loadRules(),this.loadRequirements(),this.loadShifts(),this.loadScoringRules(),this.loadSavedList(),this.loadPrevSavesList()]);
       this._checkPendingGenerate();
-      this._restoreFullState()||this._restoreAutoSave();
+      this._restoreFullState();
       this._pickLandingTab();
       this._checkViolations(); // 복원된 사전입력 기준 라인트 + 신호등 초기 판정
       this._startAutoSave();
@@ -587,17 +590,23 @@ function app() {
     },
 
     // #13 스케줄 자동 저장
-    async _autoSaveSchedule(){
-      if(!this.schedule||!Object.keys(this.schedule).length)return;
+    // over = 화면에 넣지 않은 결과 {year,month,schedule,nurse_scores,nurse_score_details,relaxed_cells} — 만드는 동안 달이 바뀐 생성
+    // (solver.js _offscreenResult). 이름·년월은 그 결과의 달로 — 지금 보는 달로 저장해 그 달 자동저장본을 지웠다 (2026-10-21)
+    async _autoSaveSchedule(over){
       // 저장할 본문은 기다리기 전에 만든다 — 그 사이 이어 찾기(결정 1-50)가 계산 기록을 비워 빈 기록이 저장됐다 (리뷰 2026-10-19)
       // 수동 저장(saveSchedule)과 동일한 스키마 — 이전 payload는 ScheduleSave 필수 필드가 없어 항상 422로 무음 실패했다.
-      const name=`자동저장 ${this.year}-${String(this.month).padStart(2,'0')}`, year=this.year, month=this.month;
-      const body={year,month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights,relaxed_cells:this.relaxedCells};
+      const year=over?over.year:this.year, month=over?over.month:this.month;
+      const name=`자동저장 ${year}-${String(month).padStart(2,'0')}`;
+      const body={year,month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights,relaxed_cells:this.relaxedCells,...over};
+      if(!body.schedule||!Object.keys(body.schedule).length)return;
       try{
-        // 같은 달 자동저장본은 하나만 — 이전 것을 지우고 새로 넣는다 (사용자 결정 2026-09-06 "자동저장 붙이자")
-        try{ const list=await this.api('GET','/api/schedules'); for(const s of (list||[])){ if(s.name===name&&+s.year===+year&&+s.month===+month) await this.api('DELETE',`/api/schedules/${s.id}`); } }catch(e){}
+        // 같은 달 자동저장본은 하나만 (사용자 결정 2026-09-06 "자동저장 붙이자") — 새것을 먼저 넣고 옛것을 지운다.
+        // 먼저 지우면 그 사이 프로필 닫기(409)·실패에 그 달 자동저장본이 아예 없어졌다 (리뷰 2026-10-21)
+        let old=[];
+        try{ old=((await this.api('GET','/api/schedules'))||[]).filter(s=>s.name===name&&+s.year===+year&&+s.month===+month).map(s=>s.id); }catch(e){}
         await this.api('POST','/api/schedules',body);
-        this.rdSaved=true;
+        for(const id of old){ try{ await this.api('DELETE',`/api/schedules/${id}`); }catch(e){} }
+        if(!over)this.rdSaved=true;
         this.toast('근무표 자동 저장됨','info');
         this.loadSavedList();
       }catch(e){console.warn('자동저장 실패:',e)}
@@ -650,11 +659,15 @@ function app() {
           this._recoverPoll=setInterval(async()=>{
             const pollRef=this._recoverPoll;
             try{const r=await this.api('GET','/api/generate/result');
-              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;if(this._contNotBetter(result))return;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];this.managerCheck=result.manager_check||[];this.vReport=result.v_report||null;this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.managerCheck||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':((this.managerCheck||[]).length?'warn':(this.vReport&&this.vReport.total?'v':'summary'));this.rdDoneAt=new Date();this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
+              if(r.status==='done'&&r.result){clearInterval(pollRef);if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generating=false;this.generateFinalElapsed=this.generateElapsed;const result=r.result;
+                if(!this._resultHere(result)){this.statusMessage='';this._offscreenResult(result,result,result.profile_id??this.currentProfile);return}   // 다른 달·병동 — 그 달 이름으로만 저장
+                if(this._contNotBetter(result))return;this.statusOk=result.success;this.statusMessage=result.message;this.generationReport=result.generation_report||null;this.wishReport=result.wish_report||null;this.offTeukgeun=result.off_teukgeun||[];this.managerCheck=result.manager_check||[];this.vReport=result.v_report||null;this.fairnessOffsets=result.fairness_offsets||null;this.weekendOffsets=result.weekend_offsets||null;if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.managerCheck||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':((this.managerCheck||[]).length?'warn':(this.vReport&&this.vReport.total?'v':'summary'));this.rdDoneAt=new Date();this.trackEdits();this._autoSaveSchedule();this.runAnalysis()}}
             }catch(e){}
           },2000);
         }else if(res.status==='done'&&res.result){
-          const result=res.result;if(this._contNotBetter(result))return;this.statusOk=result.success;this.statusMessage=result.message+'\n(이전 생성 결과 복원됨)';
+          // 다른 병동·다른 달의 마지막 결과는 깔지 않는다 — B 화면에 A 의 표·이름이, 12월 화면에 11월 표가 '저장됨'으로 떴다.
+          // 끝난 결과는 만든 화면이 이미 저장했다 (여기서 다시 저장하면 그 달의 더 새 자동저장본을 덮을 수 있다)
+          const result=res.result;if(!this._resultHere(result)||this._contNotBetter(result))return;this.statusOk=result.success;this.statusMessage=result.message+'\n(이전 생성 결과 복원됨)';
           this.generationReport=result.generation_report||null;
           this.wishReport=result.wish_report||null;
           this.offTeukgeun=result.off_teukgeun||[];this.managerCheck=result.manager_check||[];this.vReport=result.v_report||null;

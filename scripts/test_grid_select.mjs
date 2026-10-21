@@ -184,4 +184,28 @@ const days0 = (a) => a.scheduleDays.findIndex((d) => a.dayKey(d) === dk(1));   /
   await a.switchToProfile({ id: 'p2', has_password: false });
   assert.deepEqual([a._schedUndo.length, a._sel, a._originalSchedule], [0, null, null]);
 }
+// ⑫ 공휴일 지정·다른 달 정리도 되돌리기 기록 — 스냅숏엔 드는데 기록이 없어 다음 Ctrl+Z 가 말없이 되돌렸다.
+//    사람별 '입력 수'는 이 화면 주기만. 자동저장은 새것을 먼저 넣고 옛것을 지운다 (리뷰 2026-10-21)
+{
+  global.confirm = () => true;
+  const a = make(); const c0 = days0(a);
+  a.prevSchedule = { a: { [dk(3)]: 'D', '2025-12-01': 'N' } };
+  assert.equal(a.countNursePrev('a'), 1, '다른 달 칸은 세지 않는다');
+  a._setSel('preinput', 0, c0); a.gridKey(key('e'));
+  a.markHoliday(a.scheduleDays[c0 + 4]);
+  assert.equal(a.holidays.length, 1);
+  a.undo();
+  assert.deepEqual([a.holidays, a.prevSchedule.a[dk(1)]], [[], 'E'], '공휴일 지정만 되돌리고 앞 칸 입력은 그대로');
+  a.clearPrevOtherMonths();
+  assert.equal(a.prevSchedule.a['2025-12-01'], undefined);
+  a.undo();
+  assert.equal(a.prevSchedule.a['2025-12-01'], 'N', '다른 달 정리도 되돌린다');
+}
+{
+  const a = make(); a.schedule = { a: { [dk(1)]: 'D' } }; const calls = [];
+  a.api = async (m, path) => { calls.push(`${m} ${path}`); return m === 'GET' ? [{ id: 7, name: '자동저장 2026-03', year: 2026, month: 3 }] : {}; };
+  a.loadSavedList = () => {};
+  await a._autoSaveSchedule();
+  assert.deepEqual(calls, ['GET /api/schedules', 'POST /api/schedules', 'DELETE /api/schedules/7']);
+}
 console.log('test_grid_select: OK');

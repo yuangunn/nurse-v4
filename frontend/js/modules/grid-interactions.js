@@ -6,23 +6,10 @@
 window.GridInteractionsModule = function() {
   return {
     // ── Auto-save ──────────────────────────────────────────
+    // 30초마다 병동별 보관본에 (misc-features.js _saveFullState — 창 닫을 때와 같은 키) — 갑자기 꺼져도 30초 안의 것이 남는다
     _startAutoSave(){
       if(this._autoSaveTimer)return;
-      this._autoSaveTimer=setInterval(()=>{
-        try{localStorage.setItem(this._autoSaveKey,JSON.stringify({y:this.year,m:this.month,ps:this.prevSchedule,dr:this.prevDayReqs,hd:this.holidays,lk:this.lockedCells,nt:this.cellNotes,t:Date.now()}))}catch(e){}
-      },30000);
-    },
-    _restoreAutoSave(){
-      try{
-        const raw=localStorage.getItem(this._autoSaveKey);
-        if(!raw)return false;
-        const d=JSON.parse(raw);
-        if(Date.now()-d.t>86400000)return false; // 24시간 초과 무시
-        if(Object.keys(this.prevSchedule).some(k=>Object.keys(this.prevSchedule[k]).length>0))return false; // 이미 데이터 있으면 무시
-        this.year=d.y;this.month=d.m;this.prevSchedule=d.ps;this.prevDayReqs=d.dr||{};this.holidays=d.hd||[];
-        this.lockedCells=d.lk||{};this.cellNotes=d.nt||{};
-        return true;
-      }catch(e){return false}
+      this._autoSaveTimer=setInterval(()=>this._saveFullState(),30000);
     },
 
     // ── 실시간 제약 위반 경고 ──────────────────────────────
@@ -247,6 +234,7 @@ window.GridInteractionsModule = function() {
         let avail=0;
         for(const n of this.nurses){
           if((n.start_date&&dk<n.start_date)||(n.end_date&&dk>n.end_date))continue;
+          if(n.is_trainee&&this.isTraineeInTraining(n,day))continue;   // 트레이닝 중인 신규는 인원이 아니다 (엔진·분석 탭과 같다)
           const pre=this.prevSchedule[n.id]?.[dk];
           if(pre&&restLeave.includes(pre))continue;
           avail++;
@@ -271,7 +259,9 @@ window.GridInteractionsModule = function() {
     // gridKey / focusCell / isFocused / gridCopy / gridPaste 는 modules/drag-select.js (사전입력·근무표 공용).
 
     // ── 셀 잠금 ────────────────────────────────────────────
+    // 잠금·메모도 되돌리기 스냅숏에 들어 있다 — 기록을 남기지 않으면 앞 칸 Ctrl+Z 가 이것까지 말없이 지웠다 (리뷰 2026-10-21)
     toggleLock(nurseId,day){
+      this._pushUndo();
       const dk=this.dayKey(day);
       if(!this.lockedCells[nurseId])this.lockedCells[nurseId]={};
       if(this.lockedCells[nurseId][dk])delete this.lockedCells[nurseId][dk];
@@ -290,6 +280,7 @@ window.GridInteractionsModule = function() {
       };
     },
     saveNote(){
+      this._pushUndo();
       const{nurseId,dk,text,locked}=this.noteEdit;
       if(!this.cellNotes[nurseId])this.cellNotes[nurseId]={};
       if(text.trim())this.cellNotes[nurseId][dk]=text.trim();
@@ -340,10 +331,11 @@ window.GridInteractionsModule = function() {
     applyPreset(presetIdx,nurseId){this.presets[presetIdx].apply(nurseId);this.presetPanel=false},
 
     // ── 야간 카운터 ────────────────────────────────────────
+    // 이달 칸만 (열 제목 '이달 야간(N) 입력 수') — 다른 달 사전입력까지 세어 이달 2회가 8로 보였다 (리뷰 2026-10-21)
     countPrevNights(nurseId){
       const nightCodes=this.shifts.filter(s=>s.period==='night').map(s=>s.code);
-      const ps=this.prevSchedule[nurseId]||{};
-      return Object.values(ps).filter(v=>nightCodes.includes(v)).length;
+      const ym=`${this.year}-${String(this.month).padStart(2,'0')}-`;
+      return Object.entries(this.prevSchedule[nurseId]||{}).filter(([k,v])=>k.startsWith(ym)&&nightCodes.includes(v)).length;
     },
 
     // ── 사전입력 편집 래핑 (undo 지원) ────────────────────

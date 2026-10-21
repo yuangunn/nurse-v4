@@ -14,13 +14,15 @@ v4.3.1: 단일 슬롯(`_current`) → 다중 어댑터(`_adapters`)로 확장. �
     .progress() -> dict    {gap_percent, nodes, has_solution, is_running}
 
 생성 수명주기:
-    begin()                /api/generate 진입 — running 래치 ON (솔버 등록 전 구간)
+    begin()                /api/generate 진입 — running 래치 ON (솔버 등록 전 구간), 로그 큐 비우기
+    bind_thread()          레이스 엔진 스레드 시작 시 — 이 생성에 묶는다 (생성이 끝난 뒤 여는 풀이는 곧바로 취소)
     register(adapter)      솔버가 실제 실행 시작 시 (HiGHS run() / CP-SAT solve())
     unregister(adapter)    그 솔버 종료 시 (해당 어댑터만 제거)
     end()                  /api/generate 종료 — 전체 리셋(남은 어댑터까지 정리)
 """
 from __future__ import annotations
 
+import queue
 import threading
 import time
 
@@ -30,6 +32,11 @@ _running: bool = False     # 생성 수명주기 래치 (어댑터 등록 전에
 _cancelled: bool = False   # 사용자 취소 플래그 (레이스 패자 자동중지와 구분)
 _all_cancel: bool = False  # cancel_all 발생 래치 — 레이스 패자가 완화 재시도 등
                            # 후속 솔브를 시작하지 않도록 신호 (사용자 취소와 구분)
+_gen: int = 0              # 생성 번호 — begin 마다 +1 (레이스 스레드가 끝난 생성에 속하는지 가른다)
+_tls = threading.local()   # 레이스 엔진 스레드의 생성 번호 (bind_thread)
+# 솔버 로그 → SSE (api._log_queue 가 이것). 생성을 시작할 때 비운다 — 중지 뒤 소비자 없이 남은 지난 실행 로그가 있으면
+# 새 스트림이 그것만 흘리고 생성 전에 'done' 으로 끝났고, 다음 실행들도 계속 그랬다
+log_queue: queue.Queue = queue.Queue()
 
 # ── run 단위 이벤트 레코더 (생성 리포트·정체 감지의 정본) ─────────────────────
 # 공유 _log_queue는 race/완화 재시도에서 상호 드레인되고 타임스탬프가 없어
@@ -90,7 +97,7 @@ def _carry(p: dict) -> dict:
 def record_event(kind: str, **kw):
     """run 수명주기 내 이벤트 기록 (밖이면 무시 — 레이스 패자 잔류 이벤트 차단)."""
     with _lock:
-        if not _running or _run_t0 is None or len(_events) >= _MAX_EVENTS:
+        if not _running or _run_t0 is None or len(_events) >= _MAX_EVENTS or _stale_locked():
             return
         _events.append({"t": round(time.monotonic() - _run_t0, 1),
                         "kind": kind, **kw})
@@ -108,13 +115,24 @@ def clear():
         _all_cancel = False
 
 
+def _drain_logs():
+    """로그 큐 비우기 (queue 자체 잠금만 쓴다 — _lock 안에서 불러도 된다)."""
+    while True:
+        try:
+            log_queue.get_nowait()
+        except queue.Empty:
+            return
+
+
 def begin():
     """생성 시작 — running 래치 ON, 취소 플래그 초기화 (어댑터는 아직 없음)."""
-    global _running, _cancelled, _all_cancel
+    global _running, _cancelled, _all_cancel, _gen
     with _lock:
+        _drain_logs()
         _running = True
         _cancelled = False
         _all_cancel = False
+        _gen += 1
         _adapters.clear()
         _reset_recorder_locked()
 
@@ -122,13 +140,15 @@ def begin():
 def try_begin() -> bool:
     """원자적 생성 시작 — 이미 진행 중이면 False (is_running 체크와 begin 사이의
     TOCTOU 제거용). 성공 시 begin()과 동일한 상태가 된다."""
-    global _running, _cancelled, _all_cancel
+    global _running, _cancelled, _all_cancel, _gen
     with _lock:
         if _running or _adapters:
             return False
+        _drain_logs()   # running 을 켜기 전에 — 기다리던 스트림이 지난 실행 로그를 이번 것으로 흘리지 않게
         _running = True
         _cancelled = False
         _all_cancel = False
+        _gen += 1
         _adapters.clear()
         _reset_recorder_locked()
         return True
@@ -149,19 +169,33 @@ def end():
             pass
 
 
+def bind_thread():
+    """지금 스레드를 이번 생성에 묶는다 (레이스 엔진 스레드) — 생성이 끝난 뒤 이 스레드가 여는 풀이는
+    register 가 곧바로 취소하고, was_cancel_all 이 참이라 후속 풀이를 시작하지 않는다."""
+    _tls.gen = _gen
+
+
+def _stale_locked() -> bool:
+    """끝난 생성에 묶인 스레드인가 (묶지 않은 스레드 — 단일 엔진 요청·테스트·신호등 — 는 늘 아니다)."""
+    g = getattr(_tls, "gen", None)
+    return g is not None and (g != _gen or not _running)
+
+
 def register(adapter):
     """솔버 실행 시작 — 진행/취소 어댑터 등록.
 
-    - 생성 수명주기 밖(end() 이후 레이스 패자의 완화 솔브, 테스트의 직접 호출)
-      에서는 등록하지 않는다 — running 고착(이후 생성 409 차단) 방지.
-    - 이미 사용자 취소 상태면 등록 직후 cancel()을 보낸다 — 모델 빌드 구간에
-      눌린 중지가 유실되지 않도록.
+    - 생성 수명주기 밖(테스트·신호등의 직접 호출)에서는 등록하지 않는다 — running 고착(이후 생성 409 차단) 방지.
+    - 이미 사용자 취소·패자 취소(cancel_all) 뒤면 등록 직후 cancel()을 보낸다 — 모델 빌드 구간에
+      눌린 중지, 승자가 정해진 뒤 패자가 여는 완화·폴백 풀이가 유실되지 않도록.
+    - 끝난 생성에 묶인 레이스 스레드의 풀이는 등록하지 않고 곧바로 cancel() — 예전엔 어떤 중지도 닿지 않아
+      time_limit 동안 돌거나, 다음 생성에 등록돼 그 진행으로 보였다.
     """
-    cancel_now = False
     with _lock:
-        if _running:
+        stale = _stale_locked()
+        live = _running and not stale
+        if live:
             _adapters[id(adapter)] = adapter
-            cancel_now = _cancelled
+        cancel_now = stale or (live and (_cancelled or _all_cancel))
     if cancel_now:
         try:
             adapter.cancel()
@@ -213,8 +247,9 @@ def cancel_all_adapters():
 
 
 def was_cancel_all() -> bool:
-    """이번 생성 수명주기에서 cancel_all이 발생했는가 (레이스 패자 판별용)."""
-    return _all_cancel
+    """이번 생성 수명주기에서 cancel_all이 발생했는가 (레이스 패자 판별용) — 끝난 생성에 묶인 스레드엔 늘 참."""
+    with _lock:
+        return _all_cancel or _stale_locked()
 
 
 def request_cancel():
@@ -226,7 +261,9 @@ def request_cancel():
 
 
 def is_cancelled() -> bool:
-    return _cancelled
+    """사용자 중지 — 생성 수명주기 안에서만 참. end() 뒤에도 남아 생성 밖의 정밀 충돌 분석(/api/diagnose)이
+    다음 생성 전까지 '충돌 분석 미완료 (타임아웃)'만 냈다."""
+    return _cancelled and (_running or bool(_adapters))
 
 
 def get_progress() -> dict:

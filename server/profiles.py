@@ -7,6 +7,7 @@ import sys
 import hashlib
 import base64
 import shutil
+import sqlite3
 import tempfile
 from pathlib import Path
 from typing import Optional, Dict, List
@@ -48,10 +49,19 @@ def _load_profiles() -> Dict:
     }
 
 
+def _atomic_write(path: Path, data: bytes):
+    """임시 파일에 다 쓰고 디스크에 내린 뒤 바꿔치기 — 쓰다 끊겨도(정전·강제 종료·디스크 가득) 옛 파일이 온전히 남는다."""
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
 def _save_profiles(data: Dict):
-    path = _profiles_path()
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    # 제자리에 덮어쓰면 쓰다 끊길 때 파일이 잘려 앱이 안 켜지고, 여기에만 있는 병동별 enc_salt 가 사라졌다
+    _atomic_write(_profiles_path(), json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
 
 
 def _hash_password(password: str, salt: Optional[bytes] = None) -> tuple:
@@ -88,6 +98,33 @@ def _db_path_for_profile(profile_id: str) -> Path:
 
 def _enc_path_for_profile(profile_id: str) -> Path:
     return _app_dir() / f"{profile_id}.db.enc"
+
+
+def _is_real_db(path: Path) -> bool:
+    """nurses 표가 있는 SQLite DB 인가 — 0바이트 스텁(sqlite3.connect 가 없는 경로에 만든다)·깨진 파일이면 False."""
+    try:
+        conn = sqlite3.connect(str(path))
+        try:
+            return conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='nurses'").fetchone() is not None
+        finally:
+            conn.close()
+    except sqlite3.OperationalError:
+        raise   # 잠김·읽기 오류 — 진짜 DB 일 수 있다. 스텁으로 보고 .db.enc 를 풀어 덮으면 최신 편집을 잃는다
+    except sqlite3.DatabaseError:
+        return False
+
+
+def _plain_is_current(profile_id: str) -> bool:
+    """평문 .db 가 지금 데이터인가 — .db.enc 가 없거나, 평문이 그보다 새 진짜 DB(열린 세션·크래시로 남은 최신 편집)일 때.
+    닫힌 뒤 늦은 요청이 만든 빈 스텁이면 False — 진짜는 .db.enc 다. 스텁을 믿으면 예시 명부가 시드돼 닫을 때 .db.enc 를 덮었고,
+    비밀번호 바꾸기는 복호화를 건너뛰어 영영 못 여는 .db.enc 를 남겼다."""
+    db_path, enc_path = _db_path_for_profile(profile_id), _enc_path_for_profile(profile_id)
+    if not db_path.exists():
+        return False
+    if not enc_path.exists():
+        return True
+    return db_path.stat().st_mtime > enc_path.stat().st_mtime and _is_real_db(db_path)
 
 
 # ── 공개 API ──────────────────────────────────────────────────────────────
@@ -140,6 +177,8 @@ def remove_master_password() -> bool:
 
 
 _PROFILE_ID_RE = None
+# 앱이 쓰는 파일 이름 — 게스트 임시 DB·기본 DB. 프로필 ID 로 쓰면 그 병동 DB 가 지워지거나 덮인다
+_RESERVED_IDS = ("_guest_temp", "nurse_scheduler")
 
 
 def _valid_profile_id(profile_id: str) -> bool:
@@ -159,13 +198,18 @@ def create_profile(profile_id: str, name: str, password: str = "",
     if not _valid_profile_id(profile_id):
         return {"ok": False,
                 "error": "프로필 ID는 한글/영문/숫자/-/_ 만 사용할 수 있습니다 (64자 이내)."}
+    if profile_id.casefold() in _RESERVED_IDS:
+        return {"ok": False, "error": "앱이 쓰는 이름이라 프로필 ID로 쓸 수 없습니다."}
 
     data = _load_profiles()
 
-    # 중복 체크
+    # 중복 체크 — 대소문자만 달라도 같은 DB 파일이다 (맥·윈도 파일 시스템은 대소문자를 가리지 않는다)
     for p in data["profiles"]:
-        if p["id"] == profile_id:
+        if p["id"].casefold() == profile_id.casefold():
             return {"ok": False, "error": "이미 존재하는 프로필 ID입니다."}
+    # 목록에 없는 암호화 DB 가 남아 있으면 덮지 않는다
+    if _enc_path_for_profile(profile_id).exists():
+        return {"ok": False, "error": "같은 ID의 암호화 DB 파일이 남아 있습니다. 다른 ID를 써 주세요."}
 
     profile = {
         "id": profile_id,
@@ -191,12 +235,9 @@ def create_profile(profile_id: str, name: str, password: str = "",
     if not is_guest:
         db_path = _db_path_for_profile(profile_id)
         if not db_path.exists():
-            # DB 초기화 (database.py의 init_db 호출)
+            # DB 초기화 — 경로를 넘긴다 (전역 get_db_path 를 잠깐 바꿔 끼우면 그 사이 다른 요청이 새 DB 로 갔다)
             from . import database as db
-            original_path = db.get_db_path
-            db.get_db_path = lambda: str(db_path)
-            db.init_db()
-            db.get_db_path = original_path
+            db.init_db(str(db_path))
 
             # 비밀번호가 있으면 암호화
             if password:
@@ -261,7 +302,6 @@ def open_profile(profile_id: str, password: str = "") -> Dict:
                 guest_db.unlink()
             except (PermissionError, OSError):
                 # 파일 잠금 — 테이블 내용만 지움
-                import sqlite3
                 try:
                     c = sqlite3.connect(str(guest_db))
                     tables = [r[0] for r in c.execute(
@@ -273,10 +313,7 @@ def open_profile(profile_id: str, password: str = "") -> Dict:
                 except Exception:
                     pass
         from . import database as db
-        original_fn = db.get_db_path
-        db.get_db_path = lambda: str(guest_db)
-        db.init_db()
-        db.get_db_path = original_fn
+        db.init_db(str(guest_db))
         return {"ok": True, "db_path": str(guest_db), "is_guest": True}
 
     # 암호 검증
@@ -294,8 +331,8 @@ def open_profile(profile_id: str, password: str = "") -> Dict:
     if enc_path.exists() and profile.get("enc_salt"):
         # 직전 세션이 재암호화 없이 끝났다면(크래시·강제종료) 평문 .db가
         # .db.enc보다 최신이다. 비밀번호는 위에서 해시로 이미 검증됐으므로
-        # 낡은 암호화본으로 최신 평문을 덮어쓰지 않는다.
-        if db_path.exists() and db_path.stat().st_mtime > enc_path.stat().st_mtime:
+        # 낡은 암호화본으로 최신 평문을 덮어쓰지 않는다. 빈 스텁이면 버리고 푼다.
+        if _plain_is_current(profile_id):
             return {"ok": True, "db_path": str(db_path), "is_guest": False}
         try:
             _decrypt_db(profile_id, password)
@@ -304,10 +341,7 @@ def open_profile(profile_id: str, password: str = "") -> Dict:
     elif not db_path.exists():
         # DB가 아예 없으면 생성
         from . import database as db
-        original_fn = db.get_db_path
-        db.get_db_path = lambda: str(db_path)
-        db.init_db()
-        db.get_db_path = original_fn
+        db.init_db(str(db_path))
 
     return {"ok": True, "db_path": str(db_path), "is_guest": False}
 
@@ -367,8 +401,8 @@ def change_password(profile_id: str, old_password: str,
 
     # 닫힌(암호화된) 프로필: enc_salt를 갈기 전에 반드시 '옛 비밀번호+옛 salt'로
     # 복호화부터 한다. 이 단계를 건너뛰고 salt를 덮어쓰면 .db.enc는 영구 복호화
-    # 불능이 된다.
-    was_closed = enc_path.exists() and not db_path.exists()
+    # 불능이 된다. 평문이 빈 스텁이어도 닫힌 것이다.
+    was_closed = enc_path.exists() and not _plain_is_current(profile_id)
     if was_closed:
         if not profile.get("enc_salt"):
             return {"ok": False, "error": "프로필 메타데이터 손상: 복호화 salt가 없습니다."}
@@ -408,10 +442,9 @@ def force_reset_password(profile_id: str) -> Dict:
     if not profile:
         return {"ok": False, "error": "프로필을 찾을 수 없습니다."}
 
-    # 암호화된 DB가 있으면 복호화 불가능하므로, 평문 DB가 있는 경우에만 처리
+    # 암호화된 DB가 있으면 복호화 불가능하므로, 평문 DB가 지금 데이터일 때만 처리 (빈 스텁이면 진짜 .db.enc 를 지웠다)
     enc_path = _enc_path_for_profile(profile_id)
-    db_path = _db_path_for_profile(profile_id)
-    if enc_path.exists() and not db_path.exists():
+    if enc_path.exists() and not _plain_is_current(profile_id):
         return {"ok": False, "error": "암호화된 DB가 있어 비밀번호 제거 불가. 먼저 프로필을 열어야 합니다."}
 
     profile["password_hash"] = None
@@ -457,11 +490,7 @@ def _encrypt_db(profile_id: str, password: str):
         db_path.unlink()
         return
 
-    ciphertext = f.encrypt(plaintext)
-    tmp_path = enc_path.with_name(enc_path.name + ".tmp")
-    with open(tmp_path, "wb") as fp:
-        fp.write(ciphertext)
-    os.replace(tmp_path, enc_path)
+    _atomic_write(enc_path, f.encrypt(plaintext))
 
     # 평문 DB 삭제
     db_path.unlink()
@@ -487,11 +516,7 @@ def _decrypt_db(profile_id: str, password: str):
     with open(enc_path, "rb") as fp:
         ciphertext = fp.read()
 
-    plaintext = f.decrypt(ciphertext)  # InvalidToken if wrong password
-    tmp_path = db_path.with_name(db_path.name + ".tmp")
-    with open(tmp_path, "wb") as fp:
-        fp.write(plaintext)
-    os.replace(tmp_path, db_path)
+    _atomic_write(db_path, f.decrypt(ciphertext))  # InvalidToken if wrong password
 
 
 def init_default_profiles():

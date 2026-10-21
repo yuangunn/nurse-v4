@@ -59,7 +59,8 @@ const order = (a) => a.nurses.map((n) => n.id).join('');
   assert.equal(a.rdDropCls(4), 'drop-after');
   a.onNurseDrop(4);
   assert.equal(order(a), 'acebd');
-  assert.deepEqual(a.posts.at(-1), ['/api/nurses/reorder', { order: ['a', 'c', 'e', 'b', 'd'] }]);
+  assert.deepEqual(a.posts.at(-1), ['/api/nurses/reorder', { ids: ['a', 'c', 'e', 'b', 'd'] }], '서버는 ids 를 읽는다');
+  assert.equal(a.nurses.map((n) => n.id + n.seniority).join(' '), 'a0 c1 e2 b3 d4', '순서 = 시니어리티 — 차지 선임 규칙이 이 값을 본다');
   assert.match(a.toasts.at(-1), /2명 순서를 함께 옮겼어요/);
   a.onNurseDragStart(4); a.onNurseDrop(0);                   // d 를 맨 위로 → b d 가 함께
   assert.equal(order(a), 'bdace');
