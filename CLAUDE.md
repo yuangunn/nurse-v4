@@ -1118,7 +1118,8 @@ self.cbLogging.subscribe(_on_log)
 
 ### localStorage 자동 저장 (`_saveFullState`)
 `year, month, tab, prevSchedule, prevDayReqs, holidays, lockedCells, cellNotes, prevMonthNights, timestamp`
-— 48시간 이내 복원.
+— 병동(프로필)마다 키 하나 `ns_full_state:<프로필 id>`. 30초마다·창 닫기·병동 바꾸기 전에 쓰고, 프로필 고르는 화면·게스트·
+복원 전에는 쓰지 않는다. 기한 없이 마지막 것을 복원 (예전엔 병동 구분 없는 키 둘·48시간 — 다른 병동 사전입력이 깔렸다, 2026-10-21 리뷰).
 
 ### Undo/Redo (40단계)
 위 필드들 JSON stringify → stack. Ctrl+Z/Shift+Ctrl+Z.
