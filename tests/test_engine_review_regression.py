@@ -283,7 +283,8 @@ def test_juhu_block_follows_locked_juhu_weekday(engine):
     req = GenerateRequest(year=2026, month=3, nurses=nurses, requirements=_mini_requirements(1, 1, 1),
                           rules=Rules(maxConsecutiveWorkDays=6, maxVPerMonth=1), prev_schedule=prev,
                           locked_cells={"a0": {"2026-03-02": True}}, allow_pre_relax=True,
-                          allow_juhu_relax=True, juhu_block_lock=True, time_limit=30)
+                          allow_juhu_relax=True, juhu_block_lock=True, time_limit=30, mip_gap=0.0)
+    # 오차 0 — 요일 어기기는 작은 감점이라 기본 오차 2% 면 CP-SAT(여러 스레드)이 기계에 따라 그 안에서 일찍 멈췄다 (CI 3/24)
     r = make_limited(req, 28, engine).solve()
     assert r["success"], r["message"]
     assert sorted(k for k, v in r["schedule"]["a0"].items() if v == "주") == [

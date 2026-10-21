@@ -62,8 +62,9 @@ def test_engine_avoids_single_nights_when_it_can(engine):
     assert r["success"], r.get("message")
     got = {nid: _singles(row) for nid, row in r["schedule"].items()}
     assert sum(got.values()) == 0, got
-    base = _engine(engine, LO, HI)(_request({}, mip_gap=0.0)).solve()
-    assert sum(_singles(row) for row in base["schedule"].values()) > 0, '규칙이 없으면 단독이 나오는 입력이어야 검사가 된다'
+    if engine == "highs":   # 대조는 결정적인 HiGHS 로만 — CP-SAT(여러 스레드)은 규칙이 없을 때의 표가 기계마다 달랐다 (CI 에서 단독 0)
+        base = _engine(engine, LO, HI)(_request({}, mip_gap=0.0)).solve()
+        assert sum(_singles(row) for row in base["schedule"].values()) > 0, '규칙이 없으면 단독이 나오는 입력이어야 검사가 된다'
 
 
 
