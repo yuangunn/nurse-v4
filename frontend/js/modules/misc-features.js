@@ -334,9 +334,15 @@ window.MiscFeaturesModule = function() {
     },
 
     // ═══ 최근 작업 복원 확장 ══════════════════════════════
+    // 사전입력·필요 인원·공휴일·잠금·메모·전월N 을 병동(프로필)마다 키 하나('ns_full_state:<id>')에 — 30초마다·창 닫을 때·병동 바꾸기 전.
+    // 늘 마지막 것 하나라 다시 열면 가장 새 것이 열린다. _lsPid = 지금 화면에 깔린 것이 어느 병동 것인가 — 프로필을 열고 복원하기 전·
+    // 프로필 고르는 화면·게스트는 null 이라 쓰지 않는다. 예전엔 병동 구분 없는 키 둘이라 다른 병동 것이 깔리고, 창 닫을 때만 쓰는 낡은 것이
+    // 30초 자동 보관보다 먼저 열리고, 프로필 화면에서 닫으면 빈 상태가 덮었다 (2026-10-21)
+    _lsPid:null,
     _saveFullState(){
+      if(!this._lsPid||this.profileScreen)return;
       try{
-        localStorage.setItem('ns_full_state',JSON.stringify({
+        localStorage.setItem('ns_full_state:'+this._lsPid,JSON.stringify({
           y:this.year,m:this.month,tab:this.activeTab,
           ps:this.prevSchedule,dr:this.prevDayReqs,hd:this.holidays,
           lk:this.lockedCells,nt:this.cellNotes,mn:this.prevMonthNights,
@@ -345,17 +351,27 @@ window.MiscFeaturesModule = function() {
       }catch(e){}
     },
     _restoreFullState(){
+      const pid=this.currentProfile;
+      this._lsPid=(this.profiles||[]).some(p=>p.id===pid&&p.is_guest)?null:pid;   // 게스트는 '종료 시 데이터 삭제' — 보관하지 않는다
+      if(!this._lsPid)return false;
       try{
-        const raw=localStorage.getItem('ns_full_state');
-        if(!raw)return false;
-        const d=JSON.parse(raw);
-        if(Date.now()-d.t>172800000)return false; // 48시간 초과 무시
+        const raw=localStorage.getItem('ns_full_state:'+pid);
+        const d=raw?JSON.parse(raw):this._legacyFullState();
+        if(!d)return false;
         if(Object.keys(this.prevSchedule).some(k=>Object.keys(this.prevSchedule[k]).length>0))return false;
         this.year=d.y;this.month=d.m;this.activeTab=d.tab||'preinput';
         this.prevSchedule=d.ps||{};this.prevDayReqs=d.dr||{};this.holidays=d.hd||[];
         this.lockedCells=d.lk||{};this.cellNotes=d.nt||{};this.prevMonthNights=d.mn||{};
         return true;
       }catch(e){return false}
+    },
+    // 예전 판의 병동 구분 없는 키 둘 — 그 사전입력의 사람이 이 병동 명부에 있으면 더 새 것을 한 번 이어받고 지운다 (판 올림에 작업을 잃지 않게)
+    _legacyFullState(){
+      const keys=['ns_full_state','ns_prev_autosave'];
+      const d=keys.map(k=>{try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}).filter(x=>x&&x.ps).sort((a,b)=>(b.t||0)-(a.t||0))[0];
+      if(!d||!Object.keys(d.ps).some(id=>(this.nurses||[]).some(n=>n.id===id)))return null;
+      for(const k of keys)localStorage.removeItem(k);
+      return d;
     },
 
     // ═══ PDF 내보내기 (인쇄 기반) ═════════════════════════
@@ -387,8 +403,10 @@ window.MiscFeaturesModule = function() {
       const rest=this.nurses.filter(n=>!group.includes(n));
       rest.splice(rest.indexOf(target)+(from<idx?1:0),0,...group);
       this.nurses.splice(0,this.nurses.length,...rest);
-      // 서버에 순서 저장
-      this.api('POST','/api/nurses/reorder',{order:this.nurses.map(n=>n.id)}).catch(()=>{});
+      // 순서 = 시니어리티 (결정 1-5) — 엔진의 차지 선임 규칙은 seniority 값을 본다. 서버는 ids 를 읽는다
+      // (예전엔 {order} 로 보내 아무것도 저장되지 않고, 이 값도 그대로라 차지가 옛 순서로 갔다 — 2026-10-21)
+      this.nurses.forEach((n,i)=>{n.seniority=i});
+      this.api('POST','/api/nurses/reorder',{ids:this.nurses.map(n=>n.id)}).catch(()=>this.toast('간호사 순서를 저장하지 못했습니다 — 다시 옮겨 주세요','error'));
       this.toast(group.length>1?`${group.length}명 순서를 함께 옮겼어요`:'간호사 순서가 변경되었습니다','info');
     },
 

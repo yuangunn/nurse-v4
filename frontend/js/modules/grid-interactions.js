@@ -6,23 +6,10 @@
 window.GridInteractionsModule = function() {
   return {
     // ── Auto-save ──────────────────────────────────────────
+    // 30초마다 병동별 보관본에 (misc-features.js _saveFullState — 창 닫을 때와 같은 키) — 갑자기 꺼져도 30초 안의 것이 남는다
     _startAutoSave(){
       if(this._autoSaveTimer)return;
-      this._autoSaveTimer=setInterval(()=>{
-        try{localStorage.setItem(this._autoSaveKey,JSON.stringify({y:this.year,m:this.month,ps:this.prevSchedule,dr:this.prevDayReqs,hd:this.holidays,lk:this.lockedCells,nt:this.cellNotes,t:Date.now()}))}catch(e){}
-      },30000);
-    },
-    _restoreAutoSave(){
-      try{
-        const raw=localStorage.getItem(this._autoSaveKey);
-        if(!raw)return false;
-        const d=JSON.parse(raw);
-        if(Date.now()-d.t>86400000)return false; // 24시간 초과 무시
-        if(Object.keys(this.prevSchedule).some(k=>Object.keys(this.prevSchedule[k]).length>0))return false; // 이미 데이터 있으면 무시
-        this.year=d.y;this.month=d.m;this.prevSchedule=d.ps;this.prevDayReqs=d.dr||{};this.holidays=d.hd||[];
-        this.lockedCells=d.lk||{};this.cellNotes=d.nt||{};
-        return true;
-      }catch(e){return false}
+      this._autoSaveTimer=setInterval(()=>this._saveFullState(),30000);
     },
 
     // ── 실시간 제약 위반 경고 ──────────────────────────────

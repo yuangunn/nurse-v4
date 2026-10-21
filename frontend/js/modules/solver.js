@@ -30,9 +30,13 @@ window.SolverModule = function() {
         else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
       };
       const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60,allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,juhu_block_lock:this.juhuBlockLock,unlimited_v:this.unlimitedV,solver:this.solver,...payloadPatch};
+      const pid=this.currentProfile;
       this.api('POST','/api/estimate',payload).then(est=>{if(est&&est.estimated_seconds)this.estimatedSeconds=est.estimated_seconds}).catch(()=>{});
       try{
         const result=await this.api('POST','/api/generate',payload);
+        // 만드는 동안 병동·달이 바뀌었으면 지금 화면에 넣지 않는다 — 12월 화면에 11월 표를 넣고 '자동저장 2026-12'(12월 것을 지우고)로 저장했다.
+        // 이어 찾기도 걸지 않는다. 받는 쪽(readjustSchedule)은 false 면 결과를 보지 않는다
+        if(!this._resultHere({profile_id:pid,year:payload.year,month:payload.month})){this._offscreenResult(result,payload,pid,_readjust);return false}
         // 이어 찾는 동안 손으로 고친 칸이 있으면 그 표를 그대로 둔다 — 바꾸면 고친 칸이 말없이 사라졌다 (리뷰 2026-10-19)
         const edited=_cont&&(this._originalSchedule?this.getManualEditCount():0)>0;
         if(_cont&&(edited||!this._contBetter(result))){this._contKeep(result,_cont,edited);return}
@@ -45,7 +49,7 @@ window.SolverModule = function() {
         this.loadFairnessLedger&&this.loadFairnessLedger();
         // 13단계 진단이 짚은 셀 좌표 → 정밀분석과 동일한 '충돌 위치로 이동' 칩 표시
         if(!result.success&&((Array.isArray(result.anchored)&&result.anchored.length)||result.summary)){this.diagResult={anchored:result.anchored||[],summary:result.summary||''}}
-        if(result.success){this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=result.relaxed_cells||{};this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.managerCheck||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':((this.managerCheck||[]).length?'warn':(this.vReport&&this.vReport.total?'v':'summary'));this.rdDoneAt=new Date();this.activeTab='schedule';this._autoSaveSchedule();   // 생성 성공 시 자동 저장 (같은 달 자동저장본 하나만)
+        if(result.success){const oldRx=this.relaxedCells;this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=_readjust?this._wishRelaxed(oldRx,result.relaxed_cells):(result.relaxed_cells||{});this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.managerCheck||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':((this.managerCheck||[]).length?'warn':(this.vReport&&this.vReport.total?'v':'summary'));this.rdDoneAt=new Date();this.activeTab='schedule';this._autoSaveSchedule();   // 생성 성공 시 자동 저장 (같은 달 자동저장본 하나만)
           if(result.stopped)this.statusMessage+='\n⏹ 중지 요청으로 탐색 종료 — 현재까지 찾은 최선의 해를 표시합니다.';
           // 완화된 셀 상세 메시지
           if(Object.keys(this.relaxedCells).length>0){
@@ -76,6 +80,7 @@ window.SolverModule = function() {
               prev_fingerprint:result.model_fingerprint||null,prev_objective:result.objective??null,
               _cont:{objective:result.objective??null,fingerprint:result.model_fingerprint||null,gap:result.mip_gap_percent,message:this.statusMessage,ok:this.statusOk}};
           }}
+        return true;
       }catch(e){if(_cont)this._contKeep(null,_cont);else{this.statusOk=false;this.statusMessage='서버 오류: '+e.message}}
       finally{this.generating=false;this.continuing=false;this.stopRequested=false;if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generateFinalElapsed=this.generateElapsed;
         if(next)setTimeout(()=>this.generate(next),0)}
@@ -102,6 +107,30 @@ window.SolverModule = function() {
         : r&&r.success
         ? `\n\n🔁 이어 찾기에서 더 좋은 표는 없었습니다 — 지금 표 그대로${g!=null?` (가장 좋은 답과 ${g}% 안쪽)`:''}.`
         : `\n\n🔁 이어 찾기를 끝내지 못해 지금 표를 그대로 둡니다.`);
+    },
+    // 생성 결과가 지금 화면(병동·달)의 것인가 — 서버가 결과에 profile_id·year·month 를 싣는다 (없는 값은 보지 않는다. 새로고침 복구 app.js 도 쓴다)
+    _resultHere(r){
+      return (r?.profile_id==null||r.profile_id===this.currentProfile)&&(r?.year==null||(+r.year===+this.year&&+r.month===+this.month));
+    },
+    // 화면에 넣지 않은 결과 — 같은 병동이면 만든 달의 자동저장본으로만 저장한다 (같은 달 자동저장본은 하나만 — 그 달 것을 바꾼다).
+    // 이어 찾기가 앞 표보다 낫지 않으면 앞 표가 이미 저장돼 있다. 재조정은 화면의 고친 표에서 나온 것이라 그 달로 가서 다시
+    _offscreenResult(r,ym,pid,readjust){
+      if(pid!==this.currentProfile){this.toast('다른 병동에서 만들던 근무표라 열지 않았습니다.','warn',6000);return}
+      const label=`${ym.year}년 ${ym.month}월 근무표`;
+      if(readjust||!r?.success){this.toast(`${label}를 ${readjust?'다시 맞추는':'만드는'} 동안 보는 달이 바뀌어 화면에 넣지 않았습니다 — 그 달로 가서 다시 해 주세요.`,'warn',8000);return}
+      if(r.continued&&!r.improved)return;
+      this.toast(`${label}는 지금 보는 달이 달라 화면에 넣지 않고 그 달 자동저장본으로 저장합니다 — 저장한 근무표에서 열 수 있어요.`,'info',8000);
+      this._autoSaveSchedule({year:+ym.year,month:+ym.month,schedule:r.schedule,nurse_scores:r.nurse_scores||{},nurse_score_details:r.nurse_score_details||{},relaxed_cells:r.relaxed_cells||{}});
+    },
+    // 재조정은 지금 표 전체를 사전입력으로 보내 서버 relaxed_cells 에 '따라 고친 칸'까지 온다 — 사람이 넣은 원티드를 못 지킨 칸만,
+    // 원래 값도 원티드로 (앞 표에서 이미 못 지킨 칸도 남긴다). 예전엔 '되돌려서 잠금'이 솔버 값을 잠긴 원티드로 넣었다 (2026-10-21)
+    _wishRelaxed(...srcs){
+      const out={};
+      for(const src of srcs)for(const[nid,cells]of Object.entries(src||{}))for(const dk of Object.keys(cells||{})){
+        const w=this.prevSchedule?.[nid]?.[dk];
+        if(w&&this.isPrevMatched(nid,new Date(dk+'T00:00:00'))==='changed')(out[nid]=out[nid]||{})[dk]={original:w,assigned:this.schedule[nid][dk]};
+      }
+      return out;
     },
     // 완화 카드 제목 — "원티드 미반영 N건 (메모 있는 셀 M건)"
     relaxedSummaryLabel(){

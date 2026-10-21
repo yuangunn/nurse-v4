@@ -183,7 +183,7 @@ window.ScheduleFeaturesModule = function() {
         }
       }
       const before=JSON.parse(JSON.stringify(this.schedule));
-      await this.generate({
+      const here=await this.generate({
         prev_schedule:prevPayload,
         locked_cells:locked,
         per_day_requirements:dayReq,
@@ -193,7 +193,7 @@ window.ScheduleFeaturesModule = function() {
         allow_pre_relax:true,
         _readjust:true,
       });
-      if(!this.statusOk)return;          // 실패 시 수정본 유지 + 기존 진단 표시
+      if(!here||!this.statusOk)return;   // 실패 시 수정본 유지 + 기존 진단 표시 (그동안 달이 바뀌었으면 화면에 넣지 않았다)
       const changed={}; const detail=[];
       const nids=new Set([...Object.keys(this.schedule||{}),...Object.keys(before)]);
       let nChg=0;
@@ -239,6 +239,7 @@ window.ScheduleFeaturesModule = function() {
           this.prevSchedule[nid][dk]=shift;count++;
         }
       }
+      this._checkViolations&&this._checkViolations();   // 이어온 칸으로 신호등·인원 경고를 다시
       if(count>0)this.toast(`${py}년 ${pm}월에서 ${count}건 이월 완료`,'info');
       else this.toast('이월할 데이터가 없습니다','info');
     },
