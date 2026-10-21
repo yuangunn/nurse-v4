@@ -32,8 +32,11 @@ _profile_lock = threading.Lock()
 # cancelSolve() 호출과 mip_gap 캡처를 가능하게 함.
 _solve_lock = threading.Lock()
 _last_mip_gap: Optional[float] = None
-_log_queue: queue.Queue = queue.Queue()
-_last_generate_result: Optional[dict] = None  # 마지막 생성 결과 보관 (새로고침 복구용)
+_log_queue: queue.Queue = solver_progress.log_queue  # 생성을 시작할 때 solver_progress 가 비운다
+# 마지막 생성 결과 (새로고침 복구용) — profile_id·year·month 를 달아 지금 열린 병동의 것만 돌려준다
+# (병동 사이에 넘어가 다른 병동 화면에 그 표가 '저장됨'으로 깔렸다)
+_last_generate_result: Optional[dict] = None
+_generating_profile_id: Optional[str] = None  # 지금 도는 생성의 병동
 
 try:
     import highspy as _highspy_mod
@@ -353,6 +356,9 @@ def set_master_password(body: dict):
         password = body.get("password", "")
         if not password:
             raise HTTPException(400, "비밀번호를 입력해주세요.")
+        # 이미 있으면 지금 마스터를 확인한다 (remove 와 같게) — 모르는 사람이 덮어써 열기·초기화 관문을 지났다
+        if prof.has_master_password() and not prof.verify_master_password(body.get("current_password", "")):
+            raise HTTPException(400, "현재 마스터 비밀번호가 틀렸습니다.")
         prof.set_master_password(password)
         return {"ok": True}
     elif action == "remove":
@@ -432,11 +438,17 @@ def dev_info():
 
 @app.post("/api/dev/reset-seed")
 def dev_reset_seed():
-    """예시 데이터(18명) 재생성"""
+    """예시 데이터(18명) 재생성 — 저장된 근무표·사전입력이 있으면 거절한다 (init_db 가 재시드하지 않는 것과 같은 이유:
+    예시 ID 만 남으면 다음 열기의 유령 정리가 저장본의 실제 간호사 칸을 전부 지운다 — 공정성 원장·전월N 의 원천)."""
     from .database import _seed_nurses
     # 삭제와 시드를 같은 트랜잭션에서 — 분리하면 시드 INSERT가 커밋되지 않고
     # GC 롤백되어 빈 테이블만 남는다.
     with db.get_conn() as conn:
+        saved = conn.execute(
+            "SELECT (SELECT COUNT(*) FROM schedules) + (SELECT COUNT(*) FROM prev_schedules)").fetchone()[0]
+        if saved:
+            raise HTTPException(409, f"저장된 근무표·사전입력이 {saved}개 있어 예시 데이터로 바꾸지 않습니다 — 바꾸면 "
+                                     "그 저장본의 간호사 칸이 모두 지워집니다. 새 프로필이나 게스트에서 시험해 주세요.")
         conn.execute("DELETE FROM nurses")
         _seed_nurses(conn)
     return {"ok": True}
@@ -826,8 +838,6 @@ def _decode_nurse_table_rows(body: dict) -> list:
     csv_b64가 xlsx면 매직 바이트(PK)로 감지해 시트 파싱 — 파일명·확장자 무관.
     텍스트면 인코딩 자동 감지(UTF-8/CP949) 후 CSV 파싱."""
     import base64
-    import csv as _csv
-    import io
 
     csv_b64 = body.get("csv_b64")
     if csv_b64:
@@ -853,12 +863,24 @@ def _decode_nurse_table_rows(body: dict) -> list:
 
     if text.startswith("\ufeff"):
         text = text[1:]
-    return [r for r in _csv.reader(io.StringIO(text))]
+    return _csv_rows(text)
+
+
+def _csv_rows(text: str, delimiter: str = ",") -> list:
+    """CSV 글 → 행 목록. 따옴표가 닫히지 않아 한 칸이 커지면(csv.Error) 400 — 처리 안 된 500 이었다."""
+    import csv as _csv
+    import io
+
+    try:
+        return list(_csv.reader(io.StringIO(text), delimiter=delimiter))
+    except _csv.Error as e:
+        raise HTTPException(400, f"CSV 를 읽지 못했습니다 — 따옴표(\")가 닫히지 않은 칸이 있는지 확인해 주세요 ({e})")
 
 
 def _parse_nurses_rows(rows_in: list) -> dict:
-    """2D 문자열 rows → {nurses, errors[{row,col,got,expected,message}]}.
-    id 비어 있으면 자동 생성. '#' 시작 행(안내 주석)·빈 행은 무시.
+    """2D 문자열 rows → {nurses, errors[{row,col,got,expected,message}], fields}.
+    id 비어 있으면 자동 생성. '#' 시작 행(안내 주석)·빈 행은 무시. fields = 파일에 있는 열의 키
+    (기존 간호사는 이 열만 덮는다 — _resolve_nurse_ids). 간호사마다 '_row' 에 파일 행 번호.
     CSV·xlsx 어느 쪽 입력이든 _decode_nurse_table_rows가 rows로 맞춰 준다."""
     import uuid
 
@@ -873,7 +895,7 @@ def _parse_nurses_rows(rows_in: list) -> dict:
 
     if len(rows) < 2:
         return {
-            "nurses": [],
+            "nurses": [], "fields": [],
             "errors": [{
                 "row": 0, "col": "_file", "got": "",
                 "expected": "헤더 행 + 최소 1명",
@@ -886,7 +908,7 @@ def _parse_nurses_rows(rows_in: list) -> dict:
 
     if "이름" not in header:
         return {
-            "nurses": [],
+            "nurses": [], "fields": [],
             "errors": [{
                 "row": 1, "col": "이름", "got": ",".join(header)[:120],
                 "expected": "헤더에 '이름' 포함",
@@ -979,6 +1001,7 @@ def _parse_nurses_rows(rows_in: list) -> dict:
             gender_raw = "female"
 
         nurses.append({
+            "_row": idx,
             "id": nid,
             "name": name,
             "group": col(row, "그룹"),
@@ -997,9 +1020,11 @@ def _parse_nurses_rows(rows_in: list) -> dict:
             "end_date": chk_date("전출일"),
         })
 
-    return {"nurses": nurses, "errors": errors}
+    fields = [k for c, k in zip(_NURSE_CSV_HEADER[1:], _NURSE_DIFF_FIELDS) if c in header]
+    return {"nurses": nurses, "errors": errors, "fields": fields}
 
 
+# 파일 열(_NURSE_CSV_HEADER[1:])과 같은 순서 — 열 → 간호사 키
 _NURSE_DIFF_FIELDS = (
     "name", "group", "gender", "capable_shifts", "is_night_shift",
     "seniority", "juhu_day", "juhu_auto_rotate", "is_trainee",
@@ -1007,26 +1032,40 @@ _NURSE_DIFF_FIELDS = (
 )
 
 
-def _resolve_nurse_ids(parsed_nurses: list, existing_nurses: list):
-    """파싱한 nurse의 id를 기존 DB와 매칭. id 우선, name+group fallback.
-    매칭된 기존 ID 집합 반환."""
+def _resolve_nurse_ids(parsed_nurses: list, existing_nurses: list, fields: list, errors: list) -> set:
+    """파싱한 nurse를 기존 DB와 매칭 — id 우선, name+group fallback. 지우면 안 되는 기존 ID 집합 반환.
+    · 매칭되면 파일에 있는 열(fields)만 기존 값에 덮는다 — 임신·월별 야간전담·희망처럼 파일에 없는 칸은 그대로
+      (내보내기 → 그대로 다시 가져오기만 해도 그 칸이 지워졌다).
+    · 같은 이름·그룹이 기존에 둘 이상이면 이름으로 짝짓지 않고, 한 사람에 두 행이 붙으면 뒤 행은 건너뛴다(errors) —
+      뒤 행이 앞 행을 덮고 '전체 교체'가 다른 한 명을 지웠다."""
     by_id = {n["id"]: n for n in existing_nurses}
-    by_name_grp = {(n.get("name", "").strip(), n.get("group", "").strip()): n
-                   for n in existing_nurses}
+    by_name_grp: dict = {}
+    for n in existing_nurses:
+        by_name_grp.setdefault((n.get("name", "").strip(), n.get("group", "").strip()), []).append(n)
 
-    matched_ids = set()
+    taken, protected, kept = set(), set(), []
     for p in parsed_nurses:
-        match = None
-        if p["id"] in by_id:
-            match = by_id[p["id"]]
-        else:
-            key = (p.get("name", "").strip(), p.get("group", "").strip())
-            if key[0] and key in by_name_grp:
-                match = by_name_grp[key]
+        row = p.get("_row")
+        key = (p.get("name", "").strip(), p.get("group", "").strip())
+        match = by_id.get(p["id"])
+        if match is None and key[0]:
+            same = by_name_grp.get(key, [])
+            if len(same) > 1:
+                protected.update(n["id"] for n in same)
+                errors.append({"row": row, "col": "id", "got": f"{key[0]} ({key[1]})", "expected": "id 칸",
+                               "message": f"{row}행: 같은 이름·그룹이 {len(same)}명이라 누구인지 몰라 건너뜀 — id 칸을 채워 주세요"})
+                continue
+            match = same[0] if same else None
         if match:
-            p["id"] = match["id"]
-            matched_ids.add(match["id"])
-    return matched_ids
+            p = {**match, **{k: p[k] for k in fields}, "id": match["id"]}
+        if p["id"] in taken:
+            errors.append({"row": row, "col": "id", "got": p["id"], "expected": "겹치지 않는 사람",
+                           "message": f"{row}행: 앞 행과 같은 사람({p['name']})이라 건너뜀"})
+            continue
+        taken.add(p["id"])
+        kept.append(p)
+    parsed_nurses[:] = kept
+    return taken | protected
 
 
 def _build_diff(parsed_nurses: list, existing_nurses: list, matched_ids: set,
@@ -1090,7 +1129,7 @@ def nurse_import_preview(body: dict):
 
     parsed = _parse_nurses_rows(rows)
     existing = db.get_nurses()
-    matched_ids = _resolve_nurse_ids(parsed["nurses"], existing)
+    matched_ids = _resolve_nurse_ids(parsed["nurses"], existing, parsed["fields"], parsed["errors"])
     diff = _build_diff(parsed["nurses"], existing, matched_ids, replace_all)
 
     return {
@@ -1114,6 +1153,8 @@ def nurse_import(body: dict):
     parsed = _parse_nurses_rows(rows)
     nurses_to_save = parsed["nurses"]
     errors = parsed["errors"]
+    existing = db.get_nurses()
+    matched_ids = _resolve_nurse_ids(nurses_to_save, existing, parsed["fields"], errors)
 
     if not nurses_to_save:
         raise HTTPException(
@@ -1121,9 +1162,6 @@ def nurse_import(body: dict):
             f"유효한 행이 없습니다. 오류 {len(errors)}건: "
             + "; ".join(e["message"] for e in errors[:5]),
         )
-
-    existing = db.get_nurses()
-    matched_ids = _resolve_nurse_ids(nurses_to_save, existing)
 
     try:
         # 업서트를 먼저, 삭제는 마지막에 — 중간 실패 시 '삭제만 반영되고 신규는
@@ -1178,6 +1216,25 @@ def _parse_xlsx_sheets(raw: bytes) -> list:
     except ImportError:
         raise HTTPException(500, "openpyxl이 설치되어 있지 않습니다 (pip install openpyxl)")
 
+    # 병합 범위는 적재하면서 칸마다 객체가 생긴다 — 수 KB 파일의 큰 병합 하나가 수 초·수백 MB 를 먹어
+    # 적재 뒤의 셀 상한 검사로는 막지 못했다. 적재 전에 시트 XML 의 병합 칸 수를 센다.
+    import re
+    import zipfile
+    from openpyxl.utils.cell import range_boundaries
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as z:
+            for name in z.namelist():
+                if not name.endswith(".xml"):
+                    continue
+                cells = 0
+                for ref in re.findall(rb'<(?:\w+:)?mergeCell\b[^>]*\bref="([A-Za-z]+\d+:[A-Za-z]+\d+)"', z.read(name)):
+                    c1, r1, c2, r2 = range_boundaries(ref.decode())
+                    cells += (r2 - r1 + 1) * (c2 - c1 + 1)
+                if cells > _TABLE_FILE_MAX_CELLS:
+                    raise HTTPException(400, f"시트의 병합 셀이 너무 큽니다 (셀 {_TABLE_FILE_MAX_CELLS:,}개 초과)")
+    except (zipfile.BadZipFile, ValueError):
+        pass   # 깨진 파일은 아래 load_workbook 이 알린다
+
     try:
         wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True)
     except Exception as e:
@@ -1210,9 +1267,6 @@ def _parse_xlsx_sheets(raw: bytes) -> list:
 
 def _parse_delimited_sheets(raw: bytes, filename: str) -> list:
     """csv/tsv/txt 바이트 → [{name, rows}]. 인코딩 자동 감지(CP949 폴백)."""
-    import csv as _csv
-    import io
-
     text = None
     for enc in _CSV_ENCODINGS:
         try:
@@ -1228,7 +1282,7 @@ def _parse_delimited_sheets(raw: bytes, filename: str) -> list:
     lines = text.splitlines()
     first_line = lines[0] if lines else ""
     delimiter = "\t" if "\t" in first_line else ","
-    rows = [row for row in _csv.reader(io.StringIO(text), delimiter=delimiter)]
+    rows = _csv_rows(text, delimiter)
     while rows and not any(s.strip() for s in rows[-1]):
         rows.pop()
     return [{"name": filename, "rows": rows}] if rows else []
@@ -1644,17 +1698,13 @@ def generate_stream():
     """SSE: 솔버 로그 + 진행 상황 실시간 스트리밍"""
     def event_gen():
         import time
-        # 솔버가 아직 시작되지 않았을 수 있으므로 최대 30초 대기
+        # 생성이 시작될 때까지 최대 30초 대기 — 프론트는 POST /api/generate 보다 스트림을 먼저 연다.
+        # 큐에 지난 실행의 로그가 남아 있다고 기다리지 않으면 그것만 흘리고 생성 전에 'done' 으로 끝나
+        # 그 생성 내내 진행·로그가 안 보였다 (큐는 생성을 시작할 때 solver_progress 가 비운다)
         waited = 0
-        while not solver_progress.is_active() and _log_queue.empty() and waited < 30:
-            if solver_progress.is_running():
-                # generate()가 호출됨 → 솔버 시작 대기
-                time.sleep(0.2)
-                waited += 0.2
-            else:
-                # generate() 자체가 아직 호출 안 됨 → 짧게 대기
-                time.sleep(0.5)
-                waited += 0.5
+        while not solver_progress.is_running() and waited < 30:
+            time.sleep(0.2)
+            waited += 0.2
         while True:
             # 로그 메시지 우선 드레인
             try:
@@ -1731,6 +1781,7 @@ def _run_race(request: GenerateRequest) -> dict:
     winner = {"name": None}
 
     def _run(name, factory):
+        solver_progress.bind_thread()   # 이 생성이 끝난 뒤 패자가 여는 풀이는 곧바로 취소된다
         try:
             res = factory(request).solve()
         except Exception as e:  # 한 엔진이 터져도 다른 엔진 결과로 진행
@@ -1780,12 +1831,14 @@ def _run_race(request: GenerateRequest) -> dict:
 
 @app.post("/api/generate")
 def generate(request: GenerateRequest):
-    global _last_mip_gap, _last_generate_result
+    global _last_mip_gap, _last_generate_result, _generating_profile_id
     # 이전 솔버가 아직 돌고 있으면 거부 (체크-시작을 원자적으로)
     if not solver_progress.try_begin():
         raise HTTPException(status_code=409, detail="이미 생성이 진행 중입니다. 중지 후 다시 시도하세요.")
     _last_mip_gap = None
     _last_generate_result = None  # 새 생성 시작 시 이전 결과 초기화
+    pid = _generating_profile_id = _current_profile_id
+    tag = {"profile_id": pid, "year": request.year, "month": request.month}
     try:
         # shifts가 비어있으면 DB에서 로드
         if not request.scoring_rules:
@@ -1875,47 +1928,51 @@ def generate(request: GenerateRequest):
                     result["relax_boosts"] = relax_ctx["boosts"]
                 if result.get("relaxed_cells"):
                     report["relax_attempted"] = True
-                try:
-                    note, recent = db.insert_generation_run({
-                        "year": request.year, "month": request.month,
-                        "solver": request.solver,
-                        "success": 1 if result.get("success") else 0,
-                        "stopped": 1 if result.get("stopped") else 0,
-                        "relaxed": 1 if report.get("relax_attempted") else 0,
-                        "duration_s": report.get("duration_seconds"),
-                        "final_gap": report.get("final_gap_percent"),
-                        "num_vars": report.get("num_vars"),
-                        "num_constraints": report.get("num_constraints"),
-                        "nurse_count": len(request.nurses or []),
-                        "pre_filled": sum(len(v) for v in (request.prev_schedule or {}).values()),
-                        "time_limit": request.time_limit,
-                        "mip_gap": request.mip_gap,
-                    })
-                    if note:
-                        report["history_note"] = note
-                    report["recent_runs"] = recent
-                except Exception:
-                    pass
+                if _current_profile_id == pid:   # 생성 중 다른 병동을 열었으면 그 병동 DB 에 이 생성 이력을 쓰지 않는다
+                    try:
+                        note, recent = db.insert_generation_run({
+                            "year": request.year, "month": request.month,
+                            "solver": request.solver,
+                            "success": 1 if result.get("success") else 0,
+                            "stopped": 1 if result.get("stopped") else 0,
+                            "relaxed": 1 if report.get("relax_attempted") else 0,
+                            "duration_s": report.get("duration_seconds"),
+                            "final_gap": report.get("final_gap_percent"),
+                            "num_vars": report.get("num_vars"),
+                            "num_constraints": report.get("num_constraints"),
+                            "nurse_count": len(request.nurses or []),
+                            "pre_filled": sum(len(v) for v in (request.prev_schedule or {}).values()),
+                            "time_limit": request.time_limit,
+                            "mip_gap": request.mip_gap,
+                        })
+                        if note:
+                            report["history_note"] = note
+                        report["recent_runs"] = recent
+                    except Exception:
+                        pass
                 result["generation_report"] = report
         except Exception:
             pass
+        result.update(tag)   # 어느 병동·어느 달의 표인지 — 새로고침 복구·프론트가 맞는 화면에만 깐다
         _last_generate_result = result  # 결과 보관
         solver_progress.end()
         return result
     except Exception as e:
         solver_progress.end()
-        _last_generate_result = {"success": False, "message": str(e), "schedule": {}}
+        _last_generate_result = {"success": False, "message": str(e), "schedule": {}, **tag}
         logger.error("Server error: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail="서버 오류가 발생했습니다. 다시 시도해주세요.")
 
 
 @app.get("/api/generate/result")
 def get_generate_result():
-    """마지막 생성 결과 조회 (새로고침 복구용)"""
+    """마지막 생성 결과 조회 (새로고침 복구용) — 지금 열린 병동의 생성만. 결과의 year·month 로 프론트가 달을 가린다.
+    다른 병동의 생성이 도는 중이면 idle — 'running' 이면 이 화면이 끝까지 기다려도 받을 결과가 없다."""
     if solver_progress.is_running():
-        return {"status": "running"}
-    if _last_generate_result is not None:
-        return {"status": "done", "result": _last_generate_result}
+        return {"status": "running" if _generating_profile_id == _current_profile_id else "idle"}
+    r = _last_generate_result
+    if r is not None and r.get("profile_id") == _current_profile_id:
+        return {"status": "done", "result": r}
     return {"status": "idle"}
 
 
@@ -1999,6 +2056,7 @@ def save_schedule(body: ScheduleSave):
             "nurse_score_details": body.nurse_score_details or {},
             "locked_cells": body.locked_cells or {},
             "cell_notes": body.cell_notes or {},
+            "relaxed_cells": body.relaxed_cells or {},   # 완화 이력 원장의 정본 (결정 1-20)
             "holidays": body.holidays or [],
             "prev_day_reqs": body.prev_day_reqs or {},
             "prev_month_nights": body.prev_month_nights or {},
@@ -2070,15 +2128,16 @@ def get_scoring_rules():
 
 
 @app.post("/api/scoring_rules")
-def save_scoring_rule(body: dict):
+def save_scoring_rule(body: ScoringRule):
+    # 생성이 읽을 때와 같은 모델로 받는다 — 소수 배점(-0.5)·빈칸이 그대로 저장되면 그 뒤 모든 생성이 검증 오류(500)였다 (422 로 거절)
     rid = db.save_scoring_rule(
-        name=body["name"],
-        rule_type=body["rule_type"],
-        params=body.get("params", {}),
-        score=body["score"],
-        enabled=body.get("enabled", True),
-        sort_order=body.get("sort_order", 0),
-        rule_id=body.get("id"),
+        name=body.name,
+        rule_type=body.rule_type,
+        params=body.params,
+        score=body.score,
+        enabled=body.enabled,
+        sort_order=body.sort_order,
+        rule_id=body.id,
     )
     return {"id": rid}
 
