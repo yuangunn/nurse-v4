@@ -330,7 +330,9 @@ def test_weekend_fairness_rule_seeded_and_migrated_once(tmp_path, monkeypatch):
         return [r for r in db.list_scoring_rules() if r["rule_type"] == "weekend_fairness"]
 
     assert len(_rules()) == 1 and _rules()[0]["score"] == -30 and _rules()[0]["enabled"]
-    db.delete_scoring_rule(_rules()[0]["id"])     # 구버전 DB 흉내
+    db.delete_scoring_rule(_rules()[0]["id"])     # 구버전 DB 흉내 — 규칙도 마이그레이션 번호(0)도 없다
+    with db.get_conn() as conn:
+        conn.execute("PRAGMA user_version = 0")
     db.init_db()                                  # 마이그레이션이 다시 넣는다
     assert len(_rules()) == 1
     db.init_db()                                  # 재실행해도 중복 없음

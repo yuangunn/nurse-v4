@@ -194,18 +194,20 @@ def init_db():
         if existing_scoring == 0:
             _seed_scoring_rules(conn)
 
-        # 퐁당퐁당 회피 규칙 마이그레이션 (기존 DB에 없을 경우 추가)
-        has_pondang = conn.execute(
-            "SELECT COUNT(*) FROM scoring_rules WHERE rule_type='pattern' AND name LIKE '%퐁당%'"
-        ).fetchone()[0]
-        if not has_pondang:
-            conn.execute(
-                "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
-                ("퐁당퐁당 회피", "pattern", json.dumps({"pattern": ["work", "rest_leave", "work"]}), -20, 1, 12)
-            )
-
-        # 법정공휴일 + 주말 배점 규칙 마이그레이션
-        _migrate_holiday_weekend_rules(conn)
+        # 옛 배점 규칙 마이그레이션(퐁당퐁당·법정공휴일/주말 5종)은 버전 1 전 DB 에서 한 번만 — 이름·유형으로 찾아
+        # 없으면 넣어서, 사용자가 지운 규칙이 열 때마다 켜진 채 되살아났고 이름을 바꾸면 하나 더 생겼다
+        if conn.execute("PRAGMA user_version").fetchone()[0] < 1:
+            # 퐁당퐁당 회피 규칙 마이그레이션 (기존 DB에 없을 경우 추가)
+            has_pondang = conn.execute(
+                "SELECT COUNT(*) FROM scoring_rules WHERE rule_type='pattern' AND name LIKE '%퐁당%'"
+            ).fetchone()[0]
+            if not has_pondang:
+                conn.execute(
+                    "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
+                    ("퐁당퐁당 회피", "pattern", json.dumps({"pattern": ["work", "rest_leave", "work"]}), -20, 1, 12)
+                )
+            # 법정공휴일 + 주말 배점 규칙 마이그레이션
+            _migrate_holiday_weekend_rules(conn)
         _migrate_single_night_rule(conn)
 
         # 임부휴무(P1) 근무 코드 마이그레이션 (기존 DB에 없을 경우 추가)
@@ -543,6 +545,19 @@ def compute_fairness_ledger(year: int, month: int, months_back: int = 3) -> Dict
 # 사전입력 플렉스(D↔DC 등 차지 승격)는 '뒤집힘'이 아니다 — 원장 집계에서 제외
 _RELAX_FLEX = {"D": {"D", "DC"}, "DC": {"D", "DC"}, "E": {"E", "EC"}, "EC": {"E", "EC"},
                "N": {"N", "NC"}, "NC": {"N", "NC"}}
+_PERIOD_WORK = {"day": {"D", "DC"}, "evening": {"E", "EC"}, "night": _NIGHT_CODES}
+
+
+def _relax_kept(pre: str, got: str) -> bool:
+    """구버전 저장본(relaxed_cells 없음) 폴백 — 사전입력 pre 자리에 got 이 들어갔으면 지킨 것인가.
+    차지 승격·원티드 '둘 중 하나'·'N 빼고'(제1원칙 14)·번표 표기(OFF)를 엔진과 같게 본다 — 지켜 준 D/E·N제외 칸까지 셌다."""
+    from .scheduler_base import _FLEX_NOT, _FLEX_ONE_OF, _PRE_ALIAS
+    pre = _PRE_ALIAS.get(pre, pre)
+    if pre in _FLEX_NOT:
+        return got not in _NIGHT_CODES
+    if pre in _FLEX_ONE_OF:
+        return any(got in _PERIOD_WORK[p] for p in _FLEX_ONE_OF[pre])
+    return got == pre or got in _RELAX_FLEX.get(pre, set())
 
 
 def compute_relax_ledger(year: int, month: int, months_back: int = 3) -> Dict:
@@ -550,8 +565,9 @@ def compute_relax_ledger(year: int, month: int, months_back: int = 3) -> Dict:
 
     원티드(사전입력)에는 사연이 있다(제1원칙 8). 같은 사람의 원티드가 매달 완화로
     뒤집히면 다음 달엔 더 강하게 지켜야 한다 — 위시 거절 원장과 같은 파생 뷰 방식.
-    저장본에 `relaxed_cells`가 있으면 그것을, 없으면(구버전 저장본) `prev_schedule` 대
-    `schedule` 차이를 센다. 차지 승격(D→DC 등)과 주휴('주')는 뒤집힘으로 안 센다.
+    저장본에 `relaxed_cells`가 있으면(빈 {} 도) 그것을, 없으면(구버전 저장본) `prev_schedule` 대
+    `schedule` 차이를 센다. 차지 승격(D→DC 등)·지켜진 원티드 D/E·N제외·주휴('주')·신규 트레이닝 칸('/')은
+    뒤집힘으로 안 센다.
     Returns: {nurse_id: {"overridden": n, "months": k}}"""
     targets = []
     y, m = year, month
@@ -574,7 +590,7 @@ def compute_relax_ledger(year: int, month: int, months_back: int = 3) -> Dict:
                 continue
             prefix = f"{ty:04d}-{tm:02d}-"
             rc = data.get("relaxed_cells")
-            if isinstance(rc, dict) and rc:
+            if isinstance(rc, dict):   # 저장본에 있으면 빈 {} 도 믿는다 — 다 지켜진 달을 '차이'로 다시 세지 않게
                 for nid, cells in rc.items():
                     ent = ledger.setdefault(nid, {"overridden": 0, "months": 0})
                     ent["months"] += 1
@@ -593,10 +609,10 @@ def compute_relax_ledger(year: int, month: int, months_back: int = 3) -> Dict:
                 ent = ledger.setdefault(nid, {"overridden": 0, "months": 0})
                 ent["months"] += 1
                 for dk, pre in (pcells or {}).items():
-                    if not pre or not str(dk).startswith(prefix) or pre == "주":
-                        continue
+                    if not pre or not str(dk).startswith(prefix) or pre == "주" or pre.startswith("/"):
+                        continue   # 신규의 트레이닝 칸('/')은 완화 대상이 아니다 (위시 원장과 같게)
                     got = ns.get(dk)
-                    if not got or got == pre or got in _RELAX_FLEX.get(pre, set()):
+                    if not got or got.startswith("/") or _relax_kept(pre, got):
                         continue
                     ent["overridden"] += 1
     return {k: v for k, v in ledger.items() if v["overridden"]}
@@ -945,7 +961,7 @@ _SINGLE_NIGHT_RULE = ("단독 나이트 감점", "pattern", json.dumps({"pattern
 
 def _migrate_single_night_rule(conn: sqlite3.Connection):
     """기존 DB 에 단독 나이트 감점을 한 번만 넣는다 (PRAGMA user_version 1) — 사용자가 지운 규칙을 다음 실행 때 되살리지 않게
-    (퐁당퐁당은 이름으로 찾아 없으면 늘 다시 넣는다)."""
+    (옛 마이그레이션도 버전 1 전에만 돈다 — init_db)."""
     if conn.execute("PRAGMA user_version").fetchone()[0] >= 1:
         return
     has = conn.execute(
@@ -971,8 +987,17 @@ def list_scoring_rules() -> List[Dict]:
             d = dict(r)
             d["params"] = json.loads(d["params"])
             d["enabled"] = bool(d["enabled"])
+            d["score"] = _int_score(d["score"])
             result.append(d)
         return result
+
+
+def _int_score(v) -> int:
+    """배점은 정수 — 예전 저장 경로가 소수(-0.5)·빈칸을 그대로 넣어, 읽을 때 ScoringRule 검증이 모든 생성을 500 으로 막았다."""
+    try:
+        return int(round(float(v)))
+    except (TypeError, ValueError, OverflowError):
+        return 0
 
 
 def save_scoring_rule(
