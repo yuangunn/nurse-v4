@@ -599,9 +599,12 @@ function app() {
       const body={year,month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights,relaxed_cells:this.relaxedCells,...over};
       if(!body.schedule||!Object.keys(body.schedule).length)return;
       try{
-        // 같은 달 자동저장본은 하나만 — 이전 것을 지우고 새로 넣는다 (사용자 결정 2026-09-06 "자동저장 붙이자")
-        try{ const list=await this.api('GET','/api/schedules'); for(const s of (list||[])){ if(s.name===name&&+s.year===+year&&+s.month===+month) await this.api('DELETE',`/api/schedules/${s.id}`); } }catch(e){}
+        // 같은 달 자동저장본은 하나만 (사용자 결정 2026-09-06 "자동저장 붙이자") — 새것을 먼저 넣고 옛것을 지운다.
+        // 먼저 지우면 그 사이 프로필 닫기(409)·실패에 그 달 자동저장본이 아예 없어졌다 (리뷰 2026-10-21)
+        let old=[];
+        try{ old=((await this.api('GET','/api/schedules'))||[]).filter(s=>s.name===name&&+s.year===+year&&+s.month===+month).map(s=>s.id); }catch(e){}
         await this.api('POST','/api/schedules',body);
+        for(const id of old){ try{ await this.api('DELETE',`/api/schedules/${id}`); }catch(e){} }
         if(!over)this.rdSaved=true;
         this.toast('근무표 자동 저장됨','info');
         this.loadSavedList();

@@ -125,7 +125,8 @@ def test_relax_skips_a_pre_code_not_in_the_shift_list():
     assert r["relaxed_cells"]["a2"]["2026-03-03"]["original"] == "모름"
 
 
-def test_generates_after_the_v_shift_is_deleted():
+@pytest.mark.parametrize("engine", ["highs", "cpsat"])
+def test_generates_after_the_v_shift_is_deleted(engine):
     """근무 설정에서 V 를 지워도 생성된다 — V 가 없으면 V 상한도 없다.
     (낮 2명 — 1/1/1 이면 쉬는 칸이 남아 V 없이는 정말 안 된다)"""
     nurses = _mini_nurses(6)
@@ -133,7 +134,7 @@ def test_generates_after_the_v_shift_is_deleted():
                           rules=Rules(maxConsecutiveWorkDays=6, maxVPerMonth=1),
                           prev_schedule=_juhu_prev(nurses, 2026, 3, 7),
                           shifts=[s for s in PROD_SHIFTS if s.code != "V"], time_limit=20)
-    r = make_limited(req, 7, "cpsat").solve()
+    r = make_limited(req, 7, engine).solve()
     assert r["success"], r.get("message")
 
 

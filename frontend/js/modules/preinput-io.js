@@ -19,8 +19,8 @@ window.PreinputIoModule = function() {
         }
       }
     },
-    clearPrevSchedule(confirmed){if(!confirmed&&!this.confirmReset())return;const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(!keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>!keys.has(h));this._clearCellMeta(keys,true);this._checkViolations&&this._checkViolations()},
-    clearPrevOtherMonths(){if(!confirm(`${this.year}년 ${this.month}월 주기 이외의 데이터를 정리합니다. 계속하시겠습니까?`))return;const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(!keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>keys.has(h));this._clearCellMeta(keys,false)},
+    clearPrevSchedule(confirmed){if(!confirmed&&!this.confirmReset())return;this._pushUndo();const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(!keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>!keys.has(h));this._clearCellMeta(keys,true);this._checkViolations&&this._checkViolations()},
+    clearPrevOtherMonths(){if(!confirm(`${this.year}년 ${this.month}월 주기 이외의 데이터를 정리합니다. 계속하시겠습니까?`))return;this._pushUndo();const keys=this._cycleDateKeys();for(const nid of Object.keys(this.prevSchedule)){for(const k of Object.keys(this.prevSchedule[nid])){if(!keys.has(k))delete this.prevSchedule[nid][k]}if(!Object.keys(this.prevSchedule[nid]).length)delete this.prevSchedule[nid]}const newDR={};for(const[k,v]of Object.entries(this.prevDayReqs)){if(keys.has(k))newDR[k]=v}this.prevDayReqs=newDR;this.holidays=this.holidays.filter(h=>keys.has(h));this._clearCellMeta(keys,false)},
     // 이 화면 주기(앞뒤 달 칸 포함)의 사전입력 칸 수. monthCells 면 rdCells 와 같은 칸만 — 이 달 칸, 신규의 트레이닝 날 빼고.
     // 예전엔 다른 달 사전입력까지 세어 상태 줄이 '772 / 566칸 입력'이었다 (2026-10-19)
     countPrevEntries(monthCells=false){
@@ -33,7 +33,8 @@ window.PreinputIoModule = function() {
       }
       return n;
     },
-    countNursePrev(nurseId){return Object.keys(this.prevSchedule[nurseId]||{}).length},
+    // 이 화면 주기 칸만 — 다른 달 사전입력까지 세었다 (countPrevEntries 와 같게, 리뷰 2026-10-21)
+    countNursePrev(nurseId){const keys=this._cycleDateKeys();return Object.keys(this.prevSchedule[nurseId]||{}).filter(k=>keys.has(k)).length},
 
     // ── 일별 필요인원 오버라이드 ──────────────────────────────
     getDayWeekKey(day){return['sun','mon','tue','wed','thu','fri','sat'][day.getDay()]},
@@ -93,8 +94,9 @@ window.PreinputIoModule = function() {
     markHoliday(day){
       const k=this.dayKey(day);const dn=['일','월','화','수','목','금','토'];
       const label=`${day.getMonth()+1}/${day.getDate()}(${dn[day.getDay()]})`;
-      if(this.isHoliday(day)){if(!confirm(`${label} 법정공휴일 지정을 해제합니다. 계속하시겠습니까?`))return;this.holidays=this.holidays.filter(h=>h!==k)}
-      else{if(!confirm(`${label}을(를) 법정공휴일로 지정합니다.\n이 날에 각 간호사에게 개별적으로 '법'을 배정할 수 있습니다. 계속하시겠습니까?`))return;this.holidays.push(k)}
+      // 공휴일도 되돌리기 스냅숏(hd)에 든다 — 기록 없이 바꾸면 다음 Ctrl+Z 가 말없이 되돌렸다 (리뷰 2026-10-21)
+      if(this.isHoliday(day)){if(!confirm(`${label} 법정공휴일 지정을 해제합니다. 계속하시겠습니까?`))return;this._pushUndo();this.holidays=this.holidays.filter(h=>h!==k)}
+      else{if(!confirm(`${label}을(를) 법정공휴일로 지정합니다.\n이 날에 각 간호사에게 개별적으로 '법'을 배정할 수 있습니다. 계속하시겠습니까?`))return;this._pushUndo();this.holidays.push(k)}
       this._checkViolations&&this._checkViolations();
     },
 

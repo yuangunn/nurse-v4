@@ -496,6 +496,8 @@ class _HighsConstraintsMixin:
     def _c_max_v_per_month(self, prob, x):
         """V(연차) 당월 최대 사용 횟수 (hard constraint) + 익월에서 V 사용 금지
         unlimited_v=True일 때는 당월 V 상한 제거 (목적함수 페널티로 대체)"""
+        if "V" not in self.ALL_SHIFTS:
+            return   # 근무 정의에서 V 를 지웠으면 걸 칸이 없다 — x[..]["V"] KeyError 500 (CP-SAT 과 같게, 리뷰 2026-10-21)
         max_v = self.rules.maxVPerMonth
         for nurse in self.nurses:
             nid = nurse["id"]
