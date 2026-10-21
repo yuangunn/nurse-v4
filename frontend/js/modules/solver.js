@@ -167,7 +167,7 @@ window.SolverModule = function() {
     fmtEta(sec){if(!sec)return'';return sec<90?`약 ${sec}초`:`약 ${Math.round(sec/60)}분`},
 
     // ── 정밀 충돌 분석 (CP-SAT assumptions) ───────────────────
-    _diagPayload(){return{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null}},
+    _diagPayload(){return{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,unlimited_v:this.unlimitedV}},   // 'V 무제한'은 엄격 판정 자체를 바꾼다 — 빠져 만들 수 있는 표를 '만들 수 없음'이라 했다 (리뷰 2026-10-21)
     async diagnoseConflicts(){
       if(this.diagnosing)return;
       this.diagnosing=true; this.diagResult=null;
@@ -194,7 +194,8 @@ window.SolverModule = function() {
       finally{this.fixing=false;}
     },
     jumpToPreCell(nid,iso){
-      if(iso){const p=String(iso).split('-').map(Number);if(p[0]&&p[1]){this.year=p[0];this.month=p[1];}}
+      // 지금 화면 주기에 있는 날(1일 앞 지난달 칸·끝 주)이면 달을 바꾸지 않는다 — 바꾸면 되돌리기·신호등이 그 달로 넘어갔다 (리뷰 2026-10-21)
+      if(iso&&!(this.scheduleDays||[]).some(d=>this.dayKey(d)===iso)){const p=String(iso).split('-').map(Number);if(p[0]&&p[1]){this.year=p[0];this.month=p[1];}}
       this.activeTab='preinput';
       this.$nextTick(()=>setTimeout(()=>{
         let el=(nid&&iso)?document.querySelector(`[data-cell="${nid}|${iso}"]`):null;
@@ -218,7 +219,9 @@ window.SolverModule = function() {
       }
       this._pushUndo();
       let rn=0;
+      const first=`${this.year}-${String(this.month).padStart(2,'0')}-01`;
       for(const rm of rms){
+        if(rm.date_iso&&rm.date_iso<first)continue;   // 지난달 칸은 기록 — 처방이 내도 지우지 않는다 (서버도 고정한다)
         if(rm.nurse_id&&rm.date_iso&&this.prevSchedule[rm.nurse_id]&&this.prevSchedule[rm.nurse_id][rm.date_iso]!==undefined){
           delete this.prevSchedule[rm.nurse_id][rm.date_iso]; rn++;
           if(!Object.keys(this.prevSchedule[rm.nurse_id]).length)delete this.prevSchedule[rm.nurse_id];

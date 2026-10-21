@@ -484,6 +484,7 @@ function app() {
       // 달이 바뀌면 고른 칸 번호가 다른 날을 가리킨다 — 선택·근무표 되돌리기를 비운다 (그대로 두면 Ctrl+V 가 엉뚱한 날에 붙었다)
       this.$watch('month',()=>this._resetGridHistory());
       this.$watch('year',()=>this._resetGridHistory());
+      this.$watch('unlimitedV',()=>this._queueFeasibility&&this._queueFeasibility());   // 'V 무제한'은 신호등 판정을 바꾼다
       window.addEventListener('resize',()=>{if(this.gridFit)this.rdFitColumnsSoon()});
       window.__rdState=(screen,state)=>this.rdApplyState(screen,state);   // design/handoff/check 검증용 상태 진입
     },

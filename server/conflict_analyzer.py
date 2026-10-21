@@ -438,12 +438,17 @@ class _ConflictAnalyzer(CpSatScheduler):
                 # 명시적 0도 게이팅 — 솔버는 ==0을 강제하므로 빠지면 '0명 요구일
                 # 사전입력 근무' 충돌을 '충돌 없음'으로 오진한다
                 exprs = [x[n["id"]][d][s] for n in self.nurses for s in shifts]
+                total = sum(exprs)
                 if not any(not isinstance(e, int) for e in exprs):
-                    continue
+                    if total == req:
+                        continue
+                    # 그 시간대를 설 수 있는 사람이 아무도 없다(식이 모두 상수) — 건너뛰면 원인이 빠지거나 '충돌 없음'이었다.
+                    # 상수를 변수로 감싸 게이트에 건다 (리뷰 2026-10-21)
+                    total = model.NewConstant(total)
                 label = (f"{self._fmt_date(dt)} {period} 필요 인원 {req}명" if req > 0
                          else f"{self._fmt_date(dt)} {period} 0명(배정 금지)")
                 lit = gate(label, dt=dt, kind="staff")
-                model.Add(sum(exprs) == req).OnlyEnforceIf(lit)
+                model.Add(total == req).OnlyEnforceIf(lit)
 
     def _g_charge_requirements(self, model, x, gate):
         period_to_req = {"day": "D", "evening": "E", "night": "N"}
@@ -892,9 +897,10 @@ class _ConflictAnalyzer(CpSatScheduler):
                 pre = self._effective_pre(nurse, dt, pre, is_holiday)
                 pre_flex = self._PRE_FLEX.get(pre, {pre} if pre else set())
                 active = self._nurse_active_on(nurse, dt)
-                # 잠긴 셀: 완화·진단 경로와 동일하게 절대 고정 — keep 리터럴을 만들지
-                # 않아 '잠긴 셀 제거'가 처방으로 제시되는 일을 차단한다.
-                if active and pre and self.locked_cells.get(nid, {}).get(dt_str):
+                # 잠긴 셀·지난달 칸(기록): 완화·진단 경로와 동일하게 절대 고정 — keep 리터럴을 만들지
+                # 않아 '잠긴 셀 제거'·'지난달 근무 제거'가 처방으로 제시되는 일을 차단한다 (지난달 N 을 지우라고 내서
+                # 적용하면 실제로는 밤근무 다음 날인 사람에게 D 가 갔다 — 리뷰 2026-10-21). 지난달 칸은 승격하지 않는다(_locked_domain).
+                if active and pre and (self.locked_cells.get(nid, {}).get(dt_str) or dt < date(self.year, self.month, 1)):
                     keep = self._locked_domain(nurse, dt, pre)   # 잠긴 D·E·N 은 차지로 올릴 수 있다 (완화 패리티)
                     for s in self.ALL_SHIFTS:
                         if s in keep and len(keep) > 1:
@@ -1016,7 +1022,10 @@ class _ConflictAnalyzer(CpSatScheduler):
                 if not any(not isinstance(e, int) for e in exprs):
                     continue
                 assigned = sum(exprs)
-                model.Add(assigned <= req)
+                # 잠긴 칸(상수 1)이 필요 인원보다 많으면 그 수까지 — 엔진처럼 사실로 받는다 (_pin_day_period_count).
+                # 아니면 그날 하나 때문에 처방 전체가 '계산하지 못했습니다'였다 (리뷰 2026-10-21)
+                fixed = sum(1 for n in self.nurses if self._locked_code(n, d) in shifts)
+                model.Add(assigned <= max(req, fixed))
                 if req > 0:
                     short = model.NewIntVar(0, req, f"short_{d}_{period}")
                     model.Add(short >= req - assigned)
@@ -1025,8 +1034,9 @@ class _ConflictAnalyzer(CpSatScheduler):
             for s in charge_shifts:
                 rk = period_to_req.get(s["period"])
                 if rk and day_req.get(rk, 0) > 0:
-                    csum = sum(x[n["id"]][d][s["code"]] for n in self.nurses)
-                    model.Add(csum <= 1)
+                    cexprs = [x[n["id"]][d][s["code"]] for n in self.nurses]
+                    csum = sum(cexprs)
+                    model.Add(csum <= max(1, sum(e for e in cexprs if isinstance(e, int))))
                     cshort = model.NewIntVar(0, 1, f"cshort_{d}_{s['code']}")
                     model.Add(cshort >= 1 - csum)
                     cost_terms.append(SHORT_COST * cshort)
