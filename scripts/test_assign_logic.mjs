@@ -697,9 +697,9 @@ async function main() {
   eq('붙여넣기가 필요 인원을 만들지 않는다', pasted, { req: false, 사람: 4 });
   await ev(`window.__app.setFormId('101'); return 1`);
 
-  // ── 22. 화면 인쇄가 없는 서식은 101 인쇄 틀로 빠지지 않는다 ──────────
+  // ── 22. 배정표는 화면 인쇄가 없다 — 모든 서식이 엑셀로 받아 엑셀에서 인쇄 ──────────
   // 82 가 101 틀로 빠져 방 칸이 있고 SU 줄이 없는 종이가 나오고 있었다 (2026-09-27).
-  // 102·82 는 엑셀로 받아 엑셀에서 인쇄한다 — 도구 띠의 검정 단추도 엑셀로 바뀐다.
+  // 2026-10-26 사용자 "배정표 인쇄만 없애. 어싸인표 인쇄는 내버려두고" — 122 는 두 장으로 잘렸다. 하루 어싸인표 [인쇄]는 남는다.
   step('22 인쇄 서식 가드');
   const guard = await ev(`const A=window.__app; return (async()=>{
     const s=A.store; s.cells={}; s.unit={}; s.order=['가간호','나간호','다간호','라간호'];
@@ -707,21 +707,24 @@ async function main() {
     A.store=s; A.recompute(); A.wkSunday=new Date(2026,8,13);
     const out={can:{}};
     for(const id of ['101','122','102','82']){ A.setFormId(id); out.can[id]=A.canPrint(); }
-    const bar=()=>{ A.show('week'); const p=document.querySelector('#btnPrint'), x=document.querySelector('#btnXlsx');
-      return {인쇄:getComputedStyle(p).display!=='none', 엑셀주:x.classList.contains('pri')}; };
-    A.setFormId('82'); out.bar82=bar();
-    let msg=''; try{ await A.buildPrintArea(false); msg='만들어짐'; }catch(e){ msg=e.message; }
-    const pa=document.querySelector('#printArea');
-    out.print82={엑셀안내:/엑셀/.test(msg), 장:pa.querySelectorAll('.sheet').length, 표:!!pa.querySelector('table')};
-    let called=false; const keep=window.print; window.print=()=>{ called=true; };
-    await A.printWeek(false); await new Promise(r=>setTimeout(r,300)); window.print=keep;
-    out.print82.인쇄창=called;
-    A.setFormId('101'); out.bar101=bar();
+    const bar=()=>{ A.show('week'); const x=document.querySelector('#btnXlsx');
+      return {인쇄:!!document.querySelector('#btnPrint'), 엑셀주:x.classList.contains('pri')}; };
+    out.print={};
+    for(const id of ['82','122','101']){ A.setFormId(id); out['bar'+id]=bar();
+      let msg=''; try{ await A.buildPrintArea(false); msg='만들어짐'; }catch(e){ msg=e.message; }
+      const pa=document.querySelector('#printArea');
+      let called=false; const keep=window.print; window.print=()=>{ called=true; };
+      await A.printWeek(false); await new Promise(r=>setTimeout(r,300)); window.print=keep;
+      out.print[id]={엑셀안내:/엑셀/.test(msg), 장:pa.querySelectorAll('.sheet').length, 표:!!pa.querySelector('table'), 인쇄창:called}; }
+    A.show('day'); out.day={인쇄:!!document.querySelector('#btnDayPrint'), 한글:!!document.querySelector('#btnDayHwpx')};
+    A.show('week');
     return out; })();`);
-  eq('화면 인쇄는 101·122 만', guard.can, { '101': true, '122': true, '102': false, '82': false });
-  eq('82 는 [인쇄]를 숨기고 엑셀이 주 단추', guard.bar82, { 인쇄: false, 엑셀주: true });
-  eq('101 은 [인쇄]가 주 단추', guard.bar101, { 인쇄: true, 엑셀주: false });
-  eq('82 인쇄 영역은 101 표가 아니라 안내 한 장', guard.print82, { 엑셀안내: true, 장: 1, 표: false, 인쇄창: false });
+  eq('배정표 화면 인쇄는 없다', guard.can, { '101': false, '122': false, '102': false, '82': false });
+  for (const id of ['82', '122', '101']) {
+    eq(`${id} 도구 띠 — [인쇄] 없음, 엑셀이 주 단추`, guard['bar' + id], { 인쇄: false, 엑셀주: true });
+    eq(`${id} 인쇄 영역은 양식 표가 아니라 안내 한 장 (Ctrl+P 도)`, guard.print[id], { 엑셀안내: true, 장: 1, 표: false, 인쇄창: false });
+  }
+  eq('하루 어싸인표의 [인쇄]·[한글 파일로 받기]는 남는다', guard.day, { 인쇄: true, 한글: true });
 
   // 저장 상태는 머리줄 알약 하나에 (사용자 시안 2026-09-28, 결정 2-37) — 따로 뜨던 빨간 배지(saveDot)는 없다.
   // 초록 '저장됨 · 시각' · 회색 '저장 중…'(고친 것이 아직 파일에 없을 때도) · ⚠ 는 짧게 · 읽기 전용은 노랑.
@@ -882,19 +885,16 @@ async function main() {
     A.wkSunday=new Date(2026,9,4); A.renderWeek();
     const cell=[...document.querySelectorAll('#wkTable td.evt')].find(t=>t.dataset.iso==='2026-10-05');
     const shown={글자:cell?cell.textContent:'', 반복표시:!!(cell&&cell.querySelector('.evRep'))};
-    await A.buildPrintArea(false);
-    const printed=(document.querySelector('#printArea')||{}).textContent.includes('병동 회의');
     const p3=A.openEventDay('2026-10-08'); await wait(60);
     [...document.querySelectorAll('#modalBox button')].find(b=>b.textContent.includes('병동 회의')).click(); await wait(60);
     [...document.querySelectorAll('#modalBox button')].find(b=>b.textContent.includes('만 빼기')).click(); await p3;
     const skipped={skip:s.evRules[0].skip, 목:A.eventText('2026-10-08'), 다음목:A.eventText('2026-10-15')};
     A.undoAny(); skipped.undo=A.eventText('2026-10-08');
-    return {rule:[r.text,r.from,r.to,r.wds], note, err, n:s.evRules.length, shown, printed, skipped}; })()`);
+    return {rule:[r.text,r.from,r.to,r.wds], note, err, n:s.evRules.length, shown, skipped}; })()`);
   eq('매주 여러 요일로 넣는다', add.rule, ['병동 회의', '2026-10-05', '2026-10-31', [1, 4]]);
   ok('몇 날에 드는지 미리 알려 준다', add.note.includes('매주 월·목 · 10/05~10/31 · 8일'), add.note);
   eq('내용이 비면 넣지 않는다', [add.err, add.n], ['내용을 적으세요', 1]);
   ok('배정표 맨 윗줄에 반복 표시와 함께 나온다', add.shown.글자.includes('병동 회의') && add.shown.반복표시, JSON.stringify(add.shown));
-  ok('인쇄물에도 나온다', add.printed);
   eq('반복 일정은 이 날만 뺄 수 있다', [add.skipped.skip, add.skipped.목, add.skipped.다음목], [['2026-10-08'], '', '병동 회의']);
   eq('뺀 것도 Ctrl+Z 로 되돌아온다', add.skipped.undo, '병동 회의');
   await ev(`const A=window.__app; A.store.evRules=[]; A.wkSunday=new Date(2026,8,6); return 1`);
@@ -1448,7 +1448,7 @@ async function main() {
   eq('인계사항 상자가 첫 요일 칸에서 시작해도 지우지 않는다', rv27.인계사항, {채움: '<인계사항>', 맵핑: '<인계사항>', 목록: true});
   eq('일정 여섯 날은 세 줄로 (두 개씩)', rv27.일정줄, {줄: 3, 다있음: 6});
   eq('시트를 고쳐 싸면 calcChain 이 빠진다 (종류·관계 목록에서도)', rv27.calc, {처음: true, 뒤: false, 종류: false, 관계: false});
-  eq('122 자리표시자 양식은 화면 인쇄, 101 자리표시자 양식은 엑셀', [rv27.인쇄122, rv27.인쇄101], [true, false]);
+  eq('자리표시자 양식도 배정표 화면 인쇄는 없다 (122·101)', [rv27.인쇄122, rv27.인쇄101], [false, false]);
   eq('못 박은 표시자·못 박지 않은 표시자를 섞어도 화면 자리 수가 같다', [rv27.자리수.섞음, rv27.자리수.줄모름], [rv27.자리수.못박음, null]);
   ok('못 박은 표시자로 센 자리 수', rv27.자리수.못박음 && rv27.자리수.못박음.D >= 4, JSON.stringify(rv27.자리수));
   eq('표시자가 없는 요일 칸의 지난주 값은 비운다', [rv27.지난주.F5, rv27.지난주.E5], ['', '김차지']);
@@ -2181,7 +2181,7 @@ async function main() {
   // 맞바꾼 상대가 빠지면 남은 반쪽도 풀린다 · 근무 바꾸기로 DC 를 주면 다른 DC 는 D · 카드는 손으로 정한 자리 탓을 그대로 말한다 ·
   // 칸의 D/A 는 배정표 종이의 자리 이름 · 새 간호사는 차지 없이 · 원칙 4 를 끄면 3 이 돌아온다 · '1호' 표기 · 그날 방 수정은 그 인원수일 때만
   step('33 실시간 수정·칸 표기·설정');
-  const v33 = await ev(`const A=window.__app, D='2026-09-06';
+  const v33 = await ev(`return (async()=>{ const A=window.__app, D='2026-09-06';
     const setup=(id,n)=>{ A.setFormId(id); A.setWard(id); const s=A.store;
       s.order=['김차지','이에이','박비','최씨','정디','한막내'].slice(0,n||5); s.cells={}; s.ovr={}; s.ovrPair={}; s.roomOv={}; s.roomOvCnt={};
       s.presetDay={}; s.seedManual={}; s.unit={}; s.relief={}; s.trainee={}; s.trOv={}; s.evRules=[]; s.daily={}; s.banRooms={}; s.caps={}; s.hidden={};
@@ -2244,7 +2244,7 @@ async function main() {
       s.cells['정디'][D]='D/CN'; A.recompute(); out.cn102=/차지[(]CRN[)]는 자리가 아니라 근무를 DC 로 적습니다/.test(card()); }
     // ⑥ 새 간호사 — 가능 근무를 정해 둔 병동이면 차지 없이, 근무표의 NC 는 켠다. 처음 시작(가능 근무 없음)은 전부
     { let s=setup('101'); s.caps={'박비':['D','E','N']};
-      const was=window.prompt; window.prompt=()=>'새간호'; A.addNurse(); window.prompt=was;
+      { const pr=A.addNurse(); await new Promise(r=>setTimeout(r,40)); document.querySelector('#mdInput').value='새간호'; document.querySelector('#mdOk').click(); await pr; }   // 이름은 앱 창(askText)으로
       out.newCaps=A.store.caps['새간호'];
       s.order.push('새둘'); A.capsForNew('새둘',{'2026-09-07':'NC'}); out.newNC=A.store.caps['새둘'];
       s=setup('101'); s.order.push('새셋'); out.fresh=[A.capsForNew('새셋',{}),A.store.caps['새셋']||null]; }
@@ -2267,7 +2267,7 @@ async function main() {
       out.rov=[ed5!==base,A.store.roomOvCnt[D].D['차지'],A.roomsFor('D',4,'차지',D)===base4,
         /그날 방 수정[(]A[(]CN[)] 자리[)]은 5명일 때 고친 것이라 지금 4명인 배정에는 쓰지 않았습니다/.test(card())];
       s.cells['정디'][D]='D'; A.recompute(); out.rovBack=A.roomsFor('D',5,'차지',D)===ed5; }
-    A.show('week'); return out;`);
+    A.show('week'); return out; })()`);
   // 82 는 차지가 자리에 묶이지 않는다(결정 2-45) — 차지 자리(종이 A)로 맞바꿔도 차지는 사람 그대로, D/CN 은 없는 자리, DC/B 는 B 에 앉은 차지
   for (const id of ['101', '122', '82']) {
     const fl = id === '82';
@@ -2400,9 +2400,7 @@ async function main() {
         const c2=await xl(), sg=[]; for(const sec of L.sections) for(let k=0;k<sec.rows;k++) L.memoCols.forEach(mc=>{ const v=c2[A.colName(mc)+(sec.row+k)]; if(v) sg.push(A.colName(mc)+(sec.row+k)+'='+v); });
         const tue=A.dayInfo('2026-09-08').D, mon=A.dayInfo('2026-09-07').D;
         out.sg122=[sg, A.roomsFor('D',tue.cnt,'차지','2026-09-08')!==A.roomsFor('D',mon.cnt,'차지','2026-09-07')];
-        await A.buildPrintArea(false);
-        out.sg122p=[...document.querySelectorAll('#printArea td.pnm')].map(td=>td.nextElementSibling).filter(td=>td&&td.textContent.trim()).map(td=>td.textContent.trim());
-        out.sg122n=document.querySelectorAll('#printArea td.pnm').length; }
+}
       // ⑨ 주지 않을 방 카드 — 칸에 적은 자리가 그 날 없으면(4명인 날 D/E) 손 탓이 아니다 (PR #73 교차 검토)
       { const s=base('101',4); allD(s,D1); s.cells['최씨'][D1]='D/E'; A.recompute();
         const rm=l=>A.roomTokens(A.roomsFor('D',4,l,D1)).map(A.roomFull);
@@ -2437,7 +2435,7 @@ async function main() {
   eq('올린 101 양식(CN 이 둘째 줄) — 차지 김차지가 CN 줄, 자리에 묶인다', [v34.cn101[0][1], v34.cn101C], [['CN', '김차지'], ['김차지', false]]);
   eq('올린 101 양식(첫 줄이 그냥 A) — 화면도 A, 차지는 첫 줄', v34.a101, [['A', 'B', 'C', 'D', 'E'], true, false]);
   eq('D 6줄 올린 101 양식 — 화면 여섯 줄, 화면 인쇄 대신 엑셀', v34.p6, [6, false]);
-  ok('내장 101 은 화면 인쇄', v34.p5);
+  eq('내장 101 도 배정표 화면 인쇄는 없다', v34.p5, false);
   ok('102 엑셀 — /CRN 은 신규 줄 앞', /^김차지 [/]CRN/.test(v34.trX) && /[/] 신규일$/.test(v34.trX), v34.trX);
   ok('102 하루 어싸인표 — /CRN 은 신규 줄 앞', /김차지 [/]CRN/.test(v34.trH) && v34.trH.indexOf('/CRN') < v34.trH.indexOf('/ 신규일'), v34.trH);
   ok('102 화면 — /CRN 은 신규 줄 앞', v34.trS.indexOf('/CRN') >= 0 && v34.trS.indexOf('/CRN') < v34.trS.indexOf('/ 신규일'), v34.trS);
@@ -2445,7 +2443,6 @@ async function main() {
   ok('122 — 월~금 방 열에 D 여섯째 자리 이름(E)', /^E/.test(v34.e122[0]), v34.e122[0]);
   eq('122 — 그 자리 방은 방 열과 같아 싸인 칸이 비어 있다', v34.e122[1], '');
   eq('122 — 그 날 방이 방 열과 달라도 엑셀의 이름 옆 싸인 칸은 모두 비어 있다', v34.sg122, [[], true]);
-  ok('122 — 인쇄의 이름 옆 싸인 칸도 비어 있다', v34.sg122n > 0 && v34.sg122p.length === 0, JSON.stringify(v34.sg122p.slice(0, 4)));
   eq('주지 않을 방 카드 — 그 날 없는 자리를 적었으면 손 탓이 아니라 "모두 피하는 배치가 없습니다"', v34.ban, [true, false]);
   eq('DC/CN 인 날 정디에게 DC — 정디가 차지, 김차지는 D(차지 자리 표기도 걷음)', v34.dcCN, ['정디', 'D']);
   eq('다른 사람이 DC 인 날 D/A(CN) — 표시대로 김차지가 차지, 카드', v34.taken, ['김차지', true]);
@@ -3352,8 +3349,7 @@ async function main() {
     await A.openDay(D); await wait(400);
     out.day=[/손으로 바꾼 것/.test(document.querySelector('#daySide').textContent),/차지 교육/.test(document.querySelector('#daySide').textContent),
       /차지 교육/.test(document.querySelector('#dayPreview').textContent)];
-    A.show('week'); await A.buildPrintArea(false); await wait(50);
-    out.paper=/차지 교육/.test(document.querySelector('#printArea').textContent);
+    A.show('week');
     // 접힌 카드 — 펼치면 줄마다 사유
     const fb=document.querySelector('#wkWhy .fold'); if(fb) fb.click(); await wait(10);
     out.fold=[!!fb,document.querySelectorAll('#wkWhy .whyRow').length];
@@ -3450,7 +3446,6 @@ async function main() {
   eq('담당 교체 모두 초기화도 되돌린다(사유까지)', v41.reset, ['{}', true, '옛 교체 — 회진']);
   eq('확인 카드 — 문장 뒤에 사유', v41.warn, [true]);
   eq('하루 어싸인표 옆 열에 사유, 종이(미리보기)에는 없다', v41.day, [true, true, false]);
-  eq('인쇄에는 사유가 안 나온다', v41.paper, false);
   eq("좁은 화면 — '손으로 바꾼 것'은 접혀 있고 펼치면 줄마다", v41.fold, [true, 1]);
   eq('방 창이 열린 채 Ctrl+Z — 창이 닫힌다', v41.uRp, ['none', null, '{}']);
   eq('다시 고치면 사유를 또 묻고, 되돌리기는 그 고침만 (앞의 맞바꿈과 사유는 남는다)', v41.uRp2, [true, '{}', '차지', '앞의 맞바꿈']);
@@ -3463,6 +3458,88 @@ async function main() {
   eq('적은 때가 망가진 사유도 화면을 멈추지 않는다', v41.badAt, ['', '', true]);
   eq('[사유 적기] 사이 변경이 없어지면 적지 않고 되돌리기 점도 없다', v41.editGone, [0, '{}', true]);
   eq('창을 연 단추를 두 번 눌러도 사유 창이 바로 닫히지 않는다', v41.dbl, [true, false, '{}']);
+
+  // ── 42. 표 모양 고치기 — 하루 어싸인표 양식의 칸 크기·합치기·나누기·글자 모양 (2026-10-26) ──
+  // 고친 XML 이 한글 표 규칙을 지키는지: 격자 자리마다 칸이 딱 하나, tr 수 = rowCnt, tr 순서 = rowAddr, 표 크기 = 칸 크기 합.
+  step('42 표 모양 고치기');
+  const v42 = await ev(`return (async()=>{ const A=window.__app, out={};
+    delete A.store.dayForm; A.DAYTPL=null; A.undoClear();
+    await A.openHwEd(); const E=()=>A.hwEd, tbls=()=>[...E().sec.getElementsByTagNameNS('*','tbl')];
+    const grid=t=>{ const m=A.hwTable(t), cov={}; let dup=0;
+      for(const x of m.cells) for(let r=x.r;r<x.r+x.rs;r++) for(let c=x.c;c<x.c+x.cs;c++){ const k=r+','+c; if(cov[k]) dup++; cov[k]=1; }
+      const trs=[...t.children].filter(e=>e.localName==='tr');
+      const trOk=trs.length===m.rowCnt&&trs.every((tr,i)=>[...tr.children].filter(e=>e.localName==='tc').every(tc=>+[...tc.children].find(e=>e.localName==='cellAddr').getAttribute('rowAddr')===i));
+      const g=A.hwTableGeom(m), sz=[...t.children].find(e=>e.localName==='sz');
+      const szOk=Math.abs(+sz.getAttribute('width')-g.colW.reduce((a,b)=>a+b,0))<2&&Math.abs(+sz.getAttribute('height')-g.rowH.reduce((a,b)=>a+b,0))<2;
+      return {rc:m.rowCnt+'x'+m.colCnt, n:m.cells.length, holes:m.rowCnt*m.colCnt-Object.keys(cov).length, dup, trOk, szOk}; };
+    const t1=()=>tbls()[1];
+    out.g0=grid(t1()); delete out.g0.szOk;
+    const m0=A.hwTable(t1()), txt=[m0.at(0,0).text.trim(),m0.at(0,1).text.trim()];
+    out.merge=A.hwMerge(t1(),A.hwRect(m0,{r:0,c:0},{r:0,c:1}));
+    const top=A.hwTable(t1()).at(0,0); out.g1=grid(t1()); out.mtxt=[top.cs,top.text.includes(txt[0]),top.text.includes(txt[1])];
+    out.unmerge=A.hwUnmerge(t1(),0,0); out.g2=grid(t1());
+    out.split=A.hwSplitGrid(t1(),1,1,2,3); out.g3=grid(t1());
+    const t0=tbls()[0], tw=()=>A.hwTableGeom(A.hwTable(t0)).colW.reduce((a,b)=>a+b,0), th=()=>A.hwTableGeom(A.hwTable(t0)).rowH.reduce((a,b)=>a+b,0);
+    const W=tw(), d1=A.hwResizeCol(t0,1,600), W1=tw(), d2=A.hwResizeCol(t0,1,-99999);
+    out.col=[d1,Math.round(W1-W),d2<0&&Math.min(...A.hwTable(t0).cells.filter(x=>x.c+x.cs===1).map(x=>x.w))>=850,grid(t0).holes,grid(t0).szOk];
+    const H=th(), d3=A.hwResizeRow(t0,1,500); out.row=[d3,Math.round(th()-H)];
+    const head=E().head, cnt=()=>head.getElementsByTagNameNS('*','charPr').length, n0=cnt();
+    const v1=A.hwVariant(head,'charProperties','charPr','0',cp=>cp.setAttribute('height','1300'));
+    const v2=A.hwVariant(head,'charProperties','charPr','0',cp=>cp.setAttribute('height','1300'));
+    const ids=A.hwFontIds(head,'시험서체'), ids2=A.hwFontIds(head,'시험서체');
+    out.char=[v1===v2,cnt()-n0,+head.getElementsByTagNameNS('*','charProperties')[0].getAttribute('itemCnt')===cnt(),Object.keys(ids).length,JSON.stringify(ids)===JSON.stringify(ids2)];
+    E().sel={t:0,a:{r:0,c:1},b:{r:0,c:1}};
+    const run=()=>A.hwTable(tbls()[0]).at(0,1).sub.getElementsByTagNameNS('*','run')[0], cp=()=>E().st.char[run().getAttribute('charPrIDRef')];
+    const pt0=cp().pt, b0=!!cp().bold;
+    A.hwEdSize(2,true); A.hwEdToggle('bold'); out.tool=[cp().pt-pt0,!!cp().bold!==b0];
+    A.hwEdUndo(); A.hwEdUndo(); out.undo=cp().pt===pt0&&!!cp().bold===b0;
+    const keep=A.hwTable(t1()).cells.length;
+    E().dirty=true; await A.hwEdSave();
+    const T=await A.loadDayTpl(), doc=new DOMParser().parseFromString(T.sec,'application/xml'), tt=[...doc.getElementsByTagNameNS('*','tbl')];
+    out.saved=[T.name.endsWith('(표 고침)'),!A.hwEd,A.hwTable(tt[1]).cells.length===keep,grid(tt[1]).holes,grid(tt[0]).trOk];
+    const back=await A.parseHwpx(await A.dayHwpxBytes('2026-09-07')); out.pack=!!(back.sec&&back.head);
+    A.undoAny(); out.appUndo=!A.store.dayForm;
+    return out; })()`);
+  eq('나눌 표 처음 모양', v42.g0, { rc: '3x2', n: 6, holes: 0, dup: 0, trOk: true });
+  eq('합치기 — 칸 하나가 줄고 격자가 맞다', [v42.merge, v42.g1], [true, { rc: '3x2', n: 5, holes: 0, dup: 0, trOk: true, szOk: true }]);
+  eq('합친 칸은 두 칸 너비, 두 칸 글자를 다 가진다', v42.mtxt, [2, true, true]);
+  eq('합친 칸을 풀면 원래 칸 수', [v42.unmerge, v42.g2.n, v42.g2.holes], [true, 6, 0]);
+  eq('홑칸을 줄 2 × 칸 3 으로 — 격자에 선이 늘고 빈 자리·겹침이 없다', [v42.split, v42.g3], [true, { rc: '4x4', n: 11, holes: 0, dup: 0, trOk: true, szOk: true }]);
+  eq('세로 경계를 끌면 양옆 칸만 — 표 폭 그대로, 하한에서 멈춘다', v42.col, [600, 0, true, 0, true]);
+  eq('가로 경계를 끌면 그 줄이 높아지고 표가 길어진다', v42.row, [500, 500]);
+  eq('같은 글자 모양은 한 번만, 서체는 언어마다 한 번만 더한다', v42.char, [true, 1, true, 7, true]);
+  eq('고른 칸 — 글씨 2pt 크게 · 굵게 뒤집기, 되돌리기', [v42.tool, v42.undo], [[2, true], true]);
+  eq('저장 — 이 병동 양식(표 고침)으로, 다시 읽어도 같은 격자', v42.saved, [true, true, true, 0, true]);
+  ok('고친 양식으로 한글 파일이 싸진다', v42.pack);
+  ok('앱 되돌리기(Ctrl+Z)로 고치기 전 양식', v42.appUndo);
+
+  // ── 43. 관리 화면 실사용 — 파일 덮개·줄 끌기·스크롤 (2026-10-26) ──
+  // 사용자: "가능근무 하나하나 수정할때마다 스크롤 맨 위로가고 … 드래그하면 '파일을 놓으세요' 이딴 거나 나오고"
+  step('43 관리 화면 실사용');
+  const v43 = await ev(`return (async()=>{ const A=window.__app, out={}, wait=ms=>new Promise(r=>setTimeout(r,ms));
+    const s=A.store; s.order=Array.from({length:24},(_,i)=>'간호'+String(i+1).padStart(2,'0')); s.cells={}; s.groups=[];
+    for(const n of s.order) s.cells[n]={};
+    A.store=s; A.recompute(); A.show('admin'); A.pickAdmin('caps'); await wait(100);
+    const drop=document.querySelector('#drop'), rows=()=>[...document.querySelectorAll('#capsTable tr.nrow')];
+    const dt=new DataTransfer(), src=rows()[5], dst=rows()[1], name=A.store.order[5];
+    src.dispatchEvent(new DragEvent('dragstart',{dataTransfer:dt,bubbles:true}));
+    const r=dst.getBoundingClientRect();
+    dst.dispatchEvent(new DragEvent('dragover',{dataTransfer:dt,bubbles:true,cancelable:true,clientY:r.top+2}));
+    out.overlay=drop.classList.contains('on');
+    dst.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true,clientY:r.top+2}));
+    src.dispatchEvent(new DragEvent('dragend',{dataTransfer:dt,bubbles:true}));
+    await wait(50); out.moved=A.store.order.indexOf(name);
+    const f=new DataTransfer(); f.items.add(new File(['x'],'a.xlsx'));
+    window.dispatchEvent(new DragEvent('dragover',{dataTransfer:f,bubbles:true,cancelable:true})); out.fileOverlay=drop.classList.contains('on'); drop.classList.remove('on');
+    const room=document.documentElement.scrollHeight-innerHeight;
+    scrollTo(0,Math.min(600,room)); await wait(30); const y0=scrollY;
+    rows()[12].querySelector('[onclick^="toggleCap"]').click(); await wait(80);
+    out.scroll=[room>100,Math.abs(scrollY-y0)<=2,y0,scrollY];
+    return out; })()`);
+  eq('줄을 끌면 파일 덮개가 뜨지 않는다', v43.overlay, false);
+  eq('6번째 줄을 2번째 줄 위에 놓으면 2번째가 된다', v43.moved, 1);
+  ok('파일을 끌면 덮개', v43.fileOverlay);
+  ok('가운데로 내린 채 할 수 있는 근무를 눌러도 스크롤이 그대로', v43.scroll[0] && v43.scroll[1], JSON.stringify(v43.scroll));
 
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
