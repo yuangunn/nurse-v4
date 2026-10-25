@@ -1441,8 +1441,14 @@ def save_shift(body: dict):
     return {"ok": True}
 
 
+# 기본 근무는 지울 수 없다 — 화면(settings-defs.js deleteShift)과 같은 목록. V 도 (사용자 결정 2026-10-26, 결정 1-56)
+_PROTECTED_SHIFTS = {"DC", "D", "D1", "EC", "E", "중", "NC", "N", "OF", "주", "V"}
+
+
 @app.delete("/api/shifts/{code}")
 def delete_shift(code: str):
+    if code in _PROTECTED_SHIFTS:
+        raise HTTPException(400, "기본 근무는 삭제할 수 없습니다.")
     db.delete_shift(code)
     return {"ok": True}
 
