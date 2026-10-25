@@ -327,7 +327,9 @@
 - **하지 않은 것 (남김)**: 프로필 삭제에 비밀번호 요구(비밀번호 입력 창이 필요 — Electron 은 prompt 를 못 띄운다), 여러 주 휴무 부족을 게이팅 모델이 증명 못 해
   신호등이 시간 초과로 끝나는 것(성능), 서버 포트가 바뀌면 localStorage 가 안 보이는 것, 윈도 릴리스 연기 시험, 생성 뒤 달을 바꿔 손으로 저장하면 새 달
   이름으로 저장되는 것, 배정 도구의 일자만 있는 날짜 줄 달 해석·낮은 4건, 같은 이름·그룹 간호사 라벨 겹침.
-  결정이 필요한 것: 암호 프로필의 사전입력이 localStorage 에 평문(병동별로 나누기만 했다), 근무 정의에서 V 를 지울 수 있게 둘지.
+  사용자 결정 (2026-10-26): 암호 프로필의 사전입력은 localStorage 에 평문 그대로 둔다("평문으로 두자" — 병동별로 나누기만 했다).
+  근무 정의에서 V 는 지울 수 없다("V은 지울수 없게 해야지") — 화면(deleteShift)과 서버(DELETE /api/shifts, 400)가 같은 기본 근무 목록으로 막는다
+  (엔진은 V 가 없어도 돌지만, 쉬는 칸을 V 로 채우는 병동이 지우면 생성이 막힌다). tests/test_shift_protect.py.
 - **검사**: 회귀 테스트 — tests/test_profile_lifecycle.py · test_data_roundtrip.py · test_solver_lifecycle.py · test_engine_review_regression.py ·
   test_cpsat_review_regression.py · test_conflict_review.py · test_local_only.py, scripts/test_frontend_state.mjs · test_frontend_edit.mjs ·
   test_grid_select.mjs ⑫. 대부분 고치기 전 코드에서 실패하는 것을 확인했다. pytest 525 · JS 17 · 배정 도구 브라우저 검사 · 디자인 검사기 통과.
