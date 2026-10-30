@@ -636,7 +636,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                                nid=nid)
                     model.Add(sum(t_terms) <= self._tail_saeng_cap(nurse, tail_idxs)).OnlyEnforceIf(lit)
             # (야간전담 '여성+31일달 생 정확히 1회' 게이트는 제거 — 생휴는 보장이
-            #  아니라는 사용자 원칙. 솔버에서도 같은 강제를 제거함 — 패리티)
+            #  아니라는 원칙. 솔버에서도 같은 강제를 제거함 — 패리티)
 
     def _g_forbidden(self, model, x, gate):
         """역순 전환 중 하드인 것 (가장 흔한 사전입력 충돌). per (nurse, date-pair).

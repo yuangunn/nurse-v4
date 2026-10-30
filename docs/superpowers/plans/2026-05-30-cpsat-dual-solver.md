@@ -82,7 +82,7 @@ ort_dynlibs = collect_dynamic_libs('ortools')
 - [ ] **Step 5: 빌드 → 네트워크 차단 실행 (게이트)**
 
 Run: `build.bat` (PyInstaller 단계까지) → `dist/NurseScheduler/NurseScheduler.exe`를 네트워크 차단(어댑터 비활성/방화벽) 상태에서 기동, `/health` 확인 + 게스트로 작은 CP-SAT 생성 1회.
-Expected: 서버 기동 + CP-SAT 생성 성공. 실패 시 hiddenimports/`collect_dynamic_libs` 보강 후 재시도. 그래도 실패면 **STOP — 사용자에게 보고, CP-SAT 미출시 폴백**.
+Expected: 서버 기동 + CP-SAT 생성 성공. 실패 시 hiddenimports/`collect_dynamic_libs` 보강 후 재시도. 그래도 실패면 **STOP — 보고, CP-SAT 미출시 폴백**.
 
 - [ ] **Step 6: Commit**
 
@@ -368,4 +368,4 @@ reverse[lit.Index()] = ("간호사/날짜/제약" 한국어 라벨)
 ## 참고
 - 각 Phase 끝 `py -m pytest tests/ -q` green 필수. HiGHS 경로 회귀 금지.
 - 동등성 기준: 비트 동일 아님 — 하드제약 충족 + 목적값 comparable(허용 gap은 Task 4d에서 확정).
-- Phase 0 실패 시 전체 중단 + 사용자 보고.
+- Phase 0 실패 시 전체 중단 + 보고.

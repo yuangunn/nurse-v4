@@ -5,7 +5,7 @@
 서브모델을 직접 풀어 핵심 규칙을 검증한다:
   - 야간전담: N/NC만, 주간/이브닝 0, 당월 정확히 14 야간
   - 생휴는 강제하지 않는다 — "월 1회 주어질 수 있다"일 뿐 보장이 아님
-    (2026-08-19 사용자 원칙, decisions.md). 월 ≤1 상한만 (_cs_menstrual_leave)
+    (2026-08-19 원칙, decisions.md). 월 ≤1 상한만 (_cs_menstrual_leave)
 """
 from __future__ import annotations
 
@@ -137,8 +137,8 @@ def _two_month_request(night_months: dict, prev_nights: dict,
 def test_night_kept_month_excluded_from_two_month_sum(solver):
     """전월 나이트킵(14N)이어도 당월 야간 배정이 막히면 안 된다.
 
-    2026-08-20 사용자 명시: "나이트킵 때 한 나이트는 수면오프와 전혀 연관 없는
-    나이트". 홀짝월 합산(≤11)은 수면오프 회피 규칙이므로 야간전담 달의 야간은
+    2026-08-20: 나이트킵 때 한 나이트는 수면오프와 전혀 연관 없는
+    나이트다. 홀짝월 합산(≤11)은 수면오프 회피 규칙이므로 야간전담 달의 야간은
     합산 대상이 아니다 — 그대로 더하면 전월 14회 → 당월 상한 0이 되어 나이트킵을
     마친 사람만 야간을 못 받는다.
     """
