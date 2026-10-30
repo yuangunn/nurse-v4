@@ -3541,6 +3541,45 @@ async function main() {
   ok('파일을 끌면 덮개', v43.fileOverlay);
   ok('가운데로 내린 채 할 수 있는 근무를 눌러도 스크롤이 그대로', v43.scroll[0] && v43.scroll[1], JSON.stringify(v43.scroll));
 
+  // ── 44. 차지 방 없는 프리셋 — 그 프리셋을 쓰는 날은 차지가 어제 보던 자리를 그대로 (2026-10-30) ──
+  // 병동 문의: "평일 D, E 는 차지방이 있지만(차지인 날 방 튕김) 주말, 공휴일, 나이트는 차지방이 없어서 방이 튕기지 않아야"
+  step('44 차지 방 없는 프리셋');
+  const v44 = await ev(`return (async()=>{ const A=window.__app, out={}, wait=ms=>new Promise(r=>setTimeout(r,ms));
+    const days=['2026-11-29','2026-11-30','2026-12-01','2026-12-02','2026-12-03','2026-12-04','2026-12-05'];
+    const dc={'2026-11-29':'간호03','2026-11-30':'간호01','2026-12-01':'간호03','2026-12-02':'간호01','2026-12-03':'간호01','2026-12-04':'간호01','2026-12-05':'간호04'};
+    A.setFormId('101'); A.setWard('101'); const s=A.store;
+    s.order=['간호01','간호02','간호03','간호04','간호05']; s.cells={}; s.ovr={}; s.ovrPair={}; s.roomOv={}; s.roomOvCnt={}; s.presetDay={}; s.seedManual={};
+    s.unit={}; s.relief={}; s.trainee={}; s.trOv={}; s.daily={}; s.banRooms={}; s.groups=[]; s.groupLog=[]; s.why={}; s.hidden={};
+    s.caps={}; for(const n of s.order) s.caps[n]=['DC','D','EC','E','NC','N'];
+    for(const n of s.order){ s.cells[n]={}; for(const d of days) s.cells[n][d]=dc[d]===n?'DC':'D'; }
+    A.store=s; A.resetSchemes(); s.presets[5]=[{id:'pWk',name:'주말',rooms:JSON.parse(JSON.stringify(s.schemes[5]))}];
+    s.presetPlan={sun:{D:{5:'pWk'}},sat:{D:{5:'pWk'}}}; s.noChg={}; A.recompute(); A.undoClear();
+    const lab=(n,d)=>((A.result.byNurse[n]||{})[d]||{}).label, chg=d=>A.result.byDay[d].D.charge;
+    out.off=[chg('2026-12-05'),lab('간호04','2026-12-05'),lab('간호04','2026-12-04')];
+    A.setPresetNoChg(5,'pWk',true); await wait(20);
+    out.on=[chg('2026-12-05'),lab('간호04','2026-12-05'),lab('간호04','2026-12-04'),lab('간호03','2026-12-01'),A.store.noChg['5:pWk']===true];
+    out.float=[A.weekData(new Date(2026,10,29)).map(d=>d.secs.D.float).join(',')];
+    A.wkSunday=new Date(2026,10,29); A.show('week'); await wait(30);
+    const td=[...document.querySelectorAll('#wkTable td.nm')].find(t=>t.dataset.n==='간호04'&&t.dataset.iso==='2026-12-05');
+    const td2=[...document.querySelectorAll('#wkTable td.nm')].find(t=>t.dataset.n==='간호03'&&t.dataset.iso==='2026-12-01');
+    out.tag=[!!(td&&td.querySelector('.crnTag')),!!(td2&&td2.querySelector('.crnTag'))];
+    // 풀린 날은 DC 도 칸에 적은 자리에 앉는다(차지 자리로 끌려가지 않는다)
+    A.store.cells['간호04']['2026-12-05']='DC/C'; A.recompute();
+    out.pin=[((A.cellPins['2026-12-05']||{}).D||{})['간호04'].why, chg('2026-12-05')];
+    A.store.cells['간호04']['2026-12-05']='DC'; A.recompute();
+    out.saved=/"noChg":\\{"5:pWk":true\\}/.test(A.serializeStore(A.store));
+    A.undoAny(); out.undo=!A.store.noChg['5:pWk'];
+    return out; })()`);
+  eq('차지 방이 있는 날 — 토요일 차지(간호04)는 차지 자리로 간다', [v44.off[0], v44.off[1]], ['간호04', '차지']);
+  ok('차지 방 없음을 켜면 토요일 차지가 금요일 자리를 그대로 본다', v44.on[0] === '간호04' && v44.on[1] === v44.on[2] && v44.on[1] !== '차지', JSON.stringify(v44.on));
+  eq('평일(기본 프리셋)은 그대로 차지 자리', v44.on[3], '차지');
+  ok('켠 값이 저장된다', v44.on[4]);
+  eq('그 프리셋을 쓰는 날(일·토)만 차지가 풀린다', v44.float, ['true,false,false,false,false,false,true']);
+  eq('풀린 날만 이름 뒤 /CRN', v44.tag, [true, false]);
+  eq('풀린 날은 DC/자리도 그 자리에 앉는다', v44.pin, ['', '간호04']);
+  ok('데이터 파일에 noChg 로 저장', v44.saved);
+  ok('Ctrl+Z 로 차지 방 없음 끄기 전으로', v44.undo);
+
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');
   ok('페이지 오류 없음', !errs, String(errs));

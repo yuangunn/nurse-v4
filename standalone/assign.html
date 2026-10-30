@@ -905,6 +905,9 @@
   #dayPaper{margin:0;padding:18px;background:var(--paper-2);box-shadow:none}
   #dayPreview{display:flex;justify-content:center;min-height:240px}
   #dayPreview .hsheet{box-shadow:0 2px 12px rgba(15,17,21,.18)}
+  .psNoChg{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:10px 0 2px;font-size:13.5px;cursor:pointer}
+  .psNoChg input{width:17px;height:17px;margin:0;accent-color:var(--accent)}
+  .psTag{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:6px;font-size:11px;font-weight:700;background:var(--rule-soft);color:var(--ink-2)}
   /* 표 모양 고치기 — 화면 전체 */
   #hwEd{position:fixed;inset:0;z-index:165;background:var(--paper);display:none;flex-direction:column}
   #hwEd.on{display:flex}
@@ -2124,7 +2127,7 @@ function formModal(o){
 
 /* 만든이·버전 — 여기만 고치면 도움말·관리·시작 화면에 함께 반영된다.
  * ver/date 는 빌드할 때 자동으로 채워진다(scripts/build-assign-standalone.mjs). */
-/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261026a'};/*BUILD_INFO_END*/
+/*BUILD_INFO_BEGIN*/const BUILD={ver:'v261030a'};/*BUILD_INFO_END*/
 const ABOUT={
   name:'어싸인 배정표',
   by:'yuangunn',
@@ -2206,6 +2209,11 @@ function crnSeats(P){ const n=seatOv&&seatOv[P];   // 양식 보기 초안에서
 /* 종이의 병동 자리가 하나뿐인 근무(82 N)는 옮겨 앉을 자리가 없으니 묶는다 — 풀어 두면 손으로 그 자리에 앉힌 사람이 차지가 아니고
  * 차지는 종이 밖 자리로 밀려 화면 어디에도 /CRN 이 안 보였다 (2026-10-01 교차 검토) */
 function crnFloat(P){ const F=formDef(); return !!(F&&(F.crnMark||F.noRooms)&&!(tplCrnSeat()||{})[P]&&crnSeats(P).length>1); }
+/* 그 날 그 근무의 차지가 자리에 묶이지 않나 — 서식이 푸는 것(crnFloat) 또는 그 날 쓰는 방 구성 프리셋이 '차지 방 없음'(presetNoChg).
+ * cnt = 그 근무 사람 수(코어의 cnt 와 같게). 계산 뒤에는 recompute 가 정해 둔 chgFloatDay 를 본다(chgFloat) */
+function crnFloatAt(P,iso,cnt){ return crnFloat(P)||(!!iso&&cnt>0&&crnSeats(P).length>1&&!!presetFor(P,cnt,iso).noChg); }
+let chgFloatDay={};   // {날짜:{근무:true}} — 프리셋 때문에 차지가 풀린 근무 (recompute 가 채운다)
+const chgFloat=(P,iso)=>crnFloat(P)||!!(iso&&chgFloatDay[iso]&&chgFloatDay[iso][P]);
 /* 화면에서 바로 인쇄하는 서식은 101·122 모양뿐이다. 102·82 는 앱이 채운 엑셀을 엑셀에서 인쇄한다.
  * 예전엔 82 가 101 인쇄 틀로 빠져 방 칸이 있고 SU 줄이 없는 종이가 나왔다 (2026-09-27) */
 /* 배정표는 화면 인쇄를 쓰지 않는다 (2026-10-26, 사용자 "인쇄버튼 없애. 엑셀표 그대로 양식을 후 수정할것도 필요한데" ·
@@ -2226,6 +2234,7 @@ function emptyStore(){ return {app:'assign',ver:3,rev:0,order:[],cells:{},ovr:{}
   schemes:JSON.parse(JSON.stringify(DEFAULT_SCHEMES)),
   ui:{},   // 화면 상태(인쇄함·시작안내 숨김·처음안내 봄) — localStorage 가 아니라 여기에 (2026-09-20)
   presets:{6:[],5:[],4:[],3:[],2:[]},presetPlan:{},presetDay:{},
+  noChg:{},       // 차지 방 없는 프리셋 {'인원수:프리셋id':true} — 그 프리셋을 쓰는 날은 차지가 자리에 묶이지 않는다 (2026-10-30, presetFor·crnFloatAt)
   ovrPair:{},hidden:{},history:[],
   relief:{},      // 대체간호사 {날짜:{근무:[이름]}} — 근무표에 없는 사람 (2026-09-27)
   newUntil:{},    // 신규 표시를 더 오래 둘 날 {이름:'YYYY-MM-DD'} — 없으면 근무표의 마지막 /D·/E·/N 날 (2026-09-27, traineeUntil)
@@ -2322,6 +2331,7 @@ function migrateStore(){ // 구버전 파일: charge(bool) → caps(가능근무
   if(!formDefOf(store.formId)) store.formId=formFor(store.ward)||'101';
   if(store.wardPicked==null) store.wardPicked=!!store.ward&&(store.ward!=='101'||(store.rooms||[]).length!==DEFAULT_ROOMS.length);   // 기본값 그대로면 아직 안 고른 것
   // 방 구성 프리셋(2026-09-17): 인원수별 추가 프리셋 목록 + 요일 계획 + 그날 예외. 옛 파일은 빈 값으로 시작 — '기본' 프리셋 = store.schemes
+  if(!store.noChg||typeof store.noChg!=='object'||Array.isArray(store.noChg)) store.noChg={};
   if(!store.presets||typeof store.presets!=='object') store.presets={};
   for(const c of [6,5,4,3,2]) if(!Array.isArray(store.presets[c])) store.presets[c]=[];
   if(!store.presetPlan||typeof store.presetPlan!=='object') store.presetPlan={};
@@ -3414,6 +3424,13 @@ function recompute(){
   // 대체간호사 — 명부 맨 뒤(가장 후임)로 세고 차지는 맡기지 않는다. 한 사람으로 세어 병실을 나눈다
   const rel=reliefSchedule();
   for(const nm in rel) nurses.push({id:nm,name:nm,seniority:nurses.length,chargeCapable:false});
+  // 그 날 그 근무가 '차지 방 없음' 프리셋인지 — 인원수(코어의 staff 와 같게: 병동 간호사 + 대체간호사)로 프리셋을 찾는다.
+  // 칸에 적은 자리(DC/B)를 읽기 전에 정해야 한다 — 차지가 풀린 날은 DC 도 적은 자리에 앉는다
+  chgFloatDay={};
+  { const cntDay={}, add=(iso,code)=>{ const P=AssignCore.periodOf(code); if(P){ const d=(cntDay[iso]=cntDay[iso]||{}); d[P]=(d[P]||0)+1; } };
+    for(const n of wardOnly) for(const iso in (store.cells[n]||{})){ const pc=parseCellRaw(store.cells[n][iso]); if(pc&&pc.code) add(iso,pc.code); }
+    for(const nm in rel) for(const iso in rel[nm]) add(iso,rel[nm][iso]);
+    for(const iso in cntDay) for(const P in cntDay[iso]) if(!crnFloat(P)&&crnFloatAt(P,iso,cntDay[iso][P])) (chgFloatDay[iso]=chgFloatDay[iso]||{})[P]=true; }
   const schedule={}, cellOvr={};
   for(const n of store.order){
     const sc={};
@@ -3425,8 +3442,8 @@ function recompute(){
         const P=AssignCore.periodOf(pc.code);
         if(!P) continue;
         // 종이 자리 이름 → 앱 자리. 차지 자리가 고정인 서식에서 DC·EC·NC 는 차지 자리에 앉는다 — 다른 자리를 같이 적으면 표시를 따른다
-        let seat=seatOfLabel(pc.label,P), why=seat?'':'none';
-        if(seat&&/C$/.test(pc.code)&&!crnFloat(P)&&seat!=='차지'){ seat=null; why='chg'; }
+        let seat=seatOfLabel(pc.label,P,iso), why=seat?'':'none';
+        if(seat&&/C$/.test(pc.code)&&!chgFloat(P,iso)&&seat!=='차지'){ seat=null; why='chg'; }
         ((cellPins[iso]=cellPins[iso]||{})[P]=cellPins[iso][P]||{})[n]={lb:pc.label,code:pc.code,seat,why};
         if(seat) ((cellOvr[iso]=cellOvr[iso]||{})[P]=cellOvr[iso][P]||{})[n]=seat;
       }
@@ -3436,7 +3453,7 @@ function recompute(){
   // 차지 자리가 고정인 서식에서 DC·EC·NC 가 아닌 칸이 차지 자리(D/A(CN))를 적었는데 그 날 다른 사람이 DC·EC·NC 면 표시를 따른다 —
   // 위 'chg' 의 반대쪽이다. 옛 파일의 'D/A'(그때는 둘째 자리)가 말없이 차지를 가져가지 않게 (2026-10-01 교차 검토)
   for(const iso in cellPins) for(const P in cellPins[iso]){
-    if(crnFloat(P)) continue;
+    if(chgFloat(P,iso)) continue;
     const pins=cellPins[iso][P];
     if(!wardOnly.some(n=>(schedule[n]||{})[iso]===P+'C')) continue;
     for(const n in pins){ const c=pins[n];
@@ -3511,7 +3528,8 @@ function recompute(){
      ...(hg?{handoverGroups:hg}:{}),
      roomsFor:roomsForCore,maxSeats:P=>seatsFor(P),
      // 102: CRN 은 방이 고정이 아니다 — 종이의 어느 자리든 이어 보던 자리에 앉는다 (차지를 첫 자리에 못 박으면 CRN 이 바뀔 때마다 모두 밀린다)
-     chargeSeats:P=>crnFloat(P)?crnSeats(P):null,
+     // 101 같은 서식도 '차지 방 없음' 프리셋을 쓰는 날은 같다 — 차지가 어제 보던 방을 그대로 본다 (chgFloatDay)
+     chargeSeats:(P,cnt,dk)=>chgFloat(P,dk)?crnSeats(P):null,
      // 겹침은 병실 개수가 아니라 병상수 합(같이 보던 환자 수) — 병상수를 모르는 방은 1
      // 겹침은 병실 개수가 아니라 병상수 합(같이 보던 환자 수). 병상 키 하나는 환자 한 명 = 1
      bedsOf:t=>{ const [room,no]=splitBed(roomFull(t)); return no!=null?1:(bedCount(room)||1); }});
@@ -3572,7 +3590,7 @@ function paperSeat(P){
 }
 /* 화면 자리 수 + 종이에 찍히는 자리 + 종이의 자리 이름·줄 순서 — 양식을 읽고 나서 이것이 달라지면 다시 계산해 그린다.
  * 이름·순서를 빼면 양식을 다 읽기 전에 그린 화면(처음 열 때·되돌리기 뒤)이 내장 양식 이름(A(CN)·B…)으로 남았다 (2026-10-01 실시간 수정 검사) */
-const seatSig=()=>['D','E','N'].map(secRows).join(',')+'|'+((p=>p?['D','E','N'].map(P=>[...p[P].names].sort().join('')+(p[P].sub?'+':'')).join('/'):'')(tplPaper()))+'|'+['D','E','N'].map(P=>crnFloat(P)?'f':'x').join('')+'|'+JSON.stringify([tplLabels(),tplOrder()]);
+const seatSig=()=>['D','E','N'].map(secRows).join(',')+'|'+((p=>p?['D','E','N'].map(P=>[...p[P].names].sort().join('')+(p[P].sub?'+':'')).join('/'):'')(tplPaper()))+'|'+['D','E','N'].map(P=>crnFloat(P)?'f':'x').join('')+JSON.stringify(store.noChg||{})+'|'+JSON.stringify([tplLabels(),tplOrder()]);
 /* 양식 구조에서 구역별 줄 수 — 못 찾으면 null (서식 정의로 돌아간다) */
 function layoutRows(L){ const o={}; for(const s of (L&&L.sections)||[]) if(s.rows>0) o[s.P]=s.rows; return (o.D&&o.E&&o.N)?o:null; }
 let rowsSig='';   // recompute 가 쓴 자리 수 — 양식을 읽고 나서 달라졌는지 본다
@@ -3620,12 +3638,12 @@ function weekSlots(P){ const s=slotsOf(P), o=tplOrder(), q=o&&o[P];
  * 'A(CN)' 은 'A' 로도, 차지 자리가 고정인 서식의 차지 자리는 'CN'·'CRN'·'차지' 로도 적을 수 있다. 없는 자리면 null */
 function seatNameNorm(s){ return String(s||'').toUpperCase().replace(/\s+/g,''); }
 function seatNames(P){ return LBL_ORDER.slice(0,seatsFor(P)).map(l=>[l,seatNameNorm(FORM_LBL(l,P))]).filter(([,p])=>/^[A-F](\(C?R?N\))?$|^C?R?N$/.test(p)); }
-function seatOfLabel(lb,P){
+function seatOfLabel(lb,P,iso){
   const want=seatNameNorm(lb); if(!want) return null;
   const names=seatNames(P);
   const hit=names.find(([,p])=>p===want)||names.find(([,p])=>p.replace(/\(.*\)$/,'')===want);
   if(hit) return hit[0];
-  if(/^(CR?N|차지)$/.test(want)&&!crnFloat(P)) return '차지';
+  if(/^(CR?N|차지)$/.test(want)&&!chgFloat(P,iso)) return '차지';
   return null;
 }
 let wkSunday=(()=>{const t=new Date();t.setHours(0,0,0,0);return addDays(t,-t.getDay())})();
@@ -3647,14 +3665,17 @@ const clampCnt=(c,P)=>Math.min(Math.max(+c||2,2),P?seatsFor(P):MAX_SEATS);
 function presetsOf(cnt){ cnt=clampCnt(cnt); return [{id:'default',name:'기본',rooms:(store.schemes||{})[cnt]||{}},...(((store.presets||{})[cnt])||[])]; }
 function presetById(cnt,id){ return presetsOf(cnt).find(p=>p.id===id)||null; }
 function presetEmpty(p){ const ls=Object.keys(p.rooms||{}); return !ls.length||ls.some(l=>!(p.rooms[l]||[]).length); }
+/* 차지 방 없는 프리셋 — 그 프리셋을 쓰는 날은 차지가 따로 방을 맡지 않고 어제 보던 자리·방을 그대로 본다(이름 뒤 /CRN).
+ * 평일 D·E 는 차지 방이 있고 주말·공휴일·나이트는 없는 병동 (2026-10-30 병동 문의: "주말, 공휴일, 나이트는 차지방이 없어서 방이 튕기지 않아야") */
+const presetNoChg=(cnt,id)=>!!((store.noChg||{})[clampCnt(cnt)+':'+id]);
 function presetFor(P,cnt,iso){
   cnt=clampCnt(cnt,P);
   const pd=iso&&store.presetDay[iso]&&store.presetDay[iso][P]&&store.presetDay[iso][P][cnt];
-  if(pd){ const p=presetById(cnt,pd); if(p) return {...p,src:'day'}; }
+  if(pd){ const p=presetById(cnt,pd); if(p) return {...p,src:'day',noChg:presetNoChg(cnt,p.id)}; }
   const wd=iso?WD_KEY[new Date(iso+'T00:00:00').getDay()]:null;
   const pl=wd&&store.presetPlan[wd]&&store.presetPlan[wd][P]&&store.presetPlan[wd][P][cnt];
-  if(pl){ const p=presetById(cnt,pl); if(p) return {...p,src:'plan'}; }
-  return {...presetsOf(cnt)[0],src:'default'};
+  if(pl){ const p=presetById(cnt,pl); if(p) return {...p,src:'plan',noChg:presetNoChg(cnt,p.id)}; }
+  const p=presetsOf(cnt)[0]; return {...p,src:'default',noChg:presetNoChg(cnt,p.id)};
 }
 const presetSrcLabel=pr=>pr.src==='day'?'오늘만 바꾼 상태':pr.src==='plan'?'요일 계획':'기본';
 /* 그날 하루 방 수정(roomOv) — **고친 그 인원수일 때만** 쓴다. 5명일 때 고친 차지 방을 4명이 된 날에도 들고 가면 4인 방 구성과
@@ -3959,7 +3980,7 @@ function renderWeek(){
       const label=other?null:slot, labTxt=other==='SU'?'<span class="unitTag">SU</span>':(other||FORM_LBL(slot,P));
       // 차지가 자리에 묶이지 않는 서식(102·82)은 차지 이름 뒤에 /CRN 을 보인다 — 차지가 앉은 자리 어디서든.
       // 화면에 표시가 없으면 누구를 차지로 두고 고치는지 모른 채 자리를 바꾸게 된다. 종이에 찍을지는 서식이 정한다(crnMark — 102 만)
-      const crnOn=!other&&crnFloat(P);
+      const crnOn=iso=>!other&&chgFloat(P,iso);
       h+='<tr style="height:34px">';
       if(li===0) h+=`<td class="seccol sec${P}" rowspan="${nRows}">${P}</td>`;
       h+=`<td class="lab">${labTxt}</td>`;
@@ -3990,7 +4011,7 @@ function renderWeek(){
            ` title="${esc(rmStr)}호 — 클릭 = 이 날 방 수정·프리셋${pr.src!=='default'?' · 방 구성: '+esc(pr.name)+(pr.src==='day'?' (오늘만)':' (요일 계획)'):''}${hasDup?' · ⚠ 다른 어싸인과 방 겹침':''}${escA(rmWhy)}">${esc(rmStr)}</td>`)+
            `<td class="nm${ov?' ovd':''}${nw.has?' why':''}${tdCls(d)}" data-n="${esc(nm)}" data-iso="${iso}"${nw.tip?` title="${escA(nw.tip)}"`:''}>${esc(nm)}${
              rl?'<span class="rlfTag" title="대체간호사 — 우리 근무표에 없는 사람입니다. 눌러서 빼거나 이름을 고칩니다">대체</span>':''}${
-             crnOn&&nm===day[P].charge?'<span class="dim crnTag"> /CRN</span>':''}${
+             crnOn(iso)&&nm===day[P].charge?'<span class="dim crnTag"> /CRN</span>':''}${
              traineesUnder(iso,P,nm).map(T=>`<div class="trn">/ ${esc(T)}</div>`).join('')}</td>`;
       });
       h+='</tr>';
@@ -4078,8 +4099,8 @@ function renderWeekWarnings(days,infos){
           const tag=esc(ch)+(rel?'(대체)':'');
           // 왜 — 차지 자리가 고정인 서식은 손으로 정한 자리가 시니어리티보다 앞선다. 손으로 옮긴 탓이면 그렇게 말하고 그날 교체를 푸는 단추를 단다
           // (예전엔 차지 가능한 사람이 그 근무에 있어도 '차지 가능한 사람이 없어'라며 간호사 관리로 보냈다 — 2026-10-01 검증)
-          const hand=!crnFloat(P)&&handSeat(ch,iso,P);
-          const held=crnFloat(P)?[]:here.filter(n=>n!==ch&&!isRelief(n,iso)&&capsAt(n,iso).includes(P+'C')&&handSeat(n,iso,P));
+          const hand=!chgFloat(P,iso)&&handSeat(ch,iso,P);
+          const held=chgFloat(P,iso)?[]:here.filter(n=>n!==ch&&!isRelief(n,iso)&&capsAt(n,iso).includes(P+'C')&&handSeat(n,iso,P));
           const viaOvr=[ch,...held].some(n=>handSeat(n,iso,P)&&handSeat(n,iso,P).by==='ovr');
           const btn=viaOvr?` <button class="inl" onclick="clearOvrDay('${iso}','${P}')" title="이 날 ${P} 근무에서 손으로 바꾼 자리를 모두 자동으로 되돌립니다 — Ctrl+Z 로 되돌릴 수 있습니다">이 날 ${P} 교체 풀기</button>`:'';
           const by=ns=>{ const k=new Set(ns.map(n=>handSeat(n,iso,P).by)); return k.size>1?'손으로':k.has('ovr')?'배정표에서 손으로':'근무표 칸에'; };
@@ -4097,7 +4118,7 @@ function renderWeekWarnings(days,infos){
         const c=cp[nm], txt=esc(cellText({code:c.code,label:c.lb})), info=result&&result.byNurse[nm]&&result.byNurse[nm][iso];
         if(!info) continue;
         if(c.why==='none') push('err',`${md(iso)} ${P} ${esc(nm)} — 근무표 칸의 '${txt}': 이 양식에 '${esc(c.lb)}' 자리가 없습니다. `+
-          (/^(CR?N|차지)$/.test(c.lb)&&crnFloat(P)?`차지(CRN)는 자리가 아니라 근무를 ${P}C 로 적습니다.`
+          (/^(CR?N|차지)$/.test(c.lb)&&chgFloat(P,iso)?`차지(CRN)는 자리가 아니라 근무를 ${P}C 로 적습니다.`
             :seatNames(P).length?`배정표의 자리 이름(${seatNames(P).map(([l])=>esc(FORM_LBL(l,P))).join('·')})으로 적어 주세요.`
             :`이 근무는 자리 이름을 적지 않습니다 — '/${esc(c.lb)}' 를 지우세요.`));
         else if(c.why==='chg') push('warn',`${md(iso)} ${P} ${esc(nm)} — 근무표 칸의 '${txt}': ${esc(c.code)} 는 차지 자리에 앉으므로 '/${esc(c.lb)}' 는 쓰지 않았습니다.`);
@@ -4125,7 +4146,7 @@ function renderWeekWarnings(days,infos){
         const pvCharge=((((result&&result.byDay[pv])||{})[pP])||{}).charge;
         const bk=expandBeds(bansAt(h.to,iso));   // 그 날 든 그룹의 주지 않을 방도
         const why=hs&&hs.l===seat?'hand'
-          :(seat==='차지'&&!crnFloat(P)&&Object.keys(labs).length>1&&pvCharge!==h.from)?'chg'
+          :(seat==='차지'&&!chgFloat(P,iso)&&Object.keys(labs).length>1&&pvCharge!==h.from)?'chg'
           :Object.keys(labs).some(l=>{ const x=labs[l]!==h.to&&handSeat(labs[l],iso,P); return x&&x.l===l; })?'held'
           :bk.length&&Object.keys(labs).some(l=>expandBeds(roomTokens(roomsFor(P,cnt,l,iso))).some(t=>bk.includes(t)))?'ban':'none';
         const gk=gs.map(groupNameOf).join('·');
@@ -4158,10 +4179,10 @@ function renderWeekWarnings(days,infos){
         const hs=handSeat(nm,iso,P), byHand=!!hs&&hs.l===l;
         const hw=byHand&&hs.by==='ovr'&&whyOf(iso,'seat|'+P+'|'+nm);
         const why=byHand?'손으로 옮긴 자리입니다 — 그 자리 이름을 눌러 바꿀 수 있습니다.'+(hw?` (사유: ${esc(hw.t)})`:'')
-          :(l==='차지'&&day[P].charge===nm&&!crnFloat(P))?'차지 자리의 방이라 차지가 봅니다 — 그날 방 수정이나 관리 > 방 구성에서 그 방을 다른 자리로 옮기세요.'
+          :(l==='차지'&&day[P].charge===nm&&!chgFloat(P,iso))?'차지 자리의 방이라 차지가 봅니다 — 그날 방 수정이나 관리 > 방 구성에서 그 방을 다른 자리로 옮기세요.'
           :'모두 피하는 배치가 없습니다.';
         const src=banSources(nm,iso,hit), via=src.gs.length&&!src.own?`(${src.gs.map(x=>`'${esc(x)}'`).join('·')} 그룹)`:'';
-        push('err',`${md(iso)} ${P} ${esc(nm)} — ${roomsLabel(collapseBeds(hit))}는 주지 않을 방${via}인데 배정됐습니다. ${why}`,byHand?null:((l==='차지'&&!crnFloat(P))?'schemes':'caps'));   // 102 처럼 차지가 자리를 고르면 차지 자리라도 사람 쪽(간호사 관리)
+        push('err',`${md(iso)} ${P} ${esc(nm)} — ${roomsLabel(collapseBeds(hit))}는 주지 않을 방${via}인데 배정됐습니다. ${why}`,byHand?null:((l==='차지'&&!chgFloat(P,iso))?'schemes':'caps'));   // 102 처럼 차지가 자리를 고르면 차지 자리라도 사람 쪽(간호사 관리)
       }
     }
   });
@@ -4639,7 +4660,7 @@ function openPick(name,iso,x,y,ask){
   pk.classList.toggle('shOpen',pkShiftOpen);
   // 차지가 자리에 묶이지 않는 서식(102) — 자리를 맞바꿔도 CRN 은 그대로다. CRN 을 바꾸는 길은 [CRN 맡기기](근무를 DC·EC·NC 로).
   // 종이에 차지 자리가 따로 있는 102 모양 양식(A(CN)·D(CRN))은 그 자리에 앉은 사람이 CRN 이라 맞바꾸면 CRN 도 바뀐다
-  const crnF=crnFloat(P), crnM=crnF||formDef().crnMark, chg=day&&day.charge, crnT=n=>crnF&&n&&n===chg?' /CRN':'';
+  const crnF=chgFloat(P,iso), crnM=crnF||formDef().crnMark, chg=day&&day.charge, crnT=n=>crnF&&n&&n===chg?' /CRN':'';
   const psP=paperSeat(P), onP=!!(info.label&&psP.on(info.label));
   pk.innerHTML=`<div class="pkHead"><span><b>${esc(name)}</b>${esc(crnT(name))}${rel?'<span class="rlfTag">대체</span>':''} · ${dd}일 ${P}</span>`+
       `<span class="dim">지금 ${info.label?FORM_LBL(info.label,P):'자리 없음'}</span>`+
@@ -4660,7 +4681,7 @@ function openPick(name,iso,x,y,ask){
     `<div class="pkRow"><button onclick="pickChoose(null)" title="손으로 바꾼 자리를 풀고 자동 배정으로 돌립니다 — 맞바꾼 상대도 함께 풀립니다">자동으로 되돌리기</button>`+
     (store.ovr[iso]&&store.ovr[iso][P]?`<button onclick="pickClearDay()" title="이 날 이 시간대의 수동 교체를 모두 풉니다">이 날 ${P} 교체 모두 풀기</button>`:'')+
     (crnM&&!rel&&chg!==name?`<button onclick="pickCrn()" title="이 날 ${P} 차지(CRN)를 ${escA(name)} 님으로 — 근무가 ${P}C 로 바뀌고 ${
-      !crnFloat(P)?'양식의 CRN 자리로 옮깁니다 — 자리가 바뀌는 사람은 알림에 적습니다'
+      !crnF?'양식의 CRN 자리로 옮깁니다 — 자리가 바뀌는 사람은 알림에 적습니다'
       :info.label&&crnSeats(P).includes(info.label)?'앉은 자리는 그대로입니다 — 자리가 바뀌는 사람이 있으면 알림에 적습니다'
       :`양식 줄로 올라가고, 대신 다른 한 사람이 ${onP?'대체 줄로':'양식 칸 밖으로'} 내려갑니다`}">CRN 맡기기</button>`:'')+`</div>`+
     (rel?`<div class="pkSec">대체간호사 <span class="dim">우리 근무표에 없는 사람 · 이 날만</span></div>`+
@@ -4742,14 +4763,14 @@ function pickChoose(label,why){
  * 차지 자리가 고정인 서식은 손으로 옮긴 자리가 표시보다 앞서므로 이 사람과 차지 자리에 고정된 사람의 교체를 푼다.
  * 이 사람의 칸은 부르는 쪽이 쓴다. 내린 사람 이름 목록을 돌려준다 */
 function giveChargeMark(name,iso,P){
-  const was=[], pin=!crnFloat(P);
+  const was=[], pin=!chgFloat(P,iso);
   for(const n of store.order){
     if(n===name||(store.unit||{})[n]) continue;   // 다른 소속(82 SU)의 근무표는 건드리지 않는다 — 병동 차지와 상관없다
     const pc=parseCellRaw((store.cells[n]||{})[iso]||'');
     if(!pc||!pc.code) continue;
     // 차지 자리가 고정인 서식에서 칸에 적은 차지 자리(DC/CN·D/A(CN))는 같이 걷는다 — 남기면 D 로 바뀐 옛 차지가 그 자리에 묶여
     // 계속 차지다(근무 바꾸기로 DC 를 줘도 아무 일이 없었다, 2026-10-01 교차 검토)
-    const chgPin=pin&&pc.label&&AssignCore.periodOf(pc.code)===P&&seatOfLabel(pc.label,P)==='차지';
+    const chgPin=pin&&pc.label&&AssignCore.periodOf(pc.code)===P&&seatOfLabel(pc.label,P,iso)==='차지';
     if(pc.code===P+'C'){ store.cells[n][iso]=cellText({code:P,label:chgPin?'':pc.label}); was.push(n); }
     else if(chgPin) store.cells[n][iso]=cellText({code:pc.code,label:''});
   }
@@ -4764,7 +4785,7 @@ function pickCrn(){
   const {name,iso,period:P}=pickCtx; closePick();
   snapshot();
   const pc=parseCellRaw((store.cells[name]||{})[iso]||'');
-  const pin=!crnFloat(P);
+  const pin=!chgFloat(P,iso);
   const was=giveChargeMark(name,iso,P);
   // 그 날 그 근무에서 누가 어느 자리이고 종이에 찍히는지
   const seats=()=>{ const d=(dayInfo(iso)||{})[P], ps=paperSeat(P), m={};
@@ -5609,7 +5630,7 @@ function snapshot(){ // 이름 변경/삭제가 ovr·caps·금지방·시드까�
     ch:store.caps,br:store.banRooms,sd:store.seedManual,al:store.alias,cu:store.custom,fi:store.formId,fs:store.forms,rm:store.rooms,sc:store.schemes,ps:store.presets,
     ev:store.events,na:store.nameAlias,tr:store.trainee,to:store.trOv,pd:store.presetDay,op:store.ovrPair,hd:store.hidden,
     pp:store.presetPlan,rl:store.relief,nu:store.newUntil,er:store.evRules,dy:store.daily,df:store.dayForm||null,du:store.duty,
-    ru:store.rules,rc:store.roomOvCnt,gr:store.groups,gl:store.groupLog||[],un:store.unit||{},wy:store.why||{}}));
+    ru:store.rules,rc:store.roomOvCnt,nc:store.noChg||{},gr:store.groups,gl:store.groupLog||[],un:store.unit||{},wy:store.why||{}}));
   if(undoStack.length>40) undoStack.shift(); }
 function restoreSnapshot(s){
   store.order=s.o; store.cells=s.c;
@@ -5620,7 +5641,7 @@ function restoreSnapshot(s){
   if(s.tr) store.trainee=s.tr; if(s.to) store.trOv=s.to; if(s.pd) store.presetDay=s.pd;
   if(s.op) store.ovrPair=s.op; if(s.hd) store.hidden=s.hd;
   if(s.pp) store.presetPlan=s.pp; if(s.rl) store.relief=s.rl; if(s.nu) store.newUntil=s.nu; if(s.er) store.evRules=s.er;
-  if(s.rm) store.rooms=s.rm; if(s.sc) store.schemes=s.sc; if(s.ps) store.presets=s.ps;
+  if(s.rm) store.rooms=s.rm; if(s.sc) store.schemes=s.sc; if(s.ps) store.presets=s.ps; if(s.nc) store.noChg=s.nc;
   // 양식이 실제로 바뀐 되돌리기만 양식을 다시 읽는다 — 근무 하나 되돌릴 때마다 지우면 다 읽을 때까지 화면이 내장 양식으로 그려졌다
   if(s.fs!==undefined){ const was=JSON.stringify((store.forms||{})[formId()]||null); store.forms=s.fs; if(JSON.stringify((store.forms||{})[formId()]||null)!==was) TPL=null; }
   if(s.dy) store.daily=s.dy;
@@ -6391,11 +6412,12 @@ function renderSchemes(){
   const selId=presetUI.sel[cnt], cur=presetById(cnt,selId);
   box.innerHTML=
     `<div class="psTabs">${cntTabs().map(c=>`<button class="segbtn${c===cnt?' on':''}" onclick="presetUI.cnt=${c};renderSchemes()" title="${c}인 근무일 때의 프리셋${c===6?' — 대체간호사가 와서 여섯이 된 날 (자리가 6개인 양식)':''}">${c}인 근무</button>`).join('')}</div>
-     <div class="psList">${list.map(p=>`<button class="psChip${p.id===selId?' on':''}" onclick="presetUI.sel[${cnt}]='${p.id}';renderSchemes()" title="${esc(p.name)} 프리셋 보기·고치기">${esc(p.name)}${presetEmpty(p)?' <span class="psWarn">비어 있음</span>':presetBad(p)?' <span class="psWarn">확인</span>':''}</button>`).join('')}
+     <div class="psList">${list.map(p=>`<button class="psChip${p.id===selId?' on':''}" onclick="presetUI.sel[${cnt}]='${p.id}';renderSchemes()" title="${esc(p.name)} 프리셋 보기·고치기">${esc(p.name)}${presetNoChg(cnt,p.id)?' <span class="psTag">차지 방 없음</span>':''}${presetEmpty(p)?' <span class="psWarn">비어 있음</span>':presetBad(p)?' <span class="psWarn">확인</span>':''}</button>`).join('')}
        <button onclick="addPreset(${cnt})" title="지금 보고 있는 프리셋을 복제해 새 프리셋을 만듭니다">＋ 새 프리셋</button>
        ${selId!=='default'?`<button onclick="renamePreset(${cnt},'${selId}')" title="이 프리셋의 이름을 바꿉니다">이름 바꾸기</button><button class="danger" onclick="deletePreset(${cnt},'${selId}')" title="이 프리셋을 지웁니다 — 계획표나 그날 적용에서 쓰던 곳은 기본으로 돌아갑니다">삭제</button>`:''}
      </div>
-     <div class="schemeRow"><b>${cnt}인 근무 · ${esc(cur.name)}</b>${formDef().labelsN?` <span class="dim" style="font-weight:400">(야간은 배정표에 ${['차지','A','B'].map(l=>FORM_LBL(l,'N')).join('·')}로 표시)</span>`:''}
+     ${['D','E','N'].some(P=>!crnFloat(P)&&crnSeats(P).length>1)?`<label class="psNoChg" title="켜면 이 프리셋을 쓰는 날(요일 계획·그날 적용)은 차지가 따로 방을 맡지 않습니다 — 차지도 어제 보던 자리·방을 그대로 보고, 화면·종이에 이름 뒤 /CRN 이 붙습니다. 평일엔 차지 방이 있고 주말·공휴일·나이트엔 없는 병동은 주말·나이트 프리셋에 켜세요"><input type="checkbox"${presetNoChg(cnt,selId)?' checked':''} onchange="setPresetNoChg(${cnt},'${selId}',this.checked)"> <b>차지 방 없음</b> <span class="dim">— 이 프리셋을 쓰는 날은 차지도 어제 보던 방을 그대로 봅니다(방이 튕기지 않음, 이름 뒤 /CRN)</span></label>`:''}
+     <div class="schemeRow"><b>${cnt}인 근무 · ${esc(cur.name)}</b>${presetNoChg(cnt,selId)?' <span class="psTag">차지 방 없음</span>':''}${formDef().labelsN?` <span class="dim" style="font-weight:400">(야간은 배정표에 ${['차지','A','B'].map(l=>FORM_LBL(l,'N')).join('·')}로 표시)</span>`:''}
       <table class="dt" style="margin-top:4px"><tr><th style="width:5em">자리</th><th>맡을 방 <span style="font-weight:600">(호수만)</span></th><th class="end" style="width:6em">병상</th></tr>${Object.keys(cur.rooms).map(l=>{
         const bd=bedsIn(cur.rooms[l]);
         return `<tr><td class="nm2">${FORM_LBL(l)}</td>
@@ -6442,6 +6464,7 @@ async function addPreset(cnt){
   if(name===null||!name.trim()) return;
   const id='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
   store.presets[cnt].push({id,name:name.trim(),rooms:JSON.parse(JSON.stringify(src.rooms))});
+  if(presetNoChg(cnt,src.id)) (store.noChg=store.noChg||{})[cnt+':'+id]=true;   // 복제 — 차지 방 없음도 같이
   presetUI.cnt=cnt; presetUI.sel[cnt]=id;
   touch(); recompute(); renderAdmin(); toast(`${cnt}인 프리셋 '${name.trim()}' 을 만들었습니다 — 자리별 방을 고치세요`,3600);
 }
@@ -6454,10 +6477,18 @@ function deletePreset(cnt,id){
   cnt=clampCnt(cnt); const p=presetById(cnt,id); if(!p||id==='default') return;
   if(!confirm(`${cnt}인 프리셋 '${p.name}' 을 지울까요?\n계획표나 그날 적용에서 이 프리셋을 쓰던 곳은 기본으로 돌아갑니다.`)) return;
   store.presets[cnt]=store.presets[cnt].filter(q=>q.id!==id);
+  if(store.noChg) delete store.noChg[cnt+':'+id];
   const prune=map=>{ for(const k in map){ const m=map[k]; for(const P in m){ if(m[P][cnt]===id) delete m[P][cnt]; if(!Object.keys(m[P]).length) delete m[P]; } if(!Object.keys(m).length) delete map[k]; } };
   prune(store.presetPlan); prune(store.presetDay);
   presetUI.sel[cnt]='default';
   touch(); recompute(); renderAdmin(); if(curScr==='week') renderWeek(); toast('지웠습니다',2600);
+}
+function setPresetNoChg(cnt,id,on){
+  cnt=clampCnt(cnt); const p=presetById(cnt,id); if(!p) return;
+  snapshot(); const m=(store.noChg=store.noChg||{}), k=cnt+':'+id;
+  if(on) m[k]=true; else delete m[k];
+  touch(); recompute(); renderAdmin(); if(curScr==='week') renderWeek();
+  toast(on?`${cnt}인 '${p.name}' — 차지 방 없음: 이 프리셋을 쓰는 날은 차지도 어제 보던 방을 그대로 봅니다 (이름 뒤 /CRN)`:`${cnt}인 '${p.name}' — 차지가 다시 차지 자리(${FORM_LBL('차지')})의 방을 봅니다`,4200,true);
 }
 function setPresetRooms(cnt,id,l,str){
   const p=presetById(clampCnt(cnt),id); if(!p) return;
@@ -7665,10 +7696,10 @@ async function draftFill(src){
   const cells=sheetCells(src.tpl); PH_RE.lastIndex=0; if(!hasPlaceholders(cells)) return null;
   const L=layoutOf(src.F,cells,sheetMerges(src.tpl)), tr=tagRows(cells,L); if(!tr) return null;
   const dateXf=await dateStyleSet(src.tpl);
-  const keep={result,tlKeys,rowsSig};
+  const keep={result,tlKeys,rowsSig,chgFloatDay};
   seatOv=tr;
   try{ recompute(); const days=weekData(fvSun); return {days,xml:fillByPlaceholders(src.tpl,cells,L,days,{dateXf})}; }
-  finally{ seatOv=null; result=keep.result; tlKeys=keep.tlKeys; rowsSig=keep.rowsSig; }
+  finally{ seatOv=null; result=keep.result; tlKeys=keep.tlKeys; rowsSig=keep.rowsSig; chgFloatDay=keep.chgFloatDay; }
 }
 /* 칸을 눌렀을 때 — 무엇을 채울지(자리표시자) 고르고, 요일 칸 밖이면 칸 글자도 고친다 (M11 ④) */
 async function fvPickCell(ref){
@@ -8937,7 +8968,7 @@ function weekData(sun){
       secs[P].cnt=Object.keys(day[P].labels).length+day[P].extra.length;
       secs[P].byLabel=day[P].labels;
       secs[P].charge=day[P].charge||'';
-      secs[P].float=crnFloat(P);   // 차지가 자리에 묶이지 않음 — 엑셀의 /CRN 이 사람을 따라간다
+      secs[P].float=chgFloat(P,iso);   // 차지가 자리에 묶이지 않음(서식 또는 그 날 프리셋) — 엑셀의 /CRN 이 사람을 따라간다
     }
     days.push({date:d,secs,mids:midsOf(iso)});
   }
@@ -9150,9 +9181,10 @@ function fillByPlaceholders(tpl,cells,L,days,opt){
     for(const m of String(cells[ref]).matchAll(PH_RE)){ if(m[1]!=='차지') continue;
       const sl=cellSeat(cells[ref])||slots[rr]; if(sl&&!(sl.P in crnArg)) crnArg[sl.P]=m[2]||'/CN'; } }
   const crnFollow=(txt,seat,day)=>{
-    if(!seat||!day||day.blank||!(seat.P in crnArg)||/\{\{\s*차지/.test(txt)||!/\{\{\s*이름/.test(txt)) return '';
+    // 차지 표시 칸이 없는 맵핑이어도 프리셋 때문에 풀린 날은 ' /CRN' — 서식이 원래 푸는 82 는 종이에 찍지 않는다(그대로)
+    if(!seat||!day||day.blank||!((seat.P in crnArg)||!crnFloat(seat.P))||/\{\{\s*차지/.test(txt)||!/\{\{\s*이름/.test(txt)) return '';
     const sec=day.secs&&day.secs[seat.P];
-    return sec&&sec.float&&sec.charge&&sec.byLabel[seat.label]===sec.charge?crnArg[seat.P]:''; };
+    return sec&&sec.float&&sec.charge&&sec.byLabel[seat.label]===sec.charge?(crnArg[seat.P]??' /CRN'):''; };
   for(const ref of phStaleCells(cells,L,hid)) xml=clearCell(xml,ref);
   const styleOf=ref=>{ const s=cellAttrs(xml.match(cellRe(ref))).match(/s="(\d+)"/); return s?+s[1]:0; };
   for(const t of T){
@@ -9510,7 +9542,7 @@ function fillForm122(tpl,L,days){
     if(day.blank) return;
     for(const P of ['D','E','N']){ const s=day.secs[P], n=secRows[P]||0;
       for(let li=0;li<n&&li<LBL_ORDER.length;li++){ const l=LBL_ORDER[li], nm=s.byLabel[l]; if(!nm) continue;
-        xml=setCellStr(xml,cn+(secRow[P]+li),nameWithTrainees(nm,iso,P));
+        xml=setCellStr(xml,cn+(secRow[P]+li),nameWithTrainees(nm,iso,P,s.float&&nm===s.charge?' /CRN':''));   // 차지 방 없는 날 — 차지가 앉은 자리에서
       } }
     if(day.mids.length&&L.midRow) xml=setCellStr(xml,cn+L.midRow,day.mids.join(', '));
   });
@@ -9564,7 +9596,7 @@ function fillForm101(tpl,days){
         const row=sec.top+li;
         const rm=roomsFor(P,s.cnt,label,isoOfD(d));
         if(rm) xml=setCellStr(xml,colR+row,rm);
-        xml=setCellStr(xml,colN+row,nameWithTrainees(nm,isoOfD(d),P));
+        xml=setCellStr(xml,colN+row,nameWithTrainees(nm,isoOfD(d),P,s.float&&nm===s.charge?' /CRN':''));   // 차지 방 없는 날 — 차지가 앉은 자리에서
       }
     }
     if(day.mids.length) xml=setCellStr(xml,colR+'10',day.mids.join(', '));
@@ -10237,13 +10269,13 @@ async function buildDayDoc(iso){
     const sc=M.shifts[P]; if(!sc) continue;
     const day=info&&info[P], labels=day?day.labels:{};
     const cnt=day?Object.keys(day.labels).length+day.extra.length:0;
-    const cl=crnFloat(P)&&day&&day.charge&&M.rows[0]&&isChgLbl(M.rows[0].label)?Object.keys(labels).find(l=>labels[l]===day.charge):null;
+    const cl=chgFloat(P,iso)&&day&&day.charge&&M.rows[0]&&isChgLbl(M.rows[0].label)?Object.keys(labels).find(l=>labels[l]===day.charge):null;
     const ord=cl?[cl].concat(LBL_ORDER.filter(l=>l!==cl)):LBL_ORDER;
     M.rows.forEach((row,i)=>{
       const lab=ord[i], nm=lab?labels[lab]:null;
       const nc=M.m.at(row.r,sc.nurse), rc=sc.room!=null?M.m.at(row.r,sc.room):null;
       // 차지가 자리에 묶이지 않는 서식(102·82)은 배정표처럼 차지 이름 뒤에 /CRN — 첫 줄 사람이 차지가 아닐 수 있다
-      if(nc) setCellText(nc,nm?nameWithTrainees(nm,iso,P,crnFloat(P)&&day&&nm===day.charge?' /CRN':''):'');
+      if(nc) setCellText(nc,nm?nameWithTrainees(nm,iso,P,chgFloat(P,iso)&&day&&nm===day.charge?' /CRN':''):'');
       if(rc) setCellText(rc,nm?roomsFor(P,cnt,lab,iso):'');
     });
     const lost=ord.slice(M.rows.length).filter(l=>labels[l]).map(l=>labels[l]);
@@ -12052,7 +12084,8 @@ const HELP=[
  steps:['관리 &gt; 방 구성에서 <b>5인·4인·3인·2인</b> 탭을 고르고 자리마다 병실을 적습니다 — 예: <b>6~9</b> 또는 <b>1, 12</b>. D 가 6줄인 서식(122)은 대체간호사가 오는 날을 위한 <b>6인</b> 탭도 있습니다.',
         '[＋ 새 프리셋]으로 같은 인원수의 다른 나눔을 만듭니다(보고 있던 것을 복제해서 시작). 이름은 <b>회진일</b>·<b>수술 많은 날</b>처럼 알아볼 수 있게.',
         '아래 <b>주간 계획표</b>에서 요일·근무(D/E/N)마다 프리셋을 고릅니다 — 보고 있는 인원수 탭의 표입니다(5인 탭 = 그 근무가 5명인 날). 월요일 Day 와 화요일 Day 가 다른 나눔이어도 됩니다.',
-        '배정표에서 방 칸을 누르면 <b>이 날 방 구성</b> 줄이 있습니다 — 프리셋을 골라 [오늘만] 또는 [매주 이 요일]. 프리셋이 기본이 아닌 날은 A(CN) 방 칸 왼쪽에 초록 띠가 보입니다.'],
+        '배정표에서 방 칸을 누르면 <b>이 날 방 구성</b> 줄이 있습니다 — 프리셋을 골라 [오늘만] 또는 [매주 이 요일]. 프리셋이 기본이 아닌 날은 A(CN) 방 칸 왼쪽에 초록 띠가 보입니다(잘못된 것이 아니라 그 날 기본이 아닌 프리셋을 쓴다는 표시).',
+        '<b>차지 방 없음</b> — 프리셋마다 켤 수 있습니다. 켠 프리셋을 쓰는 날은 차지가 따로 방을 맡지 않고 <b>어제 보던 자리·방을 그대로</b> 봅니다(방이 튕기지 않습니다). 차지는 이름 뒤 <b>/CRN</b> 으로 보입니다. 평일엔 차지 방이 있고 주말·공휴일·나이트엔 없는 병동은 주말·나이트 프리셋에만 켜세요. 평일 공휴일은 배정표 방 칸을 눌러 그 날만 주말 프리셋으로 바꿉니다.'],
  tips:['이 표가 어싸인의 기준입니다. 그날 그 근무가 몇 명인지는 근무표에서 세고, 그 인원수 탭의 계획을 따릅니다 — 정하지 않은 칸은 기본.',
        '프리셋 아래에 <b>아무도 안 보는 방 · 두 자리가 겹치는 방</b>이 바로 표시됩니다. 병실 목록의 모든 방이 한 자리씩 들어가야 하고, 문제가 있으면 관리 메뉴에 <b>확인 n</b>, 배정표 카드에도 뜹니다.',
        '비어 있는 자리가 있으면 관리 메뉴에 <b>빈 칸 n</b> 이 뜨고, 그 프리셋을 쓰는 날엔 방이 안 나옵니다.']},
@@ -12741,6 +12774,7 @@ window.__app={get store(){return store},set store(v){store=v},
   dayEditItems,renderDayFormText,openDayFormText,saveDayFormText,dutyRenameKeys,hwSetCellLines,hwSetNotices,
   openHwEd,hwEdClose,hwEdSave,hwEdMerge,hwEdSplit,hwEdSize,hwEdToggle,hwEdFace,hwEdAlign,hwEdVAlign,hwEdUndo,get hwEd(){return hwEd},
   hwTableGeom,hwTblFix,hwMerge,hwUnmerge,hwSplitGrid,hwResizeCol,hwResizeRow,hwRect,hwFontIds,hwVariant,
+  setPresetNoChg,presetNoChg,crnFloatAt,chgFloat,
   hwKids,hwPage,hwTopH,hwBodyH,hwFitPage,hwBlankPara,hwPage1,hwParaVisible,dayNoteSplit,dayNoteShow,dayNoteParas,dutyPrefer,dutyPreferSet,dutySetPrefer,dutyNumStr,dutyNumOf,
   paperPlan,tagOrder,weekSlots,tplOrder,hasPlaceholders,capsOf,get undoDepth(){return undoStack.length},undoClear(){undoStack.length=0;},
   seatOfLabel,seatNames,worksP,ovrMateGone,freeOvr,clearOvrDay,handSeat,ovrAudit,pruneOvr,giveChargeMark,capsForNew,setRule,roomOvOn,setRoomOv,roomTextWarn,josa,get cellPins(){return cellPins},
