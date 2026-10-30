@@ -421,7 +421,7 @@ class _HighsConstraintsMixin:
         """연속 야간 후 연속 휴무 보장 — 설정 '야간 min_consec 회 이상이면 rest_days 일 휴무' (기본 2·2).
         제약: sum_N(d..) - sum_N(next) + sum_W(rest_d) <= min_consec
         첫 휴무일(next)의 N 은 야간이 이어지는 것이라 빼고(-sum_N(next)), 둘째 날부터는 N 도 근무다 —
-        N N OF N 은 이틀을 쉰 게 아니다 (2026-10-17, 사용자 "2 night 이후 2 휴무 보장").
+        N N OF N 은 이틀을 쉰 게 아니다 (2026-10-17, 2 night 이후 2 휴무 보장).
         나이트킵(야간전담)도 같다 — 예전엔 빠지고 '5일 중 야간 3일'이 대신했는데, 그건 병동 규칙이 아니었다.
         """
         min_consec = getattr(self.rules, 'restAfterNightMinConsec', 2)
@@ -646,7 +646,7 @@ class _HighsConstraintsMixin:
             prob += (night_sum == eff_target, f"night_monthly_{nid}")
 
             # (과거 규칙 4 '여성+31일달 생 정확히 1회'는 제거 — 생휴는 보장이
-            #  아니라 '주어질 수 있다'는 사용자 원칙. 월 ≤1 상한은
+            #  아니라 '주어질 수 있다'는 원칙. 월 ≤1 상한은
             #  _c_menstrual_leave가 모든 여성에게 동일하게 적용한다.)
 
     # ── period 그룹 → shift 코드 목록 해석 ──────────────────────────────────

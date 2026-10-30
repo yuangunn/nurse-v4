@@ -121,7 +121,7 @@ def test_fairness_ledger_and_prev_month_nights(tmp_path, monkeypatch):
 def test_prev_month_nights_excludes_night_kept_month(tmp_path, monkeypatch):
     """나이트킵(야간전담) 달의 야간은 '전월N'에서 제외된다.
 
-    2026-08-20 사용자 명시: 나이트킵 때 한 나이트는 수면오프와 무관하다.
+    2026-08-20: 나이트킵 때 한 나이트는 수면오프와 무관하다.
     이 값이 홀짝월 합산(≤11) 상한에 쓰이므로, 14회를 그대로 넘기면 다음 달
     야간 상한이 0이 되어 나이트킵을 마친 사람만 야간을 못 받는다.
     """

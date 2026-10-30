@@ -233,7 +233,7 @@ window.SettingsDefsModule = function() {
     },
     async saveShift(){const d=this.shiftModal.data;if(!d.code.trim()){this.toast('코드를 입력하세요','error');return}if(!d.name.trim()){this.toast('이름을 입력하세요','error');return}await this.api('POST','/api/shifts',d);await this.loadShifts();this.shiftModal.open=false},
     async deleteShift(code){
-      // V(연차)도 — 쉬는 칸을 V 로 채우는 병동이 지우면 생성이 막힌다 (사용자 결정 2026-10-26, 서버 delete_shift 와 같은 목록)
+      // V(연차)도 — 쉬는 칸을 V 로 채우는 병동이 지우면 생성이 막힌다 (2026-10-26, 서버 delete_shift 와 같은 목록)
       const PROTECTED=['DC','D','D1','EC','E','중','NC','N','OF','주','V'];
       if(PROTECTED.includes(code)){this.toast('기본 근무는 삭제할 수 없습니다','error');return}
       if(!confirm(`'${code}' 근무를 삭제하시겠습니까?`))return;await this.api('DELETE',`/api/shifts/${code}`);await this.loadShifts();

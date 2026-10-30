@@ -1,4 +1,4 @@
-"""기본 근무는 지울 수 없다 — V(연차)도 (사용자 결정 2026-10-26: "근무정의에서 V은 지울수 없게 해야지")."""
+"""기본 근무는 지울 수 없다 — V(연차)도 (2026-10-26)."""
 import pytest
 from fastapi import testclient as fastapi_testclient
 

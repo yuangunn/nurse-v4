@@ -165,7 +165,7 @@ try {
     return {이름:t?t.querySelectorAll('td.nm').length:0, 카드:!!o&&o.classList.contains('demo')&&getComputedStyle(o).display!=='none'};`);
   ok('예시 근무표로 배정표가 찼다', ex.이름 > 40, JSON.stringify(ex));
   ok('배정표 옆에 예시 카드', ex.카드, JSON.stringify(ex));
-  // 고치면 맨 위에 '예시 파일 수정 중 — 연동되지 않습니다' 띠 (사용자 2026-10-10)
+  // 고치면 맨 위에 '예시 파일 수정 중 — 연동되지 않습니다' 띠 (2026-10-10)
   eq('열기만 해서는 띠가 없다', await ev(`return getComputedStyle(document.querySelector('#demoBar')).display`), 'none');
   await ev(`const A=window.__app; A.toggleCap(A.store.order[3],'DC'); return 1`);
   eq('고치면 위에 띠 — 파일이 없으면 \'어느 파일과도 연동되지 않습니다\'', await ev(`const b=document.querySelector('#demoBar');
@@ -479,13 +479,13 @@ try {
   await tapSel('#adminPanelBox button[data-k*="진료지원"]');
   await sleep(500);
   await tapSel('#dutyPaste');
-  await send('Input.insertText', { text: [['이름', '임상과', '전화번호', 'S-zone'], ['최세브', '외과', '010-0000-0100', '48001'], ['박세브', '내과', '010-0000-0101', '48002']]
+  await send('Input.insertText', { text: [['이름', '임상과', '전화번호', 'S-zone'], ['최누리', '외과', '010-0000-0100', '48001'], ['박누리', '내과', '010-0000-0101', '48002']]
     .map(r => r.join('\t')).join('\n') });
   await sleep(500);
   await tapSel('#dutyPv button.pri');
   await sleep(500);
   eq('연락처가 진료지원 번호표에 들어갔다', await ev(`const A=window.__app, k=Object.keys(A.store.duty.book).find(k=>k.includes('진료지원')); return A.store.duty.book[k].map(b=>b.name+' '+b.ext)`),
-    ['최세브 48001', '박세브 48002']);
+    ['최누리 48001', '박누리 48002']);
   ok('번호 자리에 먼저 — 내선(S-zone)이 골라져 있다', (await ev(`const b=[...document.querySelectorAll('#dutyNumSec .dtyPrefer button.on')]; return b.map(x=>x.textContent).join()`)).includes('내선'));
   await tap('배정표', '.topbar');
   await sleep(400);
@@ -493,16 +493,16 @@ try {
   await sleep(1000);
   await tapSel('#daySide textarea[data-k*="진료지원"]');
   await ev(`document.activeElement.select(); return 1`);
-  await send('Input.insertText', { text: '최세' });
+  await send('Input.insertText', { text: '최누' });
   await sleep(300);
   ok('적는 동안 번호표에서 찾은 사람을 보여 준다', (await ev(`const b=document.querySelector('#daySide .dsSug[data-sk*="진료지원"]'); return b?b.textContent:''`)).includes('#48001'));
-  await send('Input.insertText', { text: '브' });
+  await send('Input.insertText', { text: '리' });
   await tapSel('#dayNotes');
   await sleep(1000);
   const paper3 = await ev(`return document.querySelector('#dayPreview .hsheet').textContent`);
-  ok('이름만 적고 칸을 벗어나면 S-zone 번호가 종이에 붙는다', paper3.includes('최세브') && paper3.includes('#48001'), paper3.slice(-120));
-  eq('그 이름은 그 날 진료지원 당직표에 들어간다', await ev(`const A=window.__app, k=Object.keys(A.store.duty.roster).find(k=>k.includes('진료지원')); return A.store.duty.roster[k][${JSON.stringify(dayIso)}]`), '최세브');
-  ok('당직표에 넣었다는 알림에 되돌리기가 붙는다', (await ev(`const t=document.querySelector('#toast'); return t.style.display!=='none'&&t.classList.contains('undo')?t.textContent:''`)).includes('최세브'));
+  ok('이름만 적고 칸을 벗어나면 S-zone 번호가 종이에 붙는다', paper3.includes('최누리') && paper3.includes('#48001'), paper3.slice(-120));
+  eq('그 이름은 그 날 진료지원 당직표에 들어간다', await ev(`const A=window.__app, k=Object.keys(A.store.duty.roster).find(k=>k.includes('진료지원')); return A.store.duty.roster[k][${JSON.stringify(dayIso)}]`), '최누리');
+  ok('당직표에 넣었다는 알림에 되돌리기가 붙는다', (await ev(`const t=document.querySelector('#toast'); return t.style.display!=='none'&&t.classList.contains('undo')?t.textContent:''`)).includes('최누리'));
   await tapSel('#toast');
   await sleep(1000);
   eq('알림을 누르면 당직표에서 빠진다', await ev(`const A=window.__app, k=Object.keys(A.store.duty.roster).find(k=>k.includes('진료지원')); return (A.store.duty.roster[k]||{})[${JSON.stringify(dayIso)}]||null`), null);
