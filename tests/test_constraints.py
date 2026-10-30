@@ -210,7 +210,7 @@ def test_prev_schedule_juhu_preserved(build_request, solve_small, solver):
 def _teukgeun_request(pre, nurse_n=4, need_d=3, holidays=None):
     """오프특근 검증용 요청 — 하루 D=need_d, 간호사 nurse_n명의 완전한 한 주.
 
-    제1원칙 3(2026-08-20 사용자 명시): 오프특근은 **어쩔 수 없을 때 발생한다**.
+    제1원칙 3(2026-08-20): 오프특근은 **어쩔 수 없을 때 발생한다**.
     경가·조가 등으로 휴무가 갑자기 많아지면 남은 근무자가 오프를 줄여가며 근무를
     뛰고, 그때도 깎이지 않는 최소 보장이 주휴다.
     → 주 1회 OF는 조건부 면제가 아니라 '최대한 지키는 의무'다."""

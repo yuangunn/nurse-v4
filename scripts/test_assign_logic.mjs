@@ -337,7 +337,7 @@ async function main() {
     A.closeWizard(); return out;`);
   // 요일별 필요 인원 단계는 없다 — 완성된 근무표를 받으므로 인원을 재지 않는다 (2026-09-27, 결정 2-28)
   // 환영(파일 만들기)이 0단계다 — 처음 켠 사람이 환영 카드 → 시작 화면 → 마법사로 세 번 갈아타지 않게 (2026-09-27)
-  // 병동을 고른 다음은 그 병동 예시로 먼저 해 보기 (2026-10-10 사용자 "온보딩에서 병동 고르고 예시파일로 어떻게 하는지 알아보기를 유도")
+  // 병동을 고른 다음은 그 병동 예시로 먼저 해 보기 (2026-10-10)
   eq('마법사 단계 순서', wiz.map(w => w.id),
     ['hello', 'ward', 'demo', 'scheme', 'paste', 'codes', 'caps', 'done']);
   ok('단계마다 본문이 그려진다 (패널 id 가 어긋나면 빈다)',
@@ -523,7 +523,7 @@ async function main() {
 
   // ── 16. 한 장에 표가 둘인 번표 · 82병동 SU ────────────────────────────
   // 82병동 파트장은 병동과 SU(Stroke unit) 근무표를 한 시트에서 관리한다. 통째로
-  // 붙이면 SU 간호사가 병동 명부에 섞여 병동 자리에 배정됐다 (2026-09-21 제보).
+  // 붙이면 SU 간호사가 병동 명부에 섞여 병동 자리에 배정됐다 (2026-09-21).
   step('16 두 표 가르기 · SU');
   const two = await ev(`const A=window.__app; A.setFormId('82'); A.setWard('82');
     const s=A.store; s.cells={}; s.order=[]; s.unit={}; A.store=s;
@@ -637,7 +637,7 @@ async function main() {
   eq('두 번 쓴 따옴표는 하나로', clip.메모, '메모에 "따옴표" 와 줄바꿈');
 
   // ── 21. 다른 소속(SU)이 화면에 보이는가 ───────────────────────────────
-  // "뒤에서 코드로는 정리돼 있지만 유저는 모른다" (2026-09-21 사용자 지적).
+  // 코드 안에서는 정리돼 있어도 화면에 안 보이면 쓰는 사람은 모른다 (2026-09-21).
   step('21 SU 가 눈에 보인다');
   const vis = await ev(`const A=window.__app; A.setFormId('82'); A.setWard('82');
     const s=A.store; s.cells={}; s.unit={};
@@ -699,7 +699,7 @@ async function main() {
 
   // ── 22. 배정표는 화면 인쇄가 없다 — 모든 서식이 엑셀로 받아 엑셀에서 인쇄 ──────────
   // 82 가 101 틀로 빠져 방 칸이 있고 SU 줄이 없는 종이가 나오고 있었다 (2026-09-27).
-  // 2026-10-26 사용자 "배정표 인쇄만 없애. 어싸인표 인쇄는 내버려두고" — 122 는 두 장으로 잘렸다. 하루 어싸인표 [인쇄]는 남는다.
+  // 2026-10-26 배정표 인쇄만 없앤다(어싸인표 인쇄는 그대로) — 122 는 두 장으로 잘렸다. 하루 어싸인표 [인쇄]는 남는다.
   step('22 인쇄 서식 가드');
   const guard = await ev(`const A=window.__app; return (async()=>{
     const s=A.store; s.cells={}; s.unit={}; s.order=['가간호','나간호','다간호','라간호'];
@@ -726,7 +726,7 @@ async function main() {
   }
   eq('하루 어싸인표의 [인쇄]·[한글 파일로 받기]는 남는다', guard.day, { 인쇄: true, 한글: true });
 
-  // 저장 상태는 머리줄 알약 하나에 (사용자 시안 2026-09-28, 결정 2-37) — 따로 뜨던 빨간 배지(saveDot)는 없다.
+  // 저장 상태는 머리줄 알약 하나에 (2026-09-28 시안, 결정 2-37) — 따로 뜨던 빨간 배지(saveDot)는 없다.
   // 초록 '저장됨 · 시각' · 회색 '저장 중…'(고친 것이 아직 파일에 없을 때도) · ⚠ 는 짧게 · 읽기 전용은 노랑.
   // 쓸 수 없는 상태(파일 없음·읽기 전용)에서는 알약이 이미 말하므로 저장 상태를 덧붙이지 않는다. 경로는 툴팁에.
   const chip = await ev(`const A=window.__app; const el=document.querySelector('#fileInfo'), t=()=>el.textContent.trim(), c=k=>el.classList.contains(k);
@@ -939,7 +939,7 @@ async function main() {
     const rej=async u8=>{ try{ await A.parseHwpx(u8); return 'ok'; }catch(e){ return e.message; } };
     const hwp=await rej(new Uint8Array([0xD0,0xCF,0x11,0xE0,0,0,0,0]));
     const xl=await rej(A.b64ToBytes(document.querySelector('#tplB64').textContent.replace(/[/][*][^*]*[*][/]/g,'').trim()));
-    // 시작 안내 마지막 줄은 엑셀 내려받기 (사용자 2026-09-27)
+    // 시작 안내 마지막 줄은 엑셀 내려받기 (2026-09-27)
     const ob=A.onboardItems().slice(-1)[0];
     s.evRules=[]; A.recompute();
     return {layout,fill,zip,own,hwp:/HWPX/.test(hwp),xl:/엑셀/.test(xl),ob:[ob.lb,ob.go,ob.goT]}; })();`);
@@ -1090,10 +1090,10 @@ async function main() {
     // GS = 늘 같은 번호 · 진료지원 = 번호표에 S-zone
     s.duty.lines[K[1]]={fixed:{phone:'010-0000-9999',ext:''}};
     s.duty.roster[K[1]]={'2026-09-28':'홍길동'};
-    s.duty.book[K[2]]=[{name:'최세브',phone:'010-0000-0100',ext:'48001'},{name:'박세브',phone:'010-0000-0101',ext:'48002'}];
+    s.duty.book[K[2]]=[{name:'최누리',phone:'010-0000-0100',ext:'48001'},{name:'박누리',phone:'010-0000-0101',ext:'48002'}];
     s.duty.book[K[0]]=[{name:'R4 이순신',phone:'010-0000-0004',ext:''}];
-    const name=[A.dayDutyName(K[2],'최세브'),A.dayDutyName(K[2],'최세브 #48001'),A.dayDutyName(K[2],'모르는 사람'),A.dayDutyName(K[1],'아무개')];
-    s.duty.roster[K[2]]={'2026-09-28':'최세브'};
+    const name=[A.dayDutyName(K[2],'최누리'),A.dayDutyName(K[2],'최누리 #48001'),A.dayDutyName(K[2],'모르는 사람'),A.dayDutyName(K[1],'아무개')];
+    s.duty.roster[K[2]]={'2026-09-28':'최누리'};
     const r=await A.buildDayDoc('2026-09-28'), L1=A.dayLayout(r.doc);
     const num={prefer:[A.dutyPrefer(K[0]),A.dutyPrefer(K[1]),A.dutyPrefer(K[2])], GS:L1.fields[1].cell.text, PA:L1.fields[2].cell.text,
       경고:r.warn.filter(w=>K.some(k=>w.includes(k)))};
@@ -1143,12 +1143,12 @@ async function main() {
   ok('채운 당직 칸은 모두 같은 문단 모양', dfm.para.채움.every(p => p === dfm.para.기준), JSON.stringify(dfm.para));
   eq('칸이 먼저 쓰는 번호 — OS 전화 · GS 늘 같은 번호(전화) · 진료지원 내선', dfm.num.prefer, ['phone', 'phone', 'ext']);
   eq('GS — 누가 당직이든 늘 같은 번호', dfm.num.GS, '홍길동\n010-0000-9999');
-  eq('진료지원 — 이름만 적으면 S-zone 번호', dfm.num.PA, '최세브\n#48001');
+  eq('진료지원 — 이름만 적으면 S-zone 번호', dfm.num.PA, '최누리\n#48001');
   eq('늘 같은 번호·번호표에 있는 사람은 번호 경고 없음', dfm.num.경고, []);
-  eq('전화번호 먼저로 바꾸면 전화번호', dfm.num.전화로, '최세브\n010-0000-0100');
-  eq('바꾼 것도 Ctrl+Z', dfm.num.되돌림, '최세브\n#48001');
+  eq('전화번호 먼저로 바꾸면 전화번호', dfm.num.전화로, '최누리\n010-0000-0100');
+  eq('바꾼 것도 Ctrl+Z', dfm.num.되돌림, '최누리\n#48001');
   eq('{전화} {내선} 은 그것만', dfm.num.토큰, '가 010-0000-0001 48009');
-  eq('이름만 적은 칸 → 당직표로 (번호가 든 글·번호표에 없는 이름은 아님, 늘 같은 번호 칸은 아무 이름이나)', dfm.name, ['최세브', null, null, '아무개']);
+  eq('이름만 적은 칸 → 당직표로 (번호가 든 글·번호표에 없는 이름은 아님, 늘 같은 번호 칸은 아무 이름이나)', dfm.name, ['최누리', null, null, '아무개']);
   ok('양식은 A4 한 장', dfm.fit.양식높이);
   ok('공지가 두 줄이면 빈 줄을 건드리지 않는다', dfm.fit.그대로);
   ok('공지가 늘면 빈 줄을 걷어 A4 한 장', dfm.fit.걷음 > 0 && dfm.fit.한장, JSON.stringify(dfm.fit));
@@ -2453,7 +2453,7 @@ async function main() {
   eq('올린 101 양식(CN 이 둘째 줄) — 양식 보기 칸 이름 = 화면 줄 이름', v34.cn101V[0], v34.cn101V[1]);
   ok('102 조각 서식 이름 칸 — /CRN 은 신규 줄 앞', v34.trRich === 4 && /^김차지 [/]CRN\n[/] 신규일$/.test(v34.trRichX), JSON.stringify([v34.trRich, v34.trRichX]));
 
-  // ── 35. 옆 파일 자동 열림 → 저장 연결 (2026-10-03 사용자 제보) ─────────────────────
+  // ── 35. 옆 파일 자동 열림 → 저장 연결 (2026-10-03) ─────────────────────
   // 같은 폴더의 assign-data.js 를 읽고 [저장 연결]로 파일을 고르면 연결됐는데도 알약이 빨강 '저장 연결 안 됨'이었다 —
   // 자동으로 읽을 때 적어 둔 저장 문장이 연결 뒤에도 남았다. 실제 파일 창은 못 띄우므로 같은 모양의 가짜 핸들을 쓴다.
   const v35 = await ev(`return (async()=>{ const A=window.__app; const keepStore=JSON.parse(JSON.stringify(A.store));
@@ -2500,7 +2500,7 @@ async function main() {
   ok('다른 폴더에 만든 assign-data.js — 바로 뜬다고 하지 않고 HTML 옆으로 옮기라고', !/다음부터는 켜면 바로/.test(v35.딴곳새파일) && /assign\.html 파일이 있는 폴더로 옮겨/.test(v35.딴곳새파일) && !/이름은/.test(v35.딴곳새파일), v35.딴곳새파일);
   ok('다른 폴더·다른 이름 — 옮기기에 이름까지', /폴더로 옮겨/.test(v35.딴곳딴이름) && /이름은 assign-data\.js/.test(v35.딴곳딴이름), v35.딴곳딴이름);
 
-  // ── 36. 파일 창이 어디서 열리나 (2026-10-03 사용자: "문서에서 시작한다 — 같은 폴더부터") ─────────────────────
+  // ── 36. 파일 창이 어디서 열리나 (2026-10-03: 문서 폴더가 아니라 같은 폴더부터) ─────────────────────
   // 브라우저는 파일 창을 경로로 열지 못한다: 기억한 파일의 폴더 > HTML 이 든 바탕 화면·문서·다운로드 > 브라우저 기본.
   // 윈도 경로면 HTML 옆 경로를 복사해 두고 '파일 이름 칸에 Ctrl+V' 를 알린다. 실제 파일 창은 못 띄우므로 옵션을 받아 본다.
   const v36 = await ev(`return (async()=>{ const A=window.__app; const keepStore=JSON.parse(JSON.stringify(A.store));
@@ -2570,7 +2570,7 @@ async function main() {
   eq('기억한 핸들이 방금 읽은 그 파일이면 허용 한 번으로 잇는다', v36.같은파일잇기, [true, true]);
   ok('파일 창이 몸짓 오류로 안 열리면 한 번 더 누르라고 (영어 오류 문장 아님)', /한 번 더 눌러/.test(v36.몸짓) && !/gesture/.test(v36.몸짓), v36.몸짓);
 
-  // ── 37. 간호사 그룹 · 그룹원끼리 인계 피하기 (2026-10-09 사용자: "갓 독립한 신규끼리 인계하지 않게") ─────────────────────
+  // ── 37. 간호사 그룹 · 그룹원끼리 인계 피하기 (2026-10-09: 갓 독립한 신규끼리 인계하지 않게) ─────────────────────
   // 관리 > 간호사 관리에서 그룹을 만들고(공용 창) 그룹 칸 칩으로 그룹원을 넣는다 → 배정 엔진에 handoverGroups 로 넘어가
   // 신규 → 신규 인계(D → E)가 사라진다 → 배정 원칙 스위치를 끄면 처음 배정 그대로 → 손으로 같은 방에 앉히면 확인 카드 '같은 그룹 인계'.
   // 이름 바꾸기·삭제가 그룹원을 따라가고, Ctrl+Z·옛 파일·저장 → 다시 열기·파일 안 스냅샷·마법사에서도 그대로
@@ -2684,7 +2684,7 @@ async function main() {
     A.startWizard(A.WIZ.findIndex(w=>w.id==='caps'));
     out.wiz=[!!document.querySelector('#wizBody .grpStrip'), document.querySelectorAll('#wizBody .grpChip').length, !!document.querySelector('#wizBody .grpStrip button[onclick^="pickAdmin"]')];
     A.closeWizard();
-    // ── 고친 날부터 (2026-10-09 사용자) — 그룹원을 넣고 빼거나 스위치를 바꾸면 그 날부터 바뀌고 지난 날 배정은 그대로 ──
+    // ── 고친 날부터 (2026-10-09) — 그룹원을 넣고 빼거나 스위치를 바꾸면 그 날부터 바뀌고 지난 날 배정은 그대로 ──
     { const D3='2026-09-08', J=x=>JSON.stringify(x), Dp=['가선임','나선임','다선임','라선임','자신규'];
       A.store.ovr={}; A.store.unit={}; A.store.groupLog=[];
       for(const n of A.store.order){ A.store.cells[n]={}; for(const d of [D1,D2,D3]) A.store.cells[n][d]=Dp.includes(n)?'D':'E'; }
@@ -2795,7 +2795,7 @@ async function main() {
   eq('저장 → 다시 열기 — 그룹·배정 그대로', v37.trip, [true, true]);
   ok('파일 안 스냅샷(이전 상태로 되돌리기)에 그룹이 든다', v37.hist);
 
-  // ── 38. 그룹의 가능 근무·주지 않을 방 (2026-10-09 사용자: "그룹별 가능근무 수정, 그룹별 배정하지 않을 방을 지정") ─────────────
+  // ── 38. 그룹의 가능 근무·주지 않을 방 (2026-10-09: 그룹별 가능 근무, 그룹별 배정하지 않을 방) ─────────────
   // 그룹원 각자 설정 위에 더한다(가능 근무 = 개인 ∩ 그룹, 주지 않을 방 = 개인 ∪ 그룹). 고친 날부터 — 지난 배정은 그대로.
   // 인계 피하기를 끈 그룹·그룹원 하나인 그룹도 기록된다(예전 기록 모양은 인계 피하기 그룹만 봤다). 호실을 고치면 기록 속 그룹의 방도 따라간다
   step('38 그룹의 가능 근무·주지 않을 방');
@@ -2950,7 +2950,7 @@ async function main() {
   eq('저장 → 다시 열기 — 그룹 제한·배정 그대로', v38.trip, [true, true]);
   eq('다른 소속(SU)은 그룹 제한을 쓰지 않는다', v38.su, [true, []]);
 
-  // ── 39. 예시로 둘러보기 (2026-10-09 사용자: "병동별 예시 js 파일을 추가하고 근무표도 임의로 채워서 한번 사용할수 있게") ─────────
+  // ── 39. 예시로 둘러보기 (2026-10-09: 병동별 예시 파일에 근무표도 임의로 채워 한번 써 볼 수 있게) ─────────
   // 예시는 메모리에서만 연다 — 데이터 파일·IndexedDB·localStorage 에 아무것도 쓰지 않는다. 우리 병동 파일을 보다가 열었으면
   // 끝낼 때 그 파일로 그대로 돌아온다. 예시 파일(store.example)은 어느 길로 열어도(파일 고르기·끌어다 놓기·백업 불러오기·옆 파일)
   // 연결하지 않고 예시로 연다 — 고친 것이 예시 파일에 쌓이지 않게. 실제 파일 창은 못 띄우므로 같은 모양의 가짜 핸들을 쓴다.
@@ -3099,8 +3099,8 @@ async function main() {
   eq('예시에서 [우리 병동 파일 만들기] — 예시 끝, 빈 새 파일(예시 표시 없음), 병동 단계', v39.make, [false, 'file', 0, true, 'ward']);
   eq('도움말 주제·시작 화면 단추', v39.help, [true, true]);
 
-  // ── 40. 처음 설정의 예시 단계 + 예시 수정 알림 띠 (2026-10-10 사용자: "온보딩으로 할 때 병동 고르고 예시파일로 어떻게 하는지 알아보기를
-  // 유도 — 예시파일로는 자동연동 안 되게, 예시파일로 수정할 때는 위에 알림 뱃지(예시파일 수정 중으로 연동이 되지 않는다)") ─────────
+  // ── 40. 처음 설정의 예시 단계 + 예시 수정 알림 띠 (2026-10-10: 처음 설정에서 병동을 고른 뒤 예시 파일로 써 보게
+  // 유도 — 예시 파일은 자동 연동하지 않고, 예시를 고치면 위에 알림 띠(예시 파일 수정 중 — 연동되지 않음)) ─────────
   // 병동 단계 다음이 '고른 병동 예시로 먼저 해 볼까요?' — 열면 마법사는 닫히고, 예시를 끝내면 우리 병동 파일로 돌아와 방 구성부터.
   // 예시를 보는 동안 어디에도 쓰지 않고(파일·IndexedDB·localStorage), 저장 중에 예시가 열려도 예시가 우리 병동 파일에 들어가지 않는다.
   step('40 처음 설정 — 고른 병동 예시로 해 보기 · 수정 알림 띠');
@@ -3223,7 +3223,7 @@ async function main() {
   eq('예시 중 다른 파일을 열면 — 우리 파일로 먼저 돌아오고 되돌리기 기록은 새 파일에 안 따라감', v40.swapFile, [true, true, false, '61', 0, false, true]);
 
   // ── 41. 손으로 바꿀 때 사유 (2026-10-11, 결정 2-51) ─────────────────────────────────────
-  // 사용자: "어싸인 방배정 변경이나 어싸인 간호사 변경시 사유를 꼭 작성할 수 있게 — 왜 바꿨는지를 모르니까 보기가 힘들다".
+  // 어싸인 방배정이나 간호사를 손으로 바꿀 때는 사유를 꼭 적게 한다 — 왜 바꿨는지 모르면 나중에 보기 힘들다.
   // 배정표에서 눌러 연 창에서만 사유를 받는다 — 비우면 안 바뀌고, 그만두면 아무것도 안 바뀌며, 되돌리기 한 번에 사유까지 돌아간다.
   step('41 손으로 바꿀 때 사유');
   const v41 = await ev(`return (async()=>{ const A=window.__app, D='2026-09-06', out={}, J=x=>JSON.stringify(x);
@@ -3266,7 +3266,7 @@ async function main() {
     out.direct=[J((A.store.ovr[D]||{}).D),seatKeys()];
     await openName('최씨'); [...document.querySelectorAll('#pick button')].find(b=>b.getAttribute('onclick')==='pickChoose(null)').click(); await wait(20);
     out.auto=[modalOn(),J(A.store.ovr),J(A.store.why)];
-    // ⑤ 근무 바꾸기는 묻지 않는다 — 근무를 바꾸는 것은 지금처럼 바로 (사용자가 고른 범위 '자리·방만')
+    // ⑤ 근무 바꾸기는 묻지 않는다 — 근무를 바꾸는 것은 지금처럼 바로 (범위는 '자리·방만')
     s=setup('101'); await openName('정디');
     [...document.querySelectorAll('#pick .shl button')].find(b=>b.textContent.trim()==='OF').click(); await wait(20);
     out.shift=[modalOn(),A.store.cells['정디'][D],J(A.store.why),document.querySelector('#wkWhy').style.display];
@@ -3514,7 +3514,7 @@ async function main() {
   ok('앱 되돌리기(Ctrl+Z)로 고치기 전 양식', v42.appUndo);
 
   // ── 43. 관리 화면 실사용 — 파일 덮개·줄 끌기·스크롤 (2026-10-26) ──
-  // 사용자: "가능근무 하나하나 수정할때마다 스크롤 맨 위로가고 … 드래그하면 '파일을 놓으세요' 이딴 거나 나오고"
+  // 가능 근무를 하나 고칠 때마다 스크롤이 맨 위로 가고, 줄을 끌면 '파일을 놓으세요' 덮개가 떴다.
   step('43 관리 화면 실사용');
   const v43 = await ev(`return (async()=>{ const A=window.__app, out={}, wait=ms=>new Promise(r=>setTimeout(r,ms));
     const s=A.store; s.order=Array.from({length:24},(_,i)=>'간호'+String(i+1).padStart(2,'0')); s.cells={}; s.groups=[];

@@ -1,4 +1,4 @@
-"""야간 뒤 휴무 — '야간 2연속 뒤 휴무 2일', 나이트킵도 같다 (2026-10-17, 사용자 "2 night 이후 2 휴무 보장").
+"""야간 뒤 휴무 — '야간 2연속 뒤 휴무 2일', 나이트킵도 같다 (2026-10-17, 2 night 이후 2 휴무 보장).
 
 예전엔 둘째 휴무일에 N 을 허용해 N N OF N 이 통과했고, 나이트킵은 이 규칙에서 빠진 채
 '5일 중 야간 3일 이하'가 대신했다 — 병동이 준 적 없는 규칙이라 실제 번표의 N OF N N N(5일 중 4일)을 막았고,
@@ -62,6 +62,6 @@ def test_two_nights_then_two_full_rest_days(nid):
 
 @pytest.mark.parametrize("mid", ["OF", "V"])
 def test_night_offday_then_day_is_forbidden_with_leave_too(mid):
-    # N → 쉼 → D 금지 — 쉼이 V(휴가)여도 (2026-10-17, 사용자 "N > V > D 도 금지")
+    # N → 쉼 → D 금지 — 쉼이 V(휴가)여도 (2026-10-17, N > V > D 도 금지)
     assert not _feasible("r", {2: "N", 3: mid, 4: "D"})
     assert _feasible("r", {2: "N", 3: mid, 4: "E"})

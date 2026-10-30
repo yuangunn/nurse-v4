@@ -1,5 +1,5 @@
-"""완전 확정 표 폴백 (2026-08-19 사용자 지시) — "완성된 번표를 빈칸 없이 넣고
-생성을 누르면 생성이 되어야 한다."
+"""완전 확정 표 폴백 (2026-08-19) — 완성된 번표를 빈칸 없이 넣고
+생성을 누르면 생성이 되어야 한다.
 
 빈칸 없는 사전입력은 검증 대상이 아니라 주어진 사실: 솔버가 infeasible이어도
 표를 그대로 확정하고(pinned_confirmed) 규칙 차이는 pinned_notes로만 알린다.
@@ -46,7 +46,7 @@ def test_solver_output_roundtrips_as_full_preinput():
 
 def test_night_dedicated_15_nights_pinned_table_confirmed():
     """야간전담이 15일 야간인 완성표(규정 14일) — 과거엔 infeasible,
-    이제는 그대로 성공 + '15일' 안내. (사용자 시나리오: 지나간 달의 실제 번표)"""
+    이제는 그대로 성공 + '15일' 안내. (시나리오: 지나간 달의 실제 번표)"""
     nurses = [
         Nurse(id="a0", name="*야간", group="A", gender="female",
               capable_shifts=["NC", "N"], is_night_shift=True),
