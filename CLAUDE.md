@@ -152,7 +152,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 377건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과)
+├── tests/                   # pytest 회귀 530건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -194,19 +194,35 @@ npm start
 ```
 
 ### 테스트
+
+**고친 곳에 맞는 것만 돌린다.** `tests/`(pytest)는 standalone 을 읽지 않고, frontend 앱은 `assign-core.js` 를 쓰지 않는다.
+CI(`test.yml` 의 `changes` 작업)도 바뀐 파일이 전부 standalone 쪽이면 pytest 를 건너뛴다.
+
+standalone(`standalone/`·`frontend/js/modules/assign-core.js`·`scripts/*assign*`)만 고쳤을 때 — 로컬 약 3분, pytest 불필요:
+```bash
+node scripts/build-assign-standalone.mjs     # 소스를 고쳤으면 먼저 (CI 가 동기 여부를 본다)
+node scripts/test_assign_core.mjs            # 배정 코어 (1초)
+node scripts/test_assign_logic.mjs           # 로직 회귀 — 헤드리스 크롬, $CHROME 로 경로 지정 (약 45초)
+node scripts/test_assign_e2e.mjs             # 화면을 실제로 눌러 끝까지 (약 40초)
+node scripts/test_assign_live.mjs --seed 1,2,3   # 병동 양식 9가지에서 배정표를 실제로 고치며 화면·엑셀·인쇄 대조 (약 60초)
+node scripts/test_assign_compat.mjs          # 옛 배포본 데이터 파일을 지금 assign.html 로 (약 5초)
+node scripts/test_assign_principles.mjs      # 배정 원칙을 '모든 배치를 다 따져 본 정답'과 견준다 (약 15초, docs/verification.md)
+node scripts/make-assign-examples.mjs --check   # 병동별 예시 파일이 지금 HTML 과 같은지 — 인자 없이 돌리면 다시 만든다
+python3 scripts/check_form_borders.py        # 양식을 바꿨을 때
+```
+
+근무표 엔진·frontend 앱(그 밖의 파일)을 고쳤을 때 — 로컬 pytest 약 1분:
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 377건
-node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
-  && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
-  && node scripts/test_charge_plain.mjs && node scripts/test_hospital_holidays.mjs \
-  && node scripts/test_manager_check.mjs && node scripts/test_trainee_days.mjs \
-  && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs \
-  && node scripts/test_assign_logic.mjs   # standalone 로직 (헤드리스 크롬, $CHROME 로 경로 지정 가능)
-node scripts/test_assign_compat.mjs      # 옛 배포본이 저장한 데이터 파일을 지금 assign.html 로 열어 본다 (CI)
-node scripts/make-assign-examples.mjs --check  # 병동별 예시 파일(standalone/예시/)이 지금 assign.html 로 만든 것과 같고 깨끗하게 열리는지 (CI) — 인자 없이 돌리면 다시 만든다
-node scripts/test_assign_live.mjs        # 병동 양식 9가지에서 배정표를 실제로 눌러 고치고 화면·엑셀·인쇄·하루 어싸인표를 본다 (CI, 약 30초)
-node scripts/test_assign_principles.mjs  # 어싸인 원칙 — 배정 엔진을 '모든 배치를 다 따져 본 정답'과 견준다 (CI, 약 40초, docs/verification.md)
+python3 -m pytest -q                  # 530건
+node scripts/test_paste_dates.mjs && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
+  && node scripts/test_charge_plain.mjs && node scripts/test_day_reqs.mjs && node scripts/test_hospital_holidays.mjs \
+  && node scripts/test_manager_check.mjs && node scripts/test_trainee_days.mjs && node scripts/test_continue_search.mjs \
+  && node scripts/test_grid_select.mjs && node scripts/test_roster_bulk.mjs && node scripts/test_paste_fix.mjs \
+  && node scripts/test_juhu_rotation.mjs && node scripts/test_frontend_state.mjs && node scripts/test_frontend_edit.mjs \
+  && node scripts/verify_holidays.mjs
+```
+```bash
 # 화면(index.html)을 재배치했다면 — 핸들러 손실 0 확인 (REMOVED 는 전부 의도한 것이어야 한다)
 python3 scripts/handler_inventory.py <(git show origin/main:frontend/index.html) frontend/index.html
 # 리디자인 계약 검사 (design/handoff) — 1920×1080 으로 실제 앱을 열어 200+ 항목 getComputedStyle 검사, 불일치 0 이어야 한다
@@ -616,11 +632,9 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   리포의 `standalone/예시/<병동>병동 예시.js` 14개도 같은 함수로 만든다(`node scripts/make-assign-examples.mjs`, CI `--check` = 같은지 + 5주 '확인 필요' 0) — 파일의 `example` 표시 때문에
   어느 길로 열어도(파일 열기·끌어 놓기·백업 불러오기·옆 파일) 예시로 연다. 인트라넷용으로 HTML 의 [예시 파일 받기](`downloadExample`)가 같은 함수로 그 자리에서 만들어 내려준다(HTML 에 박지 않는다 — 날짜가 굳는다). **makeExample·서식·병실 규칙을 바꾸면 예시 파일을 다시 만들어 커밋할 것.** 이름은 옛이야기 이름, 번호는 010-0000-….
   끌어 놓기는 `getAsFileSystemHandle` 을 **첫 await 전에** 잡는다(내용부터 읽으면 핸들이 사라진다).
-  **손으로 바꾼 사유 (결정 2-51)**: 배정표에서 **자리 바꾸기 · 그날 방 고치기 · 오늘만 방 구성**은 사유를 적어야 바뀐다(자리·방만 — 근무 바꾸기·사람 넣기·CRN 맡기기는 묻지 않는다).
-  `store.why[날짜]['seat|P|이름'|'room|P|자리'|'preset|P|인원']={t,v,at}` — **바꾼 것이 그대로일 때만 산다**(`whyVal`===v, `recompute` 의 `pruneWhy` 가 걷는다), 그래서 되돌리는 길에서 사유를 따로 지우지 말 것.
-  묻는 것은 배정표에서 눌러 연 창(`ask`)뿐 — 바꾸는 함수는 동기 그대로 사유를 마지막 인자로 받고, 함수를 바로 부르는 검사·캡처는 묻지 않는다. 그날 방 창은 한 번 묻고 되돌리기도 한 번.
-  보이는 곳: 칸 점·툴팁 · 고르기 창 맨 위 · 배정표 옆 `#wkWhy` · 하루 어싸인표 옆 열 · 관리 > 수동 수정 관리. **종이에는 찍지 않는다.** 새 손 변경을 만들면 `whyVal`·`handChanges` 에 키를 더할 것.
-  손 변경 값을 프로그램이 고쳐 쓰는 곳(병상수 줄이기의 `setRoom`)은 바뀐 것만 고치고 사유의 `v` 도 함께 고칠 것 — 글자만 달라져도 사유가 걷힌다. 되돌리기(`undoAny`)는 열린 이름·방 창을 닫는다(방 창이 '되돌리기 점 찍음'·사유를 들고 있다).
+  **손으로 바꾸는 것 (결정 2-55)**: 배정표에서 자리·그날 방·오늘만 방 구성·근무를 바꾸면 **묻지 않고 바로** 바뀐다(사유 기능 2-51 은 뺐다 — 한 사람이 쓴다).
+  무엇을 바꿨는지는 `handChanges` 가 손 변경(ovr·roomOv·presetDay)에서 바로 만든다 — 배정표 옆 `#wkWhy`(접힘 기본) · 하루 어싸인표 옆 열 · 관리 > 수동 수정 관리.
+  그날 방 `setRoomOv`: `''` = 방 없음(손으로 다 뺀 것), `null` = 자동으로. 되돌리기(`undoAny`)는 열린 이름·방 창을 닫는다(방 창이 '되돌리기 점 찍음'을 들고 있다).
   **예시는 어떤 파일과도 잇지 않는다 (결정 2-50)** — 파일로 갖는 길은 [예시 파일 받기]뿐이고 받은 파일도 열면 예시. 처음 고치면(`touch`, 화면 상태 `touch('ui')` 는 빼고) 머리줄 안 띠 `#demoBar`
   '예시 파일 수정 중 — … 연동되지 않습니다'. `_writeStore` 는 부를 때의 `store`·`fileHandle` 을 잡아 await 마다 바뀌었거나 예시면 멈춘다 — 저장 중 예시를 열어도 우리 파일에 예시가 안 들어간다.
   예시 중 저장 연결·파일 다시 읽기·다른 위치 저장은 아무것도 안 한다. 새 저장 길을 만들 때도 `inDemo()` 면 멈출 것.
