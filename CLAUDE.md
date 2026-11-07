@@ -915,7 +915,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   새 파일 안내(`newDataFile`)는 이름이 아니라 `fileLoc.verified`(HTML 옆 같은 내용)로 '다음부터 바로 뜬다'를 말한다.
   **파일 창의 시작 폴더**(2026-10-03 — 문서 폴더가 아니라 같은 폴더부터): 브라우저는 경로로 못 연다 — `pickWith` 가 기억한 파일의 폴더 > HTML 이 든 바탕 화면·문서·다운로드(`wellKnownOf`)
   > 브라우저 기본 순으로 `startIn` 을 주고 `id:'assign-data'` 로 지난번 폴더를 따로 기억시킨다. 윈도 경로면 HTML 옆 파일 경로를 복사해 두고(`copyPathHint`)
-  '파일 이름 칸에 Ctrl+V'를 알린다. 기억한 핸들은 방금 자동으로 읽은 파일과 rev·saved 가 같을 때만 잇는다(`__reattachOther`) — 문서 폴더의 같은 이름 사본에 이어 쓰면 옆 파일은 옛 내용으로 남는다.
+  '맨 아래 파일 이름 칸에 Ctrl+V (위쪽 주소창 말고)'를 알린다 — 주소창에 넣고 Enter 하면 윈도가 .js 를 실행하려 해 Windows Script Host 오류 창이 뜬다(2026-11-07). 기억한 핸들은 방금 자동으로 읽은 파일과 rev·saved 가 같을 때만 잇는다(`__reattachOther`) — 문서 폴더의 같은 이름 사본에 이어 쓰면 옆 파일은 옛 내용으로 남는다.
   **온보딩·도움말은 그림 없이 실제 화면으로** (2026-09-17, 결정: GIF 파이프라인 폐기): ① 투어 엔진 `startTour(steps)` —
   가리개(`#tourShield`) + 구멍(`#tourHole`, box-shadow 스포트라이트) + 말풍선(`#tourBox`), 단계 `{sel|el(), title, text,
   before(), after()}`, Esc/←→, 가리개가 클릭을 막아 '보여 주기'이지 '따라 하기'가 아니다(상태 안 흐트러짐). 도움말 주제별
