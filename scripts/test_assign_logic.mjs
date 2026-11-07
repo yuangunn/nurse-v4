@@ -3221,242 +3221,82 @@ async function main() {
     ['9', false, true, true, 7, 7, true]);
   eq('예시 중 다른 파일을 열면 — 우리 파일로 먼저 돌아오고 되돌리기 기록은 새 파일에 안 따라감', v40.swapFile, [true, true, false, '61', 0, false, true]);
 
-  // ── 41. 손으로 바꿀 때 사유 (2026-10-11, 결정 2-51) ─────────────────────────────────────
-  // 어싸인 방배정이나 간호사를 손으로 바꿀 때는 사유를 꼭 적게 한다 — 왜 바꿨는지 모르면 나중에 보기 힘들다.
-  // 배정표에서 눌러 연 창에서만 사유를 받는다 — 비우면 안 바뀌고, 그만두면 아무것도 안 바뀌며, 되돌리기 한 번에 사유까지 돌아간다.
-  step('41 손으로 바꿀 때 사유');
+  // ── 41. 손으로 바꾸면 묻지 않고 바로 바뀐다 ─────────────────────────────────────
+  // 자리 맞바꾸기·그날 방·직접 입력·오늘만 방 구성 모두 창 없이 바로. 되돌리기는 창 하나에 한 번.
+  step('41 손으로 바꾸기 — 묻지 않고 바로');
   const v41 = await ev(`return (async()=>{ const A=window.__app, D='2026-09-06', out={}, J=x=>JSON.stringify(x);
     const wait=ms=>new Promise(r=>setTimeout(r,ms));
-    const setup=(id,n,off)=>{ A.setFormId(id); A.setWard(id); const s=A.store;
+    const setup=(id,n)=>{ A.setFormId(id); A.setWard(id); const s=A.store;
       s.order=['김차지','이에이','박비','최씨','정디','한막내'].slice(0,n||5); s.cells={}; s.ovr={}; s.ovrPair={}; s.roomOv={}; s.roomOvCnt={};
-      s.presetDay={}; s.seedManual={}; s.unit={}; s.relief={}; s.trainee={}; s.trOv={}; s.evRules=[]; s.daily={}; s.banRooms={}; s.caps={}; s.hidden={}; s.why={};
+      s.presetDay={}; s.seedManual={}; s.unit={}; s.relief={}; s.trainee={}; s.trOv={}; s.evRules=[]; s.daily={}; s.banRooms={}; s.caps={}; s.hidden={};
       s.rules={keepSameShift:true,keepAcrossShift:true,keepAfterOff:true,bounceAfterOff:false};
-      for(const nm of s.order) s.cells[nm]={[D]:(off||[]).includes(nm)?'OF':'D'};
+      for(const nm of s.order) s.cells[nm]={[D]:'D'};
       s.presets={}; s.presetPlan={}; s.groups=[]; s.groupLog=[]; A.store=s; A.resetSchemes(); A.recompute();
       A.wkSunday=new Date(2026,8,6); A.show('week'); A.undoClear(); return A.store; };
     const modalOn=()=>document.querySelector('#modal').classList.contains('on');
-    const whyIn=()=>document.querySelector('#modalBox #whyIn');
     const nmCell=nm=>[...document.querySelectorAll('#wkTable td.nm')].find(t=>t.dataset.n===nm&&t.dataset.iso===D);
-    const openName=async nm=>{ nmCell(nm).click(); await wait(10); return document.querySelector('#pick').style.display==='block'; };
-    const ok=async t=>{ if(t!=null) whyIn().value=t; document.querySelector('#mdOk').click(); await wait(20); };
-    const err=()=>(document.querySelector('#mdErr')||{}).textContent||'';
-    const seatKeys=()=>Object.keys((A.store.why||{})[D]||{}).sort();
-    // ① 자리 바꾸기 — 창에서 누르면 사유 창이 먼저, 비우면 안 바뀐다, 적으면 둘 다 같은 사유로
-    let s=setup('101');
-    out.open=await openName('최씨');
-    [...document.querySelectorAll('#pick .swapBtn')].find(b=>/pickChoose[(]'차지'/.test(b.getAttribute('onclick'))).click(); await wait(20);
-    out.asked=[modalOn(),!!whyIn(),J(A.store.ovr),document.querySelector('#pick').style.display];
-    await ok(''); out.empty=[modalOn(),err(),J(A.store.ovr)];
-    const d0=A.undoDepth;
-    await ok('격리 환자 담당'); out.swapped=[modalOn(),(A.store.ovr[D]||{}).D,seatKeys(),A.store.why[D]['seat|D|최씨'].t,A.store.why[D]['seat|D|김차지'].t,A.undoDepth-d0];
-    const c=nmCell('최씨'); out.tip=[c.classList.contains('why'),/사유: 격리 환자 담당/.test(c.title),c.classList.contains('ovd')];
-    const wb=document.querySelector('#wkWhy'); out.card=[wb.style.display,/손으로 바꾼 것/.test(wb.textContent),/격리 환자 담당/.test(wb.textContent),A.WHY_ROWS.wk.length];
-    // 이름 창 위의 사유 줄 — 맞바꾼 상대에서 열어도
-    await openName('김차지'); out.pkWhy=(document.querySelector('#pick .pkWhy')||{}).textContent||''; A.closePick();
-    // ② 그만두기 — 아무것도 안 바뀌고 되돌리기 기록도 없다
-    const st=J([A.store.ovr,A.store.why]), d1=A.undoDepth;
-    await openName('정디'); [...document.querySelectorAll('#pick .swapBtn:not([disabled])')][0].click(); await wait(20);
-    document.querySelector('#mdCancel').click(); await wait(20);
-    out.cancel=[modalOn(),J([A.store.ovr,A.store.why])===st,A.undoDepth-d1];
-    // ③ 되돌리기 한 번 — 자리와 사유가 함께 돌아간다
-    A.undoAny(); out.undo=[J(A.store.ovr),J(A.store.why)];
-    // ④ 자동으로 되돌리기는 묻지 않고, 바꾼 것이 없어지면 사유도 걷힌다
-    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지','회진 준비');
-    out.direct=[J((A.store.ovr[D]||{}).D),seatKeys()];
-    await openName('최씨'); [...document.querySelectorAll('#pick button')].find(b=>b.getAttribute('onclick')==='pickChoose(null)').click(); await wait(20);
-    out.auto=[modalOn(),J(A.store.ovr),J(A.store.why)];
-    // ⑤ 근무 바꾸기는 묻지 않는다 — 근무를 바꾸는 것은 지금처럼 바로 (범위는 '자리·방만')
-    s=setup('101'); await openName('정디');
-    [...document.querySelectorAll('#pick .shl button')].find(b=>b.textContent.trim()==='OF').click(); await wait(20);
-    out.shift=[modalOn(),A.store.cells['정디'][D],J(A.store.why),document.querySelector('#wkWhy').style.display];
-    // 옛 시험판의 근무·대체간호사 사유는 열 때 걷힌다
-    A.store.why={[D]:{'shift|정디':{t:'옛 사유',v:'OF'},'relief|D|한대체':{t:'옛 사유',v:'한대체'}}}; A.migrateStore(); out.shiftOld=J(A.store.why);
-    // ⑥ 그날 방 고치기 — 처음 고칠 때 한 번만 묻고, 창은 그 자리에 다시 열리고, 되돌리기 한 번에 창을 열기 전으로
-    s=setup('101');
-    const rmCell=[...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l==='B');
-    const rm0=A.roomsFor('D',5,'B',D); rmCell.click(); await wait(10);
+    const rmCell=l=>[...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l===l);
     const off=()=>[...document.querySelectorAll('#rpick .rpRoom > button:first-child')].filter(b=>!b.classList.contains('on'));
-    const d2=A.undoDepth;
-    off()[0].click(); await wait(20);
-    out.rmAsk=[modalOn(),document.querySelector('#rpick').style.display,J(A.store.roomOv)];
-    await ok('격리실 추가'); out.rm1=[modalOn(),document.querySelector('#rpick').style.display,!!((A.store.roomOv[D]||{}).D||{}).B,(A.store.why[D]['room|D|B']||{}).t,
-      /이번에 고치는 사유/.test(document.querySelector('#rpick').textContent)];
-    off()[0].click(); await wait(20);
-    out.rm2=[modalOn(),A.undoDepth-d2,(A.store.why[D]['room|D|B']||{}).v===A.store.roomOv[D].D.B];
-    A.closeRoomPick();
-    const rc=[...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l==='B');
-    out.rmTip=[rc.classList.contains('why'),/사유: 격리실 추가/.test(rc.title)];
-    A.undoAny(); out.rmUndo=[A.roomsFor('D',5,'B',D)===rm0,J(A.store.why)];
-    // ⑦ 직접 입력 — 방과 사유를 한 창에서 (브라우저 입력 창이 아니다)
-    s=setup('101'); [...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l==='C').click(); await wait(10);
+    const ctrlZ=()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true}));
+    // ① 자리 맞바꾸기 — 상대를 누르면 바로, 되돌리기 한 번
+    let s=setup('101'); nmCell('최씨').click(); await wait(10);
+    const d0=A.undoDepth;
+    [...document.querySelectorAll('#pick .swapBtn')].find(b=>/pickChoose[(]'차지'/.test(b.getAttribute('onclick'))).click(); await wait(20);
+    const ovD=(A.store.ovr[D]||{}).D||{};
+    out.swap=[modalOn(),ovD['최씨'],ovD['김차지'],A.undoDepth-d0,nmCell('최씨').classList.contains('ovd')];
+    const wb=document.querySelector('#wkWhy'); out.card=[wb.style.display,/손으로 바꾼 것/.test(wb.textContent),A.WHY_ROWS.wk.length];
+    A.undoAny(); out.swapUndo=J(A.store.ovr);
+    // ② 그날 방 — 누르면 바로, 창은 열린 채, 같은 창에서 여러 번 고쳐도 되돌리기 한 번
+    s=setup('101'); const rm0=A.roomsFor('D',5,'B',D);
+    rmCell('B').click(); await wait(10); const d1=A.undoDepth;
+    off()[0].click(); await wait(20); off()[0].click(); await wait(20);
+    out.room=[modalOn(),document.querySelector('#rpick').style.display,!!((A.store.roomOv[D]||{}).D||{}).B,A.undoDepth-d1];
+    A.closeRoomPick(); A.undoAny(); out.roomUndo=A.roomsFor('D',5,'B',D)===rm0;
+    // ③ 직접 입력 — 방 칸 하나만
+    s=setup('101'); rmCell('C').click(); await wait(10);
     [...document.querySelectorAll('#rpick button')].find(b=>/직접 입력/.test(b.textContent)).click(); await wait(20);
-    out.manAsk=[modalOn(),!!document.querySelector('#rpText'),!!whyIn()];
-    document.querySelector('#rpText').value='1, 2'; await ok(''); out.manEmpty=[modalOn(),err()];
-    const d3=A.undoDepth; await ok('보호자 요청');
-    out.man=[A.store.roomOv[D].D.C,(A.store.why[D]['room|D|C']||{}).t,A.undoDepth-d3];
-    // ⑧ 오늘만 방 구성 — 사유를 받는다, 매주 계획은 묻지 않는다
+    out.manForm=[modalOn(),!!document.querySelector('#rpText'),!!document.querySelector('#modalBox #whyIn')];
+    document.querySelector('#rpText').value='1, 2'; document.querySelector('#mdOk').click(); await wait(20);
+    out.man=[modalOn(),A.store.roomOv[D].D.C];
+    // ④ 오늘만 방 구성 — 바로 · 매주 계획도 바로
     s=setup('101'); s.presets[5]=[{id:'px',name:'격리',rooms:JSON.parse(J(s.schemes[5]))}];
-    [...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l==='B').click(); await wait(10);
-    document.querySelector('#rpPresetSel').value='px';
+    rmCell('B').click(); await wait(10); document.querySelector('#rpPresetSel').value='px';
     [...document.querySelectorAll('#rpick button')].find(b=>b.textContent.trim()==='오늘만').click(); await wait(20);
-    out.preAsk=[modalOn(),J(A.store.presetDay)];
-    await ok('격리 환자 많음'); out.pre=[J(A.store.presetDay),(A.store.why[D]['preset|D|5']||{}).t];
-    [...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l==='B').click(); await wait(10);
-    document.querySelector('#rpPresetSel').value='px';
+    out.pre=[modalOn(),J(A.store.presetDay)];
+    rmCell('B').click(); await wait(10); document.querySelector('#rpPresetSel').value='px';
     [...document.querySelectorAll('#rpick button')].find(b=>/^매주/.test(b.textContent.trim())).click(); await wait(20);
     out.weekly=[modalOn(),J(A.store.presetPlan)];
-    // ⑨ 대체간호사 넣기 — 이름만 (사유 칸 없음)
-    s=setup('101',4); await openName('최씨'); [...document.querySelectorAll('#pick button')].find(b=>/대체간호사 넣기/.test(b.textContent)).click(); await wait(20);
-    out.rlfAsk=[modalOn(),!!document.querySelector('#modalBox #mdInput'),!!whyIn()];
-    document.querySelector('#modalBox #mdInput').value='한대체'; document.querySelector('#mdOk').click(); await wait(20);
-    out.rlf=[modalOn(),J(A.store.relief),J(A.store.why),nmCell('한대체').title||''];
-    // ⑩ 쉬는 간호사 넣기 — 사람을 고르면 바로
-    s=setup('101',6,['한막내']); await openName('최씨'); [...document.querySelectorAll('#pick button')].find(b=>/쉬는 간호사 넣기/.test(b.textContent)).click(); await wait(20);
-    [...document.querySelectorAll('#modalBox button[data-g]')].find(b=>/한막내/.test(b.textContent)).click(); await wait(20);
-    out.add=[modalOn(),A.store.cells['한막내'][D],J(A.store.why)];
-    // ⑪ CRN 맡기기 (102) — 바로 DC
-    s=setup('102'); await openName('박비'); [...document.querySelectorAll('#pick button')].find(b=>/CRN 맡기기/.test(b.textContent)).click(); await wait(20);
-    out.crn=[modalOn(),A.store.cells['박비'][D],A.dayInfo(D).D.charge,J(A.store.why)];
-    // ⑫ 지난 사유 — 눌러서 채운다
-    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지','선임 교육');
-    await openName('정디'); [...document.querySelectorAll('#pick .swapBtn:not([disabled])')][0].click(); await wait(20);
-    const chips=[...document.querySelectorAll('#modalBox .whyChip')].map(b=>b.textContent);
-    const ch=[...document.querySelectorAll('#modalBox .whyChip')].find(b=>b.textContent==='선임 교육'); if(ch) ch.click();
-    out.chips=[chips.includes('선임 교육'),whyIn().value,modalOn()]; A.closeModal(null); await wait(10);
-    // ⑬ 이름을 바꾸면 사유도 새 이름으로, 지우면 사유도 사라진다
-    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지','회진');
-    A.applyNurseName(A.store.order.indexOf('최씨'),'최새'); A.recompute(); out.ren=seatKeys();
-    A.applyNurseName(A.store.order.indexOf('최새'),''); A.recompute(); out.renDel=seatKeys();
-    // ⑭ 옛 파일 — 사유 없는 손 교체는 '사유 없음', 목록에서 나중에 적을 수 있다. 모양이 틀린 사유는 열 때 걷힌다
+    // ⑤ 방 창이 열린 채 Ctrl+Z — 창이 닫히고 그 방 수정이 돌아간다(앞의 맞바꿈은 남는다)
     s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지');
-    A.store.why={x:5,[D]:{'seat|D|없는사람':{t:'옛 것',v:'A'},'bad':null,'seat|D|최씨':{t:'',v:'차지'}}}; A.migrateStore();
-    out.migr=J(A.store.why);
-    A.show('admin'); A.pickAdmin('manual'); await wait(20);
-    const tb=document.querySelector('#whyTable'); out.adm=[/사유 없음/.test(tb.textContent),A.WHY_ROWS.adm.length];
-    [...tb.querySelectorAll('button')].find(b=>b.textContent==='사유 적기').click(); await wait(20);
-    out.admAsk=[modalOn(),whyIn().value];
-    await ok('옛 교체 — 회진'); out.admWhy=[(A.store.why[D]['seat|D|최씨']||{}).t,(A.store.why[D]['seat|D|김차지']||{}).t,/옛 교체 — 회진/.test(document.querySelector('#whyTable').textContent)];
-    // 초기화도 되돌릴 수 있다
-    A.resetOv(); const r1=J(A.store.ovr); A.undoAny(); out.reset=[r1,!!(A.store.ovr[D]||{}).D,(A.store.why[D]['seat|D|최씨']||{}).t];
-    A.show('week');
-    // ⑮ 확인 카드 — 손으로 정한 자리의 사유가 문장 뒤에 붙는다 (문장은 그대로)
-    s=setup('101'); s.caps={'박비':['D','E','N']}; A.recompute(); A.openPick('박비',D,10,10); A.pickChoose('차지','차지 교육');
-    for(let i=0;i<3;i++){ const f=document.querySelector('#wkWarn.shut .fold')||document.querySelector('#wkWarn .more'); if(!f||!/자세히|더 보기/.test(f.textContent)) break; f.click(); }
-    const wt=document.querySelector('#wkWarn').textContent;
-    out.warn=[/박비 — 자격 없이 차지입니다[.] 배정표에서 손으로 차지 자리로 정해 두었기 때문입니다[.] [(]사유: 차지 교육[)]/.test(wt)];
-    // ⑯ 하루 어싸인표 옆 열에도, 종이에는 안 나온다
-    await A.openDay(D); await wait(400);
-    out.day=[/손으로 바꾼 것/.test(document.querySelector('#daySide').textContent),/차지 교육/.test(document.querySelector('#daySide').textContent),
-      /차지 교육/.test(document.querySelector('#dayPreview').textContent)];
-    A.show('week');
-    // 접힌 카드 — 펼치면 줄마다 사유
-    const fb=document.querySelector('#wkWhy .fold'); if(fb) fb.click(); await wait(10);
-    out.fold=[!!fb,document.querySelectorAll('#wkWhy .whyRow').length];
-    // ── 머지 뒤 검토에서 고친 것 (2026-10-11) ──
-    const rmB=()=>[...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l==='B');
-    const ctrlZ=()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true}));
-    // ⓐ 방 창이 열린 채 Ctrl+Z — 창이 닫히고, 다시 고치면 사유를 또 묻고 되돌리기 점도 새로 (그 앞의 맞바꿈은 남는다)
-    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지','앞의 맞바꿈');
-    rmB().click(); await wait(10); off()[0].click(); await wait(20); await ok('방 사유 1');
+    rmCell('B').click(); await wait(10); off()[0].click(); await wait(20);
     ctrlZ(); await wait(20);
-    out.uRp=[document.querySelector('#rpick').style.display,A.rpCtx,J(A.store.roomOv)];
-    rmB().click(); await wait(10); off()[0].click(); await wait(20);
-    const asked2=modalOn(); await ok('방 사유 2'); A.closeRoomPick();
-    A.undoAny(); out.uRp2=[asked2,J(A.store.roomOv),((A.store.ovr[D]||{}).D||{})['최씨'],(A.store.why[D]||{})['seat|D|최씨']&&A.store.why[D]['seat|D|최씨'].t];
-    // ⓑ 병상수를 줄여도 — 상관없는 방 수정은 글자 그대로 사유도 그대로, 줄어든 병상이 든 수정은 고쳐 쓰고 사유를 잇는다
+    out.uRp=[document.querySelector('#rpick').style.display,A.rpCtx,J(A.store.roomOv),((A.store.ovr[D]||{}).D||{})['최씨']];
+    // ⑥ 병상수를 줄이면 — 상관없는 방 수정은 그대로, 줄어든 병상이 든 수정은 고쳐 쓴다
     s=setup('101'); s.rooms[0][1]=4; s.rooms[8][1]=4; A.recompute(); A.show('week');
-    const manual=async(l,txt,why)=>{ [...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l===l).click(); await wait(10);
-      [...document.querySelectorAll('#rpick button')].find(b=>/직접 입력/.test(b.textContent)).click(); await wait(20);
-      document.querySelector('#rpText').value=txt; await ok(why); };
-    await manual('C','2,3','보호자 요청'); await manual('D','1:1, 1:4','격리 병상');
-    A.setRoom(8,1,'2');
-    out.bedOther=[A.store.roomOv[D].D.C,(A.store.why[D]['room|D|C']||{}).t];
-    A.setRoom(0,1,'3');
-    out.bedCut=[A.store.roomOv[D].D.D,(A.store.why[D]['room|D|D']||{}).t,(A.store.why[D]['room|D|D']||{}).v===A.store.roomOv[D].D.D];
-    // ⓒ 사유 창이 열린 동안 파란 알림을 눌러도 되돌리지 않는다
-    s=setup('101'); await openName('최씨');
-    [...document.querySelectorAll('#pick .swapBtn')].find(b=>/pickChoose[(]'차지'/.test(b.getAttribute('onclick'))).click(); await wait(20); await ok('먼저 바꿈');
-    const ov1=J(A.store.ovr);
-    await openName('정디'); [...document.querySelectorAll('#pick .swapBtn:not([disabled])')][0].click(); await wait(20);
-    document.querySelector('#toast').click(); await wait(20);
-    out.toast=[modalOn(),J(A.store.ovr)===ov1]; document.querySelector('#mdCancel').click(); await wait(20);
-    // ⓓ 사유를 적는 사이 배정이 바뀌면(함수로 바로 되돌리기) 창을 연 때의 자리로 맞바꾸지 않는다
-    s=setup('101'); A.openPick('정디',D,10,10); A.pickChoose('B','먼저 맞바꿈');
-    await openName('정디'); [...document.querySelectorAll('#pick .swapBtn')].find(b=>/pickChoose[(]'A'/.test(b.getAttribute('onclick'))).click(); await wait(20);
-    A.undoAny(); const ov2=J(A.store.ovr); await ok('늦은 사유');
-    out.stale=[J(A.store.ovr)===ov2,J(A.store.why),/배정이 바뀌어/.test(document.querySelector('#toast').textContent)];
-    // ⓔ 맞바꾼 상대가 그 근무에서 빠지면 이름 칸의 점·풍선이 없어지고 창에는 '지금은 쓰지 않음'
-    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지','격리');
-    s.cells['김차지'][D]='OF'; A.recompute(); A.show('week');
-    const c2=nmCell('최씨'); out.gone=[c2.classList.contains('why'),/격리/.test(c2.title||'')];
-    await openName('최씨'); out.goneTxt=/지금은 쓰지 않음/.test((document.querySelector('#pick .pkWhy')||{}).textContent||''); A.closePick();
-    // ⓕ 적은 때가 글자가 아닌 사유(손으로 고친 파일)도 화면을 멈추지 않는다
-    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지');
-    A.store.why={[D]:{'seat|D|최씨':{t:'옛 사유',v:'차지',at:5}}}; A.migrateStore();
-    let thrown=''; try{ A.show('admin'); A.pickAdmin('manual'); await wait(20); A.show('week'); }catch(e){ thrown=String(e); }
-    out.badAt=[A.store.why[D]['seat|D|최씨'].at,thrown,/옛 사유/.test(document.querySelector('#wkWhy').textContent)];
-    // ⓖ [사유 적기] 사이 그 변경이 없어지면 아무것도 적지 않고 되돌리기 점도 없다
-    s=setup('101'); A.openPick('최씨',D,10,10); A.pickChoose('차지'); A.show('admin'); A.pickAdmin('manual'); await wait(20);
-    const d5=A.undoDepth; A.whyEdit('adm',0); await wait(20); s.ovr={}; s.ovrPair={}; await ok('늦은 사유');
-    out.editGone=[A.undoDepth-d5,J(A.store.why),/적지 않았습니다/.test(document.querySelector('#toast').textContent)];
+    A.setRoomOv(D,'D','C','2,3',5); A.setRoomOv(D,'D','D','1:1, 1:4',5);
+    A.setRoom(8,1,'2'); out.bedOther=A.store.roomOv[D].D.C;
+    A.setRoom(0,1,'3'); out.bedCut=A.store.roomOv[D].D.D;
+    // ⑦ 관리 > 수동 수정 관리 — 바꾼 것만 (사유 칸 없음)
+    A.show('admin'); A.pickAdmin('manual'); await wait(10);
+    const tb=document.querySelector('#whyTable'); out.adm=[tb.querySelectorAll('tr').length>1,/사유/.test(tb.textContent)];
+    // ⑧ 옛 파일에 남은 사유는 열 때 버린다
+    const s2=A.store; s2.why={[D]:{'seat|D|최씨':{t:'옛 사유',v:'차지'}}}; A.store=s2; A.migrateStore(); out.oldWhy=('why' in A.store);
     A.show('week');
-    // ⓗ 창을 연 단추를 두 번 눌러도(둘째 누름이 창 바깥에) 사유 창이 바로 닫히지 않는다 — 조금 뒤 바깥을 누르면 닫힌다
-    s=setup('101'); await openName('정디'); [...document.querySelectorAll('#pick .swapBtn:not([disabled])')][0].click(); await wait(10);
-    const md=()=>document.querySelector('#modal').dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
-    md(); const stay=modalOn(); await wait(500); md();
-    out.dbl=[stay,modalOn(),J(A.store.ovr)];
-    return out; })()`, 60000);
-  eq('사유 — 배정표에서 이름을 누르면 창이 열린다', v41.open, true);
-  eq('자리 바꾸기를 누르면 사유 창이 먼저 — 아직 안 바뀌고 이름 창은 닫힌다', v41.asked, [true, true, '{}', 'none']);
-  eq('사유를 비우면 안 바뀐다', v41.empty, [true, '사유를 적어 주세요 — 비워 두면 바뀌지 않습니다.', '{}']);
-  eq('적으면 맞바꾼 두 사람 모두 같은 사유, 되돌리기 한 번', v41.swapped,
-    [false, { '김차지': 'C', '최씨': '차지' }, ['seat|D|김차지', 'seat|D|최씨'], '격리 환자 담당', '격리 환자 담당', 1]);
-  eq('이름 칸에 점과 마우스를 올리면 사유', v41.tip, [true, true, true]);
-  eq("배정표 옆 '손으로 바꾼 것'에 한 줄(맞바꿈은 한 줄)", v41.card, ['flex', true, true, 1]);
-  ok('맞바꾼 상대의 이름 창에도 사유 줄', /자리 바꿈 · 사유: 격리 환자 담당/.test(v41.pkWhy), v41.pkWhy);
-  eq('그만두기 — 아무것도 안 바뀌고 되돌리기 기록도 없다', v41.cancel, [false, true, 0]);
-  eq('되돌리기 한 번에 자리와 사유가 함께', v41.undo, ['{}', '{}']);
-  eq('함수를 바로 부르면 사유를 묻지 않는다(검사·캡처 길)', v41.direct, [JSON.stringify({ '김차지': 'C', '최씨': '차지' }), ['seat|D|김차지', 'seat|D|최씨']]);
-  eq('자동으로 되돌리기는 묻지 않고, 사유도 걷힌다', v41.auto, [false, '{}', '{}']);
-  eq("근무 바꾸기는 묻지 않고 바로 — '손으로 바꾼 것'에도 안 나온다", v41.shift, [false, 'OF', '{}', 'none']);
-  eq('옛 시험판의 근무·대체간호사 사유는 열 때 걷힌다', v41.shiftOld, '{}');
-  eq('그날 방 — 처음 고칠 때 사유 창, 아직 안 바뀜', v41.rmAsk, [true, 'none', '{}']);
-  eq('사유를 적으면 바뀌고 방 창이 그 자리에 다시 열린다', v41.rm1, [false, 'block', true, '격리실 추가', true]);
-  eq('같은 창에서 또 고치면 묻지 않고, 되돌리기는 창 하나에 한 번', v41.rm2, [false, 1, true]);
-  eq('방 칸에도 점과 사유', v41.rmTip, [true, true]);
-  eq('되돌리기 한 번에 창을 열기 전 방으로 (예전엔 되돌릴 길이 없었다)', v41.rmUndo, [true, '{}']);
-  eq('직접 입력 — 방과 사유를 한 창에서', v41.manAsk, [true, true, true]);
-  eq('직접 입력도 사유를 비우면 안 바뀐다', v41.manEmpty, [true, '사유를 적어 주세요 — 비워 두면 바뀌지 않습니다.']);
-  eq('직접 입력 — 바뀌고 사유, 되돌리기 한 번', v41.man, ['1, 2', '보호자 요청', 1]);
-  eq('오늘만 방 구성 — 사유가 먼저', v41.preAsk, [true, '{}']);
-  eq('오늘만 방 구성 — 바뀌고 사유', v41.pre, [JSON.stringify({ '2026-09-06': { D: { 5: 'px' } } }), '격리 환자 많음']);
-  eq('매주 계획은 설정이라 묻지 않는다', v41.weekly, [false, JSON.stringify({ sun: { D: { 5: 'px' } } })]);
-  eq('대체간호사 넣기 — 이름만 묻는다(사유 칸 없음)', v41.rlfAsk, [true, true, false]);
-  eq('대체간호사 — 바로 들어가고 사유는 없다', v41.rlf, [false, JSON.stringify({ '2026-09-06': { D: ['한대체'] } }), '{}', '']);
-  eq('쉬는 간호사 넣기 — 사람을 고르면 바로', v41.add, [false, 'D', '{}']);
-  eq('CRN 맡기기 — 묻지 않고 바로 DC', v41.crn, [false, 'DC', '박비', '{}']);
-  eq('지난 사유를 누르면 채운다(바로 바꾸지는 않는다)', v41.chips, [true, '선임 교육', true]);
-  eq('이름을 바꾸면 사유도 새 이름으로', v41.ren, ['seat|D|김차지', 'seat|D|최새']);
-  eq('명부에서 지우면 그 사람과 맞바꾼 상대의 사유가 함께 사라진다(맞바꿈이 풀리므로)', v41.renDel, []);
-  eq('열 때 모양이 틀린 사유·없는 것의 사유는 걷힌다', v41.migr, '{}');
-  eq("관리 > 수동 수정 관리 — 옛 교체는 '사유 없음'으로", v41.adm, [true, 1]);
-  eq('[사유 적기] — 빈 칸으로 열린다', v41.admAsk, [true, '']);
-  eq('목록에서 적은 사유 — 맞바꾼 두 사람 모두', v41.admWhy, ['옛 교체 — 회진', '옛 교체 — 회진', true]);
-  eq('담당 교체 모두 초기화도 되돌린다(사유까지)', v41.reset, ['{}', true, '옛 교체 — 회진']);
-  eq('확인 카드 — 문장 뒤에 사유', v41.warn, [true]);
-  eq('하루 어싸인표 옆 열에 사유, 종이(미리보기)에는 없다', v41.day, [true, true, false]);
-  eq("좁은 화면 — '손으로 바꾼 것'은 접혀 있고 펼치면 줄마다", v41.fold, [true, 1]);
-  eq('방 창이 열린 채 Ctrl+Z — 창이 닫힌다', v41.uRp, ['none', null, '{}']);
-  eq('다시 고치면 사유를 또 묻고, 되돌리기는 그 고침만 (앞의 맞바꿈과 사유는 남는다)', v41.uRp2, [true, '{}', '차지', '앞의 맞바꿈']);
-  eq('병상수를 줄여도 상관없는 방 수정은 글자·사유 그대로', v41.bedOther, ['2,3', '보호자 요청']);
-  eq('줄어든 병상이 든 방 수정은 고쳐 쓰고 사유를 잇는다', v41.bedCut, ['1:1', '격리 병상', true]);
-  eq('사유 창이 열린 동안 파란 알림을 눌러도 되돌리지 않는다', v41.toast, [true, true]);
-  eq('사유를 적는 사이 배정이 바뀌면 바꾸지 않는다', v41.stale, [true, '{}', true]);
-  eq('맞바꾼 상대가 빠져 효력이 없으면 이름 칸에 점·사유 풍선이 없다', v41.gone, [false, false]);
-  ok("그 사람 창에는 '지금은 쓰지 않음'", v41.goneTxt, String(v41.goneTxt));
-  eq('적은 때가 망가진 사유도 화면을 멈추지 않는다', v41.badAt, ['', '', true]);
-  eq('[사유 적기] 사이 변경이 없어지면 적지 않고 되돌리기 점도 없다', v41.editGone, [0, '{}', true]);
-  eq('창을 연 단추를 두 번 눌러도 사유 창이 바로 닫히지 않는다', v41.dbl, [true, false, '{}']);
+    return out; })()`);
+  eq('자리 맞바꾸기 — 창 없이 바로, 되돌리기 한 번, 빨간 밑줄', v41.swap, [false, '차지', 'C', 1, true]);
+  eq("배정표 옆 '손으로 바꾼 것'에 한 줄", v41.card, ['flex', true, 1]);
+  eq('되돌리기 한 번에 맞바꿈이 돌아간다', v41.swapUndo, '{}');
+  eq('그날 방 — 창 없이 바로, 방 창은 열린 채, 여러 번 고쳐도 되돌리기 한 번', v41.room, [false, 'block', true, 1]);
+  eq('되돌리기 한 번에 창을 열기 전 방으로', v41.roomUndo, true);
+  eq('직접 입력 — 방 칸 하나만', v41.manForm, [true, true, false]);
+  eq('직접 입력 — 바로 바뀐다', v41.man, [false, '1, 2']);
+  eq('오늘만 방 구성 — 바로', v41.pre, [false, JSON.stringify({ '2026-09-06': { D: { 5: 'px' } } })]);
+  eq('매주 계획도 바로', v41.weekly, [false, JSON.stringify({ sun: { D: { 5: 'px' } } })]);
+  eq('방 창이 열린 채 Ctrl+Z — 창이 닫히고 방 수정만 돌아간다', v41.uRp, ['none', null, '{}', '차지']);
+  eq('병상수를 줄여도 상관없는 방 수정은 그대로', v41.bedOther, '2,3');
+  eq('줄어든 병상이 든 방 수정은 고쳐 쓴다', v41.bedCut, '1:1');
+  eq('수동 수정 관리 — 바꾼 것만, 사유 칸 없음', v41.adm, [true, false]);
+  eq('옛 파일에 남은 사유는 열 때 버린다', v41.oldWhy, false);
 
   // ── 42. 표 모양 고치기 — 하루 어싸인표 양식의 칸 크기·합치기·나누기·글자 모양 (2026-10-26) ──
   // 고친 XML 이 한글 표 규칙을 지키는지: 격자 자리마다 칸이 딱 하나, tr 수 = rowCnt, tr 순서 = rowAddr, 표 크기 = 칸 크기 합.
@@ -3612,14 +3452,13 @@ async function main() {
   eq('비워 둔 인원수 날은 \'아무도 안 보는 방\' 경고를 안 띄운다', empty2Day.경고, false);
   await ev(`window.__app.resetSchemes&&window.__app.resetSchemes(); return 1`).catch(()=>{});
 
-  // ── 빈 자리 채우기는 묻지 않는다 · 방을 다 빼면 '방 없음' 그대로 · 확인 열 두 구역은 접힘이 기본 ──
+  // ── 빈 자리 채우기 · 방을 다 빼면 '방 없음' 그대로 · 확인 열 두 구역은 접힘이 기본 ──
   // 화면을 실제로 누른다(방 칸 → 방 고르기 창 → 방 단추).
   step('빈 자리 채우기 · 방 다 빼기 · 접힘');
   const hand = await ev(`const A=window.__app, out={}, D='2026-09-08', J=JSON.stringify;
     return (async()=>{
     const wait=ms=>new Promise(r=>setTimeout(r,ms));
     const modalOn=()=>document.querySelector('#modal').classList.contains('on');
-    const ok=async t=>{ const i=document.querySelector('#modalBox #whyIn'); if(t!=null&&i) i.value=t; document.querySelector('#mdOk').click(); await wait(20); };
     const rm=l=>[...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l===l);
     const btns=on=>[...document.querySelectorAll('#rpick .rpRoom > button:first-child')].filter(b=>b.classList.contains('on')===on);
     const setup=n=>{ A.setFormId('101'); A.setWard('101'); const s=A.store;
@@ -3627,17 +3466,17 @@ async function main() {
       s.presetDay={}; s.presets={}; s.presetPlan={}; s.why={}; s.unit={}; s.caps={}; s.banRooms={}; s.hidden={};
       for(const nm of s.order) s.cells[nm]={[D]:'D'}; A.store=s; A.resetSchemes(); A.recompute();
       A.wkSunday=new Date(2026,8,6); A.show('week'); return A.store; };
-    // ① 2인 방 구성을 통째로 비운 날 — 빈 차지 칸에 방을 넣어도 사유를 묻지 않는다
+    // ① 2인 방 구성을 통째로 비운 날 — 빈 차지 칸에 방을 넣으면 바로 들어간다
     setup(2); A.setScheme(2,'차지',''); A.setScheme(2,'A',''); A.show('week');
     out.blank0=A.roomsFor('D',2,'차지',D);
     rm('차지').click(); await wait(10);
     btns(false)[0].click(); await wait(20);
     out.fill=[modalOn(),!!((A.store.roomOv[D]||{}).D||{})['차지'],document.querySelector('#rpick').style.display];
     btns(false)[0].click(); await wait(20); out.fill2=modalOn(); A.closeRoomPick();
-    // ② 프리셋 방이 있는 자리에서 방을 다 빼면 — 사유는 한 번, 그 뒤엔 '방 없음' 그대로(프리셋으로 안 돌아감)
+    // ② 프리셋 방이 있는 자리에서 방을 다 빼면 '방 없음' 그대로(프리셋으로 안 돌아감)
     setup(5); const pre=A.roomsFor('D',5,'B',D);
     rm('B').click(); await wait(10);
-    btns(true)[0].click(); await wait(20); out.ask=modalOn(); await ok('입원 대기 — 방 미정');
+    btns(true)[0].click(); await wait(20); out.ask=modalOn();
     for(let i=0;i<20&&btns(true).length;i++){ btns(true)[0].click(); await wait(15); }
     out.cleared=[modalOn(),J(((A.store.roomOv[D]||{}).D||{}).B),A.roomsFor('D',5,'B',D)];
     A.closeRoomPick();
@@ -3658,9 +3497,9 @@ async function main() {
     out.side=A.sideMode?A.sideMode():null;
     return out; })();`);
   eq('비워 둔 2인 날 차지 칸은 방이 없다', hand.blank0, '');
-  eq('빈 자리에 방을 넣으면 사유를 묻지 않고 바로 들어간다', hand.fill, [false, true, 'block']);
+  eq('빈 자리에 방을 넣으면 바로 들어간다', hand.fill, [false, true, 'block']);
   eq('두 번째 방도 묻지 않는다', hand.fill2, false);
-  eq('방이 있던 자리를 고치면 사유를 한 번 묻는다', hand.ask, true);
+  eq('방이 있던 자리를 고쳐도 묻지 않는다', hand.ask, false);
   eq('방을 다 빼면 \'방 없음\'으로 남는다 (프리셋으로 안 돌아감)', hand.cleared, [false, '""', '']);
   eq('배정표 방 칸도 비어 있다', hand.cell, '');
   eq('다시 열어도 방 없음 그대로', hand.reopen, '');
