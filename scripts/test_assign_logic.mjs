@@ -382,13 +382,12 @@ async function main() {
   eq('옛 localStorage 상태를 데이터 파일로 옮긴다', ui.옮김, { printed: 1, obHidden: 1 });
   eq('옮긴 뒤 옛 값은 지운다', ui.옛값남음, [null, null]);
 
+  // 시작 안내는 숨기지 않고 접는다 — 옛 파일의 obHidden 이 있어도 카드가 사라지지 않는다
   const uiKeep = await ev(`const A=window.__app;
-    const s=A.store; s.ui={}; A.store=s;
-    A.hideOnboard();
-    const a=!!A.store.ui.obHidden;
-    A.showOnboard();
-    return {숨김저장:a, 되돌림:!A.store.ui.obHidden};`);
-  ok('숨기기·되돌리기가 데이터 파일에 남는다', uiKeep.숨김저장 && uiKeep.되돌림, JSON.stringify(uiKeep));
+    const s=A.store; s.ui={obHidden:1}; A.store=s; A.show('week'); A.renderOnboard();
+    const el=document.querySelector('#onboard');
+    return {숨김무시:!(el.style.display==='none'&&A.onboardItems().some(i=>!i.ok)), 접힘:!el.querySelector('.obRow')};`);
+  ok('옛 숨김 값이 있어도 시작 안내는 접힌 채 보인다', uiKeep.숨김무시 && uiKeep.접힘, JSON.stringify(uiKeep));
 
   // ── 11. 필요 인원은 재지 않는다 ────────────────────────────────────────
   // 이 도구는 완성된 근무표를 받는다 — 인원이 맞는지는 근무표를 짤 때 정해졌다 (2026-09-27, 결정 2-28).
@@ -3579,6 +3578,95 @@ async function main() {
   eq('풀린 날은 DC/자리도 그 자리에 앉는다', v44.pin, ['', '간호04']);
   ok('데이터 파일에 noChg 로 저장', v44.saved);
   ok('Ctrl+Z 로 차지 방 없음 끄기 전으로', v44.undo);
+
+  // ── 비워 둔 2인 방 구성 — 다시 열어도 비어 있다 ─────────────────────
+  // 예전 기본값 2:{차지:[],A:[]} 와 사람이 비운 것이 모양이 같아, 열 때마다 기본값으로 채우던 것.
+  step('2인 비워 두기');
+  const empty2 = await ev(`const A=window.__app; A.setWard('101');
+    const reopen=()=>{ A.store=JSON.parse(JSON.stringify(A.store)); A.migrateStore(); };
+    const filled=c=>Object.values(A.store.schemes[c]||{}).some(a=>a&&a.length);
+    // 옛 파일: 2인이 예전 기본값 그대로, 채우기 표시 없음 → 한 번 채운다
+    const s=A.store; s.schemes[2]={차지:[],A:[]}; delete s.schemesSeeded; A.store=s; reopen();
+    const old=filled(2);
+    // 화면에서 2인 두 줄을 비우고 저장 → 다시 열기
+    A.setScheme(2,'차지',''); A.setScheme(2,'A',''); reopen();
+    const kept=!filled(2);
+    const unusedOk=!A.presetBad(A.presetsOf(2)[0]);
+    // 일부만 빈 것은 여전히 확인 대상
+    A.setScheme(2,'차지','1001'); const partBad=A.presetBad(A.presetsOf(2)[0]);
+    A.setScheme(2,'차지','');
+    // 키가 아예 없는 인원수는 언제든 채운다
+    const s2=A.store; delete s2.schemes[3]; A.store=s2; reopen();
+    return {old,kept,unusedOk,partBad,missingRefilled:filled(3)};`);
+  eq('옛 파일의 빈 2인은 한 번 채운다', empty2.old, true);
+  eq('비워 둔 2인은 다시 열어도 비어 있다', empty2.kept, true);
+  eq('통째로 비운 기본 방 구성은 확인 대상이 아니다(안 씀)', empty2.unusedOk, true);
+  eq('일부만 빈 방 구성은 여전히 확인 대상', empty2.partBad, true);
+  eq('키가 없는 인원수는 채운다', empty2.missingRefilled, true);
+  const empty2Day = await ev(`const A=window.__app; const s=A.store; const iso='2026-09-08';
+    s.order=['가','나']; s.cells={가:{[iso]:'NC'},나:{[iso]:'N'}}; A.store=s; A.recompute();
+    A.wkSunday=new Date(2026,8,6); A.show('week');
+    return {배정:Object.keys(A.result.byDay[iso].N.labels).length,
+      경고:/아무도 안 보는 방/.test((document.querySelector('#wkWarn')||{}).textContent||'')};`);
+  eq('2인이 비어도 2명 근무는 배정된다', empty2Day.배정, 2);
+  eq('비워 둔 인원수 날은 \'아무도 안 보는 방\' 경고를 안 띄운다', empty2Day.경고, false);
+  await ev(`window.__app.resetSchemes&&window.__app.resetSchemes(); return 1`).catch(()=>{});
+
+  // ── 빈 자리 채우기는 묻지 않는다 · 방을 다 빼면 '방 없음' 그대로 · 확인 열 두 구역은 접힘이 기본 ──
+  // 화면을 실제로 누른다(방 칸 → 방 고르기 창 → 방 단추).
+  step('빈 자리 채우기 · 방 다 빼기 · 접힘');
+  const hand = await ev(`const A=window.__app, out={}, D='2026-09-08', J=JSON.stringify;
+    return (async()=>{
+    const wait=ms=>new Promise(r=>setTimeout(r,ms));
+    const modalOn=()=>document.querySelector('#modal').classList.contains('on');
+    const ok=async t=>{ const i=document.querySelector('#modalBox #whyIn'); if(t!=null&&i) i.value=t; document.querySelector('#mdOk').click(); await wait(20); };
+    const rm=l=>[...document.querySelectorAll('#wkTable td.rm')].find(t=>t.dataset.iso===D&&t.dataset.l===l);
+    const btns=on=>[...document.querySelectorAll('#rpick .rpRoom > button:first-child')].filter(b=>b.classList.contains('on')===on);
+    const setup=n=>{ A.setFormId('101'); A.setWard('101'); const s=A.store;
+      s.order=['김차지','이에이','박비','최씨','정디'].slice(0,n); s.cells={}; s.ovr={}; s.ovrPair={}; s.roomOv={}; s.roomOvCnt={};
+      s.presetDay={}; s.presets={}; s.presetPlan={}; s.why={}; s.unit={}; s.caps={}; s.banRooms={}; s.hidden={};
+      for(const nm of s.order) s.cells[nm]={[D]:'D'}; A.store=s; A.resetSchemes(); A.recompute();
+      A.wkSunday=new Date(2026,8,6); A.show('week'); return A.store; };
+    // ① 2인 방 구성을 통째로 비운 날 — 빈 차지 칸에 방을 넣어도 사유를 묻지 않는다
+    setup(2); A.setScheme(2,'차지',''); A.setScheme(2,'A',''); A.show('week');
+    out.blank0=A.roomsFor('D',2,'차지',D);
+    rm('차지').click(); await wait(10);
+    btns(false)[0].click(); await wait(20);
+    out.fill=[modalOn(),!!((A.store.roomOv[D]||{}).D||{})['차지'],document.querySelector('#rpick').style.display];
+    btns(false)[0].click(); await wait(20); out.fill2=modalOn(); A.closeRoomPick();
+    // ② 프리셋 방이 있는 자리에서 방을 다 빼면 — 사유는 한 번, 그 뒤엔 '방 없음' 그대로(프리셋으로 안 돌아감)
+    setup(5); const pre=A.roomsFor('D',5,'B',D);
+    rm('B').click(); await wait(10);
+    btns(true)[0].click(); await wait(20); out.ask=modalOn(); await ok('입원 대기 — 방 미정');
+    for(let i=0;i<20&&btns(true).length;i++){ btns(true)[0].click(); await wait(15); }
+    out.cleared=[modalOn(),J(((A.store.roomOv[D]||{}).D||{}).B),A.roomsFor('D',5,'B',D)];
+    A.closeRoomPick();
+    out.cell=rm('B').textContent.trim();
+    A.store=JSON.parse(J(A.store)); A.migrateStore(); A.recompute(); out.reopen=A.roomsFor('D',5,'B',D);
+    A.show('week'); let w=document.querySelector('#wkWhy');
+    const hasNone=/방 없음/.test(J(A.WHY_ROWS.wk.map(r=>r.html)));
+    // 앞선 검사가 펼쳐 두었을 수 있다 — 넓은 화면에서도 접기 단추가 있고 누르면 접힌다
+    if(w.classList.contains('open')){ w.querySelector('.fold').click(); await wait(10); w=document.querySelector('#wkWhy'); }
+    out.whyCard=[hasNone, w.classList.contains('open'), !!w.querySelector('.fold'), !!w.querySelector('.items')];
+    // ③ [↩ 자동으로] 를 눌러야 프리셋으로 돌아간다
+    rm('B').click(); await wait(10);
+    [...document.querySelectorAll('#rpick button')].find(b=>b.getAttribute('onclick')==='roomPickAuto()').click(); await wait(20);
+    out.auto=[A.roomsFor('D',5,'B',D)===pre, pre!==''];
+    // ④ 시작 안내 — 숨기기 없이 접기만, 넓은 화면에서도 접힘이 기본
+    const ob=document.querySelector('#onboard');
+    out.ob=[ob.style.display, ob.querySelectorAll('.obRow').length, /숨기기/.test(ob.textContent), !!ob.querySelector('.obFold')];
+    out.side=A.sideMode?A.sideMode():null;
+    return out; })();`);
+  eq('비워 둔 2인 날 차지 칸은 방이 없다', hand.blank0, '');
+  eq('빈 자리에 방을 넣으면 사유를 묻지 않고 바로 들어간다', hand.fill, [false, true, 'block']);
+  eq('두 번째 방도 묻지 않는다', hand.fill2, false);
+  eq('방이 있던 자리를 고치면 사유를 한 번 묻는다', hand.ask, true);
+  eq('방을 다 빼면 \'방 없음\'으로 남는다 (프리셋으로 안 돌아감)', hand.cleared, [false, '""', '']);
+  eq('배정표 방 칸도 비어 있다', hand.cell, '');
+  eq('다시 열어도 방 없음 그대로', hand.reopen, '');
+  eq('손으로 바꾼 것: \'방 없음\'으로 보이고 접힘이 기본(접기 단추 있음)', hand.whyCard, [true, false, true, false]);
+  eq('[↩ 자동으로] 를 눌러야 프리셋으로', hand.auto, [true, true]);
+  eq('시작 안내는 접힘이 기본이고 숨기기가 없다', [hand.ob[1], hand.ob[2]], [0, false]);
 
   // ── 페이지 오류 0 ───────────────────────────────────────────────────────
   const errs = await ev('return (window.__pageErrors||[]).length');

@@ -152,7 +152,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 377건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과)
+├── tests/                   # pytest 회귀 530건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -194,19 +194,35 @@ npm start
 ```
 
 ### 테스트
+
+**고친 곳에 맞는 것만 돌린다.** `tests/`(pytest)는 standalone 을 읽지 않고, frontend 앱은 `assign-core.js` 를 쓰지 않는다.
+CI(`test.yml` 의 `changes` 작업)도 바뀐 파일이 전부 standalone 쪽이면 pytest 를 건너뛴다.
+
+standalone(`standalone/`·`frontend/js/modules/assign-core.js`·`scripts/*assign*`)만 고쳤을 때 — 로컬 약 3분, pytest 불필요:
+```bash
+node scripts/build-assign-standalone.mjs     # 소스를 고쳤으면 먼저 (CI 가 동기 여부를 본다)
+node scripts/test_assign_core.mjs            # 배정 코어 (1초)
+node scripts/test_assign_logic.mjs           # 로직 회귀 — 헤드리스 크롬, $CHROME 로 경로 지정 (약 45초)
+node scripts/test_assign_e2e.mjs             # 화면을 실제로 눌러 끝까지 (약 40초)
+node scripts/test_assign_live.mjs --seed 1,2,3   # 병동 양식 9가지에서 배정표를 실제로 고치며 화면·엑셀·인쇄 대조 (약 60초)
+node scripts/test_assign_compat.mjs          # 옛 배포본 데이터 파일을 지금 assign.html 로 (약 5초)
+node scripts/test_assign_principles.mjs      # 배정 원칙을 '모든 배치를 다 따져 본 정답'과 견준다 (약 15초, docs/verification.md)
+node scripts/make-assign-examples.mjs --check   # 병동별 예시 파일이 지금 HTML 과 같은지 — 인자 없이 돌리면 다시 만든다
+python3 scripts/check_form_borders.py        # 양식을 바꿨을 때
+```
+
+근무표 엔진·frontend 앱(그 밖의 파일)을 고쳤을 때 — 로컬 pytest 약 1분:
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 377건
-node scripts/test_assign_core.mjs && node scripts/test_paste_dates.mjs \
-  && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
-  && node scripts/test_charge_plain.mjs && node scripts/test_hospital_holidays.mjs \
-  && node scripts/test_manager_check.mjs && node scripts/test_trainee_days.mjs \
-  && node scripts/test_juhu_rotation.mjs && node scripts/verify_holidays.mjs \
-  && node scripts/test_assign_logic.mjs   # standalone 로직 (헤드리스 크롬, $CHROME 로 경로 지정 가능)
-node scripts/test_assign_compat.mjs      # 옛 배포본이 저장한 데이터 파일을 지금 assign.html 로 열어 본다 (CI)
-node scripts/make-assign-examples.mjs --check  # 병동별 예시 파일(standalone/예시/)이 지금 assign.html 로 만든 것과 같고 깨끗하게 열리는지 (CI) — 인자 없이 돌리면 다시 만든다
-node scripts/test_assign_live.mjs        # 병동 양식 9가지에서 배정표를 실제로 눌러 고치고 화면·엑셀·인쇄·하루 어싸인표를 본다 (CI, 약 30초)
-node scripts/test_assign_principles.mjs  # 어싸인 원칙 — 배정 엔진을 '모든 배치를 다 따져 본 정답'과 견준다 (CI, 약 40초, docs/verification.md)
+python3 -m pytest -q                  # 530건
+node scripts/test_paste_dates.mjs && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
+  && node scripts/test_charge_plain.mjs && node scripts/test_day_reqs.mjs && node scripts/test_hospital_holidays.mjs \
+  && node scripts/test_manager_check.mjs && node scripts/test_trainee_days.mjs && node scripts/test_continue_search.mjs \
+  && node scripts/test_grid_select.mjs && node scripts/test_roster_bulk.mjs && node scripts/test_paste_fix.mjs \
+  && node scripts/test_juhu_rotation.mjs && node scripts/test_frontend_state.mjs && node scripts/test_frontend_edit.mjs \
+  && node scripts/verify_holidays.mjs
+```
+```bash
 # 화면(index.html)을 재배치했다면 — 핸들러 손실 0 확인 (REMOVED 는 전부 의도한 것이어야 한다)
 python3 scripts/handler_inventory.py <(git show origin/main:frontend/index.html) frontend/index.html
 # 리디자인 계약 검사 (design/handoff) — 1920×1080 으로 실제 앱을 열어 200+ 항목 getComputedStyle 검사, 불일치 0 이어야 한다

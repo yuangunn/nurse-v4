@@ -26,6 +26,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 바뀐 파일이 전부 standalone(어싸인 배정 도구) 쪽이면 pytest 를 건너뛴다 — tests/ 는 standalone 을 읽지 않는다.
+  # assign-core.js 는 frontend/ 아래 있지만 standalone 빌드만 쓴다. 목록 밖 파일이 하나라도 있으면 전부 돈다.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      py: ${{ steps.d.outputs.py }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: d
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then echo py=true >> "$GITHUB_OUTPUT"; exit 0; fi
+          # 한글 파일 이름이 "\354…" 로 감싸여 나오면 ^standalone/ 에 안 걸린다
+          git -c core.quotePath=false diff --name-only "$BASE" HEAD | tee changed.txt
+          if grep -qvE '^(standalone/|frontend/js/modules/assign-core\.js$|scripts/(test_assign_|make-assign-examples|build-assign-standalone|check_form_borders)|tests/fixtures/assign-data/|docs/|design/)|\.md$' changed.txt
+          then echo py=true >> "$GITHUB_OUTPUT"; else echo py=false >> "$GITHUB_OUTPUT"; fi
+
   # pytest 는 4개 러너에 나눠 동시에 돈다 (2026-09-28). 한 줄로 돌리면 5분 13초였고
   # 그중 4분 10초가 CP-SAT 테스트 4개(v_report 98초·weekly_of 60초·juhu_block 45초×2)였다.
   # 느린 파일 셋을 한 러너씩 주면 가장 느린 러너 ≈ 2분. xdist 로 한 러너 안에서 나누지
@@ -33,6 +53,8 @@ jobs:
   # 새 테스트 파일은 저절로 'rest' 에 들어간다. 느린 파일이 새로 생기면 그룹을 하나 더 만든다.
   pytest-group:
     name: pytest (${{ matrix.group }})
+    needs: changes
+    if: needs.changes.outputs.py == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -78,15 +100,19 @@ jobs:
         run: python -m pytest -q --durations=10 ${{ matrix.args }}
 
   # 예전 체크 이름 'pytest' 를 그대로 남긴다 — 필수 체크로 걸려 있어도 머지가 막히지 않게.
+  # standalone 만 바뀌어 그룹을 건너뛰었으면(skipped) 통과다. 판정 작업(changes)이 실패하면 실패.
   pytest:
-    needs: pytest-group
+    needs: [changes, pytest-group]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: 그룹이 모두 통과했는지
         run: |
-          if [ "${{ needs.pytest-group.result }}" != "success" ]; then
-            echo "::error::pytest 그룹 중 실패한 것이 있습니다 (${{ needs.pytest-group.result }})"
+          if [ "${{ needs.changes.result }}" != "success" ]; then
+            echo "::error::바뀐 파일 판정이 실패했습니다"; exit 1; fi
+          r="${{ needs.pytest-group.result }}"
+          if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
+            echo "::error::pytest 그룹 중 실패한 것이 있습니다 ($r)"
             exit 1
           fi
 
