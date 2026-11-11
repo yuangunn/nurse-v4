@@ -65,12 +65,12 @@ table.qa tr:last-child td{border-bottom:none}
 <div class="box">
 처음 한 번만 &nbsp;<b>우리 병동 정하기</b><br>
 매달 한 번 &nbsp;<b>근무표 넣기</b><br>
-매주 &nbsp;<b>배정표 인쇄하기</b>
+매주 &nbsp;<b>배정표 엑셀로 받아 인쇄하기</b>
 </div>
 <div class="foot">이 설명서의 모든 화면은 실제 프로그램 화면입니다.<br>이름은 예시(홍길동·김영숙 등)입니다.</div>
 </div><div class="pg ">
 <h1>이 프로그램이 하는 일</h1>
-<div class="lead">병동 근무표가 나오면, <b>그 주에 누가 어느 병실을 맡는지</b>를 자동으로 정해 주고 인쇄까지 해 줍니다.
+<div class="lead">병동 근무표가 나오면, <b>그 주에 누가 어느 병실을 맡는지</b>를 자동으로 정해 주고 병동 양식 엑셀까지 만들어 줍니다.
 손으로 짜던 배정표를 대신 만들어 주는 프로그램입니다.</div>
 
 <h2>세 가지만 기억하세요</h2>
@@ -79,8 +79,8 @@ table.qa tr:last-child td{border-bottom:none}
     <div class="d">병동 번호를 고르고, 간호사 이름을 넣습니다. 한 번 해 두면 다시 할 일이 없습니다.</div></div>
   <div class="card"><div class="t"><span class="when b">매달 한 번</span>근무표를 넣습니다</div>
     <div class="d">엑셀 근무표를 복사해서 붙여넣기만 하면 됩니다.</div></div>
-  <div class="card"><div class="t"><span class="when c">매주</span>배정표를 인쇄합니다</div>
-    <div class="d">화면에 이미 만들어져 있습니다. [인쇄]를 누르면 A4 한 장으로 나옵니다.</div></div>
+  <div class="card"><div class="t"><span class="when c">매주</span>배정표를 엑셀로 받아 인쇄합니다</div>
+    <div class="d">화면에 이미 만들어져 있습니다. [이번 주 배정표 엑셀로 내보내기]를 눌러 받은 파일을 엑셀에서 인쇄합니다.</div></div>
 </div>
 
 <div class="tip ok"><span class="h">인터넷이 필요 없습니다</span>
@@ -313,22 +313,26 @@ A(CN)이 차지입니다. 각 칸은 <b>왼쪽이 병실, 오른쪽이 이름</b
 
 <div class="tip"><span class="h">고치거나 지울 때</span>
 일정이 있는 칸을 누르면 그 날 일정이 나옵니다. 하나를 고르면 <b>고치기 · 이 날만 빼기 · 모든 날 지우기</b>를 할 수 있습니다.
-적은 내용은 인쇄물과 엑셀에도 그대로 나옵니다.</div>
+적은 내용은 엑셀 배정표와 하루 어싸인표에도 그대로 나옵니다.</div>
 <div class="pgnum">14</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
-<h1><span class="tag o">매주</span>인쇄하기</h1>
-<div class="lead">배정표 화면에서 <span class="k">인쇄</span> 를 누르면 <b>A4 한 장</b>으로 나옵니다.</div>
+<h1><span class="tag o">매주</span>엑셀로 받아 인쇄하기</h1>
+<div class="lead">배정표는 <b>병동 엑셀 양식 그대로</b> 받아 <b>엑셀에서 인쇄</b>합니다. 프로그램 화면에서 바로 인쇄하지는 않습니다.</div>
 
 <ol class="steps">
 <li><span class="n">1</span><div>인쇄할 주가 화면에 떠 있는지 확인합니다.</div></li>
-<li><span class="n">2</span><div><span class="k">인쇄</span> 를 누릅니다.</div></li>
-<li><span class="n">3</span><div>인쇄 창이 뜨면 <b>[인쇄]</b> 를 누릅니다.</div></li>
+<li><span class="n">2</span><div><span class="k">이번 주 배정표 엑셀로 내보내기</span> 를 누릅니다.
+브라우저의 <b>다운로드</b> 폴더에 <b style="white-space:nowrap">배정표_20260913~20260919.xlsx</b> 처럼 그 주 날짜가 붙은 파일이 생깁니다.</div></li>
+<li><span class="n">3</span><div>받은 파일을 엑셀에서 열고 <span class="k">Ctrl</span>+<span class="k">P</span> 로 인쇄합니다.
+엑셀에서 글자를 고친 뒤 인쇄해도 됩니다.</div></li>
 </ol>
 
-<figure class="small fit"><img style="max-height:138mm" src="shots/10-print.png"><figcaption>병실 배정표 양식 그대로 나옵니다. 물품체크 · CPR 업무분담 · 화재 안내까지 한 장에 들어갑니다.</figcaption></figure>
+<figure class="small fit"><img src="shots/10-export.png"><figcaption>배정표 바로 위 오른쪽 단추입니다. 받은 엑셀은 병실 배정표 양식 그대로 — 물품체크 · CPR 업무분담 · 화재 안내까지 들어갑니다.</figcaption></figure>
 
-<div class="tip ok"><span class="h">엑셀로 받고 싶을 때</span>
-<span class="k">이번 주 배정표 엑셀로 내보내기</span> 를 누르면 엑셀 파일로 저장됩니다.
-엑셀에서 고쳐 쓰실 수 있습니다.</div>
+<div class="tip"><span class="h">한 장에 안 들어오면</span>
+엑셀 인쇄 화면의 배율에서 <b>한 페이지에 시트 맞추기</b> 를 고르세요.</div>
+
+<div class="tip ok"><span class="h">하루 어싸인표는 바로 인쇄합니다</span>
+하루치 한글 양식은 다음 쪽 <b>하루 어싸인표</b> 화면의 <span class="k">인쇄</span> 로 바로 인쇄합니다.</div>
 <div class="pgnum">15</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
 <h1><span class="tag o">매일</span>하루 어싸인표</h1>
 <div class="lead">병동에서 날마다 쓰는 <b>하루 어싸인표</b>(한글 양식)를 그 날 배정 그대로 채워 줍니다.</div>
@@ -394,7 +398,7 @@ GS 당직폰처럼 번호가 정해진 칸은 <b>늘 같은 번호</b>, 진료�
 
 <div class="tip"><span class="h">되돌리려면</span>
 그 칸을 다시 눌러 <b>[자동으로 되돌리기]</b>(이름) · <b>[↩ 자동으로]</b>(방)를 누르거나 <kbd>Ctrl+Z</kbd>.
-되돌리면 목록에서도 사라집니다. 이 목록은 인쇄·엑셀에 나오지 않습니다.</div>
+되돌리면 목록에서도 사라집니다. 이 목록은 엑셀 배정표·하루 어싸인표에 나오지 않습니다.</div>
 <div class="pgnum">19</div><div class="pgft">어싸인 배정표 사용설명서</div></div><div class="pg ">
 <h1><span class="tag r">고치기</span>빈 자리에 사람 넣기</h1>
 <div class="lead">그 근무의 자리가 남으면 이름 칸이 비어 있습니다. 그 칸을 눌러 사람을 넣습니다.</div>
@@ -496,8 +500,8 @@ GS 당직폰처럼 번호가 정해진 칸은 <b>늘 같은 번호</b>, 진료�
 <span class="k">새 근무표 넣기</span> 로 근무표를 넣어 주세요.</td></tr>
 <tr><td class="q">이름이 두 번 나와요</td><td>엑셀의 이름과 명부의 이름이 조금 다른 경우입니다.
 붙여넣기 화면의 <b>이름 연결</b> 에서 같은 사람으로 이어 주면 다음부터 자동입니다.</td></tr>
-<tr><td class="q">인쇄가 두 장으로 나와요</td><td>인쇄 창에서 <b>배율</b>을 기본값으로,
-<b>머리글·바닥글</b>을 끄고 인쇄해 보세요.</td></tr>
+<tr><td class="q">배정표 인쇄가 두 장으로 나와요</td><td>엑셀 인쇄 화면의 배율에서 <b>한 페이지에 시트 맞추기</b> 를 고르세요.
+하루 어싸인표라면 인쇄 창에서 <b>배율</b>을 기본값으로, <b>머리글·바닥글</b>을 끄고 인쇄해 보세요.</td></tr>
 <tr><td class="q">컴퓨터를 바꿔야 해요</td><td>백업 파일과 assign.html 을 새 컴퓨터로 옮긴 뒤,
 프로그램을 열고 <span class="k">백업 불러오기</span> 를 누르세요.</td></tr>
 <tr><td class="q">화면이 너무 작아요</td><td><b>Ctrl</b> 키를 누른 채 <b>+</b> 를 누르면 커집니다.
@@ -519,8 +523,7 @@ GS 당직폰처럼 번호가 정해진 칸은 <b>늘 같은 번호</b>, 진료�
     당직표는 관리 &gt; <b>당직표·번호</b> 에서 엑셀 올리기(또는 붙여넣기) → <b>[넣기]</b></div></div>
 
   <div class="card"><div class="t"><span class="when c">매주</span></div>
-    <div class="d">배정표 화면에서 <b>[인쇄]</b><br>
-    엑셀로 받으려면 <b>[이번 주 배정표 엑셀로 내보내기]</b><br>
+    <div class="d">배정표 화면에서 <b>[이번 주 배정표 엑셀로 내보내기]</b> → 받은 파일을 엑셀에서 <b>Ctrl+P</b><br>
     하루치는 표 맨 위 <b>날짜</b>를 눌러 <b>하루 어싸인표</b></div></div>
 
   <div class="card"><div class="t">고칠 때</div>

@@ -1,11 +1,15 @@
 // 설명서용 실제 화면 캡처 — 예시 데이터(홍길동 등) (2026-09-18, 2026-09-27·09-28·10-09·10-10·10-11 다시 찍음)
 // 25-example 만 앱의 예시(makeExample('101') — 옛이야기 이름)로 찍는다
 import { chromium } from 'playwright-core';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, copyFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const HERE=path.dirname(fileURLToPath(import.meta.url));
-const HTML='file://'+path.resolve(HERE,'../../standalone/assign.html');
+// 빈 폴더의 사본을 띄운다 — 리포 standalone/ 에 개발자의 assign-data.js 가 있으면 페이지가 그 파일을 읽어 설정 안내가 뜨지 않는다
+const TMP=mkdtempSync(path.join(os.tmpdir(),'manual-shots-'));
+copyFileSync(path.resolve(HERE,'../../standalone/assign.html'),path.join(TMP,'assign.html'));
+const HTML='file://'+path.join(TMP,'assign.html');
 const OUT=path.join(HERE,'shots')+path.sep;
 mkdirSync(OUT,{recursive:true});
 // 한국어 — 날짜 칸이 병동 PC 처럼 '2026. 09. 16.' 로 나오게 (날짜 칸 모양은 locale 이 아니라 LANG 을 따른다)
@@ -171,18 +175,12 @@ await page.evaluate(()=>{
 await el('17-event','#modalBox');
 await page.evaluate(()=>closeModal(null));
 
-// ── 10. 인쇄 미리보기 ──
-await page.evaluate(async ()=>{ await buildPrintArea(false);
-  const pa=document.querySelector('#printArea'); pa.style.display='block'; pa.style.position='relative';
-  document.querySelector('.app').style.display='none'; window.scrollTo(0,0); });
-await page.waitForTimeout(500);
-await el('10-print','#printArea .sheet');
-
 // ── 11. 툴바 (버튼 줄) ──
-await page.evaluate(()=>{ const pa=document.querySelector('#printArea'); pa.style.display='none';
-  document.querySelector('.app').style.display=''; show('week'); window.scrollTo(0,0); });
+await page.evaluate(()=>{ show('week'); window.scrollTo(0,0); });
 await page.waitForTimeout(400);
 await el('11-toolbar','#scrWeek .wknav');
+// ── 10. 엑셀로 내보내기 단추 — 배정표는 화면 인쇄 없이 엑셀로 받아 엑셀에서 인쇄한다 (결정 2-53) ──
+await el('10-export','#scrWeek .wkTools');
 await el('20-header','.topbar');   // 맨 위 줄 — 병동 · 가운데 탭 · 저장 상태 · 도움말 (2026-09-28 머리줄 바꿈)
 
 // ── 당직표·번호 — 정형외과식 당직표(연차만 적힘) + 번호표. 번호표에 없는 이름 하나(번호 없음) ──

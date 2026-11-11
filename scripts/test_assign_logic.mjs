@@ -918,6 +918,12 @@ async function main() {
       return txt(row.r,M.shifts[P].nurse)===info[P].labels[lab] && txt(row.r,M.shifts[P].room)===A.roomsFor(P,cnt(P),lab,'2026-09-28'); }));
     const blankRest=M.rows.slice(cnt('N')).every(row=>txt(row.r,M.shifts.N.nurse)===''&&txt(row.r,M.shifts.N.room)==='');
     const fill={제목:A.hwText(L1.title), 공지:L1.notices.map(A.hwText), 자리:seats, 빈자리비움:blankRest, 경고:r.warn};
+    // 101 새 양식 — 자리 표 왼쪽 위 날짜 칸, 회색 머리줄이 칸 이름, OS 첫 줄('해당 파트별 전공의')은 양식 글자
+    const duty={날짜칸:L1.main.dateCell&&L1.main.dateCell.text, 칸:L0.fields.map(f=>f.key), 다시읽음:L1.fields.map(f=>f.key),
+      고정줄:L1.others[0].cells.some(c=>c.text==='해당 파트별 전공의')};
+    s.duty={book:{'당직진료지원간호사':[{name:'가',phone:'',ext:'1'}]}}; A.dutyStore();
+    duty.옛칸이름=A.dayLayout(new DOMParser().parseFromString(T.sec,'application/xml')).fields.map(f=>f.key)[2];
+    s.duty={}; A.dutyStore();
     // 당직: 안 적은 칸은 양식 그대로, 적은 칸은 줄바꿈이 lineBreak 로
     s.daily={'2026-09-28':{duty:{[r.L.fields[0].key]:'가나다'+String.fromCharCode(10)+'010-0000-0000'}}};
     const bytes=await A.dayHwpxBytes('2026-09-28');
@@ -941,13 +947,18 @@ async function main() {
     // 시작 안내 마지막 줄은 엑셀 내려받기 (2026-09-27)
     const ob=A.onboardItems().slice(-1)[0];
     s.evRules=[]; A.recompute();
-    return {layout,fill,zip,own,hwp:/HWPX/.test(hwp),xl:/엑셀/.test(xl),ob:[ob.lb,ob.go,ob.goT]}; })();`);
+    return {layout,fill,duty,zip,own,hwp:/HWPX/.test(hwp),xl:/엑셀/.test(xl),ob:[ob.lb,ob.go,ob.goT]}; })();`);
   eq('기본 양식 구조를 찾는다', day.layout, { 제목: true, 공지: 2, 자리: 5, 머리: ['D', 'E', 'N'], 당직: 3, 기호: '★ ' });
   eq('제목은 그 날 날짜·요일', day.fill.제목, '9월 28일 (월)');
   eq('공지는 양식의 기본 공지 + 교육·행사 일정 — 줄 수만큼 늘어난다', day.fill.공지,
     ['★ 이름표 꽂기 (스테이션 및 1인, 2인실 병실 앞)', '★ 부서예방 점검 3PM 이전 시행', '★ 이름표 꽂기', '★ 부서 점검', '★ 셋째 공지']);
   eq('D·E·N 자리마다 배정표의 이름·방', day.fill.자리, [true, true, true]);
   ok('사람 없는 자리는 양식 예시 글자를 비운다', day.fill.빈자리비움);
+  eq('자리 표 왼쪽 위 날짜 칸도 그 날로', day.duty.날짜칸, '9/28(월)');
+  eq('당직 칸 이름 = 회색 머리줄 (채운 뒤 다시 읽어도 같은 칸)', [day.duty.칸, day.duty.다시읽음],
+    [['OS 당직', 'GS 당직', '당직 진료지원 간호사'], ['OS 당직', 'GS 당직', '당직 진료지원 간호사']]);
+  ok("OS 첫 줄 '해당 파트별 전공의'는 채우지 않는다", day.duty.고정줄);
+  eq('띄어쓰기만 다른 옛 칸 이름은 저장된 이름으로', day.duty.옛칸이름, '당직진료지원간호사');
   eq('경고 없음', day.fill.경고, []);
   eq('한글 파일 — zip 순서 그대로, mimetype 맨 앞 무압축', [day.zip.순서, day.zip.첫항목, day.zip.첫압축], [true, 'mimetype', 0]);
   ok('본문 XML 이 깨지지 않는다', day.zip.XML);
@@ -3313,11 +3324,12 @@ async function main() {
       return {rc:m.rowCnt+'x'+m.colCnt, n:m.cells.length, holes:m.rowCnt*m.colCnt-Object.keys(cov).length, dup, trOk, szOk}; };
     const t1=()=>tbls()[1];
     out.g0=grid(t1()); delete out.g0.szOk;
-    const m0=A.hwTable(t1()), txt=[m0.at(0,0).text.trim(),m0.at(0,1).text.trim()];
-    out.merge=A.hwMerge(t1(),A.hwRect(m0,{r:0,c:0},{r:0,c:1}));
-    const top=A.hwTable(t1()).at(0,0); out.g1=grid(t1()); out.mtxt=[top.cs,top.text.includes(txt[0]),top.text.includes(txt[1])];
-    out.unmerge=A.hwUnmerge(t1(),0,0); out.g2=grid(t1());
-    out.split=A.hwSplitGrid(t1(),1,1,2,3); out.g3=grid(t1());
+    // 당직 표 첫 줄은 머리줄(두 칸 합침) — 홑칸 두 개인 둘째 줄을 합치고, 셋째 줄 오른쪽 칸을 나눈다
+    const m0=A.hwTable(t1()), txt=[m0.at(1,0).text.trim(),m0.at(1,1).text.trim()];
+    out.merge=A.hwMerge(t1(),A.hwRect(m0,{r:1,c:0},{r:1,c:1}));
+    const top=A.hwTable(t1()).at(1,0); out.g1=grid(t1()); out.mtxt=[top.cs,top.text.includes(txt[0]),top.text.includes(txt[1])];
+    out.unmerge=A.hwUnmerge(t1(),1,0); out.g2=grid(t1());
+    out.split=A.hwSplitGrid(t1(),2,1,2,3); out.g3=grid(t1());
     const t0=tbls()[0], tw=()=>A.hwTableGeom(A.hwTable(t0)).colW.reduce((a,b)=>a+b,0), th=()=>A.hwTableGeom(A.hwTable(t0)).rowH.reduce((a,b)=>a+b,0);
     const W=tw(), d1=A.hwResizeCol(t0,1,600), W1=tw(), d2=A.hwResizeCol(t0,1,-99999);
     out.col=[d1,Math.round(W1-W),d2<0&&Math.min(...A.hwTable(t0).cells.filter(x=>x.c+x.cs===1).map(x=>x.w))>=850,grid(t0).holes,grid(t0).szOk];
@@ -3339,11 +3351,11 @@ async function main() {
     const back=await A.parseHwpx(await A.dayHwpxBytes('2026-09-07')); out.pack=!!(back.sec&&back.head);
     A.undoAny(); out.appUndo=!A.store.dayForm;
     return out; })()`);
-  eq('나눌 표 처음 모양', v42.g0, { rc: '3x2', n: 6, holes: 0, dup: 0, trOk: true });
-  eq('합치기 — 칸 하나가 줄고 격자가 맞다', [v42.merge, v42.g1], [true, { rc: '3x2', n: 5, holes: 0, dup: 0, trOk: true, szOk: true }]);
+  eq('나눌 표 처음 모양', v42.g0, { rc: '7x2', n: 11, holes: 0, dup: 0, trOk: true });
+  eq('합치기 — 칸 하나가 줄고 격자가 맞다', [v42.merge, v42.g1], [true, { rc: '7x2', n: 10, holes: 0, dup: 0, trOk: true, szOk: true }]);
   eq('합친 칸은 두 칸 너비, 두 칸 글자를 다 가진다', v42.mtxt, [2, true, true]);
-  eq('합친 칸을 풀면 원래 칸 수', [v42.unmerge, v42.g2.n, v42.g2.holes], [true, 6, 0]);
-  eq('홑칸을 줄 2 × 칸 3 으로 — 격자에 선이 늘고 빈 자리·겹침이 없다', [v42.split, v42.g3], [true, { rc: '4x4', n: 11, holes: 0, dup: 0, trOk: true, szOk: true }]);
+  eq('합친 칸을 풀면 원래 칸 수', [v42.unmerge, v42.g2.n, v42.g2.holes], [true, 11, 0]);
+  eq('홑칸을 줄 2 × 칸 3 으로 — 격자에 선이 늘고 빈 자리·겹침이 없다', [v42.split, v42.g3], [true, { rc: '8x4', n: 16, holes: 0, dup: 0, trOk: true, szOk: true }]);
   eq('세로 경계를 끌면 양옆 칸만 — 표 폭 그대로, 하한에서 멈춘다', v42.col, [600, 0, true, 0, true]);
   eq('가로 경계를 끌면 그 줄이 높아지고 표가 길어진다', v42.row, [500, 500]);
   eq('같은 글자 모양은 한 번만, 서체는 언어마다 한 번만 더한다', v42.char, [true, 1, true, 7, true]);
