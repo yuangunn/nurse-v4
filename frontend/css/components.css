@@ -19,7 +19,7 @@
 
 /* ── Typography ──────────────────────────────────────────── */
 .section-title {
-  font-weight: 700; font-size: 0.92rem;
+  font-weight: 600; font-size: 0.92rem;
   color: var(--text-bright);
   margin-bottom: 14px;
   letter-spacing: -0.02em;
@@ -143,7 +143,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .ym-lbl { color: var(--text-dim); font-size: 0.66rem; margin: 0 2px; }
 .ym-nav {
   width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
-  border-radius: 6px; color: var(--text-dim); font-weight: 700; font-size: 0.9rem;
+  border-radius: 6px; color: var(--text-dim); font-weight: 600; font-size: 0.9rem;
   cursor: pointer; background: transparent; border: none;
   transition: all 0.15s;
 }
@@ -151,20 +151,20 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 /* 대상 년월 큰 표시 */
 .ym-big {
-  font-size: 2rem; font-weight: 700; letter-spacing: -0.03em;
+  font-size: 2rem; font-weight: 600; letter-spacing: -0.03em;
   cursor: pointer; user-select: none;
 }
 .ym-big-accent { color: var(--accent); font-size: 2.4rem; }
 .ym-arrow {
   width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
-  border-radius: 10px; font-size: 1.3rem; font-weight: 700;
+  border-radius: 10px; font-size: 1.3rem; font-weight: 600;
   color: var(--text-dim); cursor: pointer;
   background: var(--bg-input); border: 1px solid var(--border);
   transition: all 0.2s;
 }
 .ym-arrow:hover { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); transform: scale(1.05); }
 .ym-big-input {
-  font-size: 2rem; font-weight: 700; letter-spacing: -0.03em;
+  font-size: 2rem; font-weight: 600; letter-spacing: -0.03em;
   text-align: center; padding: 0;
   background: transparent !important; border: none !important;
   box-shadow: none !important; outline: none;
@@ -249,7 +249,7 @@ html.dark .tbl tbody tr.row-selected td {
   color: #f59e0b !important;
   background-color: rgba(245,158,11,0.14) !important;
   border-color: rgba(245,158,11,0.40) !important;
-  font-weight: 700;
+  font-weight: 600;
 }
 .nurse-edit-tbl button.cell-toggle.cell-night-off { color: var(--text-dim); }
 /* 다른 달에만 야간전담 — 당월은 아니므로 약하게 (뱃지 텍스트는 그대로 보인다) */
@@ -269,7 +269,7 @@ html.dark .nurse-edit-tbl button.cell-toggle.cell-night-other { color: #fbbf24; 
   display: inline-block;
   padding: 2px 6px !important;
   min-width: 1.7em;
-  font-size: 0.7rem; font-weight: 700; line-height: 1.4;
+  font-size: 0.7rem; font-weight: 600; line-height: 1.4;
   border-radius: 3px !important;
   border: 1px solid transparent;
   cursor: pointer; user-select: none;
@@ -298,7 +298,7 @@ html.dark .g-sat-bg { background-color: var(--card-warm); background-image: line
 html.dark .holiday { background-color: rgba(214, 139, 120, 0.08); }
 
 /* #2 인원 부족 표시 */
-.staff-short { color: var(--red) !important; font-weight: 700 !important; }
+.staff-short { color: var(--red) !important; font-weight: 600 !important; }
 
 /* 전입/전출 범위 밖 셀 */
 .g-inactive {
@@ -312,7 +312,7 @@ html.dark .holiday { background-color: rgba(214, 139, 120, 0.08); }
   color: rgba(128,128,128,0.6) !important;
   cursor: not-allowed !important;
 }
-.g-inactive::before { content: attr(data-marker); font-size: 0.6rem; font-weight: 700; }
+.g-inactive::before { content: attr(data-marker); font-size: 0.6rem; font-weight: 600; }
 
 /* #5 모바일 생성 옵션 접기 */
 @media (max-width: 768px) {

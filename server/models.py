@@ -107,6 +107,10 @@ class Rules(BaseModel):
         {"md": "07-17", "name": "제헌절"},
         {"md": "07-21", "name": "노조 설립일"},
     ]
+    # 간호사 그룹 — 한 사람이 여러 그룹에 속할 수 있다 (팀 = Nurse.group 과 따로, 2026-11-12).
+    # [{id, name, members: [nurse_id], maxPerShift: n|None, minPerShift: n|None}] — 한 근무(D·D1 / E·중 / N)에
+    # 그룹원 n명까지(1 = 같이 일하지 않기)·n명 이상. 엔진은 감점으로만 건다 (_nurse_group_limits).
+    nurseGroups: List[Dict[str, Any]] = []
 
 
 class GenerateRequest(BaseModel):

@@ -19,7 +19,7 @@ from ortools.sat.python import cp_model
 from .models import GenerateRequest
 from .scheduler_base import (_SchedulerBase, WEEKDAY_KEYS, timeoff_class, _OFF_TEUKGEUN_PENALTY,
                              _RARE_TRANSITION_PENALTY, _FIXED_DATE_LEAVE, _TAIL_KEEPER_SHORT_PENALTY,
-                             _TRAINEE_PAIR_BONUS)
+                             _TRAINEE_PAIR_BONUS, _GROUP_LIMIT_PENALTY)
 
 
 def _proto_fingerprint(model) -> str:
@@ -1358,6 +1358,13 @@ class CpSatScheduler(_SchedulerBase):
         # 신규가 '/D·/E·/N' 으로 넣은 날 — 프리셉터도 그 근무로 (HiGHS 패리티)
         for pid, d, codes in self._trainee_pair_targets():
             terms.append(_TRAINEE_PAIR_BONUS * lin([x[pid][d][s] for s in codes if s in x[pid][d]]))
+
+        # 간호사 그룹 — 한 근무에 그룹원 최대·최소 n명 (HiGHS 패리티, _nurse_group_limits)
+        for i, (kind, bound, nids, d, codes) in enumerate(self._nurse_group_limits()):
+            cnt = lin([x[nid][d][s] for nid in nids for s in codes if s in x[nid][d]])
+            miss = model.NewIntVar(0, max(bound, len(nids)), f"grp_miss_{i}")
+            model.Add(miss >= cnt - bound) if kind == "max" else model.Add(miss >= bound - cnt)
+            terms.append(-_GROUP_LIMIT_PENALTY * miss)
 
         # V 무제한 모드 점진 페널티
         if self.unlimited_v and "V" in self.ALL_SHIFTS:

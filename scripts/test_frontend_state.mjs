@@ -7,13 +7,14 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const store = new Map(), unload = [], ticks = [];
-const el = () => ({ style: {}, dataset: {}, classList: { add() {}, remove() {}, toggle() {} }, setAttribute() {}, appendChild() {},
+const el = () => ({ style: { setProperty() {} }, dataset: {}, classList: { add() {}, remove() {}, toggle() {} }, setAttribute() {}, appendChild() {},
   querySelector: () => null, querySelectorAll: () => [] });
 global.window = { addEventListener: (t, f) => { if (t === 'beforeunload') unload.push(f); } };
 global.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)),
   removeItem: (k) => store.delete(k) };
 global.document = { addEventListener() {}, querySelector: () => null, querySelectorAll: () => [], createElement: el, body: el(), documentElement: el() };
 global.EventSource = class { close() {} };
+global.getComputedStyle = () => ({ getPropertyValue: () => '' });
 global.setInterval = (f, ms) => ticks.push({ f, ms });      // 30초 자동 보관·새로고침 복구 폴링은 손으로 돌린다
 global.clearInterval = () => {};
 let answer = true; global.confirm = () => answer;

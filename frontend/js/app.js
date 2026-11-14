@@ -9,7 +9,7 @@ function app() {
       {id:'saved',    label:'저장'},
     ],
     activeTab: 'settings',
-    fontSize: parseInt(localStorage.getItem('fontSize'))||18,
+    fontSize: parseInt(localStorage.getItem('fontPx'))||14,   // 옛 키 'fontSize'(기본 18px 시절 값)는 읽지 않는다
     year:  new Date().getMonth()===11 ? new Date().getFullYear()+1 : new Date().getFullYear(),
     month: (new Date().getMonth()+1)%12+1,
     nurses: [],
@@ -35,7 +35,6 @@ function app() {
     },
     schedule:{}, extendedSchedule:{},
     generating:false, continuing:false,
-    gridFit:(()=>{try{return localStorage.getItem('ns_grid_fit')==='1'}catch(e){return false}})(),   // 칸 좁게 — 한 달을 한 화면에 (더보기)
     generateStartTime:null, generateElapsed:0, generateFinalElapsed:0,
     generateTimer:null, sseSource:null, solverLogs:[], showLogPanel:false,
     solveProgress:{gap_percent:null,nodes:0,has_solution:false,is_running:false},
@@ -244,6 +243,8 @@ function app() {
     },
     get filteredNurses(){
       if(this.groupFilter==='all')return this.nurses;
+      // 'g:<id>' = 그룹(겹쳐 속함), 그 밖은 팀(nurse.group)
+      if(this.groupFilter.startsWith('g:')){const g=this.nurseGroupList.find(x=>'g:'+x.id===this.groupFilter);return g?this.groupMembersOf(g):this.nurses}
       return this.nurses.filter(n=>n.group===this.groupFilter);
     },
     get nurseGroups(){
@@ -326,6 +327,7 @@ function app() {
         // 주말 근무 횟수 경고는 뺐다 — 정상 근무표에서도 병동 절반에게 매달 뜨던 통계라
         // 요약 표의 '주말·공휴일' 열과 누적 합(편차 색)으로 옮겼다 (M7-C)
       }
+      warns.push(...this.groupWarnings());   // 그룹 — 한 근무 최대·최소 n명
       // 파트장 확인 항목을 위로
       return warns.filter(w=>w.type==='check').concat(warns.filter(w=>w.type!=='check'));
     },
@@ -447,7 +449,7 @@ function app() {
     // ── init ──────────────────────────────────────────────────
     async init(){
       if(this.darkMode)document.documentElement.classList.add('dark');
-      document.documentElement.style.fontSize=this.fontSize+'px';
+      this.setFontSize(this.fontSize);
 
       // 프로필 목록 로드 → 프로필 선택 화면 표시
       await this._loadProfiles();
@@ -480,12 +482,11 @@ function app() {
         document.addEventListener('paste',e=>this.gridPaste(e));
       }
       this._setupHeaderCondense();
-      this.$watch('gridFit',v=>{try{localStorage.setItem('ns_grid_fit',v?'1':'0')}catch(e){}});
       // 달이 바뀌면 고른 칸 번호가 다른 날을 가리킨다 — 선택·근무표 되돌리기를 비운다 (그대로 두면 Ctrl+V 가 엉뚱한 날에 붙었다)
       this.$watch('month',()=>this._resetGridHistory());
       this.$watch('year',()=>this._resetGridHistory());
       this.$watch('unlimitedV',()=>this._queueFeasibility&&this._queueFeasibility());   // 'V 무제한'은 신호등 판정을 바꾼다
-      window.addEventListener('resize',()=>{if(this.gridFit)this.rdFitColumnsSoon()});
+      window.addEventListener('resize',()=>this.rdFitColumnsSoon());
       window.__rdState=(screen,state)=>this.rdApplyState(screen,state);   // design/handoff/check 검증용 상태 진입
     },
 
@@ -540,7 +541,8 @@ function app() {
       this.rdInit();
     },
 
-    setFontSize(size){this.fontSize=size;localStorage.setItem('fontSize',size);document.documentElement.style.fontSize=size+'px'},
+    // 글자 크기 — rem(옛 화면)과 --fs-k(리디자인 토큰 배율, 기본 14px = 1) 둘 다 바꾼다
+    setFontSize(size){this.fontSize=size;localStorage.setItem('fontPx',size);const r=document.documentElement.style;r.fontSize=size+'px';r.setProperty('--fs-k',size/14);r.setProperty('--row-h',Math.round(26*size/14)+'px');this.rdFitColumnsSoon?.()},
 
     // #2 스케줄 인원 부족 체크
     isScheduleStaffShort(day, period){

@@ -98,7 +98,8 @@ window.RedesignModule = function() {
       }
       return n;
     },
-    get rdSched(){ return !!(this.schedule && Object.keys(this.schedule).length); },
+    // 보고 있는 달의 근무표가 있는가 — 달을 넘겨도 schedule 은 앞 달 것이 남아 있다. 앞뒤 달 표는 넘치는 주(이 달 1~6일·23일 이후)만 겹치므로 7~22일 칸으로 가린다
+    get rdSched(){ const p=`${this.year}-${String(this.month).padStart(2,'0')}-`; return Object.values(this.schedule||{}).some(r=>Object.keys(r||{}).some(k=>k.startsWith(p) && k.slice(8)>='07' && k.slice(8)<='22')); },
     get rdRelaxedCount(){ return Object.keys(this.relaxedCells||{}).reduce((a,k)=>a+Object.keys(this.relaxedCells[k]||{}).length, 0); },
     rdCodeName(code){ const s=this.shiftMap.get(code); return CODE_NAME[code] || (s ? s.name : code); },
     rdShiftTip(code){
@@ -204,6 +205,8 @@ window.RedesignModule = function() {
     get rdEdited(){ return this._originalSchedule ? this.getManualEditCount() : 0; },
 
     // ── 실패 배너 ──
+    // 보고 있는 달의 저장본 중 가장 새것 (목록은 새것부터) — 앱을 다시 열면 표는 비어 있고 저장본만 남는다
+    get rdSavedThisMonth(){ return (this.savedSchedules||[]).find(sv=>sv.year===this.year&&sv.month===this.month)||null; },
     get rdFail(){
       if(this.generating || this.statusOk || !this.statusMessage || this.rdSched) return null;
       const short=((this.staffingAlerts||{}).short)||[];
@@ -401,18 +404,18 @@ window.RedesignModule = function() {
       if(dk) tbl.querySelector(`th.rt-day[data-dk="${dk}"]`)?.classList.add('is-hover');
       tbl.dataset.hoverDk=dk;
     },
-    // 칸 좁게 — 앞뒤 주까지 한 달(42칸)을 옆으로 넘기지 않고 한 화면에. 노트북 폭(1680)에서 34칸만 보였다 (2026-10-19)
-    // 칸 너비 = (표 너비 − 이름 칸 − 합계 칸) / 날 수, 28~44px. 꺼지면 토큰 값(44px)으로
+    // 날짜 칸 너비 — 앞뒤 주까지 한 달(35~42칸)이 옆으로 넘기지 않고 한 화면에 들어가게 늘 맞춘다.
+    // 칸 너비 = (표 영역 − 이름 칸 − 합계 칸) / 날 수, 28px ~ 토큰 값(--col-w). 표는 내용 폭이라 남는 폭은 오른쪽에 비워 둔다
     rdFitColumnsSoon(){ clearTimeout(this._fitTimer); this._fitTimer=setTimeout(()=>this.rdFitColumns(), 30); },
     rdFitColumns(){
+      const max=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--col-w'))||38;
       for(const wrap of document.querySelectorAll('.rtable-wrap')){
         const tbl=wrap.querySelector(':scope > .rtable');
-        if(!this.gridFit||!tbl){ wrap.style.removeProperty('--col-w'); continue; }
-        if(!wrap.clientWidth) continue;   // 숨은 탭 — 보일 때 다시 잰다
-        const name=tbl.querySelector('.rt-name-h')?.offsetWidth||160;
+        if(!tbl||!wrap.clientWidth) continue;   // 숨은 탭 — 보일 때 다시 잰다
+        const name=tbl.querySelector('.rt-name-h')?.offsetWidth||148;
         const sums=[...tbl.querySelectorAll('.rt-sum-h')].reduce((a,th)=>a+(th.offsetParent?th.offsetWidth:0),0);
         const days=(this.scheduleDays||[]).length||1;
-        wrap.style.setProperty('--col-w', Math.max(28, Math.min(44, Math.floor((wrap.clientWidth-name-sums-2)/days)))+'px');
+        wrap.style.setProperty('--col-w', Math.max(28, Math.min(max, Math.floor((wrap.clientWidth-name-sums-2)/days)))+'px');
       }
     },
     rdPopPick(code){ this.applyShiftEditWithUndo(code); },   // 여러 칸이면 applyMultiShiftEdit 로
@@ -430,6 +433,7 @@ window.RedesignModule = function() {
       const code=this.displayShift(nurse.id, day); const m=day.getMonth()+1, d=day.getDate();
       let t=`${nurse.name} · ${m}월 ${d}일 ${code||'(빈칸)'} — 클릭해 고치기`;
       if(this.isLocked(nurse.id, day)) t+=' · 잠긴 칸';
+      if(this.rdIsPre(nurse.id, day)) t+=' · 사전입력에서 넣은 칸';
       if(this.isRelaxed(nurse.id, day)) t+=` · 사전입력 ${this.relaxedCells[nurse.id][this.dayKey(day)].original}에서 바뀜`;
       const note=this.getNote(nurse.id, day); if(note) t+=' · 메모: '+note;
       return t;
@@ -438,6 +442,18 @@ window.RedesignModule = function() {
     // ── 요일별 인원 / 규칙 표시 ──
     rdReqVal(key, shift){ return (this.requirements[key]||{})[shift]||0; },
     rdFootNeed(day, code){ const r=this.getPrevDayReq(day, code); return (r!==null&&r!==undefined) ? r : this.getDefaultDayReq(day, code); },
+    // 날짜별 필요 인원 (설정 달력) — 이 달 표 주기 안에서 요일 기본값과 다르게 둔 날 수 · 모두 되돌리기
+    get rdDayReqCount(){ const keys=this._cycleDateKeys(); return Object.keys(this.prevDayReqs||{}).filter(k=>keys.has(k)).length; },
+    rdResetDayReqs(){
+      if(!this.rdArm('dayReqs')) return;
+      this._pushUndo(); const keys=this._cycleDateKeys();
+      for(const k of Object.keys(this.prevDayReqs)) if(keys.has(k)) delete this.prevDayReqs[k];
+      this._checkViolations();
+    },
+    // 근무표 칸이 사전입력에서 온 그대로인가 — 완화로 바뀌었거나 손으로 고친 칸은 뺀다 (모서리 표시)
+    rdIsPre(nid, day){ return !!this.getPrevShift(nid, day) && !this.isRelaxed(nid, day) && !this.isManuallyEdited(nid, day); },
+    // 사전입력 툴바의 다음 단계 단추 — 근무표가 없으면 넘어가서 바로 만들고, 있으면 보여 주기만 한다 (만든 표를 말없이 버리지 않는다)
+    rdGoMake(){ this.activeTab='schedule'; if(!this.rdSched && !this.generating) this.generate(); },
 
     // ── 간호사 모달 보조 ──
     rdWdays: ['일','월','화','수','목','금','토'],

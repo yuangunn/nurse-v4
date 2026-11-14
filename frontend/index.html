@@ -58,7 +58,7 @@
   <div style="width:420px;max-width:95vw;background:var(--bg-card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:16px;padding:32px;box-shadow:0 8px 32px rgba(0,0,0,0.12)">
     <div style="text-align:center;margin-bottom:24px">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-      <h2 style="margin:8px 0 4px;font-size:1.3rem;font-weight:700">NurseScheduler</h2>
+      <h2 style="margin:8px 0 4px;font-size:1.3rem;font-weight:600">NurseScheduler</h2>
       <p class="text-sub" style="font-size:0.8rem">프로필을 선택하세요</p>
     </div>
 
@@ -117,7 +117,7 @@
 <!-- 프로필 생성 모달 -->
 <div role="dialog" aria-modal="true" aria-label="새 프로필 만들기" :style="profileCreateModal.open?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileCreateModal.open=false">
   <div style="max-width:380px;width:90vw;background:var(--bg-card,#fff);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
-    <h3 style="margin-bottom:16px;font-weight:700">새 프로필 만들기</h3>
+    <h3 style="margin-bottom:16px;font-weight:600">새 프로필 만들기</h3>
     <div style="display:flex;flex-direction:column;gap:12px">
       <div>
         <label class="text-xs text-sub">프로필 ID (영문/숫자)</label>
@@ -147,7 +147,7 @@
 <!-- 비밀번호 변경 모달 -->
 <div role="dialog" aria-modal="true" aria-label="비밀번호 변경" :style="profileChangePwModal.open?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileChangePwModal.open=false">
   <div style="max-width:350px;width:90vw;background:var(--bg-card,#fff);border-radius:14px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
-    <h3 style="margin-bottom:16px;font-weight:700">비밀번호 변경</h3>
+    <h3 style="margin-bottom:16px;font-weight:600">비밀번호 변경</h3>
     <div style="display:flex;flex-direction:column;gap:12px">
       <div><label class="text-xs text-sub">현재 비밀번호</label>
         <input type="password" x-model="profileChangePwModal.oldPw" class="input w-full"></div>
@@ -168,7 +168,7 @@
 <div x-cloak role="dialog" aria-modal="true" aria-label="프로필 전환" :style="profileSwitchModal?'position:fixed;inset:0;z-index:9998;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="profileSwitchModal=false">
   <div style="width:420px;max-width:95vw;background:var(--bg-card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:16px;padding:28px;box-shadow:0 8px 32px rgba(0,0,0,0.15);position:relative">
     <button @click="profileSwitchModal=false" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.2rem;color:var(--text-sub,#6b7280);cursor:pointer;line-height:1" title="닫습니다.">&times;</button>
-    <h3 style="margin-bottom:16px;font-weight:700;font-size:1.1rem">프로필 전환</h3>
+    <h3 style="margin-bottom:16px;font-weight:600;font-size:1.1rem">프로필 전환</h3>
 
     <template x-if="hasMasterPassword">
       <div style="margin-bottom:12px">
@@ -206,7 +206,7 @@
 <!-- 개발자 설정 모달 -->
 <div role="dialog" aria-modal="true" aria-label="개발자 설정" :style="devSettingsOpen?'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center':'display:none'" @click.self="devSettingsOpen=false">
   <div style="max-width:720px;width:95vw;max-height:85vh;overflow-y:auto;background:var(--modal-bg,var(--bg,#fff));color:var(--text,#1f2937);border:1px solid var(--border,#e5e7eb);border-radius:14px;padding:24px;box-shadow:var(--shadow-lg,0 8px 32px rgba(0,0,0,0.2))">
-    <h3 style="margin-bottom:16px;font-weight:700;color:var(--text,#1f2937)">개발자 설정</h3>
+    <h3 style="margin-bottom:16px;font-weight:600;color:var(--text,#1f2937)">개발자 설정</h3>
 
     <!-- 보안 -->
     <div style="padding:14px;margin-bottom:10px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--bg,#f9fafb)">
@@ -332,7 +332,7 @@
   </div>
   <!-- 단계 바 — 매달 밟는 3단계만 번호, 설정은 톱니. 부제 = 다음에 할 일 (copy.json steps) -->
   <nav class="rsteps" data-rd="stepbar">
-    <button class="rstep rstep-gear" data-rd="step-gear" :class="{'is-active':activeTab==='settings'}" @click="activeTab='settings'" title="간호사 명부 · 요일별 인원 · 규칙. 처음 한 번, 인원이 바뀔 때만 들어옵니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7 M10 4H3 M21 12h-9 M8 12H3 M21 20h-5 M12 20H3 M14 2v4 M8 10v4 M16 18v4"/></svg>설정<span class="done-tag" x-show="rdStep.gearDone&&activeTab!=='settings'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>완료</span></button>
+    <button class="rstep rstep-gear" data-rd="step-gear" :class="{'is-active':activeTab==='settings'}" @click="activeTab='settings'" title="간호사 명부 · 필요 인원 · 규칙. 처음 한 번, 인원이 바뀔 때만 들어옵니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7 M10 4H3 M21 12h-9 M8 12H3 M21 20h-5 M12 20H3 M14 2v4 M8 10v4 M16 18v4"/></svg>설정<span class="done-tag" x-show="rdStep.gearDone&&activeTab!=='settings'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>완료</span></button>
     <button class="rstep" data-rd="step-1" :class="{'is-active':activeTab==='preinput','is-done':rdStep.done1&&activeTab!=='preinput'}" @click="activeTab='preinput'" :title="activeTab==='preinput'?'지금 단계입니다. 주휴·연차·희망 근무를 표에 넣습니다.':'주휴·연차·희망 근무를 표에 넣는 단계로 갑니다.'">
       <span class="rstep-num"><span x-show="!(rdStep.done1&&activeTab!=='preinput')">1</span><span x-show="rdStep.done1&&activeTab!=='preinput'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span></span>
       <span class="rstep-name">사전입력</span><span class="rstep-sub" x-text="rdStep.s1"></span>
@@ -357,7 +357,7 @@
     <aside class="rside" data-rd="side">
       <div class="rside-h">처음 한 번 · 인원이 바뀔 때</div>
       <button class="rside-item" :class="{'is-active':settingsSection==='roster'}" @click="settingsSection='roster'" :data-count="nurses.length+'명'" title="간호사 이름·자격·야간전담·주휴 요일을 관리합니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75"/></svg>간호사 명부</button>
-      <button class="rside-item" :class="{'is-active':settingsSection==='req'}" @click="settingsSection='req'" title="요일별로 낮·저녁·야간에 몇 명 있어야 하는지 정합니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M16 2v4 M8 2v4 M3 10h18"/></svg>요일별 필요 인원</button>
+      <button class="rside-item" :class="{'is-active':settingsSection==='req'}" @click="settingsSection='req'" title="요일별 기본 인원과, 법정공휴일처럼 그 날만 다른 날짜별 인원을 정합니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M16 2v4 M8 2v4 M3 10h18"/></svg>필요 인원</button>
       <button class="rside-item" :class="{'is-active':settingsSection==='rules'}" @click="settingsSection='rules'" title="연속 근무 한도·야간 한도 같은 꼭 지킬 규칙을 켜고 끕니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>규칙</button>
       <div class="rside-h">거의 안 바꾸는 것</div>
       <button class="rside-item rare" :class="{'is-active':settingsSection==='shifts'}" @click="settingsSection='shifts'" :data-count="shifts.length+'종'" title="20종 근무 코드의 이름·시간·색. 병동 표준이라 보통 그대로 둡니다.">근무 정의</button>
@@ -392,23 +392,34 @@
         </div>
       </div>
       <div x-data="{show: localStorage.getItem('ns_settings_guide_hid')!=='1'}" x-show="show" x-cloak class="rbanner info">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20z M12 16v-4 M12 8h.01"/></svg><span style="flex:1"><b>처음이라면</b> 엑셀 템플릿을 내려받아 <span x-text="nurses.length||18"></span>명을 채운 뒤 가져오면 5분이면 끝납니다. 그다음 <b>요일별 필요 인원</b>만 확인하면 됩니다.</span>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20z M12 16v-4 M12 8h.01"/></svg><span style="flex:1"><b>처음이라면</b> 엑셀 템플릿을 내려받아 <span x-text="nurses.length||18"></span>명을 채운 뒤 가져오면 5분이면 끝납니다. 그다음 <b>필요 인원</b>만 확인하면 됩니다.</span>
         <button @click="downloadNurseTemplate()" class="rbtn rbtn-sm rbtn-secondary" title="드롭다운·안내 시트가 든 엑셀 템플릿을 내려받습니다.">엑셀 템플릿 내려받기</button>
         <button @click="show=false;localStorage.setItem('ns_settings_guide_hid','1')" class="rbtn rbtn-sm rbtn-quiet" title="이 안내를 다시 보지 않습니다.">닫기</button>
+      </div>
+      <div class="rgroups" data-rd="groups" :class="_dragNurseIdx!==null?'dragging':''">
+        <b title="한 사람이 여러 그룹에 속할 수 있어요. 그룹마다 같은 근무에 몇 명까지·몇 명 이상을 걸면 근무표를 만들 때 되도록 지킵니다.">그룹</b>
+        <template x-for="g in nurseGroupList" :key="g.id">
+          <button type="button" class="rgroup" :class="groupDropId===g.id?'drop':''" @click="openGroupModal(g)" @dragover.prevent="groupDropId=g.id" @dragleave="groupDropId===g.id&&(groupDropId=null)" @drop.prevent="dropOnGroup(g)" :title="`‘${g.name}’ 그룹 — 눌러서 그룹원·규칙을 고칩니다. 명부의 순서 칸(⠿)을 여기로 끌어 놓으면 들어갑니다.`">
+            <span x-text="g.name"></span><small x-text="groupMembersOf(g).length+'명'"></small><em x-show="groupRuleText(g)" x-text="groupRuleText(g)"></em>
+          </button>
+        </template>
+        <button type="button" @click="openGroupModal(null)" class="rbtn rbtn-sm rbtn-secondary" title="새 그룹을 만듭니다. 명부에서 골라 둔 사람이 있으면 그 사람들로 시작합니다.">＋ 그룹 만들기</button>
+        <span class="hint" x-text="nurseGroupList.length?'순서 칸(⠿)을 끌어 그룹에 놓으면 들어갑니다 · 골라 둔 여러 명은 함께':'예: 신규끼리 같이 일하지 않기 · 특정 자격자는 한 근무에 1명 이상'"></span>
       </div>
       <datalist id="bulk-group-list"><template x-for="g in nurseGroupChoices" :key="g"><option :value="g"></option></template></datalist>
       <div style="flex:1;min-height:0;background:var(--card);border-radius:12px 12px 0 0;box-shadow:var(--shadow-card);overflow:auto">
         <table class="rroster" data-rd="roster">
           <thead><tr>
-            <th style="width:40px;text-align:center"><input type="checkbox" :checked="allNursesSelected" @change="toggleAllNurseSelect()" :indeterminate="selectedNurseCount>0&&!allNursesSelected" title="모두 고르기 · 풀기. 체크 칸을 끌어 여러 명을 골라 그룹·성별·할 수 있는 근무·야간전담을 한 번에 바꿉니다"/></th>
-            <th style="width:44px;text-align:center">순서</th>
-            <th style="min-width:120px">이름</th>
-            <th style="width:70px">그룹</th>
-            <th style="width:70px">성별</th>
-            <th title="켜진 코드만 이 사람에게 배정됩니다. 눌러서 켜고 끕니다.">할 수 있는 근무</th>
-            <th style="width:150px" :title="`이달에 야간만 서는 사람(나이트킵). 눌러서 ${month}월을 켜고 끕니다.`" x-text="month+'월 야간전담'"></th>
-            <th style="width:170px">특수 사항</th>
-            <th style="width:90px"></th>
+            <th style="width:36px;text-align:center"><input type="checkbox" :checked="allNursesSelected" @change="toggleAllNurseSelect()" :indeterminate="selectedNurseCount>0&&!allNursesSelected" title="모두 고르기 · 풀기. 체크 칸을 끌어 여러 명을 골라 팀·그룹·성별·할 수 있는 근무·야간전담을 한 번에 바꿉니다"/></th>
+            <th style="width:52px">순서</th>
+            <th style="width:112px">이름</th>
+            <th style="width:48px" title="한 사람 하나 — 이름 옆 표시·근무표 구분선·주휴 추천에 씁니다">팀</th>
+            <th style="width:48px">성별</th>
+            <th style="width:1%" title="켜진 코드만 이 사람에게 배정됩니다. 눌러서 켜고 끕니다.">할 수 있는 근무</th>
+            <th style="width:104px" :title="`이달에 야간만 서는 사람(나이트킵). 눌러서 ${month}월을 켜고 끕니다.`" x-text="month+'월 야간전담'"></th>
+            <th style="width:180px" title="여러 그룹에 속할 수 있어요. 위 그룹 띠로 넣고, ✕ 로 뺍니다">그룹</th>
+            <th>특수 사항</th>
+            <th style="width:72px"></th>
           </tr></thead>
           <tbody>
             <template x-for="(nurse,idx) in nurses" :key="nurse.id">
@@ -416,24 +427,28 @@
                 <td class="pick" @mousedown="rosterSelDown(idx,$event)" title="누른 채 위아래로 끌면 여러 명을 한 번에 고르거나 풉니다. Shift+누르기는 앞서 누른 줄부터 여기까지."><input type="checkbox" :checked="isNurseSelected(nurse.id)" @click="$event.detail?$event.preventDefault():toggleNurseSelect(nurse.id)" :title="nurse.name+' 선택'"/></td>
                 <td class="order" draggable="true" @dragstart="onNurseDragStart(idx)" @dragend="onNurseDragEnd()" :title="isNurseSelected(nurse.id)&&selectedNurseCount>1?`끌어서 고른 ${selectedNurseCount}명의 순서를 함께 옮깁니다.`:'끌어서 순서를 바꿉니다. 여러 명을 고른 뒤 끌면 함께 옮겨집니다.'"><span class="drag"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12h.01 M9 5h.01 M9 19h.01 M15 12h.01 M15 5h.01 M15 19h.01"/></svg></span><span x-text="idx+1"></span></td>
                 <td class="name"><input type="text" :value="nurse.name" @blur="inlineRename(nurse, $event.target.value)" @keydown.enter.prevent="$event.target.blur()" placeholder="이름" title="이름을 바로 고칠 수 있습니다. Enter 로 저장."/></td>
-                <td class="grp"><input type="text" :value="nurse.group" list="bulk-group-list" maxlength="3" @blur="inlineSetGroup(nurse, $event.target.value)" @keydown.enter.prevent="$event.target.blur()" placeholder="A" title="그룹을 바로 고칠 수 있습니다."/></td>
+                <td class="grp"><input type="text" :value="nurse.group" list="bulk-group-list" maxlength="3" @blur="inlineSetGroup(nurse, $event.target.value)" @keydown.enter.prevent="$event.target.blur()" placeholder="A" title="팀을 바로 고칠 수 있습니다."/></td>
                 <td><button @click="inlineToggleGender(nurse)" class="gender" :style="nurse.gender==='female'?'background:var(--sh-생-bg);color:var(--sh-생-fg)':'background:var(--sh-D-bg);color:var(--sh-D-fg)'" x-text="nurse.gender==='female'?'여':'남'" title="누르면 성별이 바뀝니다. 여성만 생리휴가가 배정됩니다."></button></td>
-                <td><div class="chips"><template x-for="s in allWorkShifts" :key="s"><button type="button" @click="inlineToggleShift(nurse, s)" class="shift-chip" :class="nurse.capable_shifts.includes(s)?'':'off'" :data-shift="nurse.capable_shifts.includes(s)?s:null" x-text="s" :title="rdShiftTip(s)+' — '+(nurse.capable_shifts.includes(s)?'켜짐 · 누르면 꺼짐':'꺼짐 · 누르면 켜짐')"></button></template></div></td>
+                <td class="chips-cell"><div class="chips"><template x-for="s in allWorkShifts" :key="s"><button type="button" @click="inlineToggleShift(nurse, s)" class="shift-chip" :class="nurse.capable_shifts.includes(s)?'':'off'" :data-shift="nurse.capable_shifts.includes(s)?s:null" x-text="s" :title="rdShiftTip(s)+' — '+(nurse.capable_shifts.includes(s)?'켜짐 · 누르면 꺼짐':'꺼짐 · 누르면 켜짐')"></button></template></div></td>
                 <td><button @click="inlineToggleNightThisMonth(nurse)" class="nk" :class="rdNk(nurse).cls" x-text="rdNk(nurse).label" :title="rdNk(nurse).title"></button></td>
+                <td class="groups"><template x-for="g in groupsOfNurse(nurse.id)" :key="g.id"><span class="rgtag"><button type="button" @click="openGroupModal(g)" x-text="g.name" :title="`‘${g.name}’ 그룹 — 눌러서 그룹을 엽니다`"></button><button type="button" class="x" @click="removeFromGroup(g,nurse.id)" :title="`${nurse.name} 을(를) ‘${g.name}’ 그룹에서 뺍니다`"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18 M6 6l12 12"/></svg></button></span></template></td>
                 <td class="note" x-text="nurseNote(nurse)"></td>
                 <td style="text-align:right"><button @click="openNurseModal(nurse)" class="rbtn-edit" data-rd="btn-edit" title="이름·자격·야간전담·주휴 요일·임산부·전입/전출·프리셉터를 고칩니다."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>편집</button></td>
               </tr>
             </template>
-            <tr x-show="nurses.length===0"><td colspan="9"><div class="rempty" style="margin:0;box-shadow:none;border-radius:0"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75"/></svg><div class="rempty-title">아직 간호사가 없어요</div><div class="rempty-desc">오른쪽 위 <b>간호사 추가</b>로 한 명씩 넣거나, 엑셀 템플릿을 채워 이 화면에 끌어다 놓으세요.</div></div></td></tr>
+            <tr x-show="nurses.length===0"><td colspan="10"><div class="rempty" style="margin:0;box-shadow:none;border-radius:0"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75"/></svg><div class="rempty-title">아직 간호사가 없어요</div><div class="rempty-desc">오른쪽 위 <b>간호사 추가</b>로 한 명씩 넣거나, 엑셀 템플릿을 채워 이 화면에 끌어다 놓으세요.</div></div></td></tr>
           </tbody>
         </table>
         <!-- 표 아래·스크롤 안에 붙는다 — 위에 두면 고르는 순간 바가 생기며 줄이 밀려 끌던 자리가 어긋났다 -->
         <div x-show="selectedNurseCount>0" x-cloak class="rbulk">
           <b x-text="selectedNurseCount+'명 선택됨'"></b>
-          <span>그룹:</span>
-          <template x-for="g in nurseGroupChoices" :key="'bg'+g"><button @click="bulkSetGroup(g)" class="rbtn rbtn-sm rbtn-secondary" :title="`선택한 간호사를 그룹 ‘${g}’(으)로 바꿉니다.`" x-text="g"></button></template>
-          <input type="text" x-model="_bulkGroupInput" maxlength="3" placeholder="새 그룹" @keydown.enter.prevent="bulkSetGroup()" title="새 그룹 이름을 적고 + 를 누르세요."/>
-          <button @click="bulkSetGroup()" class="rbtn rbtn-sm rbtn-secondary" :disabled="!_bulkGroupInput.trim()" title="적은 이름의 새 그룹으로 바꿉니다.">+ 새 그룹</button>
+          <span>팀:</span>
+          <template x-for="g in nurseGroupChoices" :key="'bg'+g"><button @click="bulkSetGroup(g)" class="rbtn rbtn-sm rbtn-secondary" :title="`선택한 간호사를 ‘${g}’ 팀으로 바꿉니다.`" x-text="g"></button></template>
+          <input type="text" x-model="_bulkGroupInput" maxlength="3" placeholder="새 팀" @keydown.enter.prevent="bulkSetGroup()" title="새 팀 이름을 적고 + 를 누르세요."/>
+          <button @click="bulkSetGroup()" class="rbtn rbtn-sm rbtn-secondary" :disabled="!_bulkGroupInput.trim()" title="적은 이름의 새 팀으로 바꿉니다.">+ 새 팀</button>
+          <span x-show="nurseGroupList.length">그룹에 넣기:</span>
+          <template x-for="g in nurseGroupList" :key="'bgg'+g.id"><button @click="addToGroup(g,selectedNurseIds).then(()=>clearNurseSelection())" class="rbtn rbtn-sm rbtn-secondary" :title="`고른 간호사를 ‘${g.name}’ 그룹에 넣습니다. 다른 그룹은 그대로입니다.`" x-text="'＋'+g.name"></button></template>
+          <button @click="openGroupModal(null)" class="rbtn rbtn-sm rbtn-secondary" title="고른 간호사로 새 그룹을 만듭니다.">＋ 새 그룹</button>
           <span>성별:</span>
           <button @click="bulkSetGender('female')" class="rbtn rbtn-sm rbtn-secondary" title="선택한 간호사를 여성으로 바꿉니다.">여</button>
           <button @click="bulkSetGender('male')" class="rbtn rbtn-sm rbtn-secondary" title="선택한 간호사를 남성으로 바꿉니다.">남</button>
@@ -450,13 +465,14 @@
       </div>
     </section>
 
-    <!-- 요일별 필요 인원 -->
+    <!-- 필요 인원 (요일별 + 날짜별) -->
     <section x-show="settingsSection==='req'">
       <div class="rsec-head">
-        <div><div class="rsec-title">요일별 필요 인원</div><div class="rsec-sub">낮(D)·저녁(E)·야간(N)에 요일별로 몇 명 있어야 하는지. 차지 1명이 포함된 숫자입니다.</div></div>
+        <div><div class="rsec-title">필요 인원</div><div class="rsec-sub">낮(D)·저녁(E)·야간(N)에 몇 명 있어야 하는지. 차지 1명이 포함된 숫자입니다.</div></div>
         <div class="rsec-actions"><button @click="saveRequirements()" class="rbtn rbtn-primary" title="변경을 저장합니다. 이미 만든 근무표에는 영향이 없고, 다음 만들기부터 적용됩니다."><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-8H7v8 M7 3v5h8"/></svg>저장</button></div>
       </div>
       <div class="rcard" style="overflow:auto">
+        <h4>요일별 기본값</h4>
         <table class="rreq">
           <thead><tr><th>근무</th><template x-for="(label,key) in weekdayLabels" :key="key"><th x-text="label"></th></template></tr></thead>
           <tbody><template x-for="shift in reqShiftCodes" :key="shift"><tr>
@@ -466,7 +482,22 @@
             </td></template>
           </tr></template></tbody>
         </table>
-        <div class="rsec-sub">특정 날짜만 다르게 하려면 사전입력 표 맨 아래 ‘필요 인원’ 칸의 숫자를 고치세요. 요일 기본값은 그대로 둡니다.</div>
+      </div>
+      <!-- 날짜별 필요 인원 — 사전입력 표 맨 아래 '필요 인원' 줄과 같은 값(prevDayReqs). 요일 기본값과 다른 칸만 진하게 -->
+      <div class="rcard" data-rd="day-reqs">
+        <div class="rsec-head">
+          <div style="flex:1;min-width:0"><h4 x-text="`날짜별 — ${year}년 ${month}월`"></h4><div class="rsec-sub">법정공휴일이나 병동 사정으로 그 날만 다르게 할 때 숫자를 고칩니다. 요일 기본값과 다른 칸은 진하게 보이고, 비우면 기본값으로 돌아갑니다. 사전입력 표 맨 아래 줄과 같은 값입니다.</div></div>
+          <div class="rsec-actions"><button x-show="rdDayReqCount" x-cloak @click="rdResetDayReqs()" class="rbtn rbtn-sm rbtn-secondary" x-text="rdArmed('dayReqs')?'한 번 더 누르면 되돌립니다':`바꾼 ${rdDayReqCount}일을 요일 기본값으로`" title="이 달 표에서 날짜별로 바꾼 인원을 모두 요일 기본값으로 되돌립니다. 한 번 더 눌러야 되돌립니다."></button></div>
+        </div>
+        <div class="rcal">
+          <template x-for="i in 7" :key="'ch'+i"><div class="rcal-h" x-text="rdWdays[((scheduleDays[0]?scheduleDays[0].getDay():0)+i-1)%7]"></div></template>
+          <template x-for="day in scheduleDays" :key="'dr'+dayKey(day)">
+            <div class="rcal-d" :class="[day.getDay()===6?'sat':'',day.getDay()===0?'sun':'',isHoliday(day)?'hol':'',isOverflow(day)?'overflow':'']">
+              <div class="rcal-date"><b x-text="day.getDate()"></b><span x-show="day.getDate()===1||isOverflow(day)" x-text="(day.getMonth()+1)+'월'"></span><em x-show="isHoliday(day)">법정공휴일</em></div>
+              <div class="rcal-in"><template x-for="t in reqShiftCodes" :key="t"><label><span :style="`color:var(--sh-${t}-fg)`" x-text="t"></span><input type="text" inputmode="numeric" maxlength="2" :class="getPrevDayReq(day,t)!==null?'is-over':''" :value="rdFootNeed(day,t)" @change="_pushUndo();setPrevDayReq(day,t,$event.target.value);$event.target.value=rdFootNeed(day,t);_checkViolations()" @focus="$event.target.select()" :title="rdDayLabel(day)+' '+t+' 필요 인원 — 요일 기본값 '+getDefaultDayReq(day,t)+'명'"/></label></template></div>
+            </div>
+          </template>
+        </div>
       </div>
     </section>
 
@@ -517,12 +548,12 @@
     </section>
 
     <!-- 근무 정의 -->
-    <section x-show="settingsSection==='shifts'" x-data="{expanded:false}">
+    <section x-show="settingsSection==='shifts'">
       <div class="rsec-head">
         <div><div class="rsec-title">근무 정의 <span class="n" x-text="shifts.length+'종'"></span></div><div class="rsec-sub">병동 표준이라 보통 그대로 둡니다. 코드·색·시간을 바꿀 때만 고치세요. 기본 근무는 지울 수 없습니다.</div></div>
         <div class="rsec-actions"><button @click="openShiftModal(null)" class="rbtn rbtn-primary" title="근무 코드를 하나 새로 만듭니다."><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14 M12 5v14"/></svg>새 근무</button></div>
       </div>
-      <div class="rcard" style="padding:0;overflow:auto" :style="expanded?'':'max-height:420px'">
+      <div class="rcard" style="padding:0;overflow:auto">
         <table class="rdef">
           <thead><tr><th>코드</th><th>이름</th><th>유형</th><th>시간</th><th>차지</th><th>배정</th><th></th></tr></thead>
           <tbody><template x-for="s in shifts" :key="s.code"><tr>
@@ -536,7 +567,6 @@
           </tr></template></tbody>
         </table>
       </div>
-      <div><button x-show="shifts.length>6" @click="expanded=!expanded" class="rbtn rbtn-secondary" x-text="expanded?'접기':'전체 보기 ('+shifts.length+'종)'" title="표를 전부 펼치거나 접습니다."></button></div>
     </section>
 
     <!-- 우선순위 (배점 규칙) -->
@@ -567,7 +597,7 @@
       <div class="rcard">
         <h4>글꼴</h4>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <select :value="fontPref" @change="setFontPref($event.target.value)" style="height:48px;min-width:260px" title="화면 글꼴을 바꿉니다. 전부 이 컴퓨터 안에 있어 인터넷이 필요 없습니다.">
+          <select :value="fontPref" @change="setFontPref($event.target.value)" style="min-width:260px" title="화면 글꼴을 바꿉니다. 전부 이 컴퓨터 안에 있어 인터넷이 필요 없습니다.">
             <template x-for="f in rdFontOptions" :key="'font'+f.v"><option :value="f.v" :selected="f.v===fontPref" x-text="f.label"></option></template>
           </select>
           <span class="rsec-sub">인쇄에는 영향이 없습니다.</span>
@@ -576,8 +606,8 @@
       <div class="rcard">
         <h4>글자 크기</h4>
         <div style="display:flex;align-items:center;gap:12px">
-          <div class="rnum"><button @click="setFontSize(Math.max(_devModeUnlocked?8:16,fontSize-1))" title="글자를 한 단계 작게 합니다.">−</button><output x-text="fontSize+'px'"></output><button @click="setFontSize(Math.min(_devModeUnlocked?30:24,fontSize+1))" title="글자를 한 단계 크게 합니다.">+</button></div>
-          <span class="rsec-sub">기본 18px · 16~24px 사이에서 고릅니다.</span>
+          <div class="rnum"><button @click="setFontSize(Math.max(_devModeUnlocked?8:12,fontSize-1))" title="글자를 한 단계 작게 합니다.">−</button><output x-text="fontSize+'px'"></output><button @click="setFontSize(Math.min(_devModeUnlocked?30:18,fontSize+1))" title="글자를 한 단계 크게 합니다.">+</button></div>
+          <span class="rsec-sub">기본 14px · 12~18px 사이에서 고릅니다. 표의 글자와 줄 높이가 함께 바뀝니다.</span>
         </div>
       </div>
       <div class="rcard">
@@ -684,7 +714,7 @@
     </div>
     <div class="rtoolbar-right">
       <div class="rmenu-host" x-data="{open:false}">
-        <button @click="open=!open" class="rbtn rbtn-primary" data-rd="btn-import" title="엑셀·팀즈 위시 시트에서 복사한 표를 붙여 넣거나, 지난달 표를 이어옵니다."><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"/></svg>가져오기<svg class="caret" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button @click="open=!open" class="rbtn rbtn-secondary" data-rd="btn-import" title="엑셀·팀즈 위시 시트에서 복사한 표를 붙여 넣거나, 지난달 표를 이어옵니다."><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"/></svg>가져오기<svg class="caret" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         <div x-show="open" x-cloak @click.outside="open=false" class="rmenu" data-rd="menu-import">
           <button @click="openPastePrev();open=false" class="rmenu-item" title="복사한 사전입력 표를 그대로 넣습니다. 두 달치 표도 그대로 들어갑니다."><b>엑셀 표 붙여넣기</b><small>복사한 사전입력 표를 그대로 넣습니다</small></button>
           <button @click="openPastePrev('wish');open=false" class="rmenu-item" title="팀즈 희망 근무 시트를 ‘가능하면’ 조건으로 넣습니다. 확정이 아니라 못 들어간 희망은 다음 달에 먼저 반영됩니다."><b>위시 시트 붙여넣기</b><small>팀즈 희망 근무를 ‘가능하면’ 조건으로 넣습니다</small></button>
@@ -711,18 +741,19 @@
           <button @click="showNotes=!showNotes" class="rmenu-item" :class="showNotes?'is-on':''" title="메모가 적힌 칸에 점을 표시합니다. 메모 내용은 칸 위에 마우스를 올리면 보입니다."><b>메모 표시 켜기/끄기</b><small x-text="showNotes?'지금 켜짐 — 메모 칸에 점이 보입니다':'지금 꺼짐'"></small></button>
           <button @click="showShortcutHelp=true;open=false" class="rmenu-item" title="키보드로 빠르게 넣는 법과 마우스 조작을 봅니다."><b>단축키 안내</b><small>D E N V O 키 · Ctrl+C/V · 방향키 · Ctrl+Z</small></button>
           <button @click="tableFullscreen=!tableFullscreen;open=false" class="rmenu-item" title="표만 화면 가득 보여 줍니다. Esc로 돌아옵니다."><b>전체화면</b><small>표만 크게 봅니다 · Esc로 돌아오기</small></button>
-          <button @click="gridFit=!gridFit" class="rmenu-item" :class="gridFit?'is-on':''" title="칸을 좁혀 앞뒤 주까지 한 달을 옆으로 넘기지 않고 한 화면에 봅니다. 다시 누르면 원래 너비로 돌아옵니다."><b>칸 좁게 — 한 달을 한 화면에</b><small x-text="gridFit?'지금 켜짐 — 옆으로 넘기지 않아도 됩니다':'지금 꺼짐'"></small></button>
           <div class="rmenu-sep"></div>
           <button @click="clearPrevOtherMonths();open=false" class="rmenu-item" title="지금 보는 달 주기 밖의 사전입력을 지웁니다. 한 번 더 확인합니다."><b>다른 달 정리</b><small>이 달 주기 밖 입력을 지웁니다</small></button>
           <button @click="rdClearPrev()" class="rmenu-item danger" title="이 달의 사전입력을 모두 비웁니다. 한 번 더 누르면 지워지고, 되돌릴 수 없어요."><b x-text="rdArmed('clearPrev')?'한 번 더 누르면 지웁니다 · 되돌릴 수 없어요':'표 초기화'"></b><small x-show="!rdArmed('clearPrev')">한 번 더 확인합니다</small></button>
         </div>
       </div>
+      <span class="rtoolbar-sep"></span>
+      <button @click="rdGoMake()" class="rbtn rbtn-primary" data-rd="btn-next" :title="rdSched?'만들어 둔 근무표로 갑니다. 사전입력을 고쳤다면 거기서 다시 만들기를 누르세요.':'이 사전입력을 지키면서 나머지 칸을 자동으로 채워 근무표를 만듭니다. 근무표 단계로 넘어가 바로 시작합니다.'"><span x-text="rdSched?'근무표 보기':'근무표 만들기'"></span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14 M13 6l6 6-6 6"/></svg></button>
     </div>
   </div>
   <!-- data-rd 표식은 검사(design/handoff/check)용 — 사전입력·근무표에 같은 이름이 있으면 보이는 탭에서만 붙인다 -->
   <!-- 표 (툴바 바로 아래 — 사이에 아무것도 두지 않는다) -->
   <div class="rtable-wrap" :data-rd="activeTab==='preinput'?'table-wrap':null" x-show="nurses.length>0">
-    <table class="rtable" :class="gridFit?'is-fit':''" :data-rd="activeTab==='preinput'?'table':null" x-effect="gridFit;activeTab;scheduleDays.length;rdFitColumnsSoon()">
+    <table class="rtable" :data-rd="activeTab==='preinput'?'table':null" x-effect="activeTab;scheduleDays.length;rules.maxNightTwoMonth;rdFitColumnsSoon()">
       <thead>
         <tr>
           <th class="rt-corner">주기</th>
@@ -869,7 +900,7 @@
       </div>
       <button @click="saveSchedule()" class="rbtn rbtn-secondary" :disabled="!rdSched" data-rd="btn-save" :title="rdSaveTip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-8H7v8 M7 3v5h8"/></svg><span x-text="rdSaveLabel"></span></button>
       <div class="rmenu-host" x-data="{open:false}">
-        <button @click="open=!open" class="rbtn rbtn-secondary" :data-rd="activeTab==='schedule'?'btn-more':null" title="전체화면 · 저장본과 비교 · 다음달 이월 · 차지 표시 · 그룹만 보기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12h.01 M19 12h.01 M5 12h.01"/></svg>더보기</button>
+        <button @click="open=!open" class="rbtn rbtn-secondary" :data-rd="activeTab==='schedule'?'btn-more':null" title="전체화면 · 저장본과 비교 · 다음달 이월 · 차지 표시 · 팀·그룹만 보기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12h.01 M19 12h.01 M5 12h.01"/></svg>더보기</button>
         <div x-show="open" x-cloak @click.outside="open=false" class="rmenu right">
           <button @click="tableFullscreen=true;open=false" class="rmenu-item" title="표만 화면 가득 보여 줍니다. Esc로 돌아옵니다."><b>전체화면</b><small>표만 크게 봅니다 · Esc로 돌아오기</small></button>
           <button x-show="rdSched&&savedSchedules.length>0" @click="showCompareMenu=!showCompareMenu;open=false" class="rmenu-item" title="저장해 둔 근무표 하나를 골라 지금 표와 다른 칸을 봅니다."><b>저장본과 비교</b><small>저장한 표와 다른 칸을 찾습니다</small></button>
@@ -877,9 +908,8 @@
           <div class="rmenu-sep"></div>
           <label class="rcheck" title="켜면 화면에서 차지(DC/EC/NC)를 D/E/N으로만 보여 줍니다. 인쇄·엑셀은 늘 D/E/N입니다."><input type="checkbox" x-model="hideCharge"/><span class="box"></span>차지 숨기기</label>
           <label class="rcheck" title="근무 코드별 색을 켜고 끕니다. 흑백으로 보고 싶을 때 끄세요."><input type="checkbox" x-model="colorByShift"/><span class="box"></span>색 켜기/끄기</label>
-          <label class="rcheck" title="칸을 좁혀 앞뒤 주까지 한 달을 옆으로 넘기지 않고 한 화면에 봅니다."><input type="checkbox" x-model="gridFit"/><span class="box"></span>칸 좁게 — 한 달을 한 화면에</label>
-          <div style="padding:6px 12px"><div class="sub" style="font-size:var(--fs-min);color:var(--ink-2);margin-bottom:4px">그룹만 보기</div>
-            <select x-model="groupFilter" title="한 그룹만 골라서 봅니다."><option value="all">전체 그룹</option><template x-for="g in nurseGroups" :key="g"><option :value="g" x-text="g+'그룹'"></option></template></select></div>
+          <div style="padding:6px 12px"><div class="sub" style="font-size:var(--fs-min);color:var(--ink-2);margin-bottom:4px">팀·그룹만 보기</div>
+            <select x-model="groupFilter" title="한 팀이나 그룹만 골라서 봅니다."><option value="all">전체</option><template x-for="g in nurseGroups" :key="g"><option :value="g" x-text="g+'팀'"></option></template><template x-for="g in nurseGroupList" :key="'gf'+g.id"><option :value="'g:'+g.id" x-text="g.name+' 그룹'"></option></template></select></div>
         </div>
       </div>
     </div>
@@ -891,6 +921,7 @@
       <span class="dot"></span><span x-text="rdStatus?.text"></span>
       <template x-if="rdStatus?.running"><div class="rprogress"><i :style="`width:${estimatedSeconds?Math.min(100,Math.round(generateElapsed/estimatedSeconds*100)):35}%`"></i></div></template>
       <template x-if="rdStatus?.running"><button @click="stopGenerate()" :disabled="stopRequested" class="rbtn rbtn-sm rbtn-secondary" data-rd="btn-stop" style="margin-left:auto" title="지금까지 찾은 답이 있으면 그것을 보여 주고 멈춥니다."><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg><span x-text="stopRequested?'멈추는 중':(continuing?'멈추고 지금 표 쓰기':'멈추기')"></span></button></template>
+      <template x-if="rdSched&&rdStep.done1&&!generating"><span class="relaxed-note"><i class="pre"></i>모서리 표시 = 사전입력에서 넣은 칸</span></template>
       <template x-if="rdStatus?.relaxed"><span class="relaxed-note"><i></i>점선 칸 = 사전입력과 다르게 배정된 칸</span></template>
       <template x-if="rdEdited>0&&!generating"><span class="relaxed-note"><span x-text="`손으로 고친 칸 ${rdEdited}개`"></span><button @click="readjustSchedule()" class="rbtn rbtn-sm rbtn-secondary" title="고친 칸은 그대로 잠그고, 인원·규칙이 다시 맞도록 나머지를 최소한으로 다시 맞춥니다.">고친 대로 다시 맞추기</button><span x-show="readjustSummary" x-text="readjustSummary"></span></span></template>
     </div>
@@ -932,14 +963,15 @@
     <div class="rphone-filters" x-show="rdSched">
       <button @click="groupFilter='all';myOnly=false" :class="groupFilter==='all'&&!myOnly?'on':''" title="모든 사람을 봅니다." x-text="`전체 ${nurses.length}명`"></button>
       <button @click="myOnly=!myOnly" :class="myOnly?'on':''" :disabled="!myNurseId" :title="myNurseId?'내 줄만 봅니다. 다시 누르면 전체로 돌아갑니다.':'먼저 오늘 화면에서 내 이름을 고르세요.'">내 근무만</button>
-      <template x-for="g in nurseGroups" :key="'pg'+g"><button @click="groupFilter=g;myOnly=false" :class="groupFilter===g&&!myOnly?'on':''" :title="g+'그룹만 봅니다.'" x-text="g+'그룹'"></button></template>
+      <template x-for="g in nurseGroups" :key="'pg'+g"><button @click="groupFilter=g;myOnly=false" :class="groupFilter===g&&!myOnly?'on':''" :title="g+'팀만 봅니다.'" x-text="g+'팀'"></button></template>
+      <template x-for="g in nurseGroupList" :key="'pgg'+g.id"><button @click="groupFilter='g:'+g.id;myOnly=false" :class="groupFilter==='g:'+g.id&&!myOnly?'on':''" :title="g.name+' 그룹만 봅니다.'" x-text="g.name"></button></template>
     </div>
   </div>
 
   <!-- 표 -->
   <template x-if="rdSched">
     <div class="rtable-wrap" :data-rd="activeTab==='schedule'?'table-wrap':null">
-      <table class="rtable" :class="gridFit?'is-fit':''" :data-rd="activeTab==='schedule'?'table':null" x-effect="gridFit;activeTab;scheduleDays.length;rdFitColumnsSoon()">
+      <table class="rtable" :data-rd="activeTab==='schedule'?'table':null" x-effect="activeTab;scheduleDays.length;rules.maxNightTwoMonth;rdFitColumnsSoon()">
         <thead>
           <tr>
             <th class="rt-corner">주기</th>
@@ -963,7 +995,7 @@
             <td class="rt-name" @mousedown="gridDownRow('schedule',ni,$event)" @mouseover="gridOverRow('schedule',ni)" :title="nurse.name+(nurse.is_trainee?' · 신규간호사':'')+' — 누르거나 끌어서 줄을 고릅니다'"><b x-text="nurse.name"></b><small x-text="nurse.group"></small></td>
             <template x-for="(day,di) in scheduleDays" :key="dayKey(day)">
               <td class="rt-cell" :data-cell="nurse.id+'|'+dayKey(day)" :data-shift="colorByShift&&!isNurseInactive(nurse,day)?(displayShift(nurse.id,day)||null):null"
-                  :class="[day.getDay()===6?'sat':'',day.getDay()===0?'sun':'',isCycleStart(day)&&day.getDate()!==1?'cycle-start':'',isOverflow(day)?'overflow':'',isRelaxed(nurse.id,day)?'is-relaxed':'',isManuallyEdited(nurse.id,day)?'is-edited':'',isReadjustPin(nurse.id,day)?'g-pin':'',isReadjustChanged(nurse.id,day)?'g-readj':'',hasScheduleViolation(nurse.id,day)?'g-violation':'',isNurseInactive(nurse,day)?'is-absent':'',isSel('schedule',ni,di)?'is-sel':'',_sel&&_sel.tab==='schedule'&&_sel.r1===ni&&_sel.c1===di?'is-focused':'']"
+                  :class="[day.getDay()===6?'sat':'',day.getDay()===0?'sun':'',isCycleStart(day)&&day.getDate()!==1?'cycle-start':'',isOverflow(day)?'overflow':'',rdIsPre(nurse.id,day)?'is-pre':'',isRelaxed(nurse.id,day)?'is-relaxed':'',isManuallyEdited(nurse.id,day)?'is-edited':'',isReadjustPin(nurse.id,day)?'g-pin':'',isReadjustChanged(nurse.id,day)?'g-readj':'',hasScheduleViolation(nurse.id,day)?'g-violation':'',isNurseInactive(nurse,day)?'is-absent':'',isSel('schedule',ni,di)?'is-sel':'',_sel&&_sel.tab==='schedule'&&_sel.r1===ni&&_sel.c1===di?'is-focused':'']"
                   :title="rdCellTipSched(nurse,day)" @mousedown="gridDown('schedule',ni,di,$event)" @mouseover="gridOver('schedule',ni,di)" @click="gridClick($event)&&openShiftEdit(nurse,day)">
                 <span x-text="isNurseInactive(nurse,day)?'':displayShift(nurse.id,day)"></span>
                 <span x-show="isLocked(nurse.id,day)" class="lock"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11h14v10H5z M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
@@ -992,8 +1024,9 @@
   <template x-if="!rdSched">
     <div class="rempty" data-rd="empty">
       <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M16 2v4 M8 2v4 M3 10h18"/></svg>
-      <div class="rempty-title" x-text="rdFail?'표는 만들어지지 않았습니다':`${month}월 근무표가 아직 없어요`"></div>
-      <div class="rempty-desc" x-text="rdFail?'위의 셋 중 하나를 고치거나 사전입력 완화를 켜고 다시 만들어 보세요. 지난달 표와 저장해 둔 표는 불러오기에 그대로 있어요.':(generating?'만드는 동안 기다려 주세요. 다른 화면으로 가도 계속 만들어집니다.':`왼쪽 위 근무표 만들기를 누르면 사전입력을 지키면서 자동으로 채웁니다. ${feas&&feas.estimated_seconds?rdEta(feas.estimated_seconds):'몇 분'} 걸리고, 마음에 안 들면 다시 만들 수 있어요.`)"></div>
+      <div class="rempty-title" x-text="rdFail?'표는 만들어지지 않았습니다':(rdSavedThisMonth&&!generating?`저장해 둔 ${month}월 근무표가 있어요`:`${month}월 근무표가 아직 없어요`)"></div>
+      <div class="rempty-desc" x-text="rdFail?'위의 셋 중 하나를 고치거나 사전입력 완화를 켜고 다시 만들어 보세요. 지난달 표와 저장해 둔 표는 불러오기에 그대로 있어요.':(generating?'만드는 동안 기다려 주세요. 다른 화면으로 가도 계속 만들어집니다.':rdSavedThisMonth?'아래 단추로 열어 이어서 고치거나, 왼쪽 위 근무표 만들기로 새로 만들 수 있어요.':`왼쪽 위 근무표 만들기를 누르면 사전입력을 지키면서 자동으로 채웁니다. ${feas&&feas.estimated_seconds?rdEta(feas.estimated_seconds):'몇 분'} 걸리고, 마음에 안 들면 다시 만들 수 있어요.`)"></div>
+      <button x-show="rdSavedThisMonth&&!generating" @click="loadSaved(rdSavedThisMonth.id)" class="rbtn rbtn-secondary" data-rd="btn-open-saved" style="margin-top:14px" title="저장해 둔 이 달 근무표를 엽니다. 연 뒤에 칸을 고치고 다시 저장할 수 있어요." x-text="`${rdSavedThisMonth?.name||month+'월 근무표'} 열기`"></button>
     </div>
   </template>
 
@@ -1250,8 +1283,8 @@
       <div class="flex items-center justify-between mb-3">
         <div class="section-title" style="margin:0">주휴 추천 배분</div>
         <div class="flex gap-2">
-          <button @click="applyRecommendedJuhu()" class="btn btn-sm btn-success" title="추천한 주휴를 사전입력 표에 한 번에 넣습니다. 되돌리기로 취소할 수 있어요.">사전입력에 적용</button>
-          <button @click="activeTab='preinput'" class="btn btn-sm btn-ghost" title="사전입력 화면으로 갑니다.">사전입력 탭으로</button>
+          <button @click="applyRecommendedJuhu()" class="rbtn rbtn-sm rbtn-primary" title="추천한 주휴를 사전입력 표에 한 번에 넣습니다. 되돌리기로 취소할 수 있어요.">사전입력에 적용</button>
+          <button @click="activeTab='preinput'" class="rbtn rbtn-sm rbtn-secondary" title="사전입력 화면으로 갑니다.">사전입력 탭으로</button>
         </div>
       </div>
 
@@ -1362,7 +1395,7 @@
     <button @click="showHelpModal=true;showMobileMore=false" title="사용법과 자주 묻는 질문을 엽니다."><b>도움말</b><small>사용법 · 자주 묻는 질문</small><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
   </div>
   <div class="grp">
-    <div class="row"><b>글자 크기</b><div class="rseg"><button @click="setFontSize(Math.max(_devModeUnlocked?8:16,fontSize-1))" :class="fontSize<=18?'on':''" title="글자를 한 단계 작게 합니다.">보통</button><button @click="setFontSize(Math.min(_devModeUnlocked?30:24,fontSize+1))" :class="fontSize>18?'on':''" title="글자를 한 단계 크게 합니다.">크게</button></div></div>
+    <div class="row"><b>글자 크기</b><div class="rseg"><button @click="setFontSize(14)" :class="fontSize<=14?'on':''" title="기본 글자 크기(14px)로 봅니다.">보통</button><button @click="setFontSize(16)" :class="fontSize>14?'on':''" title="글자와 표 줄을 크게(16px) 봅니다.">크게</button></div></div>
     <button @click="toggleDark()" title="화면을 어둡게/밝게 바꿉니다."><b>어두운 화면</b><span class="rtoggle" :class="darkMode?'on':''"></span></button>
     <button @click="mobileToolsOpen=!mobileToolsOpen" title="폰에서도 사전입력을 고칠 수 있게 편집 도구를 켭니다. 잘못 누르기 쉬우니 병동 컴퓨터를 권합니다."><b>편집 도구</b><small x-text="mobileToolsOpen?'켜짐':'꺼짐 (보기 전용)'"></small><span class="rtoggle" :class="mobileToolsOpen?'on':''"></span></button>
   </div>
@@ -1384,7 +1417,7 @@
     <div class="rmodal-body">
       <div class="rgrid3">
         <label class="rfield">이름<input type="text" class="rinput" x-model="nurseModal.data.name" placeholder="홍길동" title="이름"/></label>
-        <label class="rfield">그룹<input type="text" class="rinput" x-model="nurseModal.data.group" placeholder="A" maxlength="3" title="그룹 (A·B·C 등)"/></label>
+        <label class="rfield">팀<input type="text" class="rinput" x-model="nurseModal.data.group" placeholder="A" maxlength="3" title="팀 (A·B·C 등) — 한 사람 하나. 여러 그룹은 명부 위 그룹 띠에서 넣습니다"/></label>
         <div class="rfield">성별<div class="rseg"><label :class="nurseModal.data.gender==='female'?'on':''" title="여성 — 생리휴가가 배정됩니다"><input type="radio" x-model="nurseModal.data.gender" value="female"/>여</label><label :class="nurseModal.data.gender==='male'?'on':''" title="남성"><input type="radio" x-model="nurseModal.data.gender" value="male"/>남</label></div></div>
       </div>
       <div>
@@ -1434,6 +1467,58 @@
       <span class="spacer"></span>
       <button @click="nurseModal.open=false" class="rbtn rbtn-secondary" title="저장하지 않고 닫습니다.">취소</button>
       <button @click="saveNurse()" class="rbtn rbtn-primary" title="변경을 저장합니다. 이미 만든 근무표에는 영향이 없고, 다음 만들기부터 적용됩니다.">저장</button>
+    </div>
+  </div>
+</div>
+</template>
+
+<!-- ═══ 모달: 그룹 — 이름 · 그룹원(누르거나 끌어서) · 같은 근무 규칙 ═══ -->
+<template x-if="groupModal.open">
+<div class="rmodal-bg" role="dialog" aria-modal="true" @click.self="groupModal.open=false" @keydown.escape.window="groupModal.open=false" @mouseup.window="_groupPaint=null">
+  <div class="rmodal rgmodal" style="width:780px;max-width:95vw;max-height:92vh">
+    <div class="rmodal-head">
+      <div class="rmodal-title" x-text="groupModal.isNew?'그룹 만들기':'그룹 · '+(groupModal.data.name||'')"></div>
+      <button @click="groupModal.open=false" class="rmodal-close" title="닫기 (Esc). 저장하지 않은 변경은 사라집니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18 M6 6l12 12"/></svg></button>
+    </div>
+    <div class="rmodal-body">
+      <label class="rfield">그룹 이름<input type="text" class="rinput" x-model="groupModal.data.name" placeholder="신규" maxlength="12" @keydown.enter.prevent="saveGroupModal()" title="그룹 이름 — 명부·근무표 필터·주의 목록에 나옵니다"/></label>
+      <div>
+        <div class="rfield-h">그룹원 <b x-text="groupModal.data.members.length+'명'"></b><small>이름을 누르면 넣고 뺍니다 · 누른 채 끌면 여러 명 · 팀 이름을 누르면 팀 전원</small></div>
+        <div class="rgpick">
+          <template x-for="t in groupPickTeams" :key="'gt'+t.team">
+            <div class="row">
+              <button type="button" class="team" @click="groupPickTeam(t)" x-text="t.team?t.team+'팀':'팀 없음'" :title="(t.team?t.team+'팀':'팀 없는 사람')+' 전원을 넣습니다 · 다 들어 있으면 뺍니다'"></button>
+              <div class="names"><template x-for="n in t.nurses" :key="'gp'+n.id"><button type="button" :class="groupModal.data.members.includes(n.id)?'on':''" @mousedown.prevent="groupPaintDown(n.id)" @mouseenter="groupPaintOver(n.id)" x-text="n.name" :title="n.name+(groupModal.data.members.includes(n.id)?' — 들어 있음 · 누르면 뺍니다':' — 누르면 넣습니다')"></button></template></div>
+            </div>
+          </template>
+        </div>
+      </div>
+      <div class="rgrules">
+        <div>
+          <div class="rfield-h">같은 근무에<small>D·D1 / E·중 / N 을 한 근무로 봅니다</small></div>
+          <div class="rseg" style="width:100%">
+            <button type="button" :class="groupModal.data.same==='none'?'on':''" @click="groupModal.data.same='none'" title="같은 근무에 몇 명이 서도 됩니다">제한 없음</button>
+            <button type="button" :class="groupModal.data.same==='alone'?'on':''" @click="groupModal.data.same='alone'" title="그룹원 둘이 같은 근무에 서지 않게 합니다 (한 근무에 1명까지)">같이 일하지 않기</button>
+            <button type="button" :class="groupModal.data.same==='max'?'on':''" @click="groupModal.data.same='max'" title="한 근무에 그룹원이 몇 명까지 설 수 있는지 정합니다">최대 n명</button>
+          </div>
+          <label x-show="groupModal.data.same==='max'" class="rgnum">한 근무에 <input type="number" min="2" max="20" class="rinput" x-model.number="groupModal.data.maxN" title="한 근무에 그룹원 최대 인원 (2명 이상)"/> 명까지</label>
+        </div>
+        <div>
+          <div class="rfield-h">한 근무에 최소<small>매 근무에 그룹원이 이만큼은 있게</small></div>
+          <div class="rseg" style="width:100%">
+            <button type="button" :class="!groupModal.data.minOn?'on':''" @click="groupModal.data.minOn=false" title="최소 인원을 두지 않습니다">없음</button>
+            <button type="button" :class="groupModal.data.minOn?'on':''" @click="groupModal.data.minOn=true" title="매 근무에 그룹원이 몇 명 이상 있게 합니다">n명 이상</button>
+          </div>
+          <label x-show="groupModal.data.minOn" class="rgnum">한 근무에 <input type="number" min="1" max="20" class="rinput" x-model.number="groupModal.data.minN" title="한 근무에 그룹원 최소 인원 (1명 이상)"/> 명 이상</label>
+        </div>
+      </div>
+      <p class="rgnote">근무표를 만들 때 <b>되도록</b> 지킵니다. 사전입력으로 넣은 칸은 그대로 두고, 이 규칙 때문에 연차를 쓰거나 원티드를 바꾸지는 않습니다. 못 지킨 근무는 근무표 리포트의 <b>주의</b>에 나옵니다. 트레이닝 중인 신규('/' 칸)는 세지 않습니다.</p>
+    </div>
+    <div class="rmodal-foot">
+      <button x-show="!groupModal.isNew" @click="deleteGroup(groupModal.data.id)" class="rbtn rbtn-danger" title="이 그룹을 지웁니다. 간호사는 명부에 그대로 있습니다.">그룹 지우기</button>
+      <span class="spacer"></span>
+      <button @click="groupModal.open=false" class="rbtn rbtn-secondary" title="저장하지 않고 닫습니다.">취소</button>
+      <button @click="saveGroupModal()" class="rbtn rbtn-primary" title="그룹을 저장합니다. 다음 근무표 만들기부터 적용됩니다.">저장</button>
     </div>
   </div>
 </div>
@@ -1999,49 +2084,49 @@
       <template x-if="onboardingStep===0">
         <div>
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 16px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-          <h2 style="font-size:1.3rem;font-weight:700;margin-bottom:8px">NurseScheduler에 오신 것을 환영합니다</h2>
+          <h2 style="font-size:1.3rem;font-weight:600;margin-bottom:8px">NurseScheduler에 오신 것을 환영합니다</h2>
           <p class="text-sub" style="font-size:0.9rem">간호사 3교대 근무표를 자동으로 생성하는 앱입니다.<br/>간단한 사용법을 안내해 드릴게요.</p>
         </div>
       </template>
       <template x-if="onboardingStep===1">
         <div>
           <div style="font-size:2rem;margin-bottom:12px">설정</div>
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">설정 — 첫 1회만</h3>
-          <p class="text-sub" style="font-size:16px">헤더의 <strong>설정</strong>에서 간호사 등록(엑셀 일괄 가능), 요일별 필요 인원,<br/>규칙을 맞춥니다. 한 번 맞춰 두면 매달 다시 볼 일이 거의 없습니다.</p>
+          <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:8px">설정 — 첫 1회만</h3>
+          <p class="text-sub" style="font-size:16px">헤더의 <strong>설정</strong>에서 간호사 등록(엑셀 일괄 가능), 필요 인원(요일별·날짜별),<br/>규칙을 맞춥니다. 한 번 맞춰 두면 매달 다시 볼 일이 거의 없습니다.</p>
         </div>
       </template>
       <template x-if="onboardingStep===2">
         <div>
           <div style="font-size:2rem;margin-bottom:12px">✏️</div>
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">1단계: 사전입력</h3>
+          <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:8px">1단계: 사전입력</h3>
           <p class="text-sub" style="font-size:16px">주휴, 연차, 희망 근무 등을 미리 입력합니다.<br/>셀 클릭 또는 키보드(D/E/N/V/O/W)로 직접 입력할 수 있습니다.<br/><strong>빈 셀은 자동 배정이 채웁니다.</strong> 절대 못 바꾸는 날은 🔒 잠금.</p>
         </div>
       </template>
       <template x-if="onboardingStep===3">
         <div>
           <div style="font-size:2rem;margin-bottom:12px">📊</div>
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">2단계: 분석</h3>
+          <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:8px">2단계: 분석</h3>
           <p class="text-sub" style="font-size:16px">일자별 인원 과부족을 확인하고<br/><strong>주휴 추천 배분</strong>을 자동으로 계산합니다.<br/>"사전입력에 적용" 버튼으로 한 번에 반영 가능합니다.</p>
         </div>
       </template>
       <template x-if="onboardingStep===4">
         <div>
           <div style="font-size:2rem;margin-bottom:12px">📅</div>
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">3단계: 근무표</h3>
+          <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:8px">3단계: 근무표</h3>
           <p class="text-sub" style="font-size:16px"><strong>근무표 만들기</strong>를 누르면 근무표가 만들어져 표가 바로 보입니다.<br/>안 나오면 <strong>사전입력 완화</strong>를 켜고 다시 누르세요. 세부 옵션은 고급에 있습니다.<br/>완성된 근무표는 셀 클릭으로 수정할 수 있고, 표 아래 요약·리포트에 원티드 미반영·오프특근이 정리됩니다.</p>
         </div>
       </template>
       <template x-if="onboardingStep===5">
         <div>
           <div style="font-size:2rem;margin-bottom:12px">💾</div>
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">저장 · 내보내기</h3>
+          <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:8px">저장 · 내보내기</h3>
           <p class="text-sub" style="font-size:16px">근무표 탭의 <strong>저장</strong>으로 보관하고, <strong>내보내기</strong>(엑셀 파일 · 어싸인용 복사)로 내보냅니다.<br/><strong>불러오기</strong>를 누르면 저장된 근무표 목록과 근무표 파일 업로드가 열립니다.</p>
         </div>
       </template>
       <template x-if="onboardingStep===6">
         <div>
           <div style="font-size:2rem;margin-bottom:12px">✅</div>
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">준비 완료!</h3>
+          <h3 style="font-size:1.1rem;font-weight:600;margin-bottom:8px">준비 완료!</h3>
           <p class="text-sub" style="font-size:16px">언제든 헤더의 <strong>도움말</strong> 버튼으로<br/>상세 사용법을 확인할 수 있습니다.<br/><br/>키보드 <kbd>?</kbd>를 누르면 단축키 목록도 볼 수 있어요.</p>
         </div>
       </template>
@@ -2091,7 +2176,7 @@
         <div class="space-y-3">
           <div class="card-sm" style="padding:10px 14px;border-left:3px solid var(--accent)">
             <div class="font-semibold text-bright">설정 (첫 1회)</div>
-            <p class="text-xs mt-1">헤더 톱니바퀴 → 간호사 등록 → 요일별 필요인원 설정 → 규칙 관리</p>
+            <p class="text-xs mt-1">헤더 톱니바퀴 → 간호사 명부 → 필요 인원(요일별·날짜별) → 규칙</p>
           </div>
           <div class="card-sm" style="padding:10px 14px;border-left:3px solid #22c55e">
             <div class="font-semibold text-bright">① 사전입력</div>
@@ -2119,7 +2204,7 @@
           <ul class="text-xs mt-1 space-y-1 list-disc pl-4">
             <li>간호사 추가/수정/삭제 (순서 칸을 끌어 순서 변경 · 체크 칸을 끌어 여러 명 고르기 → 함께 옮기기·한 번에 고치기)</li>
             <li>엑셀 템플릿 내려받기 → 엑셀에서 편집 → 일괄 가져오기</li>
-            <li>요일별 D/E/N 필요 인원 설정</li>
+            <li>요일별 D/E/N 필요 인원 + 법정공휴일 등 날짜별 인원</li>
             <li>하드 제약 (연속 근무, 역순 전환 금지 등)</li>
             <li>우선순위 (순방향 전환, 야간 공평 등)</li>
           </ul>
@@ -2231,7 +2316,7 @@
       <!-- 정보 -->
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-        <h3 style="font-size:1.2rem;font-weight:700;margin-bottom:4px">NurseScheduler</h3>
+        <h3 style="font-size:1.2rem;font-weight:600;margin-bottom:4px">NurseScheduler</h3>
         <p class="text-dim text-xs" x-text="'v4.20.1 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">기본 계산 방식 · 다른 계산 방식 듀얼 자동 배정 · 완전 오프라인</p>

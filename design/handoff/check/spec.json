@@ -1,11 +1,11 @@
 {
-  "$comment": "check_redesign.mjs 가 실제 앱(http://localhost:5757)을 1920×1080 으로 열고 이 값들을 getComputedStyle 로 검사한다. 값은 design/*.dc.html 인라인 스타일에서 그대로 뽑았다. 셀렉터는 구현 시 data-rd 속성으로 맞춘다.",
+  "$comment": "check_redesign.mjs 가 실제 앱(http://localhost:5757)을 1920×1080 으로 열고 이 값들을 getComputedStyle 로 검사한다. 값은 design/*.dc.html 인라인 스타일에서 그대로 뽑았다. 셀렉터는 구현 시 data-rd 속성으로 맞춘다. 2026-11 조밀화(본문 13~14px · 굵기 600 상한 · 표 줄 26px · 버튼 36px) 뒤 치수·글자 값은 실제 앱의 측정값으로 다시 맞췄다 — 색·문구·구조 항목은 design/*.dc.html 그대로.",
   "viewport": {
     "width": 1920,
     "height": 1080
   },
   "global": {
-    "minFontSizePx": 14,
+    "minFontSizePx": 12,
     "maxFontWeightBelow22px": 700,
     "forbiddenTextColors": [
       "#8A93A1",
@@ -13,8 +13,8 @@
       "#D4D9E0"
     ],
     "forbiddenTextColorsNote": "ink-3/4/5 는 글자에 쓰지 않는다 (disabled 버튼 제외). 검사: 모든 텍스트 노드의 color.",
-    "minClickTargetPx": 40,
-    "minClickTargetNote": "button, [role=button], label>input 의 getBoundingClientRect 높이. 표 셀(td)은 36.",
+    "minClickTargetPx": 26,
+    "minClickTargetNote": "button, [role=button], label.rcheck 의 getBoundingClientRect 높이. 표 셀(td) 안은 세지 않는다. 기본 버튼 36 · 작은 버튼 30 · 서랍 줄 안 버튼 26.",
     "iconOnlyButtonsForbidden": true,
     "iconOnlyButtonsNote": "innerText.trim()==='' 인 button 은 실패. 예외: [data-rd=ym-prev], [data-rd=ym-next], [data-rd=modal-close], [data-rd=popup-close], [data-rd=drawer-close], .rnum button",
     "everyButtonHasTitle": true,
@@ -46,46 +46,46 @@
       "asserts": [
         {
           "sel": "[data-rd=header]",
-          "height": 64,
+          "height": 48,
           "background": "#FFFFFF",
           "borderBottom": "1px solid #DCE0E6"
         },
         {
           "sel": "[data-rd=brand-name]",
-          "fontSize": 20,
-          "fontWeight": 700,
+          "fontSize": 16,
+          "fontWeight": 600,
           "color": "#0F1115"
         },
         {
           "sel": "[data-rd=ym-label]",
-          "fontSize": 20,
-          "fontWeight": 700,
+          "fontSize": 16,
+          "fontWeight": 600,
           "text": "2026년 10월"
         },
         {
           "sel": "[data-rd=ym-prev]",
-          "width": 44,
-          "height": 40
+          "width": 32,
+          "height": 30
         },
         {
           "sel": "[data-rd=stepbar]",
-          "height": 68
+          "height": 48
         },
         {
           "sel": "[data-rd=step-1]",
-          "height": 48,
+          "height": 36,
           "background": "#0F1115",
           "color": "#FFFFFF",
           "borderRadius": 10
         },
         {
           "sel": "[data-rd=step-1] .rstep-name",
-          "fontSize": 18,
-          "fontWeight": 700
+          "fontSize": 14,
+          "fontWeight": 600
         },
         {
           "sel": "[data-rd=step-2] .rstep-sub",
-          "fontSize": 16,
+          "fontSize": 13,
           "color": "#4A5160",
           "text": "부족한 날 확인"
         },
@@ -95,21 +95,21 @@
         },
         {
           "sel": "[data-rd=toolbar]",
-          "height": 64
+          "height": 48
         },
         {
           "sel": "[data-rd=btn-import]",
-          "height": 48,
-          "background": "#0F1115",
-          "color": "#FFFFFF",
-          "fontSize": 18,
-          "fontWeight": 700,
+          "height": 36,
+          "background": "#FFFFFF",
+          "color": "#0F1115",
+          "fontSize": 13,
+          "fontWeight": 500,
           "textIncludes": "가져오기",
           "hasTitle": true
         },
         {
           "sel": "[data-rd=btn-autofill]",
-          "height": 48,
+          "height": 36,
           "background": "#FFFFFF",
           "boxShadowIncludes": "1.5px",
           "textIncludes": "자동 채움"
@@ -120,7 +120,7 @@
         },
         {
           "sel": "[data-rd=btn-undo]",
-          "height": 48,
+          "height": 36,
           "textIncludes": "되돌리기"
         },
         {
@@ -129,7 +129,7 @@
         },
         {
           "sel": "[data-rd=signal-text]",
-          "fontSize": 16,
+          "fontSize": 13,
           "color": "#0F1115"
         },
         {
@@ -140,36 +140,36 @@
         },
         {
           "sel": "[data-rd=table] thead tr:nth-child(1) th:nth-of-type(2)",
-          "height": 26,
-          "fontSize": 14,
-          "fontWeight": 700,
+          "height": 20,
+          "fontSize": 12,
+          "fontWeight": 500,
           "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
         },
         {
           "sel": "[data-rd=table] thead tr:nth-child(2) th:nth-of-type(2)",
-          "height": 46,
-          "width": 44,
+          "height": 34,
+          "width": 38,
           "borderBottom": "2px solid #B8BFC9",
           "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
         },
         {
           "sel": "[data-rd=table] tbody tr:first-of-type td:first-of-type",
-          "height": 36,
+          "height": 26,
           "positionSticky": true,
           "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
         },
         {
           "sel": "[data-rd=table] tbody tr:first-of-type td:first-of-type b",
-          "fontSize": 16,
-          "fontWeight": 600,
+          "fontSize": 13,
+          "fontWeight": 500,
           "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
         },
         {
           "sel": "[data-rd=table] tbody td[data-shift=주]",
           "background": "#EDEFF3",
           "color": "#4A5160",
-          "fontSize": 15,
-          "fontWeight": 600
+          "fontSize": 13,
+          "fontWeight": 500
         },
         {
           "sel": "[data-rd=table] tbody td[data-shift=V]",
@@ -220,8 +220,8 @@
           "asserts": [
             {
               "sel": "[data-rd=menu-import]",
-              "minWidth": 300,
-              "borderRadius": 12
+              "minWidth": 260,
+              "borderRadius": 10
             },
             {
               "sel": "[data-rd=menu-import] .rmenu-item",
@@ -245,7 +245,7 @@
               "sel": "[data-rd=cell-popup] .rpop-code",
               "$comment": "17 → 20 (2026-10-03): 병동 번표에 실제로 쓰는 휴가 코드 경가·조가·산전을 기본 근무에 넣었다 — 팝업은 근무 정의 전부를 보여 준다. 20 → 24 (같은 날): 사전입력 팝업에 원티드 '둘 중 하나·N 빼고'(D/E·E/N·D/N·N제외, 제1원칙 14) 한 줄을 더했다 — 근무표 고치기 팝업에는 없다",
               "count": 24,
-              "height": 44
+              "height": 34
             },
             {
               "sel": "[data-rd=cell-popup] [data-rd=pop-lock]",
@@ -273,7 +273,7 @@
             {
               "sel": "[data-rd=paste-modal] .rmodal-title",
               "text": "엑셀 표 붙여넣기",
-              "fontSize": 24
+              "fontSize": 20
             },
             {
               "sel": "[data-rd=paste-modal] .rbtn-primary",
@@ -304,18 +304,18 @@
       "asserts": [
         {
           "sel": "[data-rd=btn-make]",
-          "height": 48,
+          "height": 36,
           "textIncludes": "만들기"
         },
         {
           "sel": "[data-rd=chk-relax]",
-          "height": 48,
+          "height": 36,
           "textIncludes": "사전입력 완화"
         },
         {
           "sel": "[data-rd=chk-relax] .box",
-          "width": 24,
-          "height": 24
+          "width": 18,
+          "height": 18
         },
         {
           "sel": "[data-rd=chk-vfree]",
@@ -351,9 +351,9 @@
         },
         {
           "sel": "[data-rd=status]",
-          "minHeight": 48,
-          "borderRadius": 12,
-          "fontSize": 18
+          "minHeight": 36,
+          "borderRadius": 10,
+          "fontSize": 13
         },
         {
           "sel": "[data-rd=table] tbody td[data-shift=N]",
@@ -389,7 +389,7 @@
             {
               "sel": "[data-rd=empty] .rempty-title",
               "text": "10월 근무표가 아직 없어요",
-              "fontSize": 24
+              "fontSize": 20
             }
           ]
         },
@@ -411,19 +411,19 @@
             },
             {
               "sel": "[data-rd=live-log] .rlive-head",
-              "fontSize": 16,
+              "fontSize": 13,
               "textIncludes": "답을 찾았어요",
               "$comment": "2026-10-16 추가 — 만드는 동안 진행 한 줄(답을 찾았는지·가장 좋은 답과 차이)과 계산 기록을 상태 줄 아래에 보인다. v4.13 에서 기록이 서랍 안으로만 들어가 만드는 중엔 볼 곳이 없었다(서랍은 표가 없으면 열리지 않는다). 핸드오프 시안에 없는 자리라 글자 크기·문구만 건다"
             },
             {
               "sel": "[data-rd=live-log] .rlive-head .rbtn",
               "textIncludes": "계산 기록 접기",
-              "minHeight": 40,
+              "minHeight": 30,
               "hasTitle": true
             },
             {
               "sel": "[data-rd=live-log] .rlog",
-              "fontSize": 14
+              "fontSize": 12
             }
           ]
         },
@@ -461,19 +461,19 @@
             },
             {
               "sel": "[data-rd=fail] .rfail-title",
-              "fontSize": 22,
-              "fontWeight": 700,
+              "fontSize": 17,
+              "fontWeight": 600,
               "textIncludes": "만들 수 없어요"
             },
             {
               "sel": "[data-rd=fail] .rfail-fix",
               "count": 3,
-              "height": 40
+              "height": 30
             },
             {
               "sel": "[data-rd=fail] .rbtn-primary",
               "text": "사전입력 완화 켜고 다시 만들기",
-              "height": 52
+              "height": 40
             },
             {
               "sel": "[data-rd=status]",
@@ -491,13 +491,13 @@
             },
             {
               "sel": "[data-rd=drawer]",
-              "height": 236,
+              "height": 200,
               "borderTop": "2px solid #0F1115"
             },
             {
               "sel": "[data-rd=drawer] .rtab",
               "count": 7,
-              "height": 44
+              "height": 32
             },
             {
               "sel": "[data-rd=drawer] .rtab.is-active",
@@ -549,7 +549,7 @@
       "asserts": [
         {
           "sel": "[data-rd=side]",
-          "width": 240
+          "width": 200
         },
         {
           "sel": "[data-rd=side] .rside-item",
@@ -566,8 +566,8 @@
         },
         {
           "sel": "[data-rd=roster-title]",
-          "fontSize": 24,
-          "fontWeight": 800,
+          "fontSize": 20,
+          "fontWeight": 600,
           "textIncludes": "간호사 명부"
         },
         {
@@ -581,33 +581,33 @@
         },
         {
           "sel": "[data-rd=roster] thead th",
-          "height": 48,
-          "fontSize": 14,
+          "height": 30,
+          "fontSize": 12,
           "color": "#4A5160"
         },
         {
           "sel": "[data-rd=roster] tbody tr:first-of-type td",
-          "height": 50,
+          "height": 30,
           "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
         },
         {
           "sel": "[data-rd=roster] tbody tr:first-of-type td:nth-of-type(3)",
-          "fontSize": 18,
-          "fontWeight": 600,
+          "fontSize": 13,
+          "fontWeight": 500,
           "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
         },
         {
           "sel": "[data-rd=roster] tbody tr:first-of-type .shift-chip",
-          "height": 32,
-          "fontSize": 15,
-          "fontWeight": 700,
+          "height": 22,
+          "fontSize": 13,
+          "fontWeight": 600,
           "count": 7,
           "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
         },
         {
           "sel": "[data-rd=roster] tbody tr:first-of-type [data-rd=btn-edit]",
           "text": "편집",
-          "height": 36,
+          "height": 24,
           "$comment": "Alpine 은 반복을 <template x-for> 요소로 그려 행·본문의 첫 요소 자식이 template 이 된다. nth-child → nth-of-type/first-of-type 은 정적 HTML 과 같은 셀을 가리킨다"
         },
         {
@@ -631,18 +631,18 @@
             },
             {
               "sel": "[data-rd=nurse-modal] .rinput",
-              "height": 48,
-              "fontSize": 19
+              "height": 34,
+              "fontSize": 14
             },
             {
               "sel": "[data-rd=nurse-modal] [data-rd=months] button",
               "count": 12,
-              "height": 44
+              "height": 30
             },
             {
               "sel": "[data-rd=nurse-modal] [data-rd=wdays] button",
               "count": 7,
-              "height": 44
+              "height": 30
             },
             {
               "sel": "[data-rd=nurse-modal] [data-rd=special]",
@@ -671,7 +671,7 @@
         {
           "sel": "[data-rd=today-date]",
           "fontSize": 44,
-          "fontWeight": 700
+          "fontWeight": 600
         },
         {
           "sel": "[data-rd=my-shift]",
@@ -692,7 +692,7 @@
         },
         {
           "sel": "[data-rd=bottom-nav] button span",
-          "fontSize": 14,
+          "fontSize": 12,
           "$comment": "핸드오프 13px → 전역 최소 글자 14px 규칙과 충돌해 14 로 통일"
         },
         {
