@@ -9,7 +9,7 @@ from datetime import date
 import pulp
 
 from .scheduler_base import (WEEKDAY_KEYS, _OFF_TEUKGEUN_PENALTY, _RARE_TRANSITION_PENALTY, _TAIL_KEEPER_SHORT_PENALTY,
-                             _TRAINEE_PAIR_BONUS)
+                             _TRAINEE_PAIR_BONUS, _GROUP_LIMIT_PENALTY)
 
 
 class _HighsConstraintsMixin:
@@ -895,6 +895,13 @@ class _HighsConstraintsMixin:
         # ── 신규가 '/D·/E·/N' 으로 넣은 날 — 프리셉터도 그 근무로 (_trainee_pair_targets, 2026-10-19) ──
         for pid, d, codes in self._trainee_pair_targets():
             terms.append(_TRAINEE_PAIR_BONUS * pulp.lpSum(x[pid][d][s] for s in codes if s in x[pid][d]))
+
+        # ── 간호사 그룹 — 한 근무에 그룹원 최대·최소 n명 (_nurse_group_limits, 2026-11-12) ──
+        for i, (kind, bound, nids, d, codes) in enumerate(self._nurse_group_limits()):
+            cnt = pulp.lpSum(x[nid][d][s] for nid in nids for s in codes if s in x[nid][d])
+            miss = pulp.LpVariable(f"grp_miss_{i}", lowBound=0)
+            prob += (miss >= cnt - bound) if kind == "max" else (miss >= bound - cnt), f"grp_lim_{i}"
+            terms.append(-_GROUP_LIMIT_PENALTY * miss)
 
         # ── V 무제한 모드: 점진적 페널티 (1번째 -500, 2번째 -1000, 3번째+ -5000) ──
         if self.unlimited_v and "V" in self.ALL_SHIFTS:

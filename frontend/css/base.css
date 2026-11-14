@@ -2,7 +2,7 @@
 /* ── Typography utilities (YGinvest: Pretendard 단일) ─────── */
 .serif {
   font-family: var(--font-sans);
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.03em;
   font-style: normal;
 }
@@ -322,7 +322,7 @@ html.is-electron .titlebar {
   position: relative;
 }
 .step.done .step-num::after {
-  content: '✓'; margin-left: 4px; color: var(--ok); font-weight: 700;
+  content: '✓'; margin-left: 4px; color: var(--ok); font-weight: 600;
 }
 .step.active.done .step-num::after { color: var(--paper); }
 .step-body { display: flex; flex-direction: column; gap: 1px; line-height: 1.2; }
@@ -375,13 +375,13 @@ html.is-electron .titlebar {
   border-bottom: 1px solid var(--border);
   white-space: nowrap; overflow: hidden;
   font-size: 18px !important;
-  font-weight: 700; font-size: 0.88rem;
+  font-weight: 600; font-size: 0.88rem;
   color: var(--text);
   letter-spacing: -0.02em;
 }
 .sidebar-logo svg { opacity: 0.5; flex-shrink: 0; }
 .logo-ver {
-  margin-left: auto; font-size: 0.55rem; font-weight: 700;
+  margin-left: auto; font-size: 0.55rem; font-weight: 600;
   color: var(--accent); background: var(--accent-bg);
   padding: 2px 7px; border-radius: 4px;
   letter-spacing: 0.04em;

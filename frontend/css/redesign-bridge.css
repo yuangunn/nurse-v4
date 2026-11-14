@@ -1,8 +1,8 @@
 /* redesign-bridge.css — 리디자인(design/handoff) 을 기존 앱 구조에 잇는 접착 규칙.
  * 로드 순서: … → redesign-tokens.css → redesign-components.css → **redesign-bridge.css** (맨 마지막)
- * 1) 남아 있는 옛 유틸(.text-xs·.btn-xs·.tbl …)을 최소 글자 14px · 타겟 40px · ink-2 규칙에 맞춘다.
+ * 1) 남아 있는 옛 유틸(.text-xs·.btn-xs·.tbl …)을 최소 글자 12px · 굵기 600 상한 · ink-2 규칙에 맞춘다.
  * 2) 핸드오프 컴포넌트 CSS 가 다루지 않는 화면 골격(앱 셸·설정 2단·폰·인쇄 격리)을 정의한다.
- * 값은 design/handoff/design/*.dc.html 인라인 스타일과 같다 — "비슷하게" 바꾸지 말 것 (check/spec.json).
+ * 색·구조는 design/handoff/design/*.dc.html 과 같고 치수는 토큰(redesign-tokens.css)을 따른다 — 값을 바꾸면 check/spec.json 도 맞춘다.
  */
 
 /* ── 셸 ── */
@@ -10,7 +10,9 @@ body.rd { font-size: var(--fs-body); line-height: var(--lh); color: var(--ink); 
 body.rd .app-shell { background: var(--paper); }
 body.rd .appbar { padding-top: 0; border-bottom: 0; background: transparent; }
 body.rd .main-content { background: var(--paper); }
-body.rd .content { padding: 20px 24px 32px; }
+body.rd .content { padding: 14px 24px 24px; }
+/* 분석 화면 — 1920 창에서 카드와 표가 화면 끝까지 늘어나 같은 줄의 칸끼리 멀어지지 않게 */
+body.rd .content > * { max-width: 1240px; }
 body.rd .content-flex { padding: 0; }
 @media (max-width: 767px) {
   body.rd .content { padding: 12px 12px 100px; }
@@ -23,16 +25,16 @@ body.rd .content-flex.rd-screen { display: flex; flex-direction: column; min-hei
 /* 헤더 — 버전 칩(5회 클릭 개발자 모드)은 유지하되 14px 이상 */
 .rhdr-ver { font-size: var(--fs-min); font-weight: var(--fw-body); color: var(--ink-2); padding: 2px 8px; border-radius: 999px; background: var(--paper); cursor: pointer; user-select: none; margin-left: 4px; }
 .rym-edit { display: flex; align-items: center; gap: 4px; padding: 0 6px; }
-.rym-edit input, body.rd .rym-edit input { width: 4.2em; height: 36px; text-align: center; font-size: var(--fs-body); font-weight: var(--fw-strong); padding: 0 4px !important; }
+.rym-edit input, body.rd .rym-edit input { width: 4.2em; height: 28px; text-align: center; font-size: var(--fs-body); font-weight: var(--fw-strong); padding: 0 4px !important; }
 .rym-edit input.m { width: 2.6em; }
 .rym-edit span { font-size: var(--fs-sub); color: var(--ink-2); }
 .rym-label { cursor: pointer; }
-.rhdr-actions .rbtn svg { width: 18px; height: 18px; }
+.rhdr-actions .rbtn svg { width: 16px; height: 16px; }
 html.dark .rhdr, html.dark .rsteps { background: var(--card); }
 
 /* 단계 바 */
-.rsteps .rstep-gear .gear-ico { width: 20px; height: 20px; }
-.rstep-num svg { width: 16px; height: 16px; }
+.rsteps .rstep-gear .gear-ico { width: 16px; height: 16px; }
+.rstep-num svg { width: 12px; height: 12px; }
 
 /* 툴바 공통 */
 .rtoolbar .rbtn { flex: none; }
@@ -40,8 +42,8 @@ html.dark .rhdr, html.dark .rsteps { background: var(--card); }
 .rmenu { top: calc(100% + 4px); left: 0; }
 .rmenu.right { left: auto; right: 0; }
 .rmenu-item.is-on b::before { content: "✓ "; }
-.rmenu .rcheck { width: 100%; height: 48px; padding: 0 12px; }
-.rmenu select { height: 44px; width: 100%; font-size: var(--fs-sub); }
+.rmenu .rcheck { width: 100%; height: 34px; padding: 0 10px; }
+.rmenu select { height: 32px; width: 100%; font-size: var(--fs-sub); }
 
 /* 신호등 상세 팝오버 (사전입력) */
 .rsignal-pop { position: absolute; left: 24px; top: calc(100% - 4px); z-index: 45; width: min(760px, calc(100vw - 48px)); background: var(--card); border-radius: 12px; box-shadow: var(--shadow-pop); padding: 12px 16px; font-size: var(--fs-sub); max-height: 50vh; overflow: auto; }
@@ -58,10 +60,13 @@ html.dark .rhdr, html.dark .rsteps { background: var(--card); }
 .rt-cell.g-jump-flash { outline: 3px solid var(--focus) !important; outline-offset: -3px; }
 .rt-cell .paste-btn { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; font-size: var(--fs-min); color: var(--ok); cursor: pointer; }
 .rt-name .copy-tag { font-size: var(--fs-min); color: var(--down-deep); margin-left: 6px; }
-.rt-name .paste-tag { font-size: var(--fs-min); color: var(--ok); margin-left: 6px; border: 0; background: var(--ok-bg); border-radius: 6px; height: 28px; padding: 0 8px; cursor: pointer; }
-body.rd .rt-foot input, body.rd .rt-cell.rt-input input { width: 100%; height: 34px; text-align: center; border: 0; background: transparent; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); color: inherit; padding: 0; box-shadow: none; border-radius: 0; }
-body.rd .rt-foot input:focus, body.rd .rt-cell.rt-input input:focus { outline: 2px solid var(--focus); outline-offset: -2px; background: var(--card); }
-body.rd .rt-foot input.is-default { color: var(--ink-2); font-weight: var(--fw-body); }
+.rt-name .paste-tag { font-size: var(--fs-min); color: var(--ok); margin-left: 6px; border: 0; background: var(--ok-bg); border-radius: 6px; height: 22px; padding: 0 6px; cursor: pointer; }
+/* 아래쪽 일반 입력 규칙(body.rd input[type="text"])과 특이도가 같으면 뒤에 온 쪽의 테두리·최소 높이 32px 가 이겨 줄이 두꺼워진다 — .rtable 을 붙여 앞선다 */
+body.rd .rtable .rt-foot input, body.rd .rtable .rt-cell.rt-input input { width: 100%; height: calc(var(--row-h) - 2px); min-height: 0; text-align: center; border: 0; background: transparent; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); color: inherit; padding: 0; box-shadow: none; border-radius: 0; }
+body.rd .rtable .rt-foot input:hover { box-shadow: inset 0 0 0 1px var(--rule-strong); }
+body.rd .rtable .rt-foot input:focus, body.rd .rtable .rt-cell.rt-input input:focus { outline: 2px solid var(--focus); outline-offset: -2px; background: var(--card); }
+body.rd .rtable .rt-foot input.is-default { color: var(--ink-2); font-weight: var(--fw-body); }
+body.rd .rtable .rt-foot input:not(.is-default) { font-weight: var(--fw-strong); box-shadow: inset 0 -2px 0 var(--ink); }
 .rt-day .hol { font-size: var(--fs-min); line-height: 1; }
 /* 전월·익월 머리 칸은 sticky 라 칸째 반투명(opacity)이면 밑으로 지나가는 줄 글자가 비친다 (2026-10-16 화면, 25~31일).
    바탕은 불투명하게 — 반투명일 때와 같은 색을 카드 바탕에 섞어 — 두고 글자만 옅게 */
@@ -84,45 +89,48 @@ body.rd .rt-foot input.is-default { color: var(--ink-2); font-weight: var(--fw-b
 [data-shift="N제외"] { background: var(--sh-OF-bg) !important; color: var(--sh-N-fg) !important; letter-spacing: -0.04em; }
 
 /* 셀 팝업 — 희망(★) 줄 */
-.rpop-wish { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--rule); }
+.rpop-wish { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--rule); }
 .rpop-wish .lbl { font-size: var(--fs-min); color: var(--ink-2); margin-right: 4px; white-space: nowrap; }
-.rpop-wish .rbtn { height: 40px; padding: 0 10px; font-size: var(--fs-sub); background: var(--paper); flex: 1; justify-content: center; }
+.rpop-wish .rbtn { height: 30px; padding: 0 8px; font-size: var(--fs-sub); background: var(--paper); flex: 1; justify-content: center; }
 .rpop-wish .rbtn.on { background: var(--warn-bg); color: var(--warn); font-weight: var(--fw-strong); }
 .rpop-code small { font-size: var(--fs-min); }   /* 검사기 최소 글자 14px — 핸드오프 13px 은 예외 없이 14 로 */
 /* 14px 로 키운 보조 이름('Evening Charge'·'Night Charge')이 칸(약 80px)을 넘쳐 옆 칸으로 삐져나왔다 — 두 줄로 늘어나게.
    한 줄이면 그대로 44px. line-height 는 핸드오프 규칙 끝의 font: inherit 이 지우므로 여기서 다시 준다 */
-.rpop-code { height: auto; min-height: 44px; padding: 4px 2px; line-height: 1.15; }
+.rpop-code { height: auto; min-height: 34px; padding: 2px; line-height: 1.15; }
 
 /* 근무표 상태 줄 보조 */
-.rstatus .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.rstatus .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .rstatus.ok .dot { background: var(--ok); } .rstatus.warn .dot { background: var(--warn); } .rstatus.err .dot { background: var(--err); }
 .rstatus .rbtn-sm { flex: none; }
 .rstatus .relaxed-note { margin-left: auto; font-size: var(--fs-sub); color: var(--ink-2); display: flex; align-items: center; gap: 8px; }
 .rstatus .relaxed-note i { width: 26px; height: 20px; border-radius: 4px; outline: 2px dashed var(--ink); outline-offset: -2px; background: var(--card); display: inline-block; }
+.rstatus .relaxed-note + .relaxed-note { margin-left: 0; }
+.rstatus .relaxed-note i.pre { position: relative; outline: 0; box-shadow: inset 0 0 0 1px var(--rule-strong); overflow: hidden; }
+.rstatus .relaxed-note i.pre::before { content: ''; position: absolute; left: 0; top: 0; border-style: solid; border-width: 8px 8px 0 0; border-color: var(--ink) transparent transparent transparent; opacity: 0.55; }
 .rfail-fix .code { padding: 1px 6px; border-radius: 5px; font-weight: var(--fw-strong); }
 .rfail-fix svg { width: 14px; height: 14px; }
 .rfail-detail { display: flex; gap: 8px; margin-top: 8px; }
 
 /* 서랍 내용 */
-.rdrawer-body .rrow { display: grid; grid-template-columns: 120px 140px 1fr auto auto; align-items: center; gap: 16px; height: 48px; border-top: 1px solid var(--rule-soft); font-size: var(--fs-sub); }
+.rdrawer-body .rrow { display: grid; grid-template-columns: 120px 140px 1fr auto auto; align-items: center; gap: 12px; height: 32px; border-top: 1px solid var(--rule-soft); font-size: var(--fs-sub); }
 .rdrawer-body .rrow .chip { padding: 2px 8px; border-radius: 6px; font-weight: var(--fw-label); }
-.rdrawer-body .intro { font-size: var(--fs-sub); color: var(--ink-2); margin-bottom: 10px; }
+.rdrawer-body .intro { font-size: var(--fs-sub); color: var(--ink-2); margin-bottom: 6px; }
 .rdrawer-body table.rsum { width: 100%; border-collapse: collapse; font-size: var(--fs-sub); font-variant-numeric: tabular-nums; }
-.rdrawer-body table.rsum th { text-align: center; height: 44px; font-weight: var(--fw-label); color: var(--ink-2); border-bottom: 1px solid var(--rule); position: sticky; top: 0; background: var(--card); }
+.rdrawer-body table.rsum th { text-align: center; height: 28px; font-weight: var(--fw-label); color: var(--ink-2); border-bottom: 1px solid var(--rule); position: sticky; top: 0; background: var(--card); }
 .rdrawer-body table.rsum th:first-child { text-align: left; }
-.rdrawer-body table.rsum td { height: 38px; text-align: center; border-bottom: 1px solid var(--rule-soft); font-weight: var(--fw-body); }
+.rdrawer-body table.rsum td { height: 26px; text-align: center; border-bottom: 1px solid var(--rule-soft); font-weight: var(--fw-body); }
 .rdrawer-body table.rsum td:first-child { text-align: left; font-weight: var(--fw-label); }
 .rdrawer-body .hi { color: var(--err); font-weight: var(--fw-strong); } .rdrawer-body .lo { color: var(--ok); font-weight: var(--fw-strong); }
-.rdrawer-body .rlog, .rlive .rlog { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: var(--fs-min); background: var(--log-bg); color: var(--log-text); padding: 12px; border-radius: 10px; max-height: 140px; overflow: auto; white-space: pre; line-height: 1.5; }
+.rdrawer-body .rlog, .rlive .rlog { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: var(--fs-min); background: var(--log-bg); color: var(--log-text); padding: 8px 10px; border-radius: 8px; max-height: 140px; overflow: auto; white-space: pre; line-height: 1.5; }
 /* 만드는 중 — 상태 줄 아래 진행 한 줄 + 계산 기록 (서랍은 표가 없으면 열리지 않는다) */
 .rlive { margin: 0 24px 8px; display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
-.rlive-head { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 4px 0 16px; font-size: var(--fs-sub); color: var(--ink-2); }
+.rlive-head { display: flex; align-items: center; gap: 12px; min-height: 30px; padding: 0 4px 0 16px; font-size: var(--fs-sub); color: var(--ink-2); }
 .rlive-head .rbtn-sm { margin-left: auto; flex: none; }
 .rlive .rlog { max-height: 220px; }
 .rdrawer-body .rmsg { white-space: pre-wrap; font-size: var(--fs-sub); line-height: 1.5; }
 .rdrawer-body .rmsg .star { background: var(--warn-bg); border-left: 3px solid var(--warn); padding: 2px 8px; margin: 2px 0; }
 .rdrawer-body .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
-.rdrawer-body .rbtn-sm { height: 40px; }
+.rdrawer-body .rbtn-sm { height: var(--target-sm); }
 
 /* 슬라이더 바탕 줄 — 앱의 모든 슬라이더. components.css 가 없는 이름(::-webkit-slider-track)에 그려
    엄지(검은 점)만 떠 있었다. 엄지 margin-top:-6px 은 이 4px 줄 가운데 맞춤 */
@@ -131,89 +139,112 @@ input[type="range"]::-webkit-slider-runnable-track { height: 4px; background: va
 /* 고급 패널 (근무표 툴바 아래 드롭다운) */
 /* 폭 760 — 이름표 150 + 사이 10 + 가장 긴 단추 줄(정확도 넷: Pretendard 473, 서체가 안 읽혀 대체 글꼴이면 527) + 좌우 여백 40 = 727,
    높이를 줄여 세로 스크롤 막대(약 15)가 생겨도 한 줄. left/max-height 는 열 때 rdFitPop 이 창 안으로 맞춘다 (1024 폭에선 오른쪽이 잘렸다) */
-.radv { position: absolute; top: calc(100% + 4px); left: 0; z-index: 40; width: 760px; max-width: calc(100vw - 48px); overflow-y: auto; background: var(--card); border-radius: 12px; box-shadow: var(--shadow-pop); padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+.radv { position: absolute; top: calc(100% + 4px); left: 0; z-index: 40; width: 760px; max-width: calc(100vw - 48px); overflow-y: auto; background: var(--card); border-radius: 12px; box-shadow: var(--shadow-pop); padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
 .radv .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .radv .lbl { width: 150px; font-size: var(--fs-sub); font-weight: var(--fw-label); flex: none; }
-.radv .row > .lbl { align-self: flex-start; min-height: 48px; display: flex; align-items: center; }
+.radv .row > .lbl { align-self: flex-start; min-height: 34px; display: flex; align-items: center; }
 /* 이름표 오른쪽 칸 — 단추 줄, 그 아래 .line(슬라이더·설명)은 늘 제 줄 */
 .radv .ctl { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .radv .ctl > .line { flex: 0 0 100%; display: flex; align-items: center; gap: 12px; }
 .radv .ctl > .unit { margin-left: -4px; font-size: var(--fs-sub); }
 /* 단추 글자를 접지 않는다 — flex:1(기준 0)로 같은 폭을 나누면 '빠르게 (5%)'·'10분'·'둘 다 돌려 빠른 쪽'이 두 줄로 꺾였다 */
 .radv .rseg > button, .radv .rseg > label { flex: 1 0 auto; min-width: 0; white-space: nowrap; padding: 0 14px; }
-.radv input[type="range"] { width: 160px; height: 40px; }
+.radv input[type="range"] { width: 160px; height: 28px; }
 .radv .sub { font-size: var(--fs-min); color: var(--ink-2); }
 .radv .fold { border-top: 1px solid var(--rule); padding-top: 10px; }
 .radv .slider-row { display: grid; grid-template-columns: 170px 200px 60px 1fr; align-items: center; gap: 10px; font-size: var(--fs-sub); }
 
 /* 설정 2단 */
-.rsettings { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px 1fr; gap: 24px; padding: 20px 24px 0; }
-.rsettings > section { min-width: 0; display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; padding-bottom: 24px; }
+.rsettings { flex: 1; min-height: 0; display: grid; grid-template-columns: 200px 1fr; gap: 20px; padding: 14px 24px 0; }
+.rsettings > section { min-width: 0; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: auto; padding-bottom: 20px; }
+/* 설정 구역 폭 — 1920 창에서 한 줄이 화면 끝까지 늘어지면 같은 줄의 칸끼리 멀어져 읽기 어렵다. 스크롤 막대는 창 끝에 그대로 둔다 */
+.rsettings > section > * { max-width: 1120px; }
 .rsec-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rsec-title { font-size: var(--fs-title); font-weight: var(--fw-title); letter-spacing: -0.01em; }
 .rsec-title .n { color: var(--ink-2); font-weight: var(--fw-label); }
 .rsec-sub { font-size: var(--fs-sub); color: var(--ink-2); }
 .rsec-actions { margin-left: auto; display: flex; gap: 8px; }
-.rcard { background: var(--card); border-radius: 12px; box-shadow: var(--shadow-card); padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.rcard { background: var(--card); border-radius: 12px; box-shadow: var(--shadow-card); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .rcard h4 { font-size: var(--fs-h2); font-weight: var(--fw-strong); margin: 0; }
 /* 병원 휴일 (매년) — 설정 → 규칙 */
 .rhh-list { display: flex; flex-direction: column; gap: 8px; }
 .rhh-row { display: flex; align-items: center; gap: 8px; }
-body.rd .rhh-row input { height: 40px; font-size: var(--fs-body); }
+body.rd .rhh-row input { height: 30px; min-height: 30px; font-size: var(--fs-sub); }
 body.rd .rhh-row .rhh-md { width: 110px; font-variant-numeric: tabular-nums; }
 body.rd .rhh-row .rhh-name { flex: 1; min-width: 0; max-width: 360px; }
-.rside-item svg { width: 20px; height: 20px; flex: none; }
+.rside-item svg { width: 16px; height: 16px; flex: none; }
 @media (max-width: 1023px) { .rsettings { grid-template-columns: 1fr; } .rside { width: auto; flex-direction: row; flex-wrap: wrap; } .rside-h { width: 100%; } }
 
 /* 명부 표 */
 .rroster { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sub); }
-.rroster th { position: sticky; top: 0; z-index: 2; background: var(--card); height: 48px; text-align: left; padding: 0 8px; border-bottom: 2px solid var(--rule-strong); font-size: var(--fs-min); font-weight: var(--fw-label); color: var(--ink-2); white-space: nowrap; }
-.rroster td { height: 50px; padding: 0 8px; border-bottom: 1px solid var(--rule-soft); vertical-align: middle; }
+.rroster th { position: sticky; top: 0; z-index: 2; background: var(--card); height: 30px; text-align: left; padding: 0 8px; border-bottom: 1.5px solid var(--rule-strong); font-size: var(--fs-min); font-weight: var(--fw-label); color: var(--ink-2); white-space: nowrap; }
+.rroster td { height: 30px; padding: 0 8px; border-bottom: 1px solid var(--rule-soft); vertical-align: middle; }
 .rroster tr:hover td { background: var(--card-warm); }
 .rroster tr.row-selected td { background: var(--sh-D-bg); }
-.rroster td.name { font-size: var(--fs-body); font-weight: var(--fw-label); }
-body.rd .rroster td.name input, body.rd body.rd .rroster td.grp input { height: 40px; border: 0; background: transparent; font: inherit; font-size: var(--fs-body); font-weight: var(--fw-label); color: var(--ink); padding: 0 6px; border-radius: 8px; box-shadow: none; width: 100%; min-width: 4ch; }
-body.rd .rroster td.grp input { width: 4em; font-weight: var(--fw-body); }
+.rroster td.name { font-size: var(--fs-sub); font-weight: var(--fw-label); }
+body.rd .rroster td.name input, body.rd .rroster td.grp input { height: 26px; min-height: 26px; border: 0; background: transparent; font: inherit; font-size: var(--fs-sub); font-weight: var(--fw-label); color: var(--ink); padding: 0 4px; border-radius: 6px; box-shadow: none; width: 100%; min-width: 4ch; }
+body.rd .rroster td.grp input { width: 100%; padding: 0; text-align: center; font-weight: var(--fw-body); }
 .rroster td.name input:focus, .rroster td.grp input:focus { background: var(--card-warm); outline: 2px solid var(--focus); }
-.rroster .drag { color: var(--ink-2); font-size: var(--fs-min); margin-right: 4px; }
+.rroster .drag { display: inline-block; vertical-align: middle; color: var(--ink-2); font-size: var(--fs-min); margin-right: 4px; }
+.rroster .drag svg { display: inline; }
 .rroster .drag svg { vertical-align: -2px; }
-.rroster .shift-chip, .rbulk .shift-chip { height: 32px; min-width: 34px; padding: 0 8px; border: 0; border-radius: 7px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-strong); cursor: pointer; }
+.rroster .shift-chip, .rbulk .shift-chip { height: 22px; min-width: 28px; padding: 0 5px; border: 0; border-radius: 5px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-strong); cursor: pointer; }
 .rroster .shift-chip.off, .rbulk .shift-chip.off { background: var(--card); color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule); opacity: 0.85; }
-.rroster .chips { display: flex; gap: 4px; }
-.rroster .nk { height: 32px; padding: 0 10px; border: 0; border-radius: 8px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); cursor: pointer; background: var(--card); color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.rroster .chips { display: flex; gap: 3px; }
+.rroster .nk { height: 22px; padding: 0 7px; border: 0; border-radius: 6px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); cursor: pointer; background: var(--card); color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .rroster .nk.on { background: var(--warn-bg); color: var(--warn); box-shadow: none; }
 .rroster .nk.other { color: var(--ink-2); background: var(--warn-bg); }
-.rroster .gender { height: 36px; min-width: 40px; border: 0; border-radius: 8px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); cursor: pointer; background: var(--paper); color: var(--ink); }
+.rroster .gender { height: 24px; min-width: 30px; border: 0; border-radius: 6px; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); cursor: pointer; background: var(--paper); color: var(--ink); }
 .rroster .note { font-size: var(--fs-cell); color: var(--ink-2); }
-.rroster .rbtn-edit { white-space: nowrap; height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--ink); }
-.rroster .rbtn-edit svg { width: 14px; height: 14px; }
+.rroster .rbtn-edit { white-space: nowrap; height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--ink); }
+.rroster .rbtn-edit svg { width: 12px; height: 12px; }
 /* 체크 칸은 누른 채 끌어 여러 명 고르기, 순서 칸은 끌어 옮기기 (끈 사람이 골라져 있으면 고른 사람 모두) */
 .rroster td.pick { text-align: center; cursor: pointer; }
-.rroster td.order { text-align: center; color: var(--ink-2); cursor: grab; white-space: nowrap; }
+.rroster td.order { color: var(--ink-2); cursor: grab; white-space: nowrap; }
+.rroster td.chips-cell { white-space: nowrap; padding-right: 20px; }
 .rroster tr.drop-before td { box-shadow: inset 0 3px 0 var(--focus); }
 .rroster tr.drop-after td { box-shadow: inset 0 -3px 0 var(--focus); }
 /* 일괄 바의 근무 칩 — 바 배경이 D 색이라 테두리로 구분, 일부만 켜진 근무는 점선 */
 .rbulk .shift-chip { box-shadow: inset 0 0 0 1.5px var(--rule-strong); }
 .rbulk .shift-chip.some { outline: 2px dashed currentColor; outline-offset: -5px; }
-.rroster input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--ink); cursor: pointer; }
-.rbulk { position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-radius: 12px 12px 0 0; background: var(--sh-D-bg); box-shadow: 0 -6px 16px rgba(15, 17, 21, 0.12); font-size: var(--fs-sub); }
-.rbulk .rbtn { height: 40px; }
-.rbulk input { height: 40px; width: 6em; }
+.rroster input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--ink); cursor: pointer; }
+.rbulk { position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 12px; border-radius: 10px 10px 0 0; background: var(--sh-D-bg); box-shadow: 0 -6px 16px rgba(15, 17, 21, 0.12); font-size: var(--fs-sub); }
+.rbulk .rbtn { height: 30px; }
+.rbulk input { height: 30px; min-height: 30px; width: 6em; }
 
 /* 요일별 인원 */
-.rreq { border-collapse: separate; border-spacing: 0; font-size: var(--fs-sub); }
-.rreq th { height: 44px; text-align: center; font-weight: var(--fw-label); color: var(--ink-2); font-size: var(--fs-min); }
-.rreq td { padding: 6px 4px; text-align: center; }
+.rreq { align-self: flex-start; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sub); }
+.rreq th { height: 28px; text-align: center; font-weight: var(--fw-label); color: var(--ink-2); font-size: var(--fs-min); }
+.rreq td { padding: 3px 4px; text-align: center; }
 .rreq td.code { font-weight: var(--fw-strong); }
-.rreq td.code span { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 32px; border-radius: 7px; font-size: var(--fs-cell); }
-.rnum.rnum-sm button { width: 36px; height: 44px; font-size: 20px; }
-body.rd .rnum.rnum-sm input { width: 40px; height: 44px; border: 0; background: transparent; text-align: center; font: inherit; font-size: var(--fs-body); font-weight: var(--fw-strong); color: var(--ink); padding: 0; box-shadow: none; }
-body.rd .rnum input { width: 52px; height: var(--target); border: 0; background: transparent; text-align: center; font: inherit; font-size: var(--fs-h2); font-weight: var(--fw-strong); color: var(--ink); padding: 0; box-shadow: none; }
+.rreq td.code span { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 24px; border-radius: 6px; font-size: var(--fs-cell); }
+/* 날짜별 인원 — 달력. 요일 기본값과 다른 칸만 진하게 */
+.rcal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.rcal-h { text-align: center; font-size: var(--fs-min); font-weight: var(--fw-label); color: var(--ink-2); padding-bottom: 2px; }
+.rcal-d { display: flex; flex-direction: column; gap: 4px; padding: 5px 8px 7px; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--rule-soft); }
+.rcal-d.overflow { background: var(--paper); }
+.rcal-d.hol { background: var(--hol-bg); }
+.rcal-date { display: flex; align-items: baseline; gap: 4px; font-size: var(--fs-min); color: var(--ink-2); }
+.rcal-date b { font-size: var(--fs-sub); font-weight: var(--fw-label); color: var(--ink); }
+.rcal-d.sat .rcal-date b { color: var(--sat-fg); }
+.rcal-d.sun .rcal-date b, .rcal-d.hol .rcal-date b { color: var(--sun-fg); }
+.rcal-date em { margin-left: auto; font-style: normal; color: var(--hol-fg); }
+.rcal-in { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.rcal-in label { display: inline-flex; align-items: center; gap: 3px; font-size: var(--fs-min); font-weight: var(--fw-label); }
+body.rd .rcal .rcal-in input { width: 28px; height: 24px; min-height: 24px; padding: 0; text-align: center; border: 0; border-radius: 5px; background: var(--paper); box-shadow: none; font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-body); color: var(--ink-2); }
+body.rd .rcal .rcal-d.overflow .rcal-in input { background: var(--card); }
+body.rd .rcal .rcal-in input:hover { box-shadow: inset 0 0 0 1px var(--rule-strong); }
+body.rd .rcal .rcal-in input.is-over { background: var(--card); color: var(--ink); font-weight: var(--fw-strong); box-shadow: inset 0 0 0 1.5px var(--ink); }
+body.rd .rcal .rcal-in input:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
+.rnum.rnum-sm button { width: 26px; height: 30px; font-size: 15px; }
+body.rd .rnum.rnum-sm input { width: 30px; height: 30px; min-height: 30px; border: 0; background: transparent; text-align: center; font: inherit; font-size: var(--fs-body); font-weight: var(--fw-strong); color: var(--ink); padding: 0; box-shadow: none; }
+body.rd .rnum input { width: 40px; height: var(--target); min-height: 0; border: 0; background: transparent; text-align: center; font: inherit; font-size: var(--fs-h2); font-weight: var(--fw-strong); color: var(--ink); padding: 0; box-shadow: none; }
 .rnum input:focus { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: 8px; }
 
 /* 규칙 */
 .rrules { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; }
 .rrules .rcheck { justify-content: flex-start; width: 100%; }
+.rrules .with-num .rcheck { width: auto; }   /* 체크와 숫자가 한 줄에 — 100% 면 숫자가 다음 줄로 밀린다 */
 .rrules .with-num { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; height: auto; min-height: var(--target); }
 /* 클래스 이름이 .fixed 면 Tailwind 가 position:fixed 를 붙여 스크롤하면 문장이 위 칸들을 덮는다 (2026-10-03) */
 .rrules .rrules-fixed { grid-column: 1 / -1; font-size: var(--fs-sub); color: var(--ink-2); padding: 8px 12px; border-radius: 10px; background: var(--paper); }
@@ -221,60 +252,60 @@ body.rd .rnum input { width: 52px; height: var(--target); border: 0; background:
 
 /* 우선순위·근무 정의 표 */
 .rdef { width: 100%; border-collapse: collapse; font-size: var(--fs-sub); }
-.rdef th { height: 44px; text-align: left; padding: 0 8px; font-size: var(--fs-min); font-weight: var(--fw-label); color: var(--ink-2); border-bottom: 2px solid var(--rule-strong); }
-.rdef td { height: 48px; padding: 0 8px; border-bottom: 1px solid var(--rule-soft); }
-.rdef td .code { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; height: 32px; padding: 0 8px; border-radius: 7px; font-size: var(--fs-cell); font-weight: var(--fw-strong); }
-.rdef .rbtn-sm { height: 40px; }
-.rdef input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--ink); cursor: pointer; }
+.rdef th { height: 30px; text-align: left; padding: 0 8px; font-size: var(--fs-min); font-weight: var(--fw-label); color: var(--ink-2); border-bottom: 2px solid var(--rule-strong); }
+.rdef td { height: 34px; padding: 0 8px; border-bottom: 1px solid var(--rule-soft); }
+.rdef td .code { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; height: 24px; padding: 0 6px; border-radius: 6px; font-size: var(--fs-cell); font-weight: var(--fw-strong); }
+.rdef .rbtn-sm { height: 28px; }
+.rdef input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--ink); cursor: pointer; }
 .rdef tr.off td { color: var(--ink-2); }
 
 /* 간호사 모달 */
 .rmodal .rgrid3 { display: grid; grid-template-columns: 1fr 120px 160px; gap: 12px; }
-.rmodal label.rfield { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-sub); font-weight: var(--fw-label); color: var(--ink-2); }
+.rmodal .rfield { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-sub); font-weight: var(--fw-label); color: var(--ink-2); }
 .rmodal .rfield-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; font-size: var(--fs-sub); font-weight: var(--fw-label); color: var(--ink-2); }
 .rmodal .rfield-h small { font-size: var(--fs-cell); font-weight: var(--fw-body); }
-.rseg label { flex: 1; min-width: 60px; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: var(--fs-body); font-weight: var(--fw-label); cursor: pointer; color: var(--ink); }
+.rseg label { flex: 1; min-width: 60px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: var(--fs-sub); font-weight: var(--fw-label); cursor: pointer; color: var(--ink); }
 .rseg label input { position: absolute; opacity: 0; width: 0; height: 0; }
 .rseg label.on { background: var(--ink); color: var(--card); }
 .rchips { display: flex; gap: 8px; flex-wrap: wrap; }
-.rchip { height: 48px; min-width: 64px; padding: 0 14px; border: 0; border-radius: 10px; font: inherit; font-size: var(--fs-body); font-weight: var(--fw-strong); display: inline-flex; align-items: center; gap: 8px; cursor: pointer; background: var(--card); color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule-strong); }
-.rchip .box { width: 18px; height: 18px; border-radius: 5px; background: var(--card); box-shadow: inset 0 0 0 2px var(--rule-strong); display: inline-flex; align-items: center; justify-content: center; }
+.rchip { height: 34px; min-width: 52px; padding: 0 10px; border: 0; border-radius: 8px; font: inherit; font-size: var(--fs-sub); font-weight: var(--fw-strong); display: inline-flex; align-items: center; gap: 8px; cursor: pointer; background: var(--card); color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule-strong); }
+.rchip .box { width: 14px; height: 14px; border-radius: 4px; background: var(--card); box-shadow: inset 0 0 0 2px var(--rule-strong); display: inline-flex; align-items: center; justify-content: center; }
 .rchip.on { box-shadow: none; } .rchip.on .box { background: currentColor; box-shadow: none; }
-.rchip.on .box::after { content: ""; width: 5px; height: 9px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg) translate(-1px,-1px); }
-.rgrid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.rchip.on .box::after { content: ""; width: 4px; height: 7px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-1px,-1px); }
+.rgrid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .rmonths { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
 .rwdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.rmonths button, .rwdays button { height: 44px; border: 0; border-radius: 8px; font: inherit; font-size: var(--fs-sub); font-weight: var(--fw-label); cursor: pointer; background: var(--card); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--rule-strong); }
+.rmonths button, .rwdays button { height: 30px; border: 0; border-radius: 8px; font: inherit; font-size: var(--fs-sub); font-weight: var(--fw-label); cursor: pointer; background: var(--card); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--rule-strong); }
 .rmonths button.on, .rwdays button.on { background: var(--ink); color: var(--card); box-shadow: none; }
 .rspecial { border-radius: 12px; background: var(--card-warm); box-shadow: inset 0 0 0 1px var(--rule); }
-.rspecial > button { width: 100%; height: 52px; padding: 0 16px; border: 0; background: transparent; display: flex; align-items: center; gap: 10px; font: inherit; font-size: var(--fs-body); font-weight: var(--fw-label); text-align: left; cursor: pointer; color: var(--ink); }
-.rspecial > button svg { width: 18px; height: 18px; transition: transform var(--motion); }
+.rspecial > button { width: 100%; height: 38px; padding: 0 12px; border: 0; background: transparent; display: flex; align-items: center; gap: 10px; font: inherit; font-size: var(--fs-body); font-weight: var(--fw-label); text-align: left; cursor: pointer; color: var(--ink); }
+.rspecial > button svg { width: 16px; height: 16px; transition: transform var(--motion); }
 .rspecial > button.open svg { transform: rotate(0deg); }
 .rspecial > button:not(.open) svg { transform: rotate(-90deg); }
 .rspecial > button small { font-size: var(--fs-sub); font-weight: var(--fw-body); color: var(--ink-2); }
-.rspecial .body { padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 16px; }
+.rspecial .body { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 12px; }
 .rspecial .body .blk { display: flex; flex-direction: column; gap: 8px; }
 .rspecial .body .blk p { margin: 0; font-size: var(--fs-min); color: var(--ink-2); }
-.rmodal input[type="date"], .rmodal select.rinput { height: 44px; font-size: var(--fs-sub); }
+.rmodal input[type="date"], .rmodal select.rinput { height: 34px; min-height: 34px; font-size: var(--fs-sub); }
 .rmodal-foot .rbtn-danger { padding: 0 14px; }
 
 /* 저장 목록·비교 선택 (모달) */
 .rlist { display: flex; flex-direction: column; gap: 6px; }
-.rlist .item { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 12px; border-radius: 10px; background: var(--card-warm); font-size: var(--fs-sub); }
+.rlist .item { display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border-radius: 10px; background: var(--card-warm); font-size: var(--fs-sub); }
 .rlist .item b { font-size: var(--fs-body); font-weight: var(--fw-label); }
 .rlist .item .when { color: var(--ink-2); }
 .rlist .item .sp { flex: 1; }
 
 /* 붙여넣기 모달 */
 .rpaste-kinds { display: flex; gap: 8px; font-size: var(--fs-sub); font-weight: var(--fw-body); align-items: center; }
-.rpaste-kinds label { padding: 6px 12px; border-radius: 999px; background: var(--paper); color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; height: 40px; }
+.rpaste-kinds label { padding: 6px 12px; border-radius: 999px; background: var(--paper); color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; height: 30px; }
 .rpaste-kinds label input { position: absolute; opacity: 0; width: 0; height: 0; }
 .rpaste-kinds label.on { background: var(--ink); color: var(--card); }
 .rpaste-kinds .file { margin-left: auto; }
 body.rd textarea.rpaste-box, .rpaste-box { border-radius: 12px; background: var(--card-warm); box-shadow: inset 0 0 0 1.5px var(--rule-strong); padding: 14px 16px; min-height: 150px; font-size: var(--fs-cell); font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--ink); line-height: 1.7; width: 100%; resize: vertical; border: 0; }
 .rpaste-box:focus { outline: 3px solid var(--focus); outline-offset: 2px; }
 .rpaste-opts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--fs-sub); color: var(--ink-2); }
-.rpaste-opts .rcheck { height: 40px; }
+.rpaste-opts .rcheck { height: 30px; }
 /* 가져오기 — 이름 맞추기 · 근무 표기 (고르면 다시 맞춘다) */
 .rpaste-fix { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; font-size: var(--fs-sub); }
 .rpaste-fix > b { width: 100%; font-weight: var(--fw-label); }
@@ -282,11 +313,11 @@ body.rd textarea.rpaste-box, .rpaste-box { border-radius: 12px; background: var(
 .rpaste-map .raw { padding: 4px 10px; border-radius: 8px; background: var(--paper); font-weight: var(--fw-label); }
 .rpaste-map .raw.warn { background: var(--warn-bg); color: var(--warn); }
 .rpaste-map .code { padding: 4px 10px; border-radius: 8px; }
-body.rd .rpaste-map select { height: 40px; font-size: var(--fs-sub); }
+body.rd .rpaste-map select { height: 30px; min-height: 30px; font-size: var(--fs-sub); }
 /* 가져오기 미리보기 — 사람 × 날짜 칸. 바뀌는 칸은 근무 색, 이미 같은 칸은 흐리게, 비우는 칸은 줄 긋기, 모르는 표기는 노랗게 */
 .rpaste-scroll { max-height: 42vh; overflow: auto; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--rule); }
 .rpaste-preview table { border-collapse: separate; border-spacing: 0; font-size: var(--fs-min); }
-.rpaste-preview th, .rpaste-preview td { height: 30px; min-width: 30px; padding: 0 2px; text-align: center; border-bottom: 1px solid var(--rule-soft); white-space: nowrap; font-weight: var(--fw-strong); }
+.rpaste-preview th, .rpaste-preview td { height: 24px; min-width: 28px; padding: 0 2px; text-align: center; border-bottom: 1px solid var(--rule-soft); white-space: nowrap; font-weight: var(--fw-strong); }
 .rpaste-preview thead th { position: sticky; top: 0; z-index: 1; background: var(--card); color: var(--ink-2); font-weight: var(--fw-label); }
 .rpaste-preview .nm { position: sticky; left: 0; z-index: 1; background: var(--card); text-align: left; padding: 0 10px; font-size: var(--fs-sub); font-weight: var(--fw-label); }
 .rpaste-preview thead th.nm { z-index: 2; }
@@ -338,7 +369,7 @@ body.rd .rpaste-map select { height: 40px; font-size: var(--fs-sub); }
   .rtoolbar { height: auto; padding: 8px 12px; flex-wrap: wrap; gap: 8px; }
   .rtable-wrap { margin: 0; border-radius: 0; }
   .rstatus, .rfail, .rempty, .rdrawer { margin-left: 0; margin-right: 0; }
-  .rt-name { min-width: 96px; }
+  .rtable .rt-corner, .rtable .rt-name-h, .rtable .rt-name, .rtable .rt-foot-label { width: 96px; min-width: 96px; max-width: 96px; padding: 0 6px; }
   .rt-name > b { font-size: var(--fs-cell); }
   .rt-day { min-width: 38px; width: 38px; }
   .rt-cell { height: 40px; font-size: var(--fs-cell); }
@@ -400,28 +431,31 @@ body.rd .rmy .pick button.on { background: #fff; color: var(--ink); }
 .rmore .grp .rtoggle { margin-left: auto; }
 
 /* ── 옛 유틸 재매핑: 최소 글자 14px · 보조 글자 ink-2 · 버튼 40px ── */
+/* 옛 화면의 굵은 글자(Tailwind 700·600) — 600 은 제목·강조에만, 나머지는 500 */
+body.rd .font-bold { font-weight: var(--fw-strong) !important; }
+body.rd .font-semibold { font-weight: var(--fw-label) !important; }
 body.rd .text-xs { font-size: var(--fs-min) !important; }
 body.rd .text-sm { font-size: var(--fs-sub) !important; }
 body.rd .text-dim, body.rd .text-sub { color: var(--ink-2) !important; }
 body.rd .empty-state { color: var(--ink-2); }
 body.rd .empty-state p { font-size: var(--fs-body); }
 body.rd .empty-state .empty-hint { font-size: var(--fs-sub); opacity: 1; }
-body.rd .btn { min-height: 40px; font-size: var(--fs-sub); padding: 0 14px; border-radius: 10px; gap: 8px; }
-body.rd .btn-sm, body.rd .btn-xs { min-height: 40px; font-size: var(--fs-sub); padding: 0 12px; }
+body.rd .btn { min-height: var(--target-sm); font-size: var(--fs-sub); padding: 0 12px; border-radius: 8px; gap: 6px; }
+body.rd .btn-sm, body.rd .btn-xs { min-height: var(--target-sm); font-size: var(--fs-sub); padding: 0 10px; }
 body.rd .btn-ghost { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--rule-strong); }
-body.rd .btn-link { min-height: 40px; font-size: var(--fs-sub); padding: 0 10px; }
+body.rd .btn-link { min-height: var(--target-sm); font-size: var(--fs-sub); padding: 0 10px; }
 body.rd .pill { font-size: var(--fs-min); }
 body.rd .tbl { font-size: var(--fs-sub); }
 body.rd .tbl th { font-size: var(--fs-min); color: var(--ink-2); text-transform: none; letter-spacing: 0; }
 body.rd .tbl td { color: var(--ink); }
-body.rd .modal { border-radius: var(--r-modal); padding: 28px; color: var(--ink); }
+body.rd .modal { border-radius: var(--r-modal); padding: 20px; color: var(--ink); }
 body.rd .modal label { font-size: var(--fs-sub); color: var(--ink-2); }
-body.rd input[type="text"], body.rd input[type="number"], body.rd input[type="password"], body.rd input[type="date"], body.rd input[type="email"], body.rd input:not([type]), body.rd select, body.rd textarea { font-size: var(--fs-sub); min-height: 40px; box-shadow: inset 0 0 0 1.5px var(--rule-strong); color: var(--ink); }
+body.rd input[type="text"], body.rd input[type="number"], body.rd input[type="password"], body.rd input[type="date"], body.rd input[type="email"], body.rd input:not([type]), body.rd select, body.rd textarea { font-size: var(--fs-sub); min-height: 32px; box-shadow: inset 0 0 0 1.5px var(--rule-strong); color: var(--ink); }
 body.rd .modal input[type="text"], body.rd .modal input[type="number"], body.rd .modal input[type="password"], body.rd .modal input[type="date"], body.rd .modal input:not([type]), body.rd .modal select, body.rd .modal textarea { font-size: var(--fs-sub); }
 body.rd kbd { font-size: var(--fs-min); color: var(--ink-2); }
 body.rd .toast { font-size: var(--fs-sub); color: var(--ink); }
-body.rd .toast button { min-width: 40px; min-height: 40px; font-size: 20px; }
-body.rd .toast-history-btn { height: 40px; padding: 0 12px; font-size: var(--fs-min); color: var(--ink-2); bottom: 90px; }
+body.rd .toast button { min-width: 30px; min-height: 30px; font-size: 16px; }
+body.rd .toast-history-btn { height: 30px; padding: 0 12px; font-size: var(--fs-min); color: var(--ink-2); bottom: 90px; }
 body.rd .status-badge { font-size: var(--fs-min); }
 body.rd .juhu-badge { font-size: var(--fs-min); }
 body.rd .slack-swatch { width: 16px; height: 16px; }
@@ -438,9 +472,9 @@ body.rd .text-pink { color: var(--sh-생-fg) !important; }
 body.rd .diag-highlight { font-size: var(--fs-sub); }
 
 /* ── 접착 보강 (특이도) ── */
-body.rd input.rinput, body.rd select.rinput { height: 48px; min-height: 48px; font-size: 19px; font-weight: var(--fw-label); box-shadow: inset 0 0 0 1.5px var(--rule-strong); background: var(--card-warm); border-radius: var(--r-input); padding: 0 14px; }
+body.rd input.rinput, body.rd select.rinput { height: 34px; min-height: 34px; font-size: var(--fs-body); font-weight: var(--fw-body); box-shadow: inset 0 0 0 1.5px var(--rule-strong); background: var(--card-warm); border-radius: var(--r-input); padding: 0 10px; }
 body.rd input.rinput:focus, body.rd select.rinput:focus { box-shadow: inset 0 0 0 1.5px var(--focus); background: var(--card); }
-body.rd input[type="date"].rinput { font-size: var(--fs-sub); height: 44px; min-height: 44px; }
+body.rd input[type="date"].rinput { font-size: var(--fs-sub); height: 34px; min-height: 34px; }
 .rt-cycle-end { position: sticky; top: 0; z-index: 20; background: var(--card); border-bottom: 1px solid var(--rule); border-left: 2px solid var(--rule-strong); }
 .rpop.rd-fixed { position: fixed; z-index: 95; }
 .rbtn.is-disabled { color: var(--disabled-fg); }
@@ -451,11 +485,11 @@ body.rd input[type="date"].rinput { font-size: var(--fs-sub); height: 44px; min-
 .rtoolbar .rsignal + .rtoolbar-right { margin-left: 0; }
 .rbanner b { font-weight: var(--fw-strong); }
 .rbanner .rbtn { flex: none; }
-body.rd .rmodal .legacy input[type="number"], body.rd .rmodal .legacy input[type="text"] { height: 40px; }
+body.rd .rmodal .legacy input[type="number"], body.rd .rmodal .legacy input[type="text"] { height: 30px; }
 body.rd .rmodal .legacy .card-sm { border-radius: 10px; box-shadow: inset 0 0 0 1px var(--rule); padding: 10px 12px; }
 body.rd .rmodal .legacy .text-xs, body.rd .rmodal .legacy .text-sm { font-size: var(--fs-sub) !important; }
 .rstatus .relaxed-note .rbtn-sm { margin-left: 6px; }
-.rdrawer-body .rrow .rbtn-sm { height: 40px; white-space: nowrap; }
+.rdrawer-body .rrow .rbtn-sm { height: 26px; white-space: nowrap; }
 body.rd .rhdr-ver { font-size: var(--fs-min); }
 .trainee-row .rt-name { border-left: 3px solid var(--sh-생-fg); }
 .trainee-row .rt-cell span:first-child { font-style: italic; }
@@ -476,3 +510,29 @@ body.rd .rphone-ym button { width: 48px; height: 48px; border: 0; border-radius:
 body.rd .rphone-filters button { flex: none; height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); color: var(--ink); font: inherit; font-size: var(--fs-cell); font-weight: var(--fw-label); }
 body.rd .rphone-filters button.on { background: var(--ink); color: var(--card); box-shadow: none; }
 body.rd .rphone-filters button[disabled] { color: var(--ink-2); box-shadow: inset 0 0 0 1.5px var(--rule); }
+
+/* ── 간호사 그룹 (2026-11-12) — 명부 위 그룹 띠 · 명부 그룹 칸 · 그룹 창 ── */
+.rgroups { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 6px; font-size: var(--fs-sub); }
+.rgroups > b { font-weight: var(--fw-label); color: var(--ink-2); margin-right: 4px; }
+.rgroups .hint { color: var(--ink-2); font-size: var(--fs-cell); }
+.rgroup { height: 28px; padding: 0 10px; border: 0; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: var(--fs-sub); font-weight: var(--fw-strong); color: var(--ink); background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); cursor: pointer; }
+.rgroup small { font-weight: var(--fw-body); color: var(--ink-2); }
+.rgroup em { font-style: normal; font-weight: var(--fw-body); font-size: var(--fs-cell); color: var(--ink-2); padding-left: 6px; border-left: 1px solid var(--rule); }
+.rgroups.dragging .rgroup { box-shadow: inset 0 0 0 2px var(--focus); }
+.rgroup.drop { background: var(--sh-D-bg); box-shadow: inset 0 0 0 2.5px var(--focus); }
+.rroster td.groups { white-space: normal; }
+.rgtag { display: inline-flex; align-items: center; margin: 1px 3px 1px 0; border-radius: 6px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--rule); font-size: var(--fs-cell); }
+.rgtag button { border: 0; background: transparent; font: inherit; color: var(--ink); cursor: pointer; padding: 1px 3px 1px 6px; }
+.rgtag button.x { padding: 1px 5px 1px 2px; color: var(--ink-2); display: inline-flex; }
+.rgtag button.x:hover { color: var(--ink); }
+.rgpick { display: flex; flex-direction: column; gap: 8px; }
+.rgpick .row { display: flex; gap: 8px; align-items: flex-start; }
+.rgpick .team { flex: 0 0 56px; height: 28px; border: 0; border-radius: 8px; background: var(--paper); font: inherit; font-size: var(--fs-sub); font-weight: var(--fw-label); color: var(--ink-2); cursor: pointer; }
+.rgpick .names { display: flex; flex-wrap: wrap; gap: 6px; user-select: none; }
+.rgpick .names button { height: 28px; padding: 0 10px; border: 0; border-radius: 8px; font: inherit; font-size: var(--fs-sub); font-weight: var(--fw-label); cursor: pointer; background: var(--card); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--rule-strong); }
+.rgpick .names button.on { background: var(--ink); color: var(--card); box-shadow: none; }
+.rgnum { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: var(--fs-sub); color: var(--ink-2); }
+.rgnum input { width: 5em; height: 30px; min-height: 30px; }
+.rgnote { margin: 0; font-size: var(--fs-cell); color: var(--ink-2); line-height: 1.6; }
+.rgrules { display: grid; gap: 16px; }
+.rgrules .rseg button { white-space: nowrap; }

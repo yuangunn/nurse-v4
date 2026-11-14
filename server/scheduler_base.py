@@ -61,6 +61,10 @@ _TAIL_KEEPER_SHORT_PENALTY = 700
 # 근무 원티드 보존 점수(완화 500)와 비슷한 무게 — 꼬리 V(-500)보다 커서 엄격에선 맞출 수 있으면 맞추고, 프리셉터 칸에
 # 사람이 넣은 근무는 건드리지 않는다(그때는 결과에 넣은 그대로 내고 참고 목록에 알린다).
 _TRAINEE_PAIR_BONUS = 550
+# 간호사 그룹 — 한 근무(D·D1 / E·중 / N)에 그룹원 최대·최소 n명 (2026-11-12, _nurse_group_limits).
+# 넘거나 모자란 사람 하나마다. V(-500)·근무 원티드(완화 500)보다 작아서 그룹을 맞추려고 연차를 쓰거나 원티드를 깨지 않고,
+# 패턴 배점(±15~40)보다 커서 짤 수 있으면 맞춘다. 하드가 아니라서 그룹 때문에 생성이 막히지 않는다.
+_GROUP_LIMIT_PENALTY = 200
 
 def timeoff_class(code: str) -> str:
     """사전입력 코드의 보호 등급: 'leave' | 'off' | 'juhu' | 'work'.
@@ -1958,6 +1962,30 @@ class _SchedulerBase:
             eff = min(max(target, pre_n), pre_n + free)
             if eff > 0:
                 out.append((nurse, tail, eff))
+        return out
+
+    def _nurse_group_limits(self) -> list:
+        """그룹 규칙 — [(kind, bound, nids, d, codes)] (2026-11-12). kind 'max' = 한 근무에 그룹원 bound 명까지
+        (1명 = 같이 일하지 않기), 'min' = bound 명 이상. 한 근무 = 시간대(_resolve_group day·evening·night).
+        날은 배점 날(_score_days), 그날 재적한 그룹원만 센다 — 트레이닝 날 신규는 재적 밖이라 안 센다. 최소는 재적한 수까지만."""
+        ids = {n["id"]: n for n in self.nurses}
+        periods = [c for c in (self._resolve_group(p) for p in ("day", "evening", "night")) if c]
+        out = []
+        for g in getattr(self.rules, "nurseGroups", None) or []:
+            mem = [ids[i] for i in dict.fromkeys(g.get("members") or []) if i in ids]
+            for kind, key in (("max", "maxPerShift"), ("min", "minPerShift")):
+                try:
+                    b = int(g.get(key))
+                except (TypeError, ValueError):
+                    continue
+                if b < (0 if kind == "max" else 1):
+                    continue
+                for d in self._score_days():
+                    act = [n["id"] for n in mem if self._nurse_active_idx(n, d)]
+                    bound = b if kind == "max" else min(b, len(act))
+                    if (kind == "max" and len(act) <= b) or bound <= 0:
+                        continue
+                    out.extend((kind, bound, act, d, codes) for codes in periods)
         return out
 
     def _tail_saeng_cap(self, nurse, next_idx) -> int:

@@ -27,7 +27,7 @@
   border-radius: var(--r-btn);
   background: var(--accent-soft);
   color: var(--ink);
-  font-weight: 700;
+  font-weight: 600;
   transition: transform .12s ease, background-color .12s ease, color .12s ease;
 }
 .btn:hover { background: var(--rule-2); color: var(--ink); }
@@ -99,7 +99,7 @@ input[type="range"]::-webkit-slider-thumb { box-shadow: 0 1px 4px rgba(15,17,21,
   background: var(--accent-soft);
   color: var(--ink-2);
   font-family: var(--font-sans);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.01em;
   text-transform: none;
 }
@@ -114,7 +114,7 @@ html.dark .tag.ink { color: var(--paper); }
   border-radius: 9999px;
   background: var(--accent-soft);
   color: var(--ink-2);
-  font-weight: 700;
+  font-weight: 600;
 }
 .status-badge { border-radius: 9999px; }
 .juhu-badge { border-radius: 9999px; }
@@ -181,7 +181,7 @@ html.dark .step.active .step-name { color: var(--paper); }
   border-radius: var(--r-card-sm);
   box-shadow: var(--shadow-card);
 }
-.kpi-value { font-family: var(--font-sans); font-weight: 800; letter-spacing: -0.04em; }
+.kpi-value { font-family: var(--font-sans); font-weight: 600; letter-spacing: -0.04em; }
 .kpi-delta.pos { color: var(--up); }
 .kpi-delta.neg { color: var(--down); }
 
@@ -200,8 +200,8 @@ html.dark .step.active .step-name { color: var(--paper); }
 
 /* ── Today (mobile home) — YG cards ──────────────────────── */
 .today-hero { background: var(--card); }
-.today-date { font-family: var(--font-sans); font-weight: 800; letter-spacing: -0.04em; }
-.today-section-title h3 { font-family: var(--font-sans); font-weight: 800; letter-spacing: -0.02em; }
+.today-date { font-family: var(--font-sans); font-weight: 600; letter-spacing: -0.04em; }
+.today-section-title h3 { font-family: var(--font-sans); font-weight: 600; letter-spacing: -0.02em; }
 .today-duty-label .dot { border-radius: 3px; }
 .today-next-card {
   background: var(--accent); color: #fff;
@@ -211,7 +211,7 @@ html.dark .step.active .step-name { color: var(--paper); }
 }
 html.dark .today-next-card { color: var(--paper); }
 .today-next-card .lbl { font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.7; }
-.today-next-card .big { font-family: var(--font-sans); font-size: 2.6rem; font-weight: 800; line-height: 1; letter-spacing: -0.04em; }
+.today-next-card .big { font-family: var(--font-sans); font-size: 2.6rem; font-weight: 600; line-height: 1; letter-spacing: -0.04em; }
 .today-next-card .meta { font-size: 0.72rem; opacity: 0.75; font-variant-numeric: tabular-nums; }
 .shift-stack {
   display: flex; gap: 4px; height: 38px;
@@ -220,10 +220,10 @@ html.dark .today-next-card { color: var(--paper); }
 }
 .shift-stack .seg {
   flex: 1; display: flex; align-items: center; justify-content: center;
-  font-family: var(--font-sans); font-size: 0.78rem; font-weight: 800;
+  font-family: var(--font-sans); font-size: 0.78rem; font-weight: 600;
   color: var(--ink); border-radius: 9px; font-variant-numeric: tabular-nums;
 }
-.shift-stack .seg.lbl { flex: 0 0 28px; font-size: 0.62rem; color: var(--ink-3); font-weight: 700; background: transparent; }
+.shift-stack .seg.lbl { flex: 0 0 28px; font-size: 0.62rem; color: var(--ink-3); font-weight: 600; background: transparent; }
 .shift-stack .seg.shift-D { background: var(--d-bg); color: var(--d-ink); }
 .shift-stack .seg.shift-E { background: var(--e-bg); color: var(--e-ink); }
 .shift-stack .seg.shift-N { background: var(--n-bg); color: var(--n-ink); }
@@ -236,13 +236,13 @@ html.dark .today-next-card { color: var(--paper); }
 .cov-row .cov-shift {
   width: 34px; height: 34px; border-radius: 9px;
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--font-sans); font-weight: 800; font-size: 0.72rem;
+  font-family: var(--font-sans); font-weight: 600; font-size: 0.72rem;
 }
 .cov-row .cov-shift.shift-D { background: var(--d-bg); color: var(--d-ink); }
 .cov-row .cov-shift.shift-E { background: var(--e-bg); color: var(--e-ink); }
 .cov-row .cov-shift.shift-N { background: var(--n-bg); color: var(--n-ink); }
 .cov-row .cov-shift.charge { box-shadow: inset 0 0 0 1.5px currentColor; }
-.cov-row .cov-nm { font-size: 0.84rem; font-weight: 700; color: var(--ink); }
+.cov-row .cov-nm { font-size: 0.84rem; font-weight: 600; color: var(--ink); }
 .cov-row .cov-meta { font-size: 0.66rem; color: var(--ink-3); font-weight: 600; }
 
 /* ── Mobile bottom-nav (YG 5-tab: 상단 accent bar) ───────── */

@@ -538,7 +538,7 @@ def dev_download_db():
 # ── 간호사 CSV 템플릿/임포트 ──────────────────────────────────────────────
 
 _NURSE_CSV_HEADER = [
-    "id", "이름", "그룹", "성별", "가능근무",
+    "id", "이름", "팀", "성별", "가능근무",
     "야간전담", "시니어리티", "주휴요일", "주휴로테이션",
     "트레이닝", "트레이닝종료일", "프리셉터ID",
     "전입일", "전출일",
@@ -553,7 +553,7 @@ _NURSE_CSV_GUIDE = [
     ["# 작성 방법:"],
     ["# id — 고유 ID (영문/숫자, 중복 불가)"],
     ["# 이름 — 간호사 이름"],
-    ["# 그룹 — A/B/C 등 자유 입력"],
+    ["# 팀 — A/B/C 등 자유 입력, 한 사람 하나 (여러 그룹에 겹쳐 속하는 그룹은 앱 명부 위 그룹 띠에서 넣는다)"],
     ["# 성별 — female 또는 male"],
     ["# 가능근무 — 쉼표로 구분 (예: DC,D,EC,E,NC,N)"],
     ["# 야간전담 — Y(야간전담) 또는 N(일반)"],
@@ -929,7 +929,8 @@ def _parse_nurses_rows(rows_in: list) -> dict:
             }],
         }
 
-    header = [c.strip() for c in rows[0]]
+    # 옛 파일의 '그룹' 칸 = 지금의 '팀' (2026-11-12 — 그룹은 여러 개에 겹쳐 속하는 따로 된 것이 됐다)
+    header = ["팀" if c.strip() == "그룹" else c.strip() for c in rows[0]]
     data_rows = rows[1:]
 
     if "이름" not in header:
@@ -1030,7 +1031,7 @@ def _parse_nurses_rows(rows_in: list) -> dict:
             "_row": idx,
             "id": nid,
             "name": name,
-            "group": col(row, "그룹"),
+            "group": col(row, "팀"),
             "gender": gender_raw,
             "capable_shifts": capable,
             "is_night_shift": yn(col(row, "야간전담"), False),
@@ -1079,7 +1080,7 @@ def _resolve_nurse_ids(parsed_nurses: list, existing_nurses: list, fields: list,
             if len(same) > 1:
                 protected.update(n["id"] for n in same)
                 errors.append({"row": row, "col": "id", "got": f"{key[0]} ({key[1]})", "expected": "id 칸",
-                               "message": f"{row}행: 같은 이름·그룹이 {len(same)}명이라 누구인지 몰라 건너뜀 — id 칸을 채워 주세요"})
+                               "message": f"{row}행: 같은 이름·팀이 {len(same)}명이라 누구인지 몰라 건너뜀 — id 칸을 채워 주세요"})
                 continue
             match = same[0] if same else None
         if match:

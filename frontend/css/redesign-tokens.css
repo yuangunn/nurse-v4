@@ -1,35 +1,37 @@
 /* redesign-tokens.css — NurseScheduler v4 리디자인 토큰
  * 로드 순서: tokens.css → base.css → components.css → yginvest-skin.css → **redesign-tokens.css → redesign-components.css**
  * (마지막에 로드해 기존 값을 덮어쓴다. 기존 변수 이름은 그대로 두고 값만 바꾼다.)
- * 기준 해상도 1920×1080. 모든 수치는 design_handoff/design/*.dc.html 의 인라인 스타일과 1:1.
+ * 기준 해상도 1920×1080 (병동 크롬 창 안쪽은 약 1920×940). 글자·타겟·줄 높이는 한 화면에 간호사 20명 안팎과 한 달이 들어오는
+ * 밀도로 잡았다 — 본문 14px/400, 표 13px, 줄 26px. design/handoff/design/*.dc.html 의 수치(18px·44px)보다 작다.
  */
 :root {
   /* ── 서체 (선택형) ── 설정 → 그 외 에서 html[data-font] 로 전환 */
   --font-sans: 'Pretendard Variable','Pretendard',system-ui,sans-serif;
 
-  /* ── 글자 크기 스케일 (1920×1080) ── 이 넷만 쓴다 */
-  --fs-title:   24px;   /* 화면 제목 (설정 섹션 제목 등) */
-  --fs-h2:      20px;   /* 카드/서랍 제목, 앱 이름, 년월 */
-  --fs-body:    18px;   /* 본문 · 버튼 라벨 · 단계 이름 · 상태 줄 */
-  --fs-sub:     16px;   /* 부제 · 안내 · 툴팁 · 조용 버튼 · 표 이름 열 */
-  --fs-cell:    15px;   /* 표 셀 코드 · 집계 · 날짜 숫자 */
-  --fs-min:     14px;   /* 요일 · 주기 라벨 · 작은 배지 — 이보다 작은 글자 금지 */
+  /* ── 글자 크기 스케일 (1920×1080) ── 이 여섯만 쓴다 */
+  --fs-k: 1;            /* 글자 크기 배율 — 설정의 글자 크기(기본 14px)가 size/14 로 바꾼다. 아래 여섯 글자 크기에 곱한다 (표 행 높이는 setFontSize 가 정수 px 로 맞춘다) */
+  --fs-title: calc(20px * var(--fs-k));   /* 화면 제목 (설정 섹션 제목 등) */
+  --fs-h2: calc(16px * var(--fs-k));   /* 카드/서랍 제목, 앱 이름, 년월 */
+  --fs-body: calc(14px * var(--fs-k));   /* 본문 · 버튼 라벨 · 단계 이름 · 상태 줄 */
+  --fs-sub: calc(13px * var(--fs-k));   /* 부제 · 안내 · 툴팁 · 조용 버튼 · 표 이름 열 */
+  --fs-cell: calc(13px * var(--fs-k));   /* 표 셀 코드 · 집계 · 날짜 숫자 */
+  --fs-min: calc(12px * var(--fs-k));   /* 요일 · 주기 라벨 · 작은 배지 — 이보다 작은 글자는 쓰지 않는다 */
   --lh:         1.5;
 
-  /* ── 굵기 (볼드 남용 금지) ── */
-  --fw-title:   800;    /* 22px 이상 제목만 */
-  --fw-strong:  700;    /* 앱 이름 · 현재 단계 · 셀 코드 · 주 버튼 */
-  --fw-label:   600;    /* 버튼 라벨 · 이름 열 · 표 헤더 */
-  --fw-body:    500;    /* 본문 · 부제 · 안내 */
+  /* ── 굵기 ── 400 과 500 이 기본, 600 은 제목·지금 단계·주 버튼에만. 700 이상은 쓰지 않는다 */
+  --fw-title:   600;    /* 화면·카드 제목 */
+  --fw-strong:  600;    /* 앱 이름 · 현재 단계 · 주 버튼 */
+  --fw-label:   500;    /* 버튼 라벨 · 이름 열 · 표 헤더 */
+  --fw-body:    400;    /* 본문 · 부제 · 안내 */
 
   /* ── 클릭 타겟 ── */
-  --target:     48px;   /* 버튼 · 체크박스 라벨 · 숫자 ± */
-  --target-sm:  40px;   /* 헤더 보조 버튼 · 서랍 탭 · 팝업 내부 버튼 */
-  --row-h:      36px;   /* 표 행 높이 */
-  --col-w:      44px;   /* 날짜 열 너비 */
-  --hdr-h:      64px;   /* 헤더 */
-  --stepbar-h:  68px;   /* 단계 바 */
-  --toolbar-h:  64px;   /* 툴바 */
+  --target:     36px;   /* 버튼 · 체크박스 라벨 · 숫자 ± */
+  --target-sm:  30px;   /* 헤더 보조 버튼 · 서랍 탭 · 팝업 내부 버튼 */
+  --row-h:      26px;   /* 표 행 높이 */
+  --col-w:      38px;   /* 날짜 열 너비의 최대값 — 화면이 좁거나 6주 달이면 rdFitColumns 가 28px 까지 줄인다 */
+  --hdr-h:      48px;   /* 헤더 */
+  --stepbar-h:  48px;   /* 단계 바 */
+  --toolbar-h:  48px;   /* 툴바 */
 
   /* ── 간격 5단계 ── */
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px;

@@ -132,7 +132,7 @@ nurse-v4/
 │   └── profiles.py          # 프로필 관리 + Fernet 암호화 (PBKDF2 100k)
 ├── frontend/
 │   ├── index.html           # SPA (⚙ 설정 + 사전입력·분석·근무표 3단계, 저장은 근무표 서랍 + 모바일 '오늘' 홈)
-│   ├── css/                 # tokens·base·components·yginvest-skin → redesign-tokens·redesign-components(핸드오프 원본)·redesign-bridge(접착, 마지막)
+│   ├── css/                 # tokens·base·components·yginvest-skin → redesign-tokens·redesign-components(핸드오프에서 출발, 치수는 조밀화)·redesign-bridge(접착, 마지막)
 │   ├── js/
 │   │   ├── app.js           # Alpine.js 코어 (~530줄: 상태·computed·init·API·모듈 합성)
 │   │   └── modules/         # 15개 도메인 모듈 (analysis·solver·profiles·nurse-manage·redesign·
@@ -152,7 +152,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 530건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과)
+├── tests/                   # pytest 회귀 537건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과·간호사그룹)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -214,7 +214,7 @@ python3 scripts/check_form_borders.py        # 양식을 바꿨을 때
 근무표 엔진·frontend 앱(그 밖의 파일)을 고쳤을 때 — 로컬 pytest 약 1분:
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 530건
+python3 -m pytest -q                  # 537건
 node scripts/test_paste_dates.mjs && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_day_reqs.mjs && node scripts/test_hospital_holidays.mjs \
   && node scripts/test_manager_check.mjs && node scripts/test_trainee_days.mjs && node scripts/test_continue_search.mjs \
@@ -336,6 +336,8 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 - 야간 공정 배분 (range 최소화, -가중치, 직전 3개월 누적 오프셋)
 - **주말·공휴일 근무 공정 배분** (토·일 ∪ 공휴일 근무일 range 최소화 + 직전 3개월 누적 오프셋, 기본 -30; 야간전담·당월 전입/전출 제외, 임산부 포함) — 결정 1-21
 - 희망 근무 반영 (+50)
+- **간호사 그룹** (배점 규칙 아님 — 상수): 한 근무에 그룹원 최대·최소 n명을 넘거나 모자란 사람 하나마다 `-200` (결정 1-57).
+  V(-500)·근무 원티드(500)보다 작아 그룹 때문에 연차를 쓰거나 원티드를 깨지 않는다. 완화 1단계에는 넣지 않는다
 - V 사용 페널티 (-500) — 마지막 수단
 - **파트장 확인 마지막 수단** (제1원칙 13, 배점 규칙 아님 — 상수): 연속 근무 한도+1 `-3000 + 500×주말·공휴일 수`(최소 -1500) ·
   E→D1·중→D `-2000`. **완화 1단계(원티드 유지 최대화)에도 같은 감점을 넣는다** — 근무 원티드(500) 하나를 지키려고
@@ -416,7 +418,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 {
   "id": "a0",                  # 고유 ID
   "name": "김지현",
-  "group": "A",                # 자유
+  "group": "A",                # 팀 — 자유, 한 사람 하나 (이름 옆 표시·근무표 구분선·주휴 추천). 엑셀 명부 '팀' 칸(옛 '그룹' 칸도 읽는다)
   "gender": "female",          # female|male
   "capable_shifts": [...],     # ["DC","D","EC","E","NC","N"] 등
   "is_night_shift": False,     # 기본 야간전담 (fallback)
@@ -438,6 +440,11 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 **임산부(모성보호)**: `is_pregnant`+`pregnancy` 두 구간 설정 시 솔버가 각 구간 주마다 P1(임부휴무)
 1회 자동 배치 + 임신 전 기간 야간(N/NC) 제외 + 그 달 생리휴가 면제 + 야간전담 자동 해제.
 사전입력으로 P1을 직접 지정할 수도 있음. 상세 규칙은 [스케줄링 제약 규칙](#hard-constraints-반드시-지켜야-함) 참조.
+
+**그룹 (여러 개에 겹쳐 속함, 2026-11-12, 결정 1-57)**: 팀과 따로 `rules.nurseGroups=[{id,name,members:[nurse_id],maxPerShift,minPerShift}]`.
+한 근무(D·D1 / E·중 / N)에 그룹원 `maxPerShift`명까지(1 = 같이 일하지 않기)·`minPerShift`명 이상 — 엔진은 사람 하나마다 감점 200
+(`_GROUP_LIMIT_PENALTY`, `_nurse_group_limits` — 두 엔진, 하드 아님). 화면: 간호사 명부 위 그룹 띠(칩 누르면 그룹 창 — 이름·그룹원 누르기/끌기/팀 전원·규칙,
+순서 칸 ⠿ 을 칩에 끌어 놓기) · 명부 '그룹' 칸(칩 ✕ 로 빼기) · 일괄 바 '그룹에 넣기'. 못 지킨 근무는 근무표 리포트 '주의'(`groupWarnings`, 손으로 고친 뒤에도 다시 센다).
 
 **월별 야간전담**: `night_months` dict에 값이 하나라도 있으면 해당 월 키 존재 여부로 결정.
 값이 비었으면 `is_night_shift` 폴백.
@@ -508,9 +515,9 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 
 ### v4.13.0 리디자인 계약 (design/handoff) — 결정 1-24
 - **계약 3종**: `design/handoff/copy.json`(모든 라벨·툴팁·용어 — 그대로 쓴다) · `check/spec.json`(화면·상태별 computed-style 단언 + 전역 규칙:
-  최소 글자 14px, 22px 미만 굵기 ≤700, 회색 글자(#8A93A1·#B8BFC9·#D4D9E0) 금지, 클릭 대상 ≥40px, 아이콘만 버튼 금지, 모든 버튼 title,
+  최소 글자 12px, 22px 미만 굵기 ≤700(토큰 상한은 600), 회색 글자(#8A93A1·#B8BFC9·#D4D9E0) 금지, 클릭 대상 ≥26px, 아이콘만 버튼 금지, 모든 버튼 title,
   화면당 `.rbtn-primary` 정확히 1개, 영어 라벨 금지) · `reference/*.png`(1920×1080 원본). 검사기 `check_redesign.mjs` 실행법은 [테스트](#테스트) 참조.
-- **CSS 순서**: 기존 4장 → `redesign-tokens.css` → `redesign-components.css`(둘 다 핸드오프 원본, 손대지 않는다) → `redesign-bridge.css`(접착·재매핑·특이성 보정, 우리 것).
+- **CSS 순서**: 기존 4장 → `redesign-tokens.css` → `redesign-components.css`(색·구조는 핸드오프 그대로, 치수·글자는 아래 '조밀화' 값) → `redesign-bridge.css`(접착·재매핑·특이성 보정, 우리 것).
   근무 코드 색은 `[data-shift="D"]` 속성으로 칠한다(인라인 getShiftStyle 대신). 셀은 `data-cell="nid|iso"` 로 점프·팝업 위치에 쓴다.
 - **JS**: `modules/redesign.js`(`RedesignModule`) 가 문구·배치·상태 문장(`rdStep`·`rdSignal`·`rdStatus`·`rdFail`·서랍 탭·요약 행)·되돌리기 토스트·
   툴팁 엔진·2단 확인·± 버튼·셀 팝업 위치(뷰포트 좌표, `position:fixed`)·인쇄 미리보기·폰 내 근무·서체 선택·검증 훅 `window.__rdState(screen,state)` 를 맡는다.
@@ -521,6 +528,21 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   폰(≤767px): 헤더·단계 바·툴바 숨김(`rdesk-only`), 오늘(내 근무 카드 = 이름 고르기 주 버튼) · 근무표(월 이동 + 전체/내 근무만/그룹 칩) · 사전입력 · 더보기 시트, 하단 내비 78px.
 - **금지**: 검사기를 통과시키려고 화면을 속이지 않는다 — 검사기 버그는 검사기를 고치고(축약 속성 색 변환·outline 순서), 정적 HTML 가정(`nth-child`)은 같은 셀을 가리키는
   `nth-of-type`/`first-of-type` 으로 spec 을 고치며, 자기모순(13px 라벨·어두운 바탕의 #D4D9E0)은 규칙 쪽을 따른다. 전부 `$comment`/CSS 주석으로 남긴다.
+- **조밀화 (2026-11)**: 병동 창은 1920×940 안팎이고 한 화면에 간호사 20명 안팎 × 한 달(35~42칸)이 옆·아래로 넘기지 않고 들어와야 한다.
+  핸드오프 수치(본문 18px·버튼 48px·표 줄 36px·굵기 700~800)로는 표가 화면을 넘겨 가로 스크롤이 생겼다. 토큰을 다음으로 바꿨다 —
+  본문 14px/400 · 표 13px/500 · 표 줄 `--row-h` 26px · 날짜 칸 `--col-w` 38px(최소 28) · 버튼 36px · 헤더/단계 바/툴바 48px · **굵기는 400/500/600 셋, 700 이상 금지**
+  (`.font-bold`·인라인 700 도 600 으로). 글꼴은 Pretendard Variable 그대로. `spec.json` 의 치수·글자 항목은 실제 측정값으로 다시 맞췄다(색·문구·구조 항목은 핸드오프 그대로).
+  - **글자 크기**: 설정 → 그 외, 12~18px(기본 14, 저장 키 `fontPx`). `setFontSize` 가 `--fs-k`(=size/14, 글자 토큰 여섯에 곱함)와 `--row-h` 를 같이 바꾼다.
+  - **날짜 칸 너비**: `rdFitColumns` 가 (표 영역 − 이름 칸 − 합계 칸)/날 수 로 28px~`--col-w` 사이에서 맞춘다. 표는 `width:max-content` —
+    남는 폭은 오른쪽에 비운다(칸을 늘리면 같은 줄의 이름과 칸이 멀어진다). 옛 '칸 좁게'(`gridFit`) 토글은 없앴다(늘 맞춤).
+  - **읽는 화면의 폭 제한**: 설정 1120px · 분석 1240px. 명부는 한 줄 30px 표 하나(이름·팀·성별·할 수 있는 근무·야간전담·그룹·편집이 붙어 있다).
+  - **필요 인원 = 요일별 기본값 + 날짜별**: 설정 → 필요 인원의 달력 카드(`data-rd="day-reqs"`, `.rcal`)와 사전입력 표 맨 아래 '필요 인원' 줄은 **같은 값**
+    (`prevDayReqs[dk][type]`, `setPrevDayReq`)이다. 기본값과 다른 칸만 진하게, 비우면 기본값으로. 사전입력 상태의 일부라 되돌리기·세션 자동 보관·
+    사전입력 저장(`day_reqs`)·생성 payload 에 실린다 — 설정의 '저장' 단추(요일별 값)와는 별개. '바꾼 n일을 요일 기본값으로'는 두 번 눌러 확인(`rdArm`).
+  - **사전입력 → 근무표**: 사전입력 툴바의 주 버튼은 `rdGoMake()`('근무표 만들기 →' / 표가 있으면 '근무표 보기 →'). 근무표에서 사전입력으로 넣은 칸은
+    `is-pre`(왼쪽 위 모서리 삼각형, `rdIsPre`) — 상태 줄에 범례.
+  - **`rdSched` 는 보고 있는 달 기준**: `schedule` 은 달을 넘겨도 앞 달 것이 남는다. 앞뒤 달 표는 넘치는 주(이 달 1~6일·23일 이후)만 겹치므로 7~22일 칸이 있는지로 가린다.
+    이 달 표가 비어 있고 저장본이 있으면 빈 화면에 '○○ 열기' 단추(`rdSavedThisMonth` → `loadSaved`).
 
 
 **원칙 (결정 1-22)**: 근무표가 주인공. 매달 밟는 단계만 번호를 주고(사전입력 → 분석 → 근무표),
@@ -530,7 +552,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 
 0. **⚙ 설정** (헤더 왼쪽 톱니 스텝): 간호사 명부 + 요일별 인원 + 규칙 + 배점 규칙 + 개발자 설정
    - 명부 파일 5개 버튼(템플릿 저장/불러오기·엑셀 템플릿·내보내기·가져오기)은 **📗 명부 파일** 메뉴
-   - 근무 정의 17종은 **고급(접힘)** — 병동 표준이라 보통 손댈 일이 없다. 역순 전환 금지 3종은 문장 한 줄(끌 수 없음)
+   - 근무 정의 20종은 왼쪽 메뉴 '거의 안 바꾸는 것' 아래 표 하나(접힘 없음 — 20행이 한 화면에 든다). 역순 전환 금지 3종은 문장 한 줄(끌 수 없음)
    - 명부의 **야간전담 뱃지**: `3월 야간전담`·`3,5월 야간전담`처럼 **지정된 달**을 보여준다
      (당월 포함이면 진한 강조, 다른 달만이면 옅게). 클릭 = 보고 있는 달 토글.
      구현 `nurse-manage.js:nightMonthsBadge`, 검증 `node scripts/test_night_badge.mjs`

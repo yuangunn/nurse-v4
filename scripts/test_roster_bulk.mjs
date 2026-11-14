@@ -92,4 +92,56 @@ const order = (a) => a.nurses.map((n) => n.id).join('');
   assert.equal(picked(a), 'bc');
   assert.match(a.toasts.at(-1), /2명 D 끔/);
 }
+// ⑥ 그룹 (2026-11-12) — 겹쳐 속하기 · 끌어 넣기 · 저장 검사 · 근무표 주의(엔진 _nurse_group_limits 와 같은 기준)
+{
+  const a = make();
+  a.rules = { nurseGroups: [] };
+  a.selectedNurseMap = { b: true, d: true };
+  a.openGroupModal(null);
+  assert.deepEqual(a.groupModal.data.members, ['b', 'd'], '고른 사람으로 시작');
+  a.groupPaintDown('a'); a.groupPaintOver('c'); a._groupPaint = null;           // a 를 눌러 켜고 끌어 c 도
+  a.groupPaintDown('d'); a._groupPaint = null;                                   // 켜진 d 를 누르면 뺀다
+  a.groupModal.data.name = ' 신규 '; a.groupModal.data.same = 'alone';
+  await a.saveGroupModal();
+  const g = a.rules.nurseGroups[0];
+  assert.deepEqual([g.name, g.members.join(''), g.maxPerShift, g.minPerShift], ['신규', 'abc', 1, null], '명부 순서 · 같이 일하지 않기 = 1');
+  assert.deepEqual(a.posts.at(-1), ['/api/rules', { nurseGroups: a.rules.nurseGroups }], '그룹만 저장한다');
+  assert.equal(picked(a), '', '고른 사람으로 만들면 고르기를 푼다');
+  a.openGroupModal(null); a.groupModal.data.name = '신규'; await a.saveGroupModal();
+  assert.equal(a.rules.nurseGroups.length, 1, '같은 이름은 저장하지 않는다');
+  a.openGroupModal(null); Object.assign(a.groupModal.data, { name: 'IV', members: ['c', 'e'], same: 'max', maxN: 1 }); await a.saveGroupModal();
+  assert.equal(a.rules.nurseGroups.length, 1, "'최대 n명' 은 2명 이상");
+  Object.assign(a.groupModal.data, { maxN: 2, minOn: true, minN: 1 }); await a.saveGroupModal();
+  assert.deepEqual(a.groupsOfNurse('c').map((x) => x.name), ['신규', 'IV'], '한 사람이 두 그룹에');
+  a._dragNurseIdx = 4; a.selectedNurseMap = {};                                   // e 의 순서 칸을 신규 칩에
+  a.dropOnGroup(a.rules.nurseGroups[0]); await new Promise((r) => setTimeout(r));
+  assert.equal(a.rules.nurseGroups[0].members.join(''), 'abce');
+  assert.equal(a._dragNurseIdx, null, '놓으면 순서 옮기기는 끝난다');
+
+  // 근무표 주의 — 시간대(D·D1 / E·중 / N), 그 달 1일부터, '/' 트레이닝 칸·빈 칸 안 셈, 최소는 칸이 있는 그룹원 수까지만
+  a.year = 2026; a.month = 12;
+  a.shifts = [['D', 'day'], ['D1', 'day1'], ['E', 'evening'], ['중', 'middle'], ['N', 'night'], ['OF', 'rest']].map(([code, period]) => ({ code, period }));
+  Object.defineProperty(a, 'scheduleDays', { value: [new Date(2026, 10, 30), new Date(2026, 11, 1), new Date(2026, 11, 2)] });   // 앞 칸은 지난달
+  a.dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  a.rules.nurseGroups = [
+    { id: 'x', name: '신규', members: ['a', 'b', 'c'], maxPerShift: 1, minPerShift: null },
+    { id: 'y', name: 'IV', members: ['d', 'e'], maxPerShift: null, minPerShift: 2 },
+  ];
+  a.schedule = {
+    a: { '2026-11-30': 'D', '2026-12-01': 'D', '2026-12-02': 'E' },
+    b: { '2026-11-30': 'D', '2026-12-01': 'D1', '2026-12-02': '중' },          // 11/30 은 지난달 — 세지 않는다
+    c: { '2026-12-01': '/D', '2026-12-02': 'N' },                              // '/D' = 트레이닝 날
+    d: { '2026-12-01': 'D', '2026-12-02': 'D' },
+    e: { '2026-12-01': 'E', '2026-12-02': 'D' },                               // 12/2 둘 다 D — E·N 은 0명
+  };
+  const w = a.groupWarnings();
+  assert.equal(w.length, 2, JSON.stringify(w));
+  assert.match(w[0].msg, /^같이 일하지 않기를 못 지킨 근무 2개 — 12\/1 D 간호01·간호02 · 12\/2 E 간호01·간호02$/);
+  assert.equal(w[0].nurse, '신규 그룹');
+  assert.match(w[1].msg, /^한 근무 2명 이상을 못 지킨 근무 5개 — 12\/1 D 1명 · 12\/1 E 1명 · 12\/1 N 0명 · 12\/2 E 0명 · 12\/2 N 0명$/);
+  delete a.schedule.e;                                                         // 칸이 없는 날(재적 밖)은 1명까지만 바란다
+  const w2 = a.groupWarnings().find((x) => x.nurse === 'IV 그룹');
+  assert.match(w2.msg, /못 지킨 근무 4개 — 12\/1 E 0명 · 12\/1 N 0명 · 12\/2 E 0명 · 12\/2 N 0명$/);
+  assert.ok(a.scheduleWarnings.some((x) => x.nurse === '신규 그룹'), '근무표 주의 목록에 들어간다');
+}
 console.log('test_roster_bulk: OK');
