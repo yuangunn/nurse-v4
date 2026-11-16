@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.20.1 (2026-10-30, 배정 도구 방 구성 프리셋마다 [차지 방 없음] — 켠 프리셋을 쓰는 날은 차지가 자리에 묶이지 않고 어제 보던 방을 그대로(주말·공휴일·나이트에 방이 튕기지 않게, 결정 2-54). v4.20.0 = 배정 도구 실사용 고침·하루 어싸인표 표 모양 고치기·근무 정의 V 보호)
+**최신**: v4.21.0 (2026-11-16, 간호사 그룹 — 팀과 따로·여러 그룹에 겹쳐 속하기·그룹마다 한 근무 최대/최소 n명(결정 1-57) · 화면 조밀화 — 본문 14px/400·표 줄 26px·한 달이 한 화면·날짜별 필요 인원 달력·사전입력에서 근무표 만들기·저장본 열기(결정 1-58) · 배정 도구 — 손으로 바꾼 사유 제거(결정 2-55)·하루 어싸인표 기본 양식 101 새 양식. v4.20.1 = 배정 도구 방 구성 프리셋마다 [차지 방 없음](결정 2-54))
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -236,7 +236,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.20.1.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.21.0.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -1068,10 +1068,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.20.1.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.21.0.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.20.1.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.21.0.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -1167,7 +1167,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.20.1 기준)
+## 알려진 주의사항 (v4.21.0 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 배점 보조변수(전환·연속·패턴·주말·공휴일)는 생성 달 + 끝에 붙은 다음 달 며칠 + 1일 이음새(그 사람의 지난달 칸이 기록일 때)에 —
