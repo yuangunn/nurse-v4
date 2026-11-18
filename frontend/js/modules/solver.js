@@ -15,12 +15,12 @@ window.SolverModule = function() {
       const {_readjust,_cont,...payloadPatch}=patch||{};
       if(this._recoverPoll){clearInterval(this._recoverPoll);this._recoverPoll=null}
       this.generating=true;this.continuing=!!_cont;this.stopRequested=false;
-      if(!_cont){this.mipGapPercent=null;this.scheduleStopped=false;this.rdSaved=false;this.diagResult=null;this.fixResult=null;this.statusMessage=''}
+      if(!_cont){this.genFailed=false;this.mipGapPercent=null;this.scheduleStopped=false;this.rdSaved=false;this.diagResult=null;this.fixResult=null;this.statusMessage=''}
       this.estimatedSeconds=0;this.generateStartTime=Date.now();this.generateElapsed=0;
       let next=null,story=false;
       this.generateTimer=setInterval(()=>{this.generateElapsed=Math.floor((Date.now()-this.generateStartTime)/1000)},1000);
       this.solveProgress={gap_percent:null,nodes:0,has_solution:false,is_running:false};
-      this.solverLogs=[];this._logSeq=0;this._solveReset();this.story.open=false;
+      this.solverLogs=[];this._logSeq=0;this._solveReset();this.story.open=false;this.cellWhy={};
       this.sseSource=new EventSource('/api/generate/stream');
       this.sseSource.onmessage=(e)=>{
         const data=JSON.parse(e.data);
@@ -39,8 +39,8 @@ window.SolverModule = function() {
         if(!this._resultHere({profile_id:pid,year:payload.year,month:payload.month})){this._offscreenResult(result,payload,pid,_readjust);return false}
         // 이어 찾는 동안 손으로 고친 칸이 있으면 그 표를 그대로 둔다 — 바꾸면 고친 칸이 말없이 사라졌다 (리뷰 2026-10-19)
         const edited=_cont&&(this._originalSchedule?this.getManualEditCount():0)>0;
-        if(_cont&&(edited||!this._contBetter(result))){this._contKeep(result,_cont,edited);return}
-        this.statusOk=result.success;this.statusMessage=result.message;
+        if(_cont&&(edited||!this._contBetter(result))){this._contKeep(result,_cont,edited);this._contBaseBound(result);return}
+        this.statusOk=result.success;this.statusMessage=result.message;this.genFailed=!result.success;
         this.generationReport=result.generation_report||null;
         this.wishReport=result.wish_report||null;
         this.offTeukgeun=result.off_teukgeun||[];this.managerCheck=result.manager_check||[];this.vReport=result.v_report||null;
@@ -71,6 +71,7 @@ window.SolverModule = function() {
           this.trackEdits();story=!_readjust;
           if(!_readjust){this.readjustPins={};this.readjustChanged={};this.readjustSummary=''}
           if(result.warning){this.statusMessage=result.warning+'\n\n'+this.statusMessage;this.statusOk=false}
+          if(_readjust)this.contBase=null;else this._setContBase(payload,result);   // '이 표에서 더 찾기'가 이을 문제 — 멈춘 표·이어 찾은 표도 같다 (다시 맞춘 표는 다른 문제)
           if(_cont)this.statusMessage+=`\n\n🔁 이어 찾기로 더 좋은 표를 찾아 바꿔 저장했습니다${_cont.gap!=null&&this.mipGapPercent!=null?` (가장 좋은 답과 ${_cont.gap}% → ${this.mipGapPercent}% 차이)`:''}.`;
           else if(!_readjust&&!this.stopRequested&&this._wantsContinue(result)){
             this.statusMessage+=`\n\n🔁 가장 좋은 답과 ${result.mip_gap_percent}% 차이라 목표(${Math.round(this.mipGap*1000)/10}%)보다 큽니다 — 지금 표를 저장해 두고 이 표에서 한 번 더 찾습니다. 멈추면 지금 표를 씁니다.`;
@@ -81,10 +82,36 @@ window.SolverModule = function() {
               _cont:{objective:result.objective??null,fingerprint:result.model_fingerprint||null,gap:result.mip_gap_percent,message:this.statusMessage,ok:this.statusOk}};
           }}
         return true;
-      }catch(e){if(_cont)this._contKeep(null,_cont);else{this.statusOk=false;this.statusMessage='서버 오류: '+e.message}}
+      }catch(e){if(_cont)this._contKeep(null,_cont);else{this.statusOk=false;this.genFailed=true;this.statusMessage='서버 오류: '+e.message}}
       finally{this.generating=false;this.continuing=false;this.stopRequested=false;if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generateFinalElapsed=this.generateElapsed;
         if(next)setTimeout(()=>this.generate(next),0);
         else if((story||_cont)&&this.rdSched)this.rdStoryOpen()}   // 결과 요약은 다 끝난 뒤에 — 이어 찾기가 이어지면 그 끝에
+    },
+    // ── 이 표에서 더 찾기 (결정 1-69) — 끝난 표·멈춘 표에서 사람이 눌러 잇는다. 자동 이어 찾기와 같은 요청(앞 표·하한·지문)이라
+    //    같은 문제에서 더 좋은 표가 나올 때만 바뀐다. 몇 번이고 다시 누를 수 있다. 시간은 누를 때의 '고급' 설정 ──
+    contBase:null,   // {year, month, payload, objective, bound, fingerprint} — 마지막으로 만든 표의 문제. 저장본을 열면 없다(지문을 모른다)
+    _setContBase(payload,r){
+      const solver=payload.solver==='race'&&r.engine?(r.engine==='CP-SAT'?'cpsat':'highs'):payload.solver;
+      this.contBase=(r&&r.success&&r.model_fingerprint&&r.objective!=null)
+        ? {year:+payload.year,month:+payload.month,payload:{...payload,solver},objective:r.objective,bound:r.mip_dual_bound??null,fingerprint:r.model_fingerprint} : null;
+    },
+    // 더 좋은 표가 없었어도 같은 문제에서 하한이 올랐으면 다음에 이을 때 그 하한부터 (차이를 처음부터 다시 재지 않는다)
+    _contBaseBound(r){
+      const c=this.contBase;
+      if(c&&r&&r.success&&r.mip_dual_bound!=null&&r.model_fingerprint===c.fingerprint)c.bound=r.mip_dual_bound;
+    },
+    // 지금 표에서 더 찾을 수 있는가 — 같은 문제여야 한다: 표를 만든 뒤 사전입력을 고쳤거나 칸을 손으로 고쳤으면 다시 만들기·다시 맞추기로
+    get rdCanContinue(){
+      const c=this.contBase;
+      return !!c&&!this.generating&&this.rdSched&&c.year===+this.year&&c.month===+this.month&&!this.rdPreChanged&&!this.genFailed
+        &&!(this._originalSchedule&&this.getManualEditCount()>0)&&!(this.mipGapPercent!=null&&this.mipGapPercent<=0.1);
+    },
+    rdContinue(){
+      const c=this.contBase; if(!this.rdCanContinue)return;
+      return this.generate({...c.payload,time_limit:Math.max(1,Math.min(60,parseInt(this.generateTimeout)||20))*60,mip_gap:this.mipGap,
+        warm_start:this.extendedSchedule&&Object.keys(this.extendedSchedule).length?this.extendedSchedule:this.schedule,
+        prev_bound:c.bound,prev_fingerprint:c.fingerprint,prev_objective:c.objective,
+        _cont:{objective:c.objective,fingerprint:c.fingerprint,gap:this.mipGapPercent,message:this.statusMessage,ok:this.statusOk}});
     },
     // ── 이어 찾기 (결정 1-50) — 시간이 다 됐는데 차이가 목표(설정 mipGap)보다 크면 그 표에서 한 번 더 찾는다 ──
     // 실제 11월: 20분 8.8% → 같은 탐색을 60분까지 이으면 3.4%, 20분 표에서 다시 찾으면 41분에 1.9% (다시 찾는 쪽이 나았다)
@@ -172,14 +199,24 @@ window.SolverModule = function() {
     async diagnoseConflicts(){
       if(this.diagnosing)return;
       this.diagnosing=true; this.diagResult=null; this.diagOpen=true;   // 결과는 큰 창으로 — 서랍(높이 200px)에서는 몇 줄밖에 안 보였다
+      // 완화를 켜고 만들다 실패했으면 완화로도 바뀌지 않는 칸만 두고 따진다 — 사전입력 전부로 따지면 완화가 풀어 줄 충돌까지 나와 진짜 막힌 곳이 묻힌다
+      this.diagRelax=!!(this.allowPreRelax&&this.genFailed);
       try{
-        const res=await this.api('POST','/api/diagnose',this._diagPayload());
+        const res=await this.api('POST','/api/diagnose',this.diagRelax?{...this._diagPayload(),prev_schedule:this._relaxHardPrev()}:this._diagPayload());
         if(res&&res.message){
           this.diagResult=res;
           this.statusMessage=this.statusMessage+'\n\n━━ 정밀 충돌 분석 (CP-SAT) ━━\n'+res.message;
         } else this.diagOpen=false;
       }catch(e){this.diagOpen=false;this.toast('충돌 분석 실패','error');}
       finally{this.diagnosing=false;}
+    },
+    // 완화를 켜도 바뀌지 않는 사전입력 칸 — 잠근 칸 · 주휴(주휴 이동을 안 켰으면) · 지난달 칸 (엔진의 완화와 같은 기준)
+    diagRelax:false,
+    _relaxHardPrev(){
+      const first=`${this.year}-${String(this.month).padStart(2,'0')}-01`, out={};
+      for(const [nid,row] of Object.entries(this.prevSchedule||{})) for(const [dk,v] of Object.entries(row||{}))
+        if(dk<first || this.lockedCells?.[nid]?.[dk] || (v==='주'&&!this.allowJuhuRelax)) (out[nid]=out[nid]||{})[dk]=v;
+      return out;
     },
     // 왜 안 되는지 창에 그릴 묶음 — 따로 풀어야 하는 막힌 곳마다 한 묶음, 줄마다 갈 칸(있으면)을 붙인다
     diagGroups(){

@@ -320,5 +320,105 @@ const fresh = () => { store.clear(); ticks.length = 0; unload.length = 0; };
   a.diagResult = { conflicts: [], message: '충돌 없음' }; assert.deepEqual(a.diagGroups(), []);
   a.diagResult = null; assert.deepEqual(a.diagGroups(), []);
 }
+// 병동이 닫혔다 — 연 병동을 머리줄(X-Profile)로 보내고, 서버가 profile_closed 로 거절하면 화면을 막는다 (서버가 다시 시작되면
+// 병동이 닫히는데, 모르고 기본 DB 의 다른 명부를 받아 사전입력·근무표가 빈 것처럼 보였다)
+{
+  const a = app(); const calls = [];
+  Object.assign(a, { currentProfile: '병동 A', profileScreen: false, toast: () => 0 });
+  let reply = { ok: true, status: 200, json: async () => ({ v: 1 }), text: async () => '' };
+  const keep = global.fetch; global.fetch = async (url, opts) => { calls.push([url, opts.headers['X-Profile']]); return reply; };
+  assert.deepEqual(await a.api('GET', '/api/nurses'), { v: 1 });
+  assert.deepEqual(calls.at(-1), ['/api/nurses', encodeURIComponent('병동 A')]);
+  await a.api('GET', '/api/profiles'); assert.equal(calls.at(-1)[1], undefined);                 // 병동 고르기 요청에는 붙이지 않는다
+  a.profileScreen = true; await a.api('GET', '/api/nurses'); assert.equal(calls.at(-1)[1], undefined); a.profileScreen = false;
+  reply = { ok: false, status: 409, text: async () => '{"code":"profile_closed","detail":"닫혀 있습니다"}' };
+  await assert.rejects(a.api('GET', '/api/nurses'), /병동\(프로필\)이 닫혀 있습니다/);
+  assert.equal(a.profileLost, true);
+  a.profileLost = false; reply = { ok: false, status: 409, text: async () => '{"detail":"이미 생성 중"}' };   // 다른 409 는 그대로
+  await assert.rejects(a.api('POST', '/api/generate', {}), /이미 생성 중/);
+  assert.equal(a.profileLost, false);
+  // 다시 열기 — 비밀번호가 없으면 그 자리에서 열고 막힘을 푼다
+  a.profileLost = true; a.hasMasterPassword = false; const sent = [];
+  a._loadProfiles = async () => { a.profiles = [{ id: '병동 A', has_password: false }]; a.currentProfile = null; };   // 서버는 닫혀 있어 null 을 준다
+  a.api = async (m, u, body) => { sent.push([m, u, body]); return u === '/api/profiles/open' ? { ok: true } : []; };
+  await a.reopenProfile();
+  assert.deepEqual(sent[0], ['POST', '/api/profiles/open', { id: '병동 A', password: '' }]);
+  assert.deepEqual([a.profileLost, a.currentProfile], [false, '병동 A']);
+  global.fetch = keep;
+}
+// 완화에서 못 바꾸는 칸 — 잠근 칸 · 주휴(주휴 이동을 안 켰으면) · 지난달 칸. 완화 실패의 진단·인원 셈이 이 칸만 본다
+{
+  const a = app();
+  Object.assign(a, { year: 2026, month: 12, allowJuhuRelax: false, lockedCells: { a1: { '2026-12-18': true } },
+    prevSchedule: { a1: { '2026-11-30': 'N', '2026-12-07': '주', '2026-12-18': 'N제외', '2026-12-31': 'OF' }, a2: { '2026-12-31': 'V' } } });
+  assert.deepEqual(a._relaxHardPrev(), { a1: { '2026-11-30': 'N', '2026-12-07': '주', '2026-12-18': 'N제외' } });
+  a.allowJuhuRelax = true;
+  assert.deepEqual(a._relaxHardPrev(), { a1: { '2026-11-30': 'N', '2026-12-18': 'N제외' } });
+  // 인원 여유 — 완화 기준이면 잠그지 않은 쉬는 칸은 '나올 수 있는 사람'
+  Object.assign(a, { allowJuhuRelax: false, shifts: [{ code: 'OF', period: 'rest' }, { code: 'V', period: 'leave' }, { code: '주', period: 'rest' }, { code: 'D', period: 'day' }],
+    nurses: [{ id: 'a1' }, { id: 'a2' }, { id: 'a3' }], requirements: { thu: { D: 1, E: 1, N: 1 } }, prevDayReqs: {},
+    isTraineeInTraining: () => false,
+    prevSchedule: { a1: { '2026-12-31': 'OF' }, a2: { '2026-12-31': 'V' } }, lockedCells: { a2: { '2026-12-31': true } } });
+  const at = (r) => r.find((x) => x.dk === '2026-12-31');       // 목요일만 필요 인원을 줬다 — 다른 날은 건너뛴다
+  assert.deepEqual(at(a._staffingSlack(false).short), { dk: '2026-12-31', needed: 3, avail: 1 });
+  assert.deepEqual(at(a._staffingSlack(true).short), { dk: '2026-12-31', needed: 3, avail: 2 });   // 잠근 V 만 못 나온다
+  a.lockedCells = {};
+  assert.equal(at(a._staffingSlack(true).short), undefined);
+  assert.deepEqual(at(a._staffingSlack(true).tight), { dk: '2026-12-31', needed: 3, avail: 3 });
+}
+// 근무 성향 (결정 1-70) — 간호사 창에서 시간대마다 선호·기피·한 달 최대. 보통·제한 없음은 저장하지 않는다
+{
+  const a = app();
+  a.nurses = [];
+  a.openNurseModal({ id: 'a1', name: '간호01', capable_shifts: ['D', 'E', 'N'] });          // 옛 간호사 — shift_prefs 없음
+  assert.deepEqual(a.nurseModal.data.shift_prefs, {});
+  a.setNursePref('N', 'like'); a.setNursePrefMax('N', '3'); a.setNursePref('E', 'avoid'); a.setNursePrefMax('D', '40');
+  assert.deepEqual(a.nurseModal.data.shift_prefs, { N: { pref: 'like', max: 3 }, E: { pref: 'avoid' }, D: { max: 31 } });
+  assert.deepEqual([a.nursePref('N').pref, a.nursePref('N').max, a.nursePref('X').max], ['like', 3, undefined]);
+  a.setNursePref('N', ''); a.setNursePrefMax('N', ''); a.setNursePref('E', ''); a.setNursePrefMax('D', 'abc');
+  assert.deepEqual(a.nurseModal.data.shift_prefs, {});
+  a.setNursePrefMax('N', '0'); assert.deepEqual(a.nurseModal.data.shift_prefs, { N: { max: 0 } });   // 0 은 '한 번도'
+}
+// 처음 시작 안내 (결정 1-71) — 예시 명부가 든 새 병동에서만 저절로 뜨고, 끝낸 단계는 자료로 판정한다
+{
+  fresh();
+  const a = app();
+  Object.assign(a, { currentProfile: 'w1', profileScreen: false, year: 2026, month: 12, savedSchedules: [], prevSchedule: {},
+    nurses: [{ id: 'g1', name: '간호01' }] });
+  assert.equal(a.onbCheck(), false);                               // 쓰던 병동(예시 명부 없음)에는 띄우지 않는다
+  assert.equal(a.rdOnbActive, false);
+  a.nurses = [{ id: 'a0', name: '*예시01' }, { id: 'a1', name: '*예시02' }];
+  assert.equal(a.onbCheck(), true);
+  assert.deepEqual([a.onb.open, a.rdOnbActive], [true, true]);
+  assert.deepEqual(a.rdOnbSteps.map((s) => [s.id, s.done]), [['seed', false], ['last', false], ['pre', false], ['roster', false], ['req', false], ['make', false]]);
+  assert.equal(a.rdOnbSteps[1].title, '11월 근무표 붙여넣기');
+  assert.equal(a.rdOnbNext, 0);
+  // 예시 명부 지우기 — 서버에서 지우고 명부를 다시 읽는다
+  const gone = [];
+  a.api = async (m, u) => { gone.push(`${m} ${u}`); return {}; };
+  a.loadNurses = async () => { a.nurses = []; };
+  await a.rdOnbDo('seed');
+  assert.deepEqual(gone, ['DELETE /api/nurses/a0', 'DELETE /api/nurses/a1']);
+  assert.deepEqual(a.rdOnbSteps.slice(0, 2).map((s) => [s.id, s.done]), [['seed', true], ['last', false]]);
+  // 붙여넣기 단계 — 창을 닫고 붙여넣기 창을 연다, 붙여넣기 창이 닫히면 안내로 돌아온다
+  a.openPastePrev = (target) => { a.pastePrev = { open: true, target: target || 'prev' }; };
+  await a.rdOnbDo('last');
+  assert.deepEqual([a.onb.open, a.onb.wait, a.pastePrev.target, a.activeTab], [false, 'last', 'saved', 'schedule']);
+  a.rdOnbBack(); assert.equal(a.onb.open, false);                  // 아직 붙여넣기 창이 열려 있다
+  a.pastePrev.open = false; a.savedSchedules = [{ id: 1, year: 2026, month: 11 }];
+  a.rdOnbBack(); assert.deepEqual([a.onb.open, a.onb.wait], [true, '']);
+  assert.equal(a.rdOnbSteps[1].done, true);
+  // 건너뛰기·확인했어요는 병동마다 적어 둔다 — 자료가 생기면 건너뜀 표시는 사라진다
+  a.onbSet('pre', 'skip'); assert.deepEqual([a.rdOnbSteps[2].done, a.rdOnbSteps[2].skipped], [true, true]);
+  a.nurses = [{ id: 'g1', name: '간호01' }]; a.prevSchedule = { g1: { '2026-12-10': 'OF' } };
+  assert.deepEqual([a.rdOnbSteps[2].done, a.rdOnbSteps[2].skipped], [true, false]);
+  a.onbSet('roster', 1); a.onbSet('req', 1);
+  assert.equal(a.rdOnbSteps[a.rdOnbNext].id, 'make');
+  assert.equal(JSON.parse(store.get('ns_onb:w1')).roster, 1);
+  a.currentProfile = 'w2'; assert.equal(a.rdOnbActive, false);    // 다른 병동은 따로
+  a.currentProfile = 'w1'; a.onbSet('done', 1); assert.equal(a.rdOnbActive, false);
+  assert.equal(a.onbCheck(), false);
+  a.onbStart(); assert.deepEqual([a.rdOnbActive, a.onb.open], [true, true]);   // 도움말에서 다시 열기
+}
 console.log('test_frontend_state: OK');
 process.exit(0);

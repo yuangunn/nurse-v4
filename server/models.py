@@ -46,6 +46,9 @@ class Nurse(BaseModel):
     #  · 초기/말기 각 구간 완전 포함 주마다 P1 1회 자동
     #  · [early.start, late.end] 전체 동안 야간(N/NC) 제외 + 그 달 생리휴가 면제
     pregnancy: Dict[str, Any] = {}
+    # 근무 성향 — 시간대(D 낮 · E 저녁 · N 야간)마다 {"pref": "like"|"avoid", "max": n} (둘 다 선택).
+    #  · max: 그 달 그 시간대 근무(차지 포함) 상한 — 하드. pref: 선호(가능한 많이)·기피(가능한 적게) — 배점 (결정 1-70)
+    shift_prefs: Dict[str, Any] = {}
 
 
 class DayRequirement(BaseModel):

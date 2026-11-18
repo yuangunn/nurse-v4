@@ -10,6 +10,7 @@ def test_detects_demand_over_supply(build_request, small_nurses):
     req = build_request(nurses=nurses, add_juhu=False)  # _mini_requirements: D=E=N=1
     res = analyze_conflicts(req)
     assert res["conflicts"], f"충돌이 검출되어야 함:\n{res['message']}"
+    assert res["status"] == "infeasible"                     # 화면(칸별 이유)이 문구가 아니라 이 값으로 가린다
     # 충돌 라벨이 사람이 읽는 핀포인트(인원/차지)를 포함
     joined = "\n".join(res["conflicts"])
     assert ("필요 인원" in joined) or ("차지" in joined), f"라벨이 모호함:\n{joined}"
@@ -21,6 +22,7 @@ def test_feasible_returns_no_conflict(build_request, small_nurses):
     req = build_request(nurses=nurses, add_juhu=False)
     res = analyze_conflicts(req)
     assert res["conflicts"] == [], f"충돌이 없어야 함:\n{res['message']}"
+    assert res["status"] == "feasible"
 
 
 def test_detects_preinput_forbidden_transition(build_request, small_nurses):

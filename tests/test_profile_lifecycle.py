@@ -284,3 +284,22 @@ def test_close_waits_for_inflight_write(env):
     t.join()
     assert _open(c)["ok"]
     assert "간호09" in _names(c), "닫기 직전에 쓰던 행이 암호화본에 있어야 한다"
+
+
+def test_requests_for_another_or_closed_profile_are_refused(env):
+    """화면이 연 병동(X-Profile)과 서버가 연 병동이 다르면 받지 않는다 — 서버가 다시 시작되면 병동이 닫히는데,
+    열려 있던 화면이 모르고 기본 DB(다른 명부)를 읽고 썼다. 머리줄 없는 요청과 병동 고르기 요청은 그대로."""
+    c, _ = env
+    h = {"X-Profile": "w101"}
+    assert c.get("/api/nurses").status_code != 409                       # 머리줄 없음 — 막지 않는다
+    r = c.get("/api/nurses", headers=h)                                  # 병동이 닫혀 있다
+    assert r.status_code == 409 and r.json()["code"] == "profile_closed"
+    assert c.post("/api/rules", json={}, headers=h).status_code == 409   # 쓰기도 기본 DB 에 닿지 않는다
+    assert c.get("/api/profiles", headers=h).status_code == 200          # 병동 고르기는 된다
+    assert c.post("/api/profiles/create", json={"id": "w101", "name": "병동", "password": ""}).status_code == 200
+    assert c.post("/api/profiles/open", json={"id": "w101", "password": ""}, headers=h).json()["ok"]
+    assert c.get("/api/nurses", headers=h).status_code == 200            # 같은 병동이 열려 있으면 받는다
+    assert c.get("/api/nurses", headers={"X-Profile": "w102"}).status_code == 409   # 다른 병동을 연 화면
+    assert c.get("/api/nurses", headers={"X-Profile": "%EB%B3%91%EB%8F%99"}).status_code == 409   # 한글 ID 는 퍼센트 인코딩으로 온다
+    c.post("/api/profiles/close")
+    assert c.get("/api/nurses", headers=h).status_code == 409

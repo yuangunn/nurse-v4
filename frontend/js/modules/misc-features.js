@@ -290,6 +290,8 @@ window.MiscFeaturesModule = function() {
     helpTab:'workflow',
 
     checkFirstRun(){
+      // 새 병동(예시 명부)이면 처음 시작 안내가 뜬다 — 그때는 소개 슬라이드를 겹쳐 띄우지 않는다 (도움말에서 다시 볼 수 있다)
+      if(this.onbCheck&&this.onbCheck()){localStorage.setItem('ns_onboarding_done','1');return}
       if(!localStorage.getItem('ns_onboarding_done')){
         this.showOnboarding=true;
         this.onboardingStep=0;

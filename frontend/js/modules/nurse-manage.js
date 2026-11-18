@@ -45,8 +45,20 @@ window.NurseManageModule = function() {
       if(!d.pregnancy||typeof d.pregnancy!=='object')d.pregnancy={};
       if(!d.pregnancy.early)d.pregnancy.early={start:null,end:null};
       if(!d.pregnancy.late)d.pregnancy.late={start:null,end:null};
+      if(!d.shift_prefs||typeof d.shift_prefs!=='object'||Array.isArray(d.shift_prefs))d.shift_prefs={};
       this.nurseModal.open=true;
     },
+    // 근무 성향 (결정 1-70) — 시간대 k(D·E·N)마다 {pref:'like'|'avoid', max:n}. 보통·제한 없음이면 그 키를 지운다 (빈 값을 저장하지 않는다)
+    nursePref(k){return (this.nurseModal.data.shift_prefs||{})[k]||{}},
+    _setNursePref(k,patch){
+      const d=this.nurseModal.data,sp={...(d.shift_prefs||{})},cur={...(sp[k]||{}),...patch};
+      if(!cur.pref)delete cur.pref;
+      if(cur.max===undefined||cur.max===null||cur.max==='')delete cur.max;
+      if(Object.keys(cur).length)sp[k]=cur;else delete sp[k];
+      d.shift_prefs=sp;
+    },
+    setNursePref(k,pref){this._setNursePref(k,{pref:pref||''})},
+    setNursePrefMax(k,v){const n=parseInt(v);this._setNursePref(k,{max:(v===''||v===null||isNaN(n))?'':Math.max(0,Math.min(31,n))})},
     toggleShift(s){const arr=this.nurseModal.data.capable_shifts;const idx=arr.indexOf(s);if(idx>=0)arr.splice(idx,1);else arr.push(s)},
     async saveNurse(){if(!this.nurseModal.data.name.trim()){this.toast('이름을 입력하세요','error');return}await this.api('POST','/api/nurses',this.nurseModal.data);await this.loadNurses();this.nurseModal.open=false},
     async removeNurse(id){

@@ -242,6 +242,26 @@ def test_relax_boost_protects_previously_overridden_nurse(solver):
     assert "a1" in rc and "a0" not in rc, rc
 
 
+# ── 야간 — 이 달 안에서도 고르게 (결정 1-65) ───────────────────────────────────
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_night_fairness_spreads_this_month_between_the_extremes(build_request, solver):
+    """(누적 + 당월) range 는 최대·최소 두 사람만 본다 — 누적 차이가 크면 그 사이 사람은 이번 달 0회여도 감점이 없었다.
+    풀 평균과의 차이를 함께 감점해, 누적이 가운데인 사람들이 이번 달 야간을 고르게 나눠 받는다."""
+    nurses = _mini_nurses(6)
+    req = build_request(nurses=nurses, year=2026, month=3, days=7, requirements=_mini_requirements(1, 1, 1))
+    req.scoring_rules = [ScoringRule(name="야간 공정", rule_type="night_fairness", score=-50)]
+    req.fairness_offsets = {"a0": 0, "a1": 15, "a2": 15, "a3": 15, "a4": 15, "a5": 40}   # 누적 최소 a0 · 최대 a5 가 range 를 붙든다
+    sch = make_limited(req, days=7, solver=solver)
+    assert sch._night_even_weight(-50, 6) == -8 and sch._night_even_weight(50, 6) == 0 and sch._night_even_weight(-50, 1) == 0
+    result = sch.solve()
+    assert result["success"], result.get("message")
+    nights = {n.id: sum(v in ("N", "NC") for v in result["schedule"][n.id].values()) for n in nurses}
+    mid = [nights[k] for k in ("a1", "a2", "a3", "a4")]
+    assert sum(nights.values()) == 7, nights
+    assert max(mid) - min(mid) <= 1 and min(mid) >= 1, nights   # 가운데 네 사람이 1~2회씩 — 예전엔 0회·3회도 같은 점수였다
+
+
 # ── 주말·공휴일 근무 공정성 (M6 P3②) ──────────────────────────────────────────
 
 @pytest.mark.parametrize("solver", ["highs", "cpsat"])

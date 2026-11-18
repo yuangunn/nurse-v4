@@ -64,6 +64,7 @@ class _ConflictAnalyzer(CpSatScheduler):
             self._g_weekly_off(model, x, gate)
         self._g_pregnancy_p1(model, x, gate)
         self._g_max_v(model, x, gate)
+        self._g_shift_pref_caps(model, x, gate)
         self._g_night_dedicated(model, x, gate)
         self._g_menstrual(model, x, gate)
         self._g_forbidden(model, x, gate)
@@ -202,14 +203,14 @@ class _ConflictAnalyzer(CpSatScheduler):
         all_idx = [l.Index() for l in lits]
         first = infeasible_with(all_idx)
         if first is None:
-            return {"conflicts": [], "muses": [],
+            return {"conflicts": [], "muses": [], "status": "feasible",
                     "message": "하드 제약만으로는 실현 가능합니다 (충돌 없음). "
                                "충돌은 소프트/완화 조합 또는 솔버 타임아웃일 수 있습니다."}
         if first is False:
-            return {"conflicts": [], "muses": [], "message": "충돌 분석 미완료 (타임아웃)."}
+            return {"conflicts": [], "muses": [], "status": "timeout", "message": "충돌 분석 미완료 (타임아웃)."}
         if first == []:
             # 가정 리터럴 없이도 infeasible — 완화 대상이 아닌 구조 제약끼리 충돌
-            return {"conflicts": [], "muses": [],
+            return {"conflicts": [], "muses": [], "status": "structural",
                     "message": "완화 가능한 제약과 무관하게 구조 제약(1일 1근무·근무 자격·"
                                "알 수 없는 코드 등)만으로 충돌합니다. 사전입력 코드와 "
                                "간호사 자격 설정을 확인하세요."}
@@ -275,7 +276,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                     "목록에 실제 원인이 아닌 제약이 포함돼 있을 수 있습니다.")
         anchored = [{"label": c, **(self._anchor_by_label.get(c) or {"nurse_id": None, "date": None})}
                     for c in flat]
-        return {"conflicts": flat, "anchored": anchored, "muses": muses, "message": msg}
+        return {"conflicts": flat, "anchored": anchored, "muses": muses, "status": "infeasible", "message": msg}
 
     # ── 게이팅 제약 (라벨 = 한국어 핀포인트) ──────────────────────────────────
     def _cur_day_req(self, dt):
@@ -844,6 +845,19 @@ class _ConflictAnalyzer(CpSatScheduler):
                 lit = gate(f"{self._fmt_nurse_label(nurse)} 월 야간 ≤{max_n}회", nid=nid)
                 model.Add(sum(night_vars) <= cap).OnlyEnforceIf(lit)
 
+    def _g_shift_pref_caps(self, model, x, gate):
+        """간호사별 시간대 상한 — 사람·시간대마다 1 리터럴 (엔진과 같은 사실-클램프, 결정 1-70)."""
+        month_idx = self._shift_pref_month_idx()
+        name = {"D": "낮(D)", "E": "저녁(E)", "N": "야간(N)"}
+        for nurse, key, shifts, cap, _sign in self._shift_pref_items():
+            if cap is None:
+                continue
+            nid = nurse["id"]
+            vs = [x[nid][d][s] for d in month_idx for s in shifts]
+            if vs:
+                lit = gate(f"{self._fmt_nurse_label(nurse)} {name[key]} 근무 월 {cap}회까지 (간호사 설정)", nid=nid)
+                model.Add(sum(vs) <= max(cap, self._pin_nurse_count(nid, month_idx, shifts))).OnlyEnforceIf(lit)
+
     def _g_max_night_two_month(self, model, x, gate):
         """홀짝월 합산 야간 — per nurse 1 리터럴 (야간전담 제외)."""
         max_n = self.rules.maxNightTwoMonthCount
@@ -980,6 +994,7 @@ class _ConflictAnalyzer(CpSatScheduler):
             self._cs_weekly_off(model, x)
         self._cs_pregnancy_p1_weekly(model, x)         # 임산부 P1 주1회 (모성보호)
         self._cs_max_v_per_month(model, x)
+        self._cs_shift_pref_caps(model, x)
         if self.rules.maxNightPerMonth:
             self._cs_max_night_per_month(model, x)
         # 실제 솔버 경로(_apply_hard_constraints)와 동일 집합 보장 — 빠지면

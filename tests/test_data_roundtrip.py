@@ -51,7 +51,8 @@ def test_roster_roundtrip_keeps_fields_not_in_the_file(client):
     from server import database as db
 
     keep = {"is_pregnant": True, "pregnancy": {"early": {"start": "2026-10-01", "end": "2026-12-31"}},
-            "night_months": {"2026-11": True}, "wishes": {"2026-11-05": "OF"}}
+            "night_months": {"2026-11": True}, "wishes": {"2026-11-05": "OF"},
+            "shift_prefs": {"N": {"max": 3}, "E": {"pref": "avoid"}}}
     db.upsert_nurse(_nurse(1, **keep))
     db.upsert_nurse(_nurse(2, group="B"))
 
