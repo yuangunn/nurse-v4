@@ -20,21 +20,30 @@ window.RedesignModule = function() {
   const WORK_ORDER = ['D','DC','D1','E','EC','중','N','NC'];
   const REST_ORDER = ['주','OF','V','생','특','공','법','병','경가','조가','P1','산전'];
   const PERIOD_KO = {D:'낮', E:'저녁', N:'야간'};
-  // HiGHS 기록의 Src 글자 — 그 해를 어떻게 찾았는가 (기록 머리줄의 범례 그대로)
-  const SRC = {B:'Branching', C:'Central rounding', F:'Feasibility pump', H:'Heuristic', L:'Sub-MIP', P:'Empty MIP', R:'Randomized rounding', S:'Solve LP', T:'Evaluate node', U:'Unbounded',
-    z:'Trivial zero', l:'Trivial lower', u:'Trivial upper', p:'Trivial point'};
+  // HiGHS 기록의 Src 글자(그 표를 어떻게 찾았는가)·끝난 상태를 쉬운 말로
+  const SRC = {B:'갈래를 나눠 따져 봄', C:'가운데 값에서 어림', F:'규칙을 맞추며 밀어 넣기', H:'어림 탐색', L:'작은 문제로 쪼개 풀기', P:'남은 것이 없는 문제', R:'무작위로 어림',
+    S:'조건을 느슨하게 푼 답에서', T:'갈래를 평가하다가', U:'한계 없음', z:'가장 단순한 값으로', l:'가장 단순한 값으로', u:'가장 단순한 값으로', p:'가장 단순한 값으로'};
+  const STATUS_KO = {'Optimal':'가장 좋은 표로 확인됨', 'Time limit reached':'시간이 다 됨', 'Interrupted by user':'멈춤', 'Infeasible':'이 조건으로는 만들 수 없음',
+    'Solution limit reached':'정해 둔 만큼 찾음', 'Objective target reached':'목표 점수에 닿음'};
+  // 솔버가 줄이는 값(감점) → 점수(높을수록 좋다). 'inf'·빈 값은 빈 글자
+  const SCORE = v => (v==null||v===''||v==='inf'||isNaN(+v)) ? '' : Math.round(-(+v)).toLocaleString('ko-KR');
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const fmtMD = dk => `${+dk.slice(5,7)}/${+dk.slice(8,10)}`;
   const fmtKo = dk => { const d = new Date(dk + 'T00:00:00'); return `${d.getMonth()+1}월 ${d.getDate()}일(${WD[d.getDay()]})`; };
   return {
     // ── 상태 ──
     drawerBig: false,            // 서랍을 화면 가운데 큰 창으로 (크게 보기)
+    onb: {open:false, wait:''},  // 처음 시작 안내 창 — wait: 붙여넣기 창을 띄워 놓고 닫히기를 기다리는 단계
+    onbTick: 0,                  // 안내 진행 표시(localStorage)를 바꾸면 올려 다시 그린다
+    genFailed: false,            // 방금 한 만들기가 실패했다 — 앞 표가 떠 있어도 실패 배너·상태 줄로 알린다 (경고가 붙은 성공과 가른다)
     reportTab: 'summary',        // 서랍 탭: summary·relaxed·v·teukgeun·warn·wish·log
+    showSolveEvents: false,      // 계산 현황의 '무슨 일이 있었나' — 기본은 최근 한 줄, 펼치면 전부
     showLiveLog: false,          // 만드는 중 원본 계산 기록 — 기본은 접고 해석한 계산 현황(rdSolveCards·solveStats.events)을 보인다
     solveStats: null,            // 솔버 기록에서 읽은 것 {phases:[{n,rows0,cols0,rows,cols,restarts,status,row}], events:[…]} (_solveFeed)
     story: {open:false, step:0}, // 결과 요약 — 생성이 끝나면 단계별로 넘겨 보는 창 (rdStorySteps)
     storyHint: false,            // 요약을 중간에 닫은 직후 — 상태 줄 '결과 요약 다시 보기'를 잠깐 강조
     rdWhy: false,                // 원티드 미반영 탭에서 칸마다 그날 사정을 펼쳐 보인다 ('칸별 이유가 궁금하다면?')
+    cellWhy: {},                 // 칸별 이유 — 'nid|날짜' → {loading} 또는 {res: 정밀 진단 결과} (rdCellWhy)
     rdToast: null,               // {msg, undo}
     _rdToastTimer: null,
     showPrintPreview: false,
@@ -134,6 +143,7 @@ window.RedesignModule = function() {
       const sched=this.rdSched;
       let s3='만들고 인쇄';
       if(this.generating) s3='만드는 중…';
+      else if(this.genFailed && !this.statusOk) s3='다시 만들기 실패';
       else if(this.rdPreChanged) s3='사전입력 바뀜 · 다시 만들어야 반영';
       else if(sched) s3=(this.rdRelaxedCount ? '완화로 생성' : '생성 완료')+(this.rdSaved ? ' · 저장됨' : '');   // 저장됨은 실제로 저장됐을 때만
       else if(!this.statusOk && this.statusMessage) s3='만들 수 없음';
@@ -191,6 +201,7 @@ window.RedesignModule = function() {
         return {kind:'warn', running:true, text:`근무표를 만드는 중… ${t}`};
       }
       if(!this.rdSched) return null;
+      if(this.genFailed && !this.statusOk) return {kind:'err', failed:true, text:'다시 만들지 못했어요 — 표는 그 전에 만든 표 그대로입니다. 바로 아래 안내에서 원인을 확인하세요'};
       if(this.rdPreChanged) return {kind:'warn', changed:true, text:'사전입력을 고친 뒤 아직 다시 만들지 않았어요 — 지금 표는 고치기 전 사전입력으로 만든 것입니다'};
       const rx=this.rdRelaxedCount;
       const pre=this.rdWantedCount;
@@ -222,6 +233,59 @@ window.RedesignModule = function() {
     },
     get rdEdited(){ return this._originalSchedule ? this.getManualEditCount() : 0; },
 
+    // ── 처음 시작 안내 (결정 1-71) — 새 병동은 번표 붙여넣기부터: 예시 명부 지우기 → 지난달 근무표 → 이번 달 사전입력 →
+    //    명부 확인 → 필요 인원 확인 → 만들기. 끝낸 단계는 자료를 보고 판정하고(붙여넣은 표·사전입력·만든 표), 눈으로 확인하는
+    //    두 단계와 건너뛰기·끝내기만 병동마다 localStorage('ns_onb:<병동>')에 적는다. 예시 명부(이름 앞 *)가 있는 새 병동에서 저절로 뜬다 ──
+    onbFlags(){ try{ return JSON.parse(localStorage.getItem('ns_onb:'+(this.currentProfile||''))||'{}')||{}; }catch(e){ return {}; } },
+    onbSet(k, v){ const f=this.onbFlags(); f[k]=v; try{ localStorage.setItem('ns_onb:'+(this.currentProfile||''), JSON.stringify(f)); }catch(e){} this.onbTick++; },
+    onbCheck(){
+      const f=this.onbFlags(); if(f.done) return false;
+      if(!f.started && !(this.nurses||[]).some(n=>String(n.name||'').startsWith('*'))) return false;   // 쓰던 병동에는 띄우지 않는다
+      if(!f.started) this.onbSet('started', 1);
+      this.onb.open=true; return true;
+    },
+    onbStart(){ this.onbSet('done', 0); this.onbSet('started', 1); this.onb={open:true, wait:''}; },   // 도움말에서 다시 열기
+    get rdOnbActive(){ this.onbTick; const f=this.onbFlags(); return !!this.currentProfile && !this.profileScreen && !!f.started && !f.done; },
+    get rdOnbSteps(){
+      this.onbTick; const f=this.onbFlags();
+      const seed=(this.nurses||[]).filter(n=>String(n.name||'').startsWith('*')).length;
+      const pd=new Date(this.year, this.month-2, 1), py=pd.getFullYear(), pm=pd.getMonth()+1;
+      const hasLast=(this.savedSchedules||[]).some(s=>s.year===py&&s.month===pm), pre=this.countPrevEntries(true)>0;
+      const steps=[];
+      if(seed || f.seed) steps.push({id:'seed', title:'예시 명부 지우기', act:'예시 간호사 지우기', done:!seed,
+        desc:`새 병동에는 예시 간호사 ${seed||''}명이 들어 있습니다(이름 앞 *). 우리 병동 사람을 넣기 전에 지웁니다.`});
+      steps.push({id:'last', title:`${pm}월 근무표 붙여넣기`, act:'근무표 붙여넣기', skip:true, done:hasLast||!!f.last, skipped:!hasLast&&f.last==='skip',
+        desc:'엑셀 번표를 복사해 붙여넣거나 파일을 올립니다. 명부에 없는 이름은 ‘간호사로 추가하고 다시 맞추기’를 누르면 명부가 만들어지고, 주휴 요일과 지난달 야간 수를 이어받습니다.'});
+      steps.push({id:'pre', title:`${this.month}월 사전입력 붙여넣기`, act:'사전입력 붙여넣기', skip:true, done:pre||!!f.pre, skipped:!pre&&f.pre==='skip',
+        desc:'원티드·주휴·휴가가 든 표를 붙여넣습니다. 표에서 칸을 눌러 직접 넣어도 됩니다.'});
+      steps.push({id:'roster', title:'명부 확인', act:'명부 열기', confirm:true, done:!!f.roster,
+        desc:'붙여넣은 표로는 알 수 없는 것을 확인합니다 — 할 수 있는 근무(차지·야간), 야간전담 달, 임산부, 순서(위가 선임).'});
+      steps.push({id:'req', title:'필요 인원 확인', act:'필요 인원 열기', confirm:true, done:!!f.req,
+        desc:'요일별 D·E·N 인원과, 공휴일처럼 그 날만 다른 인원을 확인합니다.'});
+      steps.push({id:'make', title:'근무표 만들기', act:'근무표 만들기', done:!!this.rdSched,
+        desc:'사전입력을 지키면서 나머지 칸을 자동으로 채웁니다.'});
+      return steps;
+    },
+    get rdOnbNext(){ return this.rdOnbSteps.findIndex(s=>!s.done); },
+    async rdOnbDo(id){
+      if(id==='seed'){
+        for(const n of (this.nurses||[]).filter(x=>String(x.name||'').startsWith('*'))) await this.api('DELETE', `/api/nurses/${n.id}`);
+        await this.loadNurses(); this.onbSet('seed', 1); return;
+      }
+      this.onb.open=false;
+      if(id==='last'){ this.onb.wait='last'; this.activeTab='schedule'; this.openPastePrev('saved'); }
+      else if(id==='pre'){ this.onb.wait='pre'; this.activeTab='preinput'; this.openPastePrev(); }
+      else if(id==='roster'){ this.activeTab='settings'; this.settingsSection='roster'; }
+      else if(id==='req'){ this.activeTab='settings'; this.settingsSection='req'; }
+      else if(id==='make'){ this.rdGoMake(); }
+    },
+    // 붙여넣기 창이 닫히면 안내 창으로 돌아온다
+    // 근무표를 올리면 '저장한 근무표' 창이 뒤따라 열린다 — 안내 창을 덮지 않게 닫는다
+    rdOnbBack(){
+      if(this.onb.wait && !(this.pastePrev&&this.pastePrev.open)){ this.onb.wait=''; if(this.rdOnbActive) this.onb.open=true; }
+      if(this.onb.open && this.rdOnbActive && this.showSavedDrawer) this.showSavedDrawer=false;
+    },
+
     // ── 계산 현황 — 솔버(HiGHS) 기록을 줄 단위로 읽어 숫자와 사건으로 (결정 1-64) ──
     // 화면에 남기는 기록(solverLogs)은 최근 200줄로 잘리므로, 줄이 들어올 때마다 여기에 쌓는다. 한 번의 생성에 풀이(Presolving model)가
     // 여러 번 올 수 있다(완화 단계). CP-SAT 기록은 형식이 달라 읽지 않는다 — 카드는 진행 정보(solveProgress)의 노드·Gap 만 보인다.
@@ -234,49 +298,52 @@ window.RedesignModule = function() {
     _solveFeed(line){
       if(!this.solveStats) this._solveReset();
       const S=this.solveStats, n=x=>Number(x).toLocaleString('ko-KR'); let P=S.phases[S.phases.length-1], m;
-      const ev=text=>{ const r=(P&&P.row)||{}; S.events.push({id:++S.seq, solve:S.phases.length, time:r.time??0, text, nodes:r.proc??0, sol:r.sol??'', gap:r.gap??''}); if(S.events.length>200) S.events.splice(0, S.events.length-200); };
+      const score=SCORE;
+      const ev=text=>{ const r=(P&&P.row)||{}; S.events.push({id:++S.seq, solve:S.phases.length, time:r.time??0, text, nodes:r.proc??0, sol:score(r.sol), gap:r.gap&&r.gap!=='inf'?r.gap:''}); if(S.events.length>200) S.events.splice(0, S.events.length-200); };
       line=String(line??'');
       if(/^Presolving model/.test(line)){ S.phases.push({n:S.phases.length+1, rows0:null, cols0:null, rows:null, cols:null, restarts:0, status:'', row:null, start:null, had:false}); return; }
       if(!P) return;
       if((m=line.match(/^(\d+) rows, (\d+) cols, \d+ nonzeros/))){ if(P.rows0==null){ P.rows0=+m[1]; P.cols0=+m[2]; } P.rows=+m[1]; P.cols=+m[2]; return; }
-      if((m=line.match(/^MIP start solution is feasible, objective value is (\S+)/))){ P.start=m[1]; P.had=true; ev(`MIP start — 앞에서 찾은 해로 시작 (objective ${m[1]})`); return; }
-      if(/^Solving MIP model with/.test(line)){ if(P.rows0!=null) ev(`Presolve — ${n(P.rows0)} → ${n(P.rows)} rows · ${n(P.cols0)} → ${n(P.cols)} cols`); return; }
+      if((m=line.match(/^MIP start solution is feasible, objective value is (\S+)/))){ P.start=m[1]; P.had=true; ev('앞 단계에서 찾은 표로 시작'); return; }
+      if(/^Solving MIP model with/.test(line)){ if(P.rows0!=null) ev(`조건 정리 — 따질 조건 ${n(P.rows0)}개를 ${n(P.rows)}개로 줄임`); return; }
       if((m=line.match(/^([\d.]+)% inactive integer columns, restarting/))){ P.restarts++; P.inactive=m[1]; return; }
-      if((m=line.match(/^Model after restart has (\d+) rows, (\d+) cols/))){ ev(`Restart — inactive integer columns ${P.inactive}% → ${n(m[1])} rows · ${n(m[2])} cols`); return; }
-      if((m=line.match(/^\s*([A-Za-z])?\s+(\d+)\s+(\d+)\s+(\d+)\s+([\d.]+)%\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([\d.]+)s\s*$/))){
-        const row={src:m[1]||(P.row&&P.row.src)||'', proc:+m[2], queue:+m[3], leaves:+m[4], expl:+m[5], bound:m[6], sol:m[7], gap:m[8], cuts:+m[9], inlp:+m[10], confl:+m[11], lpit:+m[12], time:+m[13]};
+      if((m=line.match(/^Model after restart has (\d+) rows, (\d+) cols/))){ ev(`문제를 줄여 다시 시작 — 더 볼 필요 없는 칸 ${P.inactive}%를 걷어 냄 (조건 ${n(m[1])}개)`); return; }
+      // 큰 수는 솔버가 '2237k'·'1.2M' 처럼 줄여 적는다 — 숫자 칸마다 받아 풀어 읽는다 (못 읽으면 그 줄부터 카드가 멈춘다)
+      if((m=line.match(/^\s*([A-Za-z])?\s+([\d.]+[kMG]?)\s+([\d.]+[kMG]?)\s+([\d.]+[kMG]?)\s+([\d.]+)%\s+(\S+)\s+(\S+)\s+(\S+)\s+([\d.]+[kMG]?)\s+([\d.]+[kMG]?)\s+([\d.]+[kMG]?)\s+([\d.]+[kMG]?)\s+([\d.]+)s\s*$/))){
+        const num=v=>Math.round(parseFloat(v)*({k:1e3,M:1e6,G:1e9}[v.slice(-1)]||1));
+        const row={src:m[1]||(P.row&&P.row.src)||'', proc:num(m[2]), queue:num(m[3]), leaves:num(m[4]), expl:+m[5], bound:m[6], sol:m[7], gap:m[8], cuts:num(m[9]), inlp:num(m[10]), confl:num(m[11]), lpit:num(m[12]), time:+m[13]};
         const better=row.sol!=='inf' && row.sol!==(P.row ? P.row.sol : P.start);
         P.row=row;
-        if(better){ ev(`${P.had?'더 좋은 해':'첫 해'} 발견${m[1]?` — Src ${m[1]} (${SRC[m[1]]||m[1]})`:''}`); P.had=true; }
+        if(better){ ev(`${P.had?'더 좋은 표를 찾음':'첫 표를 찾음'}${m[1]&&SRC[m[1]]?` — ${SRC[m[1]]}`:''}`); P.had=true; }
         return;
       }
-      if((m=line.match(/^\s+Status\s+(.+)$/))){ P.status=m[1].trim(); ev(`Solving report — ${P.status}`); }
+      if((m=line.match(/^\s+Status\s+(.+)$/))){ P.status=m[1].trim(); ev(`끝 — ${STATUS_KO[P.status]||P.status}`); }
     },
-    // 숫자 카드 — 지금 풀이의 마지막 줄. 용어는 솔버 기록 그대로, 뜻은 툴팁
+    // 숫자 카드 — 지금 풀이의 마지막 줄을 쉬운 말로. 솔버가 줄이는 값은 점수의 음수라 부호를 뒤집어 '점수'(높을수록 좋다)로 보인다.
+    // 솔버 기록의 원래 이름(Proc.·Leaves·BestSol…)은 툴팁에만 둔다
     get rdSolveCards(){
       const S=this.solveStats, P=S&&[...S.phases].reverse().find(p=>p.row), n=x=>Number(x).toLocaleString('ko-KR');
       if(!P){
         const p=this.solveProgress||{}; if(!(p.nodes>0) && p.gap_percent==null) return [];
-        return [{k:'노드', v:n(p.nodes||0), tip:'지금까지 처리한 탐색 노드 수'}, {k:'Gap', v:p.gap_percent==null?'—':(Math.round(p.gap_percent*100)/100)+'%', tip:'가장 좋은 해와 이론상 한계의 차이'}];
+        return [{k:'따져 본 경우', v:n(p.nodes||0), tip:'지금까지 따져 본 경우의 수'}, {k:'가능한 최고와의 차이', v:p.gap_percent==null?'—':(Math.round(p.gap_percent*100)/100)+'%', tip:'지금 표가 이론상 가장 좋은 표와 얼마나 차이 나는지 — 0%면 가장 좋은 표'}];
       }
       const r=P.row;
       return [
-        {k:'노드 (Proc.)', v:n(r.proc), tip:'분기 한정(B&B)에서 처리를 끝낸 노드 수 — 지금까지 따져 본 경우'},
-        {k:'대기 (InQueue)', v:n(r.queue), tip:'아직 열려 있어 더 따져 봐야 하는 노드 수'},
-        {k:'리프 (Leaves)', v:n(r.leaves), tip:'가지치기·불가능·해 발견으로 닫힌 끝 노드 수 — 더 볼 필요가 없어 쳐낸 경우'},
-        {k:'탐색 (Expl.)', v:r.expl+'%', tip:'탐색 트리에서 살펴본 비율'},
-        {k:'BestSol', v:r.sol==='inf'?'—':r.sol, tip:'지금까지 찾은 가장 좋은 해의 목적함수 값 (낮을수록 좋다)'},
-        {k:'BestBound', v:r.bound, tip:'이론상 이보다 좋을 수 없는 한계 값'},
-        {k:'Gap', v:r.gap==='inf'?'—':r.gap, tip:'BestSol 과 BestBound 의 차이 — 0% 면 가장 좋은 해'},
-        {k:'Cuts', v:n(r.cuts), tip:'탐색 범위를 좁히려고 더한 절단 제약 수'},
-        {k:'Confl.', v:n(r.confl), tip:'충돌 분석으로 알아낸 제약 수'},
-        {k:'LP iters', v:n(r.lpit), tip:'LP 완화를 푼 단체법 반복 수'},
-        {k:'방법 (Src)', v:r.src ? `${r.src} · ${SRC[r.src]||''}` : '—', tip:'가장 최근 해를 찾은 방법 — B 분기 · H 휴리스틱 · L Sub-MIP · F Feasibility pump · T 노드 평가 등'},
+        {k:'따져 본 경우', v:n(r.proc), tip:'지금까지 끝까지 따져 본 경우의 수 (솔버 기록의 Proc.)'},
+        {k:'아직 남은 경우', v:n(r.queue), tip:'더 따져 봐야 해서 줄 서 있는 경우의 수 (InQueue)'},
+        {k:'쳐낸 경우', v:n(r.leaves), tip:'더 볼 필요가 없어 닫은 경우의 수 — 가망이 없거나 이미 답이 나온 갈래 (Leaves)'},
+        {k:'살펴본 비율', v:r.expl+'%', tip:'전체 경우 가운데 살펴본 비율 (Expl.)'},
+        {k:'지금 표 점수', v:SCORE(r.sol)||'—', tip:'지금까지 찾은 가장 좋은 표의 점수 — 높을수록 좋다 (BestSol 의 부호를 뒤집은 값)'},
+        {k:'가능한 최고 점수', v:SCORE(r.bound)||'—', tip:'어떤 표도 이 점수를 넘을 수 없다는 한계 (BestBound)'},
+        {k:'최고와의 차이', v:r.gap==='inf'?'—':r.gap, tip:'지금 표 점수와 가능한 최고 점수의 차이 — 0%면 가장 좋은 표 (Gap)'},
+        {k:'방금 표를 찾은 방법', v:(r.src&&SRC[r.src])||'—', tip:'가장 최근 표를 어떻게 찾았는지 (Src '+(r.src||'-')+')'},
       ];
     },
     get rdSolveSub(){
       const S=this.solveStats, P=S&&S.phases[S.phases.length-1], n=x=>Number(x).toLocaleString('ko-KR'); if(!P) return '';
-      return `Solve #${P.n}` + (P.rows0!=null ? ` · Presolve ${n(P.rows0)} → ${n(P.rows)} rows · ${n(P.cols0)} → ${n(P.cols)} cols` : '') + (P.restarts ? ` · Restart ${P.restarts}회` : '') + (P.status ? ` · ${P.status}` : '');
+      const r=P.row;
+      return `${P.n}번째 풀이` + (P.rows0!=null ? ` · 따질 조건 ${n(P.rows0)}개를 ${n(P.rows)}개로 정리` : '') + (P.restarts ? ` · 문제를 줄여 다시 시작 ${P.restarts}번` : '')
+        + (r ? ` · 새로 찾아 더한 규칙 ${n(r.cuts)}개 · 막힌 데서 배운 것 ${n(r.confl)}개 · 계산 ${n(r.lpit)}번` : '') + (P.status ? ` · ${STATUS_KO[P.status]||P.status}` : '');
     },
     get rdSolveEvents(){ return [...((this.solveStats&&this.solveStats.events)||[])].reverse(); },   // 새 것이 위
 
@@ -301,15 +368,15 @@ window.RedesignModule = function() {
       const calc=[];
       if(sec) calc.push(['걸린 시간', dur]);
       if(ph.length){
-        calc.push(['풀이 횟수 (Solve)', `${ph.length}회`], ['처리한 노드 (Proc.)', n(sum('proc'))], ['닫힌 리프 (Leaves)', n(sum('leaves'))], ['LP iterations', n(sum('lpit'))]);
-        if(ph[0].rows0!=null) calc.push(['Presolve', `${n(ph[0].rows0)} → ${n(ph[0].rows)} rows`]);
-        if(lastP.row.src) calc.push(['해를 찾은 방법 (Src)', `${lastP.row.src} · ${SRC[lastP.row.src]||''}`]);
-        if(lastP.status) calc.push(['Status', lastP.status]);
+        calc.push(['풀이 횟수', `${ph.length}번`], ['따져 본 경우', `${n(sum('proc'))}가지`], ['더 볼 필요 없어 쳐낸 경우', `${n(sum('leaves'))}가지`], ['계산 횟수', `${n(sum('lpit'))}번`]);
+        if(ph[0].rows0!=null) calc.push(['따질 조건 정리', `${n(ph[0].rows0)}개 → ${n(ph[0].rows)}개`]);
+        if(lastP.row.src&&SRC[lastP.row.src]) calc.push(['마지막 표를 찾은 방법', SRC[lastP.row.src]]);
+        if(lastP.status) calc.push(['끝난 까닭', STATUS_KO[lastP.status]||lastP.status]);
       }
-      if(g!=null) calc.push(['Gap', (Math.round(g*100)/100)+'%']);
-      else if(lastP && lastP.row.gap!=='inf') calc.push(['Gap', lastP.row.gap]);
-      steps.push({id:'calc', eyebrow:'계산', title: ph.length ? `노드 ${n(sum('proc'))}개를 따져 봤어요` : '근무표를 계산했어요',
-        sub: this.scheduleStopped ? '중간에 멈춰 그때까지 찾은 해입니다.' : (g==null ? '' : (g<=0.1 ? 'Gap 0% — 이 조건에서 가장 좋은 해입니다.' : `가장 좋은 해와 ${Math.round(g*10)/10}% 안쪽 차이에서 멈췄습니다.`)), facts:calc});
+      if(g!=null) calc.push(['가능한 최고와의 차이', (Math.round(g*100)/100)+'%']);
+      else if(lastP && lastP.row.gap!=='inf') calc.push(['가능한 최고와의 차이', lastP.row.gap]);
+      steps.push({id:'calc', eyebrow:'계산', title: ph.length ? `경우 ${n(sum('proc'))}가지를 따져 봤어요` : '근무표를 계산했어요',
+        sub: this.scheduleStopped ? '중간에 멈춰 그때까지 찾은 표입니다.' : (g==null ? '' : (g<=0.1 ? '이 조건에서 가장 좋은 표입니다.' : `가장 좋은 표와 ${Math.round(g*10)/10}% 안쪽 차이에서 멈췄습니다.`)), facts:calc});
       const pre=this.rdWantedCount, rx=this.rdRelaxedCount, tc=this.rdTraineeChanged, keptN=Math.max(pre-this.rdWantedRelaxed-tc, 0);
       // 표 아래 '배정 / 필요' 줄과 같은 셈 — 날짜별로 고친 필요 인원(rdFootNeed)과 견준다
       const rowsDEN=(this.footerRows||[]).filter(r=>['D','E','N'].includes(r.label));
@@ -330,10 +397,33 @@ window.RedesignModule = function() {
       steps.push({id:'done', eyebrow:'결과', title:'근무표가 준비됐어요', sub: this.rdSaved ? '자동으로 저장했습니다.' : '', facts:[]});
       return steps;
     },
-    // 칸별 이유가 궁금하다면? — 원티드 미반영 목록을 큰 창으로 열고 칸마다 그날 사정을 펼친다
-    rdOpenWhy(){ this.story.open=false; this.rdWhy=true; this.rdOpenDrawer('relaxed'); this.drawerBig=true; },
+    // 칸별 이유 — "이 칸을 지켰다면?" 이 칸만 원래 사전입력으로 두고(다른 바뀐 칸은 풀어 둔 채) 정밀 진단(/api/diagnose)을 돌린다.
+    // 만든 표가 규칙을 지키므로, 여기서 막히면 그 칸을 지킨 탓이다 — 부딪히는 규칙 묶음이 그 칸의 이유.
+    // 막히지 않으면 지킬 수 있는 칸(계산을 멈췄거나 시간 안에 못 찾은 것). 진단은 길면 1분 (결정 1-66)
+    async rdCellWhy(nid, dk){
+      const key=nid+'|'+dk, info=this.relaxedCells?.[nid]?.[dk];
+      if(!info || (this.cellWhy[key]||{}).loading) return;
+      const prev=JSON.parse(JSON.stringify(this.prevSchedule||{}));
+      for(const [n,cells] of Object.entries(this.relaxedCells||{})) for(const d of Object.keys(cells||{})) if(prev[n]) delete prev[n][d];
+      (prev[nid]=prev[nid]||{})[dk]=info.original;
+      this.cellWhy={...this.cellWhy, [key]:{loading:true}};
+      let res;
+      try{ res=await this.api('POST','/api/diagnose',{...this._diagPayload(), prev_schedule:prev}); }
+      catch(e){ res={status:'error', message:'계산하지 못했습니다'+(e&&e.message?` — ${e.message}`:'')}; }
+      this.cellWhy={...this.cellWhy, [key]:{res:res||{status:'error', message:'계산하지 못했습니다'}}};
+    },
+    // 화면에 그릴 모양 — null(아직 안 눌렀다) · loading · free(지킬 수 있는 칸) · blocked(부딪히는 규칙 묶음, 줄마다 갈 칸) · unknown(시간 초과 등)
+    rdCellWhyView(nid, dk){
+      const w=this.cellWhy[nid+'|'+dk]; if(!w) return null;
+      if(w.loading) return {state:'loading', groups:[]};
+      const r=w.res||{}, by=new Map((r.anchored||[]).map(a=>[a.label,a]));
+      const sets=(r.muses&&r.muses.length) ? r.muses : ((r.conflicts&&r.conflicts.length) ? [r.conflicts] : []);
+      if(sets.length) return {state:'blocked', groups:sets.map(m=>m.map(l=>by.get(l)||{label:l, nurse_id:null, date:null})),
+        soft: !!((this.offTeukgeun||[]).length || (this.managerCheck||[]).length)};
+      return {state: r.status==='feasible' ? 'free' : 'unknown', groups:[], message:r.message||''};
+    },
     // 그날 사정 — 그날 근무할 수 있는 사람이 필요 인원보다 모자랐는가 (사전입력 기준 산술, 인원 여유 검사 _checkStaffing 과 같은 셈).
-    // 어느 규칙과 부딪혔는지(칸별 이유)는 엔진이 아직 주지 않는다 — 인원이 모자란 날만 '풀 수밖에 없는 날'이라고 말한다
+    // 인원이 모자란 날만 '풀 수밖에 없는 날'이라고 말한다 — 어느 규칙과 부딪혔는지는 '이 칸을 지키면?'(rdCellWhy)이 따져 본다
     rdDayFacts(dk){
       const day=new Date(dk+'T00:00:00'), need=['D','E','N'].reduce((a,c)=>a+(+this.rdFootNeed(day,c)||0), 0);
       let on=0, rest=0;
@@ -347,17 +437,22 @@ window.RedesignModule = function() {
       return {need, on, rest, can, short, text: short
         ? `그날 사정 — 재적 ${on}명 중 ${rest}명이 쉬는 날로 들어 있어 근무할 수 있는 사람이 ${can}명, 필요 인원은 ${need}명입니다. ${short}명이 모자라 쉬는 날 원티드 ${short}칸은 풀 수밖에 없는 날이었습니다.`
         : can===need
-        ? `그날 사정 — 근무할 수 있는 사람(${can}명)이 필요 인원(${need}명)과 딱 맞아 여유가 없는 날이었습니다. 야간전담·임산부처럼 그날 설 수 있는 근무가 정해진 사람이 있으면 쉬는 날 원티드를 풀어야 할 수 있습니다. 어느 규칙과 부딪혔는지는 아직 보여 드리지 못합니다.`
-        : `그날 사정 — 사람 수만 보면 ${can-need}명 여유가 있었습니다 (필요 ${need}명 · 근무할 수 있는 사람 ${can}명). 연속 근무·야간 뒤 휴무·주 1회 OF 같은 다른 규칙과 부딪혔을 수 있는데, 어느 규칙인지는 아직 보여 드리지 못합니다.`};
+        ? `그날 사정 — 근무할 수 있는 사람(${can}명)이 필요 인원(${need}명)과 딱 맞아 여유가 없는 날이었습니다. 야간전담·임산부처럼 그날 설 수 있는 근무가 정해진 사람이 있으면 쉬는 날 원티드를 풀어야 할 수 있습니다.`
+        : `그날 사정 — 사람 수만 보면 ${can-need}명 여유가 있었습니다 (필요 ${need}명 · 근무할 수 있는 사람 ${can}명). 인원이 아닌 다른 규칙(연속 근무·야간 뒤 휴무·차지 등)과 부딪혔을 수 있습니다.`};
     },
 
     // ── 실패 배너 ──
     // 보고 있는 달의 저장본 중 가장 새것 (목록은 새것부터) — 앱을 다시 열면 표는 비어 있고 저장본만 남는다
     get rdSavedThisMonth(){ return (this.savedSchedules||[]).find(sv=>sv.year===this.year&&sv.month===this.month)||null; },
     get rdFail(){
-      if(this.generating || this.statusOk || !this.statusMessage || this.rdSched) return null;
-      const short=((this.staffingAlerts||{}).short)||[];
-      const anchored=[...(((this.diagResult||{}).anchored)||[]), ...(((this.feas||{}).anchored)||[])].filter(a=>a&&(a.nurse_id||a.date));
+      // 표가 떠 있으면 숨긴다(경고가 붙은 성공도 statusOk=false 다) — 단, 방금 다시 만들기가 실패했으면 앞 표 위에 그대로 알린다.
+      // 숨기면 '다시 만들기'를 눌러도 아무 일도 안 일어난 것처럼 보였다 (2026-11-18)
+      if(this.generating || this.statusOk || !this.statusMessage || (this.rdSched && !this.genFailed)) return null;
+      // 완화를 켜고도 실패했으면 완화로 풀 수 있는 칸은 원인이 아니다 — 못 바꾸는 칸(잠근 칸·주휴)만으로 인원을 세고,
+      // 엄격 기준 신호등(feas)이 짚은 칸은 쓰지 않는다 (정밀 진단 diagResult 는 완화 기준으로 다시 돈다 — diagnoseConflicts)
+      const relax=!!this.allowPreRelax;
+      const short=relax ? this._staffingSlack(true).short : (((this.staffingAlerts||{}).short)||[]);
+      const anchored=[...(((this.diagResult||{}).anchored)||[]), ...(relax ? [] : (((this.feas||{}).anchored)||[]))].filter(a=>a&&(a.nurse_id||a.date));
       const seen=new Set(); const fixes=[];
       for(const a of anchored){
         const key=`${a.nurse_id}|${a.date}`; if(seen.has(key)) continue; seen.add(key);
@@ -371,7 +466,8 @@ window.RedesignModule = function() {
       if(short.length){
         const a=short[0]; const k=a.needed-a.avail;
         title=`${fmtKo(a.dk)} 근무 인원이 ${k}명 모자라 이 조건으로는 만들 수 없어요.`;
-        body=`그날 나올 수 있는 사람은 ${a.avail}명인데 필요 인원은 ${a.needed}명입니다. 아래 셋 중 하나를 바꾸면 풀립니다.`;
+        body=relax ? `완화를 켜도 그날 잠근 칸·주휴를 빼면 나올 수 있는 사람은 ${a.avail}명인데 필요 인원은 ${a.needed}명입니다. 잠금을 풀거나 필요 인원을 바꿔 주세요.`
+          : `그날 나올 수 있는 사람은 ${a.avail}명인데 필요 인원은 ${a.needed}명입니다. 아래 셋 중 하나를 바꾸면 풀립니다.`;
         if(fixes.length<3){
           const req={...(this.requirements?.[['sun','mon','tue','wed','thu','fri','sat'][new Date(a.dk+'T00:00:00').getDay()]]||{}), ...(this.prevDayReqs?.[a.dk]||{})};
           const p=['D','E','N'].sort((x,y)=>(+req[y]||0)-(+req[x]||0))[0];
@@ -380,11 +476,16 @@ window.RedesignModule = function() {
         }
       }else{
         // 생성 결과·신호등의 한 줄 요약이 있으면 그것을 쓴다 — 진단 첫 줄('원인 진단 결과:')은 아무것도 말하지 않는다
-        const summary=((this.diagResult||{}).summary)||((this.feas||{}).status==='infeasible' ? (this.feas||{}).summary : '');
+        const summary=((this.diagResult||{}).summary)||(!relax&&(this.feas||{}).status==='infeasible' ? (this.feas||{}).summary : '');
         const first=(this.statusMessage||'').split('\n').map(s=>s.replace(/^[★⚠❌✗\s]+/,'').trim()).find(s=>s&&!/^[━─=]+/.test(s)&&!/원인 진단 결과:?$/.test(s))||'';
         title=summary ? `이 조건으로는 만들 수 없어요. ${summary}` : `이 조건으로는 만들 수 없어요.${first ? ' '+first.slice(0,80) : ''}`;
         body='아래에서 하나를 고치거나 사전입력 완화를 켜고 다시 만들어 보세요. 잠근 칸은 완화해도 바뀌지 않습니다.';
+        if(relax){
+          title='사전입력 완화를 켜도 만들 수 없어요 — 완화로 바꿀 수 없는 칸끼리 규칙이 맞지 않습니다.';
+          body=`완화는 잠근 칸(🔒)${this.allowJuhuRelax?'':'과 주휴'}·지난달 칸을 바꾸지 않습니다. ‘왜 안 되는지 자세히 보기’가 그 칸들만 두고 부딪히는 곳을 짚어 줍니다 — 짚인 날의 잠금을 풀고 다시 만들어 보세요.`;
+        }
       }
+      if(this.rdSched) body+=' 아래 표는 다시 만들기 전에 만든 표 그대로입니다.';
       return {title, body, fixes: fixes.slice(0,3)};
     },
     rdApplyFix(f){

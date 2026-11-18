@@ -369,9 +369,10 @@ function app() {
         const trainee=!!n.is_trainee&&this.traineeLastKey(n)>=firstK;   // 이 달에 하루라도 트레이닝 (엔진 공정성 풀과 같게)
         const preg=!!n.is_pregnant&&['early','late'].some(k=>{const w=(n.pregnancy||{})[k]||{};return w.start&&w.end&&w.start<=lastK&&w.end>=firstK});
         const canNight=(n.capable_shifts||nightCodes).some(c=>nightCodes.includes(c));
+        const np=(n.shift_prefs||{}).N||{};const nightPref=!nightKeep&&(np.pref==='like'||np.pref==='avoid'||(np.max!==undefined&&np.max!==null&&np.max!==''));   // 야간 성향을 정한 사람 — 엔진 공정성 풀과 같게 (결정 1-70)
         const cum=this.fairnessLedger3m?.[s.id]||{};
         const cumN=cum.nights||0,cumW=cum.weekend_holiday??((cum.weekends||0)+(cum.holiday_work||0));
-        return{id:s.id,name:s.name,exclN:nightKeep||partial||trainee||preg||!canNight,exclW:nightKeep||partial||trainee,
+        return{id:s.id,name:s.name,exclN:nightKeep||partial||trainee||preg||!canNight||nightPref,exclW:nightKeep||partial||trainee,
                nights:s.nights,cumNights:cumN,totalNights:s.nights+cumN,wh:s.wh,cumWh:cumW,totalWh:s.wh+cumW};
       });
       const ext=(arr,k)=>arr.length?{max:Math.max(...arr.map(r=>r[k])),min:Math.min(...arr.map(r=>r[k]))}:{max:0,min:0};
@@ -680,10 +681,34 @@ function app() {
     },
 
     // ── API ───────────────────────────────────────────────────
+    // 연 병동을 머리줄(X-Profile)로 같이 보낸다 — 서버가 다시 시작돼 병동이 닫혔으면 서버가 409(profile_closed)로 받지 않는다.
+    // 그러면 화면을 막고(profileLost) 다시 열게 한다. 예전엔 모르고 기본 DB 의 다른 명부를 받아 표가 빈 것처럼 보였다
+    profileLost:false,
     async api(method,url,body,extraOpts={}){
-      const opts={method,headers:{'Content-Type':'application/json'},...extraOpts};
+      const guard=!!this.currentProfile&&!this.profileScreen&&!url.startsWith('/api/profiles');
+      const opts={method,headers:{'Content-Type':'application/json',...(guard?{'X-Profile':encodeURIComponent(this.currentProfile)}:{})},...extraOpts};
       if(body!==undefined)opts.body=JSON.stringify(body);
-      const res=await fetch(url,opts);if(!res.ok)throw new Error(await res.text());return res.json();
+      const res=await fetch(url,opts);
+      if(!res.ok){
+        const text=await res.text();
+        if(guard&&res.status===409&&text.includes('profile_closed')){this.profileLost=true;throw new Error('병동(프로필)이 닫혀 있습니다 — 다시 열어 주세요.')}
+        throw new Error(text);
+      }
+      return res.json();
+    },
+    // 닫힌 병동 다시 열기 — 비밀번호가 없으면 그 자리에서 열고 화면의 작업을 그대로 잇는다. 비밀번호가 있으면 병동 고르는 화면으로(사전입력은 보관돼 있다)
+    async reopenProfile(){
+      const pid=this.currentProfile;   // _loadProfiles 가 서버 값(닫혀 있으니 null)으로 덮는다 — 화면이 열어 둔 병동을 잡아 둔다
+      try{
+        await this._loadProfiles();
+        this.currentProfile=pid;
+        const p=(this.profiles||[]).find(x=>x.id===pid);
+        if(p&&!p.has_password&&!this.hasMasterPassword){
+          const res=await this.api('POST','/api/profiles/open',{id:p.id,password:''});
+          if(res&&res.ok){this.profileLost=false;this.toast('병동을 다시 열었습니다 — 하던 작업을 그대로 이어 가세요','info',5000);this.loadSavedList&&this.loadSavedList().catch(()=>{});return}
+        }
+      }catch(e){}
+      this._saveFullState&&this._saveFullState();location.reload();
     },
 
     // ── Undo/Redo ────────────────────────────────────────────

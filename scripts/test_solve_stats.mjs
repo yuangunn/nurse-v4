@@ -17,7 +17,7 @@ f._pushLog('Presolving model\n22766 rows, 7414 cols, 104818 nonzeros  0s\n15097 
 f._pushLog('\nSolving MIP model with:\n   15097 rows\n   6834 cols (6834 binary, 0 integer, 0 implied int., 0 continuous)');
 f._pushLog('        Nodes      |    B&B Tree     |            Objective Bounds              |  Dynamic Constraints |       Work      \nSrc  Proc. InQueue |  Leaves   Expl. | BestBound       BestSol              Gap |   Cuts   InLp Confl. | LpIters     Time');
 f._pushLog(row('', 0, 0, 0, '0.00%', -267000, 'inf', 'inf', 0, 0, 0, 0, 0.2));
-assert.equal(f.rdSolveCards.find(c => c.k === 'BestSol').v, '—');
+assert.equal(f.rdSolveCards.find(c => c.k === '지금 표 점수').v, '—');
 f._pushLog(row('L', 0, 0, 0, '0.00%', -254500, -253000, '0.59%', 5991, 381, 212, 54589, 32.3));
 f._pushLog('\n24.2% inactive integer columns, restarting\nModel after restart has 12271 rows, 4885 cols (4885 bin., 0 int., 0 impl., 0 cont.), and 65112 nonzeros');
 f._pushLog(row('', 142, 111, 16, '3.13%', -254500, -253000, '0.59%', 7876, 246, 308, 220764, 59.0));   // 같은 해 — 사건 아님
@@ -34,19 +34,22 @@ const S = f.solveStats;
 assert.deepEqual(S.phases.map(p => [p.n, p.rows0, p.rows, p.cols0, p.cols, p.restarts, p.status]),
   [[1, 22766, 15097, 7414, 6834, 1, 'Optimal'], [2, 22782, 15242, 7431, 6884, 0, '']]);
 assert.deepEqual(S.events.map(e => `${e.solve}|${e.time}|${e.text}`), [
-  '1|0|Presolve — 22,766 → 15,097 rows · 7,414 → 6,834 cols',
-  '1|32.3|첫 해 발견 — Src L (Sub-MIP)',
-  '1|32.3|Restart — inactive integer columns 24.2% → 12,271 rows · 4,885 cols',
-  '1|97.1|더 좋은 해 발견 — Src T (Evaluate node)',
-  '1|97.1|Solving report — Optimal',
-  '2|0|MIP start — 앞에서 찾은 해로 시작 (objective 5465)',
-  '2|0|Presolve — 22,782 → 15,242 rows · 7,431 → 6,884 cols',
-  '2|78.3|더 좋은 해 발견 — Src L (Sub-MIP)',
+  '1|0|조건 정리 — 따질 조건 22,766개를 15,097개로 줄임',
+  '1|32.3|첫 표를 찾음 — 작은 문제로 쪼개 풀기',
+  '1|32.3|문제를 줄여 다시 시작 — 더 볼 필요 없는 칸 24.2%를 걷어 냄 (조건 12,271개)',
+  '1|97.1|더 좋은 표를 찾음 — 갈래를 평가하다가',
+  '1|97.1|끝 — 가장 좋은 표로 확인됨',
+  '2|0|앞 단계에서 찾은 표로 시작',
+  '2|0|조건 정리 — 따질 조건 22,782개를 15,242개로 줄임',
+  '2|78.3|더 좋은 표를 찾음 — 작은 문제로 쪼개 풀기',
 ]);
-assert.equal(f.rdSolveEvents[0].text, '더 좋은 해 발견 — Src L (Sub-MIP)');          // 새 것이 위
-assert.deepEqual(f.rdSolveCards.map(c => `${c.k}=${c.v}`), ['노드 (Proc.)=101', '대기 (InQueue)=10', '리프 (Leaves)=31', '탐색 (Expl.)=0.05%',
-  'BestSol=-3155', 'BestBound=-4578.52102', 'Gap=45.12%', 'Cuts=3,615', 'Confl.=479', 'LP iters=216,551', '방법 (Src)=L · Sub-MIP']);
-assert.equal(f.rdSolveSub, 'Solve #2 · Presolve 22,782 → 15,242 rows · 7,431 → 6,884 cols');
+assert.deepEqual(S.events.map(e => [e.sol, e.gap]).slice(1, 4), [['253,000', '0.59%'], ['253,000', '0.59%'], ['254,500', '0.00%']]);   // 점수 = 솔버 값의 부호를 뒤집은 것
+assert.equal(f.rdSolveEvents[0].text, '더 좋은 표를 찾음 — 작은 문제로 쪼개 풀기');          // 새 것이 위
+// 카드는 쉬운 말 — 솔버 기록의 이름은 툴팁에만
+assert.deepEqual(f.rdSolveCards.map(c => `${c.k}=${c.v}`), ['따져 본 경우=101', '아직 남은 경우=10', '쳐낸 경우=31', '살펴본 비율=0.05%',
+  '지금 표 점수=3,155', '가능한 최고 점수=4,579', '최고와의 차이=45.12%', '방금 표를 찾은 방법=작은 문제로 쪼개 풀기']);
+assert.match(f.rdSolveCards[0].tip, /Proc\./);
+assert.equal(f.rdSolveSub, '2번째 풀이 · 따질 조건 22,782개를 15,242개로 정리 · 새로 찾아 더한 규칙 3,615개 · 막힌 데서 배운 것 479개 · 계산 216,551번');
 assert.ok(f.rdSolveCards.every(c => c.tip));
 assert.equal(f.solverLogs.length, 14);
 assert.equal(f.solverLogs.at(-1).hint, true);
@@ -59,13 +62,20 @@ assert.equal(S.events.length, 8);
 
 // 소문자 Src (z·l·u·p — 자명한 해) 줄도 읽는다
 f._pushLog(row('z', 520, 5, 40, '1.00%', '-4500', -3200, '39.00%', 1, 1, 1, 400000, 500));
-assert.equal(S.events.at(-1).text, '더 좋은 해 발견 — Src z (Trivial zero)');
+assert.equal(S.events.at(-1).text, '더 좋은 표를 찾음 — 가장 단순한 값으로');
+
+// 큰 수는 솔버가 k·M 을 붙여 줄여 적는다 — 그 줄도 읽어야 카드가 계속 바뀐다 (실제 기록: 계산 횟수가 2237k 가 된 뒤로 카드가 멈췄다)
+f._pushLog('    1775      28       278  79.18%   -3478.805352    -3358              3.60%     4996    447   9199     2476k   712.5s');
+assert.deepEqual(f.rdSolveCards.map(c => c.v).slice(0, 7), ['1,775', '28', '278', '79.18%', '3,358', '3,479', '3.60%']);
+f._pushLog('    12.5k   1.2k      3.4k  80.00%   -3470           -3358              3.33%     5000    450   10.1k    1.25M   900.0s');
+assert.deepEqual([f.rdSolveCards[0].v, f.rdSolveCards[1].v, f.rdSolveCards[2].v], ['12,500', '1,200', '3,400']);
+assert.match(f.rdSolveSub, /막힌 데서 배운 것 10,100개 · 계산 1,250,000번/);
 
 // HiGHS 기록이 아니면(CP-SAT) 진행 정보의 노드·Gap 만
 f._solveReset(); f._pushLog('#1       0.52s best:1200  next:[900,1100]  no_lp');
 assert.deepEqual(f.rdSolveCards, []);
 f.solveProgress = { nodes: 1520, gap_percent: 3.456 };
-assert.deepEqual(f.rdSolveCards.map(c => `${c.k}=${c.v}`), ['노드=1,520', 'Gap=3.46%']);
+assert.deepEqual(f.rdSolveCards.map(c => `${c.k}=${c.v}`), ['따져 본 경우=1,520', '가능한 최고와의 차이=3.46%']);
 
 // 결과 요약 단계 — 계산 → 지킨 것 → (바꾼 것) → (확인할 것) → 결과. 없는 장은 건너뛴다
 f._solveReset();
@@ -77,9 +87,9 @@ Object.assign(f, { mipGapPercent: 0, scheduleStopped: false, generationReport: {
   got: { D: 5, E: 5, N: 3 }, getDayDutyCount(d, shifts) { return this.got[shifts[1]] ?? 0; }, rdFootNeed: (d, c) => ({ D: 5, E: 5, N: 3 })[c],
   scheduleWarnings: [], offTeukgeun: [], vReport: null, wishReport: null });
 assert.deepEqual(f.rdStorySteps.map(s => s.id), ['calc', 'kept', 'done']);
-assert.equal(f.rdStorySteps[0].title, '노드 12개를 따져 봤어요');
-assert.deepEqual(f.rdStorySteps[0].facts, [['걸린 시간', '1분 15초'], ['풀이 횟수 (Solve)', '1회'], ['처리한 노드 (Proc.)', '12'], ['닫힌 리프 (Leaves)', '5'],
-  ['LP iterations', '900'], ['Presolve', '100 → 80 rows'], ['해를 찾은 방법 (Src)', 'H · Heuristic'], ['Status', 'Optimal'], ['Gap', '0%']]);
+assert.equal(f.rdStorySteps[0].title, '경우 12가지를 따져 봤어요');
+assert.deepEqual(f.rdStorySteps[0].facts, [['걸린 시간', '1분 15초'], ['풀이 횟수', '1번'], ['따져 본 경우', '12가지'], ['더 볼 필요 없어 쳐낸 경우', '5가지'],
+  ['계산 횟수', '900번'], ['따질 조건 정리', '100개 → 80개'], ['마지막 표를 찾은 방법', '어림 탐색'], ['끝난 까닭', '가장 좋은 표로 확인됨'], ['가능한 최고와의 차이', '0%']]);
 assert.equal(f.rdStorySteps[1].title, '원티드 40칸을 모두 지켰어요');
 assert.deepEqual(f.rdStorySteps[1].facts.at(-1), ['날마다 필요 인원 (D·E·N)', '모두 채움']);
 f.got.E = 4; assert.equal(f.rdStorySteps[1].facts.at(-1)[1], '2곳 모자람'); f.got.E = 5;   // 이틀 × E
@@ -103,5 +113,66 @@ f.rdStoryOpen(); assert.equal(f.storyHint, false);
 for (let i = 0; i < 4; i++) f.rdStoryGo(1);
 f.rdStoryClose(); assert.deepEqual([f.story.open, f.storyHint, said.length], [false, false, 1]);
 f.rdSched = false; assert.deepEqual(f.rdStorySteps, []);
+
+// 칸별 이유 — 이 칸만 원래 사전입력으로 두고 다른 바뀐 칸은 풀어 둔 채 정밀 진단에 보낸다
+{
+  const g = Object.defineProperties({}, Object.getOwnPropertyDescriptors(window.RedesignModule()));
+  let sent = null, reply = { status: 'feasible', conflicts: [], muses: [], message: '충돌 없음' };
+  Object.assign(g, { cellWhy: {}, offTeukgeun: [], managerCheck: [],
+    prevSchedule: { a: { '2026-12-25': 'V', '2026-12-26': 'D제외', '2026-12-10': 'OF' }, b: { '2026-12-31': 'OF' } },
+    relaxedCells: { a: { '2026-12-25': { original: 'V', assigned: 'D' }, '2026-12-26': { original: 'D제외', assigned: 'DC' } }, b: { '2026-12-31': { original: 'OF', assigned: 'E' } } },
+    _diagPayload() { return { year: 2026, month: 12, prev_schedule: this.prevSchedule, unlimited_v: false }; },
+    api: async (m, url, body) => { sent = { m, url, body }; return reply; } });
+  assert.equal(g.rdCellWhyView('a', '2026-12-25'), null);
+  const run = g.rdCellWhy('a', '2026-12-25');
+  assert.equal(g.rdCellWhyView('a', '2026-12-25').state, 'loading');
+  await run;
+  assert.deepEqual([sent.m, sent.url, sent.body.year, sent.body.unlimited_v], ['POST', '/api/diagnose', 2026, false]);
+  assert.deepEqual(sent.body.prev_schedule, { a: { '2026-12-25': 'V', '2026-12-10': 'OF' }, b: {} });   // 이 칸은 원래 값, 다른 바뀐 칸은 비움, 지킨 칸은 그대로
+  assert.deepEqual(g.prevSchedule.a['2026-12-26'], 'D제외');                                              // 화면의 사전입력은 건드리지 않는다
+  assert.equal(g.rdCellWhyView('a', '2026-12-25').state, 'free');
+  reply = { status: 'infeasible', conflicts: ['12/31 D 필요 인원 5명', '나 5주차 OF 1회'], muses: [['12/31 D 필요 인원 5명'], ['나 5주차 OF 1회']],
+    anchored: [{ label: '12/31 D 필요 인원 5명', nurse_id: null, date: '2026-12-31' }] };
+  await g.rdCellWhy('b', '2026-12-31');
+  const v = g.rdCellWhyView('b', '2026-12-31');
+  assert.deepEqual([v.state, v.soft, v.groups.map((x) => x.map((c) => [c.label, c.date]))], ['blocked', false, [[['12/31 D 필요 인원 5명', '2026-12-31']], [['나 5주차 OF 1회', null]]]]);
+  g.offTeukgeun = [{}]; assert.equal(g.rdCellWhyView('b', '2026-12-31').soft, true);
+  reply = { status: 'timeout', conflicts: [], muses: [], message: '충돌 분석 미완료 (타임아웃).' };
+  await g.rdCellWhy('a', '2026-12-26');
+  assert.deepEqual([g.rdCellWhyView('a', '2026-12-26').state, g.rdCellWhyView('a', '2026-12-26').message], ['unknown', '충돌 분석 미완료 (타임아웃).']);
+  g.api = async () => { throw new Error('연결 끊김'); };
+  await g.rdCellWhy('a', '2026-12-25');
+  assert.equal(g.rdCellWhyView('a', '2026-12-25').message, '계산하지 못했습니다 — 연결 끊김');
+  await g.rdCellWhy('a', '2026-01-01'); assert.equal(g.rdCellWhyView('a', '2026-01-01'), null);          // 바뀐 칸이 아니면 아무것도 안 한다
+}
+
+// 다시 만들기가 실패하면 앞 표가 떠 있어도 실패 배너·상태 줄로 알린다 — 숨기면 단추가 먹지 않은 것처럼 보였다
+{
+  const g = Object.defineProperties({}, Object.getOwnPropertyDescriptors(window.RedesignModule()));
+  for (const [k, v] of [['rdSched', true], ['rdPreChanged', true], ['rdRelaxedCount', 0], ['rdTraineeChanged', 0], ['rdWantedCount', 10]]) Object.defineProperty(g, k, { value: v, writable: true });
+  Object.assign(g, { generating: false, statusOk: false, statusMessage: '근무표 생성 실패 - 원인 진단 결과:\n  [원인] 일별 인원 제약 충돌', genFailed: false,
+    staffingAlerts: { short: [], tight: [] }, diagResult: null, feas: null, nurses: [], prevSchedule: {}, countPrevEntries: () => 10, analysisResult: null });
+  assert.equal(g.rdFail, null);                                   // 경고가 붙은 성공(statusOk=false) — 표가 있으면 배너 없음
+  assert.equal(g.rdStatus.changed, true);
+  g.genFailed = true;                                             // 방금 다시 만들기가 실패
+  assert.match(g.rdFail.title, /^이 조건으로는 만들 수 없어요/);
+  assert.match(g.rdFail.body, /아래 표는 다시 만들기 전에 만든 표 그대로입니다\.$/);
+  assert.deepEqual([g.rdStatus.kind, g.rdStatus.failed, g.rdStep.s3], ['err', true, '다시 만들기 실패']);
+  g.rdSched = false;                                              // 표가 없으면 예전처럼 배너만
+  assert.ok(g.rdFail && !/아래 표는/.test(g.rdFail.body)); assert.equal(g.rdStatus, null);
+  // 완화를 켜고도 실패 — 완화로 풀 수 있는 칸(잠그지 않은 OF)은 원인이 아니다. 엄격 기준의 인원 부족·신호등은 쓰지 않는다
+  g.staffingAlerts = { short: [{ dk: '2026-12-31', needed: 12, avail: 11 }], tight: [] };
+  g.feas = { status: 'infeasible', summary: '엄격 기준 요약', anchored: [{ label: 'x', nurse_id: 'a', date: '2026-12-26' }] };
+  g._staffingSlack = (fixedOnly) => ({ short: fixedOnly ? [] : g.staffingAlerts.short, tight: [] });
+  g.allowPreRelax = false;
+  assert.match(g.rdFail.title, /^12월 31일\(목\) 근무 인원이 1명 모자라/);
+  g.allowPreRelax = true; g.allowJuhuRelax = false;
+  assert.equal(g.rdFail.title, '사전입력 완화를 켜도 만들 수 없어요 — 완화로 바꿀 수 없는 칸끼리 규칙이 맞지 않습니다.');
+  assert.match(g.rdFail.body, /잠근 칸\(🔒\)과 주휴·지난달 칸을 바꾸지 않습니다/);
+  assert.deepEqual(g.rdFail.fixes, []);                            // 엄격 기준 신호등이 짚은 칸은 내지 않는다
+  g._staffingSlack = () => ({ short: [{ dk: '2026-12-19', needed: 9, avail: 7 }], tight: [] });   // 잠근 칸만으로도 모자란 날
+  assert.match(g.rdFail.title, /^12월 19일\(토\) 근무 인원이 2명 모자라/);
+  assert.match(g.rdFail.body, /^완화를 켜도 그날 잠근 칸·주휴를 빼면 나올 수 있는 사람은 7명/);
+}
 
 console.log('solve-stats: 모든 검증 통과');

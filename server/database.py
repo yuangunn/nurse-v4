@@ -208,6 +208,11 @@ def init_db(path: Optional[str] = None):
             conn.execute("ALTER TABLE nurses ADD COLUMN pregnancy TEXT DEFAULT '{}'")
         except Exception:
             pass
+        # 기존 DB 호환: 근무 성향(시간대별 상한·선호·기피) 컬럼 마이그레이션
+        try:
+            conn.execute("ALTER TABLE nurses ADD COLUMN shift_prefs TEXT DEFAULT '{}'")
+        except Exception:
+            pass
         # 기존 DB 호환: shifts.auto_assign 컬럼 마이그레이션
         try:
             conn.execute("ALTER TABLE shifts ADD COLUMN auto_assign INTEGER DEFAULT 1")
@@ -384,12 +389,12 @@ def upsert_nurse(nurse: Dict) -> None:
                 (id, name, grp, gender, capable_shifts, is_night_shift, seniority, wishes,
                  juhu_day, juhu_auto_rotate, night_months,
                  is_trainee, training_end_date, preceptor_id,
-                 start_date, end_date, is_pregnant, pregnancy)
+                 start_date, end_date, is_pregnant, pregnancy, shift_prefs)
             VALUES
                 (:id, :name, :grp, :gender, :capable_shifts, :is_night_shift, :seniority, :wishes,
                  :juhu_day, :juhu_auto_rotate, :night_months,
                  :is_trainee, :training_end_date, :preceptor_id,
-                 :start_date, :end_date, :is_pregnant, :pregnancy)
+                 :start_date, :end_date, :is_pregnant, :pregnancy, :shift_prefs)
             ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name, grp=excluded.grp, gender=excluded.gender,
                 capable_shifts=excluded.capable_shifts, is_night_shift=excluded.is_night_shift,
@@ -399,7 +404,8 @@ def upsert_nurse(nurse: Dict) -> None:
                 is_trainee=excluded.is_trainee, training_end_date=excluded.training_end_date,
                 preceptor_id=excluded.preceptor_id,
                 start_date=excluded.start_date, end_date=excluded.end_date,
-                is_pregnant=excluded.is_pregnant, pregnancy=excluded.pregnancy
+                is_pregnant=excluded.is_pregnant, pregnancy=excluded.pregnancy,
+                shift_prefs=excluded.shift_prefs
         """, {
             "id": nurse["id"],
             "name": nurse["name"],
@@ -419,6 +425,7 @@ def upsert_nurse(nurse: Dict) -> None:
             "end_date": nurse.get("end_date"),
             "is_pregnant": 1 if nurse.get("is_pregnant") else 0,
             "pregnancy": json.dumps(nurse.get("pregnancy", {})),
+            "shift_prefs": json.dumps(nurse.get("shift_prefs", {}) or {}),
         })
 
 
@@ -1119,4 +1126,5 @@ def _nurse_row_to_dict(row: sqlite3.Row) -> Dict:
         "end_date": d.get("end_date"),
         "is_pregnant": d.get("is_pregnant") in (1, "1", True),
         "pregnancy": _json("pregnancy", "{}"),
+        "shift_prefs": _json("shift_prefs", "{}"),
     }

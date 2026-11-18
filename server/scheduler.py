@@ -254,6 +254,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         if getattr(self.rules, 'restAfterNight', False):
             self._c_rest_after_night(prob, x)           # 연속야간 후 휴무 보장
         self._c_max_v_per_month(prob, x)               # V 월 최대 횟수
+        self._c_shift_pref_caps(prob, x)               # 간호사별 시간대 상한 (결정 1-70)
         if self.rules.maxNightPerMonth:
             self._c_max_night_per_month(prob, x)       # 월 최대 야간 횟수
         if self.rules.maxNightTwoMonth:
@@ -571,6 +572,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         if getattr(self.rules, 'restAfterNight', False):
             self._c_rest_after_night(prob, x)
         self._c_max_v_per_month(prob, x)
+        self._c_shift_pref_caps(prob, x)
         if self.rules.maxNightPerMonth:
             self._c_max_night_per_month(prob, x)
         if self.rules.maxNightTwoMonth:

@@ -148,6 +148,11 @@ body.rd .rtable .rt-foot input:not(.is-default) { font-weight: var(--fw-strong);
 .rsolve .tile small { display: block; font-size: var(--fs-min); color: var(--ink-2); white-space: nowrap; }
 .rsolve .tile b { display: block; font-size: var(--fs-h2); font-weight: var(--fw-strong); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rsolve-sub { font-size: var(--fs-min); color: var(--ink-2); padding: 0 4px; }
+/* 방금 있었던 일 한 줄 — 지나온 일 전부는 접어 둔다 */
+.rsolve-last { display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 0 4px 0 12px; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1px var(--rule); font-size: var(--fs-sub); }
+.rsolve-last .lbl { color: var(--ink-2); flex: none; } .rsolve-last .when { color: var(--ink-2); font-variant-numeric: tabular-nums; flex: none; }
+.rsolve-last .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--fw-label); }
+.rsolve-last .rbtn-sm { flex: none; }
 .rsolve-ev { max-height: 168px; overflow: auto; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--rule); background: var(--card); }
 .rsolve-ev table { width: 100%; border-collapse: collapse; font-size: var(--fs-sub); font-variant-numeric: tabular-nums; }
 .rsolve-ev th { position: sticky; top: 0; background: var(--card); text-align: left; height: 26px; padding: 0 12px; font-weight: var(--fw-label); color: var(--ink-2); box-shadow: inset 0 -1px 0 var(--rule); white-space: nowrap; }
@@ -158,6 +163,27 @@ body.rd .rtable .rt-foot input:not(.is-default) { font-weight: var(--fw-strong);
 /* 원티드 미반영 — 칸마다 그날 사정 한 줄 */
 .rdrawer-body .rwhy { margin: 0 0 8px 132px; padding: 6px 10px; border-radius: 8px; background: var(--paper); color: var(--ink-2); font-size: var(--fs-sub); line-height: 1.5; }
 .rdrawer-body .rwhy.is-short { background: var(--warn-bg); color: var(--ink); }
+/* 칸별 이유 — '이 칸을 지키면?' 단추와 부딪히는 규칙 묶음 */
+.rdrawer-body .rwhy-act { display: flex; align-items: center; gap: 10px; margin-top: 6px; color: var(--ink); }
+.rdrawer-body .rwhy-act .ok b { font-weight: var(--fw-label); }
+.rdrawer-body .rwhy-grp { margin-top: 6px; padding: 4px 10px; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1px var(--rule); color: var(--ink); }
+.rdrawer-body .rwhy-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; }
+.rdrawer-body .rwhy-line + .rwhy-line { border-top: 1px solid var(--rule-soft); }
+.rdrawer-body .rwhy-note { margin-top: 6px; font-size: var(--fs-min); }
+/* 처음 시작 안내 — 단계 목록. 지금 할 단계만 설명을 펼치고 검은 단추 */
+.ronb { width: 720px; max-width: calc(100vw - 48px); max-height: 86vh; }
+.ronb-body { gap: 0 !important; }
+.ronb-step { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rule-soft); }
+.ronb-step .num { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: var(--fs-sub); font-weight: var(--fw-label); background: var(--paper); color: var(--ink-2); }
+.ronb-step.is-next .num { background: var(--ink); color: var(--card); }
+.ronb-step.is-done .num { background: var(--ok-bg); color: var(--ok); }
+.ronb-step .txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ronb-step .txt b { font-size: var(--fs-body); font-weight: var(--fw-label); }
+.ronb-step.is-done .txt b { color: var(--ink-2); font-weight: var(--fw-body); }
+.ronb-step .txt small { font-size: var(--fs-sub); color: var(--ink-2); line-height: 1.5; }
+.ronb-step .acts { display: flex; gap: 6px; flex: none; }
+.ronb-count { font-size: var(--fs-sub); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ronb-chip { position: fixed; left: 24px; bottom: 20px; z-index: 60; box-shadow: var(--shadow-pop); }
 /* 결과 요약 — 한 장에 한 가지, 큰 제목과 숫자 줄 */
 /* 창 크기는 장마다 같다 — 넘길 때 '다음' 단추가 제자리에 있어야 한다. 긴 목록은 안에서 스크롤 */
 .rstory { width: 620px; max-width: calc(100vw - 48px); height: min(640px, 86vh); padding: 20px 28px 20px; gap: 10px; }
@@ -324,6 +350,15 @@ body.rd .rnum input { width: 40px; height: var(--target); min-height: 0; border:
 .rmodal .rgrid3 { display: grid; grid-template-columns: 1fr 120px 160px; gap: 12px; }
 .rmodal .rfield { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-sub); font-weight: var(--fw-label); color: var(--ink-2); }
 .rmodal .rfield-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; font-size: var(--fs-sub); font-weight: var(--fw-label); color: var(--ink-2); }
+/* 간호사 창 — 근무 성향: 시간대 한 줄마다 [기피·보통·선호] + 한 달 최대 */
+.rmodal .rprefs { display: flex; flex-direction: column; gap: 6px; }
+.rmodal .rpref { display: flex; align-items: center; gap: 12px; font-size: var(--fs-sub); }
+.rmodal .rpref .nm { width: 64px; flex: none; font-weight: var(--fw-label); }
+.rmodal .rpref .rseg { flex: none; }
+.rmodal .rpref .rseg button { min-width: 56px; }
+.rmodal .rpref .max { display: flex; align-items: center; gap: 6px; color: var(--ink-2); white-space: nowrap; }
+body.rd .rmodal .rpref .max input { width: 92px; height: 34px; min-height: 34px; text-align: center; }
+.rmodal .rprefs-note { margin-top: 6px; font-size: var(--fs-min); color: var(--ink-2); line-height: 1.5; }
 .rmodal .rfield-h small { font-size: var(--fs-cell); font-weight: var(--fw-body); }
 .rseg label { flex: 1; min-width: 60px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: var(--fs-sub); font-weight: var(--fw-label); cursor: pointer; color: var(--ink); }
 .rseg label input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -553,7 +588,10 @@ body.rd .rmodal .legacy .text-xs, body.rd .rmodal .legacy .text-sm { font-size: 
 .rdrawer-body .rrow .rbtn-sm { height: 26px; white-space: nowrap; }
 /* 서랍 크게 보기 — 표 아래 200px 로는 바뀐 칸·요약·기록을 읽기 어렵다. 같은 서랍(탭·단추 그대로)을 화면 가운데 큰 창으로, 글씨는 본문 크기 */
 .rdrawer-scrim { position: fixed; inset: 0; z-index: 80; background: rgba(15,17,21,0.42); }
-.rdrawer.is-big { position: fixed; z-index: 81; inset: 6vh max(24px, calc(50vw - 660px)) auto; height: auto; min-height: 360px; max-height: 88vh; margin: 0; border-top: 0; border-radius: var(--r-modal); box-shadow: var(--shadow-modal); overflow: hidden; }
+/* 큰 창은 화면 한가운데, 크기는 탭마다 같다(내용이 적은 탭에서 위로 떠 보이지 않게) — 아래에서 살짝 올라오며 뜬다 */
+@keyframes rdrawer-rise { from { opacity: 0; transform: translateY(calc(-50% + 18px)); } to { opacity: 1; transform: translateY(-50%); } }
+@media (prefers-reduced-motion: reduce) { .rdrawer.is-big { animation: none !important; } }
+.rdrawer.is-big { position: fixed; z-index: 81; left: max(24px, calc(50vw - 660px)); right: max(24px, calc(50vw - 660px)); top: 50%; transform: translateY(-50%); height: min(760px, 86vh); animation: rdrawer-rise .18s ease-out; margin: 0; border-top: 0; border-radius: var(--r-modal); box-shadow: var(--shadow-modal); overflow: hidden; }
 .rdrawer.is-big .rdrawer-tabs { padding: 8px 16px 0; }
 .rdrawer.is-big .rdrawer-body { padding: 16px 24px 20px; font-size: var(--fs-body); }
 .rdrawer.is-big .rdrawer-body .intro, .rdrawer.is-big .rdrawer-body .rmsg, .rdrawer.is-big .rdrawer-body table.rsum { font-size: var(--fs-body); }

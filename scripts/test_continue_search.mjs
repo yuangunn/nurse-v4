@@ -142,4 +142,36 @@ for (const extra of [{ mip_gap_percent: 1.5 }, { stopped: true }, { pinned_confi
   await a._autoSaveSchedule();
   assert.equal(posted.solver_log, '첫 실행 기록');
 }
+// ⑪ 이 표에서 더 찾기 (결정 1-69) — 멈춘 표·끝난 표에서 사람이 눌러 잇는다. 같은 요청 + 지금 표·하한·지문, 시간은 누를 때의 설정. 몇 번이고 다시
+{
+  const a = make(); const calls = [];
+  // 화면이 '이 달 표가 있다'고 보려면 달 가운데 칸이 있어야 한다 (rdSched)
+  const M1 = { a: { ...S1.a, '2026-11-10': 'D' } }, M2 = { a: { ...S2.a, '2026-11-10': 'D' } };
+  const results = [first({ schedule: M1, extended_schedule: M1, stopped: true, mip_gap_percent: 17.3 }),
+    cont({ schedule: M2, extended_schedule: M2, objective: 4200, mip_dual_bound: 4000, mip_gap_percent: 5, improved: true }),
+    cont({ schedule: M2, extended_schedule: M2, objective: 4300, mip_dual_bound: 4050, mip_gap_percent: 5, improved: false })];
+  a.api = async (m, path, body) => { if (path === '/api/generate') { calls.push(body); return results.shift(); } return {}; };
+  assert.equal(a.rdCanContinue, false);                        // 만든 표가 없다
+  await a.generate(); await sleep(5); while (a.generating) await sleep(5);
+  assert.equal(calls.length, 1);                               // 멈춘 표는 자동으로 잇지 않는다
+  assert.equal(a.rdCanContinue, true);
+  a.generateTimeout = 7;                                       // 시간은 누를 때의 설정
+  await a.rdContinue(); await sleep(5); while (a.generating) await sleep(5);
+  assert.equal(calls.length, 2);
+  assert.deepEqual([calls[1].time_limit, calls[1].warm_start, calls[1].prev_bound, calls[1].prev_fingerprint, calls[1].prev_objective], [420, M1, 3920, 'f1', 4295]);
+  assert.equal(calls[1]._cont, undefined);
+  assert.deepEqual(a.schedule, M2);                            // 더 좋은 표로 바뀜
+  assert.equal(a.rdCanContinue, true);                         // 또 누를 수 있다 — 이번엔 바뀐 표에서
+  await a.rdContinue(); await sleep(5); while (a.generating) await sleep(5);
+  assert.deepEqual([calls[2].warm_start, calls[2].prev_bound, calls[2].prev_objective], [M2, 4000, 4200]);
+  assert.deepEqual(a.schedule, M2);                            // 더 좋은 표가 없으면 그대로
+  assert.equal(a.contBase.bound, 4050);                        // 같은 문제의 하한은 이어 받는다
+  // 같은 문제가 아니면 못 잇는다 — 사전입력을 고쳤거나 칸을 손으로 고쳤거나, 이미 가장 좋은 표
+  a.prevSchedule = { a: { '2026-11-03': 'OF' } }; assert.equal(a.rdCanContinue, false); a.prevSchedule = {};
+  assert.equal(a.rdCanContinue, true);
+  a.schedule = { a: { ...M2.a, '2026-11-02': 'N' } }; assert.equal(a.rdCanContinue, false); a.schedule = M2;
+  a.mipGapPercent = 0; assert.equal(a.rdCanContinue, false); a.mipGapPercent = 5;
+  a.month = 12; assert.equal(a.rdCanContinue, false); a.month = 11;
+  a.contBase = null; assert.equal(a.rdCanContinue, false);     // 저장본을 열면 문제(지문)를 모른다
+}
 console.log('test_continue_search: OK');

@@ -183,6 +183,20 @@ async def _local_only(request, call_next):
     return await call_next(request)
 
 
+@app.middleware("http")
+async def _profile_guard(request, call_next):
+    """화면이 연 병동(X-Profile 머리줄)과 서버가 연 병동이 다르면 받지 않는다.
+    서버가 다시 시작되면 병동이 닫히는데, 열려 있던 화면은 모르고 계속 요청해 기본 DB(다른 명부)를 읽고 썼다 —
+    화면의 사전입력·근무표가 명부와 어긋나 빈 표로 보였다. 머리줄이 없는 요청(병동 고르는 화면·테스트)은 그대로 받는다."""
+    from fastapi.responses import JSONResponse
+    from urllib.parse import unquote
+    want = request.headers.get("x-profile")
+    path = request.url.path
+    if want and path.startswith("/api/") and not path.startswith("/api/profiles") and unquote(want) != (_current_profile_id or ""):
+        return JSONResponse(status_code=409, content={"code": "profile_closed", "detail": "병동(프로필)이 닫혀 있습니다 — 다시 열어 주세요."})
+    return await call_next(request)
+
+
 # 개발 중 stylesheet/script 캐시로 인한 stale UI 방지 — 정적 파일에 no-cache
 @app.middleware("http")
 async def _no_cache_static(request, call_next):

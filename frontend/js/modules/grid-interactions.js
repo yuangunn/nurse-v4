@@ -217,7 +217,10 @@ window.GridInteractionsModule = function() {
       this._queueFeasibility&&this._queueFeasibility();
     },
 
-    _checkStaffingSlack(){
+    _checkStaffingSlack(){ this.staffingAlerts=this._staffingSlack(false); },
+    // fixedOnly — 완화를 켜도 바뀌지 않는 쉬는 칸(잠근 칸 · 주휴 이동을 안 켰을 때의 주휴)만 '못 나오는 사람'으로 센다.
+    // 완화로 만들다 실패했을 때는 이 셈이어야 한다 — 풀 수 있는 OF 까지 세어 엉뚱한 날을 인원 부족이라 짚었다 (2026-11-18)
+    _staffingSlack(fixedOnly){
       // 실시간 인원 슬랙 — 사전입력을 넣는 '그 자리에서' 부족/빡빡을 경고.
       // (생성 20분 돌리고 실패로 알게 되는 일을 입력 시점에 차단)
       const restLeave=this.shifts.filter(s=>s.period==='rest'||s.period==='leave').map(s=>s.code);
@@ -237,13 +240,13 @@ window.GridInteractionsModule = function() {
           if((n.start_date&&dk<n.start_date)||(n.end_date&&dk>n.end_date))continue;
           if(n.is_trainee&&this.isTraineeInTraining(n,day))continue;   // 트레이닝 중인 신규는 인원이 아니다 (엔진·분석 탭과 같다)
           const pre=this.prevSchedule[n.id]?.[dk];
-          if(pre&&restLeave.includes(pre))continue;
+          if(pre&&restLeave.includes(pre)&&(!fixedOnly||this.lockedCells?.[n.id]?.[dk]||(pre==='주'&&!this.allowJuhuRelax)))continue;
           avail++;
         }
         if(avail<needed)short.push({dk,needed,avail});
         else if(avail===needed)tight.push({dk,needed,avail});
       }
-      this.staffingAlerts={short,tight};
+      return {short,tight};
     },
     hasViolation(nurseId,day){
       return this._violationSet?.has(`${nurseId}|${this.dayKey(day)}`)||false;

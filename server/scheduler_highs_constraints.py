@@ -541,6 +541,17 @@ class _HighsConstraintsMixin:
                 cap = max(max_n, self._pin_nurse_count(nid, month_idx, self.NIGHT_SHIFTS))
                 prob += pulp.lpSum(night_vars) <= cap, f"max_night_month_{nid}"
 
+    def _c_shift_pref_caps(self, prob, x):
+        """간호사별 시간대 상한 — 그 달 D·E·N(차지 포함) 횟수 ≤ 정한 수. 사람이 넣은 칸이 이미 넘으면 그 수까지 (사실-클램프)."""
+        month_idx = self._shift_pref_month_idx()
+        for nurse, key, shifts, cap, _sign in self._shift_pref_items():
+            if cap is None:
+                continue
+            nid = nurse["id"]
+            vs = [x[nid][d][s] for d in month_idx for s in shifts]
+            if vs:
+                prob += pulp.lpSum(vs) <= max(cap, self._pin_nurse_count(nid, month_idx, shifts)), f"shift_pref_cap_{key}_{nid}"
+
     def _c_max_night_two_month(self, prob, x):
         """홀짝월 합산 야간 제한 (이전달 야간 + 당월 야간 <= maxNightTwoMonthCount) — 야간전담 제외"""
         max_n = self.rules.maxNightTwoMonthCount
@@ -803,6 +814,17 @@ class _HighsConstraintsMixin:
                     range_var = pulp.LpVariable(f"night_range_{rid}", lowBound=0, upBound=ub_fair, cat="Integer")
                     prob += range_var >= max_n - min_n, f"night_range_def_{rid}"
                     terms.append(sc * range_var)
+                    # 이 달 안에서도 고르게 — 위 range 는 (누적 + 당월)의 최대·최소 두 사람만 본다. 누적 차이가 한 달 야간 수보다
+                    # 크면 그 사이에 있는 사람은 이번 달 0회여도 6회여도 감점이 같았다. 풀 평균에서 벗어난 만큼 감점 (결정 1-65)
+                    w_even = self._night_even_weight(sc, len(fairness_pool))
+                    if w_even:
+                        k = len(fairness_pool)
+                        total = pulp.lpSum(night_counts.values())
+                        for nid, cnt in night_counts.items():
+                            dev = pulp.LpVariable(f"night_dev_{rid}_{nid}", lowBound=0, upBound=k * max(1, len(month_days)))
+                            prob += dev >= k * cnt - total, f"night_dev_hi_{rid}_{nid}"
+                            prob += dev >= total - k * cnt, f"night_dev_lo_{rid}_{nid}"
+                            terms.append(w_even * dev)
 
             elif rt == "weekend_fairness":
                 # 주말·공휴일 근무 공정 배분 (M6 P3②): 부담일(토·일·법정공휴일) 근무일 수의
@@ -895,6 +917,11 @@ class _HighsConstraintsMixin:
         # ── 신규가 '/D·/E·/N' 으로 넣은 날 — 프리셉터도 그 근무로 (_trainee_pair_targets, 2026-10-19) ──
         for pid, d, codes in self._trainee_pair_targets():
             terms.append(_TRAINEE_PAIR_BONUS * pulp.lpSum(x[pid][d][s] for s in codes if s in x[pid][d]))
+
+        # ── 간호사별 근무 성향 — 선호 근무는 한 번마다 가점, 기피 근무는 감점 (_shift_pref_items, 결정 1-70) ──
+        for nurse, _key, shifts, _cap, sign in self._shift_pref_items():
+            if sign:
+                terms.append(sign * self._SHIFT_PREF_SCORE * pulp.lpSum(x[nurse["id"]][d][s] for d in month_days for s in shifts))
 
         # ── 간호사 그룹 — 한 근무에 그룹원 최대·최소 n명 (_nurse_group_limits, 2026-11-12) ──
         for i, (kind, bound, nids, d, codes) in enumerate(self._nurse_group_limits()):

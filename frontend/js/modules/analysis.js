@@ -122,6 +122,16 @@ window.AnalysisModule = function() {
       return {days:dayAnalysis, weeks, warnings, totalNurses:this.nurses.length};
     },
 
+    // 분석 알림 두 묶음 — 인원이 모자라거나 배정할 수 없는 것(빨강)은 펼친 채로, 빠듯한 날·확인할 것(노랑·참고)은 접어 두고 건수만.
+    // 날마다 한 줄씩 다 펼치면 정작 봐야 할 빨간 줄이 묻혔다
+    anaOpen:{danger:true,warn:false},
+    get anaWarnGroups(){
+      const ws=(this.analysisResult&&this.analysisResult.warnings)||[];
+      return [
+        {id:'danger',color:'red',icon:'⚠',label:'인원이 모자라거나 배정할 수 없는 곳',none:'인원이 모자란 날이 없습니다',items:ws.filter(w=>w.type==='danger')},
+        {id:'warn',color:'amber',icon:'⚡',label:'여유가 빠듯한 날 · 확인할 것',none:'여유가 빠듯한 날이 없습니다',items:ws.filter(w=>w.type!=='danger')},
+      ];
+    },
     // 그 달 나이트킵인가 — 엔진 night_keeper_in_month 와 같게: night_months 가 있으면 그 달 키, 없으면 is_night_shift,
     // 임신 구간(초기 시작~출산 전 끝)이 그 달과 겹치면 나이트킵이 아니다. 나이트킵은 달력 달로 맡는다 (결정 1-33).
     isKeeperDay(nurse,day){return this._keeperInMonth(nurse,day.getFullYear(),day.getMonth()+1)},   // 표에서 나이트킵 칸을 노랗게

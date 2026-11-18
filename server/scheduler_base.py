@@ -1035,6 +1035,7 @@ class _SchedulerBase:
         # 누적 오프셋과 견주면 첫 달부터 야간을 몰아 받는다 (화면 공정성 카드도 이 달 신규는 대상 아님)
         first = date(self.year, self.month, 1)
         fresh = {nid for nid, d in (getattr(self, "_indep", None) or {}).items() if d > first}
+        night_pref = {n["id"] for n, key, _s, _c, _g in self._shift_pref_items() if key == "N"}
         return [
             nurse for nurse in self.nurses
             if not nurse.get("is_night_shift")
@@ -1043,7 +1044,45 @@ class _SchedulerBase:
             and any(s in set(nurse.get("capable_shifts", self.WORK_SHIFTS))
                     for s in self.NIGHT_SHIFTS)
             and not (nurse.get("is_pregnant") and self._preg_active_in_month(nurse))
+            and nurse["id"] not in night_pref      # 야간 상한·선호·기피를 정한 사람 — 일부러 다르게 받는다 (결정 1-70)
         ]
+
+    # ── 간호사별 근무 성향 (결정 1-70) ─────────────────────────────────────────
+    _SHIFT_PREF_SCORE = 100     # 선호·기피 근무 한 번마다 — 순방향·연속 보상(15~30)보다 크고 원티드(500)·연차(-500)보다 작다
+
+    def _shift_pref_items(self):
+        """간호사별 근무 성향을 (간호사, 시간대 글자, 그 시간대 근무들, 상한 또는 None, +1 선호·-1 기피·0) 로.
+        시간대 = D(DC·D) · E(EC·E) · N(NC·N). 그 달 나이트킵의 야간은 성향을 보지 않는다(야간 14회가 정해져 있다).
+        두 엔진·진단기 공용."""
+        per = {"D": self.DAY_SHIFTS, "E": self.EVENING_SHIFTS, "N": self.NIGHT_SHIFTS}
+        out = []
+        for nurse in self.nurses:
+            prefs = nurse.get("shift_prefs") or {}
+            for key, shifts in per.items():
+                p = prefs.get(key) or {}
+                if not isinstance(p, dict) or (key == "N" and nurse.get("is_night_shift")):
+                    continue
+                cap = p.get("max")
+                try:
+                    cap = int(cap) if cap not in (None, "") else None
+                except (TypeError, ValueError):
+                    cap = None
+                if cap is not None and cap < 0:
+                    cap = None
+                sign = {"like": 1, "avoid": -1}.get(p.get("pref"), 0)
+                if cap is not None or sign:
+                    out.append((nurse, key, shifts, cap, sign))
+        return out
+
+    def _shift_pref_month_idx(self):
+        return [d for d, dt in enumerate(self.all_dates) if dt.month == self.month and dt.year == self.year]
+
+    @staticmethod
+    def _night_even_weight(score, k: int) -> int:
+        """야간 '이 달 안에서 고르게' 감점의 가중치 — 풀 평균과의 차이 1/k 회마다 (k = 풀 사람 수).
+        야간 공평성 점수(음수)를 사람 수로 나눈 정수라, 한 사람이 평균에서 1회 벗어나면 대략 그 점수만큼 깎인다.
+        점수가 0 이상이면(감점이 아니면) 걸지 않는다. 두 엔진 공용 (결정 1-65)."""
+        return -max(1, round(abs(score) / k)) if score < 0 and k >= 2 else 0
 
     def _is_weekend_or_holiday(self, dt: date) -> bool:
         """주말(토·일) 또는 법정공휴일 — 주말·공휴일 근무 공정성의 '부담일' (M6 P3②)."""

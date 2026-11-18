@@ -269,6 +269,7 @@ class CpSatScheduler(_SchedulerBase):
             self._cs_weekly_off(model, x)
         self._cs_pregnancy_p1_weekly(model, x)         # 임산부 P1 주1회 (모성보호)
         self._cs_max_v_per_month(model, x)
+        self._cs_shift_pref_caps(model, x)             # 간호사별 시간대 상한 (결정 1-70)
         if self.rules.maxNightPerMonth:
             self._cs_max_night_per_month(model, x)
         if self.rules.maxNightTwoMonth:
@@ -845,6 +846,17 @@ class CpSatScheduler(_SchedulerBase):
                 cap = max(max_n, self._pin_nurse_count(nid, month_idx, self.NIGHT_SHIFTS))
                 model.Add(sum(night_vars) <= cap)
 
+    def _cs_shift_pref_caps(self, model, x):
+        """간호사별 시간대 상한 (HiGHS 패리티, 결정 1-70)."""
+        month_idx = self._shift_pref_month_idx()
+        for nurse, _key, shifts, cap, _sign in self._shift_pref_items():
+            if cap is None:
+                continue
+            nid = nurse["id"]
+            vs = [x[nid][d][s] for d in month_idx for s in shifts]
+            if vs:
+                model.Add(sum(vs) <= max(cap, self._pin_nurse_count(nid, month_idx, shifts)))
+
     def _cs_max_night_two_month(self, model, x):
         max_n = self.rules.maxNightTwoMonthCount
         prev_nights = getattr(self, 'prev_month_nights', None) or {}
@@ -1278,6 +1290,16 @@ class CpSatScheduler(_SchedulerBase):
                     range_var = model.NewIntVar(0, ub_fair, f"night_range_{rid}")
                     model.Add(range_var >= max_n - min_n)
                     terms.append(sc * range_var)
+                    # 이 달 안에서도 고르게 — 풀 평균에서 벗어난 만큼 감점 (HiGHS 패리티, 결정 1-65)
+                    w_even = self._night_even_weight(sc, len(fairness_pool))
+                    if w_even:
+                        k = len(fairness_pool)
+                        total = lin(list(night_counts.values()))
+                        for nid, cnt in night_counts.items():
+                            dev = model.NewIntVar(0, k * ub_nights, f"night_dev_{rid}_{nid}")
+                            model.Add(dev >= k * cnt - total)
+                            model.Add(dev >= total - k * cnt)
+                            terms.append(w_even * dev)
 
             elif rt == "weekend_fairness":
                 # 주말·공휴일 근무 공정 배분 — 부담일 근무일 수의 (누적+당월) range 최소화
@@ -1358,6 +1380,11 @@ class CpSatScheduler(_SchedulerBase):
         # 신규가 '/D·/E·/N' 으로 넣은 날 — 프리셉터도 그 근무로 (HiGHS 패리티)
         for pid, d, codes in self._trainee_pair_targets():
             terms.append(_TRAINEE_PAIR_BONUS * lin([x[pid][d][s] for s in codes if s in x[pid][d]]))
+
+        # 간호사별 근무 성향 — 선호 가점·기피 감점 (HiGHS 패리티, 결정 1-70)
+        for nurse, _key, shifts, _cap, sign in self._shift_pref_items():
+            if sign:
+                terms.extend(sign * self._SHIFT_PREF_SCORE * x[nurse["id"]][d][s] for d in month_days for s in shifts)
 
         # 간호사 그룹 — 한 근무에 그룹원 최대·최소 n명 (HiGHS 패리티, _nurse_group_limits)
         for i, (kind, bound, nids, d, codes) in enumerate(self._nurse_group_limits()):

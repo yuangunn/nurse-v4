@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.21.0 (2026-11-18, 근무표 엑셀을 병동 번표 양식으로 — 1일부터·팀 색·계 수식·앞 달 시트(결정 1-59·1-61) · 임산부는 임신 구간 공휴일에 법(결정 1-60) · 세부 원티드·공휴일 휴무=법(결정 1-62) · 고친 사전입력으로 다시 만들기·서랍 크게 보기(결정 1-63) · 계산 현황·결과 요약(결정 1-64) · 간호사 그룹 — 팀과 따로·여러 그룹에 겹쳐 속하기·그룹마다 한 근무 최대/최소 n명(결정 1-57) · 화면 조밀화 — 본문 14px/400·표 줄 26px·한 달이 한 화면·날짜별 필요 인원 달력·사전입력에서 근무표 만들기·저장본 열기(결정 1-58) · 배정 도구 — 손으로 바꾼 사유 제거(결정 2-55)·하루 어싸인표 기본 양식 101 새 양식. v4.20.1 = 배정 도구 방 구성 프리셋마다 [차지 방 없음](결정 2-54))
+**최신**: v4.21.1 (2026-11-18, 야간을 이 달 안에서도 고르게(결정 1-65) · 칸별 이유 '이 칸을 지키면?'(1-66) · 실패 표시와 완화 기준 진단(1-67) · 병동 닫힘 막기(1-68) · 이 표에서 더 찾기(1-69) · 간호사별 근무 성향(1-70) · 처음 시작 안내(1-71) · 분석 알림 두 묶음(1-72) · 서랍 큰 창 가운데·상태 줄 단추 정리(1-73). v4.21.0 = 근무표 엑셀을 병동 번표 양식으로 — 1일부터·팀 색·계 수식·앞 달 시트(결정 1-59·1-61) · 임산부는 임신 구간 공휴일에 법(결정 1-60) · 세부 원티드·공휴일 휴무=법(결정 1-62) · 고친 사전입력으로 다시 만들기·서랍 크게 보기(결정 1-63) · 계산 현황·결과 요약(결정 1-64) · 간호사 그룹 — 팀과 따로·여러 그룹에 겹쳐 속하기·그룹마다 한 근무 최대/최소 n명(결정 1-57) · 화면 조밀화 — 본문 14px/400·표 줄 26px·한 달이 한 화면·날짜별 필요 인원 달력·사전입력에서 근무표 만들기·저장본 열기(결정 1-58) · 배정 도구 — 손으로 바꾼 사유 제거(결정 2-55)·하루 어싸인표 기본 양식 101 새 양식. v4.20.1 = 배정 도구 방 구성 프리셋마다 [차지 방 없음](결정 2-54))
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -152,7 +152,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 556건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과·간호사그룹)
+├── tests/                   # pytest 회귀 567건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과·간호사그룹)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -214,7 +214,7 @@ python3 scripts/check_form_borders.py        # 양식을 바꿨을 때
 근무표 엔진·frontend 앱(그 밖의 파일)을 고쳤을 때 — 로컬 pytest 약 1분:
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 556건
+python3 -m pytest -q                  # 567건
 node scripts/test_paste_dates.mjs && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_wanted_cells.mjs && node scripts/test_day_reqs.mjs && node scripts/test_hospital_holidays.mjs \
   && node scripts/test_manager_check.mjs && node scripts/test_trainee_days.mjs && node scripts/test_continue_search.mjs \
@@ -237,7 +237,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.21.0.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.21.1.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -336,9 +336,12 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 - 순방향 D→E, E→N 보상 (+20)
 - 동일 근무 연속 보상 (+15)
 - 연속 휴일 보상 (+30)
-- 야간 공정 배분 (range 최소화, -가중치, 직전 3개월 누적 오프셋)
+- 야간 공정 배분 ((직전 3개월 누적 + 당월) range 최소화 + **당월 야간이 풀 평균에서 벗어난 만큼** 감점 `_night_even_weight` — 누적 range 만으로는
+  그 사이에 있는 사람이 이번 달 0회여도 감점이 없었다, 결정 1-65)
 - **주말·공휴일 근무 공정 배분** (토·일 ∪ 공휴일 근무일 range 최소화 + 직전 3개월 누적 오프셋, 기본 -30; 야간전담·당월 전입/전출 제외, 임산부 포함) — 결정 1-21
 - 희망 근무 반영 (+50)
+- **간호사별 근무 성향** (배점 규칙 아님 — 상수, 결정 1-70): 선호 시간대 근무 한 번마다 `+100`, 기피는 `-100` (`_SHIFT_PREF_SCORE`).
+  한 달 최대는 하드(`_c/_cs_shift_pref_caps`). 야간 성향을 정한 사람은 야간 공정 풀에서 빠진다
 - **간호사 그룹** (배점 규칙 아님 — 상수): 한 근무에 그룹원 최대·최소 n명을 넘거나 모자란 사람 하나마다 `-200` (결정 1-57).
   V(-500)·근무 원티드(500)보다 작아 그룹 때문에 연차를 쓰거나 원티드를 깨지 않는다. 완화 1단계에는 넣지 않는다
 - V 사용 페널티 (-500) — 마지막 수단
@@ -437,6 +440,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   "end_date": None,            # 전출일 YYYY-MM-DD (None=상시)
   "is_pregnant": False,        # 임산부(모성보호)
   "pregnancy": {},             # {"early":{"start","end"},"late":{"start","end"}} 임신초기/출산전 구간
+  "shift_prefs": {},           # 근무 성향 {"N": {"pref":"like"|"avoid", "max": 3}, "D": …, "E": …} — 시간대별 한 달 상한(하드)·선호/기피(±100) (결정 1-70)
 }
 ```
 
@@ -549,7 +553,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   - **사전입력 ↔ 근무표 (고쳐서 다시 만들기, 결정 1-63)**: 표가 있으면 사전입력 툴바에 '다시 만들기'(`rdRemake()`)와 '근무표 보기 →'가 나란히,
     근무표 툴바에는 '← 사전입력 고치기'. 표를 만든(연) 뒤 사전입력 칸이 바뀌면(`rdPreChanged` — 기준 `_preAtMake` 는 `trackEdits()` 가 잡고,
     저장본을 열면 저장 때의 사전입력) 사전입력의 주 버튼이 '고친 사전입력으로 다시 만들기'로 바뀌고, 근무표 상태 줄·단계 바 부제가 다시 만들어야 함을 알린다.
-    서랍(요약·리포트)은 '크게 보기'(`drawerBig`)로 화면 가운데 큰 창이 되고, 상태 줄의 '바뀐 n칸 보기'가 원티드 미반영 탭을 큰 창으로 바로 연다.
+    서랍(요약·리포트)은 '크게 보기'(`drawerBig`)로 화면 한가운데 고정 크기의 큰 창이 된다 (상태 줄의 같은 서랍을 여는 단추는 뺐다 — 결정 1-73).
   - **사전입력 → 근무표**: 사전입력 툴바의 주 버튼은 `rdGoMake()`('근무표 만들기 →' / 표가 있으면 '근무표 보기 →'). 근무표에서 사전입력으로 넣은 칸은
     `is-pre`(왼쪽 위 모서리 삼각형, `rdIsPre`) — 상태 줄에 범례.
   - **`rdSched` 는 보고 있는 달 기준**: `schedule` 은 달을 넘겨도 앞 달 것이 남는다. 앞뒤 달 표는 넘치는 주(이 달 1~6일·23일 이후)만 겹치므로 7~22일 칸이 있는지로 가린다.
@@ -590,9 +594,11 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
      주의·위시 반영·생성 리포트·솔버 로그; 사연 항목이 있으면 생성 직후 자동으로 열림)
    - **만드는 중**: 상태 줄 바로 아래 진행 한 줄(`rdLiveProgress` — 답을 찾았는지·가장 좋은 답과 n% 안쪽·3분 넘게 그대로면
      '지금 멈춰도 됩니다'·조건을 정리하는 중) + **계산 현황**(`.rlive`, `data-rd=live-log`): 솔버(HiGHS) 기록을 읽은 숫자 카드(`rdSolveCards`)와
-     시간순 사건 표(`solveStats.events`, `_solveFeed`). 원본 기록은 접어 둔다(`showLiveLog`, '원본 기록 보기'). 서랍 '생성 기록' 탭에도 같은 것 (결정 1-43·1-64)
+     시간순 사건(`solveStats.events`, `_solveFeed` — 최근 한 줄만, '지나온 일 모두 보기'로 편다). 글자는 쉬운 말(따져 본 경우·쳐낸 경우·지금 표 점수…), 솔버 이름은 툴팁.
+     원본 기록은 접어 둔다(`showLiveLog`, '원본 기록 보기'). 서랍 '생성 기록' 탭에도 같은 것 (결정 1-43·1-64)
    - **결과 요약**(`story`, `rdStorySteps`): 생성이 다 끝나면 한 장씩 넘겨 보는 창 — 계산 → 지킨 것 → 바꾼 것 → 확인할 것 → 결과. 상태 줄 '결과 요약 다시 보기'.
-     '칸별 이유가 궁금하다면?'(`rdOpenWhy`)은 바뀐 칸마다 그날 인원 사정(`rdDayFacts`)을 보인다 — 어느 규칙과 부딪혔는지는 아직 없다 (결정 1-64)
+     '칸별 이유가 궁금하다면?'(`rdOpenWhy`)은 바뀐 칸마다 그날 인원 사정(`rdDayFacts`)과 **'이 칸을 지키면?'**(`rdCellWhy` — 그 칸만 원래대로 두고
+     다른 바뀐 칸은 비운 채 `/api/diagnose` → 부딪히는 규칙 묶음, 없으면 지킬 수 있는 칸)을 보인다 (결정 1-64·1-66)
    - **🧾 연차(V) 설명** (`_v_report`, 결과 `v_report`): 솔버가 놓은 V를 주 단위로 "재적 칸 − 근무 = 쉬어야 할 칸,
      주휴·OF·확정 휴가·생으로 채우고 남은 칸이 V" 산술로 설명 + 힌트(주휴 없는 사람·남는 날 원티드·필요 인원).
      사전입력 V는 세지 않는다. 주 안에서 주휴 요일을 옮기는 것은 주간 총량을 못 바꾼다 (결정 1-23)
@@ -1085,10 +1091,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.21.0.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.21.1.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.21.0.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.21.1.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -1184,7 +1190,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.21.0 기준)
+## 알려진 주의사항 (v4.21.1 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 배점 보조변수(전환·연속·패턴·주말·공휴일)는 생성 달 + 끝에 붙은 다음 달 며칠 + 1일 이음새(그 사람의 지난달 칸이 기록일 때)에 —
@@ -1205,6 +1211,14 @@ self.cbLogging.subscribe(_on_log)
   법정공휴일과 합쳐 `holidays` 에 넣는다 — 엔진은 `holidays` 하나만 본다. `_computeKRHolidays` 에 넣지 말 것
   (KASI 골든셋 비교 대상이 아니고 대체공휴일을 만들면 안 된다). 검증 `node scripts/test_hospital_holidays.mjs`
 - 간호사 삭제는 API 경유 — 저장본 캐스케이드 정리 자동 실행
+- **화면은 연 병동을 `X-Profile` 머리줄로 보낸다** (`api()`) — 서버가 다시 시작돼 병동이 닫혔으면 `_profile_guard` 가 409 `profile_closed`, 화면은 창으로 막고
+  다시 열게 한다(`profileLost`·`reopenProfile`). `api()` 를 거치지 않는 fetch 는 막히지 않는다 — 병동 자료를 읽고 쓰는 요청은 `api()` 로 (결정 1-68)
+- **처음 시작 안내**(`onb`·`rdOnbSteps`, 결정 1-71) — 예시 명부(이름 앞 `*`)가 든 새 병동에서 뜬다: 예시 지우기 → 지난달 근무표 붙여넣기(이름으로 명부 생성) →
+  사전입력 붙여넣기 → 명부·필요 인원 확인 → 만들기. 진행 표시는 병동마다 `localStorage('ns_onb:<병동>')`. 분석 탭 알림은 두 묶음(`anaWarnGroups`, 결정 1-72)
+- **이 표에서 더 찾기**(`rdContinue`, 결정 1-69) — 끝난 표·멈춘 표에서 같은 문제(`contBase`: 요청·감점·하한·지문)를 이어 찾는다.
+  사전입력을 고쳤거나 칸을 손으로 고쳤거나 저장본을 연 표에는 단추가 없다(`rdCanContinue`)
+- **만들기 실패는 `genFailed`** — 표가 떠 있어도 실패 배너·상태 줄로 알린다. 완화를 켠 실패의 인원 셈·정밀 진단은 완화로도 바뀌지 않는 칸
+  (잠근 칸·주휴·지난달 칸, `_relaxHardPrev`·`_staffingSlack(true)`)만 본다 (결정 1-67)
 - **모듈 합성은 디스크립터** — `app()` 끝의 `Object.defineProperties(_app, getOwnPropertyDescriptors(mod()))`. `...spread` 로 되돌리면
   getter(`rd*` 계산 속성, `ruleScoreSummary`)가 값으로 굳어 화면이 안 바뀐다 (결정 2-20)
 - **`data-rd` 표식은 검사기 전용** — 사전입력·근무표에 같은 이름(table·table-wrap·toolbar·btn-more)이 있어 보이는 탭에서만 붙인다
