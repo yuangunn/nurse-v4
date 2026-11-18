@@ -240,7 +240,7 @@ window.GridInteractionsModule = function() {
           if((n.start_date&&dk<n.start_date)||(n.end_date&&dk>n.end_date))continue;
           if(n.is_trainee&&this.isTraineeInTraining(n,day))continue;   // 트레이닝 중인 신규는 인원이 아니다 (엔진·분석 탭과 같다)
           const pre=this.prevSchedule[n.id]?.[dk];
-          if(pre&&restLeave.includes(pre)&&(!fixedOnly||this.lockedCells?.[n.id]?.[dk]||(pre==='주'&&!this.allowJuhuRelax)))continue;
+          if(pre&&restLeave.includes(pre)&&(!fixedOnly||this.lockedCells?.[n.id]?.[dk]||(pre==='주'&&!this.allowJuhuRelax)||this.isCarryDay(day)))continue;
           avail++;
         }
         if(avail<needed)short.push({dk,needed,avail});

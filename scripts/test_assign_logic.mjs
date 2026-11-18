@@ -2497,9 +2497,19 @@ async function main() {
     await newDataFile(); out.딴곳새파일=toastTxt();
     const h5=mk('근무.js'); window.showSaveFilePicker=async()=>h5;
     await newDataFile(); out.딴곳딴이름=toastTxt();
+    // 켤 때 안내 창 — 옆 파일을 읽기만 하면 가운데 창이 뜨고, 단추 한 번이 곧 저장 연결이다. '나중에'는 읽기 전용 그대로
+    const modalOn=()=>document.querySelector('#modal').classList.contains('on');
+    side(); await wait(50);
+    out.안내=[modalOn(), document.querySelector('#modalBox .mt').textContent, document.querySelector('#modalBox button[data-g]').textContent];
+    const h6=mk('assign-data.js',txt0); window.showOpenFilePicker=async()=>[h6];
+    document.querySelector('#modalBox button[data-g]').click(); await wait(400); out.안내연결=[modalOn(), pill()];
+    side(); await wait(50); document.querySelector('#mdCancel').click(); await wait(50); out.안내나중에=[modalOn(), pill()];
     window.idbGet=realIdb; window.probeSidecar=realProbe; window.showOpenFilePicker=keepOpen; window.showSaveFilePicker=keepSave;
     fileHandle=null; window.__autoRead=false; window.__autoEdits=false; A.store=keepStore; A.memoryMode(); A.saveMsg('');
     return out; })();`);
+  eq('옆 파일을 읽기만 하면 켤 때 저장 연결 안내 창이 뜬다', v35.안내, [true, '저장 연결', '저장 연결하기']);
+  eq('안내 창의 단추 한 번으로 저장이 연결되고 창이 닫힌다', v35.안내연결, [false, v35.연결]);
+  eq('안내 창에서 나중에를 누르면 읽기 전용 그대로', v35.안내나중에, [false, ['읽기 전용', 'warn']]);
   eq('옆 파일을 읽은 처음 — 노랑 읽기 전용, 닫아도 묻지 않는다', [v35.처음, v35.처음닫기], [['읽기 전용', 'warn'], false]);
   ok('[저장 연결]로 파일을 고르면 알약이 저장됨 — 옛 \'저장 연결 안 됨\'이 남지 않는다',
     /^저장됨/.test(v35.연결[0]) && v35.연결[1] === 'ok' && !v35.연결닫기, JSON.stringify(v35.연결));

@@ -225,3 +225,35 @@ def test_diagnosis_names_pregnancy_p1_cause(build_request):
     assert not result["success"]
     assert "P1" in result["message"], result["message"]
     assert "원인 불명" not in result["message"]
+
+
+# ── 지난달 근무표의 마지막 주는 완화에서도 그대로 (결정 1-75) ──────────────────
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_relax_keeps_last_table_week_in_this_month(solver):
+    """2026-12 는 11/29(일)에 시작한다 — 첫 주기 11/29~12/5 는 11월 번표의 마지막 주다.
+    그 주의 이번 달 칸(12/1~12/5)은 이미 나간 표라, 완화를 켜도 바꾸지 않는다: 12/15 에 모두가 OF 를 원해
+    완화가 꼭 필요하고, a0 의 그 주는 7일 연속 근무(이번 달 규칙 위반)라 완화가 가장 먼저 고치고 싶어 하는 칸이다."""
+    nurses = _mini_nurses(6)
+    prev = _juhu_prev(nurses, 2026, 12, 28)
+    carry = {**{f"2026-11-{d:02d}": "D" for d in (29, 30)}, **{f"2026-12-{d:02d}": "D" for d in range(1, 6)}}
+    prev.setdefault("a0", {}).update(carry)
+    for n in nurses:
+        prev.setdefault(n.id, {})["2026-12-15"] = "OF"
+    req = _full_request(2026, 12, nurses=nurses, prev_schedule=prev)
+    req.allow_pre_relax = True
+
+    if solver == "highs":
+        from server.scheduler import NurseScheduler
+        result = NurseScheduler(req).solve()
+    else:
+        from server.scheduler_cpsat import CpSatScheduler
+        result = CpSatScheduler(req).solve()
+
+    assert result["success"], result.get("message")
+    relaxed = result.get("relaxed_cells") or {}
+    assert any("2026-12-15" in cells for cells in relaxed.values())          # 완화는 실제로 일어났다
+    merged = {**((result.get("extended_schedule") or {}).get("a0") or {}), **(result["schedule"].get("a0") or {})}
+    for dt_str in carry:
+        assert merged.get(dt_str) in ("D", "DC"), f"지난달 표의 칸 {dt_str} 이 바뀜: D → {merged.get(dt_str)}"
+        assert dt_str not in relaxed.get("a0", {})

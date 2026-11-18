@@ -375,7 +375,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         # 제약 함수(시니어리티 게이팅 등)에 '사전입력=소프트' 모드임을 알린다 —
         # 완화 모드에서 원본 prev로 게이팅하면 하드 제약이 통째로 사라진다.
         self._pre_soft = True
-        self._pin = {}  # 사실-클램프 비활성 — 완화 모드에선 제약이 온전히 걸려야 함
+        self._pin = self._relax_pin()  # 풀 수 있는 칸·잠근 칸에는 제약이 온전히 걸린다 — 지난달 표의 칸만 사실로 남긴다
         pre_bonus_terms = []
         # 최소 침습 차등 보너스(높을수록 보호 → 늦게 완화). 휴무는 간호사 개인의 시간이라
         # 강하게 보호: 근무 < OFF < 연차류. 주휴(주)는 기본 하드 고정(allow_juhu_relax 시에만).
@@ -423,6 +423,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                     or dt < first_of_month
                 if is_locked and pre:
                     keep = self._locked_domain(nurse, dt, pre)   # 잠긴 D·E·N 은 차지로 올릴 수 있다
+                    if self._day_all_pinned(d, dt):
+                        keep = {pre}                             # 지난달 표로 꽉 찬 날은 문자 그대로 (인원·차지 제약도 건너뛴다 — 엄격과 같다)
                     for s in self.ALL_SHIFTS:
                         if s in keep and len(keep) > 1:
                             v = pulp.LpVariable(f"r_{nid}_{d}_{s}", cat="Binary")

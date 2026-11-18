@@ -380,7 +380,7 @@ window.RedesignModule = function() {
       const pre=this.rdWantedCount, rx=this.rdRelaxedCount, tc=this.rdTraineeChanged, keptN=Math.max(pre-this.rdWantedRelaxed-tc, 0);
       // 표 아래 '배정 / 필요' 줄과 같은 셈 — 날짜별로 고친 필요 인원(rdFootNeed)과 견준다
       const rowsDEN=(this.footerRows||[]).filter(r=>['D','E','N'].includes(r.label));
-      const short=this.scheduleDays.filter(d=>!this.isOverflow(d)).reduce((a,d)=>a+rowsDEN.filter(r=>this.getDayDutyCount(d,r.shifts)<(+this.rdFootNeed(d,r.label)||0)).length, 0);
+      const short=this.scheduleDays.filter(d=>!this.isPrevMonthDay(d)).reduce((a,d)=>a+rowsDEN.filter(r=>this.getDayDutyCount(d,r.shifts)<(+this.rdFootNeed(d,r.label)||0)).length, 0);
       const kept=[['원티드 (주휴·지난달 표에서 이어온 칸은 빼고)', `${n(pre)}칸`], ['그대로 지킨 칸', `${n(keptN)}칸`]];
       if(tc) kept.push(['신규 트레이닝 날 (프리셉터 근무를 따름)', `${tc}칸`]);
       kept.push(['날마다 필요 인원 (D·E·N)', short ? `${short}곳 모자람` : '모두 채움']);
@@ -759,11 +759,15 @@ window.RedesignModule = function() {
       this._checkViolations();
     },
     // 근무표 칸이 사전입력에서 온 그대로인가 — 완화로 바뀌었거나 손으로 고친 칸은 뺀다 (모서리 표시)
-    // 원티드 색을 칠할 칸 — 사전입력 값이 있는 칸. 주휴(주)·달 밖 날짜, 그리고 지난달과 겹친 첫 주기(지난달 근무표에서 이어온 칸)는 뺀다
+    // 원티드 색을 칠할 칸 — 사전입력 값이 있는 칸. 주휴(주)와 지난달 근무표의 칸(isCarryDay)은 뺀다.
+    // 끝에 붙은 다음 달 며칠(12월 표의 1/1·1/2)은 이 표가 만드는 칸이라 칠한다 — 빼 두면 그 칸만 화면·엑셀에 표식이 없었다 (결정 1-75)
     isWanted(nid, day){
-      const c=this.getPrevShift(nid, day); if(!c || c==='주' || this.isOverflow(day)) return false;
-      const s=this.scheduleDays[0]; return !(this.isOverflow(s) && Math.round((day-s)/86400000)<7);
+      const c=this.getPrevShift(nid, day); return !!c && c!=='주' && !this.isCarryDay(day);
     },
+    // 지난달 근무표의 칸 — 앞 달에서 시작한 첫 주기(7일) 전체: 지난달 날짜와 그 주의 이번 달 날짜(12월이면 11/29~12/5).
+    // 완화를 켜도 바뀌지 않는다 (엔진 _carry_week_keys + '지난달 칸' 고정과 같은 범위)
+    isCarryDay(day){ const s=this.scheduleDays[0]; return !!s && this.isOverflow(s) && Math.round((day-s)/86400000)<7; },
+    isPrevMonthDay(day){ return day<new Date(this.year, this.month-1, 1); },
     rdIsPre(nid, day){ return !!this.getPrevShift(nid, day) && !this.isRelaxed(nid, day) && !this.isManuallyEdited(nid, day); },
     // 사전입력 툴바의 다음 단계 단추 — 근무표가 없으면 넘어가서 바로 만들고, 있으면 보여 주기만 한다 (만든 표를 말없이 버리지 않는다)
     rdGoMake(){ this.activeTab='schedule'; if(!this.rdSched && !this.generating) this.generate(); },
