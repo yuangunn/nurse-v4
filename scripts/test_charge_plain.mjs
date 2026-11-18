@@ -84,7 +84,7 @@ Object.assign(ctx, {
   nurses: [{ id: 'a', name: '간호01', group: 'B', capable_shifts: ['D', 'DC', 'E', 'N', 'NC'] },
     { id: 'b', name: '간호02', group: 'A', start_date: '2026-11-03' }, { id: 'c', name: '간호03', group: 'B' }, { id: 'd', name: '간호04' }],
   schedule: { a: { '2026-10-31': 'NC', '2026-11-01': 'DC', '2026-11-02': 'OF', '2026-11-03': 'D', '2026-11-04': 'OF', '2026-12-05': 'EC' }, b: { '2026-11-02': 'D', '2026-11-03': 'D' } },
-  // 11/2 원티드 그대로 · 11/3 원티드가 풀림 · 11/4 원티드를 손으로 고침(원래 E) · 12/5 는 달 밖
+  // 11/2 원티드 그대로 · 11/3 원티드가 풀림 · 11/4 원티드를 손으로 고침(원래 E) · 12/5 는 끝에 붙은 다음 달 날
   prevSchedule: { a: { '2026-11-02': 'OF', '2026-11-03': 'OF', '2026-11-04': 'E', '2026-12-05': 'EC' }, b: { '2026-11-02': 'D' } },
   _originalSchedule: { a: { '2026-10-31': 'NC', '2026-11-01': 'DC', '2026-11-02': 'OF', '2026-11-03': 'D', '2026-11-04': 'E', '2026-12-05': 'EC' }, b: { '2026-11-02': 'D', '2026-11-03': 'D' } },
   relaxedCells: { a: { '2026-11-03': 1 } }, cellNotes: { a: { '2026-11-02': '개인 사정' }, b: { '2026-10-30': '표 밖' } },
@@ -103,9 +103,9 @@ assert.deepEqual(body.team_colors, { B: '#DDEBF7', A: '#123456' });
 assert.equal(ctx.rdTeamStyle(ctx.nurses[1]), '--team-bg:#123456;--team-fg:#FFFFFF');
 assert.equal(ctx.rdTeamStyle(ctx.nurses[0]), '--team-bg:#DDEBF7;--team-fg:#1A1A1A');
 assert.equal(ctx.rdTeamStyle(ctx.nurses[3]), '');
-// 표식 — 화면과 같다: 원티드 그대로 w · 풀린 칸 r · 손으로 고친 칸·달 밖·전입 전은 빈 표식 · 나이트킵 줄은 k
+// 표식 — 화면과 같다: 원티드 그대로 w(끝에 붙은 다음 달 날도 — 결정 1-75) · 풀린 칸 r · 손으로 고친 칸·전입 전은 빈 표식 · 나이트킵 줄은 k
 assert.equal(body.marks[0].slice(0, 5), ' wr  ');
-assert.equal(body.marks[0][34], ' ');
+assert.equal(body.marks[0][34], 'w');
 assert.equal(body.marks[1].slice(0, 3), '   ');
 assert.equal(body.marks[2], 'k'.repeat(35));
 assert.equal(body.marks[3], ' '.repeat(35));

@@ -1033,7 +1033,7 @@
         <tfoot>
           <template x-for="row in footerRows" :key="row.label"><tr>
             <td class="rt-foot-label" :data-shift="row.label==='휴무'?'OF':row.label" x-text="row.label==='휴무'?'휴무':row.label+' 배정 / 필요'"></td>
-            <template x-for="day in scheduleDays" :key="'sf'+row.label+day"><td class="rt-foot" :data-shift="row.label==='휴무'?'OF':row.label" :class="[isOverflow(day)?'overflow':'',row.label==='D'&&isScheduleStaffShort(day,'day')?'staff-short':'',row.label==='E'&&isScheduleStaffShort(day,'evening')?'staff-short':'',row.label==='N'&&isScheduleStaffShort(day,'night')?'staff-short':'']" x-text="isOverflow(day)?'':(row.label==='휴무'?(getDayDutyCount(day,row.shifts)||''):`${getDayDutyCount(day,row.shifts)}/${rdFootNeed(day,row.label)}`)"></td></template>
+            <template x-for="day in scheduleDays" :key="'sf'+row.label+day"><td class="rt-foot" :data-shift="row.label==='휴무'?'OF':row.label" :class="[isOverflow(day)?'overflow':'',row.label==='D'&&isScheduleStaffShort(day,'day')?'staff-short':'',row.label==='E'&&isScheduleStaffShort(day,'evening')?'staff-short':'',row.label==='N'&&isScheduleStaffShort(day,'night')?'staff-short':'']" x-text="isPrevMonthDay(day)?'':(row.label==='휴무'?(getDayDutyCount(day,row.shifts)||''):`${getDayDutyCount(day,row.shifts)}/${rdFootNeed(day,row.label)}`)"></td></template>
             <td class="rt-foot" :data-shift="row.label==='휴무'?'OF':row.label" colspan="7"></td>
           </tr></template>
         </tfoot>

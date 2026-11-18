@@ -13,7 +13,7 @@ const ctx = (year, month, start, pre) => ({
   year, month, scheduleDays: [start],
   isOverflow(d) { return d.getMonth() !== month - 1 || d.getFullYear() !== year; },
   getPrevShift: (_, d) => pre[dk(d)] || '',
-  isWanted: mod.isWanted,
+  isWanted: mod.isWanted, isCarryDay: mod.isCarryDay,
 });
 // 2026-12: 표는 11/29(일)부터 — 첫 주기 11/29~12/5 가 지난달과 겹친다
 let c = ctx(2026, 12, new Date(2026, 10, 29), { '2026-11-30': 'D', '2026-12-05': 'OF', '2026-12-06': 'OF', '2026-12-07': '주', '2026-12-31': 'N제외', '2027-01-01': 'OF' });
@@ -24,7 +24,7 @@ assert.equal(w(2026, 12, 6), true, '둘째 주기부터 칠한다');
 assert.equal(w(2026, 12, 7), false, '주휴');
 assert.equal(w(2026, 12, 8), false, '빈칸');
 assert.equal(w(2026, 12, 31), true, '다음 달과 겹친 마지막 주기의 이달 날짜는 칠한다');
-assert.equal(w(2027, 1, 1), false, '다음 달 날짜');
+assert.equal(w(2027, 1, 1), true, '끝에 붙은 다음 달 날짜도 이 표가 만드는 칸이라 칠한다');
 // 원티드 칸 수(rdWantedCount) = 칠하는 칸 수 — 주휴·달 밖·지난달과 겹친 첫 주기는 세지 않는다. 바뀐 칸도 원티드인 것만 센다
 {
   const days = []; for (const d = new Date(2026, 10, 29); d <= new Date(2027, 0, 2); d.setDate(d.getDate() + 1)) days.push(new Date(d));
@@ -32,7 +32,7 @@ assert.equal(w(2027, 1, 1), false, '다음 달 날짜');
   Object.assign(g, { year: 2026, month: 12, scheduleDays: days, nurses: [{ id: 'a' }, { id: 'b' }], isOverflow: c.isOverflow,
     getPrevShift: (id, d) => (id === 'a' ? { '2026-11-30': 'D', '2026-12-05': 'OF', '2026-12-06': 'OF', '2026-12-07': '주', '2026-12-31': 'N제외', '2027-01-01': 'OF' } : { '2026-12-10': 'V' })[dk(d)] || '' });
   Object.defineProperty(g, 'rdRelaxedList', { value: [{ nid: 'a', dk: '2026-12-06' }, { nid: 'a', dk: '2026-12-07' }, { nid: 'a', dk: '2026-12-05' }] });
-  assert.equal(g.rdWantedCount, 3);        // a: 12/6·12/31 · b: 12/10
+  assert.equal(g.rdWantedCount, 4);        // a: 12/6·12/31·1/1 · b: 12/10
   assert.equal(g.rdWantedRelaxed, 1);      // 12/6 만 — 주휴(12/7)·지난달 표 칸(12/5)은 원티드가 아니다
 }
 // 표가 1일에 시작하면(지난달과 겹치지 않으면) 첫 주기도 칠한다

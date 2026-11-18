@@ -509,6 +509,23 @@ def _latest_saved(conn, year: int, month: int):
         return None
 
 
+def _saved_night_kept(data: Dict, key: str) -> set:
+    """그 달(key = 'YYYY-MM') 저장본에서 야간전담(나이트킵)이었던 간호사 id.
+    저장본에 함께 담긴 그 달의 명부로 판정하고, 없으면 현재 명부로."""
+    saved_nurses = data.get("nurses") or []
+    if not saved_nurses:
+        try:
+            saved_nurses = get_nurses()
+        except Exception:
+            saved_nurses = []
+    kept = set()
+    for n in saved_nurses:
+        nm = n.get("night_months") or {}
+        if (nm.get(key) if nm else n.get("is_night_shift")):
+            kept.add(n.get("id"))
+    return kept
+
+
 def compute_prev_month_nights(year: int, month: int) -> Dict[str, int]:
     """직전 달 최신 저장 근무표에서 간호사별 야간(N/NC) 횟수 — '전월N' 자동 인수인계.
     수동으로 옮겨 적다 빼먹으면 월초 연속야간 검증이 빠지는 문제를 막는다.
@@ -526,18 +543,7 @@ def compute_prev_month_nights(year: int, month: int) -> Dict[str, int]:
         data = _latest_saved(conn, py, pm)
     if not data:
         return out
-    # 저장본에 함께 담긴 그 달의 명부로 야간전담 여부 판정 (없으면 현재 명부)
-    saved_nurses = data.get("nurses") or []
-    if not saved_nurses:
-        try:
-            saved_nurses = get_nurses()
-        except Exception:
-            saved_nurses = []
-    night_kept = set()
-    for n in saved_nurses:
-        nm = n.get("night_months") or {}
-        if (nm.get(key) if nm else n.get("is_night_shift")):
-            night_kept.add(n.get("id"))
+    night_kept = _saved_night_kept(data, key)
     for nid, days in (data.get("schedule") or {}).items():
         if nid in night_kept:
             continue                      # 나이트킵 달 — 수면오프와 무관
@@ -568,7 +574,11 @@ def compute_fairness_ledger(year: int, month: int, months_back: int = 3) -> Dict
     Returns {nid: {"nights": n, "weekends": n, "holiday_work": n,
                    "weekend_holiday": n, "months": k}}
     weekend_holiday = 토·일 ∪ 법정공휴일 근무일 수(합집합 — 토요일 공휴일은 1회).
-    weekend_fairness 오프셋의 원천 (M6 P3②)."""
+    weekend_fairness 오프셋의 원천 (M6 P3②).
+
+    **야간전담(나이트킵)이었던 달의 야간은 누적에 넣지 않는다** (결정 1-74) — 그 달 14회는 맡은 일이지 일반 근무로 쌓은 야간이
+    아니다(제1원칙 7). 넣으면 누적이 20회를 넘어 '야간을 많이 선 사람'으로 잡히고, 다음 달들에 야간을 덜 받는다.
+    주말·공휴일 수는 그대로 센다."""
     import datetime as _dt
     targets = []
     y, m = year, month
@@ -584,6 +594,7 @@ def compute_fairness_ledger(year: int, month: int, months_back: int = 3) -> Dict
             if not data:
                 continue
             prefix = f"{ty:04d}-{tm:02d}-"
+            night_kept = _saved_night_kept(data, f"{ty:04d}-{tm:02d}")
             holidays = {h for h in (data.get("holidays") or []) if str(h).startswith(prefix)}
             for nid, days in (data.get("schedule") or {}).items():
                 touched = False
@@ -594,7 +605,7 @@ def compute_fairness_ledger(year: int, month: int, months_back: int = 3) -> Dict
                     if not dk.startswith(prefix) or s not in _WORK_CODES:
                         continue
                     touched = True
-                    if s in _NIGHT_CODES:
+                    if s in _NIGHT_CODES and nid not in night_kept:
                         ent["nights"] += 1
                     is_weekend = False
                     try:

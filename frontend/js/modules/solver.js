@@ -210,12 +210,12 @@ window.SolverModule = function() {
       }catch(e){this.diagOpen=false;this.toast('충돌 분석 실패','error');}
       finally{this.diagnosing=false;}
     },
-    // 완화를 켜도 바뀌지 않는 사전입력 칸 — 잠근 칸 · 주휴(주휴 이동을 안 켰으면) · 지난달 칸 (엔진의 완화와 같은 기준)
+    // 완화를 켜도 바뀌지 않는 사전입력 칸 — 잠근 칸 · 주휴(주휴 이동을 안 켰으면) · 지난달 근무표의 칸(지난달 날짜 + 그 표의 마지막 주) (엔진의 완화와 같은 기준)
     diagRelax:false,
     _relaxHardPrev(){
       const first=`${this.year}-${String(this.month).padStart(2,'0')}-01`, out={};
       for(const [nid,row] of Object.entries(this.prevSchedule||{})) for(const [dk,v] of Object.entries(row||{}))
-        if(dk<first || this.lockedCells?.[nid]?.[dk] || (v==='주'&&!this.allowJuhuRelax)) (out[nid]=out[nid]||{})[dk]=v;
+        if(dk<first || this.isCarryDay(new Date(dk+'T00:00:00')) || this.lockedCells?.[nid]?.[dk] || (v==='주'&&!this.allowJuhuRelax)) (out[nid]=out[nid]||{})[dk]=v;
       return out;
     },
     // 왜 안 되는지 창에 그릴 묶음 — 따로 풀어야 하는 막힌 곳마다 한 묶음, 줄마다 갈 칸(있으면)을 붙인다

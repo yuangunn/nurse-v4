@@ -314,6 +314,8 @@ class CpSatScheduler(_SchedulerBase):
                 fixed_to = None
                 if active and pre and locked:
                     keep = self._locked_domain(nurse, dt, pre)   # 잠긴 D·E·N 은 차지로 올릴 수 있다
+                    if self._day_all_pinned(d, dt):
+                        keep = {pre}                             # 지난달 표로 꽉 찬 날은 문자 그대로 (HiGHS 패리티)
                     if len(keep) > 1:
                         for s in self.ALL_SHIFTS:
                             x[nid][d][s] = model.NewBoolVar(f"rx_{nid}_{d}_{s}") if s in keep else 0
@@ -391,7 +393,7 @@ class CpSatScheduler(_SchedulerBase):
         solver_progress.record_event("relax_start", engine="CP-SAT")
         # 제약 함수(시니어리티 게이팅 등)에 '사전입력=소프트' 모드임을 알림
         self._pre_soft = True
-        self._pin = {}  # 사실-클램프 비활성 — 완화 모드에선 제약이 온전히 걸려야 함
+        self._pin = self._relax_pin()  # 풀 수 있는 칸·잠근 칸에는 제약이 온전히 걸린다 — 지난달 표의 칸만 사실로 남긴다
         x, pre_keeps = self._build_vars_relaxed(model)
         self._apply_hard_constraints(model, x)
         self._cs_juhu_block_dow(model, x)

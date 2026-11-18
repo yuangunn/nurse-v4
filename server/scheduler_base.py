@@ -392,6 +392,14 @@ class _SchedulerBase:
             for nid, cells in self.locked_cells.items()
             if nid in valid_nurse_ids
         }
+        # 지난달 근무표의 마지막 주 — 앞 달에서 시작한 첫 주기(7일) 가운데 이번 달 날(12월이면 12/1~12/5). 이미 나간 표의 칸이라
+        # 완화를 켜도 바꾸지 않는다: 완화에서는 잠근 칸으로 다룬다 (결정 1-75). 1일 이후라 '지난달 칸(dt < 1일)' 고정에 들지 않아,
+        # 완화가 그 주의 E·N 을 사람끼리 맞바꿨다. 엄격 풀이는 사전입력이 모두 하드라 달라지지 않는다.
+        self._carry_keys = set(self._carry_week_keys()) if self.allow_pre_relax else set()
+        for iso in self._carry_keys:
+            for nid, days in self.prev.items():
+                if days.get(iso):
+                    self.locked_cells.setdefault(nid, {})[iso] = True
         # 끝 주에 주휴가 빠졌으면 블록 요일로 채운다 (결정 1-41). 신호등·두 엔진·진단이 같은 prev 를 본다.
         self.auto_juhu: List[Dict] = self._fill_missing_juhu(raw_prev)
         # 신규가 '/'로 넣은 원티드 — 트레이닝 날 근무('/D·/E·/N', 프리셉터와 같이) 또는 그날 자기 휴무('/OF·/주·/생') (2026-10-19).
@@ -406,6 +414,14 @@ class _SchedulerBase:
                         self._trainee_typed.setdefault(t["id"], {})[iso] = base
 
     # ── 날짜 범위 계산 ────────────────────────────────────────────────────────
+
+    def _carry_week_keys(self) -> List[str]:
+        """지난달 근무표의 마지막 주에 든 이번 달 날짜 — 첫 주기가 앞 달에서 시작했을 때 그 7일 가운데 1일 이후.
+        프론트 isWanted·_relaxHardPrev 와 같은 범위."""
+        first = date(self.year, self.month, 1)
+        if not self.all_dates or self.all_dates[0] >= first:
+            return []
+        return [dt.strftime("%Y-%m-%d") for dt in self.all_dates[:7] if dt >= first]
 
     def _cycle_day_offset(self, d: date) -> int:
         """기준일로부터의 일수 (주기 계산용)"""
@@ -1914,11 +1930,26 @@ class _SchedulerBase:
             return None
         return self._effective_pre(nurse, dt, pre, iso in self.holidays)
 
+    def _relax_pin(self) -> Dict:
+        """완화 풀이의 사실-클램프 인덱스 — 지난달 근무표의 칸(지난달 날짜 + 그 표의 마지막 주)만.
+        이미 나간 표라 이번 달 규칙과 어긋나도 사실로 받는다: 인덱스를 비우면 그 주가 7일 연속 근무 같은 위반을 안고 있을 때
+        상수끼리 모순이 돼 완화가 통째로 실패한다(엄격 풀이는 _build_pin_index 로 받아들인다). 사람이 잠근 칸과 풀 수 있는 칸은
+        넣지 않는다 — 규칙이 온전히 걸린다 (결정 1-75)."""
+        first = date(self.year, self.month, 1)
+        pin = {}
+        for nurse in self.nurses:
+            for d, dt in enumerate(self.all_dates):
+                if dt < first or dt.strftime("%Y-%m-%d") in self._carry_keys:
+                    code = self._locked_code(nurse, d)
+                    if code:
+                        pin[(nurse["id"], d)] = code
+        return pin
+
     def _fact_code(self, nurse, d):
         """사실 칸의 코드 — 사실-클램프(_pin)가 켜져 있으면 그것, 꺼져 있으면(완화) 잠긴 칸(_locked_code).
         잠긴 칸은 완화에서도 상수라 인원·상한을 그 수 아래로 걸면 모델이 모순이다 — 엄격에서 되는 표가
         완화를 켜면 통째로 실패했다 (잠긴 V 셋·한 주 OF 둘·필요 2명인 날 D 셋, 리뷰 2026-10-20)."""
-        return self._pin.get((nurse["id"], d)) if self._pin else self._locked_code(nurse, d)
+        return self._pin.get((nurse["id"], d)) or self._locked_code(nurse, d)   # 완화의 _pin 에는 지난달 표의 칸만 든다 — 잠근 칸은 _locked_code
 
     def _pin_day_period_count(self, d, codes) -> int:
         """그 날 사실 칸(_fact_code) 중 코드 그룹에 속하는 수 (D↔DC류 플렉스는 period 불변)."""

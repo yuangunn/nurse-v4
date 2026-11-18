@@ -118,6 +118,27 @@ def test_fairness_ledger_and_prev_month_nights(tmp_path, monkeypatch):
     assert nights == {"a1": 2}
 
 
+def test_fairness_ledger_skips_nights_of_a_night_keeper_month(tmp_path, monkeypatch):
+    """야간전담(나이트킵)이었던 달의 야간은 누적에 넣지 않는다 — 그 달 14회는 맡은 일이라, 넣으면 다음 달들에 야간을 덜 받는다.
+    일반으로 선 달의 야간과 주말·공휴일 수는 그대로 센다 (결정 1-74)."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from server import database as db
+    db.init_db()
+    keeper = {"id": "a1", "name": "간호01", "night_months": {"2026-04": True}}
+    plain = {"id": "a2", "name": "간호02"}
+    db.save_schedule(year=2026, month=4, name="4월", data={
+        "nurses": [keeper, plain],
+        "schedule": {"a1": {"2026-04-03": "N", "2026-04-04": "N", "2026-04-05": "NC"},     # 4/4(토)·4/5(일) 주말
+                     "a2": {"2026-04-03": "N", "2026-04-04": "D"}}})
+    db.save_schedule(year=2026, month=5, name="5월", data={
+        "nurses": [keeper, plain],
+        "schedule": {"a1": {"2026-05-01": "N", "2026-05-02": "E"}, "a2": {"2026-05-01": "N"}}})
+    ledger = db.compute_fairness_ledger(2026, 6)
+    assert ledger["a1"]["nights"] == 1                      # 5월(일반) 1회만 — 4월 나이트킵의 3회는 뺀다
+    assert ledger["a1"]["weekends"] == 3 and ledger["a1"]["months"] == 2   # 주말 근무는 그대로 (4/4·4/5·5/2)
+    assert ledger["a2"]["nights"] == 2                      # 일반 간호사는 그대로
+
+
 def test_prev_month_nights_excludes_night_kept_month(tmp_path, monkeypatch):
     """나이트킵(야간전담) 달의 야간은 '전월N'에서 제외된다.
 
