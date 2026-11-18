@@ -933,7 +933,7 @@
       <template x-if="rdStatus?.changed"><button @click="generate()" class="rbtn rbtn-sm rbtn-primary" data-rd="status-remake" title="고친 사전입력으로 근무표를 새로 만듭니다.">고친 사전입력으로 다시 만들기</button></template>
       <template x-if="rdStatus?.relaxed"><button @click="rdOpenDrawer('relaxed');drawerBig=true" class="rbtn rbtn-sm rbtn-secondary" data-rd="status-relaxed" title="사전입력과 다르게 배정된 칸을 큰 창으로 봅니다 — 원래 값·바뀐 값·메모, 되돌려서 잠금."><span x-text="`바뀐 ${rdRelaxedCount}칸 보기`"></span></button></template>
       <template x-if="rdStatus?.relaxed"><button @click="rdOpenWhy()" class="rbtn rbtn-sm rbtn-secondary" data-rd="status-why" title="바뀐 칸마다 그날 인원 사정을 큰 창으로 봅니다 — 쉬는 날 원티드를 풀 수밖에 없는 날이었는지.">칸별 이유가 궁금하다면?</button></template>
-      <template x-if="rdSched&&!generating&&!rdStatus?.changed"><button @click="rdStoryOpen()" class="rbtn rbtn-sm rbtn-quiet" data-rd="status-story" title="얼마나 계산했는지, 무엇을 지키고 무엇을 바꿨는지 한 장씩 다시 봅니다.">결과 요약 다시 보기</button></template>
+      <template x-if="rdSched&&!generating&&!rdStatus?.changed"><button @click="rdStoryOpen()" class="rbtn rbtn-sm rbtn-secondary" :class="storyHint?'is-hint':''" data-rd="status-story" title="얼마나 계산했는지, 무엇을 지키고 무엇을 바꿨는지 한 장씩 다시 봅니다.">결과 요약 다시 보기</button></template>
       <template x-if="rdSched&&rdStep.done1&&!generating"><span class="relaxed-note"><i class="pre"></i>모서리 표시 = 사전입력에서 넣은 칸</span></template>
       <template x-if="rdStatus?.relaxed"><span class="relaxed-note"><i></i>점선 칸 = 사전입력과 다르게 배정된 칸</span></template>
       <template x-if="rdEdited>0&&!generating"><span class="relaxed-note"><span x-text="`손으로 고친 칸 ${rdEdited}개`"></span><button @click="readjustSchedule()" class="rbtn rbtn-sm rbtn-secondary" title="고친 칸은 그대로 잠그고, 인원·규칙이 다시 맞도록 나머지를 최소한으로 다시 맞춥니다.">고친 대로 다시 맞추기</button><span x-show="readjustSummary" x-text="readjustSummary"></span></span></template>
@@ -1433,10 +1433,10 @@
 
 <!-- ═══ 결과 요약 — 생성이 끝나면 한 장씩 넘겨 본다 (목록을 품으므로 x-show). 닫혀 있을 땐 .rmodal-bg 를 떼어 둔다 —
      검사기와 Esc 처리가 '열린 창'을 .rmodal-bg 로 찾는다 ═══ -->
-<div :class="story.open&&rdStoryStep?'rmodal-bg':''" role="dialog" aria-modal="true" data-rd="story" x-show="story.open&&rdStoryStep" x-cloak @click.self="story.open=false" @keydown.window="rdStoryKey($event)">
+<div :class="story.open&&rdStoryStep?'rmodal-bg':''" role="dialog" aria-modal="true" data-rd="story" x-show="story.open&&rdStoryStep" x-cloak @keydown.window="rdStoryKey($event)">
   <div class="rmodal rstory">
     <div class="rstory-top"><span class="rstory-dots"><template x-for="(s,i) in rdStorySteps" :key="'sd'+s.id"><i :class="i<=story.step?'on':''"></i></template></span>
-      <button @click="story.open=false" class="rbtn rbtn-sm rbtn-quiet" style="margin-left:auto" data-rd="story-skip" title="요약을 닫고 근무표를 봅니다. 상태 줄의 결과 요약 다시 보기로 다시 엽니다 (Esc).">바로 표 보기</button></div>
+      <button @click="rdStoryClose()" class="rbtn rbtn-sm rbtn-quiet" style="margin-left:auto" data-rd="story-skip" title="요약을 닫고 근무표를 봅니다. 상태 줄의 결과 요약 다시 보기로 다시 엽니다 (Esc).">바로 표 보기</button></div>
     <div class="rstory-eyebrow" x-text="rdStoryStep?.eyebrow"></div>
     <div class="rstory-title" x-text="rdStoryStep?.title"></div>
     <div class="rstory-sub" x-show="rdStoryStep?.sub" x-text="rdStoryStep?.sub"></div>

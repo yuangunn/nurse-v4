@@ -33,6 +33,7 @@ window.RedesignModule = function() {
     showLiveLog: false,          // 만드는 중 원본 계산 기록 — 기본은 접고 해석한 계산 현황(rdSolveCards·solveStats.events)을 보인다
     solveStats: null,            // 솔버 기록에서 읽은 것 {phases:[{n,rows0,cols0,rows,cols,restarts,status,row}], events:[…]} (_solveFeed)
     story: {open:false, step:0}, // 결과 요약 — 생성이 끝나면 단계별로 넘겨 보는 창 (rdStorySteps)
+    storyHint: false,            // 요약을 중간에 닫은 직후 — 상태 줄 '결과 요약 다시 보기'를 잠깐 강조
     rdWhy: false,                // 원티드 미반영 탭에서 칸마다 그날 사정을 펼쳐 보인다 ('칸별 이유가 궁금하다면?')
     rdToast: null,               // {msg, undo}
     _rdToastTimer: null,
@@ -276,9 +277,15 @@ window.RedesignModule = function() {
     get rdSolveEvents(){ return [...((this.solveStats&&this.solveStats.events)||[])].reverse(); },   // 새 것이 위
 
     // ── 결과 요약 — 생성이 끝나면 한 장씩 넘겨 본다: 계산 → 지킨 것 → 바꾼 것 → 확인할 것 → 결과 (결정 1-64) ──
-    rdStoryOpen(){ this.story={open:true, step:0}; },
+    rdStoryOpen(){ this.story={open:true, step:0}; this.storyHint=false; },
     rdStoryGo(d){ const last=this.rdStorySteps.length-1, s=this.story.step+d; if(s>last){ this.story.open=false; return; } this.story.step=Math.max(0, s); },
-    rdStoryKey(e){ if(!this.story.open) return; if(e.key==='Escape') this.story.open=false; else if(e.key==='ArrowRight'||e.key==='Enter'){ e.preventDefault(); this.rdStoryGo(1); } else if(e.key==='ArrowLeft') this.rdStoryGo(-1); },
+    // 끝까지 보기 전에 닫으면 다시 여는 자리를 알린다 — 창 밖을 눌러서는 닫히지 않는다 (같은 자리의 '다음'을 연달아 누르다 닫히는 일이 없게)
+    rdStoryClose(){
+      const early=this.story.step<this.rdStorySteps.length-1; this.story.open=false; if(!early) return;
+      this.storyHint=true; setTimeout(()=>{ this.storyHint=false; }, 6000);
+      this.toast('결과 요약은 표 위 상태 줄의 ‘결과 요약 다시 보기’에서 다시 볼 수 있어요','info',6000);
+    },
+    rdStoryKey(e){ if(!this.story.open) return; if(e.key==='Escape') this.rdStoryClose(); else if(e.key==='ArrowRight'||e.key==='Enter'){ e.preventDefault(); this.rdStoryGo(1); } else if(e.key==='ArrowLeft') this.rdStoryGo(-1); },
     get rdStoryStep(){ const s=this.rdStorySteps; return s[Math.min(this.story.step, s.length-1)]||null; },
     get rdStorySteps(){
       if(!this.rdSched) return [];

@@ -159,13 +159,15 @@ body.rd .rtable .rt-foot input:not(.is-default) { font-weight: var(--fw-strong);
 .rdrawer-body .rwhy { margin: 0 0 8px 132px; padding: 6px 10px; border-radius: 8px; background: var(--paper); color: var(--ink-2); font-size: var(--fs-sub); line-height: 1.5; }
 .rdrawer-body .rwhy.is-short { background: var(--warn-bg); color: var(--ink); }
 /* 결과 요약 — 한 장에 한 가지, 큰 제목과 숫자 줄 */
-.rstory { width: 620px; max-width: calc(100vw - 48px); max-height: 86vh; padding: 20px 28px 20px; gap: 10px; }
+/* 창 크기는 장마다 같다 — 넘길 때 '다음' 단추가 제자리에 있어야 한다. 긴 목록은 안에서 스크롤 */
+.rstory { width: 620px; max-width: calc(100vw - 48px); height: min(640px, 86vh); padding: 20px 28px 20px; gap: 10px; }
+.rstatus .rbtn.is-hint { box-shadow: 0 0 0 3px var(--warn); }
 .rstory-top { display: flex; align-items: center; min-height: 30px; }
 .rstory-dots { display: flex; gap: 4px; } .rstory-dots i { width: 26px; height: 4px; border-radius: 2px; background: var(--rule); } .rstory-dots i.on { background: var(--ink); }
 .rstory-eyebrow { margin-top: 6px; font-size: var(--fs-sub); font-weight: var(--fw-label); color: var(--ink-2); }
 .rstory-title { font-size: 24px; line-height: 1.35; font-weight: var(--fw-strong); letter-spacing: -0.01em; }
 .rstory-sub { font-size: var(--fs-body); color: var(--ink-2); line-height: 1.5; }
-.rstory-body { flex: 1; min-height: 216px; overflow: auto; margin-top: 6px; display: flex; flex-direction: column; }
+.rstory-body { flex: 1; min-height: 0; overflow: auto; margin-top: 6px; display: flex; flex-direction: column; }
 .rstory-fact { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 42px; border-bottom: 1px solid var(--rule-soft); font-size: var(--fs-body); color: var(--ink-2); }
 .rstory-fact b { color: var(--ink); font-size: var(--fs-h2); font-weight: var(--fw-label); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .rstory-fact.is-link { cursor: pointer; } .rstory-fact.is-link:hover { background: var(--paper); }

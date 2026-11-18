@@ -93,6 +93,13 @@ f.rdStoryGo(-1); assert.equal(f.story.step, 0);
 for (let i = 0; i < 4; i++) f.rdStoryGo(1);
 assert.deepEqual([f.story.open, f.story.step, f.rdStoryStep.id], [true, 4, 'done']);
 f.rdStoryGo(1); assert.equal(f.story.open, false);
+// 중간에 닫으면 다시 여는 자리를 알린다 (끝 장에서 닫으면 알리지 않는다)
+const said = []; f.toast = (m) => said.push(m); global.setTimeout = () => 0;
+f.rdStoryOpen(); f.rdStoryGo(1); f.rdStoryClose();
+assert.deepEqual([f.story.open, f.storyHint, said.length], [false, true, 1]);
+f.rdStoryOpen(); assert.equal(f.storyHint, false);
+for (let i = 0; i < 4; i++) f.rdStoryGo(1);
+f.rdStoryClose(); assert.deepEqual([f.story.open, f.storyHint, said.length], [false, false, 1]);
 f.rdSched = false; assert.deepEqual(f.rdStorySteps, []);
 
 console.log('solve-stats: 모든 검증 통과');
