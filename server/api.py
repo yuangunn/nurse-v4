@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from datetime import datetime
@@ -2328,3 +2329,45 @@ def save_scoring_rule(body: ScoringRule):
 def delete_scoring_rule(rule_id: int):
     db.delete_scoring_rule(rule_id)
     return {"ok": True}
+
+
+# 배점 프리셋 (결정 1-78) — 규칙 전체를 이름 붙여 남기고, 불러오기·기본값 되돌리기는 규칙 전체를 바꾼다
+class ScoringPresetName(BaseModel):
+    name: str
+
+
+def _preset_name(body: ScoringPresetName) -> str:
+    name = (body.name or "").strip()
+    if not name or len(name) > 40:
+        raise HTTPException(status_code=422, detail="프리셋 이름은 1~40자로 적어 주세요.")
+    return name
+
+
+@app.post("/api/scoring_rules/reset")
+def reset_scoring_rules():
+    db.reset_scoring_rules()
+    return db.list_scoring_rules()
+
+
+@app.get("/api/scoring_presets")
+def get_scoring_presets():
+    return db.list_scoring_presets()
+
+
+@app.post("/api/scoring_presets")
+def save_scoring_preset(body: ScoringPresetName):
+    db.save_scoring_preset(_preset_name(body))
+    return db.list_scoring_presets()
+
+
+@app.post("/api/scoring_presets/apply")
+def apply_scoring_preset(body: ScoringPresetName):
+    if not db.apply_scoring_preset(_preset_name(body)):
+        raise HTTPException(status_code=404, detail="그 이름의 프리셋이 없습니다.")
+    return db.list_scoring_rules()
+
+
+@app.post("/api/scoring_presets/delete")
+def delete_scoring_preset(body: ScoringPresetName):
+    db.delete_scoring_preset(_preset_name(body))
+    return db.list_scoring_presets()

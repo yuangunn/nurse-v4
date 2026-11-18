@@ -10,7 +10,8 @@ const store = new Map(), unload = [], ticks = [];
 const el = () => ({ style: { setProperty() {} }, dataset: {}, classList: { add() {}, remove() {}, toggle() {} }, setAttribute() {}, appendChild() {},
   querySelector: () => null, querySelectorAll: () => [] });
 global.window = { addEventListener: (t, f) => { if (t === 'beforeunload') unload.push(f); } };
-global.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)),
+// 이 달에 어떤 표를 원하는지는 이미 골랐다고 둔다 (결정 1-77) — 묻는 동작은 test_gen_pref.mjs 가 본다
+global.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : String(k).startsWith('ns_genpref:') ? '{"time":20}' : null), setItem: (k, v) => store.set(k, String(v)),
   removeItem: (k) => store.delete(k) };
 global.document = { addEventListener() {}, querySelector: () => null, querySelectorAll: () => [], createElement: el, body: el(), documentElement: el() };
 global.EventSource = class { close() {} };

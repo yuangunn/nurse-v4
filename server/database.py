@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
@@ -154,6 +155,11 @@ def init_db(path: Optional[str] = None):
                 sort_order INTEGER DEFAULT 0
             );
 
+            CREATE TABLE IF NOT EXISTS scoring_presets (
+                name TEXT PRIMARY KEY,
+                rules TEXT NOT NULL DEFAULT '[]',
+                saved_at TEXT NOT NULL DEFAULT ''
+            );
             CREATE TABLE IF NOT EXISTS generation_runs (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 year            INTEGER,
@@ -1119,6 +1125,55 @@ def save_scoring_rule(
 def delete_scoring_rule(rule_id: int) -> None:
     with get_conn() as conn:
         conn.execute("DELETE FROM scoring_rules WHERE id=?", (rule_id,))
+
+
+# ── 배점 프리셋 (결정 1-78) — 지금 배점 규칙 전체를 이름 붙여 병동 DB 에 남기고, 불러오면 규칙 전체를 그것으로 바꾼다 ──
+
+def _replace_scoring_rules(conn: sqlite3.Connection, rules: List[Dict]) -> None:
+    conn.execute("DELETE FROM scoring_rules")
+    conn.executemany(
+        "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
+        [(r["name"], r["rule_type"], json.dumps(r.get("params") or {}), _int_score(r.get("score")),
+          1 if r.get("enabled", True) else 0, int(r.get("sort_order") or 0)) for r in rules],
+    )
+
+
+def reset_scoring_rules() -> None:
+    """배점 규칙을 앱의 기본값(새 병동이 받는 것 — _seed_scoring_rules)으로 되돌린다. 프리셋은 그대로."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM scoring_rules")
+        _seed_scoring_rules(conn)
+
+
+def list_scoring_presets() -> List[Dict]:
+    with get_conn() as conn:
+        rows = conn.execute("SELECT name, rules, saved_at FROM scoring_presets ORDER BY saved_at DESC, name").fetchall()
+    return [{"name": r["name"], "saved_at": r["saved_at"], "count": len(json.loads(r["rules"] or "[]"))} for r in rows]
+
+
+def save_scoring_preset(name: str) -> None:
+    """지금 배점 규칙 전체를 이 이름으로 — 같은 이름이 있으면 덮어쓴다."""
+    rules = [{k: r[k] for k in ("name", "rule_type", "params", "score", "enabled", "sort_order")} for r in list_scoring_rules()]
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO scoring_presets (name, rules, saved_at) VALUES (?,?,?) "
+            "ON CONFLICT(name) DO UPDATE SET rules=excluded.rules, saved_at=excluded.saved_at",
+            (name, json.dumps(rules, ensure_ascii=False), datetime.now().isoformat(timespec="seconds")),
+        )
+
+
+def apply_scoring_preset(name: str) -> bool:
+    with get_conn() as conn:
+        row = conn.execute("SELECT rules FROM scoring_presets WHERE name=?", (name,)).fetchone()
+        if not row:
+            return False
+        _replace_scoring_rules(conn, json.loads(row["rules"] or "[]"))
+    return True
+
+
+def delete_scoring_preset(name: str) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM scoring_presets WHERE name=?", (name,))
 
 
 # ── 내부 헬퍼 ───────────────────────────────────────────────────────────────

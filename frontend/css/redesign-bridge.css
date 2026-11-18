@@ -143,6 +143,29 @@ body.rd .rtable .rt-foot input:not(.is-default) { font-weight: var(--fw-strong);
 .rlive-head .rbtn-sm { margin-left: auto; flex: none; }
 .rlive .rlog { max-height: 220px; }
 /* 계산 현황 — 솔버 기록에서 읽은 숫자 카드 + 시간순 사건 표. 원본 기록(.rlog)은 접어 둔다 (결정 1-64) */
+/* 배점 프리셋 줄 (결정 1-78) */
+.rpreset { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; font-size: var(--fs-sub); }
+.rpreset .lbl { font-weight: var(--fw-label); color: var(--ink-2); }
+.rpreset select, .rpreset input[type=text] { height: 32px; padding: 0 10px; border: 0; border-radius: var(--r-btn); background: var(--card); box-shadow: inset 0 0 0 1px var(--rule); font: inherit; font-size: var(--fs-sub); color: var(--ink); }
+.rpreset select { min-width: 220px; max-width: 320px; } .rpreset input[type=text] { width: 170px; }
+.rpreset .sep { width: 1px; height: 20px; background: var(--rule); margin: 0 4px; }
+/* 이어 찾는 동안의 중간 결과 한 줄 (결정 1-77) */
+.rmid { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 18px; min-height: 38px; padding: 4px 6px 4px 14px; border-radius: 8px; background: var(--ok-bg, var(--card)); box-shadow: inset 0 0 0 1px var(--rule); font-size: var(--fs-sub); }
+.rmid .fact { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; } .rmid .fact small { color: var(--ink-2); font-size: var(--fs-sub); } .rmid .fact b { font-weight: var(--fw-strong); font-variant-numeric: tabular-nums; }
+.rmid .rbtn-sm { margin-left: auto; flex: none; }
+/* 어떤 근무표를 원하세요? (결정 1-77) — 크기 고정 */
+.rpref { width: 600px; max-width: calc(100vw - 48px); height: min(620px, 90vh); padding: 22px 28px 18px; gap: 6px; }
+.rpref-title { font-size: 24px; line-height: 1.35; font-weight: var(--fw-strong); letter-spacing: -0.01em; }
+.rpref-sub { font-size: var(--fs-sub); color: var(--ink-2); line-height: 1.5; word-break: keep-all; }
+.rpref-body { flex: 1; min-height: 0; overflow: auto; margin-top: 10px; display: flex; flex-direction: column; gap: 14px; }
+.rpref-axis { display: grid; grid-template-columns: 104px 1fr; align-items: center; gap: 4px 12px; }
+.rpref-axis .q { font-size: var(--fs-body); font-weight: var(--fw-label); }
+.rpref-axis .hint { grid-column: 2; font-size: var(--fs-sub); color: var(--ink-2); line-height: 1.4; min-height: 2.8em; word-break: keep-all; }
+.rpref-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; padding: 3px; border-radius: 10px; background: var(--paper); }
+.rpref-pick button { min-height: 38px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); font: inherit; font-size: var(--fs-body); font-weight: var(--fw-label); cursor: pointer; white-space: nowrap; }
+.rpref-pick button:hover { color: var(--ink); }
+.rpref-pick button.on { background: var(--ink); color: var(--card); }
+.rpref-foot { display: flex; align-items: center; gap: 10px; padding-top: 8px; }
 .rsolve { display: flex; flex-wrap: wrap; gap: 6px; }
 .rsolve .tile { min-width: 96px; padding: 6px 12px; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1px var(--rule); }
 .rsolve .tile small { display: block; font-size: var(--fs-min); color: var(--ink-2); white-space: nowrap; }

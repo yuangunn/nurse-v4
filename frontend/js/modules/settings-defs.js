@@ -241,7 +241,35 @@ window.SettingsDefsModule = function() {
     },
 
     // ── 배점 관리 ─────────────────────────────────────────────
-    async loadScoringRules(){this.scoringRules=await this.api('GET','/api/scoring_rules')},
+    async loadScoringRules(){this.scoringRules=await this.api('GET','/api/scoring_rules');this.loadScoringPresets()},
+    // ── 배점 프리셋 (결정 1-78) — 지금 배점 규칙 전체를 이름 붙여 남긴다. 불러오기·기본값 되돌리기는 규칙 전체를 바꾸므로 한 번 확인한다 ──
+    scoringPresets:[], scoringPresetPick:'', scoringPresetName:'',
+    async loadScoringPresets(){try{const r=await this.api('GET','/api/scoring_presets');this.scoringPresets=Array.isArray(r)?r:[]}catch(e){this.scoringPresets=[]}
+      if(!this.scoringPresets.some(p=>p.name===this.scoringPresetPick))this.scoringPresetPick=''},
+    async saveScoringPreset(){
+      const name=(this.scoringPresetName||'').trim();
+      if(!name){this.toast('프리셋 이름을 적어 주세요','error');return}
+      if(this.scoringPresets.some(p=>p.name===name)&&!confirm(`'${name}' 프리셋이 이미 있습니다. 지금 배점으로 덮어쓸까요?`))return;
+      this.scoringPresets=await this.api('POST','/api/scoring_presets',{name});
+      this.scoringPresetPick=name;this.scoringPresetName='';
+      this.toast(`지금 배점을 '${name}' 프리셋으로 저장했습니다`,'success');
+    },
+    async applyScoringPreset(){
+      const name=this.scoringPresetPick;if(!name)return;
+      if(!confirm(`지금 배점을 '${name}' 프리셋으로 바꿉니다. 지금 배점은 저장해 두지 않았으면 사라집니다. 바꿀까요?`))return;
+      this.scoringRules=await this.api('POST','/api/scoring_presets/apply',{name});
+      this.toast(`'${name}' 프리셋을 불러왔습니다 — 다음 만들기부터 적용됩니다`,'success');
+    },
+    async deleteScoringPreset(){
+      const name=this.scoringPresetPick;if(!name)return;
+      if(!confirm(`'${name}' 프리셋을 지울까요? 지금 배점은 바뀌지 않습니다.`))return;
+      this.scoringPresets=await this.api('POST','/api/scoring_presets/delete',{name});this.scoringPresetPick='';
+    },
+    async resetScoringRules(){
+      if(!confirm('배점 규칙을 기본값으로 되돌립니다. 고친 점수·추가한 규칙은 프리셋으로 저장해 두지 않았으면 사라집니다. 되돌릴까요?'))return;
+      this.scoringRules=await this.api('POST','/api/scoring_rules/reset');
+      this.toast('배점 규칙을 기본값으로 되돌렸습니다','success');
+    },
     scoringRuleTypeLabel(rt){return{transition:'전환 패턴',pattern:'N일 패턴',consecutive_same:'연속 동일',specific_shift:'특정 근무',wish:'희망 근무',night_fairness:'야간 공평성',weekend_fairness:'주말·공휴일 공평성',holiday_work:'공휴일 근무',weekend_work:'주말 근무',holiday_off:'공휴일 OFF'}[rt]||rt},
     scoringRuleCondSummary(r){
       const p=r.params||{};const gl=v=>({work:'모든근무',day:'낮',evening:'저녁',night:'야간',rest:'휴무',leave:'휴가',rest_leave:'휴무/휴가',non_night:'야간 아닌 날',any:'전체'})[v]||v;

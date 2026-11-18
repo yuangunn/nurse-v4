@@ -152,7 +152,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 571건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과·간호사그룹)
+├── tests/                   # pytest 회귀 573건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과·간호사그룹)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -214,10 +214,10 @@ python3 scripts/check_form_borders.py        # 양식을 바꿨을 때
 근무표 엔진·frontend 앱(그 밖의 파일)을 고쳤을 때 — 로컬 pytest 약 1분:
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 571건
+python3 -m pytest -q                  # 573건
 node scripts/test_paste_dates.mjs && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_wanted_cells.mjs && node scripts/test_day_reqs.mjs && node scripts/test_hospital_holidays.mjs \
-  && node scripts/test_manager_check.mjs && node scripts/test_trainee_days.mjs && node scripts/test_continue_search.mjs \
+  && node scripts/test_manager_check.mjs && node scripts/test_trainee_days.mjs && node scripts/test_continue_search.mjs && node scripts/test_gen_pref.mjs \
   && node scripts/test_grid_select.mjs && node scripts/test_roster_bulk.mjs && node scripts/test_paste_fix.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/test_frontend_state.mjs && node scripts/test_frontend_edit.mjs \
   && node scripts/test_solve_stats.mjs \
