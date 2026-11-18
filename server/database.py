@@ -277,6 +277,7 @@ def init_db(path: Optional[str] = None):
             # 법정공휴일 + 주말 배점 규칙 마이그레이션
             _migrate_holiday_weekend_rules(conn)
         _migrate_single_night_rule(conn)
+        _migrate_single_night_score(conn)
 
         # 임부휴무(P1) 근무 코드 마이그레이션 (기존 DB에 없을 경우 추가)
         conn.execute(
@@ -1035,9 +1036,11 @@ def _migrate_holiday_weekend_rules(conn: sqlite3.Connection):
         )
 
 
-# 단독 나이트 — 앞뒤 날이 야간이 아닌 야간 하루에 경미한 감점 (2026-10-20, 결정 1-55).
+# 단독 나이트 — 앞뒤 날이 야간이 아닌 야간 하루에 감점 (2026-10-20, 결정 1-55). 처음 값 -10 은 다른 배점(야간 고르게·순방향 보상)에
+# 묻혀 실제 12월 입력에서 야간 묶음 30개 중 16개가 단독이었다 → -200 (결정 1-76).
 # 실제 번표 1~10월: 일반 간호사 야간 602회 중 단독 87회(14%) — 금지가 아니라 경미하게. 퐁당퐁당(-20)의 절반.
-_SINGLE_NIGHT_RULE = ("단독 나이트 감점", "pattern", json.dumps({"pattern": ["non_night", "night", "non_night"]}), -10, 1, 18)
+_SINGLE_NIGHT_RULE = ("단독 나이트 감점", "pattern", json.dumps({"pattern": ["non_night", "night", "non_night"]}), -200, 1, 18)
+_SINGLE_NIGHT_OLD_SCORE = -10
 
 
 def _migrate_single_night_rule(conn: sqlite3.Connection):
@@ -1054,6 +1057,18 @@ def _migrate_single_night_rule(conn: sqlite3.Connection):
             _SINGLE_NIGHT_RULE,
         )
     conn.execute("PRAGMA user_version = 1")
+
+
+def _migrate_single_night_score(conn: sqlite3.Connection):
+    """단독 나이트 감점을 처음 값(-10)으로 두고 있는 DB 만 새 기본값으로 한 번 올린다 (PRAGMA user_version 2, 결정 1-76).
+    사람이 고친 값·끈 규칙·지운 규칙은 건드리지 않고, 올린 뒤 -10 으로 되돌린 것도 다시 바꾸지 않는다."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 2:
+        return
+    conn.execute(
+        "UPDATE scoring_rules SET score=? WHERE rule_type='pattern' AND params LIKE '%non_night%' AND score=?",
+        (_SINGLE_NIGHT_RULE[3], _SINGLE_NIGHT_OLD_SCORE),
+    )
+    conn.execute("PRAGMA user_version = 2")
 
 
 # ── Scoring Rules CRUD ────────────────────────────────────────────────────────
