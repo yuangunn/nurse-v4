@@ -309,5 +309,16 @@ const fresh = () => { store.clear(); ticks.length = 0; unload.length = 0; };
   assert.match(a.statusMessage, /원티드 미반영 1건/);
   assert.deepEqual(s.db.A.saved.at(-1).relaxed_cells, a.relaxedCells);
 }
+// 왜 안 되는지 창 — 따로 풀어야 하는 막힌 곳마다 한 묶음, 줄마다 갈 칸. 묶음이 없으면 충돌 목록 하나로
+{
+  const a = app();
+  a.diagResult = { muses: [['가 V 한도'], ['12/18 N 필요 인원 3명', '나 N→E 금지']], conflicts: ['가 V 한도', '12/18 N 필요 인원 3명', '나 N→E 금지'],
+    anchored: [{ label: '가 V 한도', nurse_id: 'a1', date: null }, { label: '12/18 N 필요 인원 3명', nurse_id: null, date: '2026-12-18' }] };
+  assert.deepEqual(a.diagGroups().map((g) => g.map((x) => [x.label, x.nurse_id, x.date])),
+    [[['가 V 한도', 'a1', null]], [['12/18 N 필요 인원 3명', null, '2026-12-18'], ['나 N→E 금지', null, null]]]);
+  a.diagResult = { conflicts: ['x', 'y'] }; assert.deepEqual(a.diagGroups().map((g) => g.map((x) => x.label)), [['x', 'y']]);
+  a.diagResult = { conflicts: [], message: '충돌 없음' }; assert.deepEqual(a.diagGroups(), []);
+  a.diagResult = null; assert.deepEqual(a.diagGroups(), []);
+}
 console.log('test_frontend_state: OK');
 process.exit(0);

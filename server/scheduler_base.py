@@ -202,12 +202,18 @@ _DEFAULT_SHIFTS = [
 _PRE_ALIAS = {"OFF": "OF", "Off": "OF", "off": "OF", "특V": "특", "특v": "특", "공가": "공",
               # 원티드 '둘 중 하나'·'N 빼고' 표기 (제1원칙 14)
               "E/D": "D/E", "DE": "D/E", "ED": "D/E", "N/E": "E/N", "EN": "E/N", "NE": "E/N",
-              "DN": "D/N", "ND": "D/N", "N/D": "D/N", "N 제외": "N제외", "N빼고": "N제외"}
+              "DN": "D/N", "ND": "D/N", "N/D": "D/N", "N 제외": "N제외", "N빼고": "N제외",
+              "D 제외": "D제외", "D빼고": "D제외", "E 제외": "E제외", "E빼고": "E제외",
+              "DEN": "D/E/N", "D/OFF": "D/OF", "E/OFF": "E/OF", "N/OFF": "N/OF"}
 
 # 원티드 '둘 중 하나' — 그 날 두 근무 중 아무거나 (차지 포함, D1·중 제외) (제1원칙 14, 2026-10-03)
-_FLEX_ONE_OF = {"D/E": ("day", "evening"), "E/N": ("evening", "night"), "D/N": ("day", "night")}
-# 원티드 'N 빼고' — 야간(N·NC)만 아니면 쉬어도 된다
-_FLEX_NOT = {"N제외": ("night",)}
+# D/E/N 은 '쉬지만 않으면 된다' — 세 시간대 중 아무 근무
+_FLEX_ONE_OF = {"D/E": ("day", "evening"), "E/N": ("evening", "night"), "D/N": ("day", "night"),
+                "D/E/N": ("day", "evening", "night")}
+# 원티드 'N 빼고'·'D 빼고'·'E 빼고' — 그 시간대 근무(차지 포함)만 아니면 쉬어도 된다.
+# D/OF·E/OF·N/OF 는 '그 근무 아니면 휴무' — 나머지 두 시간대를 뺀 것과 같다
+_FLEX_NOT = {"N제외": ("night",), "D제외": ("day",), "E제외": ("evening",),
+             "D/OF": ("evening", "night"), "E/OF": ("day", "night"), "N/OF": ("day", "evening")}
 FLEX_WISH_CODES = frozenset(_FLEX_ONE_OF) | frozenset(_FLEX_NOT)
 
 
@@ -651,13 +657,24 @@ class _SchedulerBase:
         """임신 구간이 대상 월과 겹치는가 — 생리휴가 면제·야간전담 해제 대상."""
         return preg_overlaps_month(nurse, self.year, self.month)
 
+    def _preg_holiday_rest(self, nurse: dict, dt: date) -> bool:
+        """임산부가 근무 없이 쉬어야 하는 날 — 임신 구간 안의 법정공휴일 (결정 1-60).
+        그날 주휴를 미리 넣었으면 주휴, 아니면 법. 지난달 칸은 기록이라 건드리지 않는다."""
+        return bool(nurse.get("is_pregnant") and "법" in self.ALL_SHIFTS
+                    and dt >= date(self.year, self.month, 1)
+                    and dt.strftime("%Y-%m-%d") in self.holidays
+                    and self._preg_span_on(nurse["id"], dt))
+
     def _preg_forbids(self, nurse: dict, dt: date, s: str, pre: str = None) -> bool:
         """임산부 모성보호로 (날짜 dt, shift s)를 0으로 고정해야 하면 True.
           · P1: 임산부의 P1 구간(또는 사전입력 P1)에서만 허용 → 그 외 전원 금지
           · 야간(N/NC): 임신 전체 구간 동안 금지
           · 생(生): 임신-중-달엔 금지 (임신 중 생리 없음)
+          · 임신 구간의 법정공휴일: 법과 미리 넣은 쉬는 코드만 — 근무·OF·P1·옮겨 온 주휴 금지 (결정 1-60)
         """
         nid = nurse["id"]
+        if self._preg_holiday_rest(nurse, dt):
+            return s != "법" and not (s == pre and s not in self.WORK_SHIFTS)
         # P1은 임산부 P1 구간 또는 사전입력 P1에서만 — 비임산부 포함 전원 게이팅
         if s == "P1":
             if pre == "P1":
@@ -674,11 +691,13 @@ class _SchedulerBase:
         return False
 
     def _preg_effective_pre(self, nurse: dict, dt: date, pre: str):
-        """임산부 모성보호로 무시해야 할 사전입력(야간/생)은 None으로 — 솔버가 유효 근무 선택.
+        """임산부 모성보호로 무시해야 할 사전입력(야간/생/공휴일 근무)은 None으로 — 솔버가 유효 근무 선택.
         (사전입력 N을 임산부에게 강제하면 야간 면제와 충돌해 infeasible이 되므로 드롭.)"""
         if not pre or not nurse.get("is_pregnant") or dt < date(self.year, self.month, 1):
             return pre            # 지난달 칸은 기록
         nid = nurse["id"]
+        if pre in self.WORK_SHIFTS and self._preg_holiday_rest(nurse, dt):
+            return None           # 공휴일 근무 → 법으로 쉰다 (결정 1-60)
         if pre in self.NIGHT_SHIFTS and self._preg_span_on(nid, dt):
             return None
         if pre == "생" and nid in self._preg_in_month:
@@ -869,15 +888,12 @@ class _SchedulerBase:
 
     def _flex_allowed(self, code: str) -> set:
         """원티드 D/E·E/N·D/N·N제외 칸에 놓을 수 있는 근무 집합.
-        '둘 중 하나'는 두 시간대의 근무(차지 포함 — D1·중은 아님), 'N 빼고'는 야간만 뺀 전부
+        '둘 중 하나'는 두 시간대의 근무(차지 포함 — D1·중은 아님), 'N 빼고'(D제외·E제외도 같다)는 그 시간대만 뺀 전부
         (쉬는 코드 포함 — 쉬는 코드의 일반 규칙[법은 공휴일만 등]은 변수 도메인이 따로 건다)."""
+        per = {"day": self.DAY_SHIFTS, "evening": self.EVENING_SHIFTS, "night": self.NIGHT_SHIFTS}
         if code in _FLEX_ONE_OF:
-            per = {"day": self.DAY_SHIFTS, "evening": self.EVENING_SHIFTS,
-                   "night": self.NIGHT_SHIFTS}
             return {s for p in _FLEX_ONE_OF[code] for s in per[p]}
-        if code in _FLEX_NOT:
-            return set(self.ALL_SHIFTS) - set(self.NIGHT_SHIFTS)
-        return set(self.ALL_SHIFTS)
+        return set(self.ALL_SHIFTS) - {s for p in _FLEX_NOT.get(code, ()) for s in per[p]}
 
     def _apply_flex_wishes(self, x, soft: bool = False) -> list:
         """변수 생성 직후 원티드 D/E·N제외 칸에 허용 근무만 남긴다 (모든 엔진·진단 공통).

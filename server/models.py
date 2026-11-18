@@ -111,6 +111,8 @@ class Rules(BaseModel):
     # [{id, name, members: [nurse_id], maxPerShift: n|None, minPerShift: n|None}] — 한 근무(D·D1 / E·중 / N)에
     # 그룹원 n명까지(1 = 같이 일하지 않기)·n명 이상. 엔진은 감점으로만 건다 (_nurse_group_limits).
     nurseGroups: List[Dict[str, Any]] = []
+    # 팀(Nurse.group) 색 {팀: '#RRGGBB'} — 화면 이름 칸·엑셀 이름 칸 바탕. 없는 팀은 화면이 병동 번표 색을 차례로 준다 (엔진은 안 쓴다)
+    teamColors: Dict[str, str] = {}
 
 
 class GenerateRequest(BaseModel):

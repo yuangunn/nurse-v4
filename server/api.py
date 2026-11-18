@@ -727,17 +727,71 @@ def nurse_export_xlsx():
     )
 
 
-def _build_schedule_xlsx(body: dict) -> bytes:
-    """근무표 xlsx — 병동 번표 모양: 제목 · 주기 · 날짜 · 요일 머리줄, 간호사 줄 + 그 달 계, 날마다 인원 줄.
-    body = {year, month, title?, days: [ISO…], holidays?: [ISO…], rows: [[이름, 코드…]…]}.
-    days 는 그 달에 걸친 일~토 주 전부(11월 → 11/1~12/5), 코드는 클라이언트가 인쇄처럼 D/E/N 으로 바꿔 보낸다 (rdPrintCode).
-    계는 수식이 아니라 값: openpyxl 은 수식 결과를 저장하지 못해 이 파일을 다시 올리면(_parse_xlsx_sheets, data_only)
-    수식 칸이 비고 'D·근무자수' 줄이 명부에 없는 이름으로 뜬다 (결정 1-44 ②). 숫자뿐인 줄은 붙여넣기가 건너뛴다."""
+def _xlsx_set_cached(data: bytes, vals: list) -> bytes:
+    """openpyxl 은 수식만 쓰고 결과 칸(<v/>)을 비운다 — 시트 XML 에 계산해 둔 값을 넣는다 (vals = 시트 순서대로 {칸: 값}).
+    엑셀을 거치지 않고 data_only 로 읽어도(근무표 파일 올리기 · 미리보기) 숫자가 보인다 (결정 1-44 ②)."""
     import io
-    from datetime import date
+    import re
+    import zipfile
+    from xml.sax.saxutils import escape
+
+    src, out = zipfile.ZipFile(io.BytesIO(data)), io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for it in src.infolist():
+            b = src.read(it.filename)
+            sheet = re.fullmatch(r"xl/worksheets/sheet(\d+)\.xml", it.filename)
+            if sheet:
+                v = vals[int(sheet.group(1)) - 1]
+
+                def fill(mo):                                  # 글자 값(앞 달 시트를 가리키는 칸)은 t="str" 이어야 글자로 읽힌다
+                    val = v[mo.group(1)]
+                    kind = ' t="str"' if isinstance(val, str) else ""
+                    return f'<c r="{mo.group(1)}"{mo.group(2)}{kind}><f>{mo.group(3)}</f><v>{escape(str(val))}</v>'
+                b = re.sub(r'<c r="([A-Z]+\d+)"([^>]*)><f>([^<]*)</f><v\s*/>', fill, b.decode("utf-8")).encode("utf-8")
+            z.writestr(zipfile.ZipInfo(it.filename, it.date_time), b, zipfile.ZIP_DEFLATED)
+    return out.getvalue()
+
+
+def _build_schedule_xlsx(body: dict) -> bytes:
+    """근무표 xlsx. body.prev(같은 모양)가 있으면 앞 달 시트를 먼저 그리고 이 달 시트를 뒤에 둔다 (결정 1-61):
+    이 달 1일~첫 토요일은 앞 달 표에도 들어 있어, 이 달 시트의 그 칸은 앞 달 시트를 가리키고 계는 이 시트 안에서 1일부터 센다.
+    파일을 열면 이 달 시트가 보인다."""
+    import io
     from openpyxl import Workbook
+    from openpyxl.styles import Font
+
+    wb = Workbook()
+    wb._fonts[0] = Font(name="맑은 고딕", size=11)             # 기본 글꼴 = 양식과 같게 — 열 너비 단위가 기본 글꼴의 숫자 폭이다
+    ws, vals, link = wb.active, [], None
+    if body.get("prev"):
+        v, link = _xlsx_sheet(ws, body["prev"])
+        vals.append(v)
+        ws = wb.create_sheet()
+        wb.active = ws
+    vals.append(_xlsx_sheet(ws, body, link)[0])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return _xlsx_set_cached(buf.getvalue(), vals)
+
+
+def _xlsx_sheet(ws, body: dict, link: dict = None):
+    """근무표 시트 한 장 — 병동 번표 양식: 제목 · 주기 · 날짜 · 요일 머리줄, 간호사 줄 + 오른쪽 계, 아래 날마다 인원 · 차지 줄.
+    body = {year, month, title?, days: [ISO…], holidays?, rows: [[이름, 코드…]…],
+            teams?: [줄마다 팀], team_colors?: {팀: '#RRGGBB'}, marks?: [줄마다 날짜 수만큼 글자],
+            charge?: [줄마다 'DEN' 중 차지 가능한 근무], notes?: [[줄, 날짜 칸, 글]…]}.
+    marks 한 글자 = 그 칸 바탕: 'w' 원티드(분홍) · 'r' 사전입력이 풀린 칸(파랑 바탕 흰 글씨) · 'k' 나이트킵 줄(노랑).
+    이름 칸은 팀 색, 팀이 바뀌는 줄 위는 굵은 선. 코드는 클라이언트가 인쇄처럼 D/E/N 으로 바꿔 보낸다 (rdPrintCode).
+    계는 양식과 같은 수식(COUNTIF·SUM): 오른쪽 계는 모두 그 달(1일~말일) 칸만, 총근무 = D+E+N+중.
+    link(앞 달 시트가 돌려준 것)가 있으면 앞 달 시트에도 있는 날짜 칸은 그 시트의 같은 이름 줄을 가리키는 수식이 된다.
+    차지 줄은 차지 가능한 사람 줄에서 그날 D·E·N 을 센다 — 줄이 떨어져 있으면 구간마다 COUNTIF 를 더한다.
+    COUNTIF 는 칸 전체가 같아야 세므로 신규 '/D'·'D1' 은 D 에 들지 않는다 (양식과 같다).
+    수식마다 같은 뜻으로 계산한 값을 함께 넣는다 (_xlsx_set_cached) — 다시 올리면 숫자뿐인 줄이라 붙여넣기가 건너뛴다.
+    돌려주는 것 = (수식 칸 → 계산값, 다음 달 시트가 이 시트를 가리킬 때 쓸 link)."""
+    import re
+    from datetime import date
+    from openpyxl.comments import Comment
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-    from openpyxl.utils import get_column_letter
+    from openpyxl.utils import get_column_letter as L
     from .scheduler_base import _SchedulerBase
 
     y, m = int(body["year"]), int(body["month"])
@@ -746,25 +800,42 @@ def _build_schedule_xlsx(body: dict) -> bytes:
         raise ValueError("년월이나 날짜가 없습니다")
     nd, c0 = len(days), 2                                      # B열부터 날짜
     rows = [[str(r[0])] + [str(c or "") for c in (list(r[1:]) + [""] * nd)[:nd]] for r in body["rows"]]
+    nr = len(rows)
+    if not nr:
+        raise ValueError("간호사가 없습니다")
+    per_row = lambda key: [str(v or "") for v in (list(body.get(key) or []) + [""] * nr)[:nr]]   # noqa: E731
+    teams, marks, charge = per_row("teams"), per_row("marks"), per_row("charge")
+    colors = {str(t): "FF" + c[1:].upper() for t, c in (body.get("team_colors") or {}).items()
+              if re.fullmatch(r"#[0-9A-Fa-f]{6}", str(c))}
     hol = set(body.get("holidays") or [])
-    in_m = [i for i, d in enumerate(days) if (d.year, d.month) == (y, m)]
-    totals = ("D", "E", "N", "중", "OF", "법", "생", "V", "주", "근무")
-    t0 = c0 + nd                                               # 그 달 계 첫 칸
+    mon = [i for i, d in enumerate(days) if (d.year, d.month) == (y, m)] or list(range(nd))   # 그 달 칸 (이어진 한 구간)
+    totals = ("D", "E", "N", "중", "OF", "법", "생", "V", "주", "총근무")
+    work = ("D", "E", "N", "중")
+    t0 = c0 + nd                                               # 오른쪽 계 첫 칸
     last = t0 + len(totals) - 1
+    r0, r1 = 5, 4 + nr                                         # 간호사 줄
+    rs = r1 + 1                                                # 아래 인원 줄 시작
+    has_charge = "charge" in body
+    end = rs + len(work) + (3 if has_charge else 0)            # 마지막 줄
 
-    wb = Workbook()
-    ws = wb.active
     ws.title = f"{m}월"
-    norm, bold = Font(name="맑은 고딕", size=9), Font(name="맑은 고딕", size=9, bold=True)
-    red = Font(name="맑은 고딕", size=9, bold=True, color="FFFF0000")
+    ko = lambda size, color=None: Font(name="맑은 고딕", size=size, bold=True, color=color)   # noqa: E731
+    f8, f9, f10, sums = ko(8), ko(9), ko(10), Font(name="Calibri", size=8, bold=True)
     mid = Alignment(horizontal="center", vertical="center")
-    gray = PatternFill("solid", fgColor="FFEDEDED")
+    solid = lambda rgb: PatternFill("solid", fgColor=rgb)      # noqa: E731
+    yellow, pink, blue = solid("FFFFFF00"), solid("FFFF99FF"), solid("FF0070C0")
+    tfill = {"N": yellow, "중": solid("FF00B0F0"), "생": solid("FFA9D08E"), "V": solid("FFA9D08E")}   # 계 열 바탕 — 양식 값
+    vals = {}                                                  # 수식 칸 → 계산해 둔 값
 
-    def put(r, c, v, font=bold):
+    def put(r, c, v, font=f9, fill=None, calc=None):
         cell = ws.cell(r, c, v)
-        if isinstance(v, str) and v.startswith("="):
+        if calc is not None:
+            vals[cell.coordinate] = calc
+        elif isinstance(v, str) and v.startswith("="):
             cell.data_type = "s"                               # '=' 로 시작하는 이름이 수식이 되지 않게
         cell.font, cell.alignment = font, mid
+        if fill:
+            cell.fill = fill
         return cell
 
     def merge(r, c1, c2):
@@ -772,60 +843,107 @@ def _build_schedule_xlsx(body: dict) -> bytes:
             ws.merge_cells(start_row=r, start_column=c1, end_row=r, end_column=c2)
 
     put(1, 1, f"{body.get('title') or f'{y}년 {m}월 근무표'} "
-              f"({days[0].month}월 {days[0].day}일~{days[-1].month}월 {days[-1].day}일)",
-        Font(name="맑은 고딕", size=12, bold=True))
-    merge(1, 1, last)
+              f"({days[0].month}월 {days[0].day}일~{days[-1].month}월 {days[-1].day}일)", ko(12))
+    merge(1, 1, t0 - 1)
     ref = _SchedulerBase._CYCLE_REF                            # 화면 getCycleNum 과 같은 기준일·산식
-    for i in range(0, nd, 7):
-        put(2, c0 + i, f"{(days[i] - ref).days % 28 // 7 + 1}주기")
-        merge(2, c0 + i, min(c0 + i + 6, t0 - 1))
-    put(2, t0, f"{m}월 계")
-    merge(2, t0, last)
+    starts = [i for i, d in enumerate(days) if i == 0 or d.weekday() == 6]   # 주기 = 일요일~토요일. 표는 1일에 시작해 첫 묶음이 짧을 수 있다
+    for i, nxt in zip(starts, starts[1:] + [nd]):
+        put(2, c0 + i, f"{(days[i] - ref).days % 28 // 7 + 1}주기", f8)
+        merge(2, c0 + i, c0 + nxt - 1)
     put(4, 1, "이름")
     for i, d in enumerate(days):
-        f = red if d.weekday() == 6 or d.isoformat() in hol else bold
-        for cell in (put(3, c0 + i, d, f), put(4, c0 + i, "월화수목금토일"[d.weekday()], f)):
-            if i not in in_m:
-                cell.fill = gray                               # 앞뒤 달 칸 (겹치는 주기)
-        ws.cell(3, c0 + i).number_format = 'm"/"d'
-        ws.column_dimensions[get_column_letter(c0 + i)].width = 4.3
+        color = "FFFF0000" if d.weekday() == 6 or d.isoformat() in hol else None
+        c = put(3, c0 + i, d, ko(8, color))
+        c.number_format = 'm"/"d'
+        c.alignment = Alignment(horizontal="center", vertical="center", shrink_to_fit=True)   # 맥 엑셀은 이 너비에서 12/10 을 #### 로 그린다(양식도 같다) — 넘치면 글자를 줄인다
+        put(4, c0 + i, "월화수목금토일"[d.weekday()], ko(9, color))
+        ws.column_dimensions[L(c0 + i)].width = 4.25
     for j, t in enumerate(totals):
-        put(4, t0 + j, t)
-        ws.column_dimensions[get_column_letter(t0 + j)].width = 4.5
-    ws.column_dimensions["A"].width = 9
+        put(4, t0 + j, t, Font(name="Calibri", size=6, bold=True) if t == "총근무" else sums, tfill.get(t))
+        ws.column_dimensions[L(t0 + j)].width = 3.62
+    ws.column_dimensions["A"].width = 7.88
 
+    # 앞 달 시트에도 있는 날짜(이 달 1일~첫 토요일)는 그 시트의 같은 이름 줄을 가리킨다 — 값은 한 곳(앞 달 시트)에서만 고친다
+    ref_cell = {}                                              # (줄, 날짜 칸) → 앞 달 시트의 칸
+    if link:
+        at = {d: i for i, d in enumerate(link["days"])}
+        where = {}                                             # 이름 → 앞 달 시트의 줄 (같은 이름은 나온 순서대로)
+        for pk, prow in enumerate(link["rows"]):
+            where.setdefault(prow[0], []).append(pk)
+        for k, row in enumerate(rows):
+            pk = where[row[0]].pop(0) if where.get(row[0]) else None
+            for i, d in enumerate(days):
+                if pk is not None and d in at:
+                    ref_cell[k, i] = f"'{link['title']}'!{L(c0 + at[d])}{r0 + pk}"
+                    row[1 + i] = link["rows"][pk][1 + at[d]]
+    up = [[c.upper() for c in row[1:]] for row in rows]        # COUNTIF 는 대소문자를 가리지 않는다
     for k, row in enumerate(rows):
-        put(5 + k, 1, row[0])
+        r, rgb = r0 + k, colors.get(teams[k])
+        dark = rgb and int(rgb[2:4], 16) * 299 + int(rgb[4:6], 16) * 587 + int(rgb[6:8], 16) * 114 < 140000
+        put(r, 1, row[0], ko(10, "FFFFFFFF" if dark else None), solid(rgb) if rgb else None)
         for i, code in enumerate(row[1:]):
-            put(5 + k, c0 + i, code or None, norm)
-        mc = [row[1 + i].lstrip("/") for i in in_m]            # 그 달 칸만 · 신규 '/D' 는 자기 줄에서 D 로 센다
-        vals = [mc.count(t) for t in totals[:-1]] + [sum(map(mc.count, ("D", "E", "N", "중", "D1")))]
-        for j, v in enumerate(vals):
-            put(5 + k, t0 + j, v, norm)
-    rs = 5 + len(rows)
-    work = ("D", "E", "N", "중")                                # 병동 번표 아래 줄 — D1·신규 '/D' 는 세지 않는다
-    for j, lab in enumerate(work + ("근무자수",)):
-        put(rs + j, 1, lab)
-        for i in range(nd):
-            codes = [row[1 + i] for row in rows]
-            put(rs + j, c0 + i, sum(map(codes.count, work)) if lab == "근무자수" else codes.count(lab), norm)
+            mk = marks[k][i:i + 1]
+            src = ref_cell.get((k, i))
+            put(r, c0 + i, f'=IF({src}="","",{src})' if src else code or None, ko(9, "FFFFFFFF") if mk == "r" else f9,
+                {"w": pink, "k": yellow, "r": blue}.get(mk), calc=code if src else None)
+        got = []
+        a, b = mon[0], mon[-1]                                 # 계는 모두 그 달(1일~말일) 칸만 — 끝에 붙은 다음 달 며칠은 다음 달 표가 센다
+        for j, t in enumerate(totals[:-1]):
+            got.append(up[k][a:b + 1].count(t))
+            put(r, t0 + j, f'=COUNTIF({L(c0 + a)}{r}:{L(c0 + b)}{r},"{t}")', sums, tfill.get(t), calc=got[-1])
+        put(r, last, f"=SUM({L(t0)}{r}:{L(t0 + 3)}{r})", sums, calc=sum(got[:4]))
+    for k, i, text in body.get("notes") or []:
+        if 0 <= int(k) < nr and 0 <= int(i) < nd and text:
+            ws.cell(r0 + int(k), c0 + int(i)).comment = Comment(str(text), "근무표")
 
-    edge = Border(left=Side(style="medium"))                   # 주 경계(일요일 왼쪽) · 계 칸 왼쪽
-    for c in [c0 + i for i, d in enumerate(days) if d.weekday() == 6] + [t0]:
-        for r in range(2, rs + len(work) + 1):
-            ws.cell(r, c).border = edge
+    for j, t in enumerate(work + ("근무자수",)):
+        r = rs + j
+        put(r, 1, t, fill=yellow if t == "N" else solid("FF42C7F1") if t == "중" else None)
+        for i in range(nd):
+            col, day = L(c0 + i), [u[i] for u in up]
+            if t == "근무자수":
+                put(r, c0 + i, f"=SUM({col}{rs}:{col}{rs + 3})", calc=sum(map(day.count, work)))
+            else:
+                put(r, c0 + i, f'=COUNTIF({col}${r0}:{col}${r1},"{t}")', fill=yellow if t == "N" else None, calc=day.count(t))
+    for j, s in enumerate("DEN" if has_charge else ""):
+        r = rs + 5 + j
+        ks = [k for k in range(nr) if s in charge[k]]
+        runs = [[a, b] for a, b in zip(ks, ks) if a - 1 not in ks]   # 이어진 줄끼리 한 구간
+        for run in runs:
+            while run[1] + 1 in ks:
+                run[1] += 1
+        put(r, 1, f"{s}차지")
+        for i in range(nd):
+            col = L(c0 + i)
+            fx = "+".join(f'COUNTIF({col}{r0 + a}:{col}{r0 + b},"{s}")' for a, b in runs)
+            put(r, c0 + i, "=" + fx if fx else 0, Font(name="Calibri", size=9, bold=True),
+                calc=sum(up[k][i] == s for k in ks) if fx else None)
+
+    # 테두리 — 바깥 · 주 경계(일요일 왼쪽) · 팀 경계 · 인원 줄 사이는 굵게, 안쪽은 가늘게 (양식과 같다)
+    thin, med = Side(style="thin"), Side(style="medium")
+    side = lambda on: med if on else thin                      # noqa: E731
+    vm = {1, c0, t0} | {c0 + i for i, d in enumerate(days) if d.weekday() == 6}
+    hm = {2, 3, r0, end + 1} | {r0 + k for k in range(1, nr) if teams[k] != teams[k - 1]} | set(range(rs, rs + 6))
+    for r in range(2, end + 1):
+        for c in range(1, t0):
+            ws.cell(r, c).border = Border(left=side(c in vm), right=side(c + 1 in vm), top=side(r in hm), bottom=side(r + 1 in hm))
+        if 4 <= r <= r1:
+            for c in range(t0, last + 1):
+                ws.cell(r, c).border = Border(left=med, right=med, top=side(r in hm or r == 4), bottom=side(r + 1 in hm))
+    for r in (2, 3, 4):                                        # 이름 머리 칸은 세 줄을 한 칸처럼
+        ws.cell(r, 1).border = Border(left=med, right=med, top=med if r == 2 else Side(), bottom=med if r == 4 else Side())
+    for r in range(1, end + 1):
+        ws.row_dimensions[r].height = 17.25
     ws.freeze_panes = "B5"
     ws.page_setup.orientation, ws.page_setup.paperSize = "landscape", ws.PAPERSIZE_A4
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.page_setup.fitToHeight = 0                              # 가로 한 장에 맞추고 세로는 사람 수대로
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+    return vals, {"title": ws.title, "days": days, "rows": rows, "up": up}
 
 
 @app.post("/api/schedules/export.xlsx")   # GET·DELETE /api/schedules/{schedule_id} 보다 먼저 선언 — 메서드도 달라 겹치지 않는다
 def schedule_export_xlsx(body: dict):
-    """근무표 엑셀 내보내기 — 그 달에 걸친 주 전부, 병동 번표 모양. '근무표 파일 올리기'로 다시 올릴 수 있다."""
+    """근무표 엑셀 내보내기 — 병동 번표 양식(팀 색 · 원티드 · 계 수식). '근무표 파일 올리기'로 다시 올릴 수 있다."""
     from fastapi.responses import Response
     from openpyxl.utils.exceptions import IllegalCharacterError
 
@@ -1234,8 +1352,22 @@ def _cell_to_str(v) -> str:
     return str(v)
 
 
+def _comment_text(comment) -> str:
+    """셀 메모 → 본문만. 스레드 댓글은 옛 엑셀용 안내문과 '댓글:'·'답글:' 머리줄을, 옛 메모는 첫 줄 '작성자:' 를 뗀다."""
+    text = comment.text or ""
+    mark = "linkid=870924"   # 스레드 댓글을 옛 메모로 풀어 쓸 때 엑셀이 붙이는 안내문의 끝
+    if mark in text:
+        # 안내문 뒤는 '머리줄:' + 들여 쓴 본문의 반복. 머리줄 글자는 엑셀 언어마다 달라 들여쓰기로 가른다
+        return " / ".join(ln.strip() for ln in text.split(mark, 1)[1].splitlines() if ln[:1] == " " and ln.strip())
+    author = comment.author or ""
+    if author and text.startswith(author + ":"):
+        text = text[len(author) + 1:]
+    return text.strip()
+
+
 def _parse_xlsx_sheets(raw: bytes) -> list:
-    """xlsx/xlsm 바이트 → [{name, rows}]. 병합 셀은 좌상단 값을 범위 전체로 전파."""
+    """xlsx/xlsm 바이트 → [{name, rows, notes}]. 병합 셀은 좌상단 값을 범위 전체로 전파.
+    notes 는 메모·스레드 댓글이 달린 칸 [[행, 열, 글]] — rows 와 같은 0부터 세는 자리."""
     import io
 
     try:
@@ -1271,7 +1403,10 @@ def _parse_xlsx_sheets(raw: bytes) -> list:
     for ws in wb.worksheets:
         if ws.max_row * ws.max_column > _TABLE_FILE_MAX_CELLS:
             raise HTTPException(400, f"시트 '{ws.title}'가 너무 큽니다 (셀 {_TABLE_FILE_MAX_CELLS:,}개 초과)")
-        grid = [[_cell_to_str(c) for c in row] for row in ws.iter_rows(values_only=True)]
+        grid, notes = [], []
+        for r, row in enumerate(ws.iter_rows()):
+            grid.append([_cell_to_str(c.value) for c in row])
+            notes += [[r, i, t] for i, c in enumerate(row) if c.comment and (t := _comment_text(c.comment))]
         # 병합 셀 전파 — 병동 양식은 날짜/이름 헤더가 병합돼 있는 경우가 많다
         for rng in ws.merged_cells.ranges:
             top = _cell_to_str(ws.cell(rng.min_row, rng.min_col).value)
@@ -1288,7 +1423,7 @@ def _parse_xlsx_sheets(raw: bytes) -> list:
             while row and not row[-1].strip():
                 row.pop()
         if grid:
-            sheets.append({"name": ws.title, "rows": grid})
+            sheets.append({"name": ws.title, "rows": grid, "notes": notes})
     return sheets
 
 

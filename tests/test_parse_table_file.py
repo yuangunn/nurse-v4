@@ -107,3 +107,23 @@ def test_unknown_ext_rejected(client):
 def test_missing_body(client):
     res = client.post("/api/parse-table-file", json={"filename": "a.xlsx"})
     assert res.status_code == 400
+
+
+def test_xlsx_cell_notes(client):
+    """메모·스레드 댓글은 칸 자리와 함께 본문만 — 안내문·머리줄·작성자 줄은 뗀다. 빈 칸의 메모도 온다."""
+    from openpyxl.comments import Comment
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["이름", "12/1", "12/2", "12/3"])
+    ws.append(["간호01", "OF", None, "D"])
+    threaded = ("[스레드 댓글]\n\n사용 중인 버전의 Excel에서 이 스레드 댓글을 읽을 수 있지만 … 자세한 정보: "
+                "https://go.microsoft.com/fwlink/?linkid=870924.\n\n댓글:\n    결혼식\n\n답글:\n    안 되면 E")
+    ws["B2"].comment = Comment(threaded, "tc={0000}")
+    ws["C2"].comment = Comment("병동:\nN 제외", "병동")
+    ws["D2"].comment = Comment("약속", "병동")
+    buf = io.BytesIO()
+    wb.save(buf)
+    res = client.post("/api/parse-table-file", json={"file_b64": _b64(buf.getvalue()), "filename": "표.xlsx"})
+    assert res.status_code == 200, res.text
+    assert res.json()["sheets"][0]["notes"] == [[1, 1, "결혼식 / 안 되면 E"], [1, 2, "N 제외"], [1, 3, "약속"]]

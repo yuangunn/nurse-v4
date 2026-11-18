@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.20.1 (2026-10-30, 배정 도구 방 구성 프리셋마다 [차지 방 없음] — 켠 프리셋을 쓰는 날은 차지가 자리에 묶이지 않고 어제 보던 방을 그대로(주말·공휴일·나이트에 방이 튕기지 않게, 결정 2-54). v4.20.0 = 배정 도구 실사용 고침·하루 어싸인표 표 모양 고치기·근무 정의 V 보호)
+**최신**: v4.21.0 (2026-11-18, 근무표 엑셀을 병동 번표 양식으로 — 1일부터·팀 색·계 수식·앞 달 시트(결정 1-59·1-61) · 임산부는 임신 구간 공휴일에 법(결정 1-60) · 세부 원티드·공휴일 휴무=법(결정 1-62) · 고친 사전입력으로 다시 만들기·서랍 크게 보기(결정 1-63) · 계산 현황·결과 요약(결정 1-64) · 간호사 그룹 — 팀과 따로·여러 그룹에 겹쳐 속하기·그룹마다 한 근무 최대/최소 n명(결정 1-57) · 화면 조밀화 — 본문 14px/400·표 줄 26px·한 달이 한 화면·날짜별 필요 인원 달력·사전입력에서 근무표 만들기·저장본 열기(결정 1-58) · 배정 도구 — 손으로 바꾼 사유 제거(결정 2-55)·하루 어싸인표 기본 양식 101 새 양식. v4.20.1 = 배정 도구 방 구성 프리셋마다 [차지 방 없음](결정 2-54))
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -152,7 +152,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 537건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과·간호사그룹)
+├── tests/                   # pytest 회귀 556건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과·간호사그룹)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -214,12 +214,13 @@ python3 scripts/check_form_borders.py        # 양식을 바꿨을 때
 근무표 엔진·frontend 앱(그 밖의 파일)을 고쳤을 때 — 로컬 pytest 약 1분:
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 537건
+python3 -m pytest -q                  # 556건
 node scripts/test_paste_dates.mjs && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
-  && node scripts/test_charge_plain.mjs && node scripts/test_day_reqs.mjs && node scripts/test_hospital_holidays.mjs \
+  && node scripts/test_charge_plain.mjs && node scripts/test_wanted_cells.mjs && node scripts/test_day_reqs.mjs && node scripts/test_hospital_holidays.mjs \
   && node scripts/test_manager_check.mjs && node scripts/test_trainee_days.mjs && node scripts/test_continue_search.mjs \
   && node scripts/test_grid_select.mjs && node scripts/test_roster_bulk.mjs && node scripts/test_paste_fix.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/test_frontend_state.mjs && node scripts/test_frontend_edit.mjs \
+  && node scripts/test_solve_stats.mjs \
   && node scripts/verify_holidays.mjs
 ```
 ```bash
@@ -236,7 +237,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.20.1.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.21.0.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -270,6 +271,8 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 
 > 병동 번표 표기 읽기 (붙여넣기 `_shiftAlias` + 엔진 `_PRE_ALIAS`): `OFF`→OF · `특V`→특 · `공가`→공.
 > **원티드 표기 (사전입력 전용, 근무 정의 아님 — 제1원칙 14)**: `D/E`(낮·저녁) · `E/N`(저녁·야간) · `D/N`(낮·야간, `DN`) · `N제외`(야간만 빼고).
+> **세부 원티드** (칸 팝업 — 그날 가능한 것 D·E·N·휴무를 켜고 끈 묶음이 칸 코드, `rdFineToggle`): `D/E/N`(쉬지만 않으면) · `D제외`·`E제외`(그 시간대만 빼고) ·
+> `D/OF`·`E/OF`·`N/OF`(그 근무 아니면 휴무). 넷 다 켜면 빈칸, 하나만 켜면 그 코드 — 이번 달 공휴일에 휴무만 남기면 `법`(결정 1-62).
 > `E/D`·`DE`·`N/E`·`EN`·`ND`·`N 제외`·`N빼고` 도 같은 뜻으로 읽는다 (붙여넣기 `_normalizeShiftCode` = 엔진 `_PRE_ALIAS`). 칸 팝업 맨 아래 줄,
 > '이대로 근무표로'·'이 표대로 인원'은 이 칸이 있으면 막는다 (한 근무가 아니므로). 검증 `tests/test_flex_wish.py`
 > 한글 자판 입력: ㅈ 주 · ㅂ 병 · ㅃ 법 · ㅅ 생 · ㅌ 특 · ㄱ 공 · **ㄲ 경가 · ㅉ 조가 · ㅆ 산전** (Shift 쌍자음).
@@ -319,7 +322,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 | 월 최대 야간 | 기본 월 6회 (수면OFF 임계) |
 | 홀짝월 합산 야간 | 전월+당월 ≤ 11회 (선택적). **나이트킵 달의 야간은 합산 제외** (제1원칙 7) — 전월N 자동 인수인계(`compute_prev_month_nights`)와 엔진 `_two_month_rhs` 양쪽에서 뺀다 |
 | **야간전담 규칙** | N/NC만 배정, 당월 정확히 14일 근무, 야간 뒤 휴무는 일반과 같다(제1원칙 15 — 예전 '5일 중 3일'은 뺐다) (생휴 강제 없음 — 월 ≤1 상한만). **나이트킵인지는 날짜가 속한 달로**(`_keeper_on`) — 생성 범위 끝의 다음 달 며칠은 그 달 나이트킵에게 N/NC·쉬는 것만(`_keeper_forbids`, 사전입력은 사실), 이번 달만 나이트킵인 사람은 그 며칠 일반 간호사(다음 달도 나이트킵·상시 야간전담이면 그대로 나이트킵) (결정 1-33) **끝에 붙은 다음 달 며칠**: 다음 달 나이트킵은 그 며칠 몫(14×며칠/그 달 날수, 12/1~5 → 2)을 목적함수 감점 700으로 — 사람이 넣은 칸은 그대로 (`_tail_keeper_targets`, 결정 1-47) |
-| **임산부 모성보호** | `is_pregnant`+`pregnancy`{early,late} 설정 시: ①P1 구간 완전 포함 주마다 P1 정확히 1회(부분 주 ≤1) ②임신 전 구간 `[early.start~late.end]` N/NC 금지 ③임신-중-달 생(生) 면제(배정 금지) ④임산부 달엔 야간전담 자동 해제. P1은 임산부+구간 또는 사전입력 P1에서만 허용(그 외 변수 0). HiGHS·CP-SAT·conflict_analyzer 패리티. 헬퍼: `_preg_window_on`/`_preg_span_on`/`_preg_active_in_month`/`_preg_forbids`/`_preg_effective_pre` (scheduler_base) |
+| **임산부 모성보호** | `is_pregnant`+`pregnancy`{early,late} 설정 시: ①P1 구간 완전 포함 주마다 P1 정확히 1회(부분 주 ≤1) ②임신 전 구간 `[early.start~late.end]` N/NC 금지 ③임신-중-달 생(生) 면제(배정 금지) ④임산부 달엔 야간전담 자동 해제. ⑤임신 전 구간의 법정공휴일은 근무 없이 `법`(그날 넣어 둔 주휴·휴가는 그대로, 근무·OF 사전입력은 무시 — 결정 1-60). P1은 임산부+구간 또는 사전입력 P1에서만 허용(그 외 변수 0). HiGHS·CP-SAT·conflict_analyzer 패리티. 헬퍼: `_preg_window_on`/`_preg_span_on`/`_preg_active_in_month`/`_preg_holiday_rest`/`_preg_forbids`/`_preg_effective_pre` (scheduler_base) |
 | 전입/전출 재적 | start_date ≤ d ≤ end_date 범위에서만 배정 |
 | **셀 잠금** | `locked_cells[nurse][date]=true`인 셀은 완화 모드에서도 사전입력 고정. 단 잠긴 D·E·N 은 같은 시간대 차지(DC·EC·NC)로 올릴 수 있다 — 번표엔 차지 표시가 없다(제1원칙 11, `_locked_domain`, 결정 1-34). 사람이 고른 차지·지난달 기록·나이트킵의 야간 외 근무는 글자 그대로. 승격되는 잠긴 칸끼리는 시니어리티대로(선임이 차지) |
 
@@ -418,7 +421,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 {
   "id": "a0",                  # 고유 ID
   "name": "김지현",
-  "group": "A",                # 팀 — 자유, 한 사람 하나 (이름 옆 표시·근무표 구분선·주휴 추천). 엑셀 명부 '팀' 칸(옛 '그룹' 칸도 읽는다)
+  "group": "A",                # 팀 — 자유, 한 사람 하나 (이름 옆 표시·이름 칸 팀 색·근무표 구분선·주휴 추천). 엑셀 명부 '팀' 칸(옛 '그룹' 칸도 읽는다)
   "gender": "female",          # female|male
   "capable_shifts": [...],     # ["DC","D","EC","E","NC","N"] 등
   "is_night_shift": False,     # 기본 야간전담 (fallback)
@@ -438,8 +441,12 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 ```
 
 **임산부(모성보호)**: `is_pregnant`+`pregnancy` 두 구간 설정 시 솔버가 각 구간 주마다 P1(임부휴무)
-1회 자동 배치 + 임신 전 기간 야간(N/NC) 제외 + 그 달 생리휴가 면제 + 야간전담 자동 해제.
+1회 자동 배치 + 임신 전 기간 야간(N/NC) 제외 + 그 달 생리휴가 면제 + 야간전담 자동 해제
++ 임신 구간의 법정공휴일은 근무 없이 `법`(주휴를 넣은 날은 주휴 — 결정 1-60).
 사전입력으로 P1을 직접 지정할 수도 있음. 상세 규칙은 [스케줄링 제약 규칙](#hard-constraints-반드시-지켜야-함) 참조.
+
+**팀 색 (결정 1-59)**: `rules.teamColors={팀: "#RRGGBB"}` 는 고른 색만 담는다. 안 고른 팀은 명부에 처음 나온 순서로 팔레트(`teamColorMap`, redesign.js)에서
+자동으로 받는다 — 근무표·사전입력의 이름 칸(`rdTeamStyle`)과 엑셀 이름 칸이 같은 색. 명부 탭 '팀 색' 줄(`data-rd="team-colors"`)에서 바꾼다(`setTeamColor`).
 
 **그룹 (여러 개에 겹쳐 속함, 2026-11-12, 결정 1-57)**: 팀과 따로 `rules.nurseGroups=[{id,name,members:[nurse_id],maxPerShift,minPerShift}]`.
 한 근무(D·D1 / E·중 / N)에 그룹원 `maxPerShift`명까지(1 = 같이 일하지 않기)·`minPerShift`명 이상 — 엔진은 사람 하나마다 감점 200
@@ -474,7 +481,7 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
 | DELETE | `/api/nurses/{id}` | 삭제 + **저장본 캐스케이드 정리** |
 | GET | `/api/nurses/template.xlsx` | 명부 엑셀 템플릿 (드롭다운·안내 시트, 기본) — `/template`은 CSV 호환용 |
 | GET | `/api/nurses/export.xlsx` | 현재 간호사 엑셀 내보내기 (기본) — `/export`는 CSV 호환용 |
-| POST | `/api/schedules/export.xlsx` | 근무표 엑셀 — 그 달에 걸친 주 전부, 병동 번표 모양(제목·주기·날짜·요일 · 그 달 계 · 날마다 인원, 값만) (결정 1-48) |
+| POST | `/api/schedules/export.xlsx` | 근무표 엑셀 — 병동 번표 양식(1일~화면 끝 · 팀 색·굵은 선 · 원티드 분홍/풀린 칸 파랑/나이트킵 노랑 · 계·인원·차지 줄은 수식 + 계산값) (결정 1-59) |
 | POST | `/api/nurses/import` | 명부 일괄 등록/업데이트 — xlsx(매직 바이트 자동 감지)·CSV 모두 허용 |
 | GET/POST | `/api/rules` | 규칙 |
 | GET/POST | `/api/requirements` | 요일별 필요 인원 |
@@ -539,6 +546,10 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
   - **필요 인원 = 요일별 기본값 + 날짜별**: 설정 → 필요 인원의 달력 카드(`data-rd="day-reqs"`, `.rcal`)와 사전입력 표 맨 아래 '필요 인원' 줄은 **같은 값**
     (`prevDayReqs[dk][type]`, `setPrevDayReq`)이다. 기본값과 다른 칸만 진하게, 비우면 기본값으로. 사전입력 상태의 일부라 되돌리기·세션 자동 보관·
     사전입력 저장(`day_reqs`)·생성 payload 에 실린다 — 설정의 '저장' 단추(요일별 값)와는 별개. '바꾼 n일을 요일 기본값으로'는 두 번 눌러 확인(`rdArm`).
+  - **사전입력 ↔ 근무표 (고쳐서 다시 만들기, 결정 1-63)**: 표가 있으면 사전입력 툴바에 '다시 만들기'(`rdRemake()`)와 '근무표 보기 →'가 나란히,
+    근무표 툴바에는 '← 사전입력 고치기'. 표를 만든(연) 뒤 사전입력 칸이 바뀌면(`rdPreChanged` — 기준 `_preAtMake` 는 `trackEdits()` 가 잡고,
+    저장본을 열면 저장 때의 사전입력) 사전입력의 주 버튼이 '고친 사전입력으로 다시 만들기'로 바뀌고, 근무표 상태 줄·단계 바 부제가 다시 만들어야 함을 알린다.
+    서랍(요약·리포트)은 '크게 보기'(`drawerBig`)로 화면 가운데 큰 창이 되고, 상태 줄의 '바뀐 n칸 보기'가 원티드 미반영 탭을 큰 창으로 바로 연다.
   - **사전입력 → 근무표**: 사전입력 툴바의 주 버튼은 `rdGoMake()`('근무표 만들기 →' / 표가 있으면 '근무표 보기 →'). 근무표에서 사전입력으로 넣은 칸은
     `is-pre`(왼쪽 위 모서리 삼각형, `rdIsPre`) — 상태 줄에 범례.
   - **`rdSched` 는 보고 있는 달 기준**: `schedule` 은 달을 넘겨도 앞 달 것이 남는다. 앞뒤 달 표는 넘치는 주(이 달 1~6일·23일 이후)만 겹치므로 7~22일 칸이 있는지로 가린다.
@@ -578,8 +589,10 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
      "이번 생성에 누적 반영" = 원장 주입됨) → **📋 리포트 서랍**(원티드 미반영·**🧾 연차(V) 설명**·오프특근·
      주의·위시 반영·생성 리포트·솔버 로그; 사연 항목이 있으면 생성 직후 자동으로 열림)
    - **만드는 중**: 상태 줄 바로 아래 진행 한 줄(`rdLiveProgress` — 답을 찾았는지·가장 좋은 답과 n% 안쪽·3분 넘게 그대로면
-     '지금 멈춰도 됩니다'·조건을 정리하는 중) + 계산 기록 칸(`.rlive`, `data-rd=live-log`, 기본 펼침 `showLiveLog`). 서랍은 표가 있어야
-     열리므로 만드는 동안 기록은 여기서 본다. 맨 아래 따라가기는 `_scrollLogs` 하나 (결정 1-43)
+     '지금 멈춰도 됩니다'·조건을 정리하는 중) + **계산 현황**(`.rlive`, `data-rd=live-log`): 솔버(HiGHS) 기록을 읽은 숫자 카드(`rdSolveCards`)와
+     시간순 사건 표(`solveStats.events`, `_solveFeed`). 원본 기록은 접어 둔다(`showLiveLog`, '원본 기록 보기'). 서랍 '생성 기록' 탭에도 같은 것 (결정 1-43·1-64)
+   - **결과 요약**(`story`, `rdStorySteps`): 생성이 다 끝나면 한 장씩 넘겨 보는 창 — 계산 → 지킨 것 → 바꾼 것 → 확인할 것 → 결과. 상태 줄 '결과 요약 다시 보기'.
+     '칸별 이유가 궁금하다면?'(`rdOpenWhy`)은 바뀐 칸마다 그날 인원 사정(`rdDayFacts`)을 보인다 — 어느 규칙과 부딪혔는지는 아직 없다 (결정 1-64)
    - **🧾 연차(V) 설명** (`_v_report`, 결과 `v_report`): 솔버가 놓은 V를 주 단위로 "재적 칸 − 근무 = 쉬어야 할 칸,
      주휴·OF·확정 휴가·생으로 채우고 남은 칸이 V" 산술로 설명 + 힌트(주휴 없는 사람·남는 날 원티드·필요 인원).
      사전입력 V는 세지 않는다. 주 안에서 주휴 요일을 옮기는 것은 주간 총량을 못 바꾼다 (결정 1-23)
@@ -587,8 +600,12 @@ D/E/N 수치는 charge 포함 총 인원 (D=4 → DC 1 + D 3).
      (완성 번표를 xlsx/csv 업로드 또는 붙여넣기로 저장 목록에 추가, 솔버 안 돌림, 표 역산 일별 인원 함께 저장;
      연간 번표처럼 시트가 여러 개면 년월을 감지해 매핑 표 → 월별 저장본 일괄 생성).
      코드 어디서든 `activeTab='saved'` 를 넣으면 별칭 워처가 이 서랍을 연다.
-   - **📤 내보내기** 메뉴: **엑셀 파일**(`exportToXlsx` → `POST /api/schedules/export.xlsx`, 병동 번표 모양 — 그 달에 걸친 주 전부:
-     11월 → 11/1~12/5, 12월 → 11/29~1/2 · 합계는 수식이 아니라 값이라 '근무표 파일 올리기'로 다시 올라간다, 결정 1-48) · 인쇄 ·
+   - **📤 내보내기** 메뉴: **엑셀 파일**(`exportToXlsx` → `POST /api/schedules/export.xlsx`, 병동 번표 양식 — 그 달 1일부터 화면 끝까지:
+     11월 → 11/1~12/5, 12월 → 12/1~1/2 · 이름 칸 팀 색 + 팀 사이 굵은 선 · 원티드 분홍 / 사전입력이 풀린 칸 파랑 바탕 흰 글씨 /
+     나이트킵 줄 노랑 · 칸 메모 · 오른쪽 계와 아래 인원·차지 줄은 양식과 같은 COUNTIF·SUM 수식에 계산값을 함께 넣어(`_xlsx_set_cached`)
+     '근무표 파일 올리기'로 다시 올라간다. 보낼 본문은 `_xlsxBody()` 한 곳, 결정 1-59.
+     오른쪽 계는 모두 그 달 1일~말일 칸만 센다. 1일이 일요일이 아니고 앞 달 저장본이 있으면 앞 달 시트가 앞에 함께 나가고(`_xlsxPrev` → `body.prev`),
+     두 시트에 다 있는 날짜(12/1~12/5)는 이 달 시트의 칸이 앞 달 시트의 같은 이름 줄을 가리킨다 — 결정 1-61) · 인쇄 ·
      **📋 어싸인용 복사**(`copyScheduleTsv`: 이름 + 날짜 + 근무 표를
      클립보드로 → 어싸인 배정표(standalone)에 그대로 붙여넣는다)
    - **인쇄·엑셀은 늘 D/E/N** (`plainShift` — 병동 번표에 차지 표시 없음, 제1원칙 11). 더보기의 '차지 숨기기'는
@@ -1068,10 +1085,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.20.1.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.21.0.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.20.1.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.21.0.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -1167,7 +1184,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.20.1 기준)
+## 알려진 주의사항 (v4.21.0 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 배점 보조변수(전환·연속·패턴·주말·공휴일)는 생성 달 + 끝에 붙은 다음 달 며칠 + 1일 이음새(그 사람의 지난달 칸이 기록일 때)에 —

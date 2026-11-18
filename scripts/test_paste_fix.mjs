@@ -97,4 +97,18 @@ const sets = (a) => a.pastePrev.diff.will_set.map((x) => `${x.nid}${+x.dk.slice(
   paste(a, [['D', 'N']]);
   assert.equal(sets(a), 'a1D a2N', '간호01 의 3/1·3/2 — 끈 끝 칸(간호02, 3/3)이 아니라');
 }
+// ⑥ 엑셀 파일의 칸 메모 — 사람·날짜가 맞은 칸에, 근무가 빈 칸에도. 넣으면 메모 표시가 켜지고, 같은 파일을 다시 열면 넣을 게 없다
+{
+  const a = make();
+  const sheet = { name: '3월', rows: [['', '3/1', '3/2'], ['간호01', 'D', ''], ['없는이름', 'E', '']], notes: [[1, 1, '약속'], [1, 2, 'N 제외'], [2, 1, '건너뜀'], [0, 1, '머리줄']] };
+  a.pastePrev.sheets = [sheet]; a._selectPasteSheet(0);
+  assert.deepEqual(a.pastePrev.diff.notes.map((x) => `${x.nid}${+x.dk.slice(8)}${x.text}`), ['a1약속', 'a2N 제외']);
+  a.applyPastePrev();
+  assert.deepEqual(a.cellNotes, { a: { [dk(1)]: '약속', [dk(2)]: 'N 제외' } });
+  assert.equal(a.showNotes, true);
+  a.openPastePrev('prev'); a.pastePrev.sheets = [sheet]; a._selectPasteSheet(0);
+  assert.deepEqual(a.pastePrev.diff.notes, []);
+  a.pastePrev.target = 'wish'; a._matchPasteGrid();
+  assert.deepEqual(a.pastePrev.diff.notes, [], '희망으로 가져올 땐 메모를 쓰지 않는다');
+}
 console.log('test_paste_fix: OK');

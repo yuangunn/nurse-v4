@@ -12,17 +12,29 @@ window.RedesignModule = function() {
   const CODE_NAME = {DC:'Day Charge', D:'Day', D1:'상근·교육', EC:'Evening Charge', E:'Evening', '중':'중간번', NC:'Night Charge', N:'Night',
     OF:'오프', '주':'주휴', P1:'임부휴무', V:'연차', '생':'생리휴가', '특':'특별휴가', '공':'공적업무', '법':'법정공휴일', '병':'병가',
     '경가':'경사휴가', '조가':'조사휴가', '산전':'산전검진',
-    'D/E':'낮·저녁', 'E/N':'저녁·야간', 'D/N':'낮·야간', 'N제외':'야간만 빼고'};
+    'D/E':'낮·저녁', 'E/N':'저녁·야간', 'D/N':'낮·야간', 'D제외':'낮만 빼고', 'E제외':'저녁만 빼고', 'N제외':'야간만 빼고',
+    'D/E/N':'쉬지만 않으면', 'D/OF':'낮 아니면 휴무', 'E/OF':'저녁 아니면 휴무', 'N/OF':'야간 아니면 휴무'};
+  // 세부 원티드 — 그날 가능한 것(D 낮 · E 저녁 · N 야간 · R 휴무)을 켠 묶음이 곧 칸 코드다. 넷 다 켜면 빈칸(제한 없음), 하나만 켜면 기본 코드.
+  // 묶음 코드의 뜻은 엔진 _FLEX_ONE_OF·_FLEX_NOT 과 같다
+  const FINE = {DENR:'__CLEAR__', DEN:'D/E/N', DER:'N제외', DNR:'E제외', ENR:'D제외', DE:'D/E', EN:'E/N', DN:'D/N', DR:'D/OF', ER:'E/OF', NR:'N/OF', D:'D', E:'E', N:'N', R:'OF'};
   const WORK_ORDER = ['D','DC','D1','E','EC','중','N','NC'];
   const REST_ORDER = ['주','OF','V','생','특','공','법','병','경가','조가','P1','산전'];
   const PERIOD_KO = {D:'낮', E:'저녁', N:'야간'};
+  // HiGHS 기록의 Src 글자 — 그 해를 어떻게 찾았는가 (기록 머리줄의 범례 그대로)
+  const SRC = {B:'Branching', C:'Central rounding', F:'Feasibility pump', H:'Heuristic', L:'Sub-MIP', P:'Empty MIP', R:'Randomized rounding', S:'Solve LP', T:'Evaluate node', U:'Unbounded',
+    z:'Trivial zero', l:'Trivial lower', u:'Trivial upper', p:'Trivial point'};
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const fmtMD = dk => `${+dk.slice(5,7)}/${+dk.slice(8,10)}`;
   const fmtKo = dk => { const d = new Date(dk + 'T00:00:00'); return `${d.getMonth()+1}월 ${d.getDate()}일(${WD[d.getDay()]})`; };
   return {
     // ── 상태 ──
+    drawerBig: false,            // 서랍을 화면 가운데 큰 창으로 (크게 보기)
     reportTab: 'summary',        // 서랍 탭: summary·relaxed·v·teukgeun·warn·wish·log
-    showLiveLog: true,           // 만드는 중 상태 줄 아래 계산 기록 펼침 (기본 펼침 — 그 자리는 비어 있다)
+    showLiveLog: false,          // 만드는 중 원본 계산 기록 — 기본은 접고 해석한 계산 현황(rdSolveCards·solveStats.events)을 보인다
+    solveStats: null,            // 솔버 기록에서 읽은 것 {phases:[{n,rows0,cols0,rows,cols,restarts,status,row}], events:[…]} (_solveFeed)
+    story: {open:false, step:0}, // 결과 요약 — 생성이 끝나면 단계별로 넘겨 보는 창 (rdStorySteps)
+    storyHint: false,            // 요약을 중간에 닫은 직후 — 상태 줄 '결과 요약 다시 보기'를 잠깐 강조
+    rdWhy: false,                // 원티드 미반영 탭에서 칸마다 그날 사정을 펼쳐 보인다 ('칸별 이유가 궁금하다면?')
     rdToast: null,               // {msg, undo}
     _rdToastTimer: null,
     showPrintPreview: false,
@@ -81,6 +93,10 @@ window.RedesignModule = function() {
       const days=(this.scheduleDays||[]).filter(d=>!this.isOverflow(d));
       return (this.nurses||[]).reduce((a,n)=>a+(n.is_trainee?days.filter(d=>!this.isTraineeInTraining(n,d)).length:days.length), 0);
     },
+    // 원티드 칸 수 — 표에서 분홍으로 칠하는 칸(isWanted)과 같다: 주휴·달 밖 날짜·지난달 표에서 이어온 첫 주기는 정해져 있는 칸이라 세지 않는다.
+    // '몇 칸을 지켰다'는 말은 이 수로 한다 (단계 바의 'n칸 입력됨'은 넣은 칸 전부 — countPrevEntries)
+    get rdWantedCount(){ let n=0; for(const nu of (this.nurses||[])) for(const d of (this.scheduleDays||[])) if(this.isWanted(nu.id,d)) n++; return n; },
+    get rdWantedRelaxed(){ return (this.rdRelaxedList||[]).filter(x=>this.isWanted(x.nid, new Date(x.dk+'T00:00:00'))).length; },
     // 지키지 못한 신규의 트레이닝 날 사전입력 — 엔진은 넣은 '/' 휴무를 그대로, '/' 근무는 프리셉터를 그 근무로 끌고
     // 끝내 다르면 넣은 그대로 낸다(2026-10-19). 그래도 결과가 넣은 칸과 다르면 센다 (상태 줄이 '모두 지켰어요'라 하지 않게)
     get rdTraineeChanged(){
@@ -118,6 +134,7 @@ window.RedesignModule = function() {
       const sched=this.rdSched;
       let s3='만들고 인쇄';
       if(this.generating) s3='만드는 중…';
+      else if(this.rdPreChanged) s3='사전입력 바뀜 · 다시 만들어야 반영';
       else if(sched) s3=(this.rdRelaxedCount ? '완화로 생성' : '생성 완료')+(this.rdSaved ? ' · 저장됨' : '');   // 저장됨은 실제로 저장됐을 때만
       else if(!this.statusOk && this.statusMessage) s3='만들 수 없음';
       let s2='부족한 날 확인';
@@ -174,8 +191,9 @@ window.RedesignModule = function() {
         return {kind:'warn', running:true, text:`근무표를 만드는 중… ${t}`};
       }
       if(!this.rdSched) return null;
+      if(this.rdPreChanged) return {kind:'warn', changed:true, text:'사전입력을 고친 뒤 아직 다시 만들지 않았어요 — 지금 표는 고치기 전 사전입력으로 만든 것입니다'};
       const rx=this.rdRelaxedCount;
-      const pre=this.countPrevEntries();
+      const pre=this.rdWantedCount;
       // gap(최적해와의 거리) 문장 — CP-SAT 가능해는 gap 이 수천 % 도 나오므로 숫자는 10% 안쪽일 때만 보여 준다
       const g=this.mipGapPercent;
       const q = this.scheduleStopped ? ' · 중간에 멈춰 지금까지 찾은 답' : (g==null ? '' : (g<=0.1 ? ' · 가장 좋은 답' : (g<=10 ? ` · 가장 좋은 답과 ${Math.round(g*10)/10}% 안쪽 차이` : ' · 시간 안에 찾은 답 (더 좋은 표가 있을 수 있어요)')));
@@ -186,8 +204,8 @@ window.RedesignModule = function() {
       const tcNote=tc ? ` · 신규 트레이닝 날 ${tc}칸은 프리셉터 근무를 따랐어요` : '';
       if(rx) return {kind:'ok', relaxed:true, text:`근무표가 ${saved}${at} · 사전입력 ${rx}칸을 바꿔서 만들었어요${tcNote}${q}`};
       if(!this.statusOk && this.statusMessage) return {kind:'warn', text:`근무표는 있지만 확인이 필요해요 — 아래 요약·리포트의 생성 기록을 보세요`};
-      if(tc) return {kind:'ok', text:`근무표가 ${saved}${at} · 사전입력 ${Math.max(pre-tc,0)}칸 지켰어요${tcNote}${q}`};
-      return {kind:'ok', text:`근무표가 ${saved}${at} · 사전입력 ${pre}칸 모두 지켰어요${q}`};
+      if(tc) return {kind:'ok', text:`근무표가 ${saved}${at} · 원티드 ${Math.max(pre-tc,0)}칸 지켰어요${tcNote}${q}`};
+      return {kind:'ok', text:`근무표가 ${saved}${at} · 원티드 ${pre}칸 모두 지켰어요${q}`};
     },
     // 만드는 중 진행 한 줄 — solveProgress(SSE progress, 1초마다). 차이 숫자는 상태 줄과 같은 규칙(10% 안쪽만),
     // 3분 넘게 나아지지 않으면 멈춰도 된다고 알린다 (v4.12 '생성 중' 카드의 'n분째 개선 없음')
@@ -203,6 +221,135 @@ window.RedesignModule = function() {
       return '조건을 정리하는 중';
     },
     get rdEdited(){ return this._originalSchedule ? this.getManualEditCount() : 0; },
+
+    // ── 계산 현황 — 솔버(HiGHS) 기록을 줄 단위로 읽어 숫자와 사건으로 (결정 1-64) ──
+    // 화면에 남기는 기록(solverLogs)은 최근 200줄로 잘리므로, 줄이 들어올 때마다 여기에 쌓는다. 한 번의 생성에 풀이(Presolving model)가
+    // 여러 번 올 수 있다(완화 단계). CP-SAT 기록은 형식이 달라 읽지 않는다 — 카드는 진행 정보(solveProgress)의 노드·Gap 만 보인다.
+    _solveReset(){ this.solveStats={phases:[], events:[], seq:0}; },
+    _pushLog(msg, hint){
+      this.solverLogs.push(hint ? {id:++this._logSeq, msg, hint:true} : {id:++this._logSeq, msg});
+      if(!hint){ if(this.solverLogs.length>300) this.solverLogs=this.solverLogs.slice(-200); for(const l of String(msg).split('\n')) this._solveFeed(l); }   // 한 메시지에 여러 줄이 온다
+      this._scrollLogs();
+    },
+    _solveFeed(line){
+      if(!this.solveStats) this._solveReset();
+      const S=this.solveStats, n=x=>Number(x).toLocaleString('ko-KR'); let P=S.phases[S.phases.length-1], m;
+      const ev=text=>{ const r=(P&&P.row)||{}; S.events.push({id:++S.seq, solve:S.phases.length, time:r.time??0, text, nodes:r.proc??0, sol:r.sol??'', gap:r.gap??''}); if(S.events.length>200) S.events.splice(0, S.events.length-200); };
+      line=String(line??'');
+      if(/^Presolving model/.test(line)){ S.phases.push({n:S.phases.length+1, rows0:null, cols0:null, rows:null, cols:null, restarts:0, status:'', row:null, start:null, had:false}); return; }
+      if(!P) return;
+      if((m=line.match(/^(\d+) rows, (\d+) cols, \d+ nonzeros/))){ if(P.rows0==null){ P.rows0=+m[1]; P.cols0=+m[2]; } P.rows=+m[1]; P.cols=+m[2]; return; }
+      if((m=line.match(/^MIP start solution is feasible, objective value is (\S+)/))){ P.start=m[1]; P.had=true; ev(`MIP start — 앞에서 찾은 해로 시작 (objective ${m[1]})`); return; }
+      if(/^Solving MIP model with/.test(line)){ if(P.rows0!=null) ev(`Presolve — ${n(P.rows0)} → ${n(P.rows)} rows · ${n(P.cols0)} → ${n(P.cols)} cols`); return; }
+      if((m=line.match(/^([\d.]+)% inactive integer columns, restarting/))){ P.restarts++; P.inactive=m[1]; return; }
+      if((m=line.match(/^Model after restart has (\d+) rows, (\d+) cols/))){ ev(`Restart — inactive integer columns ${P.inactive}% → ${n(m[1])} rows · ${n(m[2])} cols`); return; }
+      if((m=line.match(/^\s*([A-Za-z])?\s+(\d+)\s+(\d+)\s+(\d+)\s+([\d.]+)%\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([\d.]+)s\s*$/))){
+        const row={src:m[1]||(P.row&&P.row.src)||'', proc:+m[2], queue:+m[3], leaves:+m[4], expl:+m[5], bound:m[6], sol:m[7], gap:m[8], cuts:+m[9], inlp:+m[10], confl:+m[11], lpit:+m[12], time:+m[13]};
+        const better=row.sol!=='inf' && row.sol!==(P.row ? P.row.sol : P.start);
+        P.row=row;
+        if(better){ ev(`${P.had?'더 좋은 해':'첫 해'} 발견${m[1]?` — Src ${m[1]} (${SRC[m[1]]||m[1]})`:''}`); P.had=true; }
+        return;
+      }
+      if((m=line.match(/^\s+Status\s+(.+)$/))){ P.status=m[1].trim(); ev(`Solving report — ${P.status}`); }
+    },
+    // 숫자 카드 — 지금 풀이의 마지막 줄. 용어는 솔버 기록 그대로, 뜻은 툴팁
+    get rdSolveCards(){
+      const S=this.solveStats, P=S&&[...S.phases].reverse().find(p=>p.row), n=x=>Number(x).toLocaleString('ko-KR');
+      if(!P){
+        const p=this.solveProgress||{}; if(!(p.nodes>0) && p.gap_percent==null) return [];
+        return [{k:'노드', v:n(p.nodes||0), tip:'지금까지 처리한 탐색 노드 수'}, {k:'Gap', v:p.gap_percent==null?'—':(Math.round(p.gap_percent*100)/100)+'%', tip:'가장 좋은 해와 이론상 한계의 차이'}];
+      }
+      const r=P.row;
+      return [
+        {k:'노드 (Proc.)', v:n(r.proc), tip:'분기 한정(B&B)에서 처리를 끝낸 노드 수 — 지금까지 따져 본 경우'},
+        {k:'대기 (InQueue)', v:n(r.queue), tip:'아직 열려 있어 더 따져 봐야 하는 노드 수'},
+        {k:'리프 (Leaves)', v:n(r.leaves), tip:'가지치기·불가능·해 발견으로 닫힌 끝 노드 수 — 더 볼 필요가 없어 쳐낸 경우'},
+        {k:'탐색 (Expl.)', v:r.expl+'%', tip:'탐색 트리에서 살펴본 비율'},
+        {k:'BestSol', v:r.sol==='inf'?'—':r.sol, tip:'지금까지 찾은 가장 좋은 해의 목적함수 값 (낮을수록 좋다)'},
+        {k:'BestBound', v:r.bound, tip:'이론상 이보다 좋을 수 없는 한계 값'},
+        {k:'Gap', v:r.gap==='inf'?'—':r.gap, tip:'BestSol 과 BestBound 의 차이 — 0% 면 가장 좋은 해'},
+        {k:'Cuts', v:n(r.cuts), tip:'탐색 범위를 좁히려고 더한 절단 제약 수'},
+        {k:'Confl.', v:n(r.confl), tip:'충돌 분석으로 알아낸 제약 수'},
+        {k:'LP iters', v:n(r.lpit), tip:'LP 완화를 푼 단체법 반복 수'},
+        {k:'방법 (Src)', v:r.src ? `${r.src} · ${SRC[r.src]||''}` : '—', tip:'가장 최근 해를 찾은 방법 — B 분기 · H 휴리스틱 · L Sub-MIP · F Feasibility pump · T 노드 평가 등'},
+      ];
+    },
+    get rdSolveSub(){
+      const S=this.solveStats, P=S&&S.phases[S.phases.length-1], n=x=>Number(x).toLocaleString('ko-KR'); if(!P) return '';
+      return `Solve #${P.n}` + (P.rows0!=null ? ` · Presolve ${n(P.rows0)} → ${n(P.rows)} rows · ${n(P.cols0)} → ${n(P.cols)} cols` : '') + (P.restarts ? ` · Restart ${P.restarts}회` : '') + (P.status ? ` · ${P.status}` : '');
+    },
+    get rdSolveEvents(){ return [...((this.solveStats&&this.solveStats.events)||[])].reverse(); },   // 새 것이 위
+
+    // ── 결과 요약 — 생성이 끝나면 한 장씩 넘겨 본다: 계산 → 지킨 것 → 바꾼 것 → 확인할 것 → 결과 (결정 1-64) ──
+    rdStoryOpen(){ this.story={open:true, step:0}; this.storyHint=false; },
+    rdStoryGo(d){ const last=this.rdStorySteps.length-1, s=this.story.step+d; if(s>last){ this.story.open=false; return; } this.story.step=Math.max(0, s); },
+    // 끝까지 보기 전에 닫으면 다시 여는 자리를 알린다 — 창 밖을 눌러서는 닫히지 않는다 (같은 자리의 '다음'을 연달아 누르다 닫히는 일이 없게)
+    rdStoryClose(){
+      const early=this.story.step<this.rdStorySteps.length-1; this.story.open=false; if(!early) return;
+      this.storyHint=true; setTimeout(()=>{ this.storyHint=false; }, 6000);
+      this.toast('결과 요약은 표 위 상태 줄의 ‘결과 요약 다시 보기’에서 다시 볼 수 있어요','info',6000);
+    },
+    rdStoryKey(e){ if(!this.story.open) return; if(e.key==='Escape') this.rdStoryClose(); else if(e.key==='ArrowRight'||e.key==='Enter'){ e.preventDefault(); this.rdStoryGo(1); } else if(e.key==='ArrowLeft') this.rdStoryGo(-1); },
+    get rdStoryStep(){ const s=this.rdStorySteps; return s[Math.min(this.story.step, s.length-1)]||null; },
+    get rdStorySteps(){
+      if(!this.rdSched) return [];
+      const n=x=>Number(x).toLocaleString('ko-KR'), steps=[];
+      const ph=((this.solveStats&&this.solveStats.phases)||[]).filter(p=>p.row), sum=k=>ph.reduce((a,p)=>a+(p.row[k]||0), 0), lastP=ph[ph.length-1];
+      const sec=Math.round((this.generationReport&&this.generationReport.duration_seconds) || sum('time') || 0);
+      const dur=sec>=60 ? `${Math.floor(sec/60)}분 ${sec%60}초` : `${sec}초`;
+      const g=this.mipGapPercent;
+      const calc=[];
+      if(sec) calc.push(['걸린 시간', dur]);
+      if(ph.length){
+        calc.push(['풀이 횟수 (Solve)', `${ph.length}회`], ['처리한 노드 (Proc.)', n(sum('proc'))], ['닫힌 리프 (Leaves)', n(sum('leaves'))], ['LP iterations', n(sum('lpit'))]);
+        if(ph[0].rows0!=null) calc.push(['Presolve', `${n(ph[0].rows0)} → ${n(ph[0].rows)} rows`]);
+        if(lastP.row.src) calc.push(['해를 찾은 방법 (Src)', `${lastP.row.src} · ${SRC[lastP.row.src]||''}`]);
+        if(lastP.status) calc.push(['Status', lastP.status]);
+      }
+      if(g!=null) calc.push(['Gap', (Math.round(g*100)/100)+'%']);
+      else if(lastP && lastP.row.gap!=='inf') calc.push(['Gap', lastP.row.gap]);
+      steps.push({id:'calc', eyebrow:'계산', title: ph.length ? `노드 ${n(sum('proc'))}개를 따져 봤어요` : '근무표를 계산했어요',
+        sub: this.scheduleStopped ? '중간에 멈춰 그때까지 찾은 해입니다.' : (g==null ? '' : (g<=0.1 ? 'Gap 0% — 이 조건에서 가장 좋은 해입니다.' : `가장 좋은 해와 ${Math.round(g*10)/10}% 안쪽 차이에서 멈췄습니다.`)), facts:calc});
+      const pre=this.rdWantedCount, rx=this.rdRelaxedCount, tc=this.rdTraineeChanged, keptN=Math.max(pre-this.rdWantedRelaxed-tc, 0);
+      // 표 아래 '배정 / 필요' 줄과 같은 셈 — 날짜별로 고친 필요 인원(rdFootNeed)과 견준다
+      const rowsDEN=(this.footerRows||[]).filter(r=>['D','E','N'].includes(r.label));
+      const short=this.scheduleDays.filter(d=>!this.isOverflow(d)).reduce((a,d)=>a+rowsDEN.filter(r=>this.getDayDutyCount(d,r.shifts)<(+this.rdFootNeed(d,r.label)||0)).length, 0);
+      const kept=[['원티드 (주휴·지난달 표에서 이어온 칸은 빼고)', `${n(pre)}칸`], ['그대로 지킨 칸', `${n(keptN)}칸`]];
+      if(tc) kept.push(['신규 트레이닝 날 (프리셉터 근무를 따름)', `${tc}칸`]);
+      kept.push(['날마다 필요 인원 (D·E·N)', short ? `${short}곳 모자람` : '모두 채움']);
+      steps.push({id:'kept', eyebrow:'지킨 것', title: keptN<pre ? `원티드 ${n(pre)}칸 중 ${n(keptN)}칸을 지켰어요` : `원티드 ${n(pre)}칸을 모두 지켰어요`, sub:'', facts:kept});
+      if(rx) steps.push({id:'changed', eyebrow:'바꾼 것', title:`${rx}칸은 바꿀 수밖에 없었어요`, sub:'바꾸면 안 되는 칸은 되돌려서 잠금을 누른 뒤 다시 만들어 보세요.', facts:[]});
+      const chk=(this.scheduleWarnings||[]).filter(w=>w.type==='check').length, ot=(this.offTeukgeun||[]).length, v=(this.vReport&&this.vReport.total)||0;
+      const wr=this.wishReport, unmet=wr ? Math.max(0,(wr.total_requested||0)-(wr.total_granted||0)) : 0;
+      const check=[];
+      if(chk) check.push(['파트장 확인 필요 (연속 근무 한도+1 · E→D1 · 중→D)', `${chk}건`, 'warn']);
+      if(ot) check.push(['오프특근 (주 1회 OFF 반납)', `${ot}건`, 'teukgeun']);
+      if(v) check.push(['자동으로 넣은 연차 (V)', `${v}건`, 'v']);
+      if(unmet) check.push(['못 들어간 희망 근무', `${unmet}건`, 'wish']);
+      if(check.length) steps.push({id:'check', eyebrow:'확인할 것', title:`확인할 것이 ${check.length}가지 있어요`, sub:'줄을 누르면 근무표 아래 리포트의 그 탭이 열립니다.', facts:check});
+      steps.push({id:'done', eyebrow:'결과', title:'근무표가 준비됐어요', sub: this.rdSaved ? '자동으로 저장했습니다.' : '', facts:[]});
+      return steps;
+    },
+    // 칸별 이유가 궁금하다면? — 원티드 미반영 목록을 큰 창으로 열고 칸마다 그날 사정을 펼친다
+    rdOpenWhy(){ this.story.open=false; this.rdWhy=true; this.rdOpenDrawer('relaxed'); this.drawerBig=true; },
+    // 그날 사정 — 그날 근무할 수 있는 사람이 필요 인원보다 모자랐는가 (사전입력 기준 산술, 인원 여유 검사 _checkStaffing 과 같은 셈).
+    // 어느 규칙과 부딪혔는지(칸별 이유)는 엔진이 아직 주지 않는다 — 인원이 모자란 날만 '풀 수밖에 없는 날'이라고 말한다
+    rdDayFacts(dk){
+      const day=new Date(dk+'T00:00:00'), need=['D','E','N'].reduce((a,c)=>a+(+this.rdFootNeed(day,c)||0), 0);
+      let on=0, rest=0;
+      for(const nu of this.nurses){
+        if(this.isNurseInactive(nu,day) || (nu.is_trainee&&this.isTraineeInTraining(nu,day))) continue;
+        on++;
+        const p=(this.shiftMap.get((this.relaxedCells?.[nu.id]?.[dk]?.original)||this.prevSchedule[nu.id]?.[dk]||'')||{}).period;
+        if(p==='rest'||p==='leave') rest++;
+      }
+      const can=on-rest, short=Math.max(0, need-can);
+      return {need, on, rest, can, short, text: short
+        ? `그날 사정 — 재적 ${on}명 중 ${rest}명이 쉬는 날로 들어 있어 근무할 수 있는 사람이 ${can}명, 필요 인원은 ${need}명입니다. ${short}명이 모자라 쉬는 날 원티드 ${short}칸은 풀 수밖에 없는 날이었습니다.`
+        : can===need
+        ? `그날 사정 — 근무할 수 있는 사람(${can}명)이 필요 인원(${need}명)과 딱 맞아 여유가 없는 날이었습니다. 야간전담·임산부처럼 그날 설 수 있는 근무가 정해진 사람이 있으면 쉬는 날 원티드를 풀어야 할 수 있습니다. 어느 규칙과 부딪혔는지는 아직 보여 드리지 못합니다.`
+        : `그날 사정 — 사람 수만 보면 ${can-need}명 여유가 있었습니다 (필요 ${need}명 · 근무할 수 있는 사람 ${can}명). 연속 근무·야간 뒤 휴무·주 1회 OF 같은 다른 규칙과 부딪혔을 수 있는데, 어느 규칙인지는 아직 보여 드리지 못합니다.`};
+    },
 
     // ── 실패 배너 ──
     // 보고 있는 달의 저장본 중 가장 새것 (목록은 새것부터) — 앱을 다시 열면 표는 비어 있고 저장본만 남는다
@@ -253,6 +400,10 @@ window.RedesignModule = function() {
       }
     },
     rdRelaxAndRemake(){ this.allowPreRelax=true; this.generate(); },
+    // 근무표를 만든(연) 뒤 사전입력 칸이 바뀌었는가 — 표는 고치기 전 사전입력으로 만든 것이라 다시 만들어야 반영된다.
+    // 기준(_preAtMake)은 새 표가 설 때의 사전입력(trackEdits), 저장본을 열면 저장할 때의 사전입력. 기준을 모르면 알리지 않는다
+    get rdPreChanged(){ return !this.generating && this._preAtMake!=null && this.rdSched && this._preAtMake!==this._preKey(); },
+    rdRemake(){ this.activeTab='schedule'; if(!this.generating) this.generate(); },
 
     // ── 서랍 (요약·리포트) ──
     get rdDrawerTabs(){
@@ -304,7 +455,7 @@ window.RedesignModule = function() {
     get rdSaveLabel(){ return this.rdSched && this.rdSaved ? '저장됨' : '저장'; },
     get rdSaveTip(){ return this.rdSched ? (this.rdSaved ? '자동으로 저장됐습니다. 이름을 바꿔 따로 저장하려면 누르세요.' : '이 근무표를 이름 붙여 저장합니다.') : '만든 뒤에 저장할 수 있어요.'; },
     get rdMakeLabel(){ return this.generating ? '만드는 중…' : (this.rdSched ? '다시 만들기' : '근무표 만들기'); },
-    get rdMakeTip(){ return this.rdSched ? '지금 표를 버리고 새로 만듭니다. 저장한 표는 불러오기에 남아 있어요.' : `사전입력을 지키면서 자동으로 채웁니다. ${this.feas&&this.feas.estimated_seconds ? this.rdEta(this.feas.estimated_seconds)+' 걸리고' : '몇 분 걸리고'} 중간에 멈출 수 있어요.`; },
+    get rdMakeTip(){ return this.rdSched ? (this.rdPreChanged?'고친 사전입력으로 새로 만듭니다. ':'')+'지금 표를 버리고 새로 만듭니다. 저장한 표는 불러오기에 남아 있어요.' : `사전입력을 지키면서 자동으로 채웁니다. ${this.feas&&this.feas.estimated_seconds ? this.rdEta(this.feas.estimated_seconds)+' 걸리고' : '몇 분 걸리고'} 중간에 멈출 수 있어요.`; },
 
     // ── 되돌리기 토스트 ──
     rdUndoToast(msg, undo=true){
@@ -345,7 +496,7 @@ window.RedesignModule = function() {
     get rdPopCodes(){
       const mode=this.shiftEdit.mode;
       let codes=this.getEditShifts();
-      if(mode==='prev') codes=this.allShifts.filter(c=>!c.startsWith('/'));
+      if(mode==='prev') codes=this.prevShifts;   // 차지(DC·EC·NC)는 뺀다 — D·E·N 을 넣으면 그날 차지는 엔진이 자격·시니어리티로 정한다
       const trainee=this.shiftEdit.mode==='prev' && this.shiftEdit.nurse && this.isTraineeInTraining(this.shiftEdit.nurse, this.shiftEdit.day);
       if(trainee) codes=this.traineeShifts;
       const bare=c=>c.replace(/^\//,'');
@@ -353,8 +504,46 @@ window.RedesignModule = function() {
       for(const c of codes){ const s=this.shiftMap.get(bare(c)); const p=s?s.period:''; (['day','day1','evening','middle','night'].includes(p)?work:rest).push(c); }
       const ord=(arr,order)=>arr.sort((a,b)=>{ const ia=order.indexOf(bare(a)), ib=order.indexOf(bare(b)); return (ia<0?99:ia)-(ib<0?99:ib); });
       // 원티드 '둘 중 하나'·'N 빼고'는 사전입력에만 (근무표 칸은 한 근무여야 한다 · 신규는 프리셉터를 따른다)
-      const flex=(mode==='prev'||mode==='prev_multi') && !trainee ? [...this.flexWishCodes] : [];
-      return {work:ord(work,WORK_ORDER), rest:ord(rest,REST_ORDER), flex};
+      const fine=(mode==='prev'||mode==='prev_multi') && !trainee;
+      return {work:ord(work,WORK_ORDER), rest:ord(rest,REST_ORDER), fine};
+    },
+    // 세부 원티드 — 지금 켜져 있는 것. 빈칸은 넷 다, 묶음 코드는 그 묶음, 그 밖의 코드는 그 시간대 하나.
+    // 여러 칸은 값이 모두 같을 때만 그 값으로 읽고, 섞였으면 빈칸처럼 넷 다 켠 데서 시작한다
+    get rdFineOn(){
+      const se=this.shiftEdit; if(!se.nurse||!se.day) return '';
+      const cells=se.mode==='prev_multi' ? this._dragCells : [{nid:se.nurse.id, dk:this.dayKey(se.day)}];
+      const codes=[...new Set(cells.map(c=>(this.prevSchedule[c.nid]?.[c.dk]||'').replace(/^법$/,'OF')))];   // 공휴일의 '휴무'는 법으로 적힌다 (_fineRest)
+      const code=codes.length===1 ? codes[0] : ''; if(!code) return 'DENR';
+      const key=Object.keys(FINE).find(k=>FINE[k]===code); if(key) return key;
+      const p=this.shiftMap.get(code.replace(/^\//,''))?.period;
+      return {day:'D', evening:'E', night:'N', rest:'R', leave:'R'}[p]||'';
+    },
+    rdFineToggle(k){
+      const on=this.rdFineOn, code=FINE[['D','E','N','R'].filter(x=>(x===k)!==on.includes(x)).join('')];
+      if(!code) return;   // 다 끄면 놓을 것이 없다 — 마지막 하나는 켜 둔다
+      const se=this.shiftEdit, cells=se.mode==='prev_multi' ? this._dragCells : [{nid:se.nurse.id, dk:this.dayKey(se.day)}];
+      this._gridWrite('preinput', cells.map(c=>({nid:c.nid, dk:c.dk, code:this._fineRest(c.nid,c.dk,code)})));   // 팝업은 그대로 — 이어서 더 켜고 끈다
+    },
+    // '휴무'만 켠 칸이 이번 달 법정공휴일이면 법 — 공휴일의 OF 는 엔진이 버려(_holiday_of_banned) 쉬는 날로 남지 않는다.
+    // 나이트킵은 법을 받지 못해 OF 그대로, 지난달 칸은 기록이라 그대로 (엔진과 같은 기준)
+    _fineRest(nid,dk,code){
+      if(code!=='OF'||!this.holidays.includes(dk)||dk<this.dayKey(new Date(this.year,this.month-1,1))) return code;
+      const n=this.nurses.find(x=>x.id===nid);
+      return n&&this.isKeeperDay(n,new Date(dk+'T00:00:00')) ? code : '법';
+    },
+    // 명부에서 그 시간대 근무를 하나도 못 하는 간호사면 그 단추는 꺼진 채 잠근다 (엔진도 배정하지 않는다)
+    rdFineCan(k){
+      const n=this.shiftEdit.nurse, p={D:'day', E:'evening', N:'night'}[k]; if(!p||!n?.capable_shifts) return true;
+      return n.capable_shifts.some(c=>this.shiftMap.get(c)?.period===p);
+    },
+    // 팝업에서 바로 적는 메모 — 글자마다 저장하고, 되돌리기는 한 번 들어와 적는 동안 한 번만 쌓는다
+    rdPopNote(text){
+      const se=this.shiftEdit; if(se.mode!=='prev'||!se.nurse||!se.day) return;
+      const nid=se.nurse.id, dk=this.dayKey(se.day);
+      if((this.cellNotes[nid]?.[dk]||'')===text) return;
+      if(!this._noteUndone){ this._pushUndo(); this._noteUndone=true; }
+      if(text.trim()) (this.cellNotes[nid]=this.cellNotes[nid]||{})[dk]=text;
+      else if(this.cellNotes[nid]){ delete this.cellNotes[nid][dk]; if(!Object.keys(this.cellNotes[nid]).length) delete this.cellNotes[nid]; }
     },
     get rdPopCurrent(){
       const n=this.shiftEdit.nurse, d=this.shiftEdit.day; if(!n||!d||this.shiftEdit.mode==='prev_multi'||this.shiftEdit.mode==='sched_multi') return '';
@@ -395,6 +584,24 @@ window.RedesignModule = function() {
     // ── 표 가독성 (2026-10-19) ──
     // 그룹(A·B·C)이 바뀌는 줄 — 굵은 가로선으로 묶음을 나눈다
     rdGroupStart(list, i){ return i>0 && (list[i-1]?.group||'')!==(list[i]?.group||''); },
+    // 팀 색 — 이름 칸 바탕(화면·엑셀). 고른 색은 rules.teamColors, 고르지 않은 팀은 명부에 처음 나오는 순서로 병동 번표 색을 돌려 쓴다
+    get teamColorMap(){
+      const pal=['#DDEBF7','#FFF2CC','#E2F0D9','#FCE4D6','#E4DFEC','#D9D9D9'], own=this.rules?.teamColors||{}, m={};
+      for(const n of this.nurses) if(n.group && !(n.group in m)) m[n.group]=own[n.group]||pal[Object.keys(m).length%pal.length];
+      return m;
+    },
+    // 이름 칸 :style — 어두운 색을 고르면 글씨를 희게 (서버 엑셀과 같은 산식)
+    rdTeamStyle(nurse){
+      const c=this.teamColorMap[nurse.group]; if(!c) return '';
+      const v=parseInt(c.slice(1),16), dark=(v>>16)*299+(v>>8&255)*587+(v&255)*114<140000;
+      return `--team-bg:${c};--team-fg:${dark?'#FFFFFF':'#1A1A1A'}`;
+    },
+    async setTeamColor(team, hex){
+      const prev=this.rules.teamColors||{};
+      this.rules.teamColors={...prev,[team]:hex};
+      try{ await this.api('POST','/api/rules',{teamColors:this.rules.teamColors}); }
+      catch(e){ this.rules.teamColors=prev; this.toast(e.message||'팀 색을 저장하지 못했습니다','error'); }
+    },
     // 마우스가 있는 칸의 날짜 머리를 표시 — 표가 넓어 위 날짜를 찾기 어려웠다. 움직일 때마다 표를 다시 그리지 않게 Alpine 상태 대신 DOM 클래스
     rdHoverCol(e, leave){
       const tbl=e?.currentTarget?.closest('table'); if(!tbl) return;
@@ -424,8 +631,8 @@ window.RedesignModule = function() {
       const code=this.getPrevShift(nurse.id, day); const m=day.getMonth()+1, d=day.getDate();
       let t=code ? `${nurse.name} · ${m}월 ${d}일 ${code}(${this.rdCodeName(code)}) — 클릭해 바꾸거나 잠금·메모` : `${nurse.name} · ${m}월 ${d}일 — 클릭해 근무 선택 · 빈칸은 자동 배정`;
       if(this.isLocked(nurse.id, day)) t+=' · 잠긴 칸';
-      const note=this.getNote(nurse.id, day); if(note) t+=' · 메모: '+note;
       if(!code && this.hasWish(nurse.id, day)) t+=' · 희망 '+this.getWish(nurse.id, day);
+      const note=this.getNote(nurse.id, day); if(note) t+='\n'+note;   // 줄바꿈 뒤는 메모 — 풍선말이 크게 따로 그린다
       return t;
     },
     rdCellTipSched(nurse, day){
@@ -435,7 +642,7 @@ window.RedesignModule = function() {
       if(this.isLocked(nurse.id, day)) t+=' · 잠긴 칸';
       if(this.rdIsPre(nurse.id, day)) t+=' · 사전입력에서 넣은 칸';
       if(this.isRelaxed(nurse.id, day)) t+=` · 사전입력 ${this.relaxedCells[nurse.id][this.dayKey(day)].original}에서 바뀜`;
-      const note=this.getNote(nurse.id, day); if(note) t+=' · 메모: '+note;
+      const note=this.getNote(nurse.id, day); if(note) t+='\n'+note;
       return t;
     },
 
@@ -451,6 +658,11 @@ window.RedesignModule = function() {
       this._checkViolations();
     },
     // 근무표 칸이 사전입력에서 온 그대로인가 — 완화로 바뀌었거나 손으로 고친 칸은 뺀다 (모서리 표시)
+    // 원티드 색을 칠할 칸 — 사전입력 값이 있는 칸. 주휴(주)·달 밖 날짜, 그리고 지난달과 겹친 첫 주기(지난달 근무표에서 이어온 칸)는 뺀다
+    isWanted(nid, day){
+      const c=this.getPrevShift(nid, day); if(!c || c==='주' || this.isOverflow(day)) return false;
+      const s=this.scheduleDays[0]; return !(this.isOverflow(s) && Math.round((day-s)/86400000)<7);
+    },
     rdIsPre(nid, day){ return !!this.getPrevShift(nid, day) && !this.isRelaxed(nid, day) && !this.isManuallyEdited(nid, day); },
     // 사전입력 툴바의 다음 단계 단추 — 근무표가 없으면 넘어가서 바로 만들고, 있으면 보여 주기만 한다 (만든 표를 말없이 버리지 않는다)
     rdGoMake(){ this.activeTab='schedule'; if(!this.rdSched && !this.generating) this.generate(); },
@@ -521,7 +733,8 @@ window.RedesignModule = function() {
       if(window._rdTipBound) return; window._rdTipBound=true;
       const tip=document.createElement('div'); tip.className='rtip'; tip.id='rd-tip'; tip.hidden=true; tip.setAttribute('role','tooltip'); document.body.appendChild(tip);
       let timer=null, cur=null;
-      const fmt=t=>{ const parts=String(t).trim().split(/(?<=[.。])\s+/).filter(Boolean); if(parts.length>=2){ const last=parts.pop(); return esc(parts.join(' '))+' <span class="note">'+esc(last)+'</span>'; } return esc(t); };
+      const fmt=t=>{ const nl=String(t).indexOf('\n'); if(nl>=0) return fmt(t.slice(0,nl))+'<span class="memo">'+esc(t.slice(nl+1))+'</span>';   // 칸 메모 — 줄바꿈 뒤
+        const parts=String(t).trim().split(/(?<=[.。])\s+/).filter(Boolean); if(parts.length>=2){ const last=parts.pop(); return esc(parts.join(' '))+' <span class="note">'+esc(last)+'</span>'; } return esc(t); };
       const place=el=>{ const r=el.getBoundingClientRect(); tip.style.left='0px'; tip.style.top='0px'; const tw=Math.min(380, tip.offsetWidth||380);
         let left=r.left+window.scrollX-24; if(left+tw>window.innerWidth-12) left=window.innerWidth-12-tw; if(left<8) left=8;
         let top=r.bottom+window.scrollY+8; if(top+tip.offsetHeight>window.innerHeight+window.scrollY-8) top=r.top+window.scrollY-tip.offsetHeight-8;

@@ -82,12 +82,27 @@ body.rd .rtable .rt-foot input:not(.is-default) { font-weight: var(--fw-strong);
 [data-shift="경가"] { background: var(--sh-특-bg) !important; color: var(--sh-특-fg) !important; }
 [data-shift="조가"] { background: var(--sh-주-bg) !important; color: var(--sh-주-fg) !important; }
 [data-shift="산전"] { background: var(--sh-P1-bg) !important; color: var(--sh-P1-fg) !important; }
-/* 원티드 '둘 중 하나'·'N 빼고' (제1원칙 14) — 두 근무 색을 반씩, N제외는 오프 바탕에 야간 글자색. 사전입력에만 나온다 */
+/* 원티드 '둘 중 하나'·'N 빼고' (제1원칙 14) — 두 근무 색을 반씩, N제외·D제외·E제외는 오프 바탕에 그 근무 글자색. 사전입력에만 나온다 */
 [data-shift="D/E"] { background: linear-gradient(135deg, var(--sh-D-bg) 50%, var(--sh-E-bg) 50%) !important; color: var(--ink) !important; }
 [data-shift="E/N"] { background: linear-gradient(135deg, var(--sh-E-bg) 50%, var(--sh-N-bg) 50%) !important; color: var(--ink) !important; }
 [data-shift="D/N"] { background: linear-gradient(135deg, var(--sh-D-bg) 50%, var(--sh-N-bg) 50%) !important; color: var(--ink) !important; }
 [data-shift="N제외"] { background: var(--sh-OF-bg) !important; color: var(--sh-N-fg) !important; letter-spacing: -0.04em; }
+[data-shift="D제외"] { background: var(--sh-OF-bg) !important; color: var(--sh-D-fg) !important; letter-spacing: -0.04em; }
+[data-shift="E제외"] { background: var(--sh-OF-bg) !important; color: var(--sh-E-fg) !important; letter-spacing: -0.04em; }
+/* 세부 원티드 묶음 — D/E/N 은 세 근무 색을 삼등분, D/OF·E/OF·N/OF 는 그 근무 색과 오프 바탕을 반씩 */
+[data-shift="D/E/N"] { background: linear-gradient(135deg, var(--sh-D-bg) 33.4%, var(--sh-E-bg) 33.4% 66.6%, var(--sh-N-bg) 66.6%) !important; color: var(--ink) !important; letter-spacing: -0.06em; }
+[data-shift="D/OF"] { background: linear-gradient(135deg, var(--sh-D-bg) 50%, var(--sh-OF-bg) 50%) !important; color: var(--ink) !important; letter-spacing: -0.04em; }
+[data-shift="E/OF"] { background: linear-gradient(135deg, var(--sh-E-bg) 50%, var(--sh-OF-bg) 50%) !important; color: var(--ink) !important; letter-spacing: -0.04em; }
+[data-shift="N/OF"] { background: linear-gradient(135deg, var(--sh-N-bg) 50%, var(--sh-OF-bg) 50%) !important; color: var(--ink) !important; letter-spacing: -0.04em; }
 
+/* 셀 팝업 — 세 칸(메모 · 기본 원티드 · 세부 원티드). 칸마다 굵은 제목과 위 구분선 */
+.rpop-sec { border-top: 1px solid var(--rule); padding-top: 8px; }
+.rpop-title { font-size: var(--fs-sub); font-weight: var(--fw-strong); color: var(--ink); margin-bottom: 6px; }
+.rpop-title span { font-size: var(--fs-min); font-weight: var(--fw-body); color: var(--ink-2); margin-left: 8px; }
+.rpop-note { display: block; width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 6px 8px; border: 1px solid var(--rule-strong); border-radius: 7px; background: var(--card); color: var(--ink); font: inherit; font-size: var(--fs-sub); line-height: 1.35; resize: vertical; }
+/* 세부 원티드 단추 — 켜면 그 근무 색, 끄면 흰 바탕에 줄 그은 글자 */
+.rpop-tog:not([data-shift]) { background: var(--card); color: var(--ink-2); }
+.rpop-tog:disabled { opacity: 0.5; cursor: default; }
 /* 셀 팝업 — 희망(★) 줄 */
 .rpop-wish { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--rule); }
 .rpop-wish .lbl { font-size: var(--fs-min); color: var(--ink-2); margin-right: 4px; white-space: nowrap; }
@@ -127,6 +142,52 @@ body.rd .rtable .rt-foot input:not(.is-default) { font-weight: var(--fw-strong);
 .rlive-head { display: flex; align-items: center; gap: 12px; min-height: 30px; padding: 0 4px 0 16px; font-size: var(--fs-sub); color: var(--ink-2); }
 .rlive-head .rbtn-sm { margin-left: auto; flex: none; }
 .rlive .rlog { max-height: 220px; }
+/* 계산 현황 — 솔버 기록에서 읽은 숫자 카드 + 시간순 사건 표. 원본 기록(.rlog)은 접어 둔다 (결정 1-64) */
+.rsolve { display: flex; flex-wrap: wrap; gap: 6px; }
+.rsolve .tile { min-width: 96px; padding: 6px 12px; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1px var(--rule); }
+.rsolve .tile small { display: block; font-size: var(--fs-min); color: var(--ink-2); white-space: nowrap; }
+.rsolve .tile b { display: block; font-size: var(--fs-h2); font-weight: var(--fw-strong); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rsolve-sub { font-size: var(--fs-min); color: var(--ink-2); padding: 0 4px; }
+.rsolve-ev { max-height: 168px; overflow: auto; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--rule); background: var(--card); }
+.rsolve-ev table { width: 100%; border-collapse: collapse; font-size: var(--fs-sub); font-variant-numeric: tabular-nums; }
+.rsolve-ev th { position: sticky; top: 0; background: var(--card); text-align: left; height: 26px; padding: 0 12px; font-weight: var(--fw-label); color: var(--ink-2); box-shadow: inset 0 -1px 0 var(--rule); white-space: nowrap; }
+.rsolve-ev td { height: 26px; padding: 0 12px; border-bottom: 1px solid var(--rule-soft); white-space: nowrap; }
+.rsolve-ev .num { text-align: right; }
+.rsolve-ev td:nth-child(3) { width: 100%; }
+.rdrawer.is-big .rsolve-ev { max-height: 46vh; }
+/* 원티드 미반영 — 칸마다 그날 사정 한 줄 */
+.rdrawer-body .rwhy { margin: 0 0 8px 132px; padding: 6px 10px; border-radius: 8px; background: var(--paper); color: var(--ink-2); font-size: var(--fs-sub); line-height: 1.5; }
+.rdrawer-body .rwhy.is-short { background: var(--warn-bg); color: var(--ink); }
+/* 결과 요약 — 한 장에 한 가지, 큰 제목과 숫자 줄 */
+/* 창 크기는 장마다 같다 — 넘길 때 '다음' 단추가 제자리에 있어야 한다. 긴 목록은 안에서 스크롤 */
+.rstory { width: 620px; max-width: calc(100vw - 48px); height: min(640px, 86vh); padding: 20px 28px 20px; gap: 10px; }
+.rstatus .rbtn.is-hint { box-shadow: 0 0 0 3px var(--warn); }
+.rstory-top { display: flex; align-items: center; min-height: 30px; }
+.rstory-dots { display: flex; gap: 4px; } .rstory-dots i { width: 26px; height: 4px; border-radius: 2px; background: var(--rule); } .rstory-dots i.on { background: var(--ink); }
+.rstory-eyebrow { margin-top: 6px; font-size: var(--fs-sub); font-weight: var(--fw-label); color: var(--ink-2); }
+.rstory-title { font-size: 24px; line-height: 1.35; font-weight: var(--fw-strong); letter-spacing: -0.01em; }
+.rstory-sub { font-size: var(--fs-body); color: var(--ink-2); line-height: 1.5; }
+.rstory-body { flex: 1; min-height: 0; overflow: auto; margin-top: 6px; display: flex; flex-direction: column; }
+.rstory-fact { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 42px; border-bottom: 1px solid var(--rule-soft); font-size: var(--fs-body); color: var(--ink-2); }
+.rstory-fact b { color: var(--ink); font-size: var(--fs-h2); font-weight: var(--fw-label); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.rstory-fact.is-link { cursor: pointer; } .rstory-fact.is-link:hover { background: var(--paper); }
+.rstory-cell { display: grid; grid-template-columns: 150px 1fr auto; align-items: center; gap: 12px; min-height: 50px; border-bottom: 1px solid var(--rule-soft); font-size: var(--fs-body); }
+.rstory-cell > div:first-child { display: flex; flex-direction: column; } .rstory-cell > div:first-child b { font-weight: var(--fw-label); } .rstory-cell > div:first-child span { font-size: var(--fs-sub); color: var(--ink-2); }
+.rstory-cell .chg { display: flex; align-items: center; gap: 8px; min-width: 0; } .rstory-cell .chip { padding: 2px 8px; border-radius: 6px; font-weight: var(--fw-label); }
+.rstory-cell .memo { color: var(--ink-2); font-size: var(--fs-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rstory-done { font-size: var(--fs-body); line-height: 1.6; color: var(--ink-2); display: flex; flex-direction: column; gap: 8px; } .rstory-done b { color: var(--ink); font-weight: var(--fw-label); }
+.rstory-foot { display: flex; align-items: center; gap: 10px; padding-top: 6px; }
+.rstory-count { font-size: var(--fs-sub); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+/* 왜 안 되는지 창 — 이유를 읽는 곳이라 본문보다 큰 글씨(--fs-h2), 막힌 곳마다 한 카드 */
+.rdiag .rmodal-head { padding-bottom: 14px; border-bottom: 1px solid var(--rule); }   /* 긴 목록이 설명 줄 바로 밑으로 말려 들어가 붙어 보였다 */
+.rdiag .rmodal-body { gap: 12px; }
+.rdiag .rmodal-desc { font-size: var(--fs-body); }
+.rdiag-group { border-radius: var(--r-pop); background: var(--err-bg); padding: 12px 16px 6px; }
+.rdiag-group h3 { margin: 0; font-size: var(--fs-h2); font-weight: var(--fw-strong); color: var(--err); }
+.rdiag-group p { margin: 2px 0 8px; font-size: var(--fs-body); color: var(--ink-2); }
+.rdiag-item { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 4px 0; border-top: 1px solid var(--rule); font-size: var(--fs-h2); font-weight: var(--fw-label); line-height: 1.45; }
+.rdiag-item .rbtn { margin-left: auto; flex: none; }
+.rdiag-msg { white-space: pre-wrap; font-size: var(--fs-h2); line-height: 1.6; }
 .rdrawer-body .rmsg { white-space: pre-wrap; font-size: var(--fs-sub); line-height: 1.5; }
 .rdrawer-body .rmsg .star { background: var(--warn-bg); border-left: 3px solid var(--warn); padding: 2px 8px; margin: 2px 0; }
 .rdrawer-body .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
@@ -490,6 +551,17 @@ body.rd .rmodal .legacy .card-sm { border-radius: 10px; box-shadow: inset 0 0 0 
 body.rd .rmodal .legacy .text-xs, body.rd .rmodal .legacy .text-sm { font-size: var(--fs-sub) !important; }
 .rstatus .relaxed-note .rbtn-sm { margin-left: 6px; }
 .rdrawer-body .rrow .rbtn-sm { height: 26px; white-space: nowrap; }
+/* 서랍 크게 보기 — 표 아래 200px 로는 바뀐 칸·요약·기록을 읽기 어렵다. 같은 서랍(탭·단추 그대로)을 화면 가운데 큰 창으로, 글씨는 본문 크기 */
+.rdrawer-scrim { position: fixed; inset: 0; z-index: 80; background: rgba(15,17,21,0.42); }
+.rdrawer.is-big { position: fixed; z-index: 81; inset: 6vh max(24px, calc(50vw - 660px)) auto; height: auto; min-height: 360px; max-height: 88vh; margin: 0; border-top: 0; border-radius: var(--r-modal); box-shadow: var(--shadow-modal); overflow: hidden; }
+.rdrawer.is-big .rdrawer-tabs { padding: 8px 16px 0; }
+.rdrawer.is-big .rdrawer-body { padding: 16px 24px 20px; font-size: var(--fs-body); }
+.rdrawer.is-big .rdrawer-body .intro, .rdrawer.is-big .rdrawer-body .rmsg, .rdrawer.is-big .rdrawer-body table.rsum { font-size: var(--fs-body); }
+.rdrawer.is-big .rdrawer-body .intro { margin-bottom: 12px; }
+.rdrawer.is-big .rdrawer-body .rrow { grid-template-columns: 130px 150px 1fr auto auto; height: auto; min-height: 46px; padding: 4px 0; font-size: var(--fs-body); }
+.rdrawer.is-big .rdrawer-body .rrow .rbtn-sm { height: var(--target-sm); }
+.rdrawer.is-big .rdrawer-body table.rsum td { height: 32px; }
+.rdrawer.is-big .rdrawer-body .rlog { max-height: none; font-size: var(--fs-sub); }
 body.rd .rhdr-ver { font-size: var(--fs-min); }
 .trainee-row .rt-name { border-left: 3px solid var(--sh-생-fg); }
 .trainee-row .rt-cell span:first-child { font-style: italic; }
@@ -536,3 +608,14 @@ body.rd .rphone-filters button[disabled] { color: var(--ink-2); box-shadow: inse
 .rgnote { margin: 0; font-size: var(--fs-cell); color: var(--ink-2); line-height: 1.6; }
 .rgrules { display: grid; gap: 16px; }
 .rgrules .rseg button { white-space: nowrap; }
+
+/* 나이트킵 줄은 노랑, 원티드 칸은 분홍 — 병동 번표와 같은 색. 근무 색(data-shift)보다 앞서고 글자색은 근무 색 그대로. 원티드가 나이트킵보다 앞선다 */
+.rt-name.is-keeper, .rtable tbody tr:hover > .rt-name.is-keeper, .rt-cell.is-keeper:not(.is-absent) { background: var(--keeper-bg) !important; }
+.rt-cell.is-wanted:not(.is-absent) { background: var(--wanted-bg) !important; }
+/* 팀 색 — 이름 칸 바탕 (rdTeamStyle 이 --team-bg/--team-fg 를 준다). 나이트킵 줄도 이름 칸은 팀 색, 날짜 칸만 노랑 (병동 번표와 같다).
+   다크에서는 고른 색을 카드 바탕에 섞어 눈부시지 않게 */
+.rt-name.has-team, .rtable tbody tr:hover > .rt-name.has-team { background: var(--team-bg) !important; color: var(--team-fg); }
+.rt-name.has-team > small { color: inherit; opacity: .75; }
+html.dark .rt-name.has-team, html.dark .rtable tbody tr:hover > .rt-name.has-team { background: color-mix(in srgb, var(--team-bg) 32%, var(--card)) !important; color: var(--ink); }
+.rteam { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 4px; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); font-weight: var(--fw-strong); cursor: pointer; }
+.rteam input { width: 22px; height: 22px; min-height: 0; padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer; }

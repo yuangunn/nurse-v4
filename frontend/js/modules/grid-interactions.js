@@ -114,6 +114,7 @@ window.GridInteractionsModule = function() {
           if(!def){v.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} '${code}' 알 수 없는 근무 코드`});continue}
           if(code==='OF'&&holidaySet.has(dk)&&dk>=firstKey&&!dedOn(dk)){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 공휴일 OF — 생성 시 무시되고 재배치됩니다`});continue}
           if(span&&nightSet.has(code)&&dk>=span[0]&&dk<=span[1]){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 임신 구간 야간 — 생성 시 무시됩니다 (모성보호)`});continue}
+          if(span&&workSet.has(code)&&holidaySet.has(dk)&&dk>=firstKey&&dk>=span[0]&&dk<=span[1]){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 임신 구간 공휴일 근무 — 생성 시 무시되고 법으로 쉽니다 (모성보호)`});continue}
           if(pregMonth&&code==='생'){notes.push({nid,dk,msg:`${nurse.name}: ${fmtD(day)} 임신 달 생리휴가 — 생성 시 무시됩니다`});continue}
           eff[dk]=code;
           if(['day','evening','night'].includes(def.period)&&!(flexMap[code]||[code]).some(c=>capable.has(c)))
