@@ -137,7 +137,8 @@
 .rt-cell.is-absent   { background: repeating-linear-gradient(45deg, #fff 0 3px, #E4E7EC 3px 6px); color: var(--disabled-fg); }
 .rt-cell .lock { position: absolute; top: 2px; right: 2px; width: 11px; height: 11px; }
 .rt-cell .lock svg { width: 11px; height: 11px; }
-.rt-cell .memo { position: absolute; left: 3px; bottom: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); }
+/* 메모 칸 — 왼쪽 아래 모서리의 빨간 삼각형 (엑셀 메모 표시와 같은 모양). 모서리에 붙어 26px 줄·좁은 칸에서도 글자에 닿지 않는다 */
+.rt-cell .memo { position: absolute; left: 0; bottom: 0; border-style: solid; border-width: 10px 0 0 10px; border-color: transparent transparent transparent var(--memo-bg); }
 .rt-cell .trainee { font-style: italic; opacity: 0.7; }
 /* 가독성 (2026-10-19) — 줄 따라가기·그룹 경계·날짜 찾기 */
 .rtable tbody tr:hover > td { box-shadow: inset 0 1px 0 var(--ink-2), inset 0 -1px 0 var(--ink-2); }   /* 마우스를 올린 줄 */
@@ -238,6 +239,8 @@ html.dark .rt-cell.is-sel { box-shadow: inset 0 0 0 100px rgba(138,168,255,0.24)
 .rtip { position: absolute; z-index: 95; max-width: 380px; background: var(--ink-surface); color: #fff; border-radius: 8px; padding: 7px 10px;
   font-size: var(--fs-min); line-height: 1.5; font-weight: var(--fw-body); pointer-events: none; }
 .rtip .note { color: #B8BFC9; }   /* "[주의 한 마디]" 부분 */
+/* 칸 메모 — 풍선말 안에서 한 줄 내려 본문 크기로 */
+.rtip .memo { display: block; margin-top: 3px; font-size: var(--fs-body); line-height: 1.45; color: #FFE680; white-space: pre-line; word-break: keep-all; }
 .rtip::before { content: ""; position: absolute; top: -6px; left: 36px; width: 12px; height: 12px; background: var(--ink-surface); transform: rotate(45deg); }
 
 /* ── 배너 ── */

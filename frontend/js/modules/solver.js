@@ -17,15 +17,15 @@ window.SolverModule = function() {
       this.generating=true;this.continuing=!!_cont;this.stopRequested=false;
       if(!_cont){this.mipGapPercent=null;this.scheduleStopped=false;this.rdSaved=false;this.diagResult=null;this.fixResult=null;this.statusMessage=''}
       this.estimatedSeconds=0;this.generateStartTime=Date.now();this.generateElapsed=0;
-      let next=null;
+      let next=null,story=false;
       this.generateTimer=setInterval(()=>{this.generateElapsed=Math.floor((Date.now()-this.generateStartTime)/1000)},1000);
       this.solveProgress={gap_percent:null,nodes:0,has_solution:false,is_running:false};
-      this.solverLogs=[];this._logSeq=0;
+      this.solverLogs=[];this._logSeq=0;this._solveReset();this.story.open=false;
       this.sseSource=new EventSource('/api/generate/stream');
       this.sseSource.onmessage=(e)=>{
         const data=JSON.parse(e.data);
-        if(data.type==='log'){this.solverLogs.push({id:++this._logSeq,msg:data.msg});if(this.solverLogs.length>300)this.solverLogs=this.solverLogs.slice(-200);this._scrollLogs()}
-        else if(data.type==='hint'){this.solverLogs.push({id:++this._logSeq,msg:data.msg,hint:true});this._scrollLogs()}
+        if(data.type==='log')this._pushLog(data.msg);
+        else if(data.type==='hint')this._pushLog(data.msg,true);
         else if(data.type==='progress')this.solveProgress=data;
         else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
       };
@@ -68,7 +68,7 @@ window.SolverModule = function() {
             details.sort((a,b)=>(b.note?1:0)-(a.note?1:0));
             this.statusMessage+=`\n\n📌 원티드 미반영 ${details.length}건${noted?` — 그중 메모(사유) 있는 셀 ${noted}건`:''}. 절대 못 바꾸는 날은 사전입력에서 🔒 잠금하세요.\n`+details.map(d=>d.line).join('\n');
           }
-          this.trackEdits();
+          this.trackEdits();story=!_readjust;
           if(!_readjust){this.readjustPins={};this.readjustChanged={};this.readjustSummary=''}
           if(result.warning){this.statusMessage=result.warning+'\n\n'+this.statusMessage;this.statusOk=false}
           if(_cont)this.statusMessage+=`\n\n🔁 이어 찾기로 더 좋은 표를 찾아 바꿔 저장했습니다${_cont.gap!=null&&this.mipGapPercent!=null?` (가장 좋은 답과 ${_cont.gap}% → ${this.mipGapPercent}% 차이)`:''}.`;
@@ -83,7 +83,8 @@ window.SolverModule = function() {
         return true;
       }catch(e){if(_cont)this._contKeep(null,_cont);else{this.statusOk=false;this.statusMessage='서버 오류: '+e.message}}
       finally{this.generating=false;this.continuing=false;this.stopRequested=false;if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generateFinalElapsed=this.generateElapsed;
-        if(next)setTimeout(()=>this.generate(next),0)}
+        if(next)setTimeout(()=>this.generate(next),0);
+        else if((story||_cont)&&this.rdSched)this.rdStoryOpen()}   // 결과 요약은 다 끝난 뒤에 — 이어 찾기가 이어지면 그 끝에
     },
     // ── 이어 찾기 (결정 1-50) — 시간이 다 됐는데 차이가 목표(설정 mipGap)보다 크면 그 표에서 한 번 더 찾는다 ──
     // 실제 11월: 20분 8.8% → 같은 탐색을 60분까지 이으면 3.4%, 20분 표에서 다시 찾으면 41분에 1.9% (다시 찾는 쪽이 나았다)
@@ -170,16 +171,21 @@ window.SolverModule = function() {
     _diagPayload(){return{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,unlimited_v:this.unlimitedV}},   // 'V 무제한'은 엄격 판정 자체를 바꾼다 — 빠져 만들 수 있는 표를 '만들 수 없음'이라 했다 (리뷰 2026-10-21)
     async diagnoseConflicts(){
       if(this.diagnosing)return;
-      this.diagnosing=true; this.diagResult=null;
+      this.diagnosing=true; this.diagResult=null; this.diagOpen=true;   // 결과는 큰 창으로 — 서랍(높이 200px)에서는 몇 줄밖에 안 보였다
       try{
         const res=await this.api('POST','/api/diagnose',this._diagPayload());
         if(res&&res.message){
           this.diagResult=res;
           this.statusMessage=this.statusMessage+'\n\n━━ 정밀 충돌 분석 (CP-SAT) ━━\n'+res.message;
-          this.toast(res.conflicts&&res.conflicts.length?`충돌 ${res.conflicts.length}건 발견`:'하드 제약 충돌 없음','info',3500);
-        }
-      }catch(e){this.toast('충돌 분석 실패','error');}
+        } else this.diagOpen=false;
+      }catch(e){this.diagOpen=false;this.toast('충돌 분석 실패','error');}
       finally{this.diagnosing=false;}
+    },
+    // 왜 안 되는지 창에 그릴 묶음 — 따로 풀어야 하는 막힌 곳마다 한 묶음, 줄마다 갈 칸(있으면)을 붙인다
+    diagGroups(){
+      const r=this.diagResult||{}, by=new Map((r.anchored||[]).map(a=>[a.label,a]));
+      const sets=(r.muses&&r.muses.length)?r.muses:((r.conflicts&&r.conflicts.length)?[r.conflicts]:[]);
+      return sets.map(m=>m.map(l=>by.get(l)||{label:l,nurse_id:null,date:null}));
     },
     async suggestFix(){
       if(this.fixing)return;

@@ -60,6 +60,17 @@ def test_flex_codes_leave_prev_and_aliases_normalize():
     allowed = s._flex_allowed("N제외")
     assert "N" not in allowed and "NC" not in allowed
     assert {"OF", "주", "V", "D", "E", "D1", "중"} <= allowed     # 쉬어도 된다
+    # D제외·E제외 — 그 시간대(차지 포함)만 뺀다. D1·중 은 주간이 아니라 남는다
+    s2 = NurseScheduler(_request({"a0": {D2: "D빼고"}, "a1": {D2: "E 제외"}}))
+    assert s2.flex_pre == {"a0": {D2: "D제외"}, "a1": {D2: "E제외"}}
+    assert set(s2.ALL_SHIFTS) - s2._flex_allowed("D제외") == {"DC", "D"}
+    assert set(s2.ALL_SHIFTS) - s2._flex_allowed("E제외") == {"EC", "E"}
+    # 세부 원티드 — D/E/N 은 쉬지만 않으면, D/OF 는 낮 근무 아니면 휴무 (저녁·야간을 뺀다)
+    s3 = NurseScheduler(_request({"a0": {D2: "DEN"}, "a1": {D2: "D/OFF"}}))
+    assert s3.flex_pre == {"a0": {D2: "D/E/N"}, "a1": {D2: "D/OF"}}
+    assert s3._flex_allowed("D/E/N") == {"DC", "D", "EC", "E", "NC", "N"}
+    assert set(s3.ALL_SHIFTS) - s3._flex_allowed("D/OF") == {"EC", "E", "NC", "N"}
+    assert set(s3.ALL_SHIFTS) - s3._flex_allowed("N/OF") == {"DC", "D", "EC", "E"}
 
 
 # ── strict: 허용 근무만 ─────────────────────────────────────────────────────
@@ -67,7 +78,8 @@ def test_flex_codes_leave_prev_and_aliases_normalize():
 
 @pytest.mark.parametrize("solver", ["highs", "cpsat"])
 @pytest.mark.parametrize("code,want", [("D/E", {"DC", "D"}), ("E/N", {"NC", "N"}),
-                                       ("D/N", {"DC", "D", "NC", "N"})])
+                                       ("D/N", {"DC", "D", "NC", "N"}),
+                                       ("D/E/N", {"DC", "D", "NC", "N"}), ("N/OF", {"NC", "N"})])
 def test_one_of_picks_an_allowed_shift(solver, code, want):
     """a1 OF → a0·a2 가 D 하나·N 하나. a0 의 원티드가 어느 쪽인지 정한다."""
     r = _solve(_request({"a0": {D2: code}, "a1": {D2: "OF"}}), solver)
@@ -81,6 +93,17 @@ def test_n_exclude_works_day_instead(solver):
     assert r["success"], r["message"]
     assert r["schedule"]["a0"][D2] in ("DC", "D")
     assert r["schedule"]["a2"][D2] in ("NC", "N")
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+@pytest.mark.parametrize("code,need,other", [("D제외", dict(d=1, n=1), ("DC", "D")),
+                                             ("E제외", dict(d=0, e=1, n=1), ("EC", "E"))])
+def test_d_e_exclude_takes_the_other_shift(solver, code, need, other):
+    """a1 OF → a0·a2 가 두 근무를 나눈다. a0 는 뺀 시간대가 아닌 야간을 선다."""
+    r = _solve(_request({"a0": {D2: code}, "a1": {D2: "OF"}}, **need), solver)
+    assert r["success"], r["message"]
+    assert r["schedule"]["a0"][D2] in ("NC", "N")
+    assert r["schedule"]["a2"][D2] in other
 
 
 @pytest.mark.parametrize("solver", ["highs", "cpsat"])

@@ -19,9 +19,9 @@ window.PasteImportModule = function() {
       hasNameCol:true,
       hasDateRow:true,
       matches:null,     // {nameRow:[{r,name,mapKey,nurseId,matched,mapped}], dateCol:[{c,raw,dk,matched}], dateFrom, dateTo}
-      diff:null,        // {will_set, will_clear, matched_all, unrecognized, unmatchedNames, unmatchedDates, months, outsideCycle}
+      diff:null,        // {will_set, will_clear, notes, matched_all, unrecognized, unmatchedNames, unmatchedDates, months, outsideCycle}
       // 파일 업로드 (엑셀/CSV → 서버 파싱 → grid)
-      sheets:null,      // [{name, rows}] — /api/parse-table-file 결과
+      sheets:null,      // [{name, rows, notes}] — /api/parse-table-file 결과 (notes = 엑셀 메모·스레드 댓글 [[행,열,글]])
       sheetIdx:0,
       fileName:'',
       batch:null,       // 멀티시트 일괄 업로드('saved'): {rows:[{idx,name,y,m,count,...}]}
@@ -78,7 +78,9 @@ window.PasteImportModule = function() {
       if(!raw||['-','—','x','X','·','/','none','없음'].includes(raw))return null;
       // 원티드 '둘 중 하나'·'N 빼고' (엔진 _PRE_ALIAS 와 같은 표기)
       const flex={'D/E':'D/E','E/D':'D/E','DE':'D/E','ED':'D/E','E/N':'E/N','N/E':'E/N','EN':'E/N','NE':'E/N',
-        'D/N':'D/N','N/D':'D/N','DN':'D/N','ND':'D/N','N제외':'N제외','N빼고':'N제외'}[raw.replace(/\s+/g,'').toUpperCase()];
+        'D/N':'D/N','N/D':'D/N','DN':'D/N','ND':'D/N','N제외':'N제외','N빼고':'N제외',
+        'D제외':'D제외','D빼고':'D제외','E제외':'E제외','E빼고':'E제외',
+        'D/E/N':'D/E/N','DEN':'D/E/N','D/OF':'D/OF','D/OFF':'D/OF','E/OF':'E/OF','E/OFF':'E/OF','N/OF':'N/OF','N/OFF':'N/OF'}[raw.replace(/\s+/g,'').toUpperCase()];
       if(flex)return flex;
       // 신규 트레이닝 날 '/D'·'/E'·'/N'… — 앱이 낸 '/V'·'/법'(프리셉터가 쉰 날)도 다시 올라가게 정의된 근무 코드면 다 받는다
       if(raw.startsWith('/')){
@@ -269,7 +271,7 @@ window.PasteImportModule = function() {
     _matchGrid(grid,opts){
       // 그리드 → 이름/날짜 매칭 + diff 계산. pastePrev 상태와 독립 —
       // 모달 본문(_matchPasteGrid)과 멀티시트 일괄 분석(_analyzeBatch)이 공유한다.
-      // opts: {anchorY, anchorM, mode, hasNameCol, hasDateRow, target, focusedCell}
+      // opts: {anchorY, anchorM, mode, hasNameCol, hasDateRow, target, focusedCell, notes}
       const anchorY=opts.anchorY;
       const anchorM=opts.anchorM;
       const days=this.scheduleDays;
@@ -362,6 +364,9 @@ window.PasteImportModule = function() {
       const matchedAll=[]; // 인식된 모든 (간호사,날짜,코드) — 위시/저장탭 업로드용 (prev 비교 무관)
       const unrecognized=new Set();
       const unknownCells=[];  // 모르는 표기 칸 (미리보기에 노랗게)
+      // 엑셀 칸 메모 — 사람·날짜가 맞은 칸만, 지금 메모와 다른 것만. 근무가 빈 칸에 달린 메모('N 제외')도 가져온다
+      const noteAt=new Map((opts.notes||[]).map(([r,c,t])=>[r+'|'+c,t]));
+      const notes=[];
       const startC=best.useNameCol?1:0;
 
       // 날짜 헤더 없는 경우: 당월 1일부터 시작해서 데이터 매핑
@@ -380,6 +385,8 @@ window.PasteImportModule = function() {
           const cols=best.useDateRow?best.dateCol:fallbackCols;
           for(const ci of cols){
             if(!ci.matched)continue;
+            const note=noteAt.get(r+'|'+ci.c);
+            if(note&&note!==this.cellNotes[nid]?.[ci.dk])notes.push({nid,name:nameInfo.name,dk:ci.dk,text:note});
             const cell=(grid[r]?.[ci.c]||'').trim();
             const code=this._normalizeShiftCode(cell);
             const oldShift=this.prevSchedule[nid]?.[ci.dk]||'';
@@ -436,7 +443,7 @@ window.PasteImportModule = function() {
       }
       const months=Object.keys(monthCnt).sort().map(ym=>({ym,label:`${+ym.slice(0,4)}년 ${+ym.slice(5,7)}월`,count:monthCnt[ym]}));
 
-      const diff={will_set:willSet,will_clear:willClear,matched_all:matchedAll,unrecognized:[...unrecognized],unknown_cells:unknownCells,unmatchedNames,unmatchedDates,months,outsideCycle};
+      const diff={will_set:willSet,will_clear:willClear,notes,matched_all:matchedAll,unrecognized:[...unrecognized],unknown_cells:unknownCells,unmatchedNames,unmatchedDates,months,outsideCycle};
       return{best,diff,hasNameCol:best.useNameCol,hasDateRow:best.useDateRow};
     },
 
@@ -454,6 +461,8 @@ window.PasteImportModule = function() {
         // '커서에서 붙이기'는 표에서 고른 범위의 왼쪽 위부터 (표에 바로 Ctrl+V 와 같다)
         focusedCell:(q=>q&&q.tab==='preinput'?{nIdx:q.rA,dIdx:q.cA}:null)(this._selRect?.()),
         nameMap:this.pastePrev.nameMap,
+        // 메모는 사전입력으로 가져올 때만 (희망·저장 목록 올리기는 근무 칸만 쓴다). 붙여넣은 글엔 메모가 없다
+        notes:this.pastePrev.target==='prev'?this.pastePrev.sheets?.[this.pastePrev.sheetIdx]?.notes:null,
       });
       if(this.pastePrev.mode==='auto'){
         this.pastePrev.hasNameCol=r.hasNameCol;
@@ -625,10 +634,10 @@ window.PasteImportModule = function() {
         const sheets=(res.sheets||[]).filter(s=>s.rows&&s.rows.length);
         this.dismissToast(loading);
         if(!sheets.length){this.toast('파일에서 표를 찾지 못했습니다','warn');return}
-        // 데이터 셀이 가장 많은 시트를 기본 선택
+        // 보는 달 이름의 시트를 기본 선택, 없으면 데이터 셀이 가장 많은 시트
         let bestIdx=0,bestScore=-1;
         sheets.forEach((s,i)=>{
-          const sc=s.rows.reduce((a,r)=>a+r.filter(c=>String(c??'').trim()).length,0);
+          const sc=this._parseSheetNameYM(s.name)?.m===this.month?Infinity:s.rows.reduce((a,r)=>a+r.filter(c=>String(c??'').trim()).length,0);
           if(sc>bestScore){bestScore=sc;bestIdx=i}
         });
         this.pastePrev.sheets=sheets;
@@ -723,7 +732,8 @@ window.PasteImportModule = function() {
           .catch(()=>this.toast('희망은 화면에 반영됐지만 일부 서버 저장에 실패했습니다','error'));
         this.closePastePrev();return;
       }
-      const totalChanges=diff.will_set.length+diff.will_clear.length;
+      const notes=diff.notes||[];
+      const totalChanges=diff.will_set.length+diff.will_clear.length+notes.length;
       if(!totalChanges){this.toast('적용할 변경 사항이 없습니다','warn');return}
       this._pushUndo();
       for(const item of diff.will_set){
@@ -733,12 +743,14 @@ window.PasteImportModule = function() {
       for(const item of diff.will_clear){
         if(this.prevSchedule[item.nid])delete this.prevSchedule[item.nid][item.dk];
       }
+      for(const x of notes)(this.cellNotes[x.nid]=this.cellNotes[x.nid]||{})[x.dk]=x.text;
+      if(notes.length)this.showNotes=true;   // 가져온 메모가 바로 보이게 — 꺼 두면 점이 없어 들어온 줄 모른다
       this._checkViolations&&this._checkViolations();
       const monthsNote=(diff.months||[]).length>1
         ?` (${diff.months.map(x=>`${+x.ym.slice(5,7)}월 ${x.count}`).join(' · ')})`
         :'';
-      this.toast(`사전입력 ${diff.will_set.length}건 설정${diff.will_clear.length?', '+diff.will_clear.length+'건 비움':''}${monthsNote}`,'info',monthsNote?4500:3000);
-      this.rdUndoToast&&this.rdUndoToast(`사전입력 ${new Set(diff.will_set.map(x=>x.nid)).size}명 · ${diff.will_set.length}칸을 넣었습니다.${diff.will_clear.length?' '+diff.will_clear.length+'칸은 비웠어요.':''}`);
+      this.toast(`사전입력 ${diff.will_set.length}건 설정${diff.will_clear.length?', '+diff.will_clear.length+'건 비움':''}${notes.length?', 메모 '+notes.length+'건':''}${monthsNote}`,'info',monthsNote?4500:3000);
+      this.rdUndoToast&&this.rdUndoToast(`사전입력 ${new Set(diff.will_set.map(x=>x.nid)).size}명 · ${diff.will_set.length}칸을 넣었습니다.${diff.will_clear.length?' '+diff.will_clear.length+'칸은 비웠어요.':''}${notes.length?' 메모 '+notes.length+'개도 넣었어요.':''}`);
       this.closePastePrev();
     },
 

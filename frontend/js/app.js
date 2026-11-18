@@ -50,7 +50,7 @@ function app() {
     vReport:null,            // 🧾 연차(V) 자동 배정 설명 (서버 _v_report, 제1원칙 8 · M6 P4)
     mobileToolsOpen:false,   // 📱 폰에서 사전입력 편집 도구(툴바·범례) 펼침 — 기본은 보기 전용 (M7-E)
     staffingAlerts:null, fairnessLedger3m:null,
-    solver:'highs', diagnosing:false, fixing:false, diagResult:null, fixResult:null,
+    solver:'highs', diagnosing:false, fixing:false, diagResult:null, diagOpen:false, fixResult:null,
     tableFullscreen:false,
     mipGapPercent:null, scheduleStopped:false, estimatedSeconds:0,
     statusMessage:'', statusOk:true, savedSchedules:[],
@@ -80,7 +80,7 @@ function app() {
     _sel:null, _dragRows:false, _dragMoved:false, _rowSelHinted:false, _schedUndo:[], _schedRedo:[],   // 표 칸 선택 (drag-select.js)
     lockedCells:{}, // nurseId → {dateKey: true}
     cellNotes:{},   // nurseId → {dateKey: 'text'}
-    showNotes:false, noteEdit:{open:false,nurseId:'',dk:'',text:''},
+    showNotes:localStorage.getItem('showNotes')!=='false', noteEdit:{open:false,nurseId:'',dk:'',text:''}, _noteUndone:false,
     presetPanel:false,
     copySource:null, // nurseId
     juhuOptionModal:{open:false,nurse:null,day:null},
@@ -647,13 +647,13 @@ function app() {
         if(res.status==='running'){
           this.generating=true;this.generateStartTime=Date.now();this.generateElapsed=0;
           this.generateTimer=setInterval(()=>{this.generateElapsed=Math.floor((Date.now()-this.generateStartTime)/1000)},1000);
-          this.solverLogs=[];this._logSeq=0;
+          this.solverLogs=[];this._logSeq=0;this._solveReset();
           this.solveProgress={gap_percent:null,nodes:0,has_solution:false,is_running:true};
           this.sseSource=new EventSource('/api/generate/stream');
           this.sseSource.onmessage=(e)=>{
             const data=JSON.parse(e.data);
-            if(data.type==='log'){this.solverLogs.push({id:++this._logSeq,msg:data.msg});if(this.solverLogs.length>300)this.solverLogs=this.solverLogs.slice(-200);this._scrollLogs()}
-            else if(data.type==='hint'){this.solverLogs.push({id:++this._logSeq,msg:data.msg,hint:true});this._scrollLogs()}
+            if(data.type==='log')this._pushLog(data.msg);
+            else if(data.type==='hint')this._pushLog(data.msg,true);
             else if(data.type==='progress')this.solveProgress=data;
             else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
           };

@@ -51,11 +51,11 @@ window.ScheduleFeaturesModule = function() {
     },
 
     // ═══ 1. 엑셀 내보내기 ═══════════════════════════════════
-    // 병동 번표 모양 xlsx (서버 _build_schedule_xlsx) — 그 달에 걸친 주 전부라 '근무표 파일 올리기'로 다시 올릴 수 있다
+    // 병동 번표 양식 xlsx (서버 _build_schedule_xlsx) — 계는 수식 + 계산해 둔 값이라 '근무표 파일 올리기'로 다시 올릴 수 있다
     async exportToXlsx(){
       if(!this.schedule||!Object.keys(this.schedule).length){ this.toast('근무표가 없습니다','error'); return }
       try{
-        const res=await fetch('/api/schedules/export.xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(this._xlsxBody())});
+        const res=await fetch('/api/schedules/export.xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...this._xlsxBody(),prev:await this._xlsxPrev()})});
         if(!res.ok){ const d=(await res.json().catch(()=>null))?.detail; throw new Error(typeof d==='string'?d:'내보내기 실패') }
         const url=URL.createObjectURL(await res.blob());
         const a=document.createElement('a');
@@ -64,15 +64,36 @@ window.ScheduleFeaturesModule = function() {
         document.body.removeChild(a);URL.revokeObjectURL(url);
       }catch(e){this.toast(e.message||'내보내기 실패','error')}
     },
-    // 날짜 = 1일이 든 주의 일요일부터 화면 끝까지 (병동 번표 11월 = 11/1~12/5, 12월 = 11/29~1/2).
-    // 1일이 일요일이면 엔진이 이어 보려고 앞에 붙인 지난달 한 주(11월 화면의 10/25~10/31)는 뺀다.
+    // 날짜 = 그 달 1일부터 화면 끝까지 (12월 = 12/1~1/2) — 그 달은 한 시트에 다 보이고, 계는 1일~말일 칸만 센다.
+    // 화면 앞에 붙은 지난달 날짜(11/29·11/30)는 뺀다. 1일~첫 토요일은 앞 달 표에도 있는 칸이다 (_xlsxPrev).
     // 칸은 인쇄와 같다 — 차지 없이 D/E/N (rdPrintCode), 전입 전·전출 뒤는 빈칸.
+    // marks = 줄마다 날짜 수만큼 한 글자, 화면 표식과 같은 기준: r 사전입력이 풀린 칸 · w 원티드(분홍) · k 나이트킵 줄(노랑).
+    // charge = 그 사람이 차지를 설 수 있는 근무(D·E·N) — 아래 차지 줄 수식이 이 줄들에서 센다.
     _xlsxBody(){
-      const first=new Date(this.year,this.month-1,1);first.setDate(1-first.getDay());
-      const days=this.scheduleDays.filter(d=>d>=first);
+      const first=new Date(this.year,this.month-1,1);
+      const days=this.scheduleDays.filter(d=>d>=first),ns=this.nurses,notes=[];
+      ns.forEach((n,k)=>days.forEach((d,i)=>{const t=this.getNote(n.id,d);if(t)notes.push([k,i,t])}));
       return{year:this.year,month:this.month,title:`${this.year}년 ${this.month}월 ${this.rdWard} 근무표`,
         days:days.map(d=>this.dayKey(d)),holidays:this.holidays||[],
-        rows:this.nurses.map(n=>[n.name,...days.map(d=>this.isNurseInactive(n,d)?'':this.rdPrintCode(n,d))])};
+        rows:ns.map(n=>[n.name,...days.map(d=>this.isNurseInactive(n,d)?'':this.rdPrintCode(n,d))]),
+        teams:ns.map(n=>n.group||''),team_colors:this.teamColorMap,
+        marks:ns.map(n=>days.map(d=>this.isNurseInactive(n,d)?' ':this.isRelaxed(n.id,d)?'r'
+          :this.rdIsPre(n.id,d)&&this.isWanted(n.id,d)?'w':this.isKeeperDay(n,d)?'k':' ').join('')),
+        charge:ns.map(n=>['D','E','N'].filter(s=>(n.capable_shifts||[]).includes(s+'C')).join('')),
+        notes};
+    },
+    // 앞 달 시트 본문 — 이 달 1일~첫 토요일은 앞 달 표에도 있다. 앞 달 저장본이 있으면 그 표를 앞 시트로 같이 내고,
+    // 이 달 시트의 그 칸은 앞 달 시트를 가리킨다 (서버, 결정 1-61). 저장본을 열었을 때처럼(loadSaved) 근무표·풀린 칸은 저장본,
+    // 명부·사전입력·메모는 지금 것. 앞 달 저장본이 없거나 1일이 일요일이면 null — 이 달 시트에 화면 값이 그대로 들어간다.
+    // ponytail: 화면 함수들을 그대로 쓰려고 년월·근무표만 바꾼 this 의 사본(Object.create)으로 _xlsxBody 를 부른다
+    async _xlsxPrev(){
+      if(new Date(this.year,this.month-1,1).getDay()===0)return null;
+      const pd=new Date(this.year,this.month-2,1),y=pd.getFullYear(),m=pd.getMonth()+1,v=x=>({value:x});
+      const sv=(this.savedSchedules||[]).find(s=>s.year===y&&s.month===m);
+      if(!sv)return null;
+      const d=(await this.api('GET',`/api/schedules/${sv.id}`)).data||{};
+      return this._xlsxBody.call(Object.create(this,{year:v(y),month:v(m),schedule:v(d.schedule||{}),extendedSchedule:v({}),
+        relaxedCells:v(d.relaxed_cells||{}),_originalSchedule:v(null)}));
     },
 
     // ═══ 2. 인쇄 ═══════════════════════════════════════════
@@ -100,8 +121,16 @@ window.ScheduleFeaturesModule = function() {
     _originalSchedule:null,
     trackEdits(){
       this._originalSchedule=JSON.parse(JSON.stringify(this.schedule));
+      this._preAtMake=this._preKey();   // 이 표가 선 때의 사전입력 — 뒤에 고치면 '다시 만들기'를 알린다 (rdPreChanged)
       this._schedUndo=[];this._schedRedo=[];   // 새 표 — 앞 표로 되돌리지 않는다
       this.checkScheduleViolations();
+    },
+    // 화면에 보이는 날짜의 사전입력 칸을 한 줄로 — 표를 만든 뒤 사전입력이 바뀌었는지 견준다.
+    // ponytail: 사전입력 칸만 본다 — 필요 인원·공휴일·명부를 고친 것은 알리지 않는다. 필요해지면 여기에 더한다
+    _preAtMake:null,
+    _preKey(ps){
+      ps=ps||this.prevSchedule||{};const ks=(this.scheduleDays||[]).map(d=>this.dayKey(d));
+      return (this.nurses||[]).map(n=>ks.map(k=>ps[n.id]?.[k]||'').join(',')).join('|');
     },
     isManuallyEdited(nurseId,day){
       if(!this._originalSchedule)return false;

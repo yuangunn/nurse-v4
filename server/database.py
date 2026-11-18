@@ -617,7 +617,7 @@ def _relax_kept(pre: str, got: str) -> bool:
     from .scheduler_base import _FLEX_NOT, _FLEX_ONE_OF, _PRE_ALIAS
     pre = _PRE_ALIAS.get(pre, pre)
     if pre in _FLEX_NOT:
-        return got not in _NIGHT_CODES
+        return not any(got in _PERIOD_WORK[p] for p in _FLEX_NOT[pre])
     if pre in _FLEX_ONE_OF:
         return any(got in _PERIOD_WORK[p] for p in _FLEX_ONE_OF[pre])
     return got == pre or got in _RELAX_FLEX.get(pre, set())

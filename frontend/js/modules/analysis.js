@@ -73,7 +73,7 @@ window.AnalysisModule = function() {
         let preWork=0,preRest=0,preLeave=0,preJuhu=0,preOF=0;
         for(const nurse of activeNurses){
           const val=(this.prevSchedule[nurse.id]||{})[dk];
-          if(!val||val==='N제외')continue;   // N 빼고 = 쉬어도 되는 빈칸 · D/E 같은 '둘 중 하나'는 근무로 센다
+          if(!val||/^[DEN]제외$/.test(val))continue;   // N·D·E 빼고 = 쉬어도 되는 빈칸 · D/E 같은 '둘 중 하나'는 근무로 센다
           if(val==='주')preJuhu++;
           else if(val==='OF')preOF++;
           else if(restCodes.includes(val))preRest++;
@@ -124,6 +124,7 @@ window.AnalysisModule = function() {
 
     // 그 달 나이트킵인가 — 엔진 night_keeper_in_month 와 같게: night_months 가 있으면 그 달 키, 없으면 is_night_shift,
     // 임신 구간(초기 시작~출산 전 끝)이 그 달과 겹치면 나이트킵이 아니다. 나이트킵은 달력 달로 맡는다 (결정 1-33).
+    isKeeperDay(nurse,day){return this._keeperInMonth(nurse,day.getFullYear(),day.getMonth()+1)},   // 표에서 나이트킵 칸을 노랗게
     _keeperInMonth(nurse,y,m){
       if(!nurse)return false;
       const nm=nurse.night_months||{};

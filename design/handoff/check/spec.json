@@ -173,11 +173,13 @@
         },
         {
           "sel": "[data-rd=table] tbody td[data-shift=V]",
-          "background": "#ECF7F0",
+          "$comment": "사전입력 칸은 원티드 바탕(--wanted-bg)으로 칠한다 — 주휴(주)·달 밖 날짜·지난달과 겹친 첫 주기만 근무 색 그대로. 글자색은 근무 색을 유지한다",
+          "background": "#FFB8F4",
           "color": "#1F8A5B"
         },
         {
           "sel": "[data-rd=table] tbody td[data-shift=법]",
+          "$comment": "픽스처의 법 칸(10/3)은 지난달과 겹친 첫 주기라 원티드 바탕을 칠하지 않는다 — 근무 색 그대로",
           "background": "#FDEEE5",
           "color": "#C2410C"
         },
@@ -243,8 +245,8 @@
             },
             {
               "sel": "[data-rd=cell-popup] .rpop-code",
-              "$comment": "17 → 20 (2026-10-03): 병동 번표에 실제로 쓰는 휴가 코드 경가·조가·산전을 기본 근무에 넣었다 — 팝업은 근무 정의 전부를 보여 준다. 20 → 24 (같은 날): 사전입력 팝업에 원티드 '둘 중 하나·N 빼고'(D/E·E/N·D/N·N제외, 제1원칙 14) 한 줄을 더했다 — 근무표 고치기 팝업에는 없다",
-              "count": 24,
+              "$comment": "17 → 20 (2026-10-03): 병동 번표에 실제로 쓰는 휴가 코드 경가·조가·산전을 기본 근무에 넣었다 — 팝업은 근무 정의 전부를 보여 준다. 20 → 24 (같은 날): 사전입력 팝업에 원티드 '둘 중 하나·N 빼고'(D/E·E/N·D/N·N제외, 제1원칙 14) 한 줄을 더했다 — 근무표 고치기 팝업에는 없다. 24 → 26: 그 줄에 D제외·E제외를 더했다. 26 → 24: 그 여섯 단추를 세부 원티드 단추 넷(D·E·N·휴무 켜고 끄기)으로 바꿨다. 24 → 21: 사전입력 팝업에서 차지 DC·EC·NC 를 뺐다 — 차지는 엔진이 정한다",
+              "count": 21,
               "height": 34
             },
             {
@@ -253,7 +255,8 @@
             },
             {
               "sel": "[data-rd=cell-popup] [data-rd=pop-memo]",
-              "textIncludes": "메모"
+              "$comment": "메모 단추가 팝업 안 입력 칸으로 바뀌었다 — 글자가 없으니 있는지만 본다",
+              "count": 1
             },
             {
               "sel": "[data-rd=cell-popup] [data-rd=pop-clear]",
@@ -417,7 +420,8 @@
             },
             {
               "sel": "[data-rd=live-log] .rlive-head .rbtn",
-              "textIncludes": "계산 기록 접기",
+              "$comment": "2026-11-18: 만드는 중 칸이 솔버 기록을 읽은 계산 현황(숫자 카드·사건 표)을 보이고 원본 기록은 접어 둔다 — 단추 글자가 '원본 기록 보기/접기'로 바뀌었다 (결정 1-64)",
+              "textIncludes": "원본 기록 접기",
               "minHeight": 30,
               "hasTitle": true
             },
