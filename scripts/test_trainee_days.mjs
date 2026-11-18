@@ -85,14 +85,14 @@ a = make({
   rows: { p1: ['D', 'DC', 'EC', 'D', 'D', 'D', 'OF'], t9: ['OF', '/DC', '/EC', 'D', 'E', '주', 'N'] },
 });
 assert.equal(a.rdTraineeChanged, 1);                      // 3/2 만 — 3/3 '/EC' 는 차지 표시만 다르다
-assert.match(a.rdStatus.text, /사전입력 3칸 지켰어요 · 신규 트레이닝 날 1칸은 프리셉터 근무를 따랐어요/);
+assert.match(a.rdStatus.text, /원티드 2칸 지켰어요 · 신규 트레이닝 날 1칸은 프리셉터 근무를 따랐어요/);   // 넣은 4칸 중 주휴(3/6)는 원티드로 세지 않는다
 //  · 엔진이 원티드 미반영으로 이미 알린 칸(relaxed_cells)은 두 번 세지 않는다
 a.relaxedCells = { t9: { [dk(2)]: { original: '/E', assigned: '/DC', is_timeoff: false } } };
 assert.equal(a.rdTraineeChanged, 0);
 a.relaxedCells = {};
 a.prevSchedule.t9[dk(2)] = '/D';
 assert.equal(a.rdTraineeChanged, 0);
-assert.match(a.rdStatus.text, /사전입력 4칸 모두 지켰어요/);
+assert.match(a.rdStatus.text, /원티드 3칸 모두 지켰어요/);
 
 // ── 주의 — 트레이닝 날('/D')도 그날 일한 것: 독립한 첫날들과 이어 센다 ──
 a = make({ rows: { t9: ['/D', '/D', '/E', 'E', 'E', 'N', 'OF'] } });

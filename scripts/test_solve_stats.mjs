@@ -70,9 +70,9 @@ assert.deepEqual(f.rdSolveCards.map(c => `${c.k}=${c.v}`), ['노드=1,520', 'Gap
 // 결과 요약 단계 — 계산 → 지킨 것 → (바꾼 것) → (확인할 것) → 결과. 없는 장은 건너뛴다
 f._solveReset();
 for (const l of ['Presolving model', '100 rows, 50 cols, 300 nonzeros  0s', '80 rows, 40 cols, 200 nonzeros  0s', 'Solving MIP model with:', row('H', 12, 0, 5, '100.00%', -10, -10, '0.00%', 3, 2, 1, 900, 75.4), '  Status            Optimal']) f._solveFeed(l);
-for (const [k, v] of [['rdSched', true], ['rdRelaxedCount', 0], ['rdTraineeChanged', 0]]) Object.defineProperty(f, k, { value: v, writable: true });   // 계산 속성을 값으로
+for (const [k, v] of [['rdSched', true], ['rdRelaxedCount', 0], ['rdTraineeChanged', 0], ['rdWantedCount', 40], ['rdWantedRelaxed', 0]]) Object.defineProperty(f, k, { value: v, writable: true });   // 계산 속성을 값으로
 Object.assign(f, { mipGapPercent: 0, scheduleStopped: false, generationReport: { duration_seconds: 75.4 }, rdSaved: true,
-  countPrevEntries: () => 40, scheduleDays: [new Date(2026, 11, 1), new Date(2026, 11, 2)], isOverflow: () => false,
+  scheduleDays: [new Date(2026, 11, 1), new Date(2026, 11, 2)], isOverflow: () => false,
   footerRows: [{ label: 'D', shifts: ['DC', 'D'] }, { label: 'E', shifts: ['EC', 'E'] }, { label: 'N', shifts: ['NC', 'N'] }, { label: '휴무', shifts: ['OF'] }],
   got: { D: 5, E: 5, N: 3 }, getDayDutyCount(d, shifts) { return this.got[shifts[1]] ?? 0; }, rdFootNeed: (d, c) => ({ D: 5, E: 5, N: 3 })[c],
   scheduleWarnings: [], offTeukgeun: [], vReport: null, wishReport: null });
@@ -80,12 +80,14 @@ assert.deepEqual(f.rdStorySteps.map(s => s.id), ['calc', 'kept', 'done']);
 assert.equal(f.rdStorySteps[0].title, '노드 12개를 따져 봤어요');
 assert.deepEqual(f.rdStorySteps[0].facts, [['걸린 시간', '1분 15초'], ['풀이 횟수 (Solve)', '1회'], ['처리한 노드 (Proc.)', '12'], ['닫힌 리프 (Leaves)', '5'],
   ['LP iterations', '900'], ['Presolve', '100 → 80 rows'], ['해를 찾은 방법 (Src)', 'H · Heuristic'], ['Status', 'Optimal'], ['Gap', '0%']]);
-assert.equal(f.rdStorySteps[1].title, '사전입력 40칸을 모두 지켰어요');
+assert.equal(f.rdStorySteps[1].title, '원티드 40칸을 모두 지켰어요');
 assert.deepEqual(f.rdStorySteps[1].facts.at(-1), ['날마다 필요 인원 (D·E·N)', '모두 채움']);
 f.got.E = 4; assert.equal(f.rdStorySteps[1].facts.at(-1)[1], '2곳 모자람'); f.got.E = 5;   // 이틀 × E
-f.rdRelaxedCount = 3; f.scheduleWarnings = [{ type: 'check' }, { type: 'info' }]; f.offTeukgeun = [{}]; f.vReport = { total: 2 };
+f.rdRelaxedCount = 3; f.rdWantedRelaxed = 3; f.scheduleWarnings = [{ type: 'check' }, { type: 'info' }]; f.offTeukgeun = [{}]; f.vReport = { total: 2 };
 assert.deepEqual(f.rdStorySteps.map(s => s.id), ['calc', 'kept', 'changed', 'check', 'done']);
-assert.equal(f.rdStorySteps[1].title, '사전입력 40칸 중 37칸을 지켰어요');
+assert.equal(f.rdStorySteps[1].title, '원티드 40칸 중 37칸을 지켰어요');
+f.rdWantedRelaxed = 1;                                                    // 바뀐 3칸 중 둘은 주휴·지난달 칸 — 원티드로 세지 않는다
+assert.equal(f.rdStorySteps[1].title, '원티드 40칸 중 39칸을 지켰어요'); f.rdWantedRelaxed = 3;
 assert.deepEqual(f.rdStorySteps[3].facts.map(x => x.slice(1)), [['1건', 'warn'], ['1건', 'teukgeun'], ['2건', 'v']]);
 // 넘기기 — 마지막 장에서 다음을 누르면 닫힌다
 f.rdStoryOpen(); assert.deepEqual(f.story, { open: true, step: 0 });

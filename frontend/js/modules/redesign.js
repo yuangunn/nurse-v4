@@ -93,6 +93,10 @@ window.RedesignModule = function() {
       const days=(this.scheduleDays||[]).filter(d=>!this.isOverflow(d));
       return (this.nurses||[]).reduce((a,n)=>a+(n.is_trainee?days.filter(d=>!this.isTraineeInTraining(n,d)).length:days.length), 0);
     },
+    // 원티드 칸 수 — 표에서 분홍으로 칠하는 칸(isWanted)과 같다: 주휴·달 밖 날짜·지난달 표에서 이어온 첫 주기는 정해져 있는 칸이라 세지 않는다.
+    // '몇 칸을 지켰다'는 말은 이 수로 한다 (단계 바의 'n칸 입력됨'은 넣은 칸 전부 — countPrevEntries)
+    get rdWantedCount(){ let n=0; for(const nu of (this.nurses||[])) for(const d of (this.scheduleDays||[])) if(this.isWanted(nu.id,d)) n++; return n; },
+    get rdWantedRelaxed(){ return (this.rdRelaxedList||[]).filter(x=>this.isWanted(x.nid, new Date(x.dk+'T00:00:00'))).length; },
     // 지키지 못한 신규의 트레이닝 날 사전입력 — 엔진은 넣은 '/' 휴무를 그대로, '/' 근무는 프리셉터를 그 근무로 끌고
     // 끝내 다르면 넣은 그대로 낸다(2026-10-19). 그래도 결과가 넣은 칸과 다르면 센다 (상태 줄이 '모두 지켰어요'라 하지 않게)
     get rdTraineeChanged(){
@@ -189,7 +193,7 @@ window.RedesignModule = function() {
       if(!this.rdSched) return null;
       if(this.rdPreChanged) return {kind:'warn', changed:true, text:'사전입력을 고친 뒤 아직 다시 만들지 않았어요 — 지금 표는 고치기 전 사전입력으로 만든 것입니다'};
       const rx=this.rdRelaxedCount;
-      const pre=this.countPrevEntries();
+      const pre=this.rdWantedCount;
       // gap(최적해와의 거리) 문장 — CP-SAT 가능해는 gap 이 수천 % 도 나오므로 숫자는 10% 안쪽일 때만 보여 준다
       const g=this.mipGapPercent;
       const q = this.scheduleStopped ? ' · 중간에 멈춰 지금까지 찾은 답' : (g==null ? '' : (g<=0.1 ? ' · 가장 좋은 답' : (g<=10 ? ` · 가장 좋은 답과 ${Math.round(g*10)/10}% 안쪽 차이` : ' · 시간 안에 찾은 답 (더 좋은 표가 있을 수 있어요)')));
@@ -200,8 +204,8 @@ window.RedesignModule = function() {
       const tcNote=tc ? ` · 신규 트레이닝 날 ${tc}칸은 프리셉터 근무를 따랐어요` : '';
       if(rx) return {kind:'ok', relaxed:true, text:`근무표가 ${saved}${at} · 사전입력 ${rx}칸을 바꿔서 만들었어요${tcNote}${q}`};
       if(!this.statusOk && this.statusMessage) return {kind:'warn', text:`근무표는 있지만 확인이 필요해요 — 아래 요약·리포트의 생성 기록을 보세요`};
-      if(tc) return {kind:'ok', text:`근무표가 ${saved}${at} · 사전입력 ${Math.max(pre-tc,0)}칸 지켰어요${tcNote}${q}`};
-      return {kind:'ok', text:`근무표가 ${saved}${at} · 사전입력 ${pre}칸 모두 지켰어요${q}`};
+      if(tc) return {kind:'ok', text:`근무표가 ${saved}${at} · 원티드 ${Math.max(pre-tc,0)}칸 지켰어요${tcNote}${q}`};
+      return {kind:'ok', text:`근무표가 ${saved}${at} · 원티드 ${pre}칸 모두 지켰어요${q}`};
     },
     // 만드는 중 진행 한 줄 — solveProgress(SSE progress, 1초마다). 차이 숫자는 상태 줄과 같은 규칙(10% 안쪽만),
     // 3분 넘게 나아지지 않으면 멈춰도 된다고 알린다 (v4.12 '생성 중' 카드의 'n분째 개선 없음')
@@ -306,14 +310,14 @@ window.RedesignModule = function() {
       else if(lastP && lastP.row.gap!=='inf') calc.push(['Gap', lastP.row.gap]);
       steps.push({id:'calc', eyebrow:'계산', title: ph.length ? `노드 ${n(sum('proc'))}개를 따져 봤어요` : '근무표를 계산했어요',
         sub: this.scheduleStopped ? '중간에 멈춰 그때까지 찾은 해입니다.' : (g==null ? '' : (g<=0.1 ? 'Gap 0% — 이 조건에서 가장 좋은 해입니다.' : `가장 좋은 해와 ${Math.round(g*10)/10}% 안쪽 차이에서 멈췄습니다.`)), facts:calc});
-      const pre=this.countPrevEntries(), rx=this.rdRelaxedCount, tc=this.rdTraineeChanged;
+      const pre=this.rdWantedCount, rx=this.rdRelaxedCount, tc=this.rdTraineeChanged, keptN=Math.max(pre-this.rdWantedRelaxed-tc, 0);
       // 표 아래 '배정 / 필요' 줄과 같은 셈 — 날짜별로 고친 필요 인원(rdFootNeed)과 견준다
       const rowsDEN=(this.footerRows||[]).filter(r=>['D','E','N'].includes(r.label));
       const short=this.scheduleDays.filter(d=>!this.isOverflow(d)).reduce((a,d)=>a+rowsDEN.filter(r=>this.getDayDutyCount(d,r.shifts)<(+this.rdFootNeed(d,r.label)||0)).length, 0);
-      const kept=[['사전입력', `${n(pre)}칸`], ['그대로 지킨 칸', `${n(Math.max(pre-rx-tc,0))}칸`]];
+      const kept=[['원티드 (주휴·지난달 표에서 이어온 칸은 빼고)', `${n(pre)}칸`], ['그대로 지킨 칸', `${n(keptN)}칸`]];
       if(tc) kept.push(['신규 트레이닝 날 (프리셉터 근무를 따름)', `${tc}칸`]);
       kept.push(['날마다 필요 인원 (D·E·N)', short ? `${short}곳 모자람` : '모두 채움']);
-      steps.push({id:'kept', eyebrow:'지킨 것', title: rx ? `사전입력 ${n(pre)}칸 중 ${n(Math.max(pre-rx-tc,0))}칸을 지켰어요` : `사전입력 ${n(pre)}칸을 모두 지켰어요`, sub:'', facts:kept});
+      steps.push({id:'kept', eyebrow:'지킨 것', title: keptN<pre ? `원티드 ${n(pre)}칸 중 ${n(keptN)}칸을 지켰어요` : `원티드 ${n(pre)}칸을 모두 지켰어요`, sub:'', facts:kept});
       if(rx) steps.push({id:'changed', eyebrow:'바꾼 것', title:`${rx}칸은 바꿀 수밖에 없었어요`, sub:'바꾸면 안 되는 칸은 되돌려서 잠금을 누른 뒤 다시 만들어 보세요.', facts:[]});
       const chk=(this.scheduleWarnings||[]).filter(w=>w.type==='check').length, ot=(this.offTeukgeun||[]).length, v=(this.vReport&&this.vReport.total)||0;
       const wr=this.wishReport, unmet=wr ? Math.max(0,(wr.total_requested||0)-(wr.total_granted||0)) : 0;
