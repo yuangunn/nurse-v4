@@ -81,15 +81,38 @@ def test_migration_adds_rule_once_and_never_revives_a_deleted_one(tmp_path, monk
         with sqlite3.connect(path) as c:
             return c.execute("PRAGMA user_version").fetchone()[0]
 
-    assert len(rows()) == 1 and rows()[0][1:] == (-10, 1) and version() == 1
+    assert len(rows()) == 1 and rows()[0][1:] == (-200, 1) and version() == 2
     db.init_db()
     assert len(rows()) == 1, '다시 열어도 하나'
     with sqlite3.connect(path) as c:                               # 이 규칙이 없던 옛 DB
         c.execute("DELETE FROM scoring_rules WHERE params LIKE '%non_night%'")
         c.execute("PRAGMA user_version = 0")
     db.init_db()
-    assert len(rows()) == 1 and version() == 1, '옛 DB 엔 한 번 넣는다'
+    assert len(rows()) == 1 and version() == 2, '옛 DB 엔 한 번 넣는다'
     with sqlite3.connect(path) as c:                               # 사용자가 지웠다
         c.execute("DELETE FROM scoring_rules WHERE params LIKE '%non_night%'")
     db.init_db()
     assert rows() == [], '지운 규칙을 되살리지 않는다'
+
+
+def test_migration_raises_the_first_default_score_once(tmp_path, monkeypatch):
+    """처음 값(-10)으로 둔 DB 만 새 기본값(-200)으로 한 번 올린다 — 사람이 고친 값과, 올린 뒤 되돌린 값은 그대로 (결정 1-76)."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    db.init_db()
+    path = db.get_db_path()
+
+    def score():
+        with sqlite3.connect(path) as c:
+            return c.execute("SELECT score FROM scoring_rules WHERE params LIKE '%non_night%'").fetchone()[0]
+
+    def set_(value, version):
+        with sqlite3.connect(path) as c:
+            c.execute("UPDATE scoring_rules SET score=? WHERE params LIKE '%non_night%'", (value,))
+            c.execute(f"PRAGMA user_version = {version}")
+
+    set_(-10, 1); db.init_db()
+    assert score() == -200, '처음 값으로 둔 옛 DB 는 올린다'
+    set_(-50, 1); db.init_db()
+    assert score() == -50, '사람이 고친 값은 그대로'
+    set_(-10, 2); db.init_db()
+    assert score() == -10, '올린 뒤 되돌린 값은 다시 바꾸지 않는다'
