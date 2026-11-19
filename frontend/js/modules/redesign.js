@@ -21,6 +21,29 @@ window.RedesignModule = function() {
   const REST_ORDER = ['주','OF','V','생','특','공','법','병','경가','조가','P1','산전'];
   const PERIOD_KO = {D:'낮', E:'저녁', N:'야간'};
   // HiGHS 기록의 Src 글자(그 표를 어떻게 찾았는가)·끝난 상태를 쉬운 말로
+  // ── 어떤 근무표를 원하세요? (결정 1-77) — 서로 맞바꾸는 배점끼리 '어느 쪽 우선'을 고른다. 고른 쪽의 배점을 곱해 요청에만 싣는다
+  //    (설정의 우선순위 규칙 값은 그대로 — 손으로 고친 값 위에 곱한다). 가운데('mid')는 아무것도 곱하지 않는다.
+  const is=(type, test)=>r=>r.rule_type===type && (!test || test(r.params||{}));
+  const PREF_RULE = {
+    singleN:  is('pattern', p=>(p.pattern||[]).join()==='non_night,night,non_night'),
+    runN:     is('consecutive_same', p=>p.period==='night'),
+    fairN:    is('night_fairness'),
+    useV:     is('specific_shift', p=>p.shift_code==='V'),
+    runRest:  is('consecutive_same', p=>p.period==='rest'),
+    pongdang: is('pattern', p=>(p.pattern||[]).join()==='work,rest_leave,work'),
+    fairWk:   is('weekend_fairness'),
+    wish:     is('wish'),
+  };
+  const PREF_AXES = [
+    {id:'night', q:'야간 근무는', a:{label:'묶어서', hint:'하루짜리 야간을 줄이고 이틀·사흘씩 묶습니다', fx:{singleN:2, runN:2, fairN:0.5}},
+                                  b:{label:'사람마다 고르게', hint:'사람마다 야간 횟수 차이를 줄입니다', fx:{fairN:3, singleN:0.5}}},
+    {id:'rest', q:'쉬는 날은', a:{label:'연차(V) 아끼기', hint:'자동으로 넣는 연차를 줄입니다', fx:{useV:2, runRest:0.5}},
+                                b:{label:'연속 휴일 길게', hint:'쉬는 날을 붙여 주고 근무-휴무-근무를 줄입니다', fx:{runRest:3, pongdang:2, useV:0.5}}},
+    {id:'weekend', q:'주말·공휴일은', a:{label:'근무를 고르게', hint:'사람마다 주말·공휴일 근무 횟수 차이를 줄입니다', fx:{fairWk:3, wish:0.5}},
+                                      b:{label:'희망 근무 먼저', hint:'희망 근무(위시)를 더 들어줍니다. 원티드(사전입력)는 어느 쪽이든 지킵니다', fx:{wish:3, fairWk:0.5}}},
+  ];
+  const PREF_TIMES = [{v:20, label:'20분'}, {v:60, label:'60분'}, {v:'endless', label:'멈출 때까지 계속'}];
+  const PREF_DEFAULT = {night:'mid', rest:'mid', weekend:'mid', time:20};
   const SRC = {B:'갈래를 나눠 따져 봄', C:'가운데 값에서 어림', F:'규칙을 맞추며 밀어 넣기', H:'어림 탐색', L:'작은 문제로 쪼개 풀기', P:'남은 것이 없는 문제', R:'무작위로 어림',
     S:'조건을 느슨하게 푼 답에서', T:'갈래를 평가하다가', U:'한계 없음', z:'가장 단순한 값으로', l:'가장 단순한 값으로', u:'가장 단순한 값으로', p:'가장 단순한 값으로'};
   const STATUS_KO = {'Optimal':'가장 좋은 표로 확인됨', 'Time limit reached':'시간이 다 됨', 'Interrupted by user':'멈춤', 'Infeasible':'이 조건으로는 만들 수 없음',
@@ -41,6 +64,12 @@ window.RedesignModule = function() {
     showLiveLog: false,          // 만드는 중 원본 계산 기록 — 기본은 접고 해석한 계산 현황(rdSolveCards·solveStats.events)을 보인다
     solveStats: null,            // 솔버 기록에서 읽은 것 {phases:[{n,rows0,cols0,rows,cols,restarts,status,row}], events:[…]} (_solveFeed)
     story: {open:false, step:0}, // 결과 요약 — 생성이 끝나면 단계별로 넘겨 보는 창 (rdStorySteps)
+    genPref: {open:false, draft:null, make:false},   // '어떤 근무표를 원하세요?' 창 — make: 고른 뒤 바로 만든다
+    genPrefTick: 0,              // 저장한 선택을 다시 읽게 하는 값 (localStorage 는 반응하지 않는다)
+    genEndless: false,           // 멈출 때까지 계속 — 한 번 끝날 때마다 그 표에서 다시 잇는다
+    genRound: 1,                 // 이번 만들기의 몇 번째 찾기인가 (1 = 처음, 2부터 이어 찾기)
+    genElapsedBase: 0,           // 앞 찾기들에 든 시간(초) — 이어 찾는 동안 걸린 시간을 처음부터 다시 세지 않는다
+    genRounds: [],               // 끝난 찾기마다 {n, gap, improved, sec}
     storyHint: false,            // 요약을 중간에 닫은 직후 — 상태 줄 '결과 요약 다시 보기'를 잠깐 강조
     rdWhy: false,                // 원티드 미반영 탭에서 칸마다 그날 사정을 펼쳐 보인다 ('칸별 이유가 궁금하다면?')
     cellWhy: {},                 // 칸별 이유 — 'nid|날짜' → {loading} 또는 {res: 정밀 진단 결과} (rdCellWhy)
@@ -196,7 +225,7 @@ window.RedesignModule = function() {
         const t = rem ? this.rdEta(rem)+' 남음' : (this.estimatedSeconds ? '예상보다 오래 걸리지만 멈춘 게 아니에요' : '잠시만요');
         if(this.continuing){   // 이어 찾기 (결정 1-50) — 앞 표는 저장돼 있고 화면에 그대로다
           const g=this.mipGapPercent;
-          return {kind:'warn', running:true, text:`지금 표는 저장했어요${g!=null?` (가장 좋은 답과 ${Math.round(g*10)/10}% 차이)`:''} · 그 표에서 더 좋은 표를 찾는 중… ${t} · 멈추면 지금 표를 씁니다`};
+          return {kind:'warn', running:true, text:`지금 표는 저장했어요${g!=null?` (가장 좋은 답과 ${Math.round(g*10)/10}% 차이)`:''} · 그 표에서 더 좋은 표를 찾는 중 (${Math.max(1,this.genRound-1)}번째 이어 찾기)… ${this.genEndless?'멈출 때까지 계속 찾습니다':t} · 멈추면 지금 표를 씁니다`};
         }
         return {kind:'warn', running:true, text:`근무표를 만드는 중… ${t}`};
       }
@@ -289,7 +318,7 @@ window.RedesignModule = function() {
     // ── 계산 현황 — 솔버(HiGHS) 기록을 줄 단위로 읽어 숫자와 사건으로 (결정 1-64) ──
     // 화면에 남기는 기록(solverLogs)은 최근 200줄로 잘리므로, 줄이 들어올 때마다 여기에 쌓는다. 한 번의 생성에 풀이(Presolving model)가
     // 여러 번 올 수 있다(완화 단계). CP-SAT 기록은 형식이 달라 읽지 않는다 — 카드는 진행 정보(solveProgress)의 노드·Gap 만 보인다.
-    _solveReset(){ this.solveStats={phases:[], events:[], seq:0}; },
+    _solveReset(){ this.solveStats={phases:[], events:[], seq:0, found:0}; },
     _pushLog(msg, hint){
       this.solverLogs.push(hint ? {id:++this._logSeq, msg, hint:true} : {id:++this._logSeq, msg});
       if(!hint){ if(this.solverLogs.length>300) this.solverLogs=this.solverLogs.slice(-200); for(const l of String(msg).split('\n')) this._solveFeed(l); }   // 한 메시지에 여러 줄이 온다
@@ -314,7 +343,7 @@ window.RedesignModule = function() {
         const row={src:m[1]||(P.row&&P.row.src)||'', proc:num(m[2]), queue:num(m[3]), leaves:num(m[4]), expl:+m[5], bound:m[6], sol:m[7], gap:m[8], cuts:num(m[9]), inlp:num(m[10]), confl:num(m[11]), lpit:num(m[12]), time:+m[13]};
         const better=row.sol!=='inf' && row.sol!==(P.row ? P.row.sol : P.start);
         P.row=row;
-        if(better){ ev(`${P.had?'더 좋은 표를 찾음':'첫 표를 찾음'}${m[1]&&SRC[m[1]]?` — ${SRC[m[1]]}`:''}`); P.had=true; }
+        if(better){ ev(`${P.had?'더 좋은 표를 찾음':'첫 표를 찾음'}${m[1]&&SRC[m[1]]?` — ${SRC[m[1]]}`:''}`); P.had=true; S.found=(S.found||0)+1; }
         return;
       }
       if((m=line.match(/^\s+Status\s+(.+)$/))){ P.status=m[1].trim(); ev(`끝 — ${STATUS_KO[P.status]||P.status}`); }
@@ -362,11 +391,15 @@ window.RedesignModule = function() {
       if(!this.rdSched) return [];
       const n=x=>Number(x).toLocaleString('ko-KR'), steps=[];
       const ph=((this.solveStats&&this.solveStats.phases)||[]).filter(p=>p.row), sum=k=>ph.reduce((a,p)=>a+(p.row[k]||0), 0), lastP=ph[ph.length-1];
-      const sec=Math.round((this.generationReport&&this.generationReport.duration_seconds) || sum('time') || 0);
+      // 이어 찾았으면 처음부터 든 시간 — 마지막 찾기 것만 보이면 처음부터 다시 찾은 것처럼 읽힌다
+      const total=(this.genElapsedBase||0)+(this.generating ? (this.generateElapsed||0) : (this.generateFinalElapsed||0));
+      const sec=Math.round((this.genRound>1 && total) || (this.generationReport&&this.generationReport.duration_seconds) || sum('time') || 0);
       const dur=sec>=60 ? `${Math.floor(sec/60)}분 ${sec%60}초` : `${sec}초`;
       const g=this.mipGapPercent;
       const calc=[];
-      if(sec) calc.push(['걸린 시간', dur]);
+      if(sec) calc.push([this.generating ? '지금까지 걸린 시간' : '걸린 시간', dur]);
+      if(this.genRound>1) calc.push(['이어 찾기', `${this.genRound-1}번`]);
+      if(this.solveStats&&this.solveStats.found) calc.push(['찾은 표', `${n(this.solveStats.found)}개`]);
       if(ph.length){
         calc.push(['풀이 횟수', `${ph.length}번`], ['따져 본 경우', `${n(sum('proc'))}가지`], ['더 볼 필요 없어 쳐낸 경우', `${n(sum('leaves'))}가지`], ['계산 횟수', `${n(sum('lpit'))}번`]);
         if(ph[0].rows0!=null) calc.push(['따질 조건 정리', `${n(ph[0].rows0)}개 → ${n(ph[0].rows)}개`]);
@@ -376,7 +409,7 @@ window.RedesignModule = function() {
       if(g!=null) calc.push(['가능한 최고와의 차이', (Math.round(g*100)/100)+'%']);
       else if(lastP && lastP.row.gap!=='inf') calc.push(['가능한 최고와의 차이', lastP.row.gap]);
       steps.push({id:'calc', eyebrow:'계산', title: ph.length ? `경우 ${n(sum('proc'))}가지를 따져 봤어요` : '근무표를 계산했어요',
-        sub: this.scheduleStopped ? '중간에 멈춰 그때까지 찾은 표입니다.' : (g==null ? '' : (g<=0.1 ? '이 조건에서 가장 좋은 표입니다.' : `가장 좋은 표와 ${Math.round(g*10)/10}% 안쪽 차이에서 멈췄습니다.`)), facts:calc});
+        sub: (this.generating&&this.continuing) ? '지금도 더 좋은 표를 찾고 있어요. 아래는 지금 화면에 있는 표의 것입니다.' : this.scheduleStopped ? '중간에 멈춰 그때까지 찾은 표입니다.' : (g==null ? '' : (g<=0.1 ? '이 조건에서 가장 좋은 표입니다.' : `가장 좋은 표와 ${Math.round(g*10)/10}% 안쪽 차이에서 멈췄습니다.`)), facts:calc});
       const pre=this.rdWantedCount, rx=this.rdRelaxedCount, tc=this.rdTraineeChanged, keptN=Math.max(pre-this.rdWantedRelaxed-tc, 0);
       // 표 아래 '배정 / 필요' 줄과 같은 셈 — 날짜별로 고친 필요 인원(rdFootNeed)과 견준다
       const rowsDEN=(this.footerRows||[]).filter(r=>['D','E','N'].includes(r.label));
@@ -394,7 +427,8 @@ window.RedesignModule = function() {
       if(v) check.push(['자동으로 넣은 연차 (V)', `${v}건`, 'v']);
       if(unmet) check.push(['못 들어간 희망 근무', `${unmet}건`, 'wish']);
       if(check.length) steps.push({id:'check', eyebrow:'확인할 것', title:`확인할 것이 ${check.length}가지 있어요`, sub:'줄을 누르면 근무표 아래 리포트의 그 탭이 열립니다.', facts:check});
-      steps.push({id:'done', eyebrow:'결과', title:'근무표가 준비됐어요', sub: this.rdSaved ? '자동으로 저장했습니다.' : '', facts:[]});
+      steps.push({id:'done', eyebrow:'결과', title:(this.generating&&this.continuing) ? '지금 표는 이렇습니다' : '근무표가 준비됐어요',
+        sub:(this.generating&&this.continuing) ? '더 좋은 표가 나오면 바꿔 저장합니다. 멈추면 지금 표를 그대로 씁니다.' : (this.rdSaved ? '자동으로 저장했습니다.' : ''), facts:[]});
       return steps;
     },
     // 칸별 이유 — "이 칸을 지켰다면?" 이 칸만 원래 사전입력으로 두고(다른 바뀐 칸은 풀어 둔 채) 정밀 진단(/api/diagnose)을 돌린다.
@@ -555,6 +589,52 @@ window.RedesignModule = function() {
     // ── 저장 버튼 상태 ──
     get rdSaveLabel(){ return this.rdSched && this.rdSaved ? '저장됨' : '저장'; },
     get rdSaveTip(){ return this.rdSched ? (this.rdSaved ? '자동으로 저장됐습니다. 이름을 바꿔 따로 저장하려면 누르세요.' : '이 근무표를 이름 붙여 저장합니다.') : '만든 뒤에 저장할 수 있어요.'; },
+    // ── 어떤 근무표를 원하세요? (결정 1-77) — 달마다 한 번 고르고 기억한다 (localStorage 'ns_genpref:<병동>:<년-월>').
+    //    그 달에 고른 적이 없으면 만들기를 누를 때 창이 먼저 뜬다. 다음 달은 지난번 고른 것에서 시작한다 ──
+    rdPrefAxes(){ return PREF_AXES; },
+    rdPrefTimes(){ return PREF_TIMES; },
+    _genPrefKey(){ return `ns_genpref:${this.currentProfile||''}:${this.year}-${String(this.month).padStart(2,'0')}`; },
+    _genPrefClean(o){ const p={...PREF_DEFAULT};
+      for(const a of PREF_AXES) if(['a','mid','b'].includes(o&&o[a.id])) p[a.id]=o[a.id];
+      if(o && PREF_TIMES.some(t=>t.v===o.time)) p.time=o.time;
+      return p; },
+    // 이 달에 고른 것 — 없으면 null. 저장소를 못 쓰는 곳(시크릿 창 등)에서는 기본값을 돌려줘 창이 매번 뜨지 않게 한다
+    genPrefGet(){ this.genPrefTick;
+      try{ const s=localStorage.getItem(this._genPrefKey()); return s ? this._genPrefClean(JSON.parse(s)) : null; }catch(e){ return {...PREF_DEFAULT}; } },
+    genPrefOpen(make){
+      let last=null; try{ last=JSON.parse(localStorage.getItem('ns_genpref_last:'+(this.currentProfile||''))||'null'); }catch(e){}
+      this.genPref={open:true, make:!!make, draft:this._genPrefClean(this.genPrefGet()||last)};
+    },
+    genPrefSave(){
+      const p=this._genPrefClean(this.genPref.draft), make=this.genPref.make;
+      try{ localStorage.setItem(this._genPrefKey(), JSON.stringify(p)); localStorage.setItem('ns_genpref_last:'+(this.currentProfile||''), JSON.stringify(p)); }catch(e){}
+      if(typeof p.time==='number') this.generateTimeout=p.time;
+      this.genPref.open=false; this.genPrefTick++;
+      if(make && !this.generating) this.generate();
+    },
+    // 만들기 단추 옆 한 줄 — 가운데가 아닌 것만 + 시간
+    get rdPrefSummary(){
+      const p=this.genPrefGet(); if(!p) return '어떤 근무표를 원하세요?';
+      const picks=PREF_AXES.filter(a=>p[a.id]!=='mid').map(a=>a[p[a.id]].label);
+      return [...(picks.length?picks:['고르게 균형']), p.time==='endless' ? '멈출 때까지' : `${this.generateTimeout}분`].join(' · ');
+    },
+    // 요청에 싣는 것 — 고른 쪽의 배점을 곱한 규칙 목록(가운데뿐이면 싣지 않는다 → 서버가 설정 값을 쓴다)과, 계속 찾기면 오차 0
+    genPrefPatch(){
+      const p=this.genPrefGet()||PREF_DEFAULT, mul=new Map();
+      for(const a of PREF_AXES){ const side=a[p[a.id]]; if(!side) continue;
+        for(const [k,f] of Object.entries(side.fx)) for(const r of (this.scoringRules||[])) if(PREF_RULE[k](r)) mul.set(r, (mul.get(r)||1)*f); }
+      const out={};
+      if(mul.size) out.scoring_rules=(this.scoringRules||[]).map(r=>mul.has(r) ? {...r, score:Math.round(r.score*mul.get(r))} : {...r});
+      if(p.time==='endless') out.mip_gap=0;
+      return out;
+    },
+    // 이어 찾는 동안의 중간 결과 한 줄 — 화면의 표가 어느 정도인지·몇 개를 찾았는지·모두 얼마나 걸렸는지 (찾기가 바뀌어도 처음부터 다시 세지 않는다)
+    get rdMidFacts(){
+      if(!(this.generating && this.continuing && this.rdSched)) return [];
+      const g=this.mipGapPercent, S=this.solveStats, sec=(this.genElapsedBase||0)+(this.generateElapsed||0);
+      return [['지금 화면의 표', g==null ? '저장해 둠' : `가능한 최고와 ${Math.round(g*100)/100}% 차이`], ['지금까지 찾은 표', `${(S&&S.found)||0}개`],
+        ['이어 찾기', `${Math.max(1,this.genRound-1)}번째`], ['처음부터', sec>=60 ? `${Math.floor(sec/60)}분 ${sec%60}초` : `${sec}초`]];
+    },
     get rdMakeLabel(){ return this.generating ? '만드는 중…' : (this.rdSched ? '다시 만들기' : '근무표 만들기'); },
     get rdMakeTip(){ return this.rdSched ? (this.rdPreChanged?'고친 사전입력으로 새로 만듭니다. ':'')+'지금 표를 버리고 새로 만듭니다. 저장한 표는 불러오기에 남아 있어요.' : `사전입력을 지키면서 자동으로 채웁니다. ${this.feas&&this.feas.estimated_seconds ? this.rdEta(this.feas.estimated_seconds)+' 걸리고' : '몇 분 걸리고'} 중간에 멈출 수 있어요.`; },
 

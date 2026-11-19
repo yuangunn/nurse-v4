@@ -6,7 +6,8 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 global.window = {};
-global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+// 이 달에 어떤 표를 원하는지는 이미 골랐다고 둔다 (결정 1-77 — 고른 적이 없으면 만들기가 먼저 묻는다)
+global.localStorage = { getItem: (k) => (String(k).startsWith('ns_genpref:') ? '{"time":20}' : null), setItem() {}, removeItem() {} };
 global.document = { addEventListener() {}, querySelector: () => null, querySelectorAll: () => [] };
 global.EventSource = class { close() {} };
 for (const f of ['undo-redo', 'drag-select', 'analysis', 'paste-import', 'profiles', 'dev-tools', 'nurse-manage',
@@ -113,7 +114,7 @@ for (const extra of [{ mip_gap_percent: 1.5 }, { stopped: true }, { pinned_confi
 {
   const a = app();
   a.generating = true; a.continuing = true; a.mipGapPercent = 8.7; a.estimatedSeconds = 0;
-  assert.match(a.rdStatus.text, /^지금 표는 저장했어요 \(가장 좋은 답과 8\.7% 차이\) · 그 표에서 더 좋은 표를 찾는 중… .* 멈추면 지금 표를 씁니다$/);
+  assert.match(a.rdStatus.text, /^지금 표는 저장했어요 \(가장 좋은 답과 8\.7% 차이\) · 그 표에서 더 좋은 표를 찾는 중 \(1번째 이어 찾기\)… .* 멈추면 지금 표를 씁니다$/);
 }
 // ⑨ 새로고침 복구 — 이어 찾기 결과가 improved 가 아니면 적용·자동저장하지 않는다 (리뷰: 앞 표 자동저장본을 지웠다)
 {

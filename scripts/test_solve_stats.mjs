@@ -88,7 +88,7 @@ Object.assign(f, { mipGapPercent: 0, scheduleStopped: false, generationReport: {
   scheduleWarnings: [], offTeukgeun: [], vReport: null, wishReport: null });
 assert.deepEqual(f.rdStorySteps.map(s => s.id), ['calc', 'kept', 'done']);
 assert.equal(f.rdStorySteps[0].title, '경우 12가지를 따져 봤어요');
-assert.deepEqual(f.rdStorySteps[0].facts, [['걸린 시간', '1분 15초'], ['풀이 횟수', '1번'], ['따져 본 경우', '12가지'], ['더 볼 필요 없어 쳐낸 경우', '5가지'],
+assert.deepEqual(f.rdStorySteps[0].facts, [['걸린 시간', '1분 15초'], ['찾은 표', '1개'], ['풀이 횟수', '1번'], ['따져 본 경우', '12가지'], ['더 볼 필요 없어 쳐낸 경우', '5가지'],
   ['계산 횟수', '900번'], ['따질 조건 정리', '100개 → 80개'], ['마지막 표를 찾은 방법', '어림 탐색'], ['끝난 까닭', '가장 좋은 표로 확인됨'], ['가능한 최고와의 차이', '0%']]);
 assert.equal(f.rdStorySteps[1].title, '원티드 40칸을 모두 지켰어요');
 assert.deepEqual(f.rdStorySteps[1].facts.at(-1), ['날마다 필요 인원 (D·E·N)', '모두 채움']);
