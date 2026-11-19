@@ -155,6 +155,17 @@ window.SettingsDefsModule = function() {
     // hideCharge = 화면 전용. 인쇄·엑셀은 늘 D/E/N (병동 번표에는 누가 차지인지 나오지 않는다 — 2026-10-03 병동 확인).
     // _printPlain = Ctrl+P 로 화면을 바로 인쇄할 때 잠깐 켜진다 (redesign.js beforeprint).
     hideCharge:true, _printPlain:false, colorByShift:true, showCompareMenu:false, showMobileMore:false,
+    // 근무표 보기 옵션 (결정 1-82) — 화면 전용, 인쇄·엑셀은 그대로.
+    //  viewWorkRest: 근무/쉬는 날 두 색으로만 (근무별 색·원티드·나이트킵 색을 끈다) — 누가 길게 일하고 길게 쉬는지 보려고
+    //  showWantedColor: 원티드(분홍) 칸 색
+    viewWorkRest:false, showWantedColor:true,
+    // 근무·휴무만 보기일 때 칸의 색 클래스 — 휴무·휴가는 쉬는 날, 나머지는 근무. 빈칸·재적 밖은 색 없음
+    rdCellTone(nurse, day){
+      if(!this.viewWorkRest||this.isNurseInactive(nurse,day))return '';
+      const s=this._getShift(nurse.id,day); if(!s||s==='-')return '';
+      const info=this.shiftMap.get(s);
+      return info&&(info.period==='rest'||info.period==='leave')?'vw-rest':'vw-work';
+    },
     // 전입/전출 범위 체크
     isNurseInactive(nurse, day){
       if(!nurse)return false;
