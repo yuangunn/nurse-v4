@@ -55,14 +55,31 @@ window.ScheduleFeaturesModule = function() {
     async exportToXlsx(){
       if(!this.schedule||!Object.keys(this.schedule).length){ this.toast('근무표가 없습니다','error'); return }
       try{
-        const res=await fetch('/api/schedules/export.xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...this._xlsxBody(),prev:await this._xlsxPrev()})});
-        if(!res.ok){ const d=(await res.json().catch(()=>null))?.detail; throw new Error(typeof d==='string'?d:'내보내기 실패') }
-        const url=URL.createObjectURL(await res.blob());
+        const url=URL.createObjectURL(await this._xlsxBlob());
         const a=document.createElement('a');
         a.href=url;a.download=`근무표_${this.year}년${this.month}월.xlsx`;
         document.body.appendChild(a);a.click();
         document.body.removeChild(a);URL.revokeObjectURL(url);
       }catch(e){this.toast(e.message||'내보내기 실패','error')}
+    },
+    async _xlsxBlob(){
+      const res=await fetch('/api/schedules/export.xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...this._xlsxBody(),prev:await this._xlsxPrev()})});
+      if(!res.ok){ const d=(await res.json().catch(()=>null))?.detail; throw new Error(typeof d==='string'?d:'내보내기 실패') }
+      return res.blob();
+    },
+    // 다른 앱으로 보내기 (결정 1-81) — 같은 엑셀 파일을 이 컴퓨터의 공유 창에 넘긴다(Web Share). 어떤 앱이 뜨는지는 컴퓨터마다 다르다.
+    // 파일 공유를 못 하는 곳(설치형 앱 창·옛 브라우저)에서는 메뉴에 내지 않는다 — 카카오톡·팀즈에 파일을 직접 넣는 길은 없다
+    get rdCanShareFile(){
+      try{ return typeof navigator!=='undefined'&&!!navigator.canShare&&navigator.canShare({files:[new File([''],'a.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})]}) }catch(e){ return false }
+    },
+    async shareXlsx(){
+      if(!this.schedule||!Object.keys(this.schedule).length){ this.toast('근무표가 없습니다','error'); return }
+      try{
+        const name=`근무표_${this.year}년${this.month}월.xlsx`;
+        const file=new File([await this._xlsxBlob()],name,{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+        await navigator.share({files:[file],title:name});
+      }catch(e){ if(e&&e.name==='AbortError')return;   // 공유 창을 그냥 닫았다
+        this.toast((e&&e.name==='NotAllowedError')?'공유 창을 열지 못했습니다 — 엑셀 파일로 저장한 뒤 보내 주세요':(e.message||'보내기 실패'),'error') }
     },
     // 날짜 = 그 달 1일부터 화면 끝까지 (12월 = 12/1~1/2) — 그 달은 한 시트에 다 보이고, 계는 1일~말일 칸만 센다.
     // 화면 앞에 붙은 지난달 날짜(11/29·11/30)는 뺀다. 1일~첫 토요일은 앞 달 표에도 있는 칸이다 (_xlsxPrev).
@@ -344,18 +361,19 @@ window.ScheduleFeaturesModule = function() {
     deleteTemplate(idx){this.templates.splice(idx,1);localStorage.setItem('ns_templates',JSON.stringify(this.templates))},
 
     // ═══ 간호사 명부 템플릿 다운로드/업로드 (xlsx 기본, CSV도 가져오기 허용) ═══
-    async downloadNurseTemplate(){
+    // survey: 다른 병동에 보내 채워 받는 명부 조사 양식(결정 1-80) — 한글 칸·예/아니오 고르기. 채워 온 파일은 같은 '가져오기'가 읽는다
+    async downloadNurseTemplate(survey){
       try{
         // 드롭다운·안내 시트가 든 엑셀 템플릿 — "CSV로 저장" 단계가 필요 없다
-        const res=await fetch('/api/nurses/template.xlsx');
+        const res=await fetch(survey?'/api/nurses/survey.xlsx':'/api/nurses/template.xlsx');
         if(!res.ok)throw new Error('템플릿 다운로드 실패');
         const blob=await res.blob();
         const url=URL.createObjectURL(blob);
         const a=document.createElement('a');
-        a.href=url;a.download='nurses_template.xlsx';
+        a.href=url;a.download=survey?'명부_조사_양식.xlsx':'nurses_template.xlsx';
         document.body.appendChild(a);a.click();
         document.body.removeChild(a);URL.revokeObjectURL(url);
-        this.toast('엑셀 템플릿 다운로드 완료 — 채워서 그대로 가져오기 하세요','info',4000);
+        this.toast(survey?'명부 조사 양식을 내려받았습니다 — 병동에 보내 채워 받은 뒤 엑셀/CSV 가져오기로 올리세요':'엑셀 템플릿 다운로드 완료 — 채워서 그대로 가져오기 하세요','info',5000);
       }catch(e){this.toast(e.message||'다운로드 실패','error')}
     },
 

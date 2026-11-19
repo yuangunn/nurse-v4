@@ -154,7 +154,8 @@ body.rd .rtable .rt-foot input:not(.is-default) { font-weight: var(--fw-strong);
 .rmid .fact { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; } .rmid .fact small { color: var(--ink-2); font-size: var(--fs-sub); } .rmid .fact b { font-weight: var(--fw-strong); font-variant-numeric: tabular-nums; }
 .rmid .rbtn-sm { margin-left: auto; flex: none; }
 /* 어떤 근무표를 원하세요? (결정 1-77) — 크기 고정 */
-.rpref { width: 600px; max-width: calc(100vw - 48px); height: min(620px, 90vh); padding: 22px 28px 18px; gap: 6px; }
+/* 창의 이름은 rgenpref — 간호사 창 근무 성향 줄(.rmodal .rpref)과 겹치면 그 줄이 이 크기가 된다 */
+.rgenpref { width: 600px; max-width: calc(100vw - 48px); height: min(620px, 90vh); padding: 22px 28px 18px; gap: 6px; }
 .rpref-title { font-size: 24px; line-height: 1.35; font-weight: var(--fw-strong); letter-spacing: -0.01em; }
 .rpref-sub { font-size: var(--fs-sub); color: var(--ink-2); line-height: 1.5; word-break: keep-all; }
 .rpref-body { flex: 1; min-height: 0; overflow: auto; margin-top: 10px; display: flex; flex-direction: column; gap: 14px; }

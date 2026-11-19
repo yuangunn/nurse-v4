@@ -158,4 +158,13 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   assert.match(mid.status, /찾는 중 \(1번째 이어 찾기\)/);
   assert.equal(mid.story[mid.story.length - 1], '지금 표는 이렇습니다');
 }
+// ⑤ 선택 창의 스타일 이름은 간호사 창 근무 성향 줄(.rmodal .rpref)과 겹치면 안 된다 — 겹쳐서 그 줄 셋이 창 크기(600×620)가 됐다
+{
+  const css = fs.readFileSync(new URL('../frontend/css/redesign-bridge.css', import.meta.url), 'utf8');
+  const html = fs.readFileSync(new URL('../frontend/index.html', import.meta.url), 'utf8');
+  assert.equal(/^\.rpref\s*\{/m.test(css), false, '.rpref 에 창 크기를 주지 않는다');
+  assert.match(css, /^\.rgenpref\s*\{[^}]*width:\s*600px/m);
+  assert.match(html, /class="rmodal rgenpref"/);
+  assert.match(html, /<div class="rpref"/, '간호사 창 근무 성향 줄은 .rpref 그대로');
+}
 console.log('test_gen_pref: OK');

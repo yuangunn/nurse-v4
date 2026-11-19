@@ -398,6 +398,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
 
         x: Dict[str, Dict[int, Dict[str, object]]] = {}
         _free_vars_r: list = []
+        keep_by_nurse: Dict[str, list] = {}   # 간호사 → 풀 수 있는 원티드 칸마다 '지키면 1'인 변수들 (주휴 빼고)
         first_of_month = date(self.year, self.month, 1)
         for nurse in self.nurses:
             nid = nurse["id"]
@@ -505,14 +506,16 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 if pre:
                     pre_flex = self._PRE_FLEX.get(pre, {pre})
                     bonus_amount = _pre_bonus_for(pre, nid)
-                    for s in pre_flex:
-                        v = x[nid][d].get(s)
-                        if isinstance(v, pulp.LpVariable):
-                            pre_bonus_terms.append(bonus_amount * v)
+                    kept = [x[nid][d].get(s) for s in pre_flex if isinstance(x[nid][d].get(s), pulp.LpVariable)]
+                    pre_bonus_terms.extend(bonus_amount * v for v in kept)
+                    if kept and pre != "주":
+                        keep_by_nurse.setdefault(nid, []).append(kept)
         # 원티드 D/E·N제외: 허용 근무 중 하나면 근무 원티드를 지킨 것 (잠긴 칸·지난달은 하드)
         for nid, d, code, terms in self._apply_flex_wishes(x, soft=True):
             bonus_amount = _pre_bonus_for(code, nid)
             pre_bonus_terms.extend(bonus_amount * v for v in terms)
+            if terms:
+                keep_by_nurse.setdefault(nid, []).append(list(terms))
 
         # 제약 (동일)
         self._c_one_shift_per_day(prob, x)
@@ -613,6 +616,13 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             # 지난달에 시작한 블록의 요일 어기기 (결정 1-37)
             _anchor_pen = self._juhu_anchor_pen(PRE_BONUS_OFF, PRE_BONUS_LEAVE)
             lr += [(_anchor_pen, y) for y in getattr(self, "_juhu_anchor_dev", [])]
+            # 한 사람에게 몰리지 않게 — 같은 사람의 둘째 칸부터 한 칸마다 조금 깎는다 (결정 1-79)
+            for _nid, _cells in keep_by_nurse.items():
+                if len(_cells) >= 2:
+                    _again = pulp.LpVariable(f"relax_again_{_nid}", lowBound=0)
+                    prob += (_again >= len(_cells) - 1 - pulp.lpSum(v for c in _cells for v in c),
+                             f"relax_again_{_nid}")
+                    lr.append((self._RELAX_AGAIN_PEN, _again))
             if lr:
                 bonus_expr = bonus_expr - pulp.lpSum(pen * sl for pen, sl in lr)
             prob.setObjective(bonus_expr)
