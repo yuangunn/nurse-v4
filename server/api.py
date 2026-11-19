@@ -729,6 +729,208 @@ def nurse_template_xlsx():
     )
 
 
+# ── 명부 조사 양식 (결정 1-80) — 다른 병동에 보내 채워 받는 엑셀. 앱 안의 형식(id·female·DC,D,EC…·프리셉터ID)을 모르는 사람이
+#    채우도록 한글 칸·예/아니오 고르기·위에서부터 선임 순으로 받고, 가져오기가 그대로 읽는다 (_survey_to_standard) ──
+_SURVEY_HEADER = ["순서", "이름", "팀", "성별", "낮 근무", "저녁 근무", "야간 근무", "낮 차지", "저녁 차지", "야간 차지",
+                  "주휴 요일", "신규", "트레이닝 끝나는 날", "프리셉터 이름", "전입일", "전출일", "임산부", "출산 예정일", "메모"]
+_SURVEY_GROUPS = [("", 1), ("기본", 3), ("할 수 있는 근무", 3), ("차지(책임)를 맡을 수 있는 근무", 3), ("주휴", 1),
+                  ("신규 간호사만", 3), ("이 달에 오거나 가는 분만", 2), ("임산부만", 2), ("", 1)]
+_SURVEY_EXAMPLE = [
+    ["예시", "김하나", "A", "여", "예", "예", "예", "예", "예", "예", "", "아니오", "", "", "", "", "아니오", "", "차지 가능한 선임"],
+    ["예시", "이두리", "B", "여", "예", "예", "아니오", "아니오", "아니오", "아니오", "수", "예", "2026-12-20", "김하나", "2026-12-01", "", "아니오", "", "신규 — 프리셉터와 같이 근무"],
+]
+_SURVEY_NOTES = [
+    "한 줄에 한 분씩, 위에서부터 선임 순서로 적어 주세요. 회색 '예시' 두 줄은 그대로 두셔도 됩니다.",
+    "노란 칸은 모든 분이 채워 주세요. 나머지 칸은 해당하는 분만 적으시면 됩니다. 고르는 칸은 칸을 누르면 목록이 나옵니다.",
+    "날짜는 2026-12-01 처럼 적어 주세요. 주휴 요일이 정해져 있지 않으면 비워 두세요.",
+]
+_SURVEY_ROWS = 40
+
+
+def _build_nurse_survey_xlsx() -> bytes:
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "명부 조사"
+    ncol = len(_SURVEY_HEADER)
+    last = get_column_letter(ncol)
+    thin = Side(style="thin", color="B8BFC9")
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ko = lambda size, bold=False, color="000000", italic=False: Font(name="맑은 고딕", size=size, bold=bold, color=color, italic=italic)
+
+    ws["A1"] = "간호사 명부 조사 양식"
+    ws["A1"].font = ko(16, True)
+    ws.row_dimensions[1].height = 30
+    ws["A2"] = "\n".join(_SURVEY_NOTES)
+    ws.merge_cells(f"A2:{last}2")
+    ws["A2"].font = ko(10, color="4A5160")
+    ws["A2"].alignment = Alignment(vertical="center", wrap_text=True)
+    ws.row_dimensions[2].height = 54
+
+    c = 1                                           # 3행 — 칸 묶음 이름
+    for label, span in _SURVEY_GROUPS:
+        if label:
+            ws.cell(3, c, label)
+            if span > 1:
+                ws.merge_cells(start_row=3, start_column=c, end_row=3, end_column=c + span - 1)
+            for k in range(c, c + span):
+                ws.cell(3, k).fill = PatternFill("solid", fgColor="E4E7EC")
+                ws.cell(3, k).border = box
+                ws.cell(3, k).font = ko(9, True, "4A5160")
+                ws.cell(3, k).alignment = center
+        c += span
+    required = {"이름", "성별", "낮 근무", "저녁 근무", "야간 근무", "낮 차지", "저녁 차지", "야간 차지"}
+    for i, h in enumerate(_SURVEY_HEADER, start=1):   # 4행 — 머리줄 (가져오기가 '이름'·'낮 근무'로 찾는다)
+        cell = ws.cell(4, i, h)
+        cell.font = ko(10, True)
+        cell.fill = PatternFill("solid", fgColor="FFE699" if h in required else "F4F5F7")
+        cell.border = box
+        cell.alignment = center
+    ws.row_dimensions[4].height = 32
+    for r, row in enumerate(_SURVEY_EXAMPLE, start=5):
+        for i, v in enumerate(row, start=1):
+            cell = ws.cell(r, i, v)
+            cell.font = ko(10, color="8A93A1", italic=True)
+            cell.fill = PatternFill("solid", fgColor="F4F5F7")
+            cell.border = box
+            cell.alignment = Alignment(horizontal="left" if i in (2, ncol) else "center", vertical="center")
+    first = 5 + len(_SURVEY_EXAMPLE)
+    end = first + _SURVEY_ROWS - 1
+    for k in range(_SURVEY_ROWS):
+        r = first + k
+        for i in range(1, ncol + 1):
+            cell = ws.cell(r, i, k + 1 if i == 1 else None)
+            cell.font = ko(11, color="8A93A1" if i == 1 else "000000")
+            cell.border = box
+            cell.alignment = Alignment(horizontal="left" if i in (2, ncol) else "center", vertical="center")
+        ws.row_dimensions[r].height = 20
+    widths = [6, 12, 6, 6, 8, 8, 8, 8, 8, 8, 8, 6, 14, 12, 12, 12, 7, 12, 30]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = "C5"
+
+    def pick(names, options):
+        dv = DataValidation(type="list", formula1=f'"{options}"', allow_blank=True, showErrorMessage=True,
+                            errorTitle="목록에서 골라 주세요", error=f"{options.replace(',', ' · ')} 가운데 하나를 골라 주세요.")
+        ws.add_data_validation(dv)
+        for n in names:
+            col = get_column_letter(_SURVEY_HEADER.index(n) + 1)
+            dv.add(f"{col}{first}:{col}{end}")
+
+    pick(["성별"], "여,남")
+    pick(["낮 근무", "저녁 근무", "야간 근무", "낮 차지", "저녁 차지", "야간 차지", "신규", "임산부"], "예,아니오")
+    pick(["주휴 요일"], "일,월,화,수,목,금,토")
+    for n in ("트레이닝 끝나는 날", "전입일", "전출일", "출산 예정일"):
+        col = get_column_letter(_SURVEY_HEADER.index(n) + 1)
+        for r in range(first, end + 1):
+            ws[f"{col}{r}"].number_format = "yyyy-mm-dd"
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@app.get("/api/nurses/survey.xlsx")
+def nurse_survey_xlsx():
+    """다른 병동에 보내 채워 받는 명부 조사 양식 — 채워 온 파일은 '엑셀/CSV 가져오기'가 그대로 읽는다."""
+    from fastapi.responses import Response
+
+    return Response(
+        content=_build_nurse_survey_xlsx(),
+        media_type=_XLSX_MEDIA,
+        headers={"Content-Disposition": "attachment; filename*=UTF-8''%EB%AA%85%EB%B6%80_%EC%A1%B0%EC%82%AC_%EC%96%91%EC%8B%9D.xlsx"},
+    )
+
+
+_SURVEY_YES = {"예", "네", "O", "ㅇ", "Y", "YES", "가능", "TRUE", "1"}
+_SURVEY_NO = {"아니오", "아니요", "X", "N", "NO", "불가", "FALSE", "0"}
+
+
+def _survey_date(v: str) -> str:
+    """양식의 날짜 칸 — 엑셀 날짜(2026-12-01 00:00:00)·2026.12.1·2026/12/01 을 YYYY-MM-DD 로. 못 읽으면 적힌 그대로(파서가 오류로 알린다)."""
+    import re
+    v = (v or "").strip()
+    m = re.match(r"^(\d{4})[-./]\s*(\d{1,2})[-./]\s*(\d{1,2})", v)
+    return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}" if m else v
+
+
+def _survey_to_standard(rows_in: list):
+    """명부 조사 양식(_SURVEY_HEADER)이면 표준 열로 바꾼 rows 와 안내 목록을, 아니면 (rows_in, []) 을 돌려준다.
+    머리줄은 '이름'과 '낮 근무'가 함께 있는 줄 — 그 위(제목·안내)와 '예시' 줄은 버린다. 선임 순서는 적힌 순서,
+    가능 근무는 예/아니오 여섯 칸에서 만든다. 양식에 없는 칸(야간전담·주휴 로테이션)은 싣지 않아 기존 값이 남는다."""
+    rows = [["" if c is None else str(c).strip() for c in r] for r in rows_in]
+    hi = next((i for i, r in enumerate(rows[:12]) if "이름" in r and "낮 근무" in r), None)
+    if hi is None:
+        return rows_in, []
+    head = rows[hi]
+    at = {h: head.index(h) for h in _SURVEY_HEADER if h in head}
+    get = lambda r, h: (r[at[h]] if h in at and at[h] < len(r) else "")
+    notes, out = [], [["이름", "팀", "성별", "가능근무", "시니어리티", "주휴요일", "트레이닝", "트레이닝종료일",
+                       "전입일", "전출일", "임산부", "프리셉터이름"]]
+    order = 0
+    for k, r in enumerate(rows[hi + 1:], start=hi + 2):
+        name = get(r, "이름")
+        if not name or get(r, "순서") == "예시":
+            continue
+
+        def yes(h, default):
+            v = get(r, h).upper()
+            if v in _SURVEY_YES:
+                return True
+            if v in _SURVEY_NO:
+                return False
+            if h in at:
+                notes.append({"row": k, "col": h, "got": get(r, h), "expected": "예/아니오",
+                              "message": f"{k}행 {name}: '{h}' 칸이 {'비어 있어' if not v else '예/아니오가 아니라'} "
+                                         f"'{'예' if default else '아니오'}'로 넣었습니다 — 확인해 주세요"})
+            return default
+
+        capable = [code for h, code, d in (("낮 차지", "DC", False), ("낮 근무", "D", True), ("저녁 차지", "EC", False),
+                                           ("저녁 근무", "E", True), ("야간 차지", "NC", False), ("야간 근무", "N", True))
+                   if yes(h, d)]
+        preg = yes("임산부", False) if get(r, "임산부") else False
+        if preg:
+            due = _survey_date(get(r, "출산 예정일"))
+            notes.append({"row": k, "col": "임산부", "got": due, "expected": "",
+                          "message": f"{k}행 {name}: 임산부로 넣었습니다{f' (출산 예정일 {due})' if due else ''} — "
+                                     "임신 초기·말기 구간은 간호사 창에서 넣어 주세요"})
+        out.append([name, get(r, "팀"), get(r, "성별"), ",".join(capable), str(order), get(r, "주휴 요일"),
+                    "Y" if (get(r, "신규") and yes("신규", False)) else "N", _survey_date(get(r, "트레이닝 끝나는 날")),
+                    _survey_date(get(r, "전입일")), _survey_date(get(r, "전출일")), "Y" if preg else "N", get(r, "프리셉터 이름")])
+        order += 1
+    return out, notes
+
+
+def _link_preceptor_names(parsed_nurses: list, existing_nurses: list, errors: list) -> None:
+    """양식의 '프리셉터 이름' → 프리셉터 id. 이번 파일의 사람이 먼저, 없으면 기존 명부. 이름이 없거나 둘 이상이면 비워 두고 알린다.
+    기존 간호사와 짝지은 뒤(_resolve_nurse_ids)에 불러야 id 가 맞는다."""
+    by_name: dict = {}
+    for n in list(parsed_nurses) + [e for e in existing_nurses if e["id"] not in {p["id"] for p in parsed_nurses}]:
+        by_name.setdefault((n.get("name") or "").strip(), []).append(n["id"])
+    for p in parsed_nurses:
+        want = (p.pop("_preceptor_name", "") or "").strip()
+        if not want:
+            continue
+        ids = [i for i in by_name.get(want, []) if i != p["id"]]
+        if len(ids) == 1:
+            p["preceptor_id"] = ids[0]
+        else:
+            p["preceptor_id"] = None
+            errors.append({"row": p.get("_row"), "col": "프리셉터 이름", "got": want, "expected": "명부에 있는 이름 하나",
+                           "message": f"{p.get('_row')}행 {p['name']}: 프리셉터 '{want}'{'이 명부에 없어' if not ids else '이 여러 명이라'} "
+                                      "비워 두었습니다 — 간호사 창에서 골라 주세요"})
+
+
 @app.get("/api/nurses/export.xlsx")
 def nurse_export_xlsx():
     """현재 간호사 목록을 템플릿과 같은 형식의 엑셀로 내보내기"""
@@ -1043,6 +1245,7 @@ def _parse_nurses_rows(rows_in: list) -> dict:
     CSV·xlsx 어느 쪽 입력이든 _decode_nurse_table_rows가 rows로 맞춰 준다."""
     import uuid
 
+    rows_in, survey_notes = _survey_to_standard(rows_in)
     rows = []
     for r in rows_in:
         cells = ["" if c is None else str(c) for c in r]
@@ -1179,9 +1382,17 @@ def _parse_nurses_rows(rows_in: list) -> dict:
             "start_date": chk_date("전입일"),
             "end_date": chk_date("전출일"),
         })
+        if "임산부" in header:                     # 명부 조사 양식에만 있는 칸 (결정 1-80)
+            nurses[-1]["is_pregnant"] = yn(col(row, "임산부"), False)
+        if "프리셉터이름" in header:
+            nurses[-1]["_preceptor_name"] = col(row, "프리셉터이름")
 
     fields = [k for c, k in zip(_NURSE_CSV_HEADER[1:], _NURSE_DIFF_FIELDS) if c in header]
-    return {"nurses": nurses, "errors": errors, "fields": fields}
+    if "임산부" in header:
+        fields.append("is_pregnant")
+    if "프리셉터이름" in header:
+        fields.append("preceptor_id")
+    return {"nurses": nurses, "errors": errors + survey_notes, "fields": fields}
 
 
 # 파일 열(_NURSE_CSV_HEADER[1:])과 같은 순서 — 열 → 간호사 키
@@ -1290,6 +1501,7 @@ def nurse_import_preview(body: dict):
     parsed = _parse_nurses_rows(rows)
     existing = db.get_nurses()
     matched_ids = _resolve_nurse_ids(parsed["nurses"], existing, parsed["fields"], parsed["errors"])
+    _link_preceptor_names(parsed["nurses"], existing, parsed["errors"])
     diff = _build_diff(parsed["nurses"], existing, matched_ids, replace_all)
 
     return {
@@ -1315,6 +1527,7 @@ def nurse_import(body: dict):
     errors = parsed["errors"]
     existing = db.get_nurses()
     matched_ids = _resolve_nurse_ids(nurses_to_save, existing, parsed["fields"], errors)
+    _link_preceptor_names(nurses_to_save, existing, errors)
 
     if not nurses_to_save:
         raise HTTPException(

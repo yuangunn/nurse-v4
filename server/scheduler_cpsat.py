@@ -459,6 +459,16 @@ class CpSatScheduler(_SchedulerBase):
               + [(self._juhu_anchor_pen(_BONUS["off"], _BONUS["leave"]), y)
                  for y in getattr(self, "_juhu_anchor_dev", [])]
               if keep_terms else [])
+        # 한 사람에게 몰리지 않게 — 같은 사람의 둘째 칸부터 한 칸마다 조금 깎는다 (결정 1-79, HiGHS 패리티)
+        _by_nurse: Dict[str, list] = {}
+        for nid, d, pre, flex_vars in pre_keeps:
+            if pre != "주" and flex_vars:
+                _by_nurse.setdefault(nid, []).append(flex_vars)
+        for nid, cells in (_by_nurse.items() if keep_terms else ()):
+            if len(cells) >= 2:
+                again = model.NewIntVar(0, len(cells), f"relax_again_{nid}")
+                model.Add(again >= len(cells) - 1 - sum(v for c in cells for v in c))
+                lr.append((self._RELAX_AGAIN_PEN, again))
         for pen, sl in lr:
             keep_terms.append(-pen * sl)
         # ── 2단계 사전순 솔브 (HiGHS 완화 경로와 동일 정책) ───────────────────

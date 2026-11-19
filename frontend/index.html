@@ -307,7 +307,7 @@
       <span class="rhdr-mark" aria-hidden="true"></span>
       <span class="rhdr-name" data-rd="brand-name">NurseScheduler</span>
       <span class="rhdr-meta" x-text="`${rdWard} 병동 · 간호사 ${nurses.length}명`"></span>
-      <span class="rhdr-ver" @click="trackVersionClick()" title="버전 정보. 다섯 번 누르면 개발자 설정이 켜집니다.">v4.22.0</span>
+      <span class="rhdr-ver" @click="trackVersionClick()" title="버전 정보. 다섯 번 누르면 개발자 설정이 켜집니다.">v4.23.0</span>
     </div>
     <div class="rym" title="대상 년월 — 사전입력·분석·근무표 모든 화면에 함께 적용됩니다">
       <button @click="prevMonth()" data-rd="ym-prev" title="한 달 앞으로 갑니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
@@ -379,6 +379,7 @@
           <div class="rmenu-host" x-data="{open:false}">
             <button @click="open=!open" class="rbtn rbtn-secondary" data-rd="btn-roster-excel" title="엑셀 템플릿 내려받기 · 엑셀/CSV 가져오기 · 엑셀로 내보내기 · 명부 템플릿 저장"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z M14 2v4a2 2 0 0 0 2 2h4 M8 13h8 M8 17h8"/></svg>엑셀로 명부 관리<svg class="caret" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
             <div x-show="open" x-cloak @click.outside="open=false" class="rmenu right">
+              <button @click="downloadNurseTemplate(true);open=false" class="rmenu-item" data-rd="roster-survey" title="다른 병동에 보내 채워 받는 양식입니다. 한글 칸에 예/아니오를 고르고 위에서부터 선임 순으로 적습니다. 채워 온 파일은 엑셀/CSV 가져오기로 올립니다."><b>명부 조사 양식 내려받기</b><small>병동에 보내 채워 받는 쉬운 양식</small></button>
               <button @click="downloadNurseTemplate();open=false" class="rmenu-item" title="드롭다운·안내 시트가 든 엑셀 템플릿을 내려받습니다. 채워서 그대로 가져오면 됩니다."><b>엑셀 템플릿 내려받기</b><small>채워서 가져오면 한 번에 등록됩니다</small></button>
               <button @click="$refs.nurseCsvInput.click();open=false" class="rmenu-item" title="엑셀(xlsx) 또는 CSV 파일로 명부를 한 번에 등록·수정합니다. 이 화면에 파일을 끌어다 놓아도 됩니다."><b>엑셀/CSV 가져오기</b><small>파일을 이 화면에 끌어다 놓아도 됩니다</small></button>
               <button @click="exportNursesToCSV();open=false" class="rmenu-item" title="지금 명부를 엑셀(xlsx)로 내려받습니다. 고쳐서 다시 가져오면 반영됩니다."><b>엑셀로 내보내기</b><small>고쳐서 다시 가져올 수 있어요</small></button>
@@ -909,6 +910,7 @@
         <button @click="open=!open" class="rbtn rbtn-secondary" :disabled="!rdSched" data-rd="btn-export" title="엑셀 파일로 저장 · 어싸인 배정표에 붙일 표 복사"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12"/></svg>내보내기<svg class="caret" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         <div x-show="open" x-cloak @click.outside="open=false" class="rmenu right">
           <button @click="exportToXlsx();open=false" class="rmenu-item" title="병동 번표 양식의 엑셀(xlsx) 파일로 내려받습니다. 그 달 1일부터 화면 끝까지 한 시트에 나가고, 계는 1일~말일을 셉니다. 앞 달 저장본이 있으면 앞 달 시트도 함께 나갑니다. 팀 색·원티드 분홍·오른쪽과 아래의 계 수식이 함께 들어가고, 차지는 D/E/N으로 나갑니다."><b>엑셀 파일로 저장</b><small>병동 번표 양식 · 계 수식 포함 · 다시 올릴 수 있어요</small></button>
+          <button x-show="rdCanShareFile" @click="shareXlsx();open=false" class="rmenu-item" data-rd="export-share" title="같은 엑셀 파일을 이 컴퓨터의 공유 창으로 보냅니다. 공유 창에 뜨는 앱(메신저·메일 등)을 골라 보내세요. 어떤 앱이 뜨는지는 컴퓨터마다 다릅니다."><b>다른 앱으로 보내기</b><small>엑셀 파일을 공유 창으로 — 메신저·메일 등</small></button>
           <button @click="copyScheduleTsv();open=false" class="rmenu-item" title="이름·날짜·근무 표를 복사합니다. 어싸인 배정표 프로그램에 붙여 넣으세요. 차지(DC/EC/NC)는 그대로 복사합니다 — 배정표가 차지를 알아봅니다."><b>어싸인용으로 복사</b><small>배정표 프로그램에 붙일 표</small></button>
         </div>
       </div>
@@ -961,7 +963,8 @@
       <button @click="rdStoryOpen()" class="rbtn rbtn-sm rbtn-secondary" data-rd="mid-story" title="지금 화면에 있는 표의 결과 요약을 봅니다. 찾기는 멈추지 않습니다.">지금 표 요약 보기</button></div>
     <div class="rsolve" data-rd="solve-cards" x-show="rdSolveCards.length"><template x-for="c in rdSolveCards" :key="'sc'+c.k"><div class="tile" :title="c.tip"><small x-text="c.k"></small><b x-text="c.v"></b></div></template></div>
     <div class="rsolve-sub" x-show="rdSolveSub" x-text="rdSolveSub"></div>
-    <div class="rsolve-last" data-rd="solve-last" x-show="rdSolveEvents.length"><span class="lbl">방금 있었던 일</span><span class="when" x-text="rdSolveEvents.length?rdSolveEvents[0].time+'초':''"></span><span class="what" x-text="rdSolveEvents.length?rdSolveEvents[0].text:''"></span>
+    <div class="rsolve-last" data-rd="solve-last" x-show="rdSolveEvents.length"><span class="lbl">방금 있었던 일</span>
+      <div class="lines"><template x-for="(e,i) in rdSolveEvents.slice(0,3)" :key="'sl'+e.id"><div class="line" :class="i===0?'now':''"><i class="pulse"></i><span class="when" x-text="e.time+'초'"></span><span class="what" x-text="e.text" :title="e.text"></span></div></template></div>
       <button @click="showSolveEvents=!showSolveEvents" class="rbtn rbtn-sm rbtn-quiet" data-rd="solve-events-toggle" :title="showSolveEvents?'지나온 일 목록을 접습니다.':'지금까지 무슨 일이 있었는지 시간순으로 모두 봅니다.'"><span x-text="showSolveEvents?'접기':`지나온 일 모두 보기 (${rdSolveEvents.length})`"></span></button></div>
     <div class="rsolve-ev" data-rd="solve-events" x-show="showSolveEvents&&rdSolveEvents.length"><table><thead><tr><th class="num" title="그 풀이를 시작한 뒤 흐른 시간">지난 시간</th><th title="한 번의 만들기에 풀이가 여러 번 올 수 있습니다 (완화 단계)">풀이</th><th>무슨 일이 있었나</th><th class="num" title="그때까지 따져 본 경우의 수">따져 본 경우</th><th class="num" title="그때 가장 좋은 표의 점수 — 높을수록 좋다">표 점수</th><th class="num" title="가능한 최고 점수와의 차이">최고와의 차이</th></tr></thead>
       <tbody><template x-for="e in rdSolveEvents" :key="'se'+e.id"><tr><td class="num" x-text="e.time+'초'"></td><td x-text="e.solve+'번째'"></td><td x-text="e.text"></td><td class="num" x-text="e.nodes.toLocaleString('ko-KR')"></td><td class="num" x-text="e.sol||'—'"></td><td class="num" x-text="e.gap||'—'"></td></tr></template></tbody></table></div>
@@ -1162,7 +1165,8 @@
             <div x-show="rdSolveCards.length&&!generating" style="display:flex;flex-direction:column;gap:6px">
     <div class="rsolve" data-rd="solve-cards-done" x-show="rdSolveCards.length"><template x-for="c in rdSolveCards" :key="'sc-done'+c.k"><div class="tile" :title="c.tip"><small x-text="c.k"></small><b x-text="c.v"></b></div></template></div>
     <div class="rsolve-sub" x-show="rdSolveSub" x-text="rdSolveSub"></div>
-    <div class="rsolve-last" data-rd="solve-last-done" x-show="rdSolveEvents.length"><span class="lbl">방금 있었던 일</span><span class="when" x-text="rdSolveEvents.length?rdSolveEvents[0].time+'초':''"></span><span class="what" x-text="rdSolveEvents.length?rdSolveEvents[0].text:''"></span>
+    <div class="rsolve-last" data-rd="solve-last-done" x-show="rdSolveEvents.length"><span class="lbl">방금 있었던 일</span>
+      <div class="lines"><template x-for="(e,i) in rdSolveEvents.slice(0,3)" :key="'sld'+e.id"><div class="line" :class="i===0?'now':''"><i class="pulse"></i><span class="when" x-text="e.time+'초'"></span><span class="what" x-text="e.text" :title="e.text"></span></div></template></div>
       <button @click="showSolveEvents=!showSolveEvents" class="rbtn rbtn-sm rbtn-quiet" data-rd="solve-events-toggle-done" :title="showSolveEvents?'지나온 일 목록을 접습니다.':'지금까지 무슨 일이 있었는지 시간순으로 모두 봅니다.'"><span x-text="showSolveEvents?'접기':`지나온 일 모두 보기 (${rdSolveEvents.length})`"></span></button></div>
     <div class="rsolve-ev" data-rd="solve-events-done" x-show="showSolveEvents&&rdSolveEvents.length"><table><thead><tr><th class="num" title="그 풀이를 시작한 뒤 흐른 시간">지난 시간</th><th title="한 번의 만들기에 풀이가 여러 번 올 수 있습니다 (완화 단계)">풀이</th><th>무슨 일이 있었나</th><th class="num" title="그때까지 따져 본 경우의 수">따져 본 경우</th><th class="num" title="그때 가장 좋은 표의 점수 — 높을수록 좋다">표 점수</th><th class="num" title="가능한 최고 점수와의 차이">최고와의 차이</th></tr></thead>
       <tbody><template x-for="e in rdSolveEvents" :key="'se-done'+e.id"><tr><td class="num" x-text="e.time+'초'"></td><td x-text="e.solve+'번째'"></td><td x-text="e.text"></td><td class="num" x-text="e.nodes.toLocaleString('ko-KR')"></td><td class="num" x-text="e.sol||'—'"></td><td class="num" x-text="e.gap||'—'"></td></tr></template></tbody></table></div>
@@ -1508,7 +1512,7 @@
      검사기와 Esc 처리가 '열린 창'을 .rmodal-bg 로 찾는다 ═══ -->
 <!-- 어떤 근무표를 원하세요? (결정 1-77) — 달마다 한 번 고른다. 크기는 고정, 창 밖을 눌러도 닫히지 않는다 -->
 <div :class="genPref.open?'rmodal-bg':''" role="dialog" aria-modal="true" data-rd="gen-pref" x-show="genPref.open" x-cloak @keydown.escape.window="genPref.open=false">
-  <div class="rmodal rpref">
+  <div class="rmodal rgenpref">
     <div class="rpref-title">어떤 근무표를 원하세요?</div>
     <div class="rpref-sub" x-text="`${year}년 ${month}월 근무표에 적용합니다. 가운데는 지금 설정 그대로이고, 한쪽을 고르면 그쪽을 더 중요하게 봅니다. 만든 뒤에도 만들기 단추 옆에서 바꿀 수 있어요.`"></div>
     <div class="rpref-body">
@@ -2525,7 +2529,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:600;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.22.0 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.23.0 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">기본 계산 방식 · 다른 계산 방식 듀얼 자동 배정 · 완전 오프라인</p>
         <p class="text-dim text-xs mt-1">모성보호(임산부 P1) · 최소 침습 완화 · 왜 안 되는지 자세히 보기</p>

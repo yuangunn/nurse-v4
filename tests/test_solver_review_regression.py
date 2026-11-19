@@ -257,3 +257,28 @@ def test_relax_keeps_last_table_week_in_this_month(solver):
     for dt_str in carry:
         assert merged.get(dt_str) in ("D", "DC"), f"지난달 표의 칸 {dt_str} 이 바뀜: D → {merged.get(dt_str)}"
         assert dt_str not in relaxed.get("a0", {})
+
+
+# ── 완화는 한 사람에게 몰리지 않게 (결정 1-79) ──────────────────────────────
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_relax_spreads_over_people(solver):
+    """두 날(12/15·12/22)에 여섯 명 모두 OF 를 원한다 — 날마다 세 명은 풀어야 한다(D·E·N 한 명씩).
+    풀리는 칸은 어떻게 해도 여섯이다. 같은 세 사람을 두 번 푸는 대신 여섯 명이 한 칸씩 나눠 갖는다."""
+    nurses = _mini_nurses(6)
+    prev = _juhu_prev(nurses, 2026, 12, 28)
+    for n in nurses:
+        for day in ("2026-12-15", "2026-12-22"):
+            prev.setdefault(n.id, {})[day] = "OF"
+    req = _full_request(2026, 12, nurses=nurses, prev_schedule=prev)
+    req.allow_pre_relax = True
+    if solver == "highs":
+        from server.scheduler import NurseScheduler
+        result = NurseScheduler(req).solve()
+    else:
+        from server.scheduler_cpsat import CpSatScheduler
+        result = CpSatScheduler(req).solve()
+    assert result["success"], result.get("message")
+    per = {n.id: len((result.get("relaxed_cells") or {}).get(n.id, {})) for n in nurses}
+    assert sum(per.values()) == 6, per          # 풀리는 칸 수는 늘지 않는다
+    assert max(per.values()) == 1, per          # 한 사람이 두 번 풀리지 않는다

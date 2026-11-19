@@ -5,7 +5,7 @@
 수리최적화 듀얼 엔진(HiGHS MILP · OR-Tools CP-SAT)으로 최적 근무표 자동 생성.
 Electron 네이티브 창으로 실행, 인트라넷(인터넷 없음) 환경 완전 지원.
 
-**최신**: v4.22.0 (2026-11-19, 어떤 근무표를 원하세요? — 달마다 세 가지 '어느 쪽 우선'과 찾는 시간(멈출 때까지 계속)·이어 찾는 동안의 중간 결과(결정 1-77) · 배점 프리셋·기본값으로 초기화(1-78). v4.21.3 = 단독 나이트 감점 기본값 -10 → -200, 처음 값 그대로인 기존 DB 는 한 번 올린다(결정 1-76). v4.21.2 = 2026-11-18, 지난달 표의 마지막 주는 완화에서도 그대로·끝에 붙은 다음 달 며칠의 표식(결정 1-75) · 나이트킵 달 야간은 누적에서 제외(1-74) · standalone 켤 때 저장 연결 안내(2-57). v4.21.1 = 야간을 이 달 안에서도 고르게(결정 1-65) · 칸별 이유 '이 칸을 지키면?'(1-66) · 실패 표시와 완화 기준 진단(1-67) · 병동 닫힘 막기(1-68) · 이 표에서 더 찾기(1-69) · 간호사별 근무 성향(1-70) · 처음 시작 안내(1-71) · 분석 알림 두 묶음(1-72) · 서랍 큰 창 가운데·상태 줄 단추 정리(1-73). v4.21.0 = 근무표 엑셀을 병동 번표 양식으로 — 1일부터·팀 색·계 수식·앞 달 시트(결정 1-59·1-61) · 임산부는 임신 구간 공휴일에 법(결정 1-60) · 세부 원티드·공휴일 휴무=법(결정 1-62) · 고친 사전입력으로 다시 만들기·서랍 크게 보기(결정 1-63) · 계산 현황·결과 요약(결정 1-64) · 간호사 그룹 — 팀과 따로·여러 그룹에 겹쳐 속하기·그룹마다 한 근무 최대/최소 n명(결정 1-57) · 화면 조밀화 — 본문 14px/400·표 줄 26px·한 달이 한 화면·날짜별 필요 인원 달력·사전입력에서 근무표 만들기·저장본 열기(결정 1-58) · 배정 도구 — 손으로 바꾼 사유 제거(결정 2-55)·하루 어싸인표 기본 양식 101 새 양식. v4.20.1 = 배정 도구 방 구성 프리셋마다 [차지 방 없음](결정 2-54))
+**최신**: v4.23.0 (2026-11-19, 완화는 한 사람에게 몰리지 않게(결정 1-79) · 명부 조사 양식(1-80) · 다른 앱으로 보내기(1-81) · '방금 있었던 일' 세 줄 · 간호사 창 크기 수정. v4.22.0 = 어떤 근무표를 원하세요? — 달마다 세 가지 '어느 쪽 우선'과 찾는 시간(멈출 때까지 계속)·이어 찾는 동안의 중간 결과(결정 1-77) · 배점 프리셋·기본값으로 초기화(1-78). v4.21.3 = 단독 나이트 감점 기본값 -10 → -200, 처음 값 그대로인 기존 DB 는 한 번 올린다(결정 1-76). v4.21.2 = 2026-11-18, 지난달 표의 마지막 주는 완화에서도 그대로·끝에 붙은 다음 달 며칠의 표식(결정 1-75) · 나이트킵 달 야간은 누적에서 제외(1-74) · standalone 켤 때 저장 연결 안내(2-57). v4.21.1 = 야간을 이 달 안에서도 고르게(결정 1-65) · 칸별 이유 '이 칸을 지키면?'(1-66) · 실패 표시와 완화 기준 진단(1-67) · 병동 닫힘 막기(1-68) · 이 표에서 더 찾기(1-69) · 간호사별 근무 성향(1-70) · 처음 시작 안내(1-71) · 분석 알림 두 묶음(1-72) · 서랍 큰 창 가운데·상태 줄 단추 정리(1-73). v4.21.0 = 근무표 엑셀을 병동 번표 양식으로 — 1일부터·팀 색·계 수식·앞 달 시트(결정 1-59·1-61) · 임산부는 임신 구간 공휴일에 법(결정 1-60) · 세부 원티드·공휴일 휴무=법(결정 1-62) · 고친 사전입력으로 다시 만들기·서랍 크게 보기(결정 1-63) · 계산 현황·결과 요약(결정 1-64) · 간호사 그룹 — 팀과 따로·여러 그룹에 겹쳐 속하기·그룹마다 한 근무 최대/최소 n명(결정 1-57) · 화면 조밀화 — 본문 14px/400·표 줄 26px·한 달이 한 화면·날짜별 필요 인원 달력·사전입력에서 근무표 만들기·저장본 열기(결정 1-58) · 배정 도구 — 손으로 바꾼 사유 제거(결정 2-55)·하루 어싸인표 기본 양식 101 새 양식. v4.20.1 = 배정 도구 방 구성 프리셋마다 [차지 방 없음](결정 2-54))
 **리포**: https://github.com/yuangunn/nurse-v4
 **라이선스**: All Rights Reserved
 
@@ -152,7 +152,7 @@ nurse-v4/
 │   └── setup.iss            # Inno Setup 스크립트 (#define AppVersion)
 ├── scripts/
 │   └── verify_holidays.mjs  # 공휴일 자동계산 KASI 골든셋 대조 검증
-├── tests/                   # pytest 회귀 573건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과·간호사그룹)
+├── tests/                   # pytest 회귀 578건 (제약·진단·CP-SAT 동등성·충돌·완화·모성보호·위시·공휴일·오프특근·사실클램프·쉴코드수급·주휴블록·마지막수단·둘중하나원티드·잠금차지·신규독립·끝주·끝주주휴채우기·완화시간초과·간호사그룹)
 │   └── fixtures/            # kr_holidays_golden.json (KASI 2025~2050 공휴일 골든셋)
 ├── dist/                    # 빌드 산출물 (gitignore)
 ├── docs/
@@ -214,7 +214,7 @@ python3 scripts/check_form_borders.py        # 양식을 바꿨을 때
 근무표 엔진·frontend 앱(그 밖의 파일)을 고쳤을 때 — 로컬 pytest 약 1분:
 ```bash
 pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt 만으로는 2개 파일이 수집 실패)
-python3 -m pytest -q                  # 573건
+python3 -m pytest -q                  # 578건
 node scripts/test_paste_dates.mjs && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_wanted_cells.mjs && node scripts/test_day_reqs.mjs && node scripts/test_hospital_holidays.mjs \
   && node scripts/test_manager_check.mjs && node scripts/test_trainee_days.mjs && node scripts/test_continue_search.mjs && node scripts/test_gen_pref.mjs \
@@ -237,7 +237,7 @@ node design/handoff/check/check_redesign.mjs --url http://127.0.0.1:5757 --shots
 > requirements-dev.txt 에 둔다.
 
 ### 설치된 배포판
-- `NurseScheduler_Setup_v4.22.0.exe` 실행 → 설치 마법사 → 바로 실행
+- `NurseScheduler_Setup_v4.23.0.exe` 실행 → 설치 마법사 → 바로 실행
 - 또는 `NurseScheduler_v4_portable.zip` 해제 → `NurseScheduler.exe` 실행
 
 > **Python/Node.js 설치 불필요** — PyInstaller + electron-packager로 런타임 완전 번들.
@@ -1091,10 +1091,10 @@ build.bat
 3. `cd electron && npm install` (최초 1회)
 4. `electron-packager` → `dist/electron/NurseScheduler-win32-x64/`
 5. 포터블 ZIP — PowerShell `Compress-Archive`
-6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.22.0.exe`
+6. Inno Setup (ISCC) — `dist/installer/NurseScheduler_Setup_v4.23.0.exe`
 
 ### 산출물
-- `NurseScheduler_Setup_v4.22.0.exe` (~190MB) — 설치마법사 (Windows)
+- `NurseScheduler_Setup_v4.23.0.exe` (~190MB) — 설치마법사 (Windows)
 - `NurseScheduler_v4_mac_arm64.dmg` / `.zip` — macOS(Apple Silicon, ad-hoc 서명) → `build-mac.sh`
 - `NurseScheduler_v4_portable.zip` (~250MB) — 포터블
 
@@ -1190,7 +1190,7 @@ self.cbLogging.subscribe(_on_log)
 
 ---
 
-## 알려진 주의사항 (v4.22.0 기준)
+## 알려진 주의사항 (v4.23.0 기준)
 
 - `pulp.HiGHS_CMD` 금지 → `pulp.HiGHS` (Python 바인딩)
 - 배점 보조변수(전환·연속·패턴·주말·공휴일)는 생성 달 + 끝에 붙은 다음 달 며칠 + 1일 이음새(그 사람의 지난달 칸이 기록일 때)에 —
