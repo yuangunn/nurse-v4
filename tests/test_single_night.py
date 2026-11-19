@@ -81,14 +81,14 @@ def test_migration_adds_rule_once_and_never_revives_a_deleted_one(tmp_path, monk
         with sqlite3.connect(path) as c:
             return c.execute("PRAGMA user_version").fetchone()[0]
 
-    assert len(rows()) == 1 and rows()[0][1:] == (-200, 1) and version() == 2
+    assert len(rows()) == 1 and rows()[0][1:] == (-200, 1) and version() == 3
     db.init_db()
     assert len(rows()) == 1, '다시 열어도 하나'
     with sqlite3.connect(path) as c:                               # 이 규칙이 없던 옛 DB
         c.execute("DELETE FROM scoring_rules WHERE params LIKE '%non_night%'")
         c.execute("PRAGMA user_version = 0")
     db.init_db()
-    assert len(rows()) == 1 and version() == 2, '옛 DB 엔 한 번 넣는다'
+    assert len(rows()) == 1 and version() == 3, '옛 DB 엔 한 번 넣는다'
     with sqlite3.connect(path) as c:                               # 사용자가 지웠다
         c.execute("DELETE FROM scoring_rules WHERE params LIKE '%non_night%'")
     db.init_db()
@@ -116,3 +116,34 @@ def test_migration_raises_the_first_default_score_once(tmp_path, monkeypatch):
     assert score() == -50, '사람이 고친 값은 그대로'
     set_(-10, 2); db.init_db()
     assert score() == -10, '올린 뒤 되돌린 값은 다시 바꾸지 않는다'
+
+
+def test_migration_adds_juhu_off_rules_once(tmp_path, monkeypatch):
+    """'주휴 옆에 OFF 붙이기' 두 규칙 — 새 DB 는 시드에, 옛 DB 는 한 번만. 같은 조건을 직접 만들어 둔 것이 있으면 겹쳐 넣지 않고,
+    지운 규칙은 되살리지 않는다 (결정 1-83)."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    db.init_db()
+    path = db.get_db_path()
+
+    def rows():                                  # 저장된 params 는 한글이 \\u 로 적힌다 — 풀어서 본다
+        import json
+        with sqlite3.connect(path) as c:
+            return sorted((n, s) for n, s, p in c.execute("SELECT name, score, params FROM scoring_rules WHERE rule_type='transition'")
+                          if {json.loads(p).get("from"), json.loads(p).get("to")} == {"specific:주", "specific:OF"})
+
+    def run(sql, version):
+        with sqlite3.connect(path) as c:
+            for s in sql:
+                c.execute(s)
+            c.execute(f"PRAGMA user_version = {version}")
+
+    assert rows() == [("OFF 뒤에 주휴 붙이기", 150), ("주휴 뒤에 OFF 붙이기", 150)]
+    db.init_db()
+    assert len(rows()) == 2, '다시 열어도 둘'
+    run(["DELETE FROM scoring_rules WHERE name LIKE '%주휴%붙이기'"], 2); db.init_db()
+    assert len(rows()) == 2, '옛 DB 엔 한 번 넣는다'
+    run(["DELETE FROM scoring_rules WHERE name='주휴 뒤에 OFF 붙이기'",
+         "UPDATE scoring_rules SET name='내가 만든 것', score=70 WHERE name='OFF 뒤에 주휴 붙이기'"], 2); db.init_db()
+    assert rows() == [("내가 만든 것", 70), ("주휴 뒤에 OFF 붙이기", 150)], '같은 조건이 이미 있으면 그대로 두고 없는 쪽만'
+    run(["DELETE FROM scoring_rules WHERE name LIKE '%주휴%붙이기' OR name='내가 만든 것'"], 3); db.init_db()
+    assert rows() == [], '지운 규칙을 되살리지 않는다'

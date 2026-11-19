@@ -67,20 +67,6 @@ window.ScheduleFeaturesModule = function() {
       if(!res.ok){ const d=(await res.json().catch(()=>null))?.detail; throw new Error(typeof d==='string'?d:'내보내기 실패') }
       return res.blob();
     },
-    // 다른 앱으로 보내기 (결정 1-81) — 같은 엑셀 파일을 이 컴퓨터의 공유 창에 넘긴다(Web Share). 어떤 앱이 뜨는지는 컴퓨터마다 다르다.
-    // 파일 공유를 못 하는 곳(설치형 앱 창·옛 브라우저)에서는 메뉴에 내지 않는다 — 카카오톡·팀즈에 파일을 직접 넣는 길은 없다
-    get rdCanShareFile(){
-      try{ return typeof navigator!=='undefined'&&!!navigator.canShare&&navigator.canShare({files:[new File([''],'a.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})]}) }catch(e){ return false }
-    },
-    async shareXlsx(){
-      if(!this.schedule||!Object.keys(this.schedule).length){ this.toast('근무표가 없습니다','error'); return }
-      try{
-        const name=`근무표_${this.year}년${this.month}월.xlsx`;
-        const file=new File([await this._xlsxBlob()],name,{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-        await navigator.share({files:[file],title:name});
-      }catch(e){ if(e&&e.name==='AbortError')return;   // 공유 창을 그냥 닫았다
-        this.toast((e&&e.name==='NotAllowedError')?'공유 창을 열지 못했습니다 — 엑셀 파일로 저장한 뒤 보내 주세요':(e.message||'보내기 실패'),'error') }
-    },
     // 날짜 = 그 달 1일부터 화면 끝까지 (12월 = 12/1~1/2) — 그 달은 한 시트에 다 보이고, 계는 1일~말일 칸만 센다.
     // 화면 앞에 붙은 지난달 날짜(11/29·11/30)는 뺀다. 1일~첫 토요일은 앞 달 표에도 있는 칸이다 (_xlsxPrev).
     // 칸은 인쇄와 같다 — 차지 없이 D/E/N (rdPrintCode), 전입 전·전출 뒤는 빈칸.
