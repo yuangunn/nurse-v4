@@ -236,8 +236,11 @@ const fresh = () => { store.clear(); ticks.length = 0; unload.length = 0; };
   const RX = { a1: { '2026-09-07': { original: '주', assigned: 'D' } } };
   s.db.A.saved.push({ id: 9, name: '9월', year: 2026, month: 9, schedule: { a1: { '2026-09-07': 'D' }, a9: { '2026-09-07': 'N' } },
     nurses: [{ id: 'a1', name: '간호01' }, { id: 'a9', name: '간호09' }], prev_schedule: { a1: { '2026-09-07': '주' } }, cell_notes: {},
-    prev_day_reqs: {}, rules: { maxNightPerMonthCount: 9 }, relaxed_cells: RX });
+    prev_day_reqs: {}, rules: { maxNightPerMonthCount: 9 }, relaxed_cells: RX, solver_log: '첫 줄\n둘째 줄\n셋째 줄' });
+  a._logSeq = 1; a._scrollLogs = () => {};                 // 만드는 중이라 기록 줄이 들어오고 있었다
   await a.loadSaved(9);
+  a._pushLog('그 뒤에 온 줄');                              // 저장본의 줄 번호 뒤를 잇는다 — 같은 번호면 목록의 키가 겹쳐 화면이 깨졌다
+  assert.equal(new Set(a.solverLogs.map((l) => l.id)).size, a.solverLogs.length);
   assert.deepEqual([a.year, a.month, a.schedule.a1], [2026, 9, { '2026-09-07': 'D' }]);
   assert.deepEqual([a.nurses.map((n) => n.id), a.nurses[0].is_pregnant], [['a1', 'a2'], true]);
   assert.deepEqual(a.prevSchedule, { a1: { '2026-11-02': '주', '2026-11-03': 'V' } });

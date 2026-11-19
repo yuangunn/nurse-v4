@@ -284,6 +284,7 @@ def init_db(path: Optional[str] = None):
             _migrate_holiday_weekend_rules(conn)
         _migrate_single_night_rule(conn)
         _migrate_single_night_score(conn)
+        _migrate_juhu_off_rules(conn)
 
         # 임부휴무(P1) 근무 코드 마이그레이션 (기존 DB에 없을 경우 추가)
         conn.execute(
@@ -980,6 +981,7 @@ def _seed_scoring_rules(conn: sqlite3.Connection):
         ("공휴일 OFF 페널티",        "holiday_off",      json.dumps({}),                                                    -500, 1, 16),
         ("주말·공휴일 근무 공평성",  "weekend_fairness", json.dumps({}),                                                     -30, 1, 17),
         _SINGLE_NIGHT_RULE,
+        *_JUHU_OFF_RULES,
     ]
     conn.executemany(
         "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
@@ -1063,6 +1065,29 @@ def _migrate_single_night_rule(conn: sqlite3.Connection):
             _SINGLE_NIGHT_RULE,
         )
     conn.execute("PRAGMA user_version = 1")
+
+
+# 주휴 옆에 OFF 붙이기 — 주휴 자리는 정해져 있어, OFF 를 그 앞뒤에 놓으면 하루짜리 휴무(1오프)가 이틀 휴무가 된다 (결정 1-83).
+# '연속 휴일 보상'(+30)은 어느 휴무끼리든 같은 값이라 시간 안에 주휴 옆으로 모으지 못했다.
+_JUHU_OFF_RULES = [
+    ("주휴 뒤에 OFF 붙이기", "transition", json.dumps({"from": "specific:주", "to": "specific:OF"}), 150, 1, 19),
+    ("OFF 뒤에 주휴 붙이기", "transition", json.dumps({"from": "specific:OF", "to": "specific:주"}), 150, 1, 20),
+]
+
+
+def _migrate_juhu_off_rules(conn: sqlite3.Connection):
+    """기존 DB 에 '주휴 옆에 OFF 붙이기' 두 규칙을 한 번만 넣는다 (PRAGMA user_version 3) — 같은 조건의 규칙이 이미 있으면
+    (직접 만들어 둔 것) 넣지 않고, 사용자가 지운 규칙을 다음 실행 때 되살리지 않는다."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 3:
+        return
+    for rule in _JUHU_OFF_RULES:
+        p = json.loads(rule[2])
+        has = any(json.loads(r[0] or "{}") == p for r in
+                  conn.execute("SELECT params FROM scoring_rules WHERE rule_type='transition'").fetchall())
+        if not has:
+            conn.execute(
+                "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)", rule)
+    conn.execute("PRAGMA user_version = 3")
 
 
 def _migrate_single_night_score(conn: sqlite3.Connection):

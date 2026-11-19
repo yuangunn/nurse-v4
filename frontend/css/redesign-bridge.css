@@ -143,6 +143,13 @@ body.rd .rtable .rt-foot input:not(.is-default) { font-weight: var(--fw-strong);
 .rlive-head .rbtn-sm { margin-left: auto; flex: none; }
 .rlive .rlog { max-height: 220px; }
 /* 계산 현황 — 솔버 기록에서 읽은 숫자 카드 + 시간순 사건 표. 원본 기록(.rlog)은 접어 둔다 (결정 1-64) */
+/* 근무·휴무만 색으로 보기 (결정 1-82) — 근무는 회색, 쉬는 날은 초록. 근무별 색·원티드·나이트킵 색을 덮는다 */
+.rt-cell.vw-work:not(.is-absent) { background: color-mix(in srgb, var(--ink) 16%, var(--card)) !important; color: var(--ink) !important; }
+.rt-cell.vw-rest:not(.is-absent) { background: var(--ok-bg) !important; color: var(--ok) !important; }
+.rstatus .relaxed-note.vw-legend i { width: 16px; height: 16px; outline: 0; border-radius: 4px; }
+.rstatus .relaxed-note.vw-legend i.vw-work { background: color-mix(in srgb, var(--ink) 16%, var(--card)); }
+.rstatus .relaxed-note.vw-legend i.vw-rest { background: var(--ok-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 40%, transparent); }
+.rmenu.rview { min-width: 230px; padding: 6px 4px; } .rmenu.rview .rcheck { display: flex; padding: 7px 12px; } .rmenu.rview .rcheck.is-off { opacity: .45; }
 /* 배점 프리셋 줄 (결정 1-78) */
 .rpreset { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; font-size: var(--fs-sub); }
 .rpreset .lbl { font-weight: var(--fw-label); color: var(--ink-2); }

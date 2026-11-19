@@ -31,6 +31,7 @@ window.RedesignModule = function() {
     useV:     is('specific_shift', p=>p.shift_code==='V'),
     runRest:  is('consecutive_same', p=>p.period==='rest'),
     pongdang: is('pattern', p=>(p.pattern||[]).join()==='work,rest_leave,work'),
+    juhuOff:  is('transition', p=>[p.from, p.to].sort().join()==='specific:OF,specific:주'),   // 주휴 옆에 OFF 붙이기 (결정 1-83) — 두 방향
     fairWk:   is('weekend_fairness'),
     wish:     is('wish'),
   };
@@ -38,7 +39,7 @@ window.RedesignModule = function() {
     {id:'night', q:'야간 근무는', a:{label:'묶어서', hint:'하루짜리 야간을 줄이고 이틀·사흘씩 묶습니다', fx:{singleN:2, runN:2, fairN:0.5}},
                                   b:{label:'사람마다 고르게', hint:'사람마다 야간 횟수 차이를 줄입니다', fx:{fairN:3, singleN:0.5}}},
     {id:'rest', q:'쉬는 날은', a:{label:'연차(V) 아끼기', hint:'자동으로 넣는 연차를 줄입니다', fx:{useV:2, runRest:0.5}},
-                                b:{label:'연속 휴일 길게', hint:'쉬는 날을 붙여 주고 근무-휴무-근무를 줄입니다', fx:{runRest:3, pongdang:2, useV:0.5}}},
+                                b:{label:'연속 휴일 길게', hint:'쉬는 날을 붙여 주고 근무-휴무-근무를 줄입니다', fx:{runRest:3, pongdang:2, juhuOff:2, useV:0.5}}},
     {id:'weekend', q:'주말·공휴일은', a:{label:'근무를 고르게', hint:'사람마다 주말·공휴일 근무 횟수 차이를 줄입니다', fx:{fairWk:3, wish:0.5}},
                                       b:{label:'희망 근무 먼저', hint:'희망 근무(위시)를 더 들어줍니다. 원티드(사전입력)는 어느 쪽이든 지킵니다', fx:{wish:3, fairWk:0.5}}},
   ];
