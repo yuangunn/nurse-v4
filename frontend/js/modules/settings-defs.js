@@ -159,6 +159,72 @@ window.SettingsDefsModule = function() {
     //  viewWorkRest: 근무/쉬는 날 두 색으로만 (근무별 색·원티드·나이트킵 색을 끈다) — 누가 길게 일하고 길게 쉬는지 보려고
     //  showWantedColor: 원티드(분홍) 칸 색
     viewWorkRest:false, showWantedColor:true,
+    // 강조해서 보기 (결정 1-87) — 여러 개를 함께 켤 수 있다. 켠 것에 드는 칸만 또렷하고 나머지는 흐려진다.
+    //  근무: singleN 단독 야간 · night3 3일 이상 연속 야간 · run6 6일 이상 연속 근무 · weekendWork 주말·공휴일 근무
+    //  휴무: oneOff 1오프 · longOff 긴 근무 사이 1오프(앞뒤 근무를 합쳐 8일 이상 — 그 근무까지) · nightRest1 야간 뒤 하루만 쉬고 근무 ·
+    //        juhuAlone 혼자인 주휴(앞뒤에 쉬는 날이 없다) · longRest 3일 이상 휴무
+    //  그 밖: pongdang 퐁당퐁당(하루 근무·하루 휴무가 번갈아 나흘 이상) · edited 손으로 고친 칸
+    viewHl:{},
+    rdHlDefs(){ return [
+      ['singleN','단독 야간','앞뒤가 야간이 아닌 하루짜리 야간','근무'], ['night3','3일 이상 연속 야간','야간이 사흘 넘게 이어지는 곳','근무'],
+      ['run6','6일 이상 연속 근무','쉬는 날 없이 6일 넘게 이어지는 근무','근무'], ['weekendWork','주말·공휴일 근무','토·일요일과 공휴일에 일하는 칸','근무'],
+      ['oneOff','1오프','앞뒤가 근무인 하루짜리 휴무','휴무'],
+      ['longOff','근무 4 + 1오프 + 근무 4','1오프의 앞뒤 근무를 합쳐 8일 이상 — 4-1-4 · 5-1-3 · 5-1-5 같은 모양. 앞뒤 근무까지 함께 표시합니다','휴무'],
+      ['nightRest1','야간 뒤 하루만 쉬고 근무','야간 다음에 하루만 쉬고 다시 근무하는 곳의 그 쉬는 날','휴무'],
+      ['juhuAlone','혼자인 주휴','앞뒤에 쉬는 날이 붙지 않은 주휴','휴무'], ['longRest','3일 이상 휴무','쉬는 날이 사흘 넘게 붙은 곳','휴무'],
+      ['pongdang','퐁당퐁당','하루 근무·하루 휴무가 번갈아 나흘 넘게 이어지는 구간','그 밖에'], ['edited','손으로 고친 칸','근무표를 만든 뒤 직접 바꾼 칸','그 밖에']]; },
+    rdHlGroups(){ const g=[]; for(const h of this.rdHlDefs()){ const last=g[g.length-1]; if(last&&last.name===h[3])last.items.push(h); else g.push({name:h[3],items:[h]}); } return g; },
+    get rdHlOn(){ return Object.values(this.viewHl||{}).some(Boolean); },
+    // 한 줄을 근무(W)·야간 근무(N)·쉬는 날(R)·빈칸('')으로, 날마다 곁들일 것(주휴인가·주말·공휴일인가·손으로 고쳤나)과 함께
+    _hlRow(nurse){
+      const row=[], juhu=[], wk=[], ed=[];
+      for(const d of this.scheduleDays){
+        const s=this.isNurseInactive(nurse,d)?'':this._getShift(nurse.id,d), p=s&&s!=='-'?(this.shiftMap.get(s)||{}).period:'';
+        row.push(!p?'':(p==='rest'||p==='leave'?'R':(p==='night'?'N':'W'))); juhu.push(s==='주');
+        wk.push(d.getDay()===0||d.getDay()===6||this.isHoliday(d)); ed.push(!!this.isManuallyEdited(nurse.id,d));
+      }
+      return {row, juhu, wk, ed};
+    },
+    // 날마다 걸리는 표시들 — out[i] = [표시 이름…], count = {표시: 건수}. 통째로 표시하는 것(긴 근무 사이 1오프·연속 근무·연속 야간·긴 휴무·퐁당퐁당)은 묶음 하나가 한 건
+    _hlMarks(row, x){
+      const n=row.length, w=i=>row[i]==='W'||row[i]==='N', juhu=(x&&x.juhu)||[], wk=(x&&x.wk)||[], ed=(x&&x.ed)||[], out=row.map(()=>[]), count={};
+      for(const h of this.rdHlDefs())count[h[0]]=0;
+      const put=(i,k)=>{ if(!out[i].includes(k))out[i].push(k); };
+      for(let i=0;i<n;i++){
+        if(w(i)&&wk[i]){ put(i,'weekendWork'); count.weekendWork++; }
+        if(ed[i]){ put(i,'edited'); count.edited++; }
+        if(i===0||i===n-1)continue;                       // 맨 앞·맨 끝은 앞뒤를 모른다
+        if(row[i]==='N'&&row[i-1]&&row[i+1]&&row[i-1]!=='N'&&row[i+1]!=='N'){ put(i,'singleN'); count.singleN++; }
+        if(row[i]==='R'&&row[i-1]==='N'&&w(i+1)){ put(i,'nightRest1'); count.nightRest1++; }
+        if(juhu[i]&&row[i]==='R'&&row[i-1]&&row[i+1]&&row[i-1]!=='R'&&row[i+1]!=='R'){ put(i,'juhuAlone'); count.juhuAlone++; }
+        if(row[i]==='R'&&w(i-1)&&w(i+1)){ put(i,'oneOff'); count.oneOff++;
+          let L=0,R=0; for(let j=i-1;j>=0&&w(j);j--)L++; for(let j=i+1;j<n&&w(j);j++)R++;
+          if(L+R>=8){ count.longOff++; for(let j=i-L;j<=i+R;j++)put(j,'longOff'); } }
+      }
+      // 이어진 묶음 — 같은 종류(근무·야간·휴무)가 붙은 구간
+      const runs=[]; for(let i=0;i<n;){ if(!row[i]){i++;continue} const t=w(i)?'W':'R'; let j=i; while(j+1<n&&row[j+1]&&(w(j+1)?'W':'R')===t)j++; runs.push([i,j,t]); i=j+1; }
+      for(const [a,b,t] of runs){
+        if(t==='W'&&b-a+1>=6){ count.run6++; for(let k=a;k<=b;k++)put(k,'run6'); }
+        if(t==='R'&&b-a+1>=3){ count.longRest++; for(let k=a;k<=b;k++)put(k,'longRest'); }
+      }
+      for(let i=0;i<n;){ if(row[i]!=='N'){i++;continue} let j=i; while(j+1<n&&row[j+1]==='N')j++; if(j-i+1>=3){ count.night3++; for(let k=i;k<=j;k++)put(k,'night3'); } i=j+1; }
+      // 퐁당퐁당 — 하루짜리 묶음이 끊기지 않고 넷 이상 번갈아 온다
+      for(let r=0;r<runs.length;){ if(runs[r][0]!==runs[r][1]){r++;continue} let e=r; while(e+1<runs.length&&runs[e+1][0]===runs[e+1][1]&&runs[e+1][0]===runs[e][1]+1)e++;
+        if(e-r+1>=4){ count.pongdang++; for(let k=runs[r][0];k<=runs[e][1];k++)put(k,'pongdang'); } r=e+1; }
+      return {out, count};
+    },
+    rdCellHl(nurse, di){
+      if(!this.rdHlOn)return '';
+      const R=this._hlRow(nurse), on=(this._hlMarks(R.row, R).out[di]||[]).filter(k=>this.viewHl[k]);
+      return on.length?'hl '+on.map(k=>'hl-'+k).join(' '):'hl-dim';
+    },
+    // 메뉴에 보이는 건수 — 지금 화면에 있는 줄(팀·그룹만 보기를 따른다)
+    get rdHlCounts(){
+      const c={}; for(const h of this.rdHlDefs())c[h[0]]=0;
+      for(const n of (this.rdPhoneNurses||this.nurses||[])){ const R=this._hlRow(n), k=this._hlMarks(R.row, R).count; for(const x in c)c[x]+=k[x]||0; }
+      return c;
+    },
+    rdHlClear(){ this.viewHl={}; },
     // 근무·휴무만 보기일 때 칸의 색 클래스 — 휴무·휴가는 쉬는 날, 나머지는 근무. 빈칸·재적 밖은 색 없음
     rdCellTone(nurse, day){
       if(!this.viewWorkRest||this.isNurseInactive(nurse,day))return '';
