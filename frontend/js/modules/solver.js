@@ -27,7 +27,7 @@ window.SolverModule = function() {
       this.solverLogs=[];this._logSeq=0;this.cellWhy={};
       // 이어 찾기는 앞 찾기의 계산 현황·걸린 시간을 이어 간다 — 지우면 표가 나온 뒤 처음부터 다시 찾는 것처럼 보였다 (결정 1-77)
       if(_cont){this.genRound++;this.genElapsedBase+=this.generateFinalElapsed||0}
-      else{this._solveReset();this.story.open=false;this.genRound=1;this.genElapsedBase=0;this.genRounds=[];this.genEndless=!_readjust&&(this.genPrefGet()||{}).time==='endless'}
+      else{this._solveReset();this.story.open=false;this.loadedSavedId=null;this.genRound=1;this.genElapsedBase=0;this.genRounds=[];this.genEndless=!_readjust&&(this.genPrefGet()||{}).time==='endless'}
       this.sseSource=new EventSource('/api/generate/stream');
       this.sseSource.onmessage=(e)=>{
         const data=JSON.parse(e.data);

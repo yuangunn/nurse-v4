@@ -450,6 +450,8 @@ function app() {
 
     // ── init ──────────────────────────────────────────────────
     async init(){
+      // 근무표의 칸 창이 닫히면 그 칸의 선택 표시도 끈다 — 남아 있으면 '강조해서 보기'의 표시처럼 보인다 (결정 1-88)
+      if(this.$watch)this.$watch('shiftEdit.open',v=>{ if(!v)this.rdPopClosed(); });
       if(this.darkMode)document.documentElement.classList.add('dark');
       this.setFontSize(this.fontSize);
 

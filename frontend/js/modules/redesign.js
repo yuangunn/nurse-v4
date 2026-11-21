@@ -732,7 +732,7 @@ window.RedesignModule = function() {
       this.mipGapPercent=r.mip_gap_percent!==undefined ? r.mip_gap_percent : null; this.scheduleStopped=r.stopped===true; this.relaxedCells=r.relaxed_cells||{};
       this.solverLogs=String(R.log||'').split('\n').filter(Boolean).map((m, k)=>({id:k+1, msg:m})); this._logSeq=this.solverLogs.length; this._solveReset(); for(const l of this.solverLogs) this._solveFeed(l.msg);
       this.genRound=1; this.genElapsedBase=0; this.genRounds=[]; this.generateFinalElapsed=R.sec||0; this.readjustPins={}; this.readjustChanged={}; this.readjustSummary='';
-      this.rdDoneAt=new Date(); this.activeTab='schedule'; this.trackEdits(); this._setContBase(R.payload, r); this.multi.picked=i; this.multi.open=false;
+      this.rdDoneAt=new Date(); this.activeTab='schedule'; this.trackEdits(); this._setContBase(R.payload, r); this.multi.picked=i; this.multi.open=false; this.loadedSavedId=null;
       this._autoSaveSchedule(); this.toast(`'${R.label}' 표를 열었습니다 — 다른 표는 '여러 개 만들기'에서 다시 고를 수 있어요`, 'info', 5000);
     },
     // 이어 찾는 동안의 중간 결과 한 줄 — 화면의 표가 어느 정도인지·몇 개를 찾았는지·모두 얼마나 걸렸는지 (찾기가 바뀌어도 처음부터 다시 세지 않는다)
@@ -741,6 +741,16 @@ window.RedesignModule = function() {
       const g=this.mipGapPercent, S=this.solveStats, sec=(this.genElapsedBase||0)+(this.generateElapsed||0);
       return [['지금 화면의 표', g==null ? '저장해 둠' : `가능한 최고와 ${Math.round(g*100)/100}% 차이`], ['지금까지 찾은 표', `${(S&&S.found)||0}개`],
         ['이어 찾기', `${Math.max(1,this.genRound-1)}번째`], ['처음부터', sec>=60 ? `${Math.floor(sec/60)}분 ${sec%60}초` : `${sec}초`]];
+    },
+    // 근무표 탭에서 칸 창을 닫으면 선택을 지운다 — 끌어 고르는 중(_isDragging)에는 두고, 사전입력 탭의 선택(키보드 입력용)은 건드리지 않는다
+    rdPopClosed(){ if(this.activeTab==='schedule' && this._sel && this._sel.tab==='schedule' && !this._isDragging) this._sel=null; },
+    // 저장한 근무표를 불러왔음을 알린다 (결정 1-88) — 알림 한 줄 + 표가 한 번 떠오르는 움직임 + 목록에서 그 줄에 '열려 있음'
+    loadedSavedId: null, tableFlash: false,
+    rdLoadedNotice(id, name){
+      this.loadedSavedId=id; this.toast(`‘${name||'근무표'}’를 불러왔습니다`, 'success', 3500);
+      this.tableFlash=false; clearTimeout(this._flashT);
+      const on=()=>{ this.tableFlash=true; this._flashT=setTimeout(()=>{ this.tableFlash=false; }, 900); };
+      this.$nextTick ? this.$nextTick(on) : on();
     },
     get rdMakeLabel(){ return this.generating ? '만드는 중…' : (this.rdSched ? '다시 만들기' : '근무표 만들기'); },
     get rdMakeTip(){ return this.rdSched ? (this.rdPreChanged?'고친 사전입력으로 새로 만듭니다. ':'')+'지금 표를 버리고 새로 만듭니다. 저장한 표는 불러오기에 남아 있어요.' : `사전입력을 지키면서 자동으로 채웁니다. ${this.feas&&this.feas.estimated_seconds ? this.rdEta(this.feas.estimated_seconds)+' 걸리고' : '몇 분 걸리고'} 중간에 멈출 수 있어요.`; },

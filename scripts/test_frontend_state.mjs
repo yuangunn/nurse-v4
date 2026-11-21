@@ -248,6 +248,8 @@ const fresh = () => { store.clear(); ticks.length = 0; unload.length = 0; };
   assert.deepEqual([a.cellNotes, a.prevDayReqs, a.rules.maxNightPerMonthCount], [{ a1: { '2026-11-03': '결혼식' } }, { '2026-11-20': { D: 3 } }, 6]);
   assert.deepEqual(a.relaxedCells, RX);
   assert.match(a.toasts.at(-1), /1명은 지금 명부에 없어/);
+  // 불러왔음을 알린다 — 이름이 든 알림 + 목록에서 그 줄을 가리킬 id (결정 1-88)
+  assert.ok(a.toasts.some((m) => /‘9월’를 불러왔습니다/.test(m)), a.toasts.join(' | ')); assert.equal(a.loadedSavedId, 9);
 }
 // ⑪ 주휴 채우기 — 1일 앞 지난달 칸(기록)은 두고, '매주 같은 요일'은 다른 값(V 등)을 덮기 전에 묻는다
 {
