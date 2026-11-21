@@ -166,6 +166,13 @@ const days0 = (a) => a.scheduleDays.findIndex((d) => a.dayKey(d) === dk(1));   /
   assert.equal(a._gridKeysOn(), false, '고른 칸이 다른 탭');
   global.document.querySelectorAll = () => []; delete global.document.activeElement;
 }
+// 근무표의 칸 창을 닫으면 선택 표시를 끈다 (결정 1-88) — 끌어 고르는 중과 사전입력 탭의 선택은 그대로
+{
+  const a = make(); a.activeTab = 'schedule'; a._setSel('schedule', 0, days0(a));
+  a.rdPopClosed(); assert.equal(a._sel, null);
+  a._setSel('schedule', 0, days0(a)); a._isDragging = true; a.rdPopClosed(); assert.notEqual(a._sel, null, '끄는 중에는 둔다'); a._isDragging = false;
+  a.activeTab = 'preinput'; a._setSel('preinput', 0, days0(a)); a.rdPopClosed(); assert.notEqual(a._sel, null, '사전입력 탭은 키보드로 넣는다');
+}
 // ⑪ 다른 표가 들어오면 근무표 되돌리기·고른 칸을 비운다 — 저장본 불러오기·병동 바꾸기 뒤 Ctrl+Z 가 앞 표를 되살렸다 (리뷰 2026-10-19)
 {
   const a = make(); a.activeTab = 'schedule'; const c0 = days0(a);

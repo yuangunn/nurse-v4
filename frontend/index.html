@@ -1029,7 +1029,7 @@
   <!-- 표 -->
   <template x-if="rdSched">
     <div class="rtable-wrap" :data-rd="activeTab==='schedule'?'table-wrap':null">
-      <table class="rtable" :data-rd="activeTab==='schedule'?'table':null" x-effect="activeTab;scheduleDays.length;rules.maxNightTwoMonth;rdFitColumnsSoon()">
+      <table class="rtable" :class="tableFlash?'is-loaded':''" :data-rd="activeTab==='schedule'?'table':null" x-effect="activeTab;scheduleDays.length;rules.maxNightTwoMonth;rdFitColumnsSoon()">
         <thead>
           <tr>
             <th class="rt-corner">주기</th>
@@ -2326,7 +2326,7 @@
     <div class="rmodal-head"><div><div class="rmodal-title">저장한 근무표</div><div class="rmodal-desc">골라서 불러오거나 지울 수 있어요. 만들기가 끝나면 자동으로 저장됩니다.</div></div><button @click="showSavedDrawer=false" class="rmodal-close" data-rd="modal-close" title="닫기 (Esc)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18 M6 6l12 12"/></svg></button></div>
     <div class="rmodal-body">
       <div class="rlist">
-        <template x-for="item in savedSchedules" :key="item.id"><div class="item"><b x-text="item.name||`${item.year}년 ${item.month}월`"></b><span class="when" x-text="item.created_at"></span><span class="sp"></span><button @click="loadSaved(item.id)" class="rbtn rbtn-sm rbtn-secondary" title="이 근무표를 화면에 불러옵니다. 년월도 함께 바뀝니다.">불러오기</button><button @click="deleteSaved(item.id)" class="rbtn rbtn-sm rbtn-danger" title="이 저장본을 지웁니다. 한 번 더 확인합니다.">삭제</button></div></template>
+        <template x-for="item in savedSchedules" :key="item.id"><div class="item" :class="item.id===loadedSavedId?'is-loaded':''"><b x-text="item.name||`${item.year}년 ${item.month}월`"></b><span class="when" x-text="item.created_at"></span><span class="now" x-show="item.id===loadedSavedId">지금 열려 있음</span><span class="sp"></span><button @click="loadSaved(item.id)" class="rbtn rbtn-sm rbtn-secondary" data-rd="saved-load" :title="item.id===loadedSavedId?'지금 화면에 열려 있는 근무표입니다. 다시 불러오면 고친 칸이 저장본대로 돌아갑니다.':'이 근무표를 화면에 불러옵니다. 년월도 함께 바뀝니다.'" x-text="item.id===loadedSavedId?'다시 불러오기':'불러오기'"></button><button @click="deleteSaved(item.id)" class="rbtn rbtn-sm rbtn-danger" title="이 저장본을 지웁니다. 한 번 더 확인합니다.">삭제</button></div></template>
       </div>
       <div x-show="savedSchedules.length===0" class="rempty" style="margin:0;box-shadow:none;padding:24px"><div class="rempty-title">저장된 근무표가 없어요</div><div class="rempty-desc">근무표를 만들면 자동으로 저장되고, 엑셀로 짠 표는 아래 ‘근무표 파일 올리기’로 넣을 수 있어요.</div></div>
     </div>
