@@ -80,6 +80,7 @@ function app() {
     _sel:null, _dragRows:false, _dragMoved:false, _rowSelHinted:false, _schedUndo:[], _schedRedo:[],   // 표 칸 선택 (drag-select.js)
     lockedCells:{}, // nurseId → {dateKey: true}
     cellNotes:{},   // nurseId → {dateKey: 'text'}
+    notWanted:{},   // nurseId → {dateKey: 그때의 사전입력 값} — 원티드가 아닌 사전입력(번표를 짜는 사람이 넣은 칸). 원티드 색·원티드 수에서 뺀다 (결정 1-84)
     showNotes:localStorage.getItem('showNotes')!=='false', noteEdit:{open:false,nurseId:'',dk:'',text:''}, _noteUndone:false,
     presetPanel:false,
     copySource:null, // nurseId

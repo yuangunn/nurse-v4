@@ -1,5 +1,5 @@
 /* ────────────────────────────────────────────────────────────────────────────
- * 스케줄 기능 — 엑셀/인쇄 내보내기·스케줄 비교·수동편집 추적·월간 요약·이전달 연동·희망근무 입력·다중 솔버 비교·템플릿·간호사 CSV 입출력
+ * 스케줄 기능 — 엑셀/인쇄 내보내기·스케줄 비교·수동편집 추적·월간 요약·이전달 연동·희망근무 입력·템플릿·간호사 CSV 입출력
  *
  * 사용: app() 반환 객체에 `...ScheduleFeaturesModule()` 로 스프레드. 모든 메서드는 this.* 사용.
  * ─────────────────────────────────────────────────────────────────────────── */
@@ -66,6 +66,71 @@ window.ScheduleFeaturesModule = function() {
       const res=await fetch('/api/schedules/export.xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...this._xlsxBody(),prev:await this._xlsxPrev()})});
       if(!res.ok){ const d=(await res.json().catch(()=>null))?.detail; throw new Error(typeof d==='string'?d:'내보내기 실패') }
       return res.blob();
+    },
+    // ── 근무표 그림 (결정 1-85) — 엑셀 번표 양식과 같은 모양을 canvas 에 직접 그린다: 이름 칸 팀 색 · 팀 사이 굵은 선 · 원티드 분홍 ·
+    //    풀린 칸 파랑 · 나이트킵 노랑 · 오른쪽 계(그 달 칸만) · 아래 날마다 인원. 엑셀 파일(xlsx)은 브라우저가 공유·복사를 막아(결정 1-81)
+    //    메신저에는 그림으로 보낸다. 자료는 엑셀과 같은 _xlsxBody (차지는 D/E/N) ──
+    _scheduleCanvas(){
+      const b=this._xlsxBody(), rows=b.rows, nd=b.days.length, hol=new Set(b.holidays||[]);
+      const days=b.days.map(k=>new Date(k+'T00:00:00')), inMonth=days.map(d=>d.getFullYear()===+b.year&&d.getMonth()===+b.month-1);
+      const codes=rows.map(r=>r.slice(1).map(c=>String(c||'').toUpperCase()));
+      const has=c=>codes.some(r=>r.includes(c));
+      const totals=['D','E','N',...(has('중')?['중']:[]),'OF','법','생','V','주','총근무'], work=['D','E','N','중'];
+      const foot=['D','E','N',...(has('중')?['중']:[]),'근무자수'];
+      const K=2, PAD=16, TITLE=34, NW=96, CW=30, TW=32, HH=22, RH=24, FONT="'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif";
+      const W=PAD*2+NW+CW*nd+TW*totals.length, H=PAD*2+TITLE+HH*2+RH*rows.length+RH*foot.length;
+      const cv=document.createElement('canvas'); cv.width=W*K; cv.height=H*K;
+      const g=cv.getContext('2d'); g.scale(K,K); g.fillStyle='#FFFFFF'; g.fillRect(0,0,W,H); g.textBaseline='middle';
+      const x0=PAD, xc=x0+NW, xt=xc+CW*nd, y0=PAD+TITLE, yr=y0+HH*2, yf=yr+RH*rows.length;
+      const box=(x,y,w,h,fill)=>{ if(fill){ g.fillStyle=fill; g.fillRect(x,y,w,h); } g.strokeStyle='#9AA1AC'; g.lineWidth=.5; g.strokeRect(x+.25,y+.25,w-.5,h-.5); };
+      const text=(s,x,y,w,h,{color='#111',size=12,bold=true,align='center'}={})=>{ if(s===''||s==null) return; g.fillStyle=color; g.font=`${bold?'700 ':''}${size}px ${FONT}`; g.textAlign=align;
+        let str=String(s); while(str.length>1&&g.measureText(str).width>w-4) str=str.slice(0,-1); g.fillText(str, align==='left'?x+6:x+w/2, y+h/2+.5); };
+      const dark=hex=>{ const m=/^#?([0-9a-f]{6})$/i.exec(hex||''); if(!m) return false; const n=parseInt(m[1],16); return (((n>>16)&255)*299+((n>>8)&255)*587+(n&255)*114)/1000<140; };
+      text(b.title||`${b.year}년 ${b.month}월 근무표`, x0, PAD, W-PAD*2, TITLE, {size:16, align:'left'});
+      // 머리줄 — 날짜 · 요일 (일요일·공휴일은 빨강)
+      box(x0,y0,NW,HH*2,'#F4F5F7'); text('이름', x0, y0, NW, HH*2);
+      days.forEach((d,i)=>{ const red=d.getDay()===0||hol.has(b.days[i]), c=red?'#D0021B':(inMonth[i]?'#111':'#8A93A1');
+        box(xc+CW*i,y0,CW,HH,'#F4F5F7'); text(d.getDate()===1||i===0?`${d.getMonth()+1}/${d.getDate()}`:d.getDate(), xc+CW*i, y0, CW, HH, {color:c, size:11});
+        box(xc+CW*i,y0+HH,CW,HH,'#F4F5F7'); text('일월화수목금토'[d.getDay()], xc+CW*i, y0+HH, CW, HH, {color:c, size:11}); });
+      const TF={N:'#FFFF00','중':'#00B0F0','생':'#A9D08E',V:'#A9D08E'};
+      totals.forEach((t,j)=>{ box(xt+TW*j,y0,TW,HH*2,TF[t]||'#F4F5F7'); text(t, xt+TW*j, y0, TW, HH*2, {size:t==='총근무'?9:11}); });
+      // 줄 — 이름(팀 색) · 근무(표식 색) · 계(그 달 칸만)
+      const MARK={w:'#FF99FF', k:'#FFFF00', r:'#0070C0'};
+      rows.forEach((r,k)=>{ const y=yr+RH*k, tc=(b.team_colors||{})[(b.teams||[])[k]]||'';
+        box(x0,y,NW,RH,tc||'#FFFFFF'); text(r[0], x0, y, NW, RH, {color:tc&&dark(tc)?'#FFFFFF':'#111', align:'left'});
+        for(let i=0;i<nd;i++){ const mk=(b.marks?.[k]||'')[i]; box(xc+CW*i,y,CW,RH,MARK[mk]||'#FFFFFF'); text(r[i+1]||'', xc+CW*i, y, CW, RH, {color:mk==='r'?'#FFFFFF':'#111', size:11}); }
+        const cnt=t=>codes[k].reduce((a,c,i)=>a+(inMonth[i]&&c===t?1:0),0);
+        totals.forEach((t,j)=>{ const v=t==='총근무'?work.reduce((a,c)=>a+cnt(c),0):cnt(t); box(xt+TW*j,y,TW,RH,TF[t]||'#FFFFFF'); text(v||'', xt+TW*j, y, TW, RH, {size:11, bold:false}); }); });
+      // 아래 — 날마다 인원
+      foot.forEach((t,j)=>{ const y=yf+RH*j; box(x0,y,NW,RH,t==='N'?'#FFFF00':'#F4F5F7'); text(t, x0, y, NW, RH, {size:11});
+        for(let i=0;i<nd;i++){ const v=codes.reduce((a,r)=>a+((t==='근무자수'?work.includes(r[i]):r[i]===t)?1:0),0); box(xc+CW*i,y,CW,RH,t==='N'?'#FFFF00':'#FFFFFF'); text(v||'', xc+CW*i, y, CW, RH, {size:11, bold:false}); } });
+      // 굵은 선 — 바깥 · 머리줄 아래 · 팀이 바뀌는 줄 위 · 일요일 앞 · 계 앞
+      g.strokeStyle='#111'; g.lineWidth=1.5; const line=(x1,y1,x2,y2)=>{ g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke(); };
+      g.strokeRect(x0,y0,W-PAD*2,H-PAD-y0); line(x0,yr,W-PAD,yr); line(x0,yf,W-PAD,yf); line(xc,y0,xc,H-PAD); line(xt,y0,xt,yf);
+      rows.forEach((r,k)=>{ if(k&&(b.teams||[])[k]!==(b.teams||[])[k-1]) line(x0,yr+RH*k,W-PAD,yr+RH*k); });
+      days.forEach((d,i)=>{ if(i&&d.getDay()===0) line(xc+CW*i,y0,xc+CW*i,H-PAD); });
+      return cv;
+    },
+    _scheduleImageBlob(){ return new Promise((res,rej)=>this._scheduleCanvas().toBlob(b=>b?res(b):rej(new Error('그림을 만들지 못했습니다')),'image/png')); },
+    get rdCanCopyImage(){ try{ return typeof ClipboardItem!=='undefined'&&!!navigator.clipboard&&!!navigator.clipboard.write }catch(e){ return false } },
+    get rdCanShareImage(){ try{ return !!navigator.canShare&&navigator.canShare({files:[new File([''],'a.png',{type:'image/png'})]}) }catch(e){ return false } },
+    // 그림으로 복사 — 채팅창(카카오톡·팀즈 등)에 붙여 넣는다. 클릭의 효력이 남아 있는 동안 써야 해서 그림은 약속(Promise)째 넘긴다
+    async copyScheduleImage(){
+      if(!this.schedule||!Object.keys(this.schedule).length){ this.toast('근무표가 없습니다','error'); return }
+      try{ await navigator.clipboard.write([new ClipboardItem({'image/png':this._scheduleImageBlob()})]);
+        this.toast('근무표 그림을 복사했습니다 — 채팅창에서 붙여넣기(Ctrl+V)하세요','success',5000);
+      }catch(e){ this.toast('그림을 복사하지 못했습니다 — 그림 파일로 저장해 보내 주세요','error') }
+    },
+    async shareScheduleImage(){
+      if(!this.schedule||!Object.keys(this.schedule).length){ this.toast('근무표가 없습니다','error'); return }
+      try{ const name=`근무표_${this.year}년${this.month}월.png`;
+        await navigator.share({files:[new File([await this._scheduleImageBlob()],name,{type:'image/png'})],title:name});
+      }catch(e){ if(e&&e.name==='AbortError')return; this.toast('공유 창을 열지 못했습니다 — 그림으로 복사해 붙여 넣어 주세요','error') }
+    },
+    async saveScheduleImage(){
+      if(!this.schedule||!Object.keys(this.schedule).length){ this.toast('근무표가 없습니다','error'); return }
+      const url=URL.createObjectURL(await this._scheduleImageBlob()), a=document.createElement('a');
+      a.href=url; a.download=`근무표_${this.year}년${this.month}월.png`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     },
     // 날짜 = 그 달 1일부터 화면 끝까지 (12월 = 12/1~1/2) — 그 달은 한 시트에 다 보이고, 계는 1일~말일 칸만 센다.
     // 화면 앞에 붙은 지난달 날짜(11/29·11/30)는 뺀다. 1일~첫 토요일은 앞 달 표에도 있는 칸이다 (_xlsxPrev).
@@ -304,28 +369,6 @@ window.ScheduleFeaturesModule = function() {
       this.setWish(nurseId,day,shift);
       const n=this.nurses.find(x=>x.id===nurseId);
       if(n)this.api('POST','/api/nurses',n).catch(()=>this.toast('희망 서버 저장 실패','error'));
-    },
-
-    // ═══ 9. 다중 솔버 비교 ═══════════════════════════════
-    multiSolveResults:[],
-    async generateMultiple(count=2){
-      this.multiSolveResults=[];
-      for(let i=0;i<count;i++){
-        const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:Math.max(0.02,this.mipGap+i*0.02),time_limit:Math.min(this.generateTimeout*60,120),allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,juhu_block_lock:this.juhuBlockLock,unlimited_v:this.unlimitedV,solver:this.solver};
-        try{
-          const result=await this.api('POST','/api/generate',payload);
-          if(result.success)this.multiSolveResults.push({idx:i+1,schedule:result.schedule,scores:result.nurse_scores||{},gap:result.mip_gap_percent,msg:result.message});
-        }catch(e){}
-      }
-      if(this.multiSolveResults.length>0)this.toast(`${this.multiSolveResults.length}개의 해 생성 완료`,'info');
-      else this.toast('해를 생성하지 못했습니다','error');
-    },
-    selectMultiResult(idx){
-      const r=this.multiSolveResults[idx];
-      if(!r)return;
-      this.schedule=r.schedule;this.nurseScores=r.scores;this.mipGapPercent=r.gap;
-      this.statusMessage=r.msg;this.statusOk=true;
-      this.trackEdits();
     },
 
     // ═══ 10. 템플릿 저장/불러오기 ════════════════════════

@@ -342,7 +342,7 @@ window.MiscFeaturesModule = function() {
         localStorage.setItem('ns_full_state:'+this._lsPid,JSON.stringify({
           y:this.year,m:this.month,tab:this.activeTab,
           ps:this.prevSchedule,dr:this.prevDayReqs,hd:this.holidays,
-          lk:this.lockedCells,nt:this.cellNotes,mn:this.prevMonthNights,
+          lk:this.lockedCells,nt:this.cellNotes,mn:this.prevMonthNights,nw:this.notWanted,
           t:Date.now()
         }));
       }catch(e){}
@@ -358,7 +358,7 @@ window.MiscFeaturesModule = function() {
         if(Object.keys(this.prevSchedule).some(k=>Object.keys(this.prevSchedule[k]).length>0))return false;
         this.year=d.y;this.month=d.m;this.activeTab=d.tab||'preinput';
         this.prevSchedule=d.ps||{};this.prevDayReqs=d.dr||{};this.holidays=d.hd||[];
-        this.lockedCells=d.lk||{};this.cellNotes=d.nt||{};this.prevMonthNights=d.mn||{};
+        this.lockedCells=d.lk||{};this.cellNotes=d.nt||{};this.prevMonthNights=d.mn||{};this.notWanted=d.nw||{};
         return true;
       }catch(e){return false}
     },
