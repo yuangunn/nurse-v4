@@ -161,6 +161,31 @@ body.rd .rtable .rt-foot input:not(.is-default) { font-weight: var(--fw-strong);
 .rmid .fact { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; } .rmid .fact small { color: var(--ink-2); font-size: var(--fs-sub); } .rmid .fact b { font-weight: var(--fw-strong); font-variant-numeric: tabular-nums; }
 .rmid .rbtn-sm { margin-left: auto; flex: none; }
 /* 어떤 근무표를 원하세요? (결정 1-77) — 크기 고정 */
+/* 여러 개 만들기 (결정 1-86) — 크기 고정 */
+.rmulti { width: 980px; max-width: calc(100vw - 48px); height: min(660px, 90vh); padding: 20px 28px 18px; gap: 6px; }
+.rmulti-top { display: flex; align-items: center; min-height: 30px; }
+.rmulti-body { flex: 1; min-height: 0; overflow: auto; margin-top: 10px; }
+.rmulti-set { display: flex; flex-direction: column; gap: 14px; max-width: 640px; }
+.rmulti-fixed { min-height: 38px; display: flex; align-items: center; padding: 0 12px; border-radius: 10px; background: var(--paper); font-size: var(--fs-body); font-weight: var(--fw-label); }
+.rmulti-tables { display: flex; flex-direction: column; gap: 10px; }
+.rmulti-table { padding: 10px 14px 12px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--rule); background: var(--card); }
+.rmulti-table .head { display: flex; align-items: center; gap: 10px; min-height: 30px; font-size: var(--fs-body); } .rmulti-table .head span { color: var(--ink-2); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rmulti-table .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.rkw { min-height: 32px; padding: 0 12px; border: 0; border-radius: 16px; background: var(--paper); color: var(--ink); font: inherit; font-size: var(--fs-sub); font-weight: var(--fw-label); cursor: pointer; white-space: nowrap; }
+.rkw:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--ink-2); } .rkw.on { background: var(--ink); color: var(--card); } .rkw:disabled { opacity: .35; cursor: not-allowed; text-decoration: line-through; }
+.rmulti-add { align-self: flex-start; } .rmulti-note { font-size: var(--fs-sub); color: var(--ink-2); line-height: 1.5; margin-top: 8px; word-break: keep-all; }
+.rmulti-run { display: flex; flex-direction: column; gap: 6px; }
+.rmulti-row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 14px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--rule); font-size: var(--fs-body); }
+.rmulti-row .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--rule); flex: none; } .rmulti-row .lbl { font-weight: var(--fw-label); flex: none; max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rmulti-row .st { margin-left: auto; color: var(--ink-2); font-size: var(--fs-sub); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rmulti-row.is-run { box-shadow: inset 0 0 0 2px var(--ink); } .rmulti-row.is-run .dot { background: var(--ok); animation: rsolve-pulse 2.4s ease-in-out infinite; }
+.rmulti-row.is-done .dot { background: var(--ok); } .rmulti-row.is-fail .dot { background: var(--err); } .rmulti-row.is-fail .st { color: var(--err); } .rmulti-row.is-skip, .rmulti-row.is-wait { color: var(--ink-2); }
+@media (prefers-reduced-motion: reduce) { .rmulti-row.is-run .dot { animation: none; } }
+.rmulti-cmp table { width: 100%; border-collapse: collapse; font-size: var(--fs-sub); }
+.rmulti-cmp th { text-align: left; font-weight: var(--fw-label); color: var(--ink-2); padding: 6px 8px; border-bottom: 1px solid var(--rule); white-space: normal; word-break: keep-all; vertical-align: bottom; line-height: 1.3; }
+.rmulti-cmp td { padding: 8px; border-bottom: 1px solid var(--rule-soft, var(--rule)); vertical-align: middle; } .rmulti-cmp .num { text-align: right; font-variant-numeric: tabular-nums; width: 68px; }
+.rmulti-cmp td.num { font-size: var(--fs-body); } .rmulti-cmp td.best { font-weight: var(--fw-strong); color: var(--ok); }
+.rmulti-cmp td.lbl { font-size: var(--fs-body); } .rmulti-cmp td.lbl small { color: var(--ink-2); } .rmulti-cmp tr.is-off td { color: var(--ink-2); } .rmulti-cmp tr.is-picked td { background: var(--paper); }
 /* 창의 이름은 rgenpref — 간호사 창 근무 성향 줄(.rmodal .rpref)과 겹치면 그 줄이 이 크기가 된다 */
 .rgenpref { width: 600px; max-width: calc(100vw - 48px); height: min(620px, 90vh); padding: 22px 28px 18px; gap: 6px; }
 .rpref-title { font-size: 24px; line-height: 1.35; font-weight: var(--fw-strong); letter-spacing: -0.01em; }

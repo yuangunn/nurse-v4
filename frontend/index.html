@@ -845,6 +845,7 @@
     <button x-show="rdSched||rdFail" x-cloak @click="activeTab='preinput'" class="rbtn rbtn-secondary" data-rd="btn-edit-pre" title="사전입력 화면으로 가서 칸을 고칩니다. 고친 뒤 다시 만들기를 누르면 고친 사전입력으로 새로 만듭니다."><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5 M11 6l-6 6 6 6"/></svg>사전입력 고치기</button>
     <button @click="generate()" :disabled="generating" class="rbtn" :class="(!rdSched&&!rdFail)?'rbtn-primary':'rbtn-secondary'" data-rd="btn-make" :title="rdMakeTip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><span x-text="rdMakeLabel"></span></button>
     <button x-show="rdCanContinue" x-cloak @click="rdContinue()" class="rbtn rbtn-secondary" data-rd="btn-continue" :title="`지금 표에서 출발해 ${generateTimeout}분 더 찾습니다(시간은 고급에서 바꿉니다). 더 좋은 표가 나올 때만 바뀌고, 멈추면 지금 표를 그대로 씁니다. 끝난 뒤 또 누를 수 있어요.`"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14 M13 6l6 6-6 6"/></svg>이 표에서 더 찾기</button>
+    <button @click="multiOpen()" :disabled="generating&&!multi.running" class="rbtn rbtn-secondary" :class="multi.running?'is-open':''" data-rd="btn-multi" title="방향이 다른 근무표를 여러 장 차례로 만들어 나란히 견준 뒤 고릅니다. 만든 표는 모두 저장됩니다."><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01"/></svg><span x-text="multi.running ? `여러 개 만드는 중 ${multi.idx+1}/${multi.results.length}` : (multi.results.length ? `여러 개 만들기 · 견준 표 ${multi.results.filter(r=>r.state==='done').length}장` : '여러 개 만들기')"></span></button>
     <button @click="genPrefOpen(false)" :disabled="generating" class="rbtn rbtn-quiet" data-rd="btn-pref" title="이 달 근무표를 어떤 쪽으로 만들지와 찾는 시간을 고릅니다. 달마다 따로 기억합니다."><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10 M18 6h2 M4 12h4 M12 12h8 M4 18h12 M20 18h0 M14 4v4 M8 10v4 M16 16v4"/></svg><span x-text="rdPrefSummary"></span></button>
     <label class="rcheck" data-rd="chk-relax" title="만들기가 안 될 때만 켜세요. 사전입력을 꼭 필요한 만큼만 바꿔서 만듭니다. 잠근 칸은 절대 바뀌지 않습니다."><input type="checkbox" x-model="allowPreRelax"/><span class="box"></span>사전입력 완화</label>
     <label class="rcheck" data-rd="chk-vfree" title="연차(V)를 더 써도 되게 허용합니다. 꼭 필요한 만큼만 쓰도록 큰 감점이 붙습니다."><input type="checkbox" x-model="unlimitedV"/><span class="box"></span>연차(V) 무제한</label>
@@ -910,6 +911,9 @@
         <button @click="open=!open" class="rbtn rbtn-secondary" :disabled="!rdSched" data-rd="btn-export" title="엑셀 파일로 저장 · 어싸인 배정표에 붙일 표 복사"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12"/></svg>내보내기<svg class="caret" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         <div x-show="open" x-cloak @click.outside="open=false" class="rmenu right">
           <button @click="exportToXlsx();open=false" class="rmenu-item" title="병동 번표 양식의 엑셀(xlsx) 파일로 내려받습니다. 그 달 1일부터 화면 끝까지 한 시트에 나가고, 계는 1일~말일을 셉니다. 앞 달 저장본이 있으면 앞 달 시트도 함께 나갑니다. 팀 색·원티드 분홍·오른쪽과 아래의 계 수식이 함께 들어가고, 차지는 D/E/N으로 나갑니다."><b>엑셀 파일로 저장</b><small>병동 번표 양식 · 계 수식 포함 · 다시 올릴 수 있어요</small></button>
+          <button x-show="rdCanCopyImage" @click="copyScheduleImage();open=false" class="rmenu-item" data-rd="export-img-copy" title="번표 양식 모양의 근무표 그림을 복사합니다. 카카오톡·팀즈 같은 채팅창에서 붙여넣기(Ctrl+V)하면 그림이 들어갑니다. 차지는 D/E/N으로 나갑니다."><b>그림으로 복사</b><small>채팅창에 붙여넣기(Ctrl+V)</small></button>
+          <button x-show="rdCanShareImage" @click="shareScheduleImage();open=false" class="rmenu-item" data-rd="export-img-share" title="근무표 그림을 이 컴퓨터의 공유 창으로 보냅니다. 어떤 앱이 뜨는지는 컴퓨터마다 다릅니다."><b>그림으로 보내기</b><small>이 컴퓨터의 공유 창</small></button>
+          <button @click="saveScheduleImage();open=false" class="rmenu-item" data-rd="export-img-save" title="근무표 그림(PNG)을 파일로 내려받습니다."><b>그림 파일로 저장</b><small>PNG 파일</small></button>
           <button @click="copyScheduleTsv();open=false" class="rmenu-item" title="이름·날짜·근무 표를 복사합니다. 어싸인 배정표 프로그램에 붙여 넣으세요. 차지(DC/EC/NC)는 그대로 복사합니다 — 배정표가 차지를 알아봅니다."><b>어싸인용으로 복사</b><small>배정표 프로그램에 붙일 표</small></button>
         </div>
       </div>
@@ -1517,6 +1521,67 @@
 
 <!-- ═══ 결과 요약 — 생성이 끝나면 한 장씩 넘겨 본다 (목록을 품으므로 x-show). 닫혀 있을 땐 .rmodal-bg 를 떼어 둔다 —
      검사기와 Esc 처리가 '열린 창'을 .rmodal-bg 로 찾는다 ═══ -->
+<!-- 여러 개 만들기 (결정 1-86) — 공통 설정 → 방향 → 만드는 중 → 견주기. 크기 고정, 창 밖을 눌러도 닫히지 않는다 -->
+<div :class="multi.open?'rmodal-bg':''" role="dialog" aria-modal="true" data-rd="multi" x-show="multi.open" x-cloak @keydown.escape.window="multi.open=false">
+  <div class="rmodal rmulti">
+    <div class="rmulti-top"><span class="rstory-dots"><template x-for="i in 4" :key="'md'+i"><i :class="i-1<=multi.step?'on':''"></i></template></span>
+      <button @click="multi.open=false" class="rbtn rbtn-sm rbtn-quiet" style="margin-left:auto" data-rd="multi-close" :title="multi.running?'창을 닫아도 만들기는 계속됩니다. 여러 개 만들기 단추로 다시 엽니다 (Esc).':'닫습니다 (Esc).'" x-text="multi.running?'숨기기':'닫기'"></button></div>
+    <div class="rpref-title" x-text="['여러 개 만들기 — 공통 설정','어떤 방향의 표를 만들까요?','차례로 만드는 중','만든 표 견주기'][multi.step]"></div>
+    <div class="rpref-sub" x-text="['방향이 다른 근무표를 여러 장 만들어 나란히 보고 고릅니다. 한 번에 한 장씩 차례로 만듭니다.','표마다 방향을 눌러 고릅니다. 같은 배점을 건드리는 방향끼리는 한 표에 함께 고를 수 없습니다. 아무것도 고르지 않은 표는 지금 설정 그대로(균형)입니다.','창을 숨겨도 계속 만듭니다. 멈추면 그때까지 만든 표로 견줍니다.','열마다 가장 좋은 값을 진하게 보였습니다. 표를 열어 확인하고, 마음에 들지 않으면 다시 와서 다른 표를 열 수 있습니다. 만든 표는 모두 저장한 근무표에 있습니다.'][multi.step]"></div>
+    <div class="rmulti-body">
+      <!-- 0 공통 설정 -->
+      <div x-show="multi.step===0" class="rmulti-set">
+        <div class="rpref-axis" data-axis="gap"><div class="q">목표 차이</div>
+          <div class="rpref-pick"><template x-for="g in [0.01,0.02,0.05]" :key="'mg'+g"><button :class="multi.gap===g?'on':''" @click="multi.gap=g" x-text="`${g*100}% 미만`"></button></template></div>
+          <div class="hint">가능한 최고 점수와 이만큼 안으로 들어오면 그 표에서 끝냅니다. 작을수록 좋은 표지만 오래 걸립니다.</div></div>
+        <div class="rpref-axis" data-axis="cap"><div class="q">한 장의 시간</div>
+          <div class="rpref-pick"><template x-for="c in [10,20,60]" :key="'mc'+c"><button :class="multi.cap===c?'on':''" @click="multi.cap=c" x-text="`${c}분까지`"></button></template></div>
+          <div class="hint">목표 차이에 못 미쳐도 이 시간이 지나면 그때까지 가장 좋은 표로 끝냅니다. 사전입력 완화가 필요하면 조금 더 걸릴 수 있습니다.</div></div>
+        <div class="rpref-axis"><div class="q">추가 생성</div><div class="rmulti-fixed">하지 않음</div>
+          <div class="hint">한 장을 만든 뒤 그 표에서 이어 찾지 않습니다. 더 찾고 싶으면 표를 연 뒤 ‘이 표에서 더 찾기’를 누르세요.</div></div>
+        <div class="rpref-axis"><div class="q">그 밖에</div><div class="rmulti-fixed" x-text="`사전입력 완화 ${allowPreRelax?'켬':'끔'} · 연차(V) 무제한 ${unlimitedV?'켬':'끔'}`"></div>
+          <div class="hint">근무표 위의 체크 그대로 모든 표에 적용합니다.</div></div>
+      </div>
+      <!-- 1 방향 -->
+      <div x-show="multi.step===1" class="rmulti-tables">
+        <template x-for="(t,ti) in multi.tables" :key="'mt'+ti"><div class="rmulti-table" :data-table="ti">
+          <div class="head"><b x-text="`${ti+1}번 표`"></b><span x-text="multiLabel(t.keys)"></span>
+            <button x-show="multi.tables.length>1" @click="multiRemove(ti)" class="rbtn rbtn-sm rbtn-quiet" title="이 표를 뺍니다.">빼기</button></div>
+          <div class="chips"><template x-for="k in rdMakeKeywords()" :key="'mk'+ti+k.id"><button class="rkw" :class="t.keys.includes(k.id)?'on':''" :disabled="!!multiClash(ti,k.id)" @click="multiToggle(ti,k.id)" :data-kw="k.id" :title="multiClash(ti,k.id) ? `‘${multiClash(ti,k.id)}’와 같은 배점을 건드려 함께 고를 수 없습니다.` : k.hint" x-text="k.label"></button></template></div>
+        </div></template>
+        <button x-show="multi.tables.length<4" @click="multiAdd()" class="rbtn rbtn-secondary rmulti-add" data-rd="multi-add" title="표를 하나 더 만듭니다 (네 장까지).">+ 표 추가</button>
+        <div class="rmulti-note" x-show="multiPlan.length<multi.tables.length">방향이 같은 표는 한 번만 만듭니다 — 실제로 만드는 표는 <b x-text="multiPlan.length+'장'"></b>입니다.</div>
+      </div>
+      <!-- 2 만드는 중 -->
+      <div x-show="multi.step===2" class="rmulti-run">
+        <template x-for="(r,i) in multi.results" :key="'mr'+i"><div class="rmulti-row" :class="'is-'+r.state">
+          <i class="dot"></i><b x-text="`${i+1}번`"></b><span class="lbl" x-text="r.label"></span>
+          <span class="st" x-text="r.state==='wait' ? '기다리는 중' : r.state==='run' ? `${rdLiveProgress} · ${Math.floor(multiElapsed/60)}분 ${multiElapsed%60}초` : r.state==='done' ? `끝 · ${Math.floor(r.sec/60)}분 ${r.sec%60}초 · 차이 ${r.stats.gap==null?'—':r.stats.gap+'%'}` : r.state==='skip' ? '만들지 않음' : (r.msg||'만들지 못함')"></span>
+        </div></template>
+      </div>
+      <!-- 3 견주기 -->
+      <div x-show="multi.step===3" class="rmulti-cmp">
+        <table><thead><tr><th>방향</th><template x-for="c in rdMultiCols()" :key="'mh'+c[0]"><th class="num" :title="c[2]" x-text="c[1]"></th></template><th></th></tr></thead>
+          <tbody><template x-for="(r,i) in multi.results" :key="'mc'+i"><tr :class="[multi.picked===i?'is-picked':'', r.state!=='done'?'is-off':'']">
+            <td class="lbl"><b x-text="`${i+1}번`"></b> <span x-text="r.label"></span><small x-show="r.state!=='done'" x-text="r.state==='skip' ? ' — 만들지 않음' : ' — '+(r.msg||'만들지 못함')"></small></td>
+            <template x-for="c in rdMultiCols()" :key="'mv'+i+c[0]"><td class="num" :class="multiBest(c[0],r)?'best':''" x-text="r.stats ? (r.stats[c[0]]==null?'—':r.stats[c[0]]) : ''"></td></template>
+            <td><button x-show="r.state==='done'" @click="multiPick(i)" class="rbtn rbtn-sm" :class="multi.picked===i?'rbtn-secondary':'rbtn-primary'" data-rd="multi-pick" :title="`${i+1}번 표를 화면에 엽니다. 이 달의 자동저장본이 이 표가 됩니다.`" x-text="multi.picked===i?'열려 있음':'이 표 열기'"></button></td>
+          </tr></template></tbody></table>
+        <div class="rmulti-note">숫자는 그 달에 만든 칸 기준이고 나이트킵은 뺐습니다. 모두 작을수록 좋습니다. ‘최고와의 차이’는 방향마다 점수 기준이 달라 표끼리 견주는 값이 아닙니다.</div>
+      </div>
+    </div>
+    <div class="rpref-foot">
+      <button x-show="multi.step===1||(multi.step===3&&!multi.running)" @click="multi.step=multi.step===3?1:0" class="rbtn rbtn-quiet" data-rd="multi-back" x-text="multi.step===3?'방향을 바꿔 다시 만들기':'이전'"></button>
+      <span style="flex:1"></span>
+      <span class="rstory-count" x-show="multi.step===1" x-text="`${multiPlan.length}장 · 길면 ${multiPlan.length*multi.cap}분`"></span>
+      <button x-show="multi.step===0" @click="multi.step=1" class="rbtn rbtn-primary" data-rd="multi-next">다음</button>
+      <button x-show="multi.step===1" @click="multiRun()" :disabled="generating||!multiPlan.length" class="rbtn rbtn-primary" data-rd="multi-start" x-text="`${multiPlan.length}장 만들기 시작`"></button>
+      <button x-show="multi.step===2&&multi.running" @click="multiStop()" :disabled="stopRequested" class="rbtn rbtn-secondary" data-rd="multi-stop" title="지금 만드는 표를 멈추고 남은 표는 만들지 않습니다." x-text="stopRequested?'멈추는 중':'멈추기'"></button>
+      <button x-show="multi.step===2&&!multi.running" @click="multi.step=3" class="rbtn rbtn-primary">견주기</button>
+    </div>
+  </div>
+</div>
+
 <!-- 어떤 근무표를 원하세요? (결정 1-77) — 달마다 한 번 고른다. 크기는 고정, 창 밖을 눌러도 닫히지 않는다 -->
 <div :class="genPref.open?'rmodal-bg':''" role="dialog" aria-modal="true" data-rd="gen-pref" x-show="genPref.open" x-cloak @keydown.escape.window="genPref.open=false">
   <div class="rmodal rgenpref">
@@ -1784,6 +1849,7 @@
   <div class="rpop-actions">
     <button x-show="shiftEdit.mode==='prev'&&shiftEdit.nurse" @click="toggleLock(shiftEdit.nurse.id,shiftEdit.day);shiftEdit.open=false" class="rbtn" data-rd="pop-lock" :title="isLocked(shiftEdit.nurse?.id,shiftEdit.day)?'잠금을 풉니다. 완화하면 바뀔 수 있습니다.':'이 칸을 잠급니다. 완화를 켜도 절대 바뀌지 않습니다.'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11h14v10H5z M7 11V7a5 5 0 0 1 10 0v4"/></svg><span x-text="isLocked(shiftEdit.nurse?.id,shiftEdit.day)?'잠금 해제':'잠금'"></span></button>
     <button x-show="shiftEdit.mode==='prev'||shiftEdit.mode==='prev_multi'" @click="rdPopPick('__CLEAR__')" class="rbtn rbtn-danger" data-rd="pop-clear" title="이 칸을 비웁니다. 빈칸은 자동 배정이 채웁니다.">지우기</button>
+    <button x-show="(shiftEdit.mode==='schedule'||shiftEdit.mode==='prev')&&shiftEdit.nurse&&rdCanMarkWanted(shiftEdit.nurse?.id,shiftEdit.day)" @click="toggleNotWanted(shiftEdit.nurse.id,shiftEdit.day)" class="rbtn" :class="isNotWanted(shiftEdit.nurse?.id,shiftEdit.day)?'is-open':''" data-rd="pop-notwanted" :aria-pressed="isNotWanted(shiftEdit.nurse?.id,shiftEdit.day)" title="이 사전입력이 간호사가 낸 원티드가 아니라 번표를 짜면서 따로 넣은 칸이면 켜세요. 원티드 색과 원티드 칸 수에서 빠집니다. 근무표를 만들 때 지키는 것은 같습니다."><span x-text="isNotWanted(shiftEdit.nurse?.id,shiftEdit.day)?'원티드 아님 ✓':'원티드 아님으로'"></span></button>
     <button x-show="shiftEdit.mode==='schedule'||shiftEdit.mode==='sched_multi'" @click="shiftEdit.open=false" class="rbtn" title="바꾸지 않고 닫습니다.">닫기</button>
   </div>
   <div x-show="shiftEdit.mode==='prev'&&shiftEdit.nurse" class="rpop-wish">

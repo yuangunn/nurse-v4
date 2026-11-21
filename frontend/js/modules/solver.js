@@ -8,6 +8,8 @@ window.SolverModule = function() {
     // 계산 기록 두 곳 — 만드는 중 상태 줄 아래(#liveLogPanel)·서랍(#logPanel) — 을 맨 아래 줄로 (새로고침 복구 app.js 도 쓴다)
     _scrollLogs(){ this.$nextTick(()=>{ for(const el of document.querySelectorAll('#logPanel,#liveLogPanel')) el.scrollTop=el.scrollHeight; }); },
     // ── 스케줄 생성 ──────────────────────────────────────────
+    // 지금 화면의 입력으로 만드는 생성 요청 본문 — 한 장 만들기(generate)와 여러 개 만들기(multiRun)가 같이 쓴다
+    _basePayload(){return{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60,allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,juhu_block_lock:this.juhuBlockLock,unlimited_v:this.unlimitedV,solver:this.solver}},
     // patch: 재조정 등에서 payload 일부를 덮어쓸 때 사용 (_readjust·_cont 플래그는 전송 전 제거)
     // _cont: 이어 찾기(결정 1-50) — 앞 표·안내를 그대로 둔 채 그 표에서 다시 찾고, 더 좋은 표가 나올 때만 바꾼다
     async generate(patch){
@@ -34,7 +36,7 @@ window.SolverModule = function() {
         else if(data.type==='progress')this.solveProgress=data;
         else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
       };
-      const payload={year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60,allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,juhu_block_lock:this.juhuBlockLock,unlimited_v:this.unlimitedV,solver:this.solver,...(_cont?{}:this.genPrefPatch()),...payloadPatch};
+      const payload={...this._basePayload(),...(_cont?{}:this.genPrefPatch()),...payloadPatch};
       const pid=this.currentProfile;
       this.api('POST','/api/estimate',payload).then(est=>{if(est&&est.estimated_seconds)this.estimatedSeconds=est.estimated_seconds}).catch(()=>{});
       try{

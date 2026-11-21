@@ -36,13 +36,16 @@ window.RedesignModule = function() {
     wish:     is('wish'),
   };
   const PREF_AXES = [
-    {id:'night', q:'야간 근무는', a:{label:'묶어서', hint:'하루짜리 야간을 줄이고 이틀·사흘씩 묶습니다', fx:{singleN:2, runN:2, fairN:0.5}},
-                                  b:{label:'사람마다 고르게', hint:'사람마다 야간 횟수 차이를 줄입니다', fx:{fairN:3, singleN:0.5}}},
-    {id:'rest', q:'쉬는 날은', a:{label:'연차(V) 아끼기', hint:'자동으로 넣는 연차를 줄입니다', fx:{useV:2, runRest:0.5}},
-                                b:{label:'연속 휴일 길게', hint:'쉬는 날을 붙여 주고 근무-휴무-근무를 줄입니다', fx:{runRest:3, pongdang:2, juhuOff:2, useV:0.5}}},
-    {id:'weekend', q:'주말·공휴일은', a:{label:'근무를 고르게', hint:'사람마다 주말·공휴일 근무 횟수 차이를 줄입니다', fx:{fairWk:3, wish:0.5}},
-                                      b:{label:'희망 근무 먼저', hint:'희망 근무(위시)를 더 들어줍니다. 원티드(사전입력)는 어느 쪽이든 지킵니다', fx:{wish:3, fairWk:0.5}}},
+    {id:'night', q:'야간 근무는', a:{label:'묶어서', kw:'야간 묶어서', hint:'하루짜리 야간을 줄이고 이틀·사흘씩 묶습니다', fx:{singleN:2, runN:2, fairN:0.5}},
+                                  b:{label:'사람마다 고르게', kw:'야간 고르게', hint:'사람마다 야간 횟수 차이를 줄입니다', fx:{fairN:3, singleN:0.5}}},
+    {id:'rest', q:'쉬는 날은', a:{label:'연차(V) 아끼기', kw:'연차 아끼기', hint:'자동으로 넣는 연차를 줄입니다', fx:{useV:2, runRest:0.5}},
+                                b:{label:'연속 휴일 길게', kw:'연속 휴일 길게', hint:'쉬는 날을 붙여 주고 근무-휴무-근무를 줄입니다', fx:{runRest:3, pongdang:2, juhuOff:2, useV:0.5}}},
+    {id:'weekend', q:'주말·공휴일은', a:{label:'근무를 고르게', kw:'주말 근무 고르게', hint:'사람마다 주말·공휴일 근무 횟수 차이를 줄입니다', fx:{fairWk:3, wish:0.5}},
+                                      b:{label:'희망 근무 먼저', kw:'희망 근무 먼저', hint:'희망 근무(위시)를 더 들어줍니다. 원티드(사전입력)는 어느 쪽이든 지킵니다', fx:{wish:3, fairWk:0.5}}},
   ];
+  // 여러 개 만들기(결정 1-86)의 방향 키워드 — 위 축의 양쪽 + 따로 둔 것. 두 키워드가 같은 배점을 건드리면(fx 의 이름이 겹치면) 함께 고르지 못한다
+  const MAKE_KEYWORDS = [...PREF_AXES.flatMap(a=>['a','b'].map(s=>({id:a.id+'.'+s, label:a[s].kw, hint:a[s].hint, fx:a[s].fx}))),
+    {id:'oneoff', label:'1오프 줄이기', hint:'OFF 를 주휴 옆에 더 세게 붙이고 근무-휴무-근무를 줄입니다', fx:{juhuOff:2, pongdang:2}}];
   const PREF_TIMES = [{v:20, label:'20분'}, {v:60, label:'60분'}, {v:'endless', label:'멈출 때까지 계속'}];
   const PREF_DEFAULT = {night:'mid', rest:'mid', weekend:'mid', time:20};
   const SRC = {B:'갈래를 나눠 따져 봄', C:'가운데 값에서 어림', F:'규칙을 맞추며 밀어 넣기', H:'어림 탐색', L:'작은 문제로 쪼개 풀기', P:'남은 것이 없는 문제', R:'무작위로 어림',
@@ -621,13 +624,116 @@ window.RedesignModule = function() {
     },
     // 요청에 싣는 것 — 고른 쪽의 배점을 곱한 규칙 목록(가운데뿐이면 싣지 않는다 → 서버가 설정 값을 쓴다)과, 계속 찾기면 오차 0
     genPrefPatch(){
-      const p=this.genPrefGet()||PREF_DEFAULT, mul=new Map();
-      for(const a of PREF_AXES){ const side=a[p[a.id]]; if(!side) continue;
-        for(const [k,f] of Object.entries(side.fx)) for(const r of (this.scoringRules||[])) if(PREF_RULE[k](r)) mul.set(r, (mul.get(r)||1)*f); }
-      const out={};
-      if(mul.size) out.scoring_rules=(this.scoringRules||[]).map(r=>mul.has(r) ? {...r, score:Math.round(r.score*mul.get(r))} : {...r});
+      const p=this.genPrefGet()||PREF_DEFAULT, out={};
+      const rules=this._rulesWithFx(PREF_AXES.map(a=>a[p[a.id]]).filter(Boolean).map(s=>s.fx));
+      if(rules) out.scoring_rules=rules;
       if(p.time==='endless') out.mip_gap=0;
       return out;
+    },
+    // 배점 규칙에 곱하기 묶음(fx: {규칙 이름표: 배수})들을 건 사본 — 아무것도 걸리지 않으면 null (서버가 설정 값을 쓴다)
+    _rulesWithFx(fxs){
+      const mul=new Map();
+      for(const fx of fxs) for(const [k,f] of Object.entries(fx||{})) for(const r of (this.scoringRules||[])) if(PREF_RULE[k]&&PREF_RULE[k](r)) mul.set(r, (mul.get(r)||1)*f);
+      return mul.size ? (this.scoringRules||[]).map(r=>mul.has(r) ? {...r, score:Math.round(r.score*mul.get(r))} : {...r}) : null;
+    },
+
+    // ── 여러 개 만들기 (결정 1-86) — 방향(키워드 묶음)이 다른 표를 차례로 만들어 나란히 견준다. 공통 설정: 추가 생성 안 함 ·
+    //    목표 차이(1·2·5%) · 표 한 장의 시간 상한. 서버는 한 번에 한 장만 만들어 차례로 돈다. 만든 표는 모두 이름 붙여 저장하고,
+    //    고른 표를 화면에 연다. 한 표 안의 키워드는 같은 배점을 건드리지 않는 것끼리만 (겹치면 고르지 못한다) ──
+    multi: {open:false, step:0, gap:0.02, cap:20, tables:[{keys:[]}, {keys:[]}], running:false, idx:-1, stopped:false, started:0, tick:0, results:[]},
+    rdMakeKeywords(){ return MAKE_KEYWORDS; },
+    multiOpen(){ const M=this.multi; M.open=true; M.step=M.running ? 2 : (M.results.length ? 3 : 0); },
+    multiClash(ti, id){ const kw=MAKE_KEYWORDS.find(k=>k.id===id), keys=this.multi.tables[ti]?.keys||[]; if(!kw||keys.includes(id)) return null;
+      const hit=keys.map(k=>MAKE_KEYWORDS.find(x=>x.id===k)).find(o=>o && Object.keys(o.fx).some(f=>f in kw.fx)); return hit ? hit.label : null; },
+    multiToggle(ti, id){ const t=this.multi.tables[ti]; if(!t) return; if(t.keys.includes(id)) t.keys=t.keys.filter(k=>k!==id); else if(!this.multiClash(ti, id)) t.keys=[...t.keys, id]; },
+    multiAdd(){ if(this.multi.tables.length<4) this.multi.tables.push({keys:[]}); },
+    multiRemove(ti){ if(this.multi.tables.length>1) this.multi.tables.splice(ti, 1); },
+    multiLabel(keys){ const ls=MAKE_KEYWORDS.filter(k=>(keys||[]).includes(k.id)).map(k=>k.label); return ls.length ? ls.join(' + ') : '균형 (지금 설정 그대로)'; },
+    // 실제로 만들 표 — 같은 묶음은 한 번만
+    get multiPlan(){ const seen=new Set(), out=[]; for(const t of this.multi.tables){ const keys=MAKE_KEYWORDS.filter(k=>t.keys.includes(k.id)).map(k=>k.id), sig=keys.join('|'); if(seen.has(sig)) continue; seen.add(sig); out.push({keys, label:this.multiLabel(keys)}); } return out; },
+    get multiElapsed(){ this.multi.tick; return this.multi.running&&this.multi.started ? Math.floor((Date.now()-this.multi.started)/1000) : 0; },
+    async multiRun(){
+      const M=this.multi; if(M.running||this.generating) return;
+      const plan=this.multiPlan, base=this._basePayload(), pid=this.currentProfile, ym={year:+this.year, month:+this.month};
+      if(!plan.length||!this.nurses.length) return;
+      M.results=plan.map(p=>({...p, state:'wait'})); M.running=true; M.stopped=false; M.step=2;
+      this.generating=true; this.continuing=false; this.stopRequested=false; this.genEndless=false;
+      const timer=setInterval(()=>{ M.tick++; }, 1000);
+      try{
+        for(let i=0;i<plan.length&&!M.stopped;i++){
+          const R=M.results[i], rules=this._rulesWithFx(plan[i].keys.map(k=>MAKE_KEYWORDS.find(x=>x.id===k).fx));
+          const payload={...base, mip_gap:M.gap, time_limit:M.cap*60, ...(rules ? {scoring_rules:rules} : {})};
+          M.idx=i; M.started=Date.now(); R.state='run';
+          this.solverLogs=[]; this._logSeq=0; this._solveReset(); this.solveProgress={gap_percent:null, nodes:0, has_solution:false, is_running:false};
+          this.sseSource=new EventSource('/api/generate/stream');
+          this.sseSource.onmessage=e=>{ const d=JSON.parse(e.data); if(d.type==='log') this._pushLog(d.msg); else if(d.type==='hint') this._pushLog(d.msg, true); else if(d.type==='progress') this.solveProgress=d; else if(d.type==='done'&&this.sseSource){ this.sseSource.close(); this.sseSource=null; } };
+          let r=null;
+          try{ r=await this.api('POST', '/api/generate', payload); }catch(e){ r={success:false, message:'서버 오류: '+e.message}; }
+          if(this.sseSource){ this.sseSource.close(); this.sseSource=null; }
+          R.sec=Math.floor((Date.now()-M.started)/1000);
+          if(!this._resultHere({profile_id:pid, ...ym})){ M.stopped=true; R.state='fail'; R.msg='만드는 동안 병동이나 달이 바뀌어 멈췄습니다'; break; }
+          R.result=r; R.payload=payload; R.log=this.solverLogs.map(l=>l.msg).join('\n');
+          if(r&&r.success){ R.state='done'; R.stats=this.multiStats(r); R.saveName=`${ym.month}월 · ${plan[i].label}`; await this._multiSave(R, ym); }
+          else { R.state='fail'; R.msg=String((r&&r.message)||'만들지 못했습니다').split('\n')[0]; }
+          if(r&&r.stopped) M.stopped=true;
+        }
+      } finally {
+        clearInterval(timer); for(const R of M.results) if(R.state==='wait'||R.state==='run') R.state='skip';
+        M.running=false; M.idx=-1; this.generating=false; this.stopRequested=false; M.step=3; this.loadSavedList&&this.loadSavedList();
+      }
+    },
+    multiStop(){ this.multi.stopped=true; this.stopGenerate(); },
+    // 만든 표를 이름 붙여 저장 — 같은 이름·같은 달의 옛 것은 새것으로 바꾼다 (자동저장본은 건드리지 않는다)
+    async _multiSave(R, ym){
+      const r=R.result, body={...ym, name:R.saveName, nurses:this.nurses, requirements:this.requirements, rules:this.rules, schedule:r.schedule, solver_log:R.log||'',
+        prev_schedule:this.prevSchedule, nurse_scores:r.nurse_scores||{}, nurse_score_details:r.nurse_score_details||{}, locked_cells:this.lockedCells, cell_notes:this.cellNotes,
+        holidays:this.holidays, prev_day_reqs:this.prevDayReqs, prev_month_nights:this.prevMonthNights, relaxed_cells:r.relaxed_cells||{}};
+      try{ let old=[]; try{ old=((await this.api('GET', '/api/schedules'))||[]).filter(s=>s.name===R.saveName&&+s.year===ym.year&&+s.month===ym.month).map(s=>s.id); }catch(e){}
+        await this.api('POST', '/api/schedules', body); for(const id of old){ try{ await this.api('DELETE', `/api/schedules/${id}`); }catch(e){} } R.saved=true;
+      }catch(e){ R.saved=false; }
+    },
+    // 한 장의 숫자 — 그 달에 만든 칸으로(지난달 표의 주는 빼고), 나이트킵은 빼고 센다. 견주는 표의 열과 같은 차례
+    multiStats(r){
+      const days=this.scheduleDays, n0=days.findIndex(d=>!this.isCarryDay(d)), sched=r.schedule||{}, ext=r.extended_schedule||{};
+      const per=c=>{ const s=this.shiftMap.get(c); return s ? s.period : ''; }, rest=c=>['rest','leave'].includes(per(c)), night=c=>per(c)==='night';
+      let one=0, heavy=0, nine=0, singleN=0, v=0; const nights=[], wk=[];
+      for(const nu of this.nurses){
+        if(this._keeperInMonth(nu, this.year, this.month)) continue;
+        const code=days.map(d=>{ const dk=this.dayKey(d); return this.isNurseInactive(nu, d) ? '' : (sched[nu.id]?.[dk] || ext[nu.id]?.[dk] || this.prevSchedule?.[nu.id]?.[dk] || ''); });
+        const row=code.map(c=>!c ? '-' : (rest(c) ? 'R' : 'W')); if(!row.includes('W')) continue;
+        for(let k=Math.max(n0, 1);k<row.length-1;k++){
+          if(row[k]==='R'&&row[k-1]==='W'&&row[k+1]==='W'){ one++; let L=0, Rr=0; for(let j=k-1;j>=0&&row[j]==='W';j--) L++; for(let j=k+1;j<row.length&&row[j]==='W';j++) Rr++; if(L+Rr>=8) heavy++; }
+          if(night(code[k])&&!night(code[k-1])&&!night(code[k+1])) singleN++;
+        }
+        let worst=0; for(let s=n0;s+10<=row.length;s++) worst=Math.max(worst, row.slice(s, s+10).filter(x=>x==='W').length); if(worst>=9) nine++;
+        const inMonth=days.map(d=>!this.isOverflow(d));
+        v+=code.filter((c, i)=>inMonth[i]&&c==='V').length;
+        if((nu.capable_shifts||[]).some(c=>night(c))) nights.push(code.filter((c, i)=>inMonth[i]&&night(c)).length);
+        wk.push(days.filter((d, i)=>inMonth[i]&&row[i]==='W'&&(d.getDay()===0||d.getDay()===6||this.isHoliday(d))).length);
+      }
+      const range=a=>a.length ? Math.max(...a)-Math.min(...a) : 0;
+      return {one, heavy, nine, singleN, nightRange:range(nights), weekendRange:range(wk), v, relaxed:Object.values(r.relaxed_cells||{}).reduce((a, c)=>a+Object.keys(c||{}).length, 0),
+        gap:r.mip_gap_percent!=null ? Math.round(r.mip_gap_percent*100)/100 : null};
+    },
+    rdMultiCols(){ return [['one','1오프','하루짜리 휴무(앞뒤가 근무)의 수'], ['heavy','긴 근무 사이 1오프','앞뒤 근무를 합쳐 8일 이상인 1오프'], ['nine','열흘에 9일 근무','어느 열흘에 9일 넘게 일한 사람 수'],
+      ['singleN','단독 야간','앞뒤가 야간이 아닌 하루짜리 야간'], ['nightRange','야간 횟수 차이','야간을 가장 많이 선 사람과 가장 적게 선 사람의 차이'], ['weekendRange','주말·공휴일 차이','주말·공휴일 근무 일수의 최대−최소'],
+      ['v','연차(V)','자동으로 넣은 연차 수'], ['relaxed','풀린 사전입력','완화로 바뀐 사전입력 칸 수'], ['gap','최고와의 차이(%)','가능한 최고 점수와의 차이 — 방향이 다르면 점수 기준도 달라 표끼리 견주는 값은 아닙니다']]; },
+    // 그 열에서 가장 좋은(작은) 값인가 — 모두 같으면 표시하지 않는다
+    multiBest(key, R){ const vals=this.multi.results.filter(x=>x.stats).map(x=>x.stats[key]).filter(x=>x!=null); if(key==='gap'||!R.stats||vals.length<2) return false;
+      const min=Math.min(...vals); return R.stats[key]===min && vals.some(x=>x!==min); },
+    // 고른 표를 화면에 연다 — 한 장 만들기가 끝났을 때와 같은 상태로 두고 이 달 자동저장본으로 삼는다
+    multiPick(i){
+      const R=this.multi.results[i]; if(!R||!R.result||!R.result.success||this.generating) return;
+      const r=R.result;
+      this.statusOk=true; this.statusMessage=r.message; this.genFailed=false; this.diagResult=null; this.fixResult=null;
+      this.generationReport=r.generation_report||null; this.wishReport=r.wish_report||null; this.offTeukgeun=r.off_teukgeun||[]; this.managerCheck=r.manager_check||[]; this.vReport=r.v_report||null;
+      this.relaxBoosts=r.relax_boosts||{}; this.fairnessOffsets=r.fairness_offsets||null; this.weekendOffsets=r.weekend_offsets||null;
+      this.schedule=r.schedule; this.extendedSchedule=r.extended_schedule||{}; this.nurseScores=r.nurse_scores||{}; this.nurseScoreDetails=r.nurse_score_details||{};
+      this.mipGapPercent=r.mip_gap_percent!==undefined ? r.mip_gap_percent : null; this.scheduleStopped=r.stopped===true; this.relaxedCells=r.relaxed_cells||{};
+      this.solverLogs=String(R.log||'').split('\n').filter(Boolean).map((m, k)=>({id:k+1, msg:m})); this._logSeq=this.solverLogs.length; this._solveReset(); for(const l of this.solverLogs) this._solveFeed(l.msg);
+      this.genRound=1; this.genElapsedBase=0; this.genRounds=[]; this.generateFinalElapsed=R.sec||0; this.readjustPins={}; this.readjustChanged={}; this.readjustSummary='';
+      this.rdDoneAt=new Date(); this.activeTab='schedule'; this.trackEdits(); this._setContBase(R.payload, r); this.multi.picked=i; this.multi.open=false;
+      this._autoSaveSchedule(); this.toast(`'${R.label}' 표를 열었습니다 — 다른 표는 '여러 개 만들기'에서 다시 고를 수 있어요`, 'info', 5000);
     },
     // 이어 찾는 동안의 중간 결과 한 줄 — 화면의 표가 어느 정도인지·몇 개를 찾았는지·모두 얼마나 걸렸는지 (찾기가 바뀌어도 처음부터 다시 세지 않는다)
     get rdMidFacts(){
@@ -843,7 +949,19 @@ window.RedesignModule = function() {
     // 원티드 색을 칠할 칸 — 사전입력 값이 있는 칸. 주휴(주)와 지난달 근무표의 칸(isCarryDay)은 뺀다.
     // 끝에 붙은 다음 달 며칠(12월 표의 1/1·1/2)은 이 표가 만드는 칸이라 칠한다 — 빼 두면 그 칸만 화면·엑셀에 표식이 없었다 (결정 1-75)
     isWanted(nid, day){
-      const c=this.getPrevShift(nid, day); return !!c && c!=='주' && !this.isCarryDay(day);
+      const c=this.getPrevShift(nid, day); return !!c && c!=='주' && !this.isCarryDay(day) && !this.isNotWanted(nid, day);
+    },
+    // 원티드가 아닌 사전입력 (결정 1-84) — 사전입력은 번표를 짜는 사람이 넣는다: 간호사가 낸 원티드 + 짜는 사람이 따로 챙겨 넣은 칸.
+    // 뒤쪽은 칸마다 '원티드 아님'으로 표시해 원티드 색·원티드 수에서 뺀다. 넣어 둔 값이 바뀌면 표시는 저절로 풀린다(그때 값을 적어 둔다).
+    // 엔진에는 보내지 않는다 — 사전입력으로 지키는 것은 같다
+    isNotWanted(nid, day){ const c=this.getPrevShift(nid, day); return !!c && this.notWanted?.[nid]?.[this.dayKey(day)]===c; },
+    rdCanMarkWanted(nid, day){ const c=nid&&day ? this.getPrevShift(nid, day) : ''; return !!c && c!=='주' && !this.isCarryDay(day); },
+    toggleNotWanted(nid, day){
+      if(!this.rdCanMarkWanted(nid, day)) return;
+      const dk=this.dayKey(day), row={...(this.notWanted[nid]||{})};
+      if(this.isNotWanted(nid, day)) delete row[dk]; else row[dk]=this.getPrevShift(nid, day);
+      const all={...this.notWanted}; if(Object.keys(row).length) all[nid]=row; else delete all[nid];
+      this.notWanted=all; this._saveFullState&&this._saveFullState();
     },
     // 지난달 근무표의 칸 — 앞 달에서 시작한 첫 주기(7일) 전체: 지난달 날짜와 그 주의 이번 달 날짜(12월이면 11/29~12/5).
     // 완화를 켜도 바뀌지 않는다 (엔진 _carry_week_keys + '지난달 칸' 고정과 같은 범위)

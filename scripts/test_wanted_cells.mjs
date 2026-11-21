@@ -13,7 +13,8 @@ const ctx = (year, month, start, pre) => ({
   year, month, scheduleDays: [start],
   isOverflow(d) { return d.getMonth() !== month - 1 || d.getFullYear() !== year; },
   getPrevShift: (_, d) => pre[dk(d)] || '',
-  isWanted: mod.isWanted, isCarryDay: mod.isCarryDay,
+  isWanted: mod.isWanted, isCarryDay: mod.isCarryDay, isNotWanted: mod.isNotWanted, notWanted: {},
+  dayKey: dk,
 });
 // 2026-12: 표는 11/29(일)부터 — 첫 주기 11/29~12/5 가 지난달과 겹친다
 let c = ctx(2026, 12, new Date(2026, 10, 29), { '2026-11-30': 'D', '2026-12-05': 'OF', '2026-12-06': 'OF', '2026-12-07': '주', '2026-12-31': 'N제외', '2027-01-01': 'OF' });

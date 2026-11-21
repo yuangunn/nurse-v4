@@ -77,7 +77,7 @@ window.ProfilesModule = function() {
         // 다른 병동 프로필로 새어 들어가 생성 payload·저장에 섞인다
         this.nurses=[];this.schedule={};this.prevSchedule={};
         this.extendedSchedule={};this.nurseScores={};this.nurseScoreDetails={};
-        this.lockedCells={};this.cellNotes={};this.holidays=[];
+        this.lockedCells={};this.cellNotes={};this.notWanted={};this.holidays=[];
         this.prevDayReqs={};this.prevMonthNights={};this.relaxedCells={};
         this.solverLogs=[];this._undoStack=[];this._redoStack=[];
         this._resetGridHistory();this._originalSchedule=null;   // 근무표 되돌리기·고른 칸·고친 칸 기준도 (앞 병동 표가 되살아났다)
@@ -87,7 +87,7 @@ window.ProfilesModule = function() {
         this.relaxBoosts={};this.fairnessOffsets=null;this.weekendOffsets=null;this.fairnessLedger3m=null;
         this.mipGapPercent=null;this.scheduleStopped=false;this.rdSaved=false;this.rdDoneAt=null;
         this.analysisResult=null;this.analysisWarnings=[];this.juhuRecommendation=null;this._lastAnalysisKey='';
-        this.readjustPins={};this.readjustChanged={};this.readjustSummary='';this.closeCompare();this.multiSolveResults=[];
+        this.readjustPins={};this.readjustChanged={};this.readjustSummary='';this.closeCompare();this.multi.results=[];this.multi.picked=null;this.multi.open=false;   /* 여러 개 만들기의 표는 앞 병동의 것 */
         this.scheduleViolations=[];this._feasSeq++;this.feas=null;this.staffingAlerts=null;   // 날아오는 중인 신호등 응답도 버린다
         this.selectedNurseMap={};this._rosterAnchor=null;
         await this._initApp();
