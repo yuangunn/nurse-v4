@@ -217,7 +217,7 @@ pip install -r requirements-dev.txt   # pytest·httpx 포함 (requirements.txt �
 python3 -m pytest -q                  # 579건
 node scripts/test_paste_dates.mjs && node scripts/test_preinput_lint.mjs && node scripts/test_night_badge.mjs \
   && node scripts/test_charge_plain.mjs && node scripts/test_wanted_cells.mjs && node scripts/test_day_reqs.mjs && node scripts/test_hospital_holidays.mjs \
-  && node scripts/test_manager_check.mjs && node scripts/test_trainee_days.mjs && node scripts/test_continue_search.mjs && node scripts/test_gen_pref.mjs && node scripts/test_multi_make.mjs \
+  && node scripts/test_manager_check.mjs && node scripts/test_trainee_days.mjs && node scripts/test_continue_search.mjs && node scripts/test_gen_pref.mjs && node scripts/test_multi_make.mjs && node scripts/test_view_highlight.mjs \
   && node scripts/test_grid_select.mjs && node scripts/test_roster_bulk.mjs && node scripts/test_paste_fix.mjs \
   && node scripts/test_juhu_rotation.mjs && node scripts/test_frontend_state.mjs && node scripts/test_frontend_edit.mjs \
   && node scripts/test_solve_stats.mjs \

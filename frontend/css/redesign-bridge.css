@@ -150,6 +150,30 @@ body.rd .rtable .rt-foot input:not(.is-default) { font-weight: var(--fw-strong);
 .rstatus .relaxed-note.vw-legend i.vw-work { background: color-mix(in srgb, var(--ink) 16%, var(--card)); }
 .rstatus .relaxed-note.vw-legend i.vw-rest { background: var(--ok-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 40%, transparent); }
 .rmenu.rview { min-width: 230px; padding: 6px 4px; } .rmenu.rview .rcheck { display: flex; padding: 7px 12px; } .rmenu.rview .rcheck.is-off { opacity: .45; }
+/* 강조해서 보기 (결정 1-87) — 표시마다 자리가 달라 한 칸에 여러 개가 겹쳐도 다 보인다. 같은 자리를 쓰는 표시끼리는 한 칸에 함께 걸리지 않는다.
+   테두리: 단독 야간(보라) · 3일 이상 연속 야간(남색) · 1오프(주황) · 3일 이상 휴무(초록)
+   윗줄: 6일 이상 연속 근무(파랑) · 아랫줄: 긴 근무 사이 1오프(빨강) · 왼쪽: 혼자인 주휴(갈색) / 주말·공휴일 근무(청록) · 오른쪽: 야간 뒤 하루만 쉬고 근무(분홍)
+   빗금: 퐁당퐁당 · 손으로 고친 칸은 원래의 파랑 테두리 그대로. 나머지 칸은 흐리게 */
+.rt-cell.hl, .rview-hl .sw { --hl-ring: transparent; --hl-top: transparent; --hl-bot: transparent; --hl-left: transparent; --hl-right: transparent;
+  box-shadow: inset 0 0 0 2px var(--hl-ring), inset 0 4px 0 0 var(--hl-top), inset 0 -4px 0 0 var(--hl-bot), inset 4px 0 0 0 var(--hl-left), inset -4px 0 0 0 var(--hl-right); }
+.hl-singleN { --hl-ring: #7C3AED !important; } .hl-night3 { --hl-ring: #1E3A8A !important; } .hl-oneOff { --hl-ring: #EA580C !important; } .hl-longRest { --hl-ring: #15803D !important; }
+.hl-run6 { --hl-top: #2563EB !important; } .hl-longOff { --hl-bot: #DC2626 !important; }
+.hl-juhuAlone { --hl-left: #92400E !important; } .hl-weekendWork { --hl-left: #0D9488 !important; } .hl-nightRest1 { --hl-right: #DB2777 !important; }
+.rt-cell.hl.hl-pongdang, .rview-hl .sw.hl-pongdang { background-image: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 30%, transparent) 0 2px, transparent 2px 6px) !important; }
+.rview-hl .sw.hl-edited { outline: 2px solid var(--focus) !important; outline-offset: -2px; }
+.rt-cell.hl-dim:not(.is-sel) { opacity: .32; }
+.rview-title { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px 2px; font-size: var(--fs-min); color: var(--ink-2); font-weight: var(--fw-label); min-height: 30px; }
+.rview-sub { padding: 6px 12px 0; font-size: var(--fs-min); color: var(--ink-2); }
+.rmenu.rview { max-height: calc(100vh - 170px); overflow: auto; }
+.rmenu.rview .rcheck.rview-hl { padding-top: 5px; padding-bottom: 5px; }
+.rmenu.rview .rview-hl small { margin-left: auto; padding-left: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.rview-hl .sw { width: 18px; height: 18px; border-radius: 3px; background-color: var(--card); flex: none; display: inline-block; outline: 1px solid var(--rule); outline-offset: -1px; }
+.rhlbar { margin: 0 24px 8px; padding: 4px 6px 4px 14px; min-height: 34px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1px var(--rule); font-size: var(--fs-sub); flex-shrink: 0; }
+.rhlbar .lbl { color: var(--ink-2); font-weight: var(--fw-label); } .rhlbar .it { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; } .rhlbar .rbtn-sm { margin-left: auto; flex: none; }
+.rhlbar .sw { --hl-ring: transparent; --hl-top: transparent; --hl-bot: transparent; --hl-left: transparent; --hl-right: transparent; width: 18px; height: 18px; border-radius: 3px; background-color: var(--card); flex: none; display: inline-block; outline: 1px solid var(--rule); outline-offset: -1px;
+  box-shadow: inset 0 0 0 2px var(--hl-ring), inset 0 4px 0 0 var(--hl-top), inset 0 -4px 0 0 var(--hl-bot), inset 4px 0 0 0 var(--hl-left), inset -4px 0 0 0 var(--hl-right); }
+.rhlbar .sw.hl-pongdang { background-image: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 30%, transparent) 0 2px, transparent 2px 6px) !important; }
+.rhlbar .sw.hl-edited { outline: 2px solid var(--focus) !important; outline-offset: -2px; }
 /* 배점 프리셋 줄 (결정 1-78) */
 .rpreset { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; font-size: var(--fs-sub); }
 .rpreset .lbl { font-weight: var(--fw-label); color: var(--ink-2); }
