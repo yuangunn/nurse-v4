@@ -7,7 +7,8 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 global.window = {};
 // 이 달에 어떤 표를 원하는지는 이미 골랐다고 둔다 (결정 1-77 — 고른 적이 없으면 만들기가 먼저 묻는다)
-global.localStorage = { getItem: (k) => (String(k).startsWith('ns_genpref:') ? '{"time":20}' : null), setItem() {}, removeItem() {} };
+// 초안 먼저(1-89)는 끈 채로 — 여기서는 고른 시간 그대로 한 번 찾고 잇는 길을 본다. 초안을 거치는 길은 test_draft_fair_swap 에 있다
+global.localStorage = { getItem: (k) => (String(k).startsWith('ns_genpref:') ? '{"time":20,"quick":false}' : null), setItem() {}, removeItem() {} };
 global.document = { addEventListener() {}, querySelector: () => null, querySelectorAll: () => [] };
 global.EventSource = class { close() {} };
 for (const f of ['undo-redo', 'drag-select', 'analysis', 'paste-import', 'profiles', 'dev-tools', 'nurse-manage',

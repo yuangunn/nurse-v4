@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 import json
 import math
 import queue
@@ -2370,6 +2370,39 @@ def get_generate_result():
     if r is not None and r.get("profile_id") == _current_profile_id:
         return {"status": "done", "result": r}
     return {"status": "idle"}
+
+
+class CheckScheduleRequest(GenerateRequest):
+    schedule: Dict[str, Dict[str, str]] = {}
+
+
+@app.post("/api/check_schedule")
+def check_schedule(request: CheckScheduleRequest):
+    """완성된 근무표가 앱 규칙과 다른 지점 목록 — 풀지 않고 세기만 한다 (결정 1-90, 근무 교환 검사).
+    일별 인원 · 금지 전환 · 주별 OF · V 한도 · 월 야간 · 연속 근무·야간 · 신규-프리셉터 짝 (_pinned_rule_notes 와 같은 기준).
+    지난달 칸은 사전입력(prev_schedule)의 기록을 쓴다. 생성 상태·저장본은 건드리지 않는다."""
+    from datetime import date as _d
+    from .scheduler import NurseScheduler
+    if not request.shifts:
+        from .models import ShiftDef
+        request.shifts = [ShiftDef(**s) for s in db.list_shifts()]
+    try:
+        s = NurseScheduler(request)
+        first = _d(s.year, s.month, 1)
+        valid = {dt.strftime("%Y-%m-%d"): dt for dt in s.all_dates}
+        table: Dict[str, Dict[str, str]] = {}
+        for nurse in s.nurses:
+            nid = nurse["id"]
+            row = {k: v for k, v in s.prev.get(nid, {}).items() if k in valid and valid[k] < first and v}
+            for k, v in (request.schedule.get(nid) or {}).items():
+                if k in valid and v and s._nurse_active_on(nurse, valid[k]):
+                    row[k] = v
+            if row:
+                table[nid] = row
+        return {"notes": s._pinned_rule_notes(table) + s._trainee_pair_notes(table)}
+    except Exception as e:
+        logger.error("check_schedule error: %s", e)
+        raise HTTPException(500, f"근무표 검사 실패: {e}")
 
 
 @app.post("/api/diagnose")

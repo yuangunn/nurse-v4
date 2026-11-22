@@ -55,9 +55,9 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   await a.generate();
   assert.equal(calls.length, 0);
   assert.deepEqual([a.genPref.open, a.genPref.make], [true, true]);
-  assert.deepEqual(a.genPref.draft, { night: 'mid', rest: 'mid', weekend: 'mid', time: 20 });
+  assert.deepEqual(a.genPref.draft, { night: 'mid', rest: 'mid', weekend: 'mid', time: 20, quick: true });
   assert.equal(a.rdPrefSummary, '어떤 근무표를 원하세요?');
-  a.genPref.draft.night = 'a'; a.genPref.draft.time = 60;
+  a.genPref.draft.night = 'a'; a.genPref.draft.time = 60; a.genPref.draft.quick = false;   // 초안 먼저(1-89)를 끄면 고른 시간 그대로
   a.genPrefSave(); await done(a);
   assert.equal(a.genPref.open, false);
   assert.equal(calls.length, 1);
@@ -74,15 +74,15 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   const { a: c, calls: c3 } = make([res({ mip_gap_percent: 1 })]);
   c.month = 11; await c.generate();
   assert.deepEqual([c.genPref.open, c3.length], [true, 0]);
-  assert.deepEqual(c.genPref.draft, { night: 'a', rest: 'mid', weekend: 'mid', time: 60 });
+  assert.deepEqual(c.genPref.draft, { night: 'a', rest: 'mid', weekend: 'mid', time: 60, quick: false });
 }
 // ② 모두 균형이면 규칙을 싣지 않는다(서버가 설정 값을 쓴다) · 손으로 고친 값 위에 곱한다 · 양쪽이 같은 규칙을 건드리면 곱이 쌓인다
 {
   store.clear();
   const { a } = make([]);
-  store.set(a._genPrefKey(), JSON.stringify({ night: 'mid', rest: 'mid', weekend: 'mid', time: 20 }));
+  store.set(a._genPrefKey(), JSON.stringify({ quick: false, night: 'mid', rest: 'mid', weekend: 'mid', time: 20 }));
   assert.deepEqual(a.genPrefPatch(), {});
-  store.set(a._genPrefKey(), JSON.stringify({ night: 'b', rest: 'b', weekend: 'a', time: 20 }));
+  store.set(a._genPrefKey(), JSON.stringify({ quick: false, night: 'b', rest: 'b', weekend: 'a', time: 20 }));
   a.scoringRules[2].score = -80;                                   // 야간 공평성을 손으로 -80 으로
   const p = a.genPrefPatch(), s = id => p.scoring_rules.find(r => r.id === id).score;
   assert.deepEqual([s(3), s(1)], [-240, -100], '고르게 — 야간 공평 ×3(고친 값 위에), 단독 나이트 ×0.5');
@@ -91,8 +91,8 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   assert.equal(p.mip_gap, undefined);
   assert.equal(a.rdPrefSummary, '사람마다 고르게 · 연속 휴일 길게 · 근무를 고르게 · 20분');
   // 저장한 값이 망가져 있어도 기본으로 읽는다
-  store.set(a._genPrefKey(), JSON.stringify({ night: 'x', time: 999 }));
-  assert.deepEqual(a.genPrefGet(), { night: 'mid', rest: 'mid', weekend: 'mid', time: 20 });
+  store.set(a._genPrefKey(), JSON.stringify({ quick: false, night: 'x', time: 999 }));
+  assert.deepEqual(a.genPrefGet(), { night: 'mid', rest: 'mid', weekend: 'mid', time: 20, quick: false });
 }
 // ③ 멈출 때까지 계속 — 끝날 때마다 그 표에서 다시 잇는다 (오차 0). 더 좋은 표가 없어도 잇고, 가장 좋은 표(차이 0.1% 안)면 끝난다.
 //    이어 찾는 동안 계산 현황·걸린 시간·찾은 표 수는 이어 간다
@@ -109,7 +109,7 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
     app_._pushLog('Presolving model\n100 rows, 50 cols, 300 nonzeros\n' +
       ` L       ${n}       0         0   0.00%   -4300           -${4200 - n * 10}              2.38%        5      3      0        40     1.0s`);
   });
-  store.set(a._genPrefKey(), JSON.stringify({ night: 'mid', rest: 'mid', weekend: 'mid', time: 'endless' }));
+  store.set(a._genPrefKey(), JSON.stringify({ quick: false, night: 'mid', rest: 'mid', weekend: 'mid', time: 'endless' }));
   assert.equal(a.rdPrefSummary, '고르게 균형 · 멈출 때까지');
   await a.generate(); await sleep(5);
   for (let i = 0; i < 400 && (a.generating || calls.length < 4); i++) await sleep(5);
@@ -131,7 +131,7 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
 {
   store.clear();
   const { a, calls } = make([res(), res({ continued: true, improved: false, stopped: true })], (app_, n) => { if (n === 2) app_.stopRequested = true; });
-  store.set(a._genPrefKey(), JSON.stringify({ time: 'endless' }));
+  store.set(a._genPrefKey(), JSON.stringify({ quick: false, time: 'endless' }));
   await a.generate(); await sleep(5);
   for (let i = 0; i < 200 && a.generating; i++) await sleep(5);
   await sleep(20);
@@ -144,13 +144,13 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   let mid = null;
   const { a, calls } = make([res({ mip_gap_percent: 1.5 }), res({ continued: true, improved: false, mip_dual_bound: 3950 })],
     (app_, n) => { if (n === 2) { app_.generateElapsed = 30; mid = { facts: app_.rdMidFacts, status: app_.rdStatus.text, story: app_.rdStorySteps.map(s => s.title) }; } });
-  store.set(a._genPrefKey(), JSON.stringify({ time: 'endless' }));
-  store.set(a._genPrefKey(), JSON.stringify({ time: 20 }));
+  store.set(a._genPrefKey(), JSON.stringify({ quick: false, time: 'endless' }));
+  store.set(a._genPrefKey(), JSON.stringify({ quick: false, time: 20 }));
   await a.generate(); await done(a);
   assert.equal(calls.length, 1, '목표 안(1.5%)이면 더 찾지 않는다');
   assert.deepEqual(a.rdMidFacts, [], '찾는 중이 아니면 없다');
   a.generateFinalElapsed = 65;
-  store.set(a._genPrefKey(), JSON.stringify({ time: 'endless' }));   // 계속 찾기로 바꿔 두어도
+  store.set(a._genPrefKey(), JSON.stringify({ quick: false, time: 'endless' }));   // 계속 찾기로 바꿔 두어도
   a.rdContinue(); await done(a);
   assert.equal(calls.length, 2, '사람이 누른 더 찾기는 한 번만');
   assert.equal(calls[1].mip_gap, 0.02);
