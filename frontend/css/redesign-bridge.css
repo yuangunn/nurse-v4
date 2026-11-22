@@ -223,6 +223,31 @@ body.rd .rtable .rt-foot input:not(.is-default) { font-weight: var(--fw-strong);
 .rpref-pick button:hover { color: var(--ink); }
 .rpref-pick button.on { background: var(--ink); color: var(--card); }
 .rpref-foot { display: flex; align-items: center; gap: 10px; padding-top: 8px; }
+/* 초안 먼저 보기 (결정 1-89) — 찾는 시간 줄 아래 한 줄 */
+.rpref-quick { grid-column: 2; justify-self: start; height: auto; min-height: var(--target); padding: 0 8px 0 0; } .rpref-quick small { color: var(--ink-2); font-size: var(--fs-min); margin-left: 6px; }
+/* 공평성 리포트 (결정 1-90) — 사람별 야간·주말·휴무 한 장. 합 열만 옅게 칠한다 */
+.rfair { width: 1180px; max-width: calc(100vw - 48px); height: min(760px, 92vh); padding: 18px 24px 16px; gap: 10px; }
+.rfair-top { display: flex; align-items: center; gap: 8px; min-height: 32px; } .rfair-top b { font-size: var(--fs-title); font-weight: var(--fw-title); }
+.rfair-body { flex: 1; min-height: 0; overflow: auto; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--rule); }
+.rfair-table { width: 100%; border-collapse: collapse; font-size: var(--fs-cell); font-variant-numeric: tabular-nums; }
+.rfair-table th { position: sticky; top: 0; z-index: 1; background: var(--paper); padding: 6px 6px; font-weight: var(--fw-label); font-size: var(--fs-min); line-height: 1.3; word-break: keep-all; box-shadow: inset 0 -2px 0 var(--rule-strong); }
+.rfair-table td { height: var(--row-h); padding: 0 6px; text-align: center; border-bottom: 1px solid var(--rule-soft); white-space: nowrap; }
+.rfair-table td.name { text-align: left; font-weight: var(--fw-label); } .rfair-table .sum { background: var(--cy4-bg); font-weight: var(--fw-strong); } .rfair-table th.sum { background: var(--cy4-bg); }
+.rfair-note { font-size: var(--fs-sub); color: var(--ink-2); line-height: 1.5; word-break: keep-all; }
+/* 근무 바꾸기 검사 (결정 1-90) — 크기 고정, 결과 칸만 스크롤 */
+.rswap { width: 980px; max-width: calc(100vw - 48px); height: min(620px, 92vh); padding: 22px 28px 18px; gap: 10px; }
+.rswap-title { font-size: 22px; line-height: 1.35; font-weight: var(--fw-strong); } .rswap-sub { font-size: var(--fs-sub); color: var(--ink-2); line-height: 1.5; word-break: keep-all; }
+.rswap-who { display: flex; align-items: center; gap: 12px; } .rswap-who select { width: 220px; height: 36px; } .rswap-who .arrow { font-size: 18px; color: var(--ink-2); }
+.rswap-days { display: grid; grid-template-columns: 64px; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 3px; }   /* 6주 달(33칸)도 한 줄 */
+.rswap-daylab { display: flex; flex-direction: column; justify-content: flex-end; padding: 3px 4px 4px 0; font-size: var(--fs-min); line-height: 1.25; color: var(--ink-2); min-width: 0; } .rswap-daylab b { font-weight: var(--fw-label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 1.25em; }
+.rswap-day { min-width: 0; padding: 3px 0 4px; border: 0; border-radius: 6px; background: var(--paper); color: var(--ink); font: inherit; font-size: var(--fs-min); line-height: 1.25; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+.rswap-day i { font-style: normal; color: var(--ink-2); font-size: 11px; } .rswap-day.sun i { color: var(--sun-fg); } .rswap-day.sat i { color: var(--sat-fg); } .rswap-day b { font-weight: var(--fw-label); min-height: 1.25em; white-space: nowrap; letter-spacing: -0.02em; }
+.rswap-day:hover { box-shadow: inset 0 0 0 1px var(--ink-2); } .rswap-day.on { background: var(--ink); color: var(--card); } .rswap-day.on i { color: var(--card); opacity: .75; }
+.rswap-res { flex: 1; min-height: 0; overflow: auto; padding: 10px 14px; border-radius: 10px; background: var(--paper); font-size: var(--fs-sub); line-height: 1.5; }
+.rswap-res .muted { color: var(--ink-2); } .rswap-res .pairs { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 8px; font-weight: var(--fw-label); font-variant-numeric: tabular-nums; }
+.rswap-res .grp { margin-top: 8px; } .rswap-res .grp b { display: block; font-weight: var(--fw-strong); } .rswap-res .grp p { margin: 2px 0 0; padding-left: 10px; word-break: keep-all; }
+.rswap-res .ok { color: var(--cy2-fg); font-weight: var(--fw-label); } .rswap-res .grp.ok p { font-weight: var(--fw-body); } .rswap-res .bad, .rswap-res .grp.bad b { color: var(--sun-fg); }
+.rswap-foot { display: flex; align-items: center; gap: 10px; }
 .rsolve { display: flex; flex-wrap: wrap; gap: 6px; }
 .rsolve .tile { min-width: 96px; padding: 6px 12px; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1px var(--rule); }
 .rsolve .tile small { display: block; font-size: var(--fs-min); color: var(--ink-2); white-space: nowrap; }

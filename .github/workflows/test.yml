@@ -144,6 +144,7 @@ jobs:
           node scripts/test_gen_pref.mjs
           node scripts/test_multi_make.mjs
           node scripts/test_view_highlight.mjs
+          node scripts/test_draft_fair_swap.mjs
           node scripts/test_grid_select.mjs
           node scripts/test_roster_bulk.mjs
           node scripts/test_paste_fix.mjs

@@ -47,7 +47,7 @@ window.RedesignModule = function() {
   const MAKE_KEYWORDS = [...PREF_AXES.flatMap(a=>['a','b'].map(s=>({id:a.id+'.'+s, label:a[s].kw, hint:a[s].hint, fx:a[s].fx}))),
     {id:'oneoff', label:'1오프 줄이기', hint:'OFF 를 주휴 옆에 더 세게 붙이고 근무-휴무-근무를 줄입니다', fx:{juhuOff:2, pongdang:2}}];
   const PREF_TIMES = [{v:20, label:'20분'}, {v:60, label:'60분'}, {v:'endless', label:'멈출 때까지 계속'}];
-  const PREF_DEFAULT = {night:'mid', rest:'mid', weekend:'mid', time:20};
+  const PREF_DEFAULT = {night:'mid', rest:'mid', weekend:'mid', time:20, quick:true};
   const SRC = {B:'갈래를 나눠 따져 봄', C:'가운데 값에서 어림', F:'규칙을 맞추며 밀어 넣기', H:'어림 탐색', L:'작은 문제로 쪼개 풀기', P:'남은 것이 없는 문제', R:'무작위로 어림',
     S:'조건을 느슨하게 푼 답에서', T:'갈래를 평가하다가', U:'한계 없음', z:'가장 단순한 값으로', l:'가장 단순한 값으로', u:'가장 단순한 값으로', p:'가장 단순한 값으로'};
   const STATUS_KO = {'Optimal':'가장 좋은 표로 확인됨', 'Time limit reached':'시간이 다 됨', 'Interrupted by user':'멈춤', 'Infeasible':'이 조건으로는 만들 수 없음',
@@ -601,6 +601,7 @@ window.RedesignModule = function() {
     _genPrefClean(o){ const p={...PREF_DEFAULT};
       for(const a of PREF_AXES) if(['a','mid','b'].includes(o&&o[a.id])) p[a.id]=o[a.id];
       if(o && PREF_TIMES.some(t=>t.v===o.time)) p.time=o.time;
+      if(o && typeof o.quick==="boolean") p.quick=o.quick;
       return p; },
     // 이 달에 고른 것 — 없으면 null. 저장소를 못 쓰는 곳(시크릿 창 등)에서는 기본값을 돌려줘 창이 매번 뜨지 않게 한다
     genPrefGet(){ this.genPrefTick;
@@ -620,7 +621,7 @@ window.RedesignModule = function() {
     get rdPrefSummary(){
       const p=this.genPrefGet(); if(!p) return '어떤 근무표를 원하세요?';
       const picks=PREF_AXES.filter(a=>p[a.id]!=='mid').map(a=>a[p[a.id]].label);
-      return [...(picks.length?picks:['고르게 균형']), p.time==='endless' ? '멈출 때까지' : `${this.generateTimeout}분`].join(' · ');
+      return [...(picks.length?picks:['고르게 균형']), p.time==='endless' ? '멈출 때까지' : `${this.generateTimeout}분`, ...(p.quick!==false?["초안 먼저"]:[])].join(' · ');
     },
     // 요청에 싣는 것 — 고른 쪽의 배점을 곱한 규칙 목록(가운데뿐이면 싣지 않는다 → 서버가 설정 값을 쓴다)과, 계속 찾기면 오차 0
     genPrefPatch(){
@@ -735,6 +736,94 @@ window.RedesignModule = function() {
       this.rdDoneAt=new Date(); this.activeTab='schedule'; this.trackEdits(); this._setContBase(R.payload, r); this.multi.picked=i; this.multi.open=false; this.loadedSavedId=null;
       this._autoSaveSchedule(); this.toast(`'${R.label}' 표를 열었습니다 — 다른 표는 '여러 개 만들기'에서 다시 고를 수 있어요`, 'info', 5000);
     },
+    // ── 공평성 리포트 (결정 1-90) — 간호사에게 보여 줄 수 있는 한 장: 이번 달과 직전 석 달의 야간·주말·공휴일 근무, 쉬는 날, 원티드 반영.
+    //    요약 탭의 집계(nurseSummaryData)를 그대로 쓴다. ※ 는 공평 배분 대상이 아닌 사람(나이트킵·신규·임산부 등) ──
+    fairReport: {open:false},
+    get rdFairRows(){
+      return (this.nurseSummaryData||[]).filter(r=>(r.total+r.rest+r.leave)>0).map(r=>{
+        let want=0, kept=0;
+        for(const d of (this.scheduleDays||[])) if(this.isWanted(r.id, d)){ want++; if(!this.isRelaxed(r.id, d)) kept++; }
+        return {...r, want, kept};
+      });
+    },
+    rdFairCols(){ return [['이름', r=>r.name+(r.group?` (${r.group})`:''), 'left'], ['야간', r=>r.n], ['지난 석 달 야간', r=>r.cumNights||0], ['야간 합', r=>(r.exclN?'※ ':'')+r.totalNights],
+      ['주말·공휴일 근무', r=>r.wh], ['지난 석 달', r=>r.cumWh||0], ['주말·공휴일 합', r=>(r.exclW?'※ ':'')+r.totalWh], ['휴무', r=>r.rest], ['휴가', r=>r.leave], ['1오프', r=>r.isolatedOff], ['가장 긴 연속 휴무', r=>r.maxOffRun+'일'],
+      ['원티드 반영', r=>r.want ? `${r.kept} / ${r.want}` : '—']]; },
+    get rdFairNote(){ const f=(this.nurseSummaryData||[])[0]?.fair;
+      return (f ? `대상자 가운데 야간 합의 차이 ${f.rangeN}회(최소 ${f.minN} ~ 최대 ${f.maxN}) · 주말·공휴일 합의 차이 ${f.rangeW}일(최소 ${f.minW} ~ 최대 ${f.maxW}). ` : '')+'※ 는 공평 배분 대상이 아닌 사람(나이트킵·신규·임산부·달 중간 전입·전출 등)입니다. 합 = 이번 달 + 지난 석 달.'; },
+    _fairCanvas(){
+      const cols=this.rdFairCols(), rows=this.rdFairRows, K=2, PAD=18, TITLE=36, HH=40, RH=26, FONT="'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif";
+      const widths=cols.map((c, i)=>i===0 ? 150 : 88), W=PAD*2+widths.reduce((a, b)=>a+b, 0), noteH=44, H=PAD*2+TITLE+HH+RH*rows.length+noteH;
+      const cv=document.createElement('canvas'); cv.width=W*K; cv.height=H*K; const g=cv.getContext('2d'); g.scale(K, K); g.fillStyle='#FFFFFF'; g.fillRect(0, 0, W, H); g.textBaseline='middle';
+      const text=(s, x, y, w, h, {color='#111', size=12, bold=false, align='center'}={})=>{ g.fillStyle=color; g.font=`${bold?'700 ':''}${size}px ${FONT}`; g.textAlign=align; g.fillText(String(s), align==='left' ? x+8 : x+w/2, y+h/2+.5); };
+      text(`${this.year}년 ${this.month}월 ${this.rdWard} 공평성 리포트`, PAD, PAD, W-PAD*2, TITLE, {size:16, bold:true, align:'left'});
+      let x=PAD; const y0=PAD+TITLE;
+      cols.forEach((c, i)=>{ g.fillStyle='#F4F5F7'; g.fillRect(x, y0, widths[i], HH); g.strokeStyle='#9AA1AC'; g.lineWidth=.5; g.strokeRect(x+.25, y0+.25, widths[i]-.5, HH-.5);
+        const words=c[0].split(' '), two=c[0].length>7&&words.length>1, a=two ? words.slice(0, Math.ceil(words.length/2)).join(' ') : c[0], b=two ? words.slice(Math.ceil(words.length/2)).join(' ') : '';
+        text(a, x, y0+(b?-8:0), widths[i], HH, {size:11, bold:true}); if(b) text(b, x, y0+8, widths[i], HH, {size:11, bold:true}); x+=widths[i]; });
+      rows.forEach((r, k)=>{ let xx=PAD; const y=y0+HH+RH*k;
+        cols.forEach((c, i)=>{ g.fillStyle=[3,6].includes(i) ? '#FFF7CC' : '#FFFFFF'; g.fillRect(xx, y, widths[i], RH); g.strokeStyle='#C9CED6'; g.lineWidth=.5; g.strokeRect(xx+.25, y+.25, widths[i]-.5, RH-.5);
+          text(c[1](r), xx, y, widths[i], RH, {align:c[2]||'center', bold:[3,6].includes(i)}); xx+=widths[i]; }); });
+      g.strokeStyle='#111'; g.lineWidth=1.5; g.strokeRect(PAD, y0, W-PAD*2, HH+RH*rows.length);
+      const note=this.rdFairNote, yN=y0+HH+RH*rows.length+6; g.fillStyle='#4A5160'; g.font=`11px ${FONT}`; g.textAlign='left';
+      let line='', ln=0; for(const w of note.split(' ')){ if(g.measureText(line+w).width>W-PAD*2-8){ g.fillText(line, PAD+2, yN+10+ln*16); line=''; ln++; } line+=w+' '; } g.fillText(line, PAD+2, yN+10+ln*16);
+      return cv;
+    },
+    _canvasBlob(cv){ return new Promise((res, rej)=>cv.toBlob(b=>b ? res(b) : rej(new Error('그림을 만들지 못했습니다')), 'image/png')); },
+    async fairCopy(){ try{ await navigator.clipboard.write([new ClipboardItem({'image/png':this._canvasBlob(this._fairCanvas())})]); this.toast('공평성 리포트 그림을 복사했습니다 — 채팅창에서 붙여넣기(Ctrl+V)하세요', 'success', 5000); }catch(e){ this.toast('그림을 복사하지 못했습니다 — 그림 파일로 저장해 보내 주세요', 'error'); } },
+    async fairSave(){ const url=URL.createObjectURL(await this._canvasBlob(this._fairCanvas())), a=document.createElement('a'); a.href=url; a.download=`공평성_리포트_${this.year}년${this.month}월.png`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); },
+
+    // ── 근무 교환 검사 (결정 1-90) — 두 사람이 고른 날의 근무를 맞바꾸면 무엇이 새로 걸리는지 미리 본다. 서버가 바꾸기 전·뒤의 표를
+    //    각각 규칙과 견주고(/api/check_schedule), 뒤에만 있는 것이 '새로 생기는 문제', 앞에만 있는 것이 '없어지는 문제'. 자격은 화면에서 본다 ──
+    swap: {open:false, a:'', b:'', days:[], busy:false, res:null, seq:0},
+    swapOpen(nid, day){ this.swap={open:true, a:nid||'', b:'', days:day ? [this.dayKey(day)] : [], busy:false, res:null, seq:this.swap.seq+1}; this.shiftEdit.open=false; },
+    get swapDays(){ return (this.scheduleDays||[]).filter(d=>!this.isPrevMonthDay(d)); },
+    swapCode(nid, dk){ return nid ? ((this.schedule?.[nid]||{})[dk]||'') : ''; },
+    swapToggleDay(dk){ const s=this.swap; s.days=s.days.includes(dk) ? s.days.filter(x=>x!==dk) : [...s.days, dk].sort(); this.swapCheck(); },
+    get swapPairs(){ const s=this.swap; return (s.a&&s.b) ? s.days.map(dk=>({dk, a:this.swapCode(s.a, dk), b:this.swapCode(s.b, dk)})) : []; },
+    _swapTable(){ const s=this.swap, t=JSON.parse(JSON.stringify(this.schedule||{})); t[s.a]=t[s.a]||{}; t[s.b]=t[s.b]||{};
+      for(const p of this.swapPairs){ if(p.b) t[s.a][p.dk]=p.b; else delete t[s.a][p.dk]; if(p.a) t[s.b][p.dk]=p.a; else delete t[s.b][p.dk]; } return t; },
+    // 자격 — 받을 근무가 그 사람의 가능 근무에 있는가 (쉬는 날은 누구나) · 그 날 병동에 있는 사람인가 (전입 전·전출 후)
+    _swapCapable(){ const s=this.swap, out=[], nm=id=>(this.nurses.find(n=>n.id===id)||{}).name||'';
+      for(const p of this.swapPairs){ const day=this.swapDays.find(d=>this.dayKey(d)===p.dk); if(!day) continue;
+        for(const id of [s.a, s.b]){ const n=this.nurses.find(x=>x.id===id), inact=n&&this.isNurseInactive(n, day); if(inact) out.push(`${nm(id)} — ${p.dk.slice(5).replace('-', '/')}은 ${inact==='before'?'전입 전이라':'전출 후라'} 근무를 받을 수 없습니다`); } }
+      const can=(id, code)=>{ const sh=this.shiftMap.get(code); if(!code||!sh||['rest','leave'].includes(sh.period)) return true; const n=this.nurses.find(x=>x.id===id)||{}; return !n.capable_shifts||n.capable_shifts.includes(code)||n.capable_shifts.includes({DC:'D',EC:'E',NC:'N'}[code]); };   // 차지 코드는 바탕 근무로 본다
+      for(const p of this.swapPairs){ const d=p.dk.slice(5).replace('-', '/'); if(!can(s.a, p.b)) out.push(`${nm(s.a)} — ${d} ${p.b} 근무를 할 수 없는 사람입니다 (명부의 가능 근무)`); if(!can(s.b, p.a)) out.push(`${nm(s.b)} — ${d} ${p.a} 근무를 할 수 없는 사람입니다 (명부의 가능 근무)`); }
+      return out; },
+    // 그룹 인원(한 근무 최대·최소 n명)은 화면이 센다 — 바꾼 표를 잠깐 끼워 세고 바로 되돌린다
+    //    그룹 경고는 '못 지킨 근무 N개 — 목록' 한 줄이라, 같은 규칙끼리 개수로 견준다 (글이 조금만 달라도 새 문제로 보이지 않게)
+    _swapGroupNotes(table){ const cur=this.schedule, out={}; try{ this.schedule=table;
+        for(const w of this.groupWarnings()){ const text=(w.nurse?w.nurse+': ':'')+w.msg, head=text.split(' — ')[0], m=head.match(/(\d+)개$/); out[head.replace(/\d+개$/, '')]={n:m?+m[1]:1, text, head}; }
+        return out; } finally{ this.schedule=cur; } },
+    _swapGroupDiff(before, after){ const added=[], removed=[];
+      for(const k in after){ const a=after[k], b=before[k]; if(!b) added.push(a.text); else if(a.n>b.n) added.push(a.text.replace(' — ', ` (지금은 ${b.n}개) — `)); else if(a.n<b.n) removed.push(`${a.head} (지금은 ${b.n}개)`); }
+      for(const k in before) if(!after[k]) removed.push(before[k].head+' → 0개');
+      return {added, removed}; },
+    // 바꾸면 사라지는 원티드·잠근 칸 — 막지 않고 알린다
+    _swapWanted(){ const s=this.swap, out=[], nm=id=>(this.nurses.find(n=>n.id===id)||{}).name||'';
+      for(const p of this.swapPairs){ if(p.a===p.b) continue; const day=this.swapDays.find(d=>this.dayKey(d)===p.dk); if(!day) continue;
+        for(const [id, code] of [[s.a, p.a], [s.b, p.b]]){ const d=p.dk.slice(5).replace('-', '/');
+          if(this.isLocked(id, day)) out.push(`${nm(id)} — ${d} ${code}는 잠근 칸입니다`); else if(this.isWanted(id, day)) out.push(`${nm(id)} — ${d} ${code}는 원티드입니다`); }
+        // 차지(DC/EC/NC)를 명부에 차지로 두지 않은 사람이 받는다 — 엔진도 차지가 없으면 승격시키므로 막지 않고 알린다
+        for(const [id, got] of [[s.a, p.b], [s.b, p.a]]) if(['DC','EC','NC'].includes(got) && !(this.nurses.find(n=>n.id===id)||{}).is_charge) out.push(`${nm(id)} — ${p.dk.slice(5).replace('-', '/')} ${got}(차지)를 받습니다. 명부에는 차지로 되어 있지 않습니다`); }
+      return out; },
+    async swapCheck(){
+      const s=this.swap; s.res=null; if(!s.a||!s.b||s.a===s.b||!s.days.length) return;
+      if(this.swapPairs.every(p=>p.a===p.b)){ s.res={same:true, added:[], removed:[], capable:[], wanted:[]}; return; }
+      const seq=++s.seq; s.busy=true;
+      try{ const base={...this._basePayload()}, [before, after]=await Promise.all([this.api('POST', '/api/check_schedule', {...base, schedule:this.schedule}), this.api('POST', '/api/check_schedule', {...base, schedule:this._swapTable()})]);
+        if(seq!==this.swap.seq) return;
+        const b=new Set(before.notes||[]), a=new Set(after.notes||[]), g=this._swapGroupDiff(this._swapGroupNotes(this.schedule), this._swapGroupNotes(this._swapTable()));
+        s.res={added:[...[...a].filter(x=>!b.has(x)), ...g.added], removed:[...[...b].filter(x=>!a.has(x)), ...g.removed], capable:this._swapCapable(), wanted:this._swapWanted()};
+      }catch(e){ if(seq===this.swap.seq) s.res={error:'검사하지 못했습니다 — '+(e.message||'서버 오류')}; }
+      finally{ if(seq===this.swap.seq) s.busy=false; }
+    },
+    swapApply(){
+      const s=this.swap; if(!s.res||s.res.error||s.res.same||!this.swapPairs.length) return;
+      this._schedPush(); const t=this._swapTable(); this.schedule={...this.schedule, [s.a]:t[s.a], [s.b]:t[s.b]}; this.rdSaved=false; this.checkScheduleViolations();
+      const nm=id=>(this.nurses.find(n=>n.id===id)||{}).name||''; this.toast(`${nm(s.a)} ↔ ${nm(s.b)} ${s.days.length}일 근무를 바꿨습니다 — 되돌리려면 Ctrl+Z`, 'success', 5000); s.open=false;
+    },
+
     // 이어 찾는 동안의 중간 결과 한 줄 — 화면의 표가 어느 정도인지·몇 개를 찾았는지·모두 얼마나 걸렸는지 (찾기가 바뀌어도 처음부터 다시 세지 않는다)
     get rdMidFacts(){
       if(!(this.generating && this.continuing && this.rdSched)) return [];

@@ -17,6 +17,8 @@ window.SolverModule = function() {
       const {_readjust,_cont,...payloadPatch}=patch||{};
       // 이 달에 어떤 표를 원하는지 고른 적이 없으면 먼저 묻는다 (결정 1-77) — 고르면 그 창이 다시 generate() 를 부른다
       if(!patch&&!this.genPrefGet()){this.genPrefOpen(true);return}
+      // 초안 먼저 (결정 1-89) — 새로 만들 때 첫 찾기를 짧게(90초) 끝내 표를 먼저 보이고, 그 표에서 고른 시간만큼 이어 찾는다
+      const draft=!patch&&(this.genPrefGet()||{}).quick!==false;
       if(this._recoverPoll){clearInterval(this._recoverPoll);this._recoverPoll=null}
       this.generating=true;this.continuing=!!_cont;this.stopRequested=false;
       if(!_cont){this.genFailed=false;this.mipGapPercent=null;this.scheduleStopped=false;this.rdSaved=false;this.diagResult=null;this.fixResult=null;this.statusMessage=''}
@@ -27,7 +29,7 @@ window.SolverModule = function() {
       this.solverLogs=[];this._logSeq=0;this.cellWhy={};
       // 이어 찾기는 앞 찾기의 계산 현황·걸린 시간을 이어 간다 — 지우면 표가 나온 뒤 처음부터 다시 찾는 것처럼 보였다 (결정 1-77)
       if(_cont){this.genRound++;this.genElapsedBase+=this.generateFinalElapsed||0}
-      else{this._solveReset();this.story.open=false;this.loadedSavedId=null;this.genRound=1;this.genElapsedBase=0;this.genRounds=[];this.genEndless=!_readjust&&(this.genPrefGet()||{}).time==='endless'}
+      else{this.genDraftMore=false;this._solveReset();this.story.open=false;this.loadedSavedId=null;this.genRound=1;this.genElapsedBase=0;this.genRounds=[];this.genEndless=!_readjust&&(this.genPrefGet()||{}).time==='endless'}
       this.sseSource=new EventSource('/api/generate/stream');
       this.sseSource.onmessage=(e)=>{
         const data=JSON.parse(e.data);
@@ -36,7 +38,7 @@ window.SolverModule = function() {
         else if(data.type==='progress')this.solveProgress=data;
         else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
       };
-      const payload={...this._basePayload(),...(_cont?{}:this.genPrefPatch()),...payloadPatch};
+      const payload={...this._basePayload(),...(_cont?{}:this.genPrefPatch()),...(draft?{time_limit:this.DRAFT_SEC}:{}),...payloadPatch};
       const pid=this.currentProfile;
       this.api('POST','/api/estimate',payload).then(est=>{if(est&&est.estimated_seconds)this.estimatedSeconds=est.estimated_seconds}).catch(()=>{});
       try{
@@ -46,7 +48,11 @@ window.SolverModule = function() {
         if(!this._resultHere({profile_id:pid,year:payload.year,month:payload.month})){this._offscreenResult(result,payload,pid,_readjust);return false}
         // 이어 찾는 동안 손으로 고친 칸이 있으면 그 표를 그대로 둔다 — 바꾸면 고친 칸이 말없이 사라졌다 (리뷰 2026-10-19)
         const edited=_cont&&(this._originalSchedule?this.getManualEditCount():0)>0;
-        if(_cont&&(edited||!this._contBetter(result))){this._contKeep(result,_cont,edited);this._contBaseBound(result);this._roundDone(false);if(!edited)next=this._endlessNext(result);return}
+        if(_cont&&(edited||!this._contBetter(result))){this._contKeep(result,_cont,edited);this._contBaseBound(result);this._roundDone(false);if(!edited)next=this._endlessNext(result)||this._draftMoreNext(result);return}
+        // 초안 시간(90초) 안에 표가 안 나온 것은 실패가 아니다 — 고른 시간으로 처음부터 다시 찾는다 (결정 1-89). 조건이 안 맞아 못 만든 것은 그대로 실패로 보인다
+        if(draft&&!result.success&&!result.stopped&&!this.stopRequested&&(result.relax_timed_out||/제한 시간/.test(result.message||''))){
+          this.toast('초안 시간(1분 30초) 안에 표가 나오지 않아, 고른 시간으로 다시 찾습니다','info',7000);
+          next={time_limit:Math.max(1,Math.min(60,parseInt(this.generateTimeout)||20))*60};return}
         this.statusOk=result.success;this.statusMessage=result.message;this.genFailed=!result.success;
         this.generationReport=result.generation_report||null;
         this.wishReport=result.wish_report||null;
@@ -82,14 +88,18 @@ window.SolverModule = function() {
           if(_cont){this.statusMessage+=`\n\n🔁 이어 찾기로 더 좋은 표를 찾아 바꿔 저장했습니다${_cont.gap!=null&&this.mipGapPercent!=null?` (가장 좋은 답과 ${_cont.gap}% → ${this.mipGapPercent}% 차이)`:''}.`;
             this.toast(`더 좋은 표를 찾아 바꿨습니다${_cont.gap!=null&&this.mipGapPercent!=null?` — 가장 좋은 답과 ${_cont.gap}% → ${this.mipGapPercent}% 차이`:''}`,'info',6000)}
           else if(!_readjust&&!this.stopRequested&&this._wantsContinue(result)){
-            this.statusMessage+=`\n\n🔁 가장 좋은 답과 ${result.mip_gap_percent}% 차이라 목표(${Math.round(this.mipGap*1000)/10}%)보다 큽니다 — 지금 표를 저장해 두고 이 표에서 한 번 더 찾습니다. 멈추면 지금 표를 씁니다.`;
+            const fullMin=Math.max(1,Math.min(60,parseInt(this.generateTimeout)||20));
+            this.statusMessage+=draft
+              ? `\n\n⚡ 초안을 먼저 보였습니다 (가장 좋은 답과 ${result.mip_gap_percent}% 차이) — 이 표를 저장해 두고 ${this.genEndless?'멈출 때까지':fullMin+'분'} 더 찾습니다. 멈추면 지금 표를 씁니다.`
+              : `\n\n🔁 가장 좋은 답과 ${result.mip_gap_percent}% 차이라 목표(${Math.round(this.mipGap*1000)/10}%)보다 큽니다 — 지금 표를 저장해 두고 이 표에서 한 번 더 찾습니다. 멈추면 지금 표를 씁니다.`;
+            this.genDraftMore=draft;
             // 첫 요청을 그대로 다시 — 그동안 달·설정을 바꿨어도 같은 문제를 잇는다. 레이스면 이긴 엔진으로 (엔진마다 목적식이 달라 견줄 수 없다)
             const solver=payload.solver==='race'&&result.engine?(result.engine==='CP-SAT'?'cpsat':'highs'):payload.solver;
-            next={...payload,solver,warm_start:result.extended_schedule||result.schedule,prev_bound:result.mip_dual_bound??null,
+            next={...payload,...(draft?{time_limit:fullMin*60}:{}),solver,warm_start:result.extended_schedule||result.schedule,prev_bound:result.mip_dual_bound??null,
               prev_fingerprint:result.model_fingerprint||null,prev_objective:result.objective??null,
               _cont:{objective:result.objective??null,fingerprint:result.model_fingerprint||null,gap:result.mip_gap_percent,message:this.statusMessage,ok:this.statusOk}};
           }
-          if(!_readjust){this._roundDone(true);if(!next)next=this._endlessNext(result)}}
+          if(!_readjust){this._roundDone(true);if(!next)next=this._endlessNext(result);if(!next&&_cont)next=this._draftMoreNext(result)}}
         return true;
       }catch(e){if(_cont)this._contKeep(null,_cont);else{this.statusOk=false;this.genFailed=true;this.statusMessage='서버 오류: '+e.message}}
       finally{this.generating=false;this.continuing=false;this.stopRequested=false;if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generateFinalElapsed=this.generateElapsed;
@@ -135,6 +145,16 @@ window.SolverModule = function() {
       if(this.mipGapPercent!=null&&this.mipGapPercent<=0.1)return null;
       if(this._originalSchedule&&this.getManualEditCount()>0)return null;
       return this._contRequest(0);
+    },
+    // 초안 뒤의 긴 찾기가 끝났는데도 차이가 목표보다 크면 한 번 더 — 초안 없이 만들 때의 '한 번 더 찾기'(1-50)와 같은 몫
+    DRAFT_SEC:90, genDraftMore:false,
+    _draftMoreNext(r){
+      if(!this.genDraftMore||this.genEndless)return null;
+      this.genDraftMore=false;
+      if(this.stopRequested||!this.contBase||!r||!r.success||r.stopped)return null;
+      if(this.mipGapPercent==null||this.mipGapPercent<=this.mipGap*100+1e-9)return null;
+      if(this._originalSchedule&&this.getManualEditCount()>0)return null;
+      return this._contRequest(this.mipGap);
     },
     _roundDone(improved){
       this.genRounds.push({n:this.genRound,gap:this.mipGapPercent,improved:!!improved,sec:this.generateElapsed});
