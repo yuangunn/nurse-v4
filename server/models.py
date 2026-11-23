@@ -99,7 +99,7 @@ class Rules(BaseModel):
     maxNightPerMonth: bool = True
     maxNightPerMonthCount: int = 6   # 월 최대 야간 횟수 (7회부터 수면OFF 발생)
     maxNightTwoMonth: bool = False
-    maxNightTwoMonthCount: int = 11  # 홀짝월 합산 최대 야간 (12개이상 수면OFF 발생)
+    maxNightTwoMonthCount: int = 10  # 홀짝월 합산 최대 야간 (11개부터 수면OFF 발생, 결정 1-99)
     # 사전입력 완화 차등 보너스 — 높을수록 늦게 뒤집힌다 (사전순 최소 침습, 결정 1-9)
     #   휴가 5000 > 쉬는 날(OF·P1) 3000 > 근무 500 > 주휴 300(주휴 무시를 켰을 때만 변수)
     # 원티드(사전입력)에는 사연이 있다(제1원칙 8) — 쉬는 날은 근무보다 강하게 보호한다.

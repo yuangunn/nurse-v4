@@ -29,7 +29,7 @@ function app() {
       maxOneOff:false, maxOneOffCount:3,   // 한 사람의 1오프 한도 (결정 1-98) — 기본은 끔
       minRest:true, minRestHours:11,   // 보탠 근무가 낀 전환의 최소 휴식 시간 (결정 1-92)
       maxNightPerMonth:true, maxNightPerMonthCount:6,
-      maxNightTwoMonth:false, maxNightTwoMonthCount:11,
+      maxNightTwoMonth:false, maxNightTwoMonthCount:10,   // 합산 11회부터 수면오프 (결정 1-99)
       patternOptimization:true, autoMenstrualLeave:true, maxVPerMonth:1,
       preBonusLeave:5000, preBonusOff:3000, preBonusWork:500, preBonusRest:300,
       // 병원 휴일 (매년) — 공휴일 채우기가 법정공휴일과 함께 넣는다 (misc-features.js _hospitalHolidays)

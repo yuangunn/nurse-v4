@@ -87,7 +87,7 @@ def test_layout(res):
     assert ws["C3"].font.color is None
     # 양식 치수 · 글꼴
     assert ws.row_dimensions[1].height == 17.25 and ws.row_dimensions[16].height == 17.25
-    assert [ws.column_dimensions[c].width for c in ("A", "B", "AJ", "AK", "AT")] == [7.88, 4.25, 4.25, 3.62, 3.62]
+    assert [ws.column_dimensions[c].width for c in ("A", "B", "AJ", "AK", "AT")] == [7.88, 3.75, 3.75, 3.62, 3.62]
     assert ws["B3"].alignment.shrink_to_fit                  # 날짜가 좁은 칸에서 #### 로 바뀌지 않는다
     assert (ws["A5"].font.name, ws["A5"].font.sz, ws["A5"].font.b) == ("맑은 고딕", 10, True)
     assert (ws["B5"].font.sz, ws["B3"].font.sz, ws["AK5"].font.name, ws["AT4"].font.sz) == (9, 8, "Calibri", 6)

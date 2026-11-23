@@ -81,14 +81,14 @@ def test_migration_adds_rule_once_and_never_revives_a_deleted_one(tmp_path, monk
         with sqlite3.connect(path) as c:
             return c.execute("PRAGMA user_version").fetchone()[0]
 
-    assert len(rows()) == 1 and rows()[0][1:] == (-200, 1) and version() == 3
+    assert len(rows()) == 1 and rows()[0][1:] == (-200, 1) and version() == 5   # 마이그레이션이 늘면 이 숫자도 는다 (4 = 두 달 합산 야간 1-99, 5 = 생리휴가 보상 1-100)
     db.init_db()
     assert len(rows()) == 1, '다시 열어도 하나'
     with sqlite3.connect(path) as c:                               # 이 규칙이 없던 옛 DB
         c.execute("DELETE FROM scoring_rules WHERE params LIKE '%non_night%'")
         c.execute("PRAGMA user_version = 0")
     db.init_db()
-    assert len(rows()) == 1 and version() == 3, '옛 DB 엔 한 번 넣는다'
+    assert len(rows()) == 1 and version() == 5, '옛 DB 엔 한 번 넣는다'
     with sqlite3.connect(path) as c:                               # 사용자가 지웠다
         c.execute("DELETE FROM scoring_rules WHERE params LIKE '%non_night%'")
     db.init_db()
@@ -147,3 +147,56 @@ def test_migration_adds_juhu_off_rules_once(tmp_path, monkeypatch):
     assert rows() == [("내가 만든 것", 70), ("주휴 뒤에 OFF 붙이기", 150)], '같은 조건이 이미 있으면 그대로 두고 없는 쪽만'
     run(["DELETE FROM scoring_rules WHERE name LIKE '%주휴%붙이기' OR name='내가 만든 것'"], 3); db.init_db()
     assert rows() == [], '지운 규칙을 되살리지 않는다'
+
+
+def test_migration_lowers_the_old_two_month_night_default_once(tmp_path, monkeypatch):
+    """두 달 합산 야간 한도 — 옛 기본값(11)으로 저장된 DB 만 10 으로 한 번 내린다. 사람이 고친 값과, 내린 뒤 되돌린 값은 그대로 (결정 1-99)."""
+    from server.models import Rules
+    assert Rules().maxNightTwoMonthCount == 10
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    db.init_db()
+    path = db.get_db_path()
+
+    def set_(value, version):
+        db.save_rules({"maxNightTwoMonthCount": value})
+        with sqlite3.connect(path) as c:
+            c.execute(f"PRAGMA user_version = {version}")
+
+    set_(11, 3); db.init_db()
+    assert db.get_rules()["maxNightTwoMonthCount"] == 10, '옛 기본값으로 둔 DB 는 내린다'
+    set_(12, 3); db.init_db()
+    assert db.get_rules()["maxNightTwoMonthCount"] == 12, '사람이 고친 값은 그대로'
+    set_(11, 4); db.init_db()
+    assert db.get_rules()["maxNightTwoMonthCount"] == 11, '내린 뒤 되돌린 값은 다시 바꾸지 않는다'
+
+
+def test_migration_raises_the_first_menstrual_leave_reward_once(tmp_path, monkeypatch):
+    """생리휴가 보상 — 처음 값(+80)으로 둔 DB 만 새 기본값(+1000)으로 한 번 올린다. 고친 값과, 올린 뒤 되돌린 값은 그대로 (결정 1-100)."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    db.init_db()
+    path = db.get_db_path()
+    where = "rule_type='specific_shift' AND params LIKE '%female_only%'"
+
+    def score():
+        with sqlite3.connect(path) as c:
+            return c.execute(f"SELECT score FROM scoring_rules WHERE {where}").fetchone()[0]
+
+    def set_(value, version):
+        with sqlite3.connect(path) as c:
+            c.execute(f"UPDATE scoring_rules SET score=? WHERE {where}", (value,))
+            c.execute(f"PRAGMA user_version = {version}")
+
+    assert score() == 1000, '새 DB 는 새 기본값'
+    set_(80, 4); db.init_db()
+    assert score() == 1000, '처음 값으로 둔 옛 DB 는 올린다'
+    set_(200, 4); db.init_db()
+    assert score() == 200, '사람이 고친 값은 그대로'
+    set_(80, 5); db.init_db()
+    assert score() == 80, '올린 뒤 되돌린 값은 다시 바꾸지 않는다'
+    with sqlite3.connect(path) as c:        # V 감점(-500 이 아니라 80 으로 고쳐 둔 다른 특정 근무 규칙)은 건드리지 않는다
+        c.execute("UPDATE scoring_rules SET score=80 WHERE rule_type='specific_shift' AND params LIKE '%\"V\"%'")
+        c.execute("PRAGMA user_version = 4")
+    db.init_db()
+    with sqlite3.connect(path) as c:
+        assert c.execute("SELECT score FROM scoring_rules WHERE rule_type='specific_shift' AND params LIKE '%\"V\"%'").fetchone()[0] == 80
+
