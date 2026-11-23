@@ -146,6 +146,7 @@ jobs:
           node scripts/test_view_highlight.mjs
           node scripts/test_draft_fair_swap.mjs
           node scripts/test_shift_hours.mjs
+          node scripts/test_table_history.mjs
           node scripts/test_grid_select.mjs
           node scripts/test_roster_bulk.mjs
           node scripts/test_paste_fix.mjs

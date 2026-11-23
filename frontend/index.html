@@ -307,7 +307,7 @@
       <span class="rhdr-mark" aria-hidden="true"></span>
       <span class="rhdr-name" data-rd="brand-name">NurseScheduler</span>
       <span class="rhdr-meta" x-text="`${rdWard} 병동 · 간호사 ${nurses.length}명`"></span>
-      <span class="rhdr-ver" @click="trackVersionClick()" title="버전 정보. 다섯 번 누르면 개발자 설정이 켜집니다.">v4.29.0</span>
+      <span class="rhdr-ver" @click="trackVersionClick()" title="버전 정보. 다섯 번 누르면 개발자 설정이 켜집니다.">v4.30.0</span>
     </div>
     <div class="rym" title="대상 년월 — 사전입력·분석·근무표 모든 화면에 함께 적용됩니다">
       <button @click="prevMonth()" data-rd="ym-prev" title="한 달 앞으로 갑니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
@@ -945,7 +945,7 @@
         <button @click="open=!open" class="rbtn rbtn-secondary" :data-rd="activeTab==='schedule'?'btn-more':null" title="전체화면 · 저장본과 비교 · 다음달 이월 · 차지 표시 · 팀·그룹만 보기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12h.01 M19 12h.01 M5 12h.01"/></svg>더보기</button>
         <div x-show="open" x-cloak @click.outside="open=false" class="rmenu right">
           <button @click="tableFullscreen=true;open=false" class="rmenu-item" title="표만 화면 가득 보여 줍니다. Esc로 돌아옵니다."><b>전체화면</b><small>표만 크게 봅니다 · Esc로 돌아오기</small></button>
-          <button x-show="rdSched&&savedSchedules.length>0" @click="showCompareMenu=!showCompareMenu;open=false" class="rmenu-item" title="저장해 둔 근무표 하나를 골라 지금 표와 다른 칸을 봅니다."><b>저장본과 비교</b><small>저장한 표와 다른 칸을 찾습니다</small></button>
+          <button x-show="rdSched&&rdSavedOfMonth.length>0" @click="showCompareMenu=!showCompareMenu;open=false" class="rmenu-item" data-rd="menu-cmp-saved" title="이 달에 저장한 근무표 하나를 골라, 지금 표와 달라진 칸을 달력에 겹쳐 봅니다."><b>저장한 표와 견주기</b><small>달라진 칸을 달력에 겹쳐 보기</small></button>
           <button x-show="hasNextMonthData()" @click="carryOverToNextMonth();open=false" class="rmenu-item" title="이 표의 다음 달 초 칸을 다음 달 사전입력으로 넘기고 다음 달로 이동합니다."><b>다음달로 이월</b><small>다음 달 초 근무를 사전입력으로 넘깁니다</small></button>
           <div class="rmenu-sep"></div>
           <div style="padding:6px 12px"><div class="sub" style="font-size:var(--fs-min);color:var(--ink-2);margin-bottom:4px">팀·그룹만 보기</div>
@@ -977,14 +977,55 @@
     <button @click="rdHlClear()" class="rbtn rbtn-sm rbtn-quiet" data-rd="hl-off" title="강조를 모두 끄고 원래대로 봅니다.">강조 끄기</button>
   </div>
 
+  <!-- 표 기록 (결정 1-95) — 이번 만들기에서 나온 표들. 번호를 누르면 그 표를 본다. 표가 하나뿐이면 숨긴다 -->
+  <div class="rverbar fs-hide rdesk-only" data-rd="ver-bar" x-show="verLog.length>1&&rdSched" x-cloak>
+    <span class="lbl">표 기록</span>
+    <template x-for="v in verLog" :key="'vb'+v.n"><button class="rver" :class="[v.n===verCur?'on':'',verCmp.on&&!verCmp.saved&&v.n===verCmp.a?'is-a':'',v.n>verSeen?'is-new':'']" @click="verShow(v.n)" :data-ver="v.n" :title="v.n===verCur?'지금 화면에 있는 표입니다.':`${v.n}번 표를 화면에 엽니다. 저장·인쇄·내보내기는 화면의 표가 대상입니다.`"><b x-text="verChipName(v)+(v.n>verSeen?' · 새로 나옴':'')+(verCmp.on&&!verCmp.saved&&v.n===verCmp.a?' · 견주는 앞 표':'')"></b><small x-text="verChipSub(v)"></small></button></template>
+    <span class="pin" x-show="verPinned" data-rd="ver-pin" x-text="`${verCur}번 표를 보는 중 — ${generating?'새 표가 나와도 화면은 그대로 둡니다':'최신은 '+verLast+'번입니다'}`"></span>
+    <button x-show="verPinned" @click="verShow(verLast)" class="rbtn rbtn-sm rbtn-secondary" data-rd="ver-latest" title="가장 나중에 나온 표로 돌아갑니다. 더 찾는 중이면 새 표가 나올 때 화면도 따라 바뀝니다.">최신 표로</button>
+    <span style="flex:1"></span>
+    <button @click="verCmpToggle()" class="rbtn rbtn-sm rbtn-secondary" :class="verCmp.on?'is-open':''" data-rd="ver-cmp" :title="verCmp.on?'견주기를 끄고 원래 색으로 봅니다.':'앞 번호의 표와 무엇이 달라졌는지 달력에 겹쳐 봅니다.'" x-text="verCmp.on?'견주기 끄기':'앞 표와 견주기'"></button>
+    <button @click="verNums.open=true" class="rbtn rbtn-sm rbtn-quiet" data-rd="ver-nums" title="번호마다 1오프·단독 야간 같은 숫자를 나란히 봅니다. 번호를 따로 저장할 수 있습니다.">번호마다 숫자</button>
+  </div>
+  <div class="rcmpbar fs-hide rdesk-only" data-rd="cmp-bar" x-show="verCmp.on&&rdSched" x-cloak>
+    <select class="rselect" data-rd="cmp-a" aria-label="견주는 앞 표" @change="verCmpPickA($event.target.value)">
+      <template x-if="verLog.some(x=>x.n<verCur)"><optgroup label="표 기록"><template x-for="v in verLog.filter(x=>x.n<verCur)" :key="'ca'+v.n"><option :value="'v'+v.n" :selected="verCmpAVal==='v'+v.n" x-text="v.n+'번'+(v.n===1?' (초안)':'')"></option></template></optgroup></template>
+      <template x-if="rdSavedOfMonth.length"><optgroup label="이 달에 저장한 근무표"><template x-for="s in rdSavedOfMonth" :key="'cs'+s.id"><option :value="'s'+s.id" :selected="verCmpAVal==='s'+s.id" x-text="s.name||`${s.month}월 근무표`"></option></template></optgroup></template>
+    </select>
+    <span class="arrow" aria-hidden="true">→</span>
+    <select x-show="verLog.length>1" class="rselect" data-rd="cmp-b" aria-label="화면의 표" @change="verCmpPick(verCmp.saved?null:verCmp.a,+$event.target.value)"><template x-for="v in verLog" :key="'cb'+v.n"><option :value="v.n" :selected="v.n===verCur" x-text="v.n+'번'"></option></template></select>
+    <span x-show="verLog.length<=1" class="scr">화면의 표</span>
+    <b data-rd="cmp-total" x-text="`달라진 칸 ${rdCmpTotal.cells}칸 · ${rdCmpTotal.who}명`"></b>
+    <template x-for="f in rdCmpFacts" :key="'cf'+f.label"><span class="fact" :class="f.tone" :title="f.tip"><small x-text="f.label"></small><b x-text="f.text"></b><i x-text="f.word"></i></span></template>
+    <span style="flex:1"></span>
+    <template x-for="k in [['rest','쉬게 됨'],['work','근무하게 됨'],['swap','다른 근무로']]" :key="'ck'+k[0]"><button class="rcmpkind" :class="verCmp.kinds[k[0]]?'on':''" @click="verCmp.kinds[k[0]]=!verCmp.kinds[k[0]]" :data-kind="k[0]" :title="`${k[1]} 칸을 ${verCmp.kinds[k[0]]?'빼고':'넣어'} 봅니다.`"><i class="sw" :class="verCmp.color?'vd-'+k[0]:'vd-one'"></i><span x-text="`${k[1]} ${rdCmpTotal[k[0]]}`"></span></button></template>
+    <div class="rmenu-host" x-data="{open:false}">
+      <button @click="open=!open" class="rbtn rbtn-sm rbtn-secondary" data-rd="cmp-view" title="견주는 모양을 고릅니다.">보기<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+      <div x-show="open" x-cloak @click.outside="open=false" class="rmenu right rview" data-rd="cmp-menu">
+        <label class="rcheck" data-rd="cmp-overlay" title="한 줄에 겹쳐 봅니다. 바뀐 칸에 앞 표의 근무를 작게 함께 적습니다."><input type="radio" name="cmpmode" value="overlay" x-model="verCmp.mode"/><span class="box"></span>겹쳐 보기</label>
+        <label class="rcheck" data-rd="cmp-rows" title="칸마다 윗줄에 앞 표, 아랫줄에 이 표의 근무를 적습니다. 연속 휴무 같은 흐름을 볼 때 좋습니다."><input type="radio" name="cmpmode" value="rows" x-model="verCmp.mode"/><span class="box"></span>두 줄 보기</label>
+        <div class="rmenu-sep"></div>
+        <label class="rcheck" data-rd="cmp-only" title="달라진 칸이 있는 사람만 남기고 나머지 줄은 숨깁니다."><input type="checkbox" x-model="verCmp.onlyChanged"/><span class="box"></span>바뀐 사람만 보기</label>
+        <label class="rcheck" data-rd="cmp-dim" title="안 바뀐 칸을 흐리게 해서 바뀐 칸이 눈에 띄게 합니다."><input type="checkbox" x-model="verCmp.dim"/><span class="box"></span>안 바뀐 칸 흐리게</label>
+        <label class="rcheck" data-rd="cmp-color" title="쉬게 됨·근무하게 됨·다른 근무로를 색으로 가릅니다. 끄면 한 가지 색입니다."><input type="checkbox" x-model="verCmp.color"/><span class="box"></span>종류마다 색 다르게</label>
+        <label class="rcheck" data-rd="cmp-old" :class="verCmp.mode==='rows'?'is-off':''" title="겹쳐 보기에서 바뀐 칸에 앞 표의 근무를 작게 함께 적습니다."><input type="checkbox" x-model="verCmp.old" :disabled="verCmp.mode==='rows'"/><span class="box"></span>앞 표의 근무 함께 적기</label>
+      </div>
+    </div>
+    <button @click="verCmpOff()" class="rbtn rbtn-sm rbtn-quiet" data-rd="cmp-off" title="견주기를 끄고 원래 색으로 봅니다.">끄기</button>
+  </div>
+
   <!-- 만드는 중 — 진행 한 줄(답을 찾았는지·가장 좋은 답과 차이·정체) + 계산 기록. 서랍은 표가 없으면 열리지 않고
        v4.13 상태 줄이 옛 '생성 중' 카드의 진행을 가져가지 않아, 만드는 동안 볼 곳이 없었다 (2026-10-16).
        목록(x-for)을 품으므로 x-show (결정 2-21) -->
   <div class="rlive fs-hide rdesk-only" data-rd="live-log" x-show="generating" x-cloak>
+    <!-- 표가 떠 있는 채로 더 찾는 동안에는 이 한 줄만 — 아래 근무표가 보여야 한다. 계산 현황은 '자세히'로 펼친다 -->
+    <div class="rmid" data-rd="mid-result" x-show="rdMidFacts.length"><template x-for="f in rdMidFacts" :key="'mf'+f[0]"><span class="fact"><small x-text="f[0]"></small><b x-text="f[1]"></b></span></template>
+      <span class="now" x-show="rdSolveEvents.length" :title="rdSolveEvents[0]?.text"><i class="pulse"></i><span x-text="`방금 ${rdSolveEvents[0]?.time}초 · ${rdSolveEvents[0]?.text}`"></span></span>
+      <button @click="solveOpen=!solveOpen" class="rbtn rbtn-sm rbtn-quiet" data-rd="live-toggle" :title="solveOpen?'계산 현황을 접고 근무표를 넓게 봅니다.':'따져 본 경우·점수·지나온 일 같은 계산 현황을 펼쳐 봅니다.'" x-text="solveOpen?'계산 현황 접기':'계산 현황 자세히'"></button>
+      <button @click="rdStoryOpen()" class="rbtn rbtn-sm rbtn-secondary" data-rd="mid-story" title="지금 화면에 있는 표의 결과 요약을 봅니다. 찾기는 멈추지 않습니다.">지금 표 요약 보기</button></div>
+    <div class="rlive-detail" data-rd="live-detail" x-show="!rdSolveCompact||solveOpen">
     <div class="rlive-head"><span x-text="rdLiveProgress"></span>
       <button x-show="solverLogs.length" @click="showLiveLog=!showLiveLog;_scrollLogs()" class="rbtn rbtn-sm rbtn-quiet" title="자동 배정이 지금 계산하며 남기는 원본 기록입니다. 위 숫자와 표는 이 기록을 읽어 만든 것입니다. 문의할 때 복사해 보내면 도움이 됩니다."><span x-text="showLiveLog?'원본 기록 접기':'원본 기록 보기'"></span><span x-text="' ('+solverLogs.length+'줄)'"></span></button></div>
-    <div class="rmid" data-rd="mid-result" x-show="rdMidFacts.length"><template x-for="f in rdMidFacts" :key="'mf'+f[0]"><span class="fact"><small x-text="f[0]"></small><b x-text="f[1]"></b></span></template>
-      <button @click="rdStoryOpen()" class="rbtn rbtn-sm rbtn-secondary" data-rd="mid-story" title="지금 화면에 있는 표의 결과 요약을 봅니다. 찾기는 멈추지 않습니다.">지금 표 요약 보기</button></div>
     <div class="rsolve" data-rd="solve-cards" x-show="rdSolveCards.length"><template x-for="c in rdSolveCards" :key="'sc'+c.k"><div class="tile" :title="c.tip"><small x-text="c.k"></small><b x-text="c.v"></b></div></template></div>
     <div class="rsolve-sub" x-show="rdSolveSub" x-text="rdSolveSub"></div>
     <div class="rsolve-last" data-rd="solve-last" x-show="rdSolveEvents.length"><span class="lbl">방금 있었던 일</span>
@@ -993,6 +1034,7 @@
     <div class="rsolve-ev" data-rd="solve-events" x-show="showSolveEvents&&rdSolveEvents.length"><table><thead><tr><th class="num" title="그 풀이를 시작한 뒤 흐른 시간">지난 시간</th><th title="한 번의 만들기에 풀이가 여러 번 올 수 있습니다 (완화 단계)">풀이</th><th>무슨 일이 있었나</th><th class="num" title="그때까지 따져 본 경우의 수">따져 본 경우</th><th class="num" title="그때 가장 좋은 표의 점수 — 높을수록 좋다">표 점수</th><th class="num" title="가능한 최고 점수와의 차이">최고와의 차이</th></tr></thead>
       <tbody><template x-for="e in rdSolveEvents" :key="'se'+e.id"><tr><td class="num" x-text="e.time+'초'"></td><td x-text="e.solve+'번째'"></td><td x-text="e.text"></td><td class="num" x-text="e.nodes.toLocaleString('ko-KR')"></td><td class="num" x-text="e.sol||'—'"></td><td class="num" x-text="e.gap||'—'"></td></tr></template></tbody></table></div>
     <div x-show="showLiveLog&&solverLogs.length" id="liveLogPanel" class="rlog"><template x-for="line in solverLogs" :key="'lv'+line.id"><div x-text="line.msg" :style="line.hint?'color:#F0A070;font-weight:600':''"></div></template></div>
+    </div>
   </div>
 
   <!-- 실패 배너 — 이유 한 줄 + 후보 3 + 주 버튼 1 -->
@@ -1031,7 +1073,7 @@
   <!-- 표 -->
   <template x-if="rdSched">
     <div class="rtable-wrap" :data-rd="activeTab==='schedule'?'table-wrap':null">
-      <table class="rtable" :class="tableFlash?'is-loaded':''" :data-rd="activeTab==='schedule'?'table':null" x-effect="activeTab;scheduleDays.length;rules.maxNightTwoMonth;rdFitColumnsSoon()">
+      <table class="rtable" :class="[tableFlash?'is-loaded':'',verCmp.on?(verCmp.mode==='rows'?'is-cmp2':'is-cmp'):'']" :data-rd="activeTab==='schedule'?'table':null" x-effect="activeTab;scheduleDays.length;rules.maxNightTwoMonth;rdFitColumnsSoon()">
         <thead>
           <tr>
             <th class="rt-corner">주기</th>
@@ -1051,13 +1093,13 @@
           </tr>
         </thead>
         <tbody @mouseover="rdHoverCol($event)" @mouseleave="rdHoverCol($event,true)">
-          <template x-for="(nurse,ni) in rdPhoneNurses" :key="nurse.id"><tr :class="[nurse.is_trainee?'trainee-row':'',nurse.id===myNurseId?'me':'',rdGroupStart(rdPhoneNurses,ni)?'group-start':'']">
-            <td class="rt-name" :class="[_keeperInMonth(nurse,year,month)?'is-keeper':'',teamColorMap[nurse.group]?'has-team':'']" :style="rdTeamStyle(nurse)" @mousedown="gridDownRow('schedule',ni,$event)" @mouseover="gridOverRow('schedule',ni)" :title="nurse.name+(nurse.is_trainee?' · 신규간호사':'')+(_keeperInMonth(nurse,year,month)?' · 이달 나이트킵':'')+' — 누르거나 끌어서 줄을 고릅니다'"><b x-text="nurse.name"></b><small x-text="nurse.group"></small></td>
+          <template x-for="(nurse,ni) in rdPhoneNurses" :key="nurse.id"><tr x-show="!(verCmp.on&&verCmp.onlyChanged)||rdCmpRowCount(nurse)>0" :class="[nurse.is_trainee?'trainee-row':'',nurse.id===myNurseId?'me':'',rdGroupStart(rdPhoneNurses,ni)?'group-start':'']">
+            <td class="rt-name" :class="[_keeperInMonth(nurse,year,month)?'is-keeper':'',teamColorMap[nurse.group]?'has-team':'']" :style="rdTeamStyle(nurse)" @mousedown="gridDownRow('schedule',ni,$event)" @mouseover="gridOverRow('schedule',ni)" :title="nurse.name+(nurse.is_trainee?' · 신규간호사':'')+(_keeperInMonth(nurse,year,month)?' · 이달 나이트킵':'')+' — 누르거나 끌어서 줄을 고릅니다'"><b x-text="nurse.name"></b><small x-text="nurse.group"></small><small class="vd-n" x-show="verCmp.on&&rdCmpRowCount(nurse)" x-text="rdCmpRowCount(nurse)+'칸'"></small></td>
             <template x-for="(day,di) in scheduleDays" :key="dayKey(day)">
               <td class="rt-cell" :data-cell="nurse.id+'|'+dayKey(day)" :data-shift="colorByShift&&!viewWorkRest&&!isNurseInactive(nurse,day)?(displayShift(nurse.id,day)||null):null"
-                  :class="[rdCellTone(nurse,day),rdCellHl(nurse,di),day.getDay()===6?'sat':'',day.getDay()===0?'sun':'',isCycleStart(day)&&day.getDate()!==1?'cycle-start':'',isOverflow(day)?'overflow':'',rdIsPre(nurse.id,day)?'is-pre':'',isRelaxed(nurse.id,day)?'is-relaxed':'',isManuallyEdited(nurse.id,day)?'is-edited':'',isReadjustPin(nurse.id,day)?'g-pin':'',isReadjustChanged(nurse.id,day)?'g-readj':'',hasScheduleViolation(nurse.id,day)?'g-violation':'',isNurseInactive(nurse,day)?'is-absent':'',isKeeperDay(nurse,day)&&!viewWorkRest?'is-keeper':'',showWantedColor&&!viewWorkRest&&rdIsPre(nurse.id,day)&&isWanted(nurse.id,day)?'is-wanted':'',isSel('schedule',ni,di)?'is-sel':'',_sel&&_sel.tab==='schedule'&&_sel.r1===ni&&_sel.c1===di?'is-focused':'']"
+                  :class="[rdCellTone(nurse,day),rdCellHl(nurse,di),rdCellCmp(nurse,day),day.getDay()===6?'sat':'',day.getDay()===0?'sun':'',isCycleStart(day)&&day.getDate()!==1?'cycle-start':'',isOverflow(day)?'overflow':'',rdIsPre(nurse.id,day)?'is-pre':'',isRelaxed(nurse.id,day)?'is-relaxed':'',isManuallyEdited(nurse.id,day)?'is-edited':'',isReadjustPin(nurse.id,day)?'g-pin':'',isReadjustChanged(nurse.id,day)?'g-readj':'',hasScheduleViolation(nurse.id,day)?'g-violation':'',isNurseInactive(nurse,day)?'is-absent':'',isKeeperDay(nurse,day)&&!viewWorkRest?'is-keeper':'',showWantedColor&&!viewWorkRest&&rdIsPre(nurse.id,day)&&isWanted(nurse.id,day)?'is-wanted':'',isSel('schedule',ni,di)?'is-sel':'',_sel&&_sel.tab==='schedule'&&_sel.r1===ni&&_sel.c1===di?'is-focused':'']"
                   :title="rdCellTipSched(nurse,day)" @mousedown="gridDown('schedule',ni,di,$event)" @mouseover="gridOver('schedule',ni,di)" @click="gridClick($event)&&openShiftEdit(nurse,day)">
-                <span x-text="isNurseInactive(nurse,day)?'':displayShift(nurse.id,day)"></span>
+                <small class="vd-old" x-show="verCmp.on&&rdCmpOld(nurse,day)" x-text="rdCmpOld(nurse,day)"></small><span x-text="isNurseInactive(nurse,day)?'':displayShift(nurse.id,day)"></span>
                 <span x-show="isLocked(nurse.id,day)" class="lock"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11h14v10H5z M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
                 <span x-show="hasNote(nurse.id,day)" class="memo"></span>
               </td>
@@ -1077,6 +1119,7 @@
             <template x-for="day in scheduleDays" :key="'sf'+row.label+day"><td class="rt-foot" :data-shift="row.label==='휴무'?'OF':row.label" :class="[isOverflow(day)?'overflow':'',row.label==='D'&&isScheduleStaffShort(day,'day')?'staff-short':'',row.label==='E'&&isScheduleStaffShort(day,'evening')?'staff-short':'',row.label==='N'&&isScheduleStaffShort(day,'night')?'staff-short':'']" x-text="isPrevMonthDay(day)?'':(row.label==='휴무'?(getDayDutyCount(day,row.shifts)||''):`${getDayDutyCount(day,row.shifts)}/${rdFootNeed(day,row.label)}`)"></td></template>
             <td class="rt-foot" :data-shift="row.label==='휴무'?'OF':row.label" colspan="7"></td>
           </tr></template>
+          <tr x-show="verCmp.on" class="rt-cmpfoot" data-rd="cmp-foot"><td class="rt-foot-label">그 날 바뀐 칸</td><template x-for="day in scheduleDays" :key="'cmpf'+day"><td class="rt-foot" :class="isOverflow(day)?'overflow':''" x-text="rdCmpDayCount(day)||''"></td></template><td class="rt-foot" colspan="7" x-text="rdCmpTotal.cells+'칸'"></td></tr>
         </tfoot>
       </table>
     </div>
@@ -1627,6 +1670,19 @@
   </div>
 </div>
 
+<div :class="verNums.open?'rmodal-bg':''" role="dialog" aria-modal="true" data-rd="ver-nums-modal" x-show="verNums.open" x-cloak @keydown.escape.window="verNums.open=false" @click.self="verNums.open=false">
+  <div class="rmodal rvernum">
+    <div class="rfair-top"><b>번호마다 숫자</b><span style="flex:1"></span><button @click="verNums.open=false" class="rbtn rbtn-sm rbtn-quiet" title="닫습니다 (Esc).">닫기</button></div>
+    <div class="rvernum-sub">이번 만들기에서 나온 표를 나란히 놓았습니다. 숫자는 모두 작을수록 좋고, 줄마다 가장 좋은 값을 진하게 보였습니다.</div>
+    <div class="rfair-body"><template x-if="verNums.open"><table class="rvernum-table">
+      <thead><tr><th>견주는 것</th><template x-for="v in verLog" :key="'vh'+v.n"><th :class="v.n===verCur?'cur':''"><b x-text="verChipName(v)"></b><small x-text="_verTime(v.sec)"></small></th></template></tr></thead>
+      <tbody><template x-for="(r,ri) in verNumRows()" :key="'vr'+ri"><tr><td class="lbl" :title="r.tip" x-text="r.label"></td><template x-for="(c,ci) in r.cells" :key="'vc'+ri+ci"><td :class="[c.best?'best':'',verLog[ci]&&verLog[ci].n===verCur?'cur':'']" x-text="c.text"></td></template></tr></template>
+        <tr class="acts"><td class="lbl">표 열기 · 저장</td><template x-for="v in verLog" :key="'va'+v.n"><td :class="v.n===verCur?'cur':''"><button x-show="v.n!==verCur" @click="verShow(v.n);verNums.open=false" class="rbtn rbtn-sm rbtn-secondary" :title="`${v.n}번 표를 화면에 엽니다.`">보기</button><span x-show="v.n===verCur" class="curlbl">화면의 표</span> <button @click="verSave(v.n)" class="rbtn rbtn-sm rbtn-quiet" :title="`${v.n}번 표를 저장한 근무표 목록에 따로 남깁니다.`">따로 저장</button></td></template></tr></tbody>
+    </table></template></div>
+    <div class="rfair-note">표 기록은 이번 만들기 동안 남고, 새로고침한 뒤 이 달 자동저장본을 열면 되살아납니다. 저장한 근무표 목록에는 섞이지 않으니 남기고 싶은 번호만 ‘따로 저장’하세요. 새로 만들기를 시작하면 기록은 새 표들로 바뀝니다.</div>
+  </div>
+</div>
+
 <div :class="fairReport.open?'rmodal-bg':''" role="dialog" aria-modal="true" data-rd="fair" x-show="fairReport.open" x-cloak @keydown.escape.window="fairReport.open=false" @click.self="fairReport.open=false">
   <div class="rmodal rfair">
     <div class="rfair-top"><b x-text="`${year}년 ${month}월 공평성 리포트`"></b>
@@ -1686,6 +1742,8 @@
     <div class="rstory-sub" x-show="rdStoryStep?.sub" x-text="rdStoryStep?.sub"></div>
     <div class="rstory-body">
       <template x-for="(f,i) in (rdStoryStep?.facts||[])" :key="'sf'+(rdStoryStep?.id)+i"><div class="rstory-fact" :class="f[2]?'is-link':''" @click="if(f[2]){story.open=false;rdOpenDrawer(f[2]);drawerBig=true}" :title="f[2]?'누르면 리포트의 그 탭이 열립니다.':null"><span x-text="f[0]"></span><b x-text="f[1]"></b></div></template>
+      <template x-if="rdStoryStep?.table"><table class="rstory-table" data-rd="story-table"><thead><tr><template x-for="(h,i) in rdStoryStep.table.head" :key="'sth'+i"><th x-text="h"></th></template></tr></thead>
+        <tbody><template x-for="(r,i) in rdStoryStep.table.rows" :key="'str'+i"><tr :class="r.tone"><td :title="r.tip" x-text="r.label"></td><td x-text="r.a"></td><td x-text="r.b"></td><td class="word" x-text="r.word"></td></tr></template></tbody></table></template>
       <template x-for="x in (rdStoryStep?.id==='changed'?rdRelaxedList:[])" :key="'sx'+x.nid+x.dk"><div class="rstory-cell">
         <div><b x-text="x.name"></b><span x-text="x.date"></span></div>
         <div class="chg"><span class="chip" :data-shift="x.from" x-text="x.from"></span><span>→</span><span class="chip" :data-shift="x.to" x-text="x.to"></span><span class="memo" x-show="x.note" x-text="'메모: '+x.note"></span></div>
@@ -1987,6 +2045,7 @@
 <div x-show="rdToast" x-cloak class="rtoast" data-rd="toast" role="status" aria-live="polite">
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span x-text="rdToast?rdToast.msg:''"></span>
   <button x-show="rdToast&&rdToast.undo" @click="rdToastUndo()" class="rbtn" title="방금 한 것을 취소합니다 (Ctrl+Z)."><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5 M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>되돌리기</button>
+  <button x-show="rdToast&&rdToast.act" @click="rdToast.fn&&rdToast.fn()" class="rbtn" data-rd="toast-act" x-text="rdToast?rdToast.act:''"></button>
   <button x-show="rdToast&&!rdToast.undo" @click="rdToast=null" class="rbtn" title="알림을 닫습니다.">닫기</button>
 </div>
 <div class="toast-container" role="status" aria-live="polite">
@@ -2000,42 +2059,12 @@
   <button x-show="_toastHistory.length>0" @click="showToastHistory=!showToastHistory" class="toast-history-btn" :title="`이전 알림 ${_toastHistory.length}개를 봅니다.`"><span x-text="'이전 알림 '+_toastHistory.length"></span></button>
 </div>
 
-<!-- #8 스케줄 비교 결과 모달 -->
-<div x-show="compareResult" x-cloak class="modal-bg" role="dialog" aria-modal="true" @click.self="compareResult=null">
-  <div class="modal" style="max-width:36rem;max-height:70vh;display:flex;flex-direction:column">
-    <div class="flex items-center justify-between mb-3">
-      <div class="font-bold text-lg text-bright">근무표 비교</div>
-      <button @click="compareResult=null" style="background:none;border:none;font-size:1.2rem;color:var(--text-sub);cursor:pointer" title="닫습니다.">&times;</button>
-    </div>
-    <p class="text-xs text-sub mb-3">현재 근무표 vs <strong x-text="compareResult?.savedName"></strong> — <strong class="text-blue" x-text="compareResult?.totalDiffs+'건'"></strong> 차이</p>
-    <div style="flex:1;overflow-y:auto">
-      <table class="tbl" style="font-size:14px">
-        <thead><tr><th>간호사</th><th>날짜</th><th>현재</th><th></th><th>비교대상</th></tr></thead>
-        <tbody>
-          <template x-for="(d,i) in compareResult?.diffs||[]" :key="i">
-            <tr>
-              <td class="font-medium text-bright" x-text="d.name"></td>
-              <td class="text-dim" x-text="d.dk"></td>
-              <td class="text-center"><span :style="getShiftStyle(d.current)" class="px-1.5 py-0.5 rounded text-xs font-bold" x-text="d.current"></span></td>
-              <td class="text-center text-dim">→</td>
-              <td class="text-center"><span :style="getShiftStyle(d.saved)" class="px-1.5 py-0.5 rounded text-xs font-bold" x-text="d.saved"></span></td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-      <p x-show="compareResult?.hasMore" class="text-xs text-dim text-center mt-2">외 <span x-text="compareResult?.totalDiffs-50"></span>건 생략...</p>
-    </div>
-    <button @click="compareResult=null" class="btn btn-ghost btn-sm w-full mt-3" title="닫습니다.">닫기</button>
-  </div>
-</div>
-
-
-<!-- 저장본 비교 — 어느 저장본과 비교할지 고르기 -->
+<!-- 저장한 표와 견주기 — 이 달에 저장한 근무표를 골라 달력에 겹쳐 본다 (결정 1-95). 다른 칸을 목록으로 보이던 옛 창은 없앴다 -->
 <template x-if="showCompareMenu">
 <div class="rmodal-bg" role="dialog" aria-modal="true" @click.self="showCompareMenu=false">
   <div class="rmodal" style="width:560px;max-width:95vw;max-height:80vh">
-    <div class="rmodal-head"><div><div class="rmodal-title">저장본과 비교</div><div class="rmodal-desc">지금 표와 비교할 저장본을 고르세요. 다른 칸만 목록으로 보여 줍니다.</div></div><button @click="showCompareMenu=false" class="rmodal-close" data-rd="modal-close" title="닫기 (Esc)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18 M6 6l12 12"/></svg></button></div>
-    <div class="rmodal-body"><div class="rlist"><template x-for="item in savedSchedules" :key="'cmp'+item.id"><div class="item"><b x-text="item.name||`${item.year}년 ${item.month}월`"></b><span class="when" x-text="item.created_at"></span><span class="sp"></span><button @click="compareWithSaved(item.id);showCompareMenu=false" class="rbtn rbtn-sm rbtn-secondary" title="이 저장본과 지금 표를 비교합니다.">비교</button></div></template></div></div>
+    <div class="rmodal-head"><div><div class="rmodal-title">저장한 표와 견주기</div><div class="rmodal-desc" x-text="`${month}월에 저장한 근무표 가운데 견줄 표를 고르세요. 지금 표와 달라진 칸을 달력에 겹쳐 보여 줍니다.`"></div></div><button @click="showCompareMenu=false" class="rmodal-close" data-rd="modal-close" title="닫기 (Esc)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18 M6 6l12 12"/></svg></button></div>
+    <div class="rmodal-body"><div class="rlist"><template x-for="item in rdSavedOfMonth" :key="'cmp'+item.id"><div class="item" :class="item.id===loadedSavedId?'is-loaded':''"><b x-text="item.name||`${item.year}년 ${item.month}월`"></b><span class="when" x-text="item.created_at"></span><span class="sp"></span><button @click="verCmpSaved(item.id);showCompareMenu=false" class="rbtn rbtn-sm rbtn-secondary" data-rd="cmp-saved-pick" title="이 표와 지금 표를 견줍니다. 이 표의 근무가 앞, 지금 표가 뒤입니다.">견주기</button></div></template></div></div>
     <div class="rmodal-foot"><span class="spacer"></span><button @click="showCompareMenu=false" class="rbtn rbtn-secondary" title="닫습니다.">닫기</button></div>
   </div>
 </div>
@@ -2669,7 +2698,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:600;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.29.0 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.30.0 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">기본 계산 방식 · 다른 계산 방식 듀얼 자동 배정 · 완전 오프라인</p>
         <p class="text-dim text-xs mt-1">모성보호(임산부 P1) · 최소 침습 완화 · 왜 안 되는지 자세히 보기</p>
