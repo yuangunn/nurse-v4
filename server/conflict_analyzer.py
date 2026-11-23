@@ -74,6 +74,10 @@ class _ConflictAnalyzer(CpSatScheduler):
             self._g_consecutive_work(model, x, gate)
         if self.rules.maxConsecutiveNight:
             self._g_consecutive_night(model, x, gate)
+        if getattr(self.rules, 'maxOneOff', False):
+            cap = max(0, int(self.rules.maxOneOffCount))   # 한 사람의 1오프 한도 (결정 1-98) — 사람마다 리터럴 하나
+            self._cs_max_oneoff(model, x, cap, lambda nurse: gate(
+                f"{self._fmt_nurse_label(nurse)} 1오프 ≤{cap}개", nid=nurse["id"], kind="sequence"), pin=self._gate_pins()[1])
         if getattr(self.rules, 'restAfterNight', False):
             self._g_rest_after_night(model, x, gate)
         if self.rules.maxNightPerMonth:
@@ -998,6 +1002,8 @@ class _ConflictAnalyzer(CpSatScheduler):
             self._cs_max_consecutive_work(model, x, self.rules.maxConsecutiveWorkDays)
         if self.rules.maxConsecutiveNight:
             self._cs_max_consecutive_night(model, x, self.rules.maxConsecutiveNightDays)
+        if getattr(self.rules, "maxOneOff", False):
+            self._cs_max_oneoff(model, x, max(0, int(self.rules.maxOneOffCount)))
         if self.rules.weeklyOff:
             self._cs_weekly_off(model, x)
         self._cs_pregnancy_p1_weekly(model, x)         # 임산부 P1 주1회 (모성보호)

@@ -298,6 +298,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             self._c_max_consecutive_work(prob, x, self.rules.maxConsecutiveWorkDays)
         if self.rules.maxConsecutiveNight:
             self._c_max_consecutive_night(prob, x, self.rules.maxConsecutiveNightDays)
+        if getattr(self.rules, 'maxOneOff', False):
+            self._c_max_oneoff(prob, x, max(0, int(self.rules.maxOneOffCount)))
         if getattr(self.rules, 'restAfterNight', False):
             self._c_rest_after_night(prob, x)           # 연속야간 후 휴무 보장
         self._c_max_v_per_month(prob, x)               # V 월 최대 횟수
@@ -621,6 +623,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             self._c_max_consecutive_work(prob, x, self.rules.maxConsecutiveWorkDays)
         if self.rules.maxConsecutiveNight:
             self._c_max_consecutive_night(prob, x, self.rules.maxConsecutiveNightDays)
+        if getattr(self.rules, 'maxOneOff', False):
+            self._c_max_oneoff(prob, x, max(0, int(self.rules.maxOneOffCount)))
         if getattr(self.rules, 'restAfterNight', False):
             self._c_rest_after_night(prob, x)
         self._c_max_v_per_month(prob, x)
