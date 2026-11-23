@@ -817,12 +817,20 @@ class _ConflictAnalyzer(CpSatScheduler):
                         break
                     if self.all_dates[rest_d] < from_:
                         continue   # 트레이닝 날에 휴식 강제 소급 금지
-                    if pin.get((nid, rest_d)):
-                        continue   # 사실-클램프: 확정된 휴식일 칸은 사람이 고른 그대로
-                    work_vars = [x[nid][rest_d][s] for s in self.WORK_SHIFTS
-                                 if (k > 0 or s not in self.NIGHT_SHIFTS) and not isinstance(x[nid][rest_d][s], int)]
-                    if not work_vars:
-                        continue
+                    # 휴무일 칸을 사람이 근무로 정해 두었으면 그 앞의 연속 야간을 막는다 — 엔진(_cs_rest_after_night)과 같게 (2026-11-23)
+                    fact = lambda dd: pin.get((nid, dd)) or self._locked_code(nurse, dd)
+                    rc = fact(rest_d)
+                    if rc and rc in self.WORK_SHIFTS and (k > 0 or rc not in self.NIGHT_SHIFTS):
+                        if not night_terms or all(fact(d + i) in self.NIGHT_SHIFTS for i in range(min_consec)):
+                            continue   # 야간까지 사람이 넣은 것 — 사실끼리
+                        work_vars = [1]
+                    else:
+                        if pin.get((nid, rest_d)):
+                            continue   # 사실-클램프: 확정된 휴식일 칸(쉬는 코드)은 사람이 고른 그대로
+                        work_vars = [x[nid][rest_d][s] for s in self.WORK_SHIFTS
+                                     if (k > 0 or s not in self.NIGHT_SHIFTS) and not isinstance(x[nid][rest_d][s], int)]
+                        if not work_vars:
+                            continue
                     if lit is None:
                         lit = gate(f"{self._fmt_nurse_label(nurse)} 연속야간 후 휴무 보장", nid=nid, kind="sequence")
                     lhs = sum(night_terms) + night_fixed

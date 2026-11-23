@@ -65,3 +65,59 @@ def test_night_offday_then_day_is_forbidden_with_leave_too(mid):
     # N → 쉼 → D 금지 — 쉼이 V(휴가)여도 (2026-10-17, N > V > D 도 금지)
     assert not _feasible("r", {2: "N", 3: mid, 4: "D"})
     assert _feasible("r", {2: "N", 3: mid, 4: "E"})
+
+
+# ── 휴무일 칸을 사람이 근무로 정해 둔 경우 (2026-11-23) ─────────────────────────────────────────
+# 잠근 D1(번표 입력 번, 08:30~17:30 근무) 이틀 앞까지 엔진이 N N N 을 놓았다 — 휴무일 칸이 상수면 제약을 건너뛰었기 때문.
+# 사람이 정한 근무 칸은 못 바꾸니, 그 앞에 연속 야간을 놓지 못하게 건다. 야간까지 사람이 넣은 것이면 사실끼리라 걸지 않는다.
+
+def _fixed_req(pre: dict, locked: bool, relax: bool) -> GenerateRequest:
+    nurses = [Nurse(id="r", name="일반", group="A", gender="male", capable_shifts=["DC", "D", "EC", "E", "NC", "N"])]
+    keys = {f"2026-03-{d:02d}": c for d, c in pre.items()}
+    return GenerateRequest(year=2026, month=3, nurses=nurses, requirements=Requirements(), rules=Rules(),
+                           prev_schedule={"r": keys}, allow_pre_relax=relax,
+                           locked_cells={"r": {k: True for k in keys}} if locked else None)
+
+
+def _cpsat_ok(req: GenerateRequest, pattern: dict[int, str]) -> bool:
+    sch = CpSatScheduler(req)
+    sch._pin = sch._relax_pin() if sch.allow_pre_relax else (sch._build_pin_index() or sch._pin)
+    model = cp_model.CpModel()
+    built = sch._build_vars_relaxed(model) if sch.allow_pre_relax else sch._build_vars(model)
+    x = built[0] if isinstance(built, tuple) else built
+    sch._cs_one_shift_per_day(model, x)
+    sch._cs_rest_after_night(model, x)
+    base = next(i for i, dt in enumerate(sch.all_dates) if (dt.month, dt.day) == (3, 1))
+    for day, code in pattern.items():
+        cell = x["r"][base + day - 1]
+        if code == "-":
+            for s in sch.WORK_SHIFTS:
+                if not isinstance(cell.get(s), int):
+                    model.Add(cell[s] == 0)
+        elif not isinstance(cell[code], int):
+            model.Add(cell[code] == 1)
+        elif cell[code] != 1:
+            return False
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = 20
+    return solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+
+@pytest.mark.parametrize("locked,relax", [(False, False), (True, True)])   # 엄격의 사전입력 · 완화의 잠근 칸
+def test_no_consecutive_nights_right_before_a_fixed_work_day(locked, relax):
+    req = lambda: _fixed_req({16: "D1"}, locked, relax)
+    assert not _cpsat_ok(req(), {12: "N", 13: "N", 14: "N", 15: "-"})    # 실제 표의 N N N OF D1
+    assert not _cpsat_ok(req(), {13: "N", 14: "N", 15: "-"})             # N N OF D1 — 둘째 휴무일이 근무
+    assert not _cpsat_ok(req(), {14: "N", 15: "N"})                      # N N D1 — 첫 휴무일이 근무
+    assert _cpsat_ok(req(), {12: "N", 13: "N", 14: "-", 15: "-"})        # N N 쉼 쉼 D1
+    assert _cpsat_ok(req(), {14: "N", 15: "-"})                          # 야간 한 번은 이 규칙의 대상이 아니다
+
+
+@pytest.mark.parametrize("locked,relax", [(False, False), (True, True)])
+def test_fixed_nights_then_fixed_work_is_left_to_the_person(locked, relax):
+    # 야간도 근무도 사람이 넣었다 — 모델이 막히면 안 된다 (어긋남은 _pinned_rule_notes ⑧ 가 알린다)
+    assert _cpsat_ok(_fixed_req({13: "N", 14: "N", 16: "D1"}, locked, relax), {15: "-"})
+    # 야간 하나만 사람이 넣었으면 엔진이 그 앞에 야간을 보태지 못한다
+    req = lambda: _fixed_req({14: "N", 16: "D1"}, locked, relax)
+    assert not _cpsat_ok(req(), {13: "N", 15: "-"})
+    assert _cpsat_ok(req(), {13: "-", 15: "-"})

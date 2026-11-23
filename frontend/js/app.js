@@ -193,6 +193,8 @@ function app() {
       const leaveCodes=this.shifts.filter(s=>s.period==='leave').map(s=>s.code);
       const days=this.scheduleDays.filter(d=>!this.isOverflow(d));
       const offCodes=[...restCodes,...leaveCodes];
+      // 주말·공휴일 근무는 엔진·원장·공정성 카드와 같게 모든 근무 시간대로 센다 — D/E/N 만 세면 D1·중간번·병동이 보탠 근무가 빠진다 (2026-11-23)
+      const allWork=this.shifts.filter(s=>['day','day1','evening','middle','night'].includes(s.period)).map(s=>s.code);
       const fc=this.fairnessCard;const fmap={};if(fc)for(const r of fc.rows)fmap[r.id]=r;
       const fair=fc?{maxN:fc.maxN,minN:fc.minN,rangeN:fc.rangeN,maxW:fc.maxW,minW:fc.minW,rangeW:fc.rangeW}:null;
       return this.nurses.map(nurse=>{
@@ -210,7 +212,7 @@ function app() {
           else if(nightCodes.includes(val))n++;
           else if(restCodes.includes(val))rest++;
           else if(leaveCodes.includes(val))leave++;
-          const isWk=(day.getDay()===0||day.getDay()===6),isHol=this.holidays.includes(this.dayKey(day)),work=[...dayCodes,...eveCodes,...nightCodes].includes(val);
+          const isWk=(day.getDay()===0||day.getDay()===6),isHol=this.holidays.includes(this.dayKey(day)),work=allWork.includes(val);
           if(isWk&&work)weekendWork++;
           if((isWk||isHol)&&work)wh++;   // 주말 ∪ 공휴일 (원장 weekend_holiday 와 같은 정의)
           if(offCodes.includes(val)){

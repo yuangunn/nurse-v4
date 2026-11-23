@@ -380,3 +380,22 @@ def test_weekend_fairness_rule_seeded_and_migrated_once(tmp_path, monkeypatch):
     assert len(_rules()) == 1
     db.init_db()                                  # 재실행해도 중복 없음
     assert len(_rules()) == 1
+
+
+def test_fairness_ledger_counts_shifts_the_ward_added(tmp_path, monkeypatch):
+    """병동이 근무 정의에 보탠 코드도 시간대로 센다 — 이름으로만 세면 새 중간번·새 야간 코드가 누적에서 빠진다 (2026-11-23)."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from server import database as db
+    db.init_db()
+    db.save_shift("중3", "중간번3", "middle", False, "09:00~18:00", "#eeeeee", "#111111", 30)
+    db.save_shift("N2", "야간2", "night", False, "21:00~07:00", "#eeeeee", "#111111", 31)
+    db.save_schedule(year=2026, month=5, name="5월 확정", data={"holidays": [], "schedule": {"a1": {
+        "2026-05-02": "중3",      # 토 — 새 중간번도 주말 근무다
+        "2026-05-03": "D1",       # 일 — 기본 코드는 그대로
+        "2026-05-04": "N2",       # 월 — 새 야간 코드
+        "2026-05-09": "OF",       # 토 — 휴무
+    }}})
+    ledger = db.compute_fairness_ledger(2026, 6)
+    assert ledger["a1"]["weekend_holiday"] == 2
+    assert ledger["a1"]["nights"] == 1
+    assert db.compute_prev_month_nights(2026, 6) == {"a1": 1}

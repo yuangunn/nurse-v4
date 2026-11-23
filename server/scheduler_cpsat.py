@@ -1036,12 +1036,20 @@ class CpSatScheduler(_SchedulerBase):
                         break
                     if self.all_dates[rest_d] < from_:
                         continue  # 전월(역사)·트레이닝 날에 휴식 강제 소급 금지
-                    if self._pin.get((nid, rest_d)):
-                        continue  # 사실-클램프: 확정된 휴식일 셀은 사용자 선택 그대로
-                    work_vars = [x[nid][rest_d][s] for s in self.WORK_SHIFTS
-                                 if (k > 0 or s not in self.NIGHT_SHIFTS) and not isinstance(x[nid][rest_d][s], int)]
-                    if not work_vars:
-                        continue
+                    # 휴무일 칸을 사람이 근무로 정해 두었으면 그 앞에 연속 야간을 놓지 못하게 건다 (HiGHS 와 같게, 2026-11-23).
+                    # 야간까지 사람이 넣은 것이면 사실끼리라 걸지 않는다.
+                    fact_work = self._rest_day_fact_work(nurse, rest_d, k)
+                    if fact_work:
+                        if not night_terms or self._nights_all_facts(nurse, d, min_consec):
+                            continue
+                        work_vars = [1]
+                    else:
+                        if self._pin.get((nid, rest_d)):
+                            continue  # 사실-클램프: 확정된 휴식일 셀(쉬는 코드)은 사용자 선택 그대로
+                        work_vars = [x[nid][rest_d][s] for s in self.WORK_SHIFTS
+                                     if (k > 0 or s not in self.NIGHT_SHIFTS) and not isinstance(x[nid][rest_d][s], int)]
+                        if not work_vars:
+                            continue
                     lhs = sum(night_terms) + night_fixed
                     if night_next:
                         lhs = lhs - sum(night_next)
