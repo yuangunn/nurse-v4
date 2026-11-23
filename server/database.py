@@ -285,6 +285,8 @@ def init_db(path: Optional[str] = None):
         _migrate_single_night_rule(conn)
         _migrate_single_night_score(conn)
         _migrate_juhu_off_rules(conn)
+        _migrate_two_month_night_count(conn)
+        _migrate_saeng_score(conn)
 
         # 임부휴무(P1) 근무 코드 마이그레이션 (기존 DB에 없을 경우 추가)
         conn.execute(
@@ -984,7 +986,7 @@ def _seed_scoring_rules(conn: sqlite3.Connection):
         ("D→N 전환 페널티",       "transition",       json.dumps({"from": "day",     "to": "night"}),                    -30,  1, 0),
         ("N→공 전환 페널티",       "transition",       json.dumps({"from": "night",   "to": "specific:공"}),              -40,  1, 1),
         ("V(연차) 사용 페널티",    "specific_shift",   json.dumps({"shift_code": "V", "condition": "all"}),              -500, 1, 2),
-        ("생리휴가 보상",           "specific_shift",   json.dumps({"shift_code": "생","condition": "female_only"}),      +80,  1, 3),
+        ("생리휴가 보상",           "specific_shift",   json.dumps({"shift_code": "생","condition": "female_only"}),      _SAENG_SCORE, 1, 3),
         ("D→E 순방향 보상",        "transition",       json.dumps({"from": "day",     "to": "evening"}),                  +20, 1, 4),
         ("E→N 순방향 보상",        "transition",       json.dumps({"from": "evening", "to": "night"}),                    +20, 1, 5),
         ("연속 동일 낮 근무 보상",  "consecutive_same", json.dumps({"period": "day"}),                                     +15, 1, 6),
@@ -1107,6 +1109,35 @@ def _migrate_juhu_off_rules(conn: sqlite3.Connection):
             conn.execute(
                 "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)", rule)
     conn.execute("PRAGMA user_version = 3")
+
+
+# 생리휴가 보상 — 처음 값 +80 은 다른 배점에 묻혀, 쉬는 날이 남아 연차(V)가 자동으로 들어가는 달에도 생휴 없는 여성이 남았다
+# (실제 12월 입력: 자동 V 7개가 모두 생휴가 이미 있는 사람에게, 여성 4명은 생휴 0). +1000 이면 같은 입력·같은 시간에
+# 자격 있는 여성 15명 모두 생휴를 받고 자동 V 는 7→4 로 준다 — 풀린 칸·단독 야간은 그대로 (결정 1-100).
+# 보장은 아니다 — 월 ≤1 상한만 두고 강제하지 않는다는 규칙은 그대로다.
+_SAENG_SCORE = 1000
+_SAENG_OLD_SCORE = 80
+
+
+def _migrate_saeng_score(conn: sqlite3.Connection):
+    """생리휴가 보상을 처음 값(+80)으로 두고 있는 DB 만 새 기본값으로 한 번 올린다 (PRAGMA user_version 5, 결정 1-100).
+    사람이 고친 값·끈 규칙·지운 규칙은 건드리지 않고, 올린 뒤 되돌린 것도 다시 바꾸지 않는다."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 5:
+        return
+    for rid, params in conn.execute("SELECT id, params FROM scoring_rules WHERE rule_type='specific_shift' AND score=?",
+                                    (_SAENG_OLD_SCORE,)).fetchall():
+        if json.loads(params or "{}").get("shift_code") == "생":
+            conn.execute("UPDATE scoring_rules SET score=? WHERE id=?", (_SAENG_SCORE, rid))
+    conn.execute("PRAGMA user_version = 5")
+
+
+def _migrate_two_month_night_count(conn: sqlite3.Connection):
+    """두 달 합산 야간 한도를 옛 기본값(11)으로 둔 DB 만 10 으로 한 번 내린다 (PRAGMA user_version 4, 결정 1-99) —
+    수면오프가 합산 11회부터 생긴다(전에는 12회로 알고 11까지 허용했다). 사람이 고친 값과, 내린 뒤 되돌린 값은 그대로 둔다."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 4:
+        return
+    conn.execute("UPDATE rules SET value='10' WHERE key='maxNightTwoMonthCount' AND value='11'")
+    conn.execute("PRAGMA user_version = 4")
 
 
 def _migrate_single_night_score(conn: sqlite3.Connection):

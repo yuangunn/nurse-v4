@@ -1151,9 +1151,9 @@ def _xlsx_sheet(ws, body: dict, link: dict = None):
         color = "FFFF0000" if d.weekday() == 6 or d.isoformat() in hol else None
         c = put(3, c0 + i, d, ko(8, color))
         c.number_format = 'm"/"d'
-        c.alignment = Alignment(horizontal="center", vertical="center", shrink_to_fit=True)   # 맥 엑셀은 이 너비에서 12/10 을 #### 로 그린다(양식도 같다) — 넘치면 글자를 줄인다
+        c.alignment = Alignment(horizontal="center", vertical="center", shrink_to_fit=True)   # 좁은 칸에서 12/10 이 #### 로 그려지지 않게 — 넘치면 글자를 줄인다
         put(4, c0 + i, "월화수목금토일"[d.weekday()], ko(9, color))
-        ws.column_dimensions[L(c0 + i)].width = 4.25
+        ws.column_dimensions[L(c0 + i)].width = 3.75   # 날짜 칸 — 병동 양식의 4.25 보다 좁게 (한 화면·한 장에 더 들어온다)
     for j, t in enumerate(totals):
         put(4, t0 + j, t, Font(name="Calibri", size=6, bold=True) if t == "총근무" else sums, tfill.get(t))
         ws.column_dimensions[L(t0 + j)].width = 3.62

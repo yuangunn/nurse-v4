@@ -34,7 +34,7 @@ function makeCtx({ nurses, prev = {}, rules = {}, holidays = [], dayReqs = {}, p
       weeklyOff: true, noNOD: true, maxConsecutiveWork: true, maxConsecutiveWorkDays: 5,
       maxConsecutiveNight: true, maxConsecutiveNightDays: 3, maxVPerMonth: 1,
       maxNightPerMonth: true, maxNightPerMonthCount: 6,
-      maxNightTwoMonth: false, maxNightTwoMonthCount: 11, ...rules,
+      maxNightTwoMonth: false, maxNightTwoMonthCount: 10, ...rules,
     },
     holidays, prevDayReqs: dayReqs, prevMonthNights,
     requirements: { mon: wide, tue: wide, wed: wide, thu: wide, fri: wide, sat: wide, sun: wide },
