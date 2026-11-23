@@ -69,6 +69,10 @@ window.RedesignModule = function() {
     solveStats: null,            // 솔버 기록에서 읽은 것 {phases:[{n,rows0,cols0,rows,cols,restarts,status,row}], events:[…]} (_solveFeed)
     story: {open:false, step:0}, // 결과 요약 — 생성이 끝나면 단계별로 넘겨 보는 창 (rdStorySteps)
     mk: {open:false, step:'count', count:'one', keys:[], time:20, quick:true},   // 만들기 마법사 (결정 1-93) — step: count·dir·time·run·cmp
+    verLog: [], verCur: null, verSeen: 0,   // 표 기록 (결정 1-95) — 이번 만들기에서 나온 표들 [{n, sec, gap, result, payload, stats, screen}] · 화면의 번호 · 본 적 있는 가장 큰 번호
+    verCmp: {on:false, a:null, saved:null, mode:'overlay', onlyChanged:false, dim:true, color:true, old:true, kinds:{rest:true, work:true, swap:true}},   // 견주기 — a: 견주는 앞 번호(화면의 표가 뒤) · saved: 번호 대신 저장한 근무표와 견줄 때 {id, name, schedule, stats}
+    verNums: {open:false},       // '번호마다 숫자' 창
+    solveOpen: false,            // 표가 떠 있는 채로 더 찾는 동안 계산 현황을 펼쳐 볼지 (기본은 한 줄)
     genFirst: null,              // 이번 만들기에서 처음 나온 표 — 더 찾은 표와 견준다 {schedule, extended_schedule, relaxed_cells, mip_gap_percent, sec}
     genPrefTick: 0,              // 저장한 선택을 다시 읽게 하는 값 (localStorage 는 반응하지 않는다)
     genEndless: false,           // 멈출 때까지 계속 — 한 번 끝날 때마다 그 표에서 다시 잇는다
@@ -420,7 +424,10 @@ window.RedesignModule = function() {
       if(dc){ const fs=v=>v==null ? '—' : v, t0=dc.sec>=60 ? `${Math.floor(dc.sec/60)}분 ${dc.sec%60}초` : `${dc.sec}초`;
         steps.push({id:'draft', eyebrow:'처음 표와 견주기', title: dc.better ? `처음 표보다 ${dc.better}가지가 나아졌어요` : '처음 표와 숫자는 비슷해요',
           sub:`처음 표는 ${t0} 만에 나왔고, 그 뒤 더 찾아 바꾼 것이 지금 표입니다. 숫자는 모두 작을수록 좋습니다.${dc.worse ? ' 점수 전체로는 나아졌지만 나빠진 항목도 있습니다.' : ''}`,
-          facts:[['달라진 칸', `${dc.cells}칸 · ${dc.who}명`], ...dc.rows.map(r=>[r.label, r.a===r.b ? `${fs(r.b)} (그대로)` : `${fs(r.a)} → ${fs(r.b)}${r.a!=null&&r.b!=null ? (r.b<r.a ? ' · 나아짐' : ' · 나빠짐') : ''}`])]}); }
+          facts:[['달라진 칸', `${dc.cells}칸 · ${dc.who}명`]],
+          // 표로 — 견주는 것 · 처음 표 · 지금 표 · 변화 (한 줄 글보다 눈으로 훑기 쉽다)
+          table:{head:['견주는 것', '처음 표', '지금 표', '변화'], rows:dc.rows.map(r=>({label:r.label, tip:r.tip, a:fs(r.a), b:fs(r.b),
+            word:(r.a==null||r.b==null||r.a===r.b) ? '그대로' : (r.b<r.a ? '나아짐' : '나빠짐'), tone:(r.a==null||r.b==null||r.a===r.b) ? '' : (r.b<r.a ? 'good' : 'bad')}))}}); }
       const pre=this.rdWantedCount, rx=this.rdRelaxedCount, tc=this.rdTraineeChanged, keptN=Math.max(pre-this.rdWantedRelaxed-tc, 0);
       // 표 아래 '배정 / 필요' 줄과 같은 셈 — 날짜별로 고친 필요 인원(rdFootNeed)과 견준다
       const rowsDEN=(this.footerRows||[]).filter(r=>['D','E','N'].includes(r.label));
@@ -755,6 +762,121 @@ window.RedesignModule = function() {
       return {one, heavy, nine, singleN, nightRange:range(nights), weekendRange:range(wk), v, relaxed:Object.values(r.relaxed_cells||{}).reduce((a, c)=>a+Object.keys(c||{}).length, 0),
         gap:r.mip_gap_percent!=null ? Math.round(r.mip_gap_percent*100)/100 : null};
     },
+    // ── 표 기록 (결정 1-95) — 이번 만들기에서 화면에 나온 표를 1번(초안)·2번…으로 남긴다. 번호를 누르면 그 표를 보고,
+    //    지난 번호를 보는 중이면 새 표가 나와도 화면을 바꾸지 않는다(solver.js). 두 번호를 골라 한 달력에 겹쳐 견준다.
+    //    브라우저에 따로 보관해 새로고침 뒤 그 달 자동저장본을 열면 되살아난다. 저장한 근무표 목록에는 섞지 않는다 ──
+    get verLast(){ return this.verLog.length ? this.verLog[this.verLog.length-1].n : null; },
+    get verPinned(){ return this.verLog.length>1 && this.verCur!=null && this.verCur!==this.verLast; },
+    get verFresh(){ return this.verLog.filter(v=>v.n>this.verSeen).map(v=>v.n); },
+    _verKey(){ return `ns_verlog:${this.currentProfile||''}:${this.year}-${String(this.month).padStart(2,'0')}`; },
+    _verTime(sec){ sec=Math.round(sec||0); return sec>=60 ? `${Math.floor(sec/60)}분 ${String(sec%60).padStart(2,'0')}초` : `${sec}초`; },
+    verChipSub(v){ return [this._verTime(v.sec), v.gap==null ? null : `최고와 ${Math.round(v.gap*10)/10}% 차이`].filter(Boolean).join(' · '); },
+    verChipName(v){ return `${v.n}번`+(v.n===1 ? ' · 초안' : '')+(v.n===this.verLast&&this.verLog.length>1 ? ' · 최신' : ''); },
+    verReset(){ this.verLog=[]; this.verCur=null; this.verSeen=0; this.verCmpOff(); this.verNums.open=false; },   // 화면에서만 지운다 (병동을 바꿀 때)
+    verClear(){ try{ localStorage.removeItem(this._verKey()); }catch(e){} this.verReset(); },
+    _verPush(r, payload, shown){
+      const n=(this.verLast||0)+1, v={n, sec:(this.genElapsedBase||0)+(this.generateElapsed||0), gap:r.mip_gap_percent??null, result:r, payload, stats:this.multiStats(r), screen:null};
+      const L=this.verLog.length>=8 ? [this.verLog[0], ...this.verLog.slice(2)] : this.verLog;   // 여덟 장까지 — 넘치면 초안은 두고 그다음 것부터 버린다
+      this.verLog=[...L, v];
+      if(shown){ this.verCur=n; this.verSeen=n; }
+      this._verStore(); return v;
+    },
+    // 화면의 표를 떠날 때 손으로 고친 것이 있으면 그 번호에 붙여 둔다 — 다시 열면 고친 채로 나온다
+    _verKeepScreen(){ const v=this.verLog.find(x=>x.n===this.verCur); if(v) v.screen=(this._originalSchedule&&this.getManualEditCount()>0) ? JSON.parse(JSON.stringify(this.schedule)) : null; },
+    _showResult(r, log){
+      this.statusOk=true; this.statusMessage=r.message||''; this.genFailed=false; this.diagResult=null; this.fixResult=null;
+      this.generationReport=r.generation_report||null; this.wishReport=r.wish_report||null; this.offTeukgeun=r.off_teukgeun||[]; this.managerCheck=r.manager_check||[]; this.vReport=r.v_report||null;
+      this.relaxBoosts=r.relax_boosts||{}; this.fairnessOffsets=r.fairness_offsets||null; this.weekendOffsets=r.weekend_offsets||null;
+      this.schedule=JSON.parse(JSON.stringify(r.schedule||{})); this.extendedSchedule=r.extended_schedule||{}; this.nurseScores=r.nurse_scores||{}; this.nurseScoreDetails=r.nurse_score_details||{};
+      this.mipGapPercent=r.mip_gap_percent!=null ? r.mip_gap_percent : null; this.scheduleStopped=r.stopped===true; this.relaxedCells=r.relaxed_cells||{};
+      this.readjustPins={}; this.readjustChanged={}; this.readjustSummary=''; this.trackEdits();
+    },
+    verShow(n){
+      const v=this.verLog.find(x=>x.n===n); if(!v||!v.result) return;
+      if(n!==this.verCur){ this._verKeepScreen(); this._showResult(v.result);
+        if(v.screen) this.schedule=JSON.parse(JSON.stringify(v.screen));
+        this.verCur=n; this.activeTab='schedule'; this.loadedSavedId=null; this.rdSaved=(n===this.verLast&&!v.screen);
+        if(!this.generating&&v.payload) this._setContBase(v.payload, v.result);
+        this.checkScheduleViolations&&this.checkScheduleViolations(); }
+      this.verSeen=Math.max(this.verSeen, n); this.rdToast=null;
+      if(this.verCmp.on&&!this.verCmp.saved){ if(!(this.verCmp.a<n&&this.verLog.some(x=>x.n===this.verCmp.a))) this.verCmp.a=this._verPrevOf(n);   // 견주는 앞 표는 화면의 번호보다 앞이어야 한다
+        if(this.verCmp.a==null) this.verCmp.on=false; }
+      this._verStore();
+    },
+    _verPrevOf(n){ const p=this.verLog.filter(x=>x.n<n).map(x=>x.n); return p.length ? p[p.length-1] : null; },
+    // 따로 저장 — 저장한 근무표 목록에 이름 붙여 남긴다 ('12월 · 2번 표')
+    async verSave(n){ const v=this.verLog.find(x=>x.n===n); if(!v) return; if(n===this.verCur) this._verKeepScreen();
+      const R={result:{...v.result, schedule:v.screen||v.result.schedule}, saveName:`${this.month}월 · ${n}번 표${n===1?'(초안)':''}`, log:''};
+      await this._multiSave(R, {year:+this.year, month:+this.month}); this.loadSavedList&&this.loadSavedList();
+      this.toast(R.saved ? `‘${R.saveName}’로 저장했습니다 — 불러오기에서 열 수 있어요` : '저장하지 못했습니다', R.saved?'success':'error', 5000); },
+    _verStore(){
+      const pack=lite=>JSON.stringify({cur:this.verCur, seen:this.verSeen, list:this.verLog.map(v=>({n:v.n, sec:v.sec, gap:v.gap, stats:v.stats, screen:v.screen, result:lite ? {schedule:v.result.schedule, extended_schedule:v.result.extended_schedule, relaxed_cells:v.result.relaxed_cells, mip_gap_percent:v.result.mip_gap_percent, message:v.result.message, stopped:v.result.stopped} : {...v.result, solver_log:undefined}}))});
+      try{ localStorage.setItem(this._verKey(), pack(false)); }catch(e){ try{ localStorage.setItem(this._verKey(), pack(true)); }catch(e2){ try{ localStorage.removeItem(this._verKey()); }catch(e3){} } }
+    },
+    // 저장본을 연 뒤 — 그 표가 보관해 둔 기록의 한 번호와 같으면 기록을 되살리고(새로고침 뒤 자동저장본 열기), 아니면 기록을 지운다
+    verAfterLoad(){
+      let o=null; try{ o=JSON.parse(localStorage.getItem(this._verKey())||'null'); }catch(e){}
+      const now=JSON.stringify(this.schedule||{}), list=(o&&Array.isArray(o.list)) ? o.list.filter(v=>v&&v.result&&v.result.schedule) : [];
+      const hit=[...list].reverse().find(v=>JSON.stringify(v.screen||v.result.schedule)===now);
+      if(!hit){ this.verClear(); return; }
+      this.verLog=list.map(v=>({...v, payload:null})); this.verCur=hit.n; this.verSeen=Math.max(o.seen||0, hit.n); this.verCmpOff();
+    },
+
+    // 견주기 — 화면의 표(뒤)와 앞 번호 a 를 한 달력에. 칸마다 그대로·쉬게 됨·근무하게 됨·다른 근무로
+    get verCmpA(){ const c=this.verCmp; if(!c.on) return null;
+      return c.saved ? {n:null, name:c.saved.name, result:{schedule:c.saved.schedule, extended_schedule:{}}, stats:c.saved.stats} : (this.verLog.find(v=>v.n===c.a)||null); },
+    verCmpOff(){ this.verCmp.on=false; this.verCmp.a=null; this.verCmp.saved=null; },
+    // 이 달에 저장한 근무표 — 번호 대신 이 가운데 하나와도 견줄 수 있다 (화면의 표가 뒤, 저장한 표가 앞)
+    get rdSavedOfMonth(){ return (this.savedSchedules||[]).filter(s=>+s.year===+this.year&&+s.month===+this.month); },
+    async verCmpSaved(id){
+      try{ const d=await this.api('GET', `/api/schedules/${id}`), x=d.data||{}, sched=x.schedule||{};
+        if(+(x.year||d.year)!==+this.year||+(x.month||d.month)!==+this.month){ this.toast('이 달의 근무표만 견줄 수 있습니다', 'warn'); return; }
+        this.verCmp.saved={id, name:d.name||x.name||'저장한 근무표', schedule:sched, stats:this.multiStats({schedule:sched, extended_schedule:{}, relaxed_cells:x.relaxed_cells||{}})};
+        this.verCmp.a=null; this.verCmp.on=true; this.activeTab='schedule';
+      }catch(e){ this.toast('저장한 근무표를 읽지 못했습니다 — '+(e.message||''), 'error'); } },
+    // 견주는 앞 표 고르기 — 'v2' = 표 기록의 2번, 's31' = 저장한 근무표 31
+    verCmpPickA(val){ val=String(val||''); if(val[0]==='s') return this.verCmpSaved(+val.slice(1)); this.verCmp.saved=null; this.verCmp.a=null; this.verCmpPick(+val.slice(1)); if(this.verCmp.a==null) this.verCmpOff(); },
+    get verCmpAVal(){ const c=this.verCmp; return c.saved ? 's'+c.saved.id : (c.a!=null ? 'v'+c.a : ''); },
+    get verCmpName(){ const A=this.verCmpA; return !A ? '' : (A.n==null ? `‘${A.name}’` : `${A.n}번`); },
+    verCmpToggle(){ const c=this.verCmp; if(c.on){ this.verCmpOff(); return; } c.saved=null;
+      if(this._verPrevOf(this.verCur)==null){ const nx=this.verLog.find(x=>x.n>this.verCur); if(!nx) return; this.verShow(nx.n); }   // 초안을 보는 중이면 그다음 번호로 가서 초안과 견준다
+      c.a=this._verPrevOf(this.verCur); c.on=c.a!=null; },
+    verCmpPick(a, b){ if(b!=null&&b!==this.verCur) this.verShow(b); if(a!=null&&a<this.verCur){ this.verCmp.a=a; this.verCmp.on=true; } },
+    _cmpPlain(c){ return (c&&this.hideCharge) ? this.plainShift(c) : (c||''); },
+    _cmpOld(nid, dk){ const A=this.verCmpA; if(!A) return ''; return this._cmpPlain((A.screen||A.result.schedule)?.[nid]?.[dk]||A.result.extended_schedule?.[nid]?.[dk]||''); },
+    _cmpNow(nid, dk){ return this._cmpPlain(this.schedule?.[nid]?.[dk]||this.extendedSchedule?.[nid]?.[dk]||''); },
+    _cmpRest(c){ const s=this.shiftMap.get(c&&c[0]==='/' ? c.slice(1) : c); return !c||!s||s.period==='rest'||s.period==='leave'; },
+    // '' = 견주지 않음(또는 지난달 표의 칸) · same · rest(쉬게 됨) · work(근무하게 됨) · swap(다른 근무로)
+    rdCmpKind(nurse, day){ if(!this.verCmpA||this.isCarryDay(day)||this.isNurseInactive(nurse, day)) return '';
+      const dk=this.dayKey(day), a=this._cmpOld(nurse.id, dk), b=this._cmpNow(nurse.id, dk); if(a===b) return 'same';
+      const ra=this._cmpRest(a), rb=this._cmpRest(b); return (!ra&&rb) ? 'rest' : ((ra&&!rb) ? 'work' : 'swap'); },
+    _cmpShown(k){ return k&&k!=='same'&&this.verCmp.kinds[k]!==false; },
+    rdCellCmp(nurse, day){ const c=this.verCmp; if(!c.on) return ''; const k=this.rdCmpKind(nurse, day);
+      const two=c.mode==='rows' ? ' vd2' : '';
+      if(!this._cmpShown(k)) return (c.dim&&k ? 'vd-same' : '')+two;
+      return 'vd '+(c.color ? 'vd-'+k : 'vd-one')+two; },
+    // 칸에 곁들이는 앞 표의 근무 — 겹쳐 보기는 바뀐 칸만, 두 줄 보기는 모든 칸
+    rdCmpOld(nurse, day){ const c=this.verCmp; if(!c.on||this.isNurseInactive(nurse, day)) return ''; const k=this.rdCmpKind(nurse, day); if(!k) return '';
+      if(c.mode==='rows') return this._cmpOld(nurse.id, this.dayKey(day))||'·';
+      return (c.old&&this._cmpShown(k)) ? (this._cmpOld(nurse.id, this.dayKey(day))||'빈칸') : ''; },
+    rdCmpRowCount(nurse){ if(!this.verCmp.on) return 0; let n=0; for(const d of this.scheduleDays) if(this._cmpShown(this.rdCmpKind(nurse, d))) n++; return n; },
+    rdCmpDayCount(day){ if(!this.verCmp.on) return 0; let n=0; for(const nu of this.nurses) if(this._cmpShown(this.rdCmpKind(nu, day))) n++; return n; },
+    get rdCmpTotal(){ const out={cells:0, who:0, rest:0, work:0, swap:0}; if(!this.verCmpA) return out;
+      for(const nu of this.nurses){ let n=0; for(const d of this.scheduleDays){ const k=this.rdCmpKind(nu, d); if(k&&k!=='same'){ out[k]++; if(this._cmpShown(k)) n++; } } out.cells+=n; if(n) out.who++; } return out; },
+    // 숫자 견주기 — 화면의 번호와 견주는 앞 번호 (여러 개 만들기의 견주기와 같은 숫자)
+    get rdCmpFacts(){ const A=this.verCmpA; if(!A||!A.stats) return [];
+      const B=(this.verLog.find(v=>v.n===this.verCur)||{}).stats||this.multiStats({schedule:this.schedule, extended_schedule:this.extendedSchedule, relaxed_cells:this.relaxedCells});
+      return this.rdMultiCols().filter(c=>c[0]!=='gap').map(c=>({label:c[1], tip:c[2], a:A.stats[c[0]], b:B[c[0]]})).filter(f=>f.a!=null&&f.b!=null&&f.a!==f.b)
+        .map(f=>({...f, text:`${f.a} → ${f.b}`, tone:f.b<f.a ? 'good' : 'bad', word:f.b<f.a ? '나아짐' : '나빠짐'})); },
+    // 번호마다 숫자 창 — 줄 = 견주는 것, 열 = 번호. 줄마다 가장 좋은(작은) 값을 진하게
+    verNumRows(){ const L=this.verLog; return [...this.rdMultiCols().map(c=>{ const vals=L.map(v=>v.stats ? v.stats[c[0]] : null), nums=vals.filter(x=>x!=null), min=nums.length ? Math.min(...nums) : null;
+        return {label:c[1], tip:c[2], cells:vals.map(x=>({text:x==null ? '—' : x+(c[0]==='gap'?'%':''), best:x!=null&&x===min&&nums.some(y=>y!==min)}))}; }),
+      {label:'앞 번호와 달라진 칸', tip:'바로 앞 번호의 표와 근무가 다른 칸 수', cells:L.map((v, i)=>({text:i===0 ? '—' : this._verDiffCount(L[i-1], v)+'칸', best:false}))}]; },
+    _verDiffCount(A, B){ let n=0; const a=A.screen||A.result.schedule||{}, b=B.screen||B.result.schedule||{};
+      for(const nu of this.nurses) for(const d of this.scheduleDays){ if(this.isCarryDay(d)) continue; const dk=this.dayKey(d); if((a[nu.id]?.[dk]||'')!==(b[nu.id]?.[dk]||'')) n++; } return n; },
+    // 표가 떠 있는 채로 더 찾는 동안에는 계산 현황을 한 줄로 줄인다 — 아래 근무표가 보여야 한다
+    get rdSolveCompact(){ return !!(this.generating && this.continuing && this.rdSched); },
+
     // ── 처음 나온 표와 견주기 (결정 1-94) — 초안(이번 만들기의 첫 표)과 지금 표. 손으로 고친 칸은 빼고 엔진이 낸 표끼리 본다.
     //    숫자는 여러 개 만들기의 견주기와 같은 것(multiStats). 달라진 칸이 없으면 null ──
     _draftNow(){ return this._originalSchedule||this.schedule||{}; },
@@ -778,14 +900,10 @@ window.RedesignModule = function() {
     multiPick(i){
       const R=this.multi.results[i]; if(!R||!R.result||!R.result.success||this.generating) return;
       const r=R.result;
-      this.statusOk=true; this.statusMessage=r.message; this.genFailed=false; this.diagResult=null; this.fixResult=null;
-      this.generationReport=r.generation_report||null; this.wishReport=r.wish_report||null; this.offTeukgeun=r.off_teukgeun||[]; this.managerCheck=r.manager_check||[]; this.vReport=r.v_report||null;
-      this.relaxBoosts=r.relax_boosts||{}; this.fairnessOffsets=r.fairness_offsets||null; this.weekendOffsets=r.weekend_offsets||null;
-      this.schedule=r.schedule; this.extendedSchedule=r.extended_schedule||{}; this.nurseScores=r.nurse_scores||{}; this.nurseScoreDetails=r.nurse_score_details||{};
-      this.mipGapPercent=r.mip_gap_percent!==undefined ? r.mip_gap_percent : null; this.scheduleStopped=r.stopped===true; this.relaxedCells=r.relaxed_cells||{};
+      this.verClear(); this._showResult(r);
       this.solverLogs=String(R.log||'').split('\n').filter(Boolean).map((m, k)=>({id:k+1, msg:m})); this._logSeq=this.solverLogs.length; this._solveReset(); for(const l of this.solverLogs) this._solveFeed(l.msg);
-      this.genRound=1; this.genElapsedBase=0; this.genRounds=[]; this.generateFinalElapsed=R.sec||0; this.readjustPins={}; this.readjustChanged={}; this.readjustSummary='';
-      this.rdDoneAt=new Date(); this.activeTab='schedule'; this.trackEdits(); this._setContBase(R.payload, r); this.multi.picked=i; this.mk.open=false; this.genFirst=null; this.loadedSavedId=null;
+      this.genRound=1; this.genElapsedBase=0; this.genRounds=[]; this.generateFinalElapsed=R.sec||0;
+      this.rdDoneAt=new Date(); this.activeTab='schedule'; this._setContBase(R.payload, r); this.multi.picked=i; this.mk.open=false; this.genFirst=null; this.loadedSavedId=null;
       this._autoSaveSchedule(); this.toast(`'${R.label}' 표를 열었습니다 — 다른 표는 '여러 개 만들기'에서 다시 고를 수 있어요`, 'info', 5000);
     },
     // ── 공평성 리포트 (결정 1-90) — 간호사에게 보여 줄 수 있는 한 장: 이번 달과 직전 석 달의 야간·주말·공휴일 근무, 쉬는 날, 원티드 반영.
@@ -888,7 +1006,7 @@ window.RedesignModule = function() {
     // 저장한 근무표를 불러왔음을 알린다 (결정 1-88) — 알림 한 줄 + 표가 한 번 떠오르는 움직임 + 목록에서 그 줄에 '열려 있음'
     loadedSavedId: null, tableFlash: false,
     rdLoadedNotice(id, name){
-      this.loadedSavedId=id; this.toast(`‘${name||'근무표'}’를 불러왔습니다`, 'success', 3500);
+      this.loadedSavedId=id; this.verAfterLoad(); this.toast(`‘${name||'근무표'}’를 불러왔습니다`, 'success', 3500);
       this.tableFlash=false; clearTimeout(this._flashT);
       const on=()=>{ this.tableFlash=true; this._flashT=setTimeout(()=>{ this.tableFlash=false; }, 900); };
       this.$nextTick ? this.$nextTick(on) : on();

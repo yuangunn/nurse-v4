@@ -172,6 +172,50 @@ html.dark .rt-cell.hl.hl-draftDiff, html.dark .rview-hl .sw.hl-draftDiff, html.d
 .rmenu.rview .rview-hl small { margin-left: auto; padding-left: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .rview-hl .sw { width: 18px; height: 18px; border-radius: 3px; background-color: var(--card); flex: none; display: inline-block; outline: 1px solid var(--rule); outline-offset: -1px; }
 .rhlbar { margin: 0 24px 8px; padding: 4px 6px 4px 14px; min-height: 34px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1px var(--rule); font-size: var(--fs-sub); flex-shrink: 0; }
+/* 표 기록 (결정 1-95) — 번호 줄 · 견주기 줄 · 달력의 바뀐 칸. 강조 범례와 같은 띠 모양 */
+.rverbar, .rcmpbar { margin: 0 24px 8px; padding: 5px 6px 5px 14px; min-height: 40px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 1px var(--rule); font-size: var(--fs-sub); flex-shrink: 0; }
+.rverbar .lbl { color: var(--ink-2); font-weight: var(--fw-label); margin-right: 4px; } .rverbar .pin { color: var(--ink-2); margin-left: 6px; }
+.rver { min-height: 34px; padding: 2px 12px; border: 0; border-radius: 8px; background: var(--paper); color: var(--ink); font: inherit; text-align: left; cursor: pointer; display: flex; flex-direction: column; justify-content: center; line-height: 1.25; }
+.rver b { font-size: var(--fs-sub); font-weight: var(--fw-strong); white-space: nowrap; } .rver small { font-size: var(--fs-min); color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rver:hover { box-shadow: inset 0 0 0 1px var(--ink-2); } .rver.on { background: var(--ink); color: var(--card); } .rver.on small { color: var(--card); opacity: .8; }
+.rver.is-a { box-shadow: inset 0 0 0 2px var(--ink-2); } .rver.is-new { box-shadow: inset 0 0 0 2px var(--focus); } .rver:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.rcmpbar { gap: 6px 14px; padding-left: 8px; } .rcmpbar select { height: 30px; min-height: 30px; width: auto; padding: 0 8px; font-size: var(--fs-sub); } .rcmpbar .arrow { color: var(--ink-2); margin: 0 -8px; }
+.rcmpbar > b { font-weight: var(--fw-strong); white-space: nowrap; } .rcmpbar .scr { font-weight: var(--fw-label); white-space: nowrap; } .rcmpbar select { max-width: 260px; }
+.rcmpbar .fact { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; } .rcmpbar .fact small { color: var(--ink-2); font-size: var(--fs-sub); } .rcmpbar .fact b { font-weight: var(--fw-strong); font-variant-numeric: tabular-nums; }
+.rcmpbar .fact i { font-style: normal; font-size: var(--fs-min); } .rcmpbar .fact.good i { color: var(--ok); } .rcmpbar .fact.bad i { color: var(--sun-fg); }
+.rcmpkind { height: 30px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); font: inherit; font-size: var(--fs-sub); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; text-decoration: line-through; }
+.rcmpkind.on { color: var(--ink); text-decoration: none; } .rcmpkind:hover { background: var(--paper); } .rcmpkind .sw { width: 16px; height: 16px; border-radius: 4px; background: var(--vd-bg); box-shadow: inset 0 0 0 2px var(--vd-c); flex: none; } .rcmpkind:not(.on) .sw { opacity: .35; }
+.rmenu .rmenu-sep { height: 1px; margin: 4px 8px; background: var(--rule); } .rcheck input[type="radio"] + .box { border-radius: 50%; }
+.vd-rest { --vd-c: #1D4ED8; --vd-bg: #DCEBFF; } .vd-work { --vd-c: #B4530A; --vd-bg: #FFE3CC; } .vd-swap { --vd-c: #6D28D9; --vd-bg: #EFE7FF; } .vd-one { --vd-c: #8A6D00; --vd-bg: #FFF2B8; }
+html.dark .vd-rest { --vd-c: #8AB4FF; --vd-bg: #17305C; } html.dark .vd-work { --vd-c: #FDBA74; --vd-bg: #5A2E0A; } html.dark .vd-swap { --vd-c: #C4B5FD; --vd-bg: #3A2A6B; } html.dark .vd-one { --vd-c: #FDE68A; --vd-bg: #4D4512; }
+.rtable.is-cmp { --row-h: 36px; } .rtable.is-cmp2 { --row-h: 44px; }
+.rt-cell .vd-old { display: block; font-size: 10px; line-height: 1.1; color: var(--ink-2); font-weight: var(--fw-body); }
+.rt-cell.vd { box-shadow: inset 0 0 0 2px var(--vd-c); } .rt-cell.vd:not(.vd2) { background: var(--vd-bg) !important; color: var(--ink) !important; font-weight: var(--fw-strong); }
+.rt-cell.vd .vd-old { text-decoration: line-through; color: var(--ink); opacity: .75; }
+.rt-cell.vd2 .vd-old { margin: 0 3px 2px; padding: 1px 0; border-radius: 3px; background: color-mix(in srgb, var(--ink) 7%, transparent); font-size: 11px; } .rt-cell.vd.vd2 { font-weight: var(--fw-strong); }
+.rt-cell.vd-same:not(.is-sel) { opacity: .34; } .rt-cell.vd-same.vd2:not(.is-sel) { opacity: .6; }
+.rtable .rt-name small.vd-n { margin-left: 6px; padding: 0 5px; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--ink-2); color: var(--ink); font-size: 11px; font-weight: var(--fw-label); font-variant-numeric: tabular-nums; }
+/* 전입 전·전출 후 칸의 빗금 — 어두운 화면에서도 바탕을 따른다 (밝은 색이 박혀 있어 흰 띠로 보였다) */
+html.dark .rt-cell.is-absent { background: repeating-linear-gradient(45deg, var(--card) 0 3px, var(--rule) 3px 6px); }
+.rt-cmpfoot .rt-foot, .rt-cmpfoot .rt-foot-label { font-weight: var(--fw-strong); border-top: 2px solid var(--rule-strong); }
+/* 결과 요약의 표 (처음 표와 견주기) — 견주는 것 · 처음 표 · 지금 표 · 변화 */
+.rstory-table { width: 100%; border-collapse: collapse; font-size: var(--fs-body); font-variant-numeric: tabular-nums; margin-top: 4px; }
+.rstory-table th { padding: 6px 10px; text-align: right; font-size: var(--fs-sub); font-weight: var(--fw-label); color: var(--ink-2); border-bottom: 2px solid var(--rule-strong); white-space: nowrap; } .rstory-table thead th:first-child { text-align: left !important; padding-left: 0; }
+.rstory-table td { height: 32px; padding: 0 10px; text-align: right; border-bottom: 1px solid var(--rule-soft); white-space: nowrap; } .rstory-table td:first-child { text-align: left; padding-left: 0; color: var(--ink-2); }
+.rstory-table td:nth-child(3) { font-weight: var(--fw-strong); } .rstory-table td.word { width: 76px; color: var(--ink-2); font-size: var(--fs-sub); }
+.rstory-table tr.good td.word { color: var(--ok); font-weight: var(--fw-label); } .rstory-table tr.bad td.word { color: var(--sun-fg); font-weight: var(--fw-label); }
+/* 번호마다 숫자 창 */
+.rvernum { width: 900px; max-width: calc(100vw - 48px); height: min(680px, 92vh); padding: 18px 24px 16px; gap: 8px; } .rvernum-sub { font-size: var(--fs-sub); color: var(--ink-2); line-height: 1.5; }
+.rvernum-table { width: 100%; border-collapse: collapse; font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
+.rvernum-table th { position: sticky; top: 0; background: var(--paper); padding: 8px 10px; text-align: right; font-weight: var(--fw-label); box-shadow: inset 0 -2px 0 var(--rule-strong); white-space: nowrap; } .rvernum-table th:first-child { text-align: left; color: var(--ink-2); font-size: var(--fs-sub); }
+.rvernum-table th b { display: block; font-weight: var(--fw-strong); font-size: var(--fs-sub); } .rvernum-table th small { color: var(--ink-2); font-size: var(--fs-min); font-weight: var(--fw-body); }
+.rvernum-table td { height: 36px; padding: 0 10px; text-align: right; border-bottom: 1px solid var(--rule-soft); white-space: nowrap; } .rvernum-table td.lbl { text-align: left; } .rvernum-table td.best { font-weight: var(--fw-strong); color: var(--ok); }
+.rvernum-table .cur { background: color-mix(in srgb, var(--ink) 5%, transparent); } .rvernum-table tr.acts td { height: 48px; border-bottom: 0; } .rvernum-table .curlbl { font-size: var(--fs-sub); font-weight: var(--fw-label); }
+/* 만드는 중 — 표가 떠 있으면 한 줄(.rmid)만, 계산 현황은 펼쳤을 때 */
+.rlive-detail { display: flex; flex-direction: column; gap: 6px; }
+.rmid .now { display: inline-flex; align-items: center; gap: 7px; min-width: 0; flex: 1 1 200px; color: var(--ink-2); overflow: hidden; } .rmid .now span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rmid .now .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; animation: rsolve-pulse 2.4s ease-in-out infinite; } .rmid .rbtn-sm + .rbtn-sm { margin-left: 0; }
+@media (prefers-reduced-motion: reduce) { .rmid .now .pulse { animation: none; } }
 .rhlbar .lbl { color: var(--ink-2); font-weight: var(--fw-label); } .rhlbar .it { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; } .rhlbar .rbtn-sm { margin-left: auto; flex: none; }
 .rhlbar .sw { --hl-ring: transparent; --hl-top: transparent; --hl-bot: transparent; --hl-left: transparent; --hl-right: transparent; width: 18px; height: 18px; border-radius: 3px; background-color: var(--card); flex: none; display: inline-block; outline: 1px solid var(--rule); outline-offset: -1px;
   box-shadow: inset 0 0 0 2px var(--hl-ring), inset 0 4px 0 0 var(--hl-top), inset 0 -4px 0 0 var(--hl-bot), inset 4px 0 0 0 var(--hl-left), inset -4px 0 0 0 var(--hl-right); }

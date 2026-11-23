@@ -85,7 +85,9 @@ async function run(results, { during } = {}) {
   const { a } = await run([first(), cont({ objective: 4160, improved: true })],
     { during: (x) => { x.schedule = { a: { ...x.schedule.a, '2026-11-02': 'N' } }; } });
   assert.equal(a.schedule.a['2026-11-02'], 'N');
-  assert.match(a.statusMessage, /손으로 고친 칸이 있어 고친 표를 그대로 둡니다 \(이어 찾기에서 나온 표는 쓰지 않았습니다\)/);
+  // 그 표는 버리지 않고 표 기록의 다음 번호로 남긴다 (결정 1-95) — 화면은 고친 표 그대로
+  assert.match(a.statusMessage, /더 좋은 표가 나와 표 기록 2번으로 남겼습니다 — 손으로 고친 표는 그대로 두었습니다/);
+  assert.deepEqual([a.verLog.map(v => v.n), a.verCur], [[1, 2], 1]);
 }
 // ⑤ 첫 실행 중에 달·설정을 바꿔도 이어 찾기는 첫 요청 그대로 (리뷰: 12월 · 60분 · CP-SAT 에 11월 표를 썼다)
 {

@@ -63,36 +63,7 @@ window.SettingsDefsModule = function() {
       localStorage.setItem('ns_rule_presets',JSON.stringify(this.rulePresets));
     },
 
-    // ── 스케줄 비교 ──────────────────────────────────────────
-    compareResult:null,
-    async compareWithSaved(savedId){
-      try{
-        const savedData=await this.api('GET',`/api/schedules/${savedId}`);
-        const saved=savedData.data?.schedule||savedData.data||{};
-        const current=this.schedule||{};
-        const diffs=[];
-        const allNurses=new Set([...Object.keys(current),...Object.keys(saved)]);
-        for(const nid of allNurses){
-          const curDays=current[nid]||{};
-          const savDays=saved[nid]||{};
-          const allDays=new Set([...Object.keys(curDays),...Object.keys(savDays)]);
-          for(const dk of allDays){
-            const c=curDays[dk]||'-';
-            const s=savDays[dk]||'-';
-            if(c!==s){
-              const nurse=this.nurses.find(n=>n.id===nid);
-              diffs.push({nid,name:nurse?.name||nid,dk,current:c,saved:s});
-            }
-          }
-        }
-        this.compareResult={
-          savedName:savedData.name||`${savedData.year}년 ${savedData.month}월`,
-          totalDiffs:diffs.length,
-          diffs:diffs.slice(0,50),
-          hasMore:diffs.length>50,
-        };
-      }catch(e){this.toast('비교 실패: '+e.message,'error')}
-    },
+    // 저장본과 견주기는 표 기록의 견주기(redesign.js verCmpSaved, 결정 1-95)가 달력에 겹쳐 보인다 — 다른 칸을 목록으로만 보이던 옛 창은 없앴다
 
     // ── 요구사항 ──────────────────────────────────────────────
     async loadRequirements(){this.requirements=await this.api('GET','/api/requirements')},

@@ -23,13 +23,13 @@ window.SolverModule = function() {
       this.generating=true;this.continuing=!!_cont;this.stopRequested=false;
       if(!_cont){this.genFailed=false;this.mipGapPercent=null;this.scheduleStopped=false;this.rdSaved=false;this.diagResult=null;this.fixResult=null;this.statusMessage=''}
       this.estimatedSeconds=0;this.generateStartTime=Date.now();this.generateElapsed=0;
-      let next=null,story=false;
+      let next=null,story=false,quiet=false;   // quiet: 화면에 넣지 않은 새 표가 나온 채로 끝났다 — 결과 요약 창을 띄우지 않는다(알림의 '보기'를 가린다)
       this.generateTimer=setInterval(()=>{this.generateElapsed=Math.floor((Date.now()-this.generateStartTime)/1000)},1000);
       this.solveProgress={gap_percent:null,nodes:0,has_solution:false,is_running:false};
       this.solverLogs=[];this._logSeq=0;this.cellWhy={};
       // 이어 찾기는 앞 찾기의 계산 현황·걸린 시간을 이어 간다 — 지우면 표가 나온 뒤 처음부터 다시 찾는 것처럼 보였다 (결정 1-77)
       if(_cont){this.genRound++;this.genElapsedBase+=this.generateFinalElapsed||0}
-      else{this.genDraftMore=false;this.genFirst=null;this._solveReset();this.story.open=false;this.loadedSavedId=null;this.genRound=1;this.genElapsedBase=0;this.genRounds=[];this.genEndless=!_readjust&&(this.genPrefGet()||{}).time==='endless'}
+      else{this.genDraftMore=false;this.genFirst=null;if(!_readjust)this.verClear();this._solveReset();this.story.open=false;this.loadedSavedId=null;this.genRound=1;this.genElapsedBase=0;this.genRounds=[];this.genEndless=!_readjust&&(this.genPrefGet()||{}).time==='endless'}
       this.sseSource=new EventSource('/api/generate/stream');
       this.sseSource.onmessage=(e)=>{
         const data=JSON.parse(e.data);
@@ -48,6 +48,16 @@ window.SolverModule = function() {
         if(!this._resultHere({profile_id:pid,year:payload.year,month:payload.month})){this._offscreenResult(result,payload,pid,_readjust);return false}
         // 이어 찾는 동안 손으로 고친 칸이 있으면 그 표를 그대로 둔다 — 바꾸면 고친 칸이 말없이 사라졌다 (리뷰 2026-10-19)
         const edited=_cont&&(this._originalSchedule?this.getManualEditCount():0)>0;
+        // 표 기록(결정 1-95) — 지난 번호를 보는 중이면 새 표가 나와도 화면을 바꾸지 않는다. 더 좋은 표는 번호를 붙여 기록에 남기고 알린다.
+        // 손으로 고친 표를 그대로 둘 때도 같다 — 예전엔 그 표를 버렸다
+        const pinned=_cont&&!edited&&this.verPinned;
+        if(_cont&&(edited||pinned)&&this._contBetter(result)){
+          const v=this._verPush(result,payload,false);quiet=true;
+          this._contKeep(result,_cont,edited,v);this._setContBase(payload,result);this._roundDone(true);
+          // 보던 표를 둔 것이면 새 표가 그 달의 가장 좋은 표다 — 자동저장본으로 둔다. 손으로 고친 표를 둔 것이면 저장은 사람이 정한다
+          if(!edited)this._autoSaveSchedule({year:+payload.year,month:+payload.month,schedule:result.schedule,nurse_scores:result.nurse_scores||{},nurse_score_details:result.nurse_score_details||{},relaxed_cells:result.relaxed_cells||{}});
+          this.rdToast={msg:`${v.n}번 표가 나왔습니다 — ${edited?'고친 표':'보던 표'}는 그대로 두었습니다`,act:'보기',fn:()=>this.verShow(v.n)};clearTimeout(this._rdToastTimer);   // 사람이 볼 때까지 둔다 — 번호 줄에도 '새로 나옴'으로 남는다
+          if(!edited)next=this._endlessNext(result)||this._draftMoreNext(result);return}
         if(_cont&&(edited||!this._contBetter(result))){this._contKeep(result,_cont,edited);this._contBaseBound(result);this._roundDone(false);if(!edited)next=this._endlessNext(result)||this._draftMoreNext(result);return}
         // 초안 시간(90초) 안에 표가 안 나온 것은 실패가 아니다 — 고른 시간으로 처음부터 다시 찾는다 (결정 1-89). 조건이 안 맞아 못 만든 것은 그대로 실패로 보인다
         if(draft&&!result.success&&!result.stopped&&!this.stopRequested&&(result.relax_timed_out||/제한 시간/.test(result.message||''))){
@@ -84,6 +94,7 @@ window.SolverModule = function() {
             this.statusMessage+=`\n\n📌 원티드 미반영 ${details.length}건${noted?` — 그중 메모(사유) 있는 셀 ${noted}건`:''}. 절대 못 바꾸는 날은 사전입력에서 🔒 잠금하세요.\n`+details.map(d=>d.line).join('\n');
           }
           this.trackEdits();story=!_readjust;
+          if(!_readjust)this._verPush(result,payload,true);   // 화면에 넣은 표에 번호를 붙여 표 기록에 남긴다 (결정 1-95)
           if(!_readjust){this.readjustPins={};this.readjustChanged={};this.readjustSummary=''}
           if(result.warning){this.statusMessage=result.warning+'\n\n'+this.statusMessage;this.statusOk=false}
           if(_readjust)this.contBase=null;else this._setContBase(payload,result);   // '이 표에서 더 찾기'가 이을 문제 — 멈춘 표·이어 찾은 표도 같다 (다시 맞춘 표는 다른 문제)
@@ -107,7 +118,7 @@ window.SolverModule = function() {
       }catch(e){if(_cont)this._contKeep(null,_cont);else{this.statusOk=false;this.genFailed=true;this.statusMessage='서버 오류: '+e.message}}
       finally{this.generating=false;this.continuing=false;this.stopRequested=false;if(this.generateTimer){clearInterval(this.generateTimer);this.generateTimer=null}if(this.sseSource){this.sseSource.close();this.sseSource=null}this.generateFinalElapsed=this.generateElapsed;
         if(next)setTimeout(()=>this.generate(next),0);
-        else if((story||_cont)&&this.rdSched)this.rdStoryOpen()}   // 결과 요약은 다 끝난 뒤에 — 이어 찾기가 이어지면 그 끝에
+        else if((story||_cont)&&!quiet&&this.rdSched)this.rdStoryOpen()}   // 결과 요약은 다 끝난 뒤에 — 이어 찾기가 이어지면 그 끝에
     },
     // ── 이 표에서 더 찾기 (결정 1-69) — 끝난 표·멈춘 표에서 사람이 눌러 잇는다. 자동 이어 찾기와 같은 요청(앞 표·하한·지문)이라
     //    같은 문제에서 더 좋은 표가 나올 때만 바뀐다. 몇 번이고 다시 누를 수 있다. 시간은 누를 때의 '고급' 설정 ──
@@ -172,14 +183,16 @@ window.SolverModule = function() {
       return !!(r&&r.success&&r.improved);
     },
     // 앞 표를 그대로 둔다 — 같은 모델의 하한이 더 올랐으면 앞 표의 차이를 그만큼 줄여 보여 준다
-    _contKeep(r,c,edited){
+    _contKeep(r,c,edited,ver){
       this.statusOk=c.ok;
       let g=c.gap;
       if(r&&r.success&&c.objective!=null&&r.mip_dual_bound!=null&&r.model_fingerprint&&r.model_fingerprint===c.fingerprint){
         g=Math.round(Math.max(0,c.objective-r.mip_dual_bound)/Math.max(1,Math.abs(c.objective))*10000)/100;
       }
-      this.mipGapPercent=g;
-      this.statusMessage=c.message+(edited
+      if(!ver)this.mipGapPercent=g;   // 넣지 않은 새 표가 있으면 화면의 표와 그 차이는 그대로다
+      this.statusMessage=c.message+(ver
+        ? `\n\n🔁 더 좋은 표가 나와 표 기록 ${ver.n}번으로 남겼습니다 — ${edited?'손으로 고친 표':'보던 표'}는 그대로 두었습니다.`
+        : edited
         ? `\n\n🔁 이어 찾는 동안 손으로 고친 칸이 있어 고친 표를 그대로 둡니다${r&&r.improved?' (이어 찾기에서 나온 표는 쓰지 않았습니다)':''}.`
         : r&&r.success
         ? `\n\n🔁 이어 찾기에서 더 좋은 표는 없었습니다 — 지금 표 그대로${g!=null?` (가장 좋은 답과 ${g}% 안쪽)`:''}.`
