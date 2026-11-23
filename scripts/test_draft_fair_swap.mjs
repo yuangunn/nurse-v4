@@ -28,7 +28,7 @@ function make(onApi) {
 }
 const res = (sched, gap) => ({ success: true, schedule: sched, extended_schedule: sched, message: '근무표가 생성되었습니다.', mip_gap_percent: gap, objective: 100, mip_dual_bound: 100 - gap, model_fingerprint: 'f', relaxed_cells: {} });
 const SCHED = { a: row('D D N N OF OF D'), b: row('E E OF D D D OF'), c: row('N OF D E E N N') };
-const pref = (a, patch) => { a.genPrefOpen(false); Object.assign(a.genPref.draft, patch); a.genPrefSave(); };
+const pref = (a, patch) => { a._genPrefStore({ ...(a.genPrefGet() || {}), ...patch }); };
 const gens = (calls) => calls.filter(c => c.path === '/api/generate').map(c => c.body);
 
 // ① 초안 먼저 — 첫 찾기는 90초, 그 표에서 고른 시간만큼 잇고, 그래도 차이가 크면 한 번 더. 그 뒤엔 멈춘다
@@ -70,6 +70,33 @@ const gens = (calls) => calls.filter(c => c.path === '/api/generate').map(c => c
   assert.deepEqual(gens(calls).map(b => b.time_limit), [1200]);
   pref(a, { quick: true }); await a.generate({ payloadPatch: { mip_gap: 0.05 } }); await sleep(30);
   assert.equal(gens(calls)[1].time_limit, 1200);
+}
+
+// 처음 표와 견주기 (결정 1-94) — 초안 뒤에 더 좋은 표로 바뀌면 무엇이 달라졌는지 센다. 손으로 고친 칸은 엔진의 표가 아니라 세지 않는다
+{
+  const S2 = { a: row('D D N N OF OF D'), b: row('E E OF D D D OF'), c: row('N OF D E E OF N') };   // c 의 6일 N → OF (1~5일은 지난달 표의 주라 견주지 않는다)
+  const out = [res(SCHED, 26), { ...res(S2, 1.5), improved: true, objective: 80, mip_dual_bound: 79 }];
+  const { a } = make((path) => (path === '/api/generate' ? out.shift() : {}));
+  const toasts = []; a.toast = (m) => toasts.push(m);
+  pref(a, {}); await a.generate(); await sleep(60);
+  assert.deepEqual(a.schedule, S2); assert.deepEqual(a.genFirst.schedule, SCHED); assert.equal(a.genFirst.mip_gap_percent, 26);
+  const dc = a.rdDraftCmp;
+  assert.deepEqual([dc.cells, dc.who], [1, 1]);
+  assert.equal(a.isDraftDiff('c', new Date(2026, 11, 6)), true); assert.equal(a.isDraftDiff('a', new Date(2026, 11, 7)), false);
+  const gap = dc.rows.find(r => r.key === 'gap'); assert.deepEqual([gap.a, gap.b], [26, a.mipGapPercent]);
+  assert.ok(toasts.some(m => /더 좋은 표를 찾아 바꿨습니다.*처음 표와 \d+칸 다름/.test(m)), toasts.join(' | '));
+  const step = a.rdStorySteps.find(s => s.id === 'draft'); assert.ok(step, '결과 요약에 처음 표와 견주기 단계');
+  assert.equal(step.facts[0][0], '달라진 칸'); assert.match(step.facts.find(f => f[0] === '최고와의 차이(%)')[1], /^26 → .* · 나아짐$/);
+  // 강조 — 처음 표와 달라진 칸
+  const nurseC = a.nurses.find(n => n.id === 'c'), R = a._hlRow(nurseC), M = a._hlMarks(R.row, R);
+  assert.equal(M.count.draftDiff, R.df.filter(Boolean).length); assert.equal(M.count.draftDiff, dc.cells);
+  // 손으로 고쳐도 견주는 것은 엔진이 낸 표끼리다
+  a._originalSchedule = JSON.parse(JSON.stringify(S2)); a.schedule = { ...a.schedule, a: { ...a.schedule.a, [dk(1)]: 'E' } };
+  assert.equal(a.rdDraftCmp.cells, dc.cells);
+  // 새로 만들면 처음 표를 버린다 · 표가 한 번도 바뀌지 않았으면 견줄 것이 없다
+  const { a: b } = make((path) => (path === '/api/generate' ? res(SCHED, 1.2) : {}));
+  pref(b, {}); await b.generate(); await sleep(30);
+  assert.equal(b.rdDraftCmp, null); assert.equal(b.rdStorySteps.some(s => s.id === 'draft'), false);
 }
 
 // ② 공평성 리포트 — 요약 집계 그대로 + 원티드 반영

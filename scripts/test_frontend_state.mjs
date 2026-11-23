@@ -177,11 +177,11 @@ const fresh = () => { store.clear(); ticks.length = 0; unload.length = 0; };
   a.offTeukgeun = [{ name: '간호02' }]; a.managerCheck = [{ name: '간호01' }]; a.vReport = { total: 1 }; a.wishReport = { total_granted: 1 };
   a.diagResult = { anchored: [] }; a.fixResult = { removals: [], shortfalls: [{ kind: 'staff', date: '2026-11-20', code: 'D', amount: 2 }] };
   a.analysisResult = { days: [] }; a.juhuRecommendation = { assignments: { a1: [{ dk: '2026-11-03', existing: false }] } };
-  a.selectedNurseMap = { a1: true }; a.multi.results = [{ label: '앞 병동의 표' }]; a.multi.open = true; a.readjustChanged = { a1: { '2026-11-02': true } };
+  a.selectedNurseMap = { a1: true }; a.multi.results = [{ label: '앞 병동의 표' }]; a.mk.open = true; a.genFirst = { schedule: {} }; a.readjustChanged = { a1: { '2026-11-02': true } };
   await to(a, 'B', 'pb');
   assert.deepEqual([a.statusMessage, a.offTeukgeun, a.managerCheck, a.vReport, a.wishReport, a.diagResult, a.fixResult, a.analysisResult,
     a.juhuRecommendation, a.selectedNurseMap, a.multi.results, a.readjustChanged], ['', [], [], null, null, null, null, null, null, {}, [], {}]);
-  assert.equal(a.multi.open, false);
+  assert.equal(a.mk.open, false); assert.equal(a.genFirst, null, '처음 표(초안)도 앞 병동의 것');
   a.applyFix(); a.applyRecommendedJuhu();
   assert.deepEqual([a.prevDayReqs, a.prevSchedule], [{}, {}]);
 }

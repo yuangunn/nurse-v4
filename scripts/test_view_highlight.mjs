@@ -12,8 +12,8 @@ const marks = (s, x) => mod._hlMarks(cells(s), x);
 const at = (r, i) => r.out[i].slice().sort().join(',');
 const where = (r, k) => r.out.map((m, i) => (m.includes(k) ? i : -1)).filter(i => i >= 0);
 
-assert.deepEqual(mod.rdHlDefs().map(h => h[0]), ['singleN', 'night3', 'run6', 'weekendWork', 'oneOff', 'longOff', 'nightRest1', 'juhuAlone', 'longRest', 'pongdang', 'edited']);
-assert.deepEqual(mod.rdHlGroups().map(g => [g.name, g.items.length]), [['근무', 4], ['휴무', 5], ['그 밖에', 2]]);
+assert.deepEqual(mod.rdHlDefs().map(h => h[0]), ['singleN', 'night3', 'run6', 'weekendWork', 'oneOff', 'longOff', 'nightRest1', 'juhuAlone', 'longRest', 'pongdang', 'edited', 'draftDiff']);
+assert.deepEqual(mod.rdHlGroups().map(g => [g.name, g.items.length]), [['근무', 4], ['휴무', 5], ['그 밖에', 3]]);
 
 // 단독 야간 — 앞뒤가 야간이 아닌 하루. 이틀 이어지면 아니다. 줄의 맨 앞·맨 끝과 빈칸 옆은 앞뒤를 몰라 세지 않는다
 {

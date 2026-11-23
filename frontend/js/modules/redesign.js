@@ -47,7 +47,7 @@ window.RedesignModule = function() {
   const MAKE_KEYWORDS = [...PREF_AXES.flatMap(a=>['a','b'].map(s=>({id:a.id+'.'+s, label:a[s].kw, hint:a[s].hint, fx:a[s].fx}))),
     {id:'oneoff', label:'1오프 줄이기', hint:'OFF 를 주휴 옆에 더 세게 붙이고 근무-휴무-근무를 줄입니다', fx:{juhuOff:2, pongdang:2}}];
   const PREF_TIMES = [{v:20, label:'20분'}, {v:60, label:'60분'}, {v:'endless', label:'멈출 때까지 계속'}];
-  const PREF_DEFAULT = {night:'mid', rest:'mid', weekend:'mid', time:20, quick:true};
+  const PREF_DEFAULT = {keys:[], time:20, quick:true};   // 하나만 만들 때의 선택 — 방향 키워드(MAKE_KEYWORDS 의 id) · 찾는 시간 · 초안 먼저
   const SRC = {B:'갈래를 나눠 따져 봄', C:'가운데 값에서 어림', F:'규칙을 맞추며 밀어 넣기', H:'어림 탐색', L:'작은 문제로 쪼개 풀기', P:'남은 것이 없는 문제', R:'무작위로 어림',
     S:'조건을 느슨하게 푼 답에서', T:'갈래를 평가하다가', U:'한계 없음', z:'가장 단순한 값으로', l:'가장 단순한 값으로', u:'가장 단순한 값으로', p:'가장 단순한 값으로'};
   const STATUS_KO = {'Optimal':'가장 좋은 표로 확인됨', 'Time limit reached':'시간이 다 됨', 'Interrupted by user':'멈춤', 'Infeasible':'이 조건으로는 만들 수 없음',
@@ -68,7 +68,8 @@ window.RedesignModule = function() {
     showLiveLog: false,          // 만드는 중 원본 계산 기록 — 기본은 접고 해석한 계산 현황(rdSolveCards·solveStats.events)을 보인다
     solveStats: null,            // 솔버 기록에서 읽은 것 {phases:[{n,rows0,cols0,rows,cols,restarts,status,row}], events:[…]} (_solveFeed)
     story: {open:false, step:0}, // 결과 요약 — 생성이 끝나면 단계별로 넘겨 보는 창 (rdStorySteps)
-    genPref: {open:false, draft:null, make:false},   // '어떤 근무표를 원하세요?' 창 — make: 고른 뒤 바로 만든다
+    mk: {open:false, step:'count', count:'one', keys:[], time:20, quick:true},   // 만들기 마법사 (결정 1-93) — step: count·dir·time·run·cmp
+    genFirst: null,              // 이번 만들기에서 처음 나온 표 — 더 찾은 표와 견준다 {schedule, extended_schedule, relaxed_cells, mip_gap_percent, sec}
     genPrefTick: 0,              // 저장한 선택을 다시 읽게 하는 값 (localStorage 는 반응하지 않는다)
     genEndless: false,           // 멈출 때까지 계속 — 한 번 끝날 때마다 그 표에서 다시 잇는다
     genRound: 1,                 // 이번 만들기의 몇 번째 찾기인가 (1 = 처음, 2부터 이어 찾기)
@@ -414,6 +415,12 @@ window.RedesignModule = function() {
       else if(lastP && lastP.row.gap!=='inf') calc.push(['가능한 최고와의 차이', lastP.row.gap]);
       steps.push({id:'calc', eyebrow:'계산', title: ph.length ? `경우 ${n(sum('proc'))}가지를 따져 봤어요` : '근무표를 계산했어요',
         sub: (this.generating&&this.continuing) ? '지금도 더 좋은 표를 찾고 있어요. 아래는 지금 화면에 있는 표의 것입니다.' : this.scheduleStopped ? '중간에 멈춰 그때까지 찾은 표입니다.' : (g==null ? '' : (g<=0.1 ? '이 조건에서 가장 좋은 표입니다.' : `가장 좋은 표와 ${Math.round(g*10)/10}% 안쪽 차이에서 멈췄습니다.`)), facts:calc});
+      // 초안과 견주기 — 더 찾아서 표가 바뀌었을 때만
+      const dc=this.rdDraftCmp;
+      if(dc){ const fs=v=>v==null ? '—' : v, t0=dc.sec>=60 ? `${Math.floor(dc.sec/60)}분 ${dc.sec%60}초` : `${dc.sec}초`;
+        steps.push({id:'draft', eyebrow:'처음 표와 견주기', title: dc.better ? `처음 표보다 ${dc.better}가지가 나아졌어요` : '처음 표와 숫자는 비슷해요',
+          sub:`처음 표는 ${t0} 만에 나왔고, 그 뒤 더 찾아 바꾼 것이 지금 표입니다. 숫자는 모두 작을수록 좋습니다.${dc.worse ? ' 점수 전체로는 나아졌지만 나빠진 항목도 있습니다.' : ''}`,
+          facts:[['달라진 칸', `${dc.cells}칸 · ${dc.who}명`], ...dc.rows.map(r=>[r.label, r.a===r.b ? `${fs(r.b)} (그대로)` : `${fs(r.a)} → ${fs(r.b)}${r.a!=null&&r.b!=null ? (r.b<r.a ? ' · 나아짐' : ' · 나빠짐') : ''}`])]}); }
       const pre=this.rdWantedCount, rx=this.rdRelaxedCount, tc=this.rdTraineeChanged, keptN=Math.max(pre-this.rdWantedRelaxed-tc, 0);
       // 표 아래 '배정 / 필요' 줄과 같은 셈 — 날짜별로 고친 필요 인원(rdFootNeed)과 견준다
       const rowsDEN=(this.footerRows||[]).filter(r=>['D','E','N'].includes(r.label));
@@ -542,7 +549,7 @@ window.RedesignModule = function() {
     // 근무표를 만든(연) 뒤 사전입력 칸이 바뀌었는가 — 표는 고치기 전 사전입력으로 만든 것이라 다시 만들어야 반영된다.
     // 기준(_preAtMake)은 새 표가 설 때의 사전입력(trackEdits), 저장본을 열면 저장할 때의 사전입력. 기준을 모르면 알리지 않는다
     get rdPreChanged(){ return !this.generating && this._preAtMake!=null && this.rdSched && this._preAtMake!==this._preKey(); },
-    rdRemake(){ this.activeTab='schedule'; if(!this.generating) this.generate(); },
+    rdRemake(){ this.activeTab='schedule'; if(!this.generating) this.makeOpen(); },
 
     // ── 서랍 (요약·리포트) ──
     get rdDrawerTabs(){
@@ -593,44 +600,78 @@ window.RedesignModule = function() {
     // ── 저장 버튼 상태 ──
     get rdSaveLabel(){ return this.rdSched && this.rdSaved ? '저장됨' : '저장'; },
     get rdSaveTip(){ return this.rdSched ? (this.rdSaved ? '자동으로 저장됐습니다. 이름을 바꿔 따로 저장하려면 누르세요.' : '이 근무표를 이름 붙여 저장합니다.') : '만든 뒤에 저장할 수 있어요.'; },
-    // ── 어떤 근무표를 원하세요? (결정 1-77) — 달마다 한 번 고르고 기억한다 (localStorage 'ns_genpref:<병동>:<년-월>').
-    //    그 달에 고른 적이 없으면 만들기를 누를 때 창이 먼저 뜬다. 다음 달은 지난번 고른 것에서 시작한다 ──
-    rdPrefAxes(){ return PREF_AXES; },
+    // ── 하나만 만들 때의 선택 (결정 1-77 → 1-93) — 달마다 기억한다 (localStorage 'ns_genpref:<병동>:<년-월>').
+    //    방향은 여러 개 만들기와 같은 키워드다. 옛 저장 값(세 축 night·rest·weekend = a|mid|b)은 키워드로 바꿔 읽는다 ──
     rdPrefTimes(){ return PREF_TIMES; },
     _genPrefKey(){ return `ns_genpref:${this.currentProfile||''}:${this.year}-${String(this.month).padStart(2,'0')}`; },
-    _genPrefClean(o){ const p={...PREF_DEFAULT};
-      for(const a of PREF_AXES) if(['a','mid','b'].includes(o&&o[a.id])) p[a.id]=o[a.id];
-      if(o && PREF_TIMES.some(t=>t.v===o.time)) p.time=o.time;
-      if(o && typeof o.quick==="boolean") p.quick=o.quick;
+    _genPrefClean(o){ const p={...PREF_DEFAULT, keys:[]}; o=o||{};
+      const want=Array.isArray(o.keys) ? o.keys : PREF_AXES.filter(a=>['a','b'].includes(o[a.id])).map(a=>a.id+'.'+o[a.id]);
+      for(const k of MAKE_KEYWORDS) if(want.includes(k.id) && !this._kwClash(p.keys, k.id)) p.keys.push(k.id);
+      if(PREF_TIMES.some(t=>t.v===o.time)) p.time=o.time;
+      if(typeof o.quick==="boolean") p.quick=o.quick;
       return p; },
-    // 이 달에 고른 것 — 없으면 null. 저장소를 못 쓰는 곳(시크릿 창 등)에서는 기본값을 돌려줘 창이 매번 뜨지 않게 한다
+    // 이 달에 고른 것 — 없으면 null. 저장소를 못 쓰는 곳(시크릿 창 등)에서는 기본값을 돌려준다
     genPrefGet(){ this.genPrefTick;
-      try{ const s=localStorage.getItem(this._genPrefKey()); return s ? this._genPrefClean(JSON.parse(s)) : null; }catch(e){ return {...PREF_DEFAULT}; } },
-    genPrefOpen(make){
-      let last=null; try{ last=JSON.parse(localStorage.getItem('ns_genpref_last:'+(this.currentProfile||''))||'null'); }catch(e){}
-      this.genPref={open:true, make:!!make, draft:this._genPrefClean(this.genPrefGet()||last)};
-    },
-    genPrefSave(){
-      const p=this._genPrefClean(this.genPref.draft), make=this.genPref.make;
+      try{ const s=localStorage.getItem(this._genPrefKey()); return s ? this._genPrefClean(JSON.parse(s)) : null; }catch(e){ return this._genPrefClean(null); } },
+    _genPrefLast(){ try{ const s=localStorage.getItem('ns_genpref_last:'+(this.currentProfile||'')); return s ? this._genPrefClean(JSON.parse(s)) : null; }catch(e){ return null; } },
+    _genPrefStore(o){ const p=this._genPrefClean(o);
       try{ localStorage.setItem(this._genPrefKey(), JSON.stringify(p)); localStorage.setItem('ns_genpref_last:'+(this.currentProfile||''), JSON.stringify(p)); }catch(e){}
       if(typeof p.time==='number') this.generateTimeout=p.time;
-      this.genPref.open=false; this.genPrefTick++;
-      if(make && !this.generating) this.generate();
-    },
-    // 만들기 단추 옆 한 줄 — 가운데가 아닌 것만 + 시간
-    get rdPrefSummary(){
-      const p=this.genPrefGet(); if(!p) return '어떤 근무표를 원하세요?';
-      const picks=PREF_AXES.filter(a=>p[a.id]!=='mid').map(a=>a[p[a.id]].label);
-      return [...(picks.length?picks:['고르게 균형']), p.time==='endless' ? '멈출 때까지' : `${this.generateTimeout}분`, ...(p.quick!==false?["초안 먼저"]:[])].join(' · ');
-    },
-    // 요청에 싣는 것 — 고른 쪽의 배점을 곱한 규칙 목록(가운데뿐이면 싣지 않는다 → 서버가 설정 값을 쓴다)과, 계속 찾기면 오차 0
+      this.genPrefTick++; return p; },
+    _prefText(p){ return [p.keys.length ? this.multiLabel(p.keys) : '고르게 균형', p.time==='endless' ? '멈출 때까지' : `${p.time}분`, ...(p.quick!==false?['초안 먼저']:[])].join(' · '); },
+    // 만들기 단추 옆 한 줄
+    get rdPrefSummary(){ const p=this.genPrefGet(); return p ? this._prefText(p) : ''; },
+    // 요청에 싣는 것 — 고른 방향의 배점을 곱한 규칙 목록(고른 것이 없으면 싣지 않는다 → 서버가 설정 값을 쓴다)과, 계속 찾기면 오차 0
     genPrefPatch(){
-      const p=this.genPrefGet()||PREF_DEFAULT, out={};
-      const rules=this._rulesWithFx(PREF_AXES.map(a=>a[p[a.id]]).filter(Boolean).map(s=>s.fx));
+      const p=this.genPrefGet()||this._genPrefClean(null), out={};
+      const rules=this._rulesWithFx(p.keys.map(k=>MAKE_KEYWORDS.find(x=>x.id===k).fx));
       if(rules) out.scoring_rules=rules;
       if(p.time==='endless') out.mip_gap=0;
       return out;
     },
+
+    // ── 만들기 마법사 (결정 1-93) — 만들기를 누르면 늘 이 창에서 시작한다: ① 몇 개(하나만·여러 개) ② 방향 ③ 찾는 시간 → 만들기.
+    //    여러 개는 이어서 ④ 만드는 중 ⑤ 견주기. 첫 화면의 '지난번처럼 만들기'는 지난번 고른 그대로 바로 시작한다.
+    //    크기는 고정, 창 밖을 눌러도 닫히지 않는다 ──
+    _makeLastKey(){ return 'ns_make_last:'+(this.currentProfile||''); },
+    // 지난번에 만든 방식 — 기록이 없어도 하나만의 선택을 저장해 둔 적이 있으면(마법사가 생기기 전) 하나만으로 본다
+    _makeLast(){ let o=null; try{ o=JSON.parse(localStorage.getItem(this._makeLastKey())||'null'); }catch(e){}
+      return o&&['one','multi'].includes(o.count) ? o : ((this.genPrefGet()||this._genPrefLast()) ? {count:'one'} : null); },
+    _makeRemember(){ const M=this.multi, o=this.mk.count==='multi' ? {count:'multi', tables:M.tables.map(t=>[...t.keys]), gap:M.gap, cap:M.cap} : {count:'one'};
+      try{ localStorage.setItem(this._makeLastKey(), JSON.stringify(o)); }catch(e){} this.genPrefTick++; },
+    makeSteps(){ return this.mk.count==='multi' ? ['count','dir','time','run','cmp'] : ['count','dir','time']; },
+    makeOpen(){
+      const M=this.multi; if(M.running){ this.mk={...this.mk, open:true, count:'multi', step:'run'}; return; }
+      const p=this.genPrefGet()||this._genPrefLast()||this._genPrefClean(null), last=this._makeLast();
+      if(last&&last.count==='multi'&&Array.isArray(last.tables)&&last.tables.length){ M.tables=last.tables.slice(0, 4).map(k=>({keys:this._genPrefClean({keys:k}).keys})); if([0.01,0.02,0.05].includes(last.gap)) M.gap=last.gap; if([10,20,60].includes(last.cap)) M.cap=last.cap; }
+      this.mk={open:true, step:'count', count:last ? last.count : 'one', keys:[...p.keys], time:p.time, quick:p.quick!==false};
+    },
+    // 여러 개 만든 표를 다시 본다 (만드는 중이면 진행, 끝났으면 견주기)
+    makeViewMulti(){ this.mk={...this.mk, open:true, count:'multi', step:this.multi.running ? 'run' : 'cmp'}; },
+    makePick(count){ this.mk.count=count; this.mk.step='dir'; },
+    makeBack(){ const s=this.makeSteps(), i=s.indexOf(this.mk.step); this.mk.step=this.mk.step==='cmp' ? 'dir' : s[Math.max(0, i-1)]; },
+    makeNext(){ const s=this.makeSteps(), i=s.indexOf(this.mk.step); if(i<2) this.mk.step=s[i+1]; },
+    // 지난번에 고른 것 한 줄 — 없으면 '' (첫 화면의 '지난번처럼 만들기')
+    get makeLastText(){ this.genPrefTick; const last=this._makeLast(); if(!last) return '';
+      if(last.count==='multi'){ const n=(last.tables||[]).length; return n ? `여러 개 · ${n}장 (${(last.tables||[]).map(k=>this.multiLabel(k).replace(' (지금 설정 그대로)', '')).join(' / ')})` : ''; }
+      const p=this.genPrefGet()||this._genPrefLast(); return p ? '하나만 · '+this._prefText(p) : ''; },
+    makeStart(){
+      if(this.generating) return;
+      this._makeRemember();
+      if(this.mk.count==='multi'){ this.multiRun(); return; }
+      this._genPrefStore({keys:this.mk.keys, time:this.mk.time, quick:this.mk.quick});
+      this.mk.open=false; this.generate();
+    },
+    // 지난번처럼 — 창의 값은 makeOpen 이 지난번 것으로 채워 두었다
+    makeAgain(){ if(this.makeLastText) this.makeStart(); },
+    makeKey(e){ if(!this.mk.open||e.key!=='Escape') return; this.mk.open=false; },
+    // 한 표 안에서 같은 배점을 건드리는 방향끼리는 함께 고르지 못한다 — 부딪히는 방향의 이름, 없으면 null
+    _kwClash(keys, id){ const kw=MAKE_KEYWORDS.find(k=>k.id===id); if(!kw||(keys||[]).includes(id)) return null;
+      const hit=(keys||[]).map(k=>MAKE_KEYWORDS.find(x=>x.id===k)).find(o=>o && Object.keys(o.fx).some(f=>f in kw.fx)); return hit ? hit.label : null; },
+    makeClash(id){ return this._kwClash(this.mk.keys, id); },
+    makeToggle(id){ const k=this.mk.keys; this.mk.keys=k.includes(id) ? k.filter(x=>x!==id) : (this._kwClash(k, id) ? k : [...k, id]); },
+    get makeDirHint(){ const ks=MAKE_KEYWORDS.filter(k=>this.mk.keys.includes(k.id)); return ks.length ? ks.map(k=>`${k.label} — ${k.hint}`).join('\n') : '아무것도 고르지 않으면 지금 설정 그대로(균형)로 만듭니다.'; },
+
     // 배점 규칙에 곱하기 묶음(fx: {규칙 이름표: 배수})들을 건 사본 — 아무것도 걸리지 않으면 null (서버가 설정 값을 쓴다)
     _rulesWithFx(fxs){
       const mul=new Map();
@@ -641,11 +682,9 @@ window.RedesignModule = function() {
     // ── 여러 개 만들기 (결정 1-86) — 방향(키워드 묶음)이 다른 표를 차례로 만들어 나란히 견준다. 공통 설정: 추가 생성 안 함 ·
     //    목표 차이(1·2·5%) · 표 한 장의 시간 상한. 서버는 한 번에 한 장만 만들어 차례로 돈다. 만든 표는 모두 이름 붙여 저장하고,
     //    고른 표를 화면에 연다. 한 표 안의 키워드는 같은 배점을 건드리지 않는 것끼리만 (겹치면 고르지 못한다) ──
-    multi: {open:false, step:0, gap:0.02, cap:20, tables:[{keys:[]}, {keys:[]}], running:false, idx:-1, stopped:false, started:0, tick:0, results:[]},
+    multi: {gap:0.02, cap:20, tables:[{keys:[]}, {keys:[]}], running:false, idx:-1, stopped:false, started:0, tick:0, results:[], picked:null},
     rdMakeKeywords(){ return MAKE_KEYWORDS; },
-    multiOpen(){ const M=this.multi; M.open=true; M.step=M.running ? 2 : (M.results.length ? 3 : 0); },
-    multiClash(ti, id){ const kw=MAKE_KEYWORDS.find(k=>k.id===id), keys=this.multi.tables[ti]?.keys||[]; if(!kw||keys.includes(id)) return null;
-      const hit=keys.map(k=>MAKE_KEYWORDS.find(x=>x.id===k)).find(o=>o && Object.keys(o.fx).some(f=>f in kw.fx)); return hit ? hit.label : null; },
+    multiClash(ti, id){ return this._kwClash(this.multi.tables[ti]?.keys||[], id); },
     multiToggle(ti, id){ const t=this.multi.tables[ti]; if(!t) return; if(t.keys.includes(id)) t.keys=t.keys.filter(k=>k!==id); else if(!this.multiClash(ti, id)) t.keys=[...t.keys, id]; },
     multiAdd(){ if(this.multi.tables.length<4) this.multi.tables.push({keys:[]}); },
     multiRemove(ti){ if(this.multi.tables.length>1) this.multi.tables.splice(ti, 1); },
@@ -657,7 +696,7 @@ window.RedesignModule = function() {
       const M=this.multi; if(M.running||this.generating) return;
       const plan=this.multiPlan, base=this._basePayload(), pid=this.currentProfile, ym={year:+this.year, month:+this.month};
       if(!plan.length||!this.nurses.length) return;
-      M.results=plan.map(p=>({...p, state:'wait'})); M.running=true; M.stopped=false; M.step=2;
+      M.results=plan.map(p=>({...p, state:'wait'})); M.running=true; M.stopped=false; M.picked=null; this.mk.count='multi'; this.mk.step='run'; this.genFirst=null;
       this.generating=true; this.continuing=false; this.stopRequested=false; this.genEndless=false;
       const timer=setInterval(()=>{ M.tick++; }, 1000);
       try{
@@ -680,7 +719,7 @@ window.RedesignModule = function() {
         }
       } finally {
         clearInterval(timer); for(const R of M.results) if(R.state==='wait'||R.state==='run') R.state='skip';
-        M.running=false; M.idx=-1; this.generating=false; this.stopRequested=false; M.step=3; this.loadSavedList&&this.loadSavedList();
+        M.running=false; M.idx=-1; this.generating=false; this.stopRequested=false; if(this.mk.step==='run') this.mk.step='cmp'; this.loadSavedList&&this.loadSavedList();
       }
     },
     multiStop(){ this.multi.stopped=true; this.stopGenerate(); },
@@ -716,6 +755,19 @@ window.RedesignModule = function() {
       return {one, heavy, nine, singleN, nightRange:range(nights), weekendRange:range(wk), v, relaxed:Object.values(r.relaxed_cells||{}).reduce((a, c)=>a+Object.keys(c||{}).length, 0),
         gap:r.mip_gap_percent!=null ? Math.round(r.mip_gap_percent*100)/100 : null};
     },
+    // ── 처음 나온 표와 견주기 (결정 1-94) — 초안(이번 만들기의 첫 표)과 지금 표. 손으로 고친 칸은 빼고 엔진이 낸 표끼리 본다.
+    //    숫자는 여러 개 만들기의 견주기와 같은 것(multiStats). 달라진 칸이 없으면 null ──
+    _draftNow(){ return this._originalSchedule||this.schedule||{}; },
+    isDraftDiff(nid, day){ const F=this.genFirst; if(!F||this.isCarryDay(day)) return false; const dk=this.dayKey(day); return (F.schedule?.[nid]?.[dk]||'')!==(this._draftNow()?.[nid]?.[dk]||''); },
+    get rdDraftCmp(){
+      const F=this.genFirst; if(!F||!this.rdSched) return null;
+      let cells=0; const who=new Set();
+      for(const n of this.nurses) for(const d of this.scheduleDays) if(this.isDraftDiff(n.id, d)){ cells++; who.add(n.id); }
+      if(!cells) return null;
+      const A=this.multiStats(F), B=this.multiStats({schedule:this._draftNow(), extended_schedule:this.extendedSchedule, relaxed_cells:this.relaxedCells, mip_gap_percent:this.mipGapPercent});
+      const rows=this.rdMultiCols().map(c=>({key:c[0], label:c[1], tip:c[2], a:A[c[0]], b:B[c[0]]}));
+      return {cells, who:who.size, sec:F.sec||0, rows, better:rows.filter(r=>r.a!=null&&r.b!=null&&r.b<r.a).length, worse:rows.filter(r=>r.a!=null&&r.b!=null&&r.b>r.a).length};
+    },
     rdMultiCols(){ return [['one','1오프','하루짜리 휴무(앞뒤가 근무)의 수'], ['heavy','긴 근무 사이 1오프','앞뒤 근무를 합쳐 8일 이상인 1오프'], ['nine','열흘에 9일 근무','어느 열흘에 9일 넘게 일한 사람 수'],
       ['singleN','단독 야간','앞뒤가 야간이 아닌 하루짜리 야간'], ['nightRange','야간 횟수 차이','야간을 가장 많이 선 사람과 가장 적게 선 사람의 차이'], ['weekendRange','주말·공휴일 차이','주말·공휴일 근무 일수의 최대−최소'],
       ['v','연차(V)','자동으로 넣은 연차 수'], ['relaxed','풀린 사전입력','완화로 바뀐 사전입력 칸 수'], ['gap','최고와의 차이(%)','가능한 최고 점수와의 차이 — 방향이 다르면 점수 기준도 달라 표끼리 견주는 값은 아닙니다']]; },
@@ -733,7 +785,7 @@ window.RedesignModule = function() {
       this.mipGapPercent=r.mip_gap_percent!==undefined ? r.mip_gap_percent : null; this.scheduleStopped=r.stopped===true; this.relaxedCells=r.relaxed_cells||{};
       this.solverLogs=String(R.log||'').split('\n').filter(Boolean).map((m, k)=>({id:k+1, msg:m})); this._logSeq=this.solverLogs.length; this._solveReset(); for(const l of this.solverLogs) this._solveFeed(l.msg);
       this.genRound=1; this.genElapsedBase=0; this.genRounds=[]; this.generateFinalElapsed=R.sec||0; this.readjustPins={}; this.readjustChanged={}; this.readjustSummary='';
-      this.rdDoneAt=new Date(); this.activeTab='schedule'; this.trackEdits(); this._setContBase(R.payload, r); this.multi.picked=i; this.multi.open=false; this.loadedSavedId=null;
+      this.rdDoneAt=new Date(); this.activeTab='schedule'; this.trackEdits(); this._setContBase(R.payload, r); this.multi.picked=i; this.mk.open=false; this.genFirst=null; this.loadedSavedId=null;
       this._autoSaveSchedule(); this.toast(`'${R.label}' 표를 열었습니다 — 다른 표는 '여러 개 만들기'에서 다시 고를 수 있어요`, 'info', 5000);
     },
     // ── 공평성 리포트 (결정 1-90) — 간호사에게 보여 줄 수 있는 한 장: 이번 달과 직전 석 달의 야간·주말·공휴일 근무, 쉬는 날, 원티드 반영.
@@ -842,7 +894,7 @@ window.RedesignModule = function() {
       this.$nextTick ? this.$nextTick(on) : on();
     },
     get rdMakeLabel(){ return this.generating ? '만드는 중…' : (this.rdSched ? '다시 만들기' : '근무표 만들기'); },
-    get rdMakeTip(){ return this.rdSched ? (this.rdPreChanged?'고친 사전입력으로 새로 만듭니다. ':'')+'지금 표를 버리고 새로 만듭니다. 저장한 표는 불러오기에 남아 있어요.' : `사전입력을 지키면서 자동으로 채웁니다. ${this.feas&&this.feas.estimated_seconds ? this.rdEta(this.feas.estimated_seconds)+' 걸리고' : '몇 분 걸리고'} 중간에 멈출 수 있어요.`; },
+    get rdMakeTip(){ return this.rdSched ? (this.rdPreChanged?'고친 사전입력으로 새로 만듭니다. ':'')+'몇 개 만들지와 방향을 고른 뒤 새로 만듭니다. 저장한 표는 불러오기에 남아 있어요.' : `몇 개 만들지와 방향을 먼저 고릅니다. 사전입력을 지키면서 자동으로 채웁니다. ${this.feas&&this.feas.estimated_seconds ? this.rdEta(this.feas.estimated_seconds)+' 걸리고' : '몇 분 걸리고'} 중간에 멈출 수 있어요.`; },
 
     // ── 되돌리기 토스트 ──
     rdUndoToast(msg, undo=true){
@@ -1068,7 +1120,7 @@ window.RedesignModule = function() {
     isPrevMonthDay(day){ return day<new Date(this.year, this.month-1, 1); },
     rdIsPre(nid, day){ return !!this.getPrevShift(nid, day) && !this.isRelaxed(nid, day) && !this.isManuallyEdited(nid, day); },
     // 사전입력 툴바의 다음 단계 단추 — 근무표가 없으면 넘어가서 바로 만들고, 있으면 보여 주기만 한다 (만든 표를 말없이 버리지 않는다)
-    rdGoMake(){ this.activeTab='schedule'; if(!this.rdSched && !this.generating) this.generate(); },
+    rdGoMake(){ this.activeTab='schedule'; if(!this.rdSched && !this.generating) this.makeOpen(); },
 
     // ── 간호사 모달 보조 ──
     rdWdays: ['일','월','화','수','목','금','토'],

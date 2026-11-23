@@ -72,7 +72,7 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   a.multi.gap = 0.05; a.multi.cap = 10; a.multi.tables = [{ keys: [] }, { keys: ['oneoff', 'night.a'] }, { keys: ['rest.a'] }];
   a.allowPreRelax = true;
   const run = a.multiRun(); await sleep(10);
-  assert.equal(a.generating, true, '만드는 동안 다른 만들기는 막힌다'); assert.equal(a.multi.step, 2);
+  assert.equal(a.generating, true, '만드는 동안 다른 만들기는 막힌다'); assert.deepEqual([a.mk.count, a.mk.step], ['multi', 'run']);
   await run;
   assert.equal(calls.length, 3, '표마다 한 번 — 차이가 목표보다 커도(4.2% > 5% 아님) 이어 찾지 않는다');
   assert.deepEqual(calls.map(c => [c.mip_gap, c.time_limit, c.allow_pre_relax, 'warm_start' in c]), [[0.05, 600, true, false], [0.05, 600, true, false], [0.05, 600, true, false]]);
@@ -80,7 +80,7 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   assert.deepEqual([score(calls[1], 1), score(calls[1], 3), score(calls[1], 10), score(calls[1], 11), score(calls[1], 6), score(calls[1], 4)], [-400, -25, 300, 300, -40, -500]);
   assert.deepEqual([score(calls[2], 4), score(calls[2], 5), score(calls[2], 1)], [-1000, 15, -200]);
   assert.deepEqual(a.multi.results.map(r => r.state), ['done', 'done', 'fail']); assert.equal(a.multi.results[2].msg, '만들 수 없습니다');
-  assert.deepEqual([a.generating, a.multi.running, a.multi.step], [false, false, 3]);
+  assert.deepEqual([a.generating, a.multi.running, a.mk.step], [false, false, 'cmp']);
   assert.deepEqual(saved.map(s => [s.name, s.year, s.month]), [['12월 · 균형 (지금 설정 그대로)', 2026, 12], ['12월 · 야간 묶어서 + 1오프 줄이기', 2026, 12]]);
   assert.deepEqual(saved[1].schedule, S2);
   // 숫자 — 12/6 부터(지난달 표의 주는 뺀다). a: 4-1-4 인 1오프 하나(긴 근무 사이). b: 단독 야간 하나 · D D V E E 의 V 도 하루짜리 휴무
@@ -91,8 +91,8 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   assert.equal(a.multiBest('one', a.multi.results[1]), true); assert.equal(a.multiBest('one', a.multi.results[0]), false);
   assert.equal(a.multiBest('relaxed', a.multi.results[0]), false, '모두 같으면 표시하지 않는다');
   // ③ 고른 표를 연다 — 화면의 표·차이가 그 표의 것이 되고 자동저장본으로 삼는다. 이어 찾을 수 있게 그 표의 요청을 기억한다
-  a.multi.open = true; a.multiPick(1); await sleep(5);
-  assert.deepEqual(a.schedule, S2); assert.equal(a.mipGapPercent, 1.5); assert.deepEqual([a.multi.open, a.multi.picked, a.activeTab], [false, 1, 'schedule']);
+  a.makeViewMulti(); assert.deepEqual([a.mk.open, a.mk.step], [true, 'cmp']); a.multiPick(1); await sleep(5);
+  assert.deepEqual(a.schedule, S2); assert.equal(a.mipGapPercent, 1.5); assert.deepEqual([a.mk.open, a.multi.picked, a.activeTab], [false, 1, 'schedule']);
   assert.equal(score(a.contBase.payload, 1), -400, '더 찾기는 그 표의 방향 그대로');
   assert.equal(saved.at(-1).name, '자동저장 2026-12');
   a.multiPick(2); assert.equal(a.multi.picked, 1, '만들지 못한 표는 열지 않는다');
@@ -125,5 +125,25 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   assert.deepEqual([a.isNotWanted('a', d(11)), a.isWanted('a', d(11))], [false, true], '값이 바뀌면 다시 원티드');
   a.prevSchedule = { a: { [dk(10)]: 'OF', [dk(11)]: 'D' } }; a.toggleNotWanted('a', d(11));
   assert.deepEqual(a.notWanted, {}, '다시 누르면 푼다');
+}
+// 마법사에서 여러 개 (결정 1-93) — 몇 개 → 방향 → 시간 → 만드는 중 → 견주기. 지난번 고른 표들을 기억하고 '지난번처럼 만들기'로 다시 돈다
+{
+  store.clear();
+  const S = { a: row('D D D OF OF D D D OF OF D D'), b: row('N N OF OF D D E E OF OF D D') };
+  const { a, calls } = make([() => sleep(30).then(() => res(S)), res(S), res(S), res(S)]);
+  a.makeOpen(); assert.deepEqual([a.mk.step, a.mk.count], ['count', 'one']);
+  a.makePick('multi'); assert.deepEqual(a.makeSteps(), ['count', 'dir', 'time', 'run', 'cmp']);
+  a.multi.tables = [{ keys: [] }, { keys: ['oneoff'] }]; a.makeNext(); assert.equal(a.mk.step, 'time'); a.multi.gap = 0.05; a.multi.cap = 10;
+  a.makeStart(); await sleep(5); assert.equal(a.mk.step, 'run'); while (a.multi.running) await sleep(5);
+  assert.deepEqual([a.mk.step, calls.length, a.mk.open], ['cmp', 2, true]);
+  assert.equal(a.makeLastText, '여러 개 · 2장 (균형 / 1오프 줄이기)');
+  a.makeBack(); assert.equal(a.mk.step, 'dir', '견주기에서 방향을 바꿔 다시');
+  // 새로 열면 지난번 표들이 채워져 있고, 지난번처럼 만들기가 그대로 다시 만든다
+  a.multi.tables = [{ keys: [] }]; a.mk.open = false; a.makeOpen();
+  assert.deepEqual([a.mk.count, a.multi.tables.map(t => t.keys), a.multi.gap, a.multi.cap], ['multi', [[], ['oneoff']], 0.05, 10]);
+  a.makeAgain(); await sleep(5); while (a.multi.running) await sleep(5);
+  assert.equal(calls.length, 4);
+  // 만드는 중에 만들기를 누르면 진행 화면이 열린다
+  a.multi.running = true; a.mk.open = false; a.makeOpen(); assert.deepEqual([a.mk.open, a.mk.step], [true, 'run']); a.multi.running = false;
 }
 console.log('test_multi_make: OK');

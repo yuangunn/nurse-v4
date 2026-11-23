@@ -48,33 +48,41 @@ function make(results, hook) {
 const done = async (a) => { await sleep(5); while (a.generating) await sleep(5); await sleep(5); while (a.generating) await sleep(5); };
 const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
 
-// ① 이 달에 고른 적이 없으면 만들기가 먼저 묻는다 — 요청은 가지 않는다. 고르면 그대로 만든다
+// ① 만들기는 마법사에서 시작한다 (결정 1-93) — 몇 개 → 방향 → 찾는 시간. 고른 적이 없으면 generate() 도 요청을 보내지 않고 마법사를 연다
 {
   store.clear();
   const { a, calls } = make([res({ mip_gap_percent: 1 })]);
   await a.generate();
   assert.equal(calls.length, 0);
-  assert.deepEqual([a.genPref.open, a.genPref.make], [true, true]);
-  assert.deepEqual(a.genPref.draft, { night: 'mid', rest: 'mid', weekend: 'mid', time: 20, quick: true });
-  assert.equal(a.rdPrefSummary, '어떤 근무표를 원하세요?');
-  a.genPref.draft.night = 'a'; a.genPref.draft.time = 60; a.genPref.draft.quick = false;   // 초안 먼저(1-89)를 끄면 고른 시간 그대로
-  a.genPrefSave(); await done(a);
-  assert.equal(a.genPref.open, false);
+  assert.deepEqual([a.mk.open, a.mk.step, a.mk.count], [true, 'count', 'one']);
+  assert.deepEqual([a.mk.keys, a.mk.time, a.mk.quick], [[], 20, true]);
+  assert.equal(a.rdPrefSummary, ''); assert.equal(a.makeLastText, '', '처음에는 지난번처럼 만들기가 없다');
+  assert.deepEqual(a.makeSteps(), ['count', 'dir', 'time']);
+  a.makePick('one'); assert.equal(a.mk.step, 'dir');
+  a.makeToggle('night.a'); assert.equal(a.makeClash('night.b'), '야간 묶어서'); a.makeToggle('night.b'); assert.deepEqual(a.mk.keys, ['night.a'], '부딪히는 방향은 켜지지 않는다');
+  assert.match(a.makeDirHint, /^야간 묶어서 — /);
+  a.makeNext(); assert.equal(a.mk.step, 'time'); a.makeBack(); assert.equal(a.mk.step, 'dir'); a.makeNext();
+  a.mk.time = 60; a.mk.quick = false;   // 초안 먼저(1-89)를 끄면 고른 시간 그대로
+  a.makeStart(); await done(a);
+  assert.equal(a.mk.open, false);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].time_limit, 3600, '고른 시간으로');
   assert.deepEqual([score(calls[0], 1), score(calls[0], 2), score(calls[0], 3)], [-400, 30, -25], '묶어서 — 단독 나이트·연속 야간 ×2, 야간 공평 ×0.5');
   assert.deepEqual([score(calls[0], 4), score(calls[0], 9)], [-500, 20], '다른 규칙은 그대로');
   assert.equal(a.scoringRules[0].score, -200, '설정의 값은 바꾸지 않는다');
-  assert.equal(a.rdPrefSummary, '묶어서 · 60분');
-  // 같은 달에 다시 만들면 묻지 않는다
+  assert.equal(a.rdPrefSummary, '야간 묶어서 · 60분'); assert.equal(a.makeLastText, '하나만 · 야간 묶어서 · 60분');
+  // 같은 달에 다시 — 단추는 늘 마법사를 열고, 지난번 고른 것이 채워져 있다. '지난번처럼 만들기'는 바로 시작한다
   const { a: b, calls: c2 } = make([res({ mip_gap_percent: 1 })]);
-  await b.generate(); await done(b);
-  assert.deepEqual([b.genPref.open, c2.length], [false, 1]);
-  // 다른 달은 다시 묻고, 지난번 고른 것에서 시작한다
+  b.makeOpen(); assert.deepEqual([b.mk.open, b.mk.step, b.mk.count, b.mk.keys, b.mk.time, b.mk.quick], [true, 'count', 'one', ['night.a'], 60, false]);
+  b.makeAgain(); await done(b);
+  assert.deepEqual([b.mk.open, c2.length, c2[0].time_limit], [false, 1, 3600]);
+  // 다른 달은 그 달에 고른 것이 없다 — 지난번 고른 것에서 시작한다
   const { a: c, calls: c3 } = make([res({ mip_gap_percent: 1 })]);
   c.month = 11; await c.generate();
-  assert.deepEqual([c.genPref.open, c3.length], [true, 0]);
-  assert.deepEqual(c.genPref.draft, { night: 'a', rest: 'mid', weekend: 'mid', time: 60, quick: false });
+  assert.deepEqual([c.mk.open, c3.length], [true, 0]);
+  assert.deepEqual([c.mk.keys, c.mk.time, c.mk.quick], [['night.a'], 60, false]);
+  // 1오프 줄이기는 하나만 만들 때도 고를 수 있다 — 연속 휴일 길게와는 함께 못 고른다
+  c.makePick('one'); c.makeToggle('oneoff'); assert.deepEqual(c.mk.keys, ['night.a', 'oneoff']); assert.equal(c.makeClash('rest.b'), '1오프 줄이기');
 }
 // ② 모두 균형이면 규칙을 싣지 않는다(서버가 설정 값을 쓴다) · 손으로 고친 값 위에 곱한다 · 양쪽이 같은 규칙을 건드리면 곱이 쌓인다
 {
@@ -89,10 +97,10 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   assert.deepEqual([s(5), s(6), s(4)], [90, -40, -250], '연속 휴일 길게');
   assert.deepEqual([s(7), s(8)], [-90, 25], '주말 근무를 고르게');
   assert.equal(p.mip_gap, undefined);
-  assert.equal(a.rdPrefSummary, '사람마다 고르게 · 연속 휴일 길게 · 근무를 고르게 · 20분');
+  assert.equal(a.rdPrefSummary, '야간 고르게 + 연속 휴일 길게 + 주말 근무 고르게 · 20분');   // 옛 저장 값(세 축)도 키워드로 읽는다
   // 저장한 값이 망가져 있어도 기본으로 읽는다
   store.set(a._genPrefKey(), JSON.stringify({ quick: false, night: 'x', time: 999 }));
-  assert.deepEqual(a.genPrefGet(), { night: 'mid', rest: 'mid', weekend: 'mid', time: 20, quick: false });
+  assert.deepEqual(a.genPrefGet(), { keys: [], time: 20, quick: false });
 }
 // ③ 멈출 때까지 계속 — 끝날 때마다 그 표에서 다시 잇는다 (오차 0). 더 좋은 표가 없어도 잇고, 가장 좋은 표(차이 0.1% 안)면 끝난다.
 //    이어 찾는 동안 계산 현황·걸린 시간·찾은 표 수는 이어 간다
@@ -163,8 +171,8 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   const css = fs.readFileSync(new URL('../frontend/css/redesign-bridge.css', import.meta.url), 'utf8');
   const html = fs.readFileSync(new URL('../frontend/index.html', import.meta.url), 'utf8');
   assert.equal(/^\.rpref\s*\{/m.test(css), false, '.rpref 에 창 크기를 주지 않는다');
-  assert.match(css, /^\.rgenpref\s*\{[^}]*width:\s*600px/m);
-  assert.match(html, /class="rmodal rgenpref"/);
+  assert.match(html, /data-rd="make"[^>]*>\s*<div class="rmodal rmulti"/, '만들기 마법사는 여러 개 만들기 창의 크기를 쓴다 (선택 창은 없어졌다)');
+  assert.equal(/rgenpref|genPref\.|multi\.open|multi\.step/.test(html), false, '옛 창의 상태를 참조하는 곳이 남으면 안 된다');
   assert.match(html, /<div class="rpref"/, '간호사 창 근무 성향 줄은 .rpref 그대로');
 }
 console.log('test_gen_pref: OK');

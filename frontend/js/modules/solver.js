@@ -16,7 +16,7 @@ window.SolverModule = function() {
       if(this.nurses.length===0){this.toast('간호사를 먼저 등록해주세요','error');return}
       const {_readjust,_cont,...payloadPatch}=patch||{};
       // 이 달에 어떤 표를 원하는지 고른 적이 없으면 먼저 묻는다 (결정 1-77) — 고르면 그 창이 다시 generate() 를 부른다
-      if(!patch&&!this.genPrefGet()){this.genPrefOpen(true);return}
+      if(!patch&&!this.genPrefGet()){this.makeOpen();return}
       // 초안 먼저 (결정 1-89) — 새로 만들 때 첫 찾기를 짧게(90초) 끝내 표를 먼저 보이고, 그 표에서 고른 시간만큼 이어 찾는다
       const draft=!patch&&(this.genPrefGet()||{}).quick!==false;
       if(this._recoverPoll){clearInterval(this._recoverPoll);this._recoverPoll=null}
@@ -29,7 +29,7 @@ window.SolverModule = function() {
       this.solverLogs=[];this._logSeq=0;this.cellWhy={};
       // 이어 찾기는 앞 찾기의 계산 현황·걸린 시간을 이어 간다 — 지우면 표가 나온 뒤 처음부터 다시 찾는 것처럼 보였다 (결정 1-77)
       if(_cont){this.genRound++;this.genElapsedBase+=this.generateFinalElapsed||0}
-      else{this.genDraftMore=false;this._solveReset();this.story.open=false;this.loadedSavedId=null;this.genRound=1;this.genElapsedBase=0;this.genRounds=[];this.genEndless=!_readjust&&(this.genPrefGet()||{}).time==='endless'}
+      else{this.genDraftMore=false;this.genFirst=null;this._solveReset();this.story.open=false;this.loadedSavedId=null;this.genRound=1;this.genElapsedBase=0;this.genRounds=[];this.genEndless=!_readjust&&(this.genPrefGet()||{}).time==='endless'}
       this.sseSource=new EventSource('/api/generate/stream');
       this.sseSource.onmessage=(e)=>{
         const data=JSON.parse(e.data);
@@ -62,6 +62,8 @@ window.SolverModule = function() {
         this.loadFairnessLedger&&this.loadFairnessLedger();
         // 13단계 진단이 짚은 셀 좌표 → 정밀분석과 동일한 '충돌 위치로 이동' 칩 표시
         if(!result.success&&((Array.isArray(result.anchored)&&result.anchored.length)||result.summary)){this.diagResult={anchored:result.anchored||[],summary:result.summary||''}}
+        // 이번 만들기에서 처음 나온 표 — 더 찾은 표와 견준다 (결정 1-94). 손으로 고쳐도 바뀌지 않게 사본으로
+        if(result.success&&!_cont&&!_readjust)this.genFirst=JSON.parse(JSON.stringify({schedule:result.schedule||{},extended_schedule:result.extended_schedule||{},relaxed_cells:result.relaxed_cells||{},mip_gap_percent:result.mip_gap_percent??null,sec:this.generateElapsed||0}));
         if(result.success){const oldRx=this.relaxedCells;this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=_readjust?this._wishRelaxed(oldRx,result.relaxed_cells):(result.relaxed_cells||{});this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.managerCheck||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':((this.managerCheck||[]).length?'warn':(this.vReport&&this.vReport.total?'v':'summary'));this.rdDoneAt=new Date();this.activeTab='schedule';this._autoSaveSchedule();   // 생성 성공 시 자동 저장 (같은 달 자동저장본 하나만)
           if(result.stopped)this.statusMessage+='\n⏹ 중지 요청으로 탐색 종료 — 현재까지 찾은 최선의 해를 표시합니다.';
           // 완화된 셀 상세 메시지
@@ -86,7 +88,8 @@ window.SolverModule = function() {
           if(result.warning){this.statusMessage=result.warning+'\n\n'+this.statusMessage;this.statusOk=false}
           if(_readjust)this.contBase=null;else this._setContBase(payload,result);   // '이 표에서 더 찾기'가 이을 문제 — 멈춘 표·이어 찾은 표도 같다 (다시 맞춘 표는 다른 문제)
           if(_cont){this.statusMessage+=`\n\n🔁 이어 찾기로 더 좋은 표를 찾아 바꿔 저장했습니다${_cont.gap!=null&&this.mipGapPercent!=null?` (가장 좋은 답과 ${_cont.gap}% → ${this.mipGapPercent}% 차이)`:''}.`;
-            this.toast(`더 좋은 표를 찾아 바꿨습니다${_cont.gap!=null&&this.mipGapPercent!=null?` — 가장 좋은 답과 ${_cont.gap}% → ${this.mipGapPercent}% 차이`:''}`,'info',6000)}
+            const dc=this.rdDraftCmp;
+            this.toast(`더 좋은 표를 찾아 바꿨습니다${_cont.gap!=null&&this.mipGapPercent!=null?` — 가장 좋은 답과 ${_cont.gap}% → ${this.mipGapPercent}% 차이`:''}${dc?` · 처음 표와 ${dc.cells}칸 다름`:''}`,'info',6000)}
           else if(!_readjust&&!this.stopRequested&&this._wantsContinue(result)){
             const fullMin=Math.max(1,Math.min(60,parseInt(this.generateTimeout)||20));
             this.statusMessage+=draft
