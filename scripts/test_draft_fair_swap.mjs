@@ -86,7 +86,7 @@ const gens = (calls) => calls.filter(c => c.path === '/api/generate').map(c => c
   const gap = dc.rows.find(r => r.key === 'gap'); assert.deepEqual([gap.a, gap.b], [26, a.mipGapPercent]);
   assert.ok(toasts.some(m => /더 좋은 표를 찾아 바꿨습니다.*처음 표와 \d+칸 다름/.test(m)), toasts.join(' | '));
   const step = a.rdStorySteps.find(s => s.id === 'draft'); assert.ok(step, '결과 요약에 처음 표와 견주기 단계');
-  assert.equal(step.facts[0][0], '달라진 칸'); assert.match(step.facts.find(f => f[0] === '최고와의 차이(%)')[1], /^26 → .* ▼$/);
+  assert.equal(step.facts[0][0], '달라진 칸'); assert.match(step.facts.find(f => f[0] === '최고와의 차이(%)')[1], /^26 → .* · 나아짐$/);
   // 강조 — 처음 표와 달라진 칸
   const nurseC = a.nurses.find(n => n.id === 'c'), R = a._hlRow(nurseC), M = a._hlMarks(R.row, R);
   assert.equal(M.count.draftDiff, R.df.filter(Boolean).length); assert.equal(M.count.draftDiff, dc.cells);

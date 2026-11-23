@@ -420,7 +420,7 @@ window.RedesignModule = function() {
       if(dc){ const fs=v=>v==null ? '—' : v, t0=dc.sec>=60 ? `${Math.floor(dc.sec/60)}분 ${dc.sec%60}초` : `${dc.sec}초`;
         steps.push({id:'draft', eyebrow:'처음 표와 견주기', title: dc.better ? `처음 표보다 ${dc.better}가지가 나아졌어요` : '처음 표와 숫자는 비슷해요',
           sub:`처음 표는 ${t0} 만에 나왔고, 그 뒤 더 찾아 바꾼 것이 지금 표입니다. 숫자는 모두 작을수록 좋습니다.${dc.worse ? ' 점수 전체로는 나아졌지만 나빠진 항목도 있습니다.' : ''}`,
-          facts:[['달라진 칸', `${dc.cells}칸 · ${dc.who}명`], ...dc.rows.map(r=>[r.label, r.a===r.b ? `${fs(r.b)} (그대로)` : `${fs(r.a)} → ${fs(r.b)}${r.a!=null&&r.b!=null ? (r.b<r.a ? ' ▼' : ' ▲') : ''}`])]}); }
+          facts:[['달라진 칸', `${dc.cells}칸 · ${dc.who}명`], ...dc.rows.map(r=>[r.label, r.a===r.b ? `${fs(r.b)} (그대로)` : `${fs(r.a)} → ${fs(r.b)}${r.a!=null&&r.b!=null ? (r.b<r.a ? ' · 나아짐' : ' · 나빠짐') : ''}`])]}); }
       const pre=this.rdWantedCount, rx=this.rdRelaxedCount, tc=this.rdTraineeChanged, keptN=Math.max(pre-this.rdWantedRelaxed-tc, 0);
       // 표 아래 '배정 / 필요' 줄과 같은 셈 — 날짜별로 고친 필요 인원(rdFootNeed)과 견준다
       const rowsDEN=(this.footerRows||[]).filter(r=>['D','E','N'].includes(r.label));
