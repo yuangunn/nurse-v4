@@ -43,6 +43,7 @@ const gens = (calls) => calls.filter(c => c.path === '/api/generate');
   a._genPrefStore({}); await a.generate(); await sleep(60);
   assert.deepEqual([a.verLog.map(v => v.n), a.verCur, a.verLast, a.verPinned], [[1, 2], 2, 2, false]);
   assert.deepEqual(a.schedule, S2); assert.deepEqual(a.verLog[0].result.schedule, S1);
+  assert.equal(a.verChipSub({ sec: 17, gap: 606.89 }), '17초 · 최고와 차이 큼');
   assert.equal(a.verChipName(a.verLog[0]), '1번 · 초안'); assert.equal(a.verChipName(a.verLog[1]), '2번 · 최신'); assert.match(a.verChipSub(a.verLog[0]), /최고와 26% 차이/);
   a.verShow(1);
   assert.deepEqual(a.schedule, S1); assert.deepEqual([a.verCur, a.verPinned, a.mipGapPercent, a.rdSaved], [1, true, 26, false]);
@@ -154,5 +155,39 @@ const gens = (calls) => calls.filter(c => c.path === '/api/generate');
   b.verShow(1); assert.deepEqual([b.verCur, b.verCmp.on, b.verCmpAVal], [1, true, 's40']);
   await b.verCmpPickA('v1'); assert.deepEqual([b.verCur, b.verCmp.saved, b.verCmp.on], [1, null, false]);   // 1번을 보는 중엔 1번이 앞 표가 될 수 없다(번호는 화면보다 앞이어야 한다) — 견주기가 꺼진다
   b.verShow(2); b.verCmpToggle(); assert.deepEqual([b.verCmp.on, b.verCmpAVal], [true, 'v1']);
+}
+// ⑧ 찾는 도중의 표 (결정 1-97) — 서버가 보낸 표에 번호를 붙여 남기고 화면이 따라간다. 같은 표는 번호를 늘리지 않고, 끝난 표가 같으면 내용만 바꾼다
+{
+  store.clear();
+  let fire = null;
+  const part = (sched, extra = {}) => ({ success: true, partial: true, stage: 'score', schedule: JSON.parse(JSON.stringify(sched)), extended_schedule: {}, relaxed_cells: {}, nurse_scores: {}, nurse_score_details: {}, mip_gap_percent: 30, message: '찾는 도중에 나온 표입니다.', ...extra });
+  const { a } = make(async (path) => { if (path !== '/api/generate') return {};
+    fire(part(S1, { stage: 'keep', mip_gap_percent: null })); fire(part(S1, { stage: 'keep', mip_gap_percent: null })); await sleep(5);   // 같은 표가 또 오면 무시
+    assert.deepEqual([a.verLog.map(v => v.n), a.verCur, a.generating, a.rdSolveCompact], [[1], 1, true, true]); assert.deepEqual(a.schedule, S1);
+    assert.equal(a.rdMidFacts[0][1], '1번', '차이를 모르는 표는 번호만'); assert.equal(a.rdMidFacts.some(f => f[0] === '이어 찾기'), false, '첫 찾기');
+    fire(part(S2)); await sleep(5);
+    assert.deepEqual([a.verLog.map(v => v.n), a.verCur], [[1, 2], 2]); assert.deepEqual(a.schedule, S2);
+    fire(part(S1, { stage: 'keep' })); await sleep(5); assert.equal(a.verLog.length, 2, '점수 단계의 표가 나온 뒤에는 사전입력 지키기 단계의 표를 받지 않는다');
+    return res(S2, 1.5); });                                                                 // 끝난 표 = 2번과 같은 표
+  a.EventSource = null; global.EventSource = class { constructor() { fire = (t) => this.onmessage({ data: JSON.stringify({ type: 'table', table: t }) }); } close() {} };
+  let opened = 0; a.rdStoryOpen = () => { opened++; };
+  a._genPrefStore({ quick: false }); await a.generate(); await sleep(40);
+  assert.deepEqual([a.verLog.map(v => v.n), a.verCur, a.verLog[1].gap, !!a.verLog[1].result.partial], [[1, 2], 2, 1.5, false], '끝난 표가 같으면 번호는 그대로, 내용만 끝난 것으로');
+  assert.equal(opened, 1); assert.equal(a.generating, false);
+
+  // 찾는 도중의 표를 손으로 고쳤으면 다음 표가 와도 화면은 그대로 — 끝난 표도 번호로만 남고 고친 표로 돌아온다
+  let n = 0;
+  const { a: b } = make(async (path) => { if (path !== '/api/generate') return {};
+    fire(part(S1)); await sleep(5); b.schedule = { ...b.schedule, a: { ...b.schedule.a, [dk(6)]: 'E' } };
+    fire(part(S2)); await sleep(5);
+    assert.deepEqual([b.verLog.map(v => v.n), b.verCur, b.schedule.a[dk(6)], b.rdToast && b.rdToast.act], [[1, 2], 1, 'E', '보기']);
+    return res(S3, 1.2); });
+  let opened2 = 0; b.rdStoryOpen = () => { opened2++; };
+  b._genPrefStore({ quick: false }); await b.generate(); await sleep(40);
+  assert.deepEqual([b.verLog.map(v => v.n), b.verCur, b.schedule.a[dk(6)], b.verFresh, opened2], [[1, 2, 3], 1, 'E', [3], 0]);
+  assert.equal(b.getManualEditCount(), 1); assert.match(b.rdToast.msg, /3번 표가 나왔습니다/);
+  // 다시 맞추기(고친 대로)·여러 개 만들기 중에는 받지 않는다
+  b.generating = true; b.multi.running = true; b._verPartial(part(S2), { year: 2026, month: 12 }, false); assert.equal(b.verLog.length, 3); b.multi.running = false; b.generating = false;
+  b._verPartial(part(S2), { year: 2026, month: 12 }, false); assert.equal(b.verLog.length, 3, '만드는 중이 아니면 무시');
 }
 console.log('test_table_history: OK');

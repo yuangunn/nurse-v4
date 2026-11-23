@@ -84,6 +84,83 @@ try:
          "💡 중지 신호로 탐색이 종료되었습니다."),
     ]
 
+    def _start_partial_watch(h, builder, snap):
+        """찾는 도중의 표 (결정 1-97) — HiGHS 가 더 나은 답을 낼 때마다 파일 끝에 덧붙이게 하고(mip_improving_solution_file),
+        그 파일을 지켜보다 새 답이 다 적히면 표로 바꿔 SSE 로 보낸다. 끝낼 때 부를 함수를 돌려준다.
+        콜백(cbMipImprovingSolution)이 주는 답은 줄인 문제의 값이라 쓸 수 없다 — 파일의 답만 원래 변수 차례다 (highspy 1.8.1)."""
+        if builder is None:
+            return lambda: None
+        import os, tempfile, threading, time as _time
+        try:
+            fd, path = tempfile.mkstemp(prefix="nsv4-sol-", suffix=".txt")
+            os.close(fd)
+            h.setOptionValue("mip_improving_solution_file", path)
+            ncol = int(h.getNumCol())
+        except Exception:
+            return lambda: None
+        stop = threading.Event()
+
+        def last_block(text):
+            """파일에 새로 적힌 글에서 마지막으로 **다 적힌** 답 — (목적값, 값들). 없으면 None."""
+            i = text.rfind("Objective ")
+            while i >= 0:
+                lines = text[i:].split("\n")
+                vals = [0.0] * ncol
+                seen = 0
+                for ln in lines[1:]:
+                    if ln.startswith("C"):
+                        k, _, v = ln[1:].partition(" ")
+                        try:
+                            vals[int(k)] = float(v)
+                            seen += 1
+                        except (ValueError, IndexError):
+                            break
+                if seen >= ncol:
+                    try:
+                        return float(lines[0].split()[1]), vals
+                    except (ValueError, IndexError):
+                        return None, vals
+                i = text.rfind("Objective ", 0, i)      # 마지막 것이 아직 적히는 중 — 그 앞의 것
+            return None
+
+        def watch():
+            offset, last_emit = 0, None      # 첫 표는 바로 보낸다 (단조 시계는 0 에서 시작할 수 있다)
+            while not stop.wait(0.7):
+                try:
+                    size = os.path.getsize(path)
+                    if size <= offset or (last_emit is not None and _time.monotonic() - last_emit < solver_progress.PARTIAL_MIN_GAP_SEC):
+                        continue
+                    with open(path, "r") as f:
+                        f.seek(offset)
+                        text = f.read()
+                    got = last_block(text)
+                    if not got:
+                        continue
+                    offset = size
+                    table = builder(got[1])
+                    import math
+                    gap = snap.get("gap")
+                    table["objective"] = got[0]
+                    # 사전입력 지키기 단계(keep)의 차이는 다른 목적식의 것이라 싣지 않는다
+                    table["mip_gap_percent"] = (round(gap * 100, 2) if gap is not None and math.isfinite(gap)
+                                                and table.get("stage") != "keep" else None)
+                    solver_progress.push_table(table)
+                    last_emit = _time.monotonic()
+                except Exception as e:      # 표를 못 보내도 풀이는 계속된다
+                    logger.debug("partial table skipped: %s", e)
+
+        th = threading.Thread(target=watch, name="nsv4-partial", daemon=True)
+        th.start()
+
+        def finish():
+            stop.set()
+            th.join(timeout=2)
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        return finish
+
     class _TrackableHighs(_OrigHighs):
         def run(self):
             global _last_mip_gap, _log_queue
@@ -132,10 +209,12 @@ try:
                     pass
             _hadapter = _HighsAdapter(self, snap, fp)
             solver_progress.register(_hadapter)
+            _partial_stop = _start_partial_watch(self, solver_progress.take_partial_builder(), snap)
             try:
                 result = super().run()
                 return result
             finally:
+                _partial_stop()
                 try:
                     status, gap = super().getInfoValue("mip_gap")
                     if status.value == 0:  # kOk

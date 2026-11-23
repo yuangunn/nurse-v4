@@ -162,7 +162,7 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   a.rdContinue(); await done(a);
   assert.equal(calls.length, 2, '사람이 누른 더 찾기는 한 번만');
   assert.equal(calls[1].mip_gap, 0.02);
-  assert.deepEqual(mid.facts, [['지금 화면의 표', '가능한 최고와 1.5% 차이'], ['지금까지 찾은 표', '0개'], ['이어 찾기', '1번째'], ['처음부터', '1분 35초']]);
+  assert.deepEqual(mid.facts, [['지금 화면의 표', '1번 · 가능한 최고와 1.5% 차이'], ['지금까지 찾은 표', '0개'], ['이어 찾기', '1번째'], ['처음부터', '1분 35초']]);
   assert.match(mid.status, /찾는 중 \(1번째 이어 찾기\)/);
   assert.equal(mid.story[mid.story.length - 1], '지금 표는 이렇습니다');
 }

@@ -119,11 +119,58 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         return {"success": False, "schedule": {}, "extended_schedule": {},
                 "message": "중지 요청으로 멈췄습니다 — 그때까지 찾은 표가 없습니다."}
 
-    def _warm_highs(self, x, start=None, **kw) -> "_WarmHiGHS":
+    def _warm_highs(self, x, start=None, stage="score", **kw) -> "_WarmHiGHS":
         """HiGHS 솔버 — 시작해는 start(완화 1단계의 해), 없으면 이어 찾기의 앞 표 (둘 다 없으면 보통 pulp.HiGHS 와 같다)."""
         if not start and self.warm_start:
             start = self._mip_start_pairs(x, lambda v: isinstance(v, pulp.LpVariable))
+        try:   # 찾는 도중의 표 (결정 1-97) — 이 풀이가 더 나은 답을 낼 때마다 표로 바꿔 보낼 함수를 맡긴다
+            from . import solver_progress as _sp
+            _sp.set_partial_builder(lambda vals: {**self._partial_table(x, vals), "stage": stage})
+        except Exception:
+            pass
         return _WarmHiGHS(start=start, msg=False, **kw)
+
+    def _partial_table(self, x, vals) -> Dict:
+        """솔버가 낸 답(변수 번호 차례의 값)을 근무표로 — 끝난 풀이와 같은 길(_extract_solution)에 값 읽기만 바꾼다.
+        변수 번호는 pulp 가 모델을 실을 때 붙인다(var.index). 완화 풀이면 풀린 칸도 같이 센다."""
+        n = len(vals)
+
+        def val(v):
+            i = getattr(v, "index", None)
+            return vals[i] if i is not None and i < n else 0
+
+        schedule, extended = self._extract_solution(x, val)
+        nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
+        relaxed = self._relaxed_cells_of(schedule)[0] if self.allow_pre_relax else {}
+        return {"success": True, "partial": True, "schedule": schedule, "extended_schedule": extended,
+                "nurse_scores": nurse_scores, "nurse_score_details": nurse_score_details, "relaxed_cells": relaxed,
+                "message": "찾는 도중에 나온 표입니다."}
+
+    def _relaxed_cells_of(self, schedule):
+        """사전입력과 다르게 배정된 칸 — (풀린 칸, 그 가운데 휴무 수, 차지 승격 수). PRE_FLEX 안의 변환은 승격으로 따로 센다."""
+        relaxed_cells: Dict[str, Dict[str, Dict[str, object]]] = {}
+        timeoff_changed = 0
+        charge_promotions = 0
+        for nid, days in self.prev.items():
+            for dt_str, pre_shift in days.items():
+                assigned = schedule.get(nid, {}).get(dt_str)
+                if assigned and assigned != pre_shift:
+                    pre_flex = self._PRE_FLEX.get(pre_shift, {pre_shift})
+                    if assigned not in pre_flex:
+                        is_timeoff = timeoff_class(pre_shift) != "work"
+                        if is_timeoff:
+                            timeoff_changed += 1
+                        relaxed_cells.setdefault(nid, {})[dt_str] = {
+                            "original": pre_shift,
+                            "assigned": assigned,
+                            "is_timeoff": is_timeoff,
+                        }
+                    else:
+                        # D→DC, E→EC 차지 자동승격 — 변경은 아니지만 표가
+                        # 입력과 달라지므로 별도 집계해 사용자에게 알린다
+                        charge_promotions += 1
+        self._flex_relaxed(schedule, relaxed_cells)    # 못 지킨 원티드 D/E·N제외 (근무)
+        return relaxed_cells, timeoff_changed, charge_promotions
 
     def _c_juhu_block_dow(self, prob, x):
         """주휴를 재배치할 때도 **한 블록(4주기) 안에서는 같은 요일**을 지킨다.
@@ -626,7 +673,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             if lr:
                 bonus_expr = bonus_expr - pulp.lpSum(pen * sl for pen, sl in lr)
             prob.setObjective(bonus_expr)
-            stage1 = self._warm_highs(x, timeLimit=max(30, int(self.time_limit) // 3), mip_rel_gap=0.0)
+            stage1 = self._warm_highs(x, stage="keep", timeLimit=max(30, int(self.time_limit) // 3), mip_rel_gap=0.0)
             try:
                 prob.solve(stage1)
             except Exception:
@@ -699,28 +746,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             nurse_scores, nurse_score_details = self._compute_nurse_scores(schedule)
 
             # 사전입력과 다르게 배정된 셀 찾기 (PRE_FLEX 내 변환은 승격으로 분리 집계)
-            relaxed_cells: Dict[str, Dict[str, Dict[str, object]]] = {}
-            timeoff_changed = 0
-            charge_promotions = 0
-            for nid, days in self.prev.items():
-                for dt_str, pre_shift in days.items():
-                    assigned = schedule.get(nid, {}).get(dt_str)
-                    if assigned and assigned != pre_shift:
-                        pre_flex = self._PRE_FLEX.get(pre_shift, {pre_shift})
-                        if assigned not in pre_flex:
-                            is_timeoff = timeoff_class(pre_shift) != "work"
-                            if is_timeoff:
-                                timeoff_changed += 1
-                            relaxed_cells.setdefault(nid, {})[dt_str] = {
-                                "original": pre_shift,
-                                "assigned": assigned,
-                                "is_timeoff": is_timeoff,
-                            }
-                        else:
-                            # D→DC, E→EC 차지 자동승격 — 변경은 아니지만 표가
-                            # 입력과 달라지므로 별도 집계해 사용자에게 알린다
-                            charge_promotions += 1
-            self._flex_relaxed(schedule, relaxed_cells)    # 못 지킨 원티드 D/E·N제외 (근무)
+            relaxed_cells, timeoff_changed, charge_promotions = self._relaxed_cells_of(schedule)
 
             label = "중지" if stopped else self._status_label(prob, status_str)
             relax_count = sum(len(v) for v in relaxed_cells.values())

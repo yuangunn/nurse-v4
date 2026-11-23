@@ -169,6 +169,36 @@ def end():
             pass
 
 
+# ── 찾는 도중의 표 (결정 1-97) — 엔진이 더 나은 답을 낼 때마다 그 답을 근무표로 바꿔 화면에 보낸다.
+# 스케줄러가 풀기 직전에 '값 → 표' 함수를 맡기고(set), 솔버 실행이 한 번 가져간다(take — 진단용 작은 풀이들이 쓰지 않게).
+_partial_fn = None
+PARTIAL_MIN_GAP_SEC = 4.0      # 표를 이보다 자주 보내지 않는다 (몰려서 나올 때 화면이 계속 바뀌지 않게)
+
+
+def set_partial_builder(fn) -> None:
+    global _partial_fn
+    with _lock:
+        _partial_fn = None if in_race_thread() else fn    # 레이스는 두 엔진의 표가 섞인다 — 보내지 않는다
+
+
+def take_partial_builder():
+    global _partial_fn
+    with _lock:
+        fn, _partial_fn = _partial_fn, None
+        return fn
+
+
+def push_table(table: dict) -> None:
+    """찾는 도중의 표 하나를 SSE 로 (생성이 돌고 있고 멈추라는 신호가 없을 때만)."""
+    if not table or not _running or _cancelled:
+        return
+    log_queue.put({"type": "table", "table": table})
+
+
+def in_race_thread() -> bool:
+    return getattr(_tls, "gen", None) is not None
+
+
 def bind_thread():
     """지금 스레드를 이번 생성에 묶는다 (레이스 엔진 스레드) — 생성이 끝난 뒤 이 스레드가 여는 풀이는
     register 가 곧바로 취소하고, was_cancel_all 이 참이라 후속 풀이를 시작하지 않는다."""
