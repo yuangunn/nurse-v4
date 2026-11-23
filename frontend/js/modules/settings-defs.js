@@ -172,27 +172,29 @@ window.SettingsDefsModule = function() {
       ['longOff','근무 4 + 1오프 + 근무 4','1오프의 앞뒤 근무를 합쳐 8일 이상 — 4-1-4 · 5-1-3 · 5-1-5 같은 모양. 앞뒤 근무까지 함께 표시합니다','휴무'],
       ['nightRest1','야간 뒤 하루만 쉬고 근무','야간 다음에 하루만 쉬고 다시 근무하는 곳의 그 쉬는 날','휴무'],
       ['juhuAlone','혼자인 주휴','앞뒤에 쉬는 날이 붙지 않은 주휴','휴무'], ['longRest','3일 이상 휴무','쉬는 날이 사흘 넘게 붙은 곳','휴무'],
-      ['pongdang','퐁당퐁당','하루 근무·하루 휴무가 번갈아 나흘 넘게 이어지는 구간','그 밖에'], ['edited','손으로 고친 칸','근무표를 만든 뒤 직접 바꾼 칸','그 밖에']]; },
+      ['pongdang','퐁당퐁당','하루 근무·하루 휴무가 번갈아 나흘 넘게 이어지는 구간','그 밖에'], ['edited','손으로 고친 칸','근무표를 만든 뒤 직접 바꾼 칸','그 밖에'],
+      ['draftDiff','처음 표와 달라진 칸','이번 만들기에서 처음 나온 표(초안)와 근무가 다른 칸 — 더 찾아서 바뀐 곳','그 밖에']]; },
     rdHlGroups(){ const g=[]; for(const h of this.rdHlDefs()){ const last=g[g.length-1]; if(last&&last.name===h[3])last.items.push(h); else g.push({name:h[3],items:[h]}); } return g; },
     get rdHlOn(){ return Object.values(this.viewHl||{}).some(Boolean); },
     // 한 줄을 근무(W)·야간 근무(N)·쉬는 날(R)·빈칸('')으로, 날마다 곁들일 것(주휴인가·주말·공휴일인가·손으로 고쳤나)과 함께
     _hlRow(nurse){
-      const row=[], juhu=[], wk=[], ed=[];
+      const row=[], juhu=[], wk=[], ed=[], df=[];
       for(const d of this.scheduleDays){
         const s=this.isNurseInactive(nurse,d)?'':this._getShift(nurse.id,d), p=s&&s!=='-'?(this.shiftMap.get(s)||{}).period:'';
         row.push(!p?'':(p==='rest'||p==='leave'?'R':(p==='night'?'N':'W'))); juhu.push(s==='주');
-        wk.push(d.getDay()===0||d.getDay()===6||this.isHoliday(d)); ed.push(!!this.isManuallyEdited(nurse.id,d));
+        wk.push(d.getDay()===0||d.getDay()===6||this.isHoliday(d)); ed.push(!!this.isManuallyEdited(nurse.id,d)); df.push(!!(this.genFirst&&this.isDraftDiff(nurse.id,d)));
       }
-      return {row, juhu, wk, ed};
+      return {row, juhu, wk, ed, df};
     },
     // 날마다 걸리는 표시들 — out[i] = [표시 이름…], count = {표시: 건수}. 통째로 표시하는 것(긴 근무 사이 1오프·연속 근무·연속 야간·긴 휴무·퐁당퐁당)은 묶음 하나가 한 건
     _hlMarks(row, x){
-      const n=row.length, w=i=>row[i]==='W'||row[i]==='N', juhu=(x&&x.juhu)||[], wk=(x&&x.wk)||[], ed=(x&&x.ed)||[], out=row.map(()=>[]), count={};
+      const n=row.length, w=i=>row[i]==='W'||row[i]==='N', juhu=(x&&x.juhu)||[], wk=(x&&x.wk)||[], ed=(x&&x.ed)||[], df=(x&&x.df)||[], out=row.map(()=>[]), count={};
       for(const h of this.rdHlDefs())count[h[0]]=0;
       const put=(i,k)=>{ if(!out[i].includes(k))out[i].push(k); };
       for(let i=0;i<n;i++){
         if(w(i)&&wk[i]){ put(i,'weekendWork'); count.weekendWork++; }
         if(ed[i]){ put(i,'edited'); count.edited++; }
+        if(df[i]){ put(i,'draftDiff'); count.draftDiff++; }
         if(i===0||i===n-1)continue;                       // 맨 앞·맨 끝은 앞뒤를 모른다
         if(row[i]==='N'&&row[i-1]&&row[i+1]&&row[i-1]!=='N'&&row[i+1]!=='N'){ put(i,'singleN'); count.singleN++; }
         if(row[i]==='R'&&row[i-1]==='N'&&w(i+1)){ put(i,'nightRest1'); count.nightRest1++; }
