@@ -1791,6 +1791,11 @@ def get_shifts():
 
 @app.post("/api/shifts")
 def save_shift(body: dict):
+    # 병동이 보태는 근무(기본 코드가 아닌 근무 시간대)는 시작·끝 시각이 있어야 한다 — 엔진이 그 시간으로 근무 사이 휴식을 잰다 (결정 1-92)
+    from .scheduler_base import BUILTIN_WORK_CODES, parse_shift_hours
+    if (body.get("period") in ("day", "day1", "evening", "middle", "night") and body.get("code") not in BUILTIN_WORK_CODES
+            and not parse_shift_hours(body.get("hours"))):
+        raise HTTPException(400, "근무 시간을 넣어 주세요 (예: 09:00~18:00). 이 시간으로 앞뒤 근무 사이의 휴식을 잽니다.")
     db.save_shift(
         code=body["code"],
         name=body["name"],

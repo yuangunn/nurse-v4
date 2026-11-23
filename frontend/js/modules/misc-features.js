@@ -258,7 +258,7 @@ window.MiscFeaturesModule = function() {
       // E→D1·중→D 는 마지막 수단(제1원칙 13) — 켜져 있으면 위반 표시가 아니라 서랍 '주의'의 파트장 확인 필요로 알린다
       const softTr=(this.rules||{}).rareTransitionLastResort!==false;
       const rules=[[E,D,'E→D'],[E,D1,'E→D1',softTr],[E,M,'E→중'],[N,E,'N→E'],[N,D,'N→D'],[N,D1,'N→D1'],[N,M,'N→중'],
-        [M,D,'중→D',softTr],[M,D1,'중→D1']].filter(r=>!r[3]);
+        [M,D,'중→D',softTr],[M,D1,'중→D1']].filter(r=>!r[3]).concat(this.hoursTransitionRules());   // + 보탠 근무의 실제 휴식 시간 (결정 1-92)
       for(const nurse of this.nurses){
         const nid=nurse.id;
         for(let i=0;i<days.length-1;i++){
