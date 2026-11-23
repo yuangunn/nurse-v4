@@ -770,16 +770,35 @@ window.RedesignModule = function() {
     get verFresh(){ return this.verLog.filter(v=>v.n>this.verSeen).map(v=>v.n); },
     _verKey(){ return `ns_verlog:${this.currentProfile||''}:${this.year}-${String(this.month).padStart(2,'0')}`; },
     _verTime(sec){ sec=Math.round(sec||0); return sec>=60 ? `${Math.floor(sec/60)}분 ${String(sec%60).padStart(2,'0')}초` : `${sec}초`; },
-    verChipSub(v){ return [this._verTime(v.sec), v.gap==null ? null : `최고와 ${Math.round(v.gap*10)/10}% 차이`].filter(Boolean).join(' · '); },
+    verChipSub(v){ return [this._verTime(v.sec), v.gap==null ? null : (v.gap>=100 ? '최고와 차이 큼' : `최고와 ${Math.round(v.gap*10)/10}% 차이`)].filter(Boolean).join(' · '); },   // 처음 나온 답은 차이가 몇백 %일 수 있다 — 숫자 대신 '큼'
     verChipName(v){ return `${v.n}번`+(v.n===1 ? ' · 초안' : '')+(v.n===this.verLast&&this.verLog.length>1 ? ' · 최신' : ''); },
     verReset(){ this.verLog=[]; this.verCur=null; this.verSeen=0; this.verCmpOff(); this.verNums.open=false; },   // 화면에서만 지운다 (병동을 바꿀 때)
     verClear(){ try{ localStorage.removeItem(this._verKey()); }catch(e){} this.verReset(); },
     _verPush(r, payload, shown){
+      // 같은 표면 번호를 늘리지 않는다 — 찾는 도중에 이미 나온 표가 끝난 표로 다시 올 때, 내용만 끝난 것으로 바꾼다
+      const same=this.verLog[this.verLog.length-1];
+      if(same && JSON.stringify(same.result.schedule)===JSON.stringify(r.schedule)){
+        same.result=r; same.payload=payload||same.payload; same.gap=r.mip_gap_percent??same.gap; same.stats=this.multiStats(r);
+        if(shown){ this.verCur=same.n; this.verSeen=Math.max(this.verSeen, same.n); }
+        this._verStore(); return same; }
       const n=(this.verLast||0)+1, v={n, sec:(this.genElapsedBase||0)+(this.generateElapsed||0), gap:r.mip_gap_percent??null, result:r, payload, stats:this.multiStats(r), screen:null};
       const L=this.verLog.length>=8 ? [this.verLog[0], ...this.verLog.slice(2)] : this.verLog;   // 여덟 장까지 — 넘치면 초안은 두고 그다음 것부터 버린다
       this.verLog=[...L, v];
       if(shown){ this.verCur=n; this.verSeen=n; }
       this._verStore(); return v;
+    },
+    // 찾는 도중의 표 (결정 1-97) — 엔진이 더 나은 답을 낼 때마다 서버가 보낸다. 번호를 붙여 남기고, 최신 번호를 보는 중이고 손으로 고치지 않았으면
+    // 화면도 따라간다. 사전입력 지키기 단계(keep)의 표는 점수가 낮으니 첫 찾기에서 점수 단계의 표가 나오기 전까지만 받는다
+    _verPartial(t, payload, cont){
+      if(!t||!t.schedule||!this.generating||this.multi.running) return;
+      if(+payload.year!==+this.year||+payload.month!==+this.month) return;
+      if(t.stage==='keep' && (cont || this.verLog.some(v=>!(v.result&&v.result.stage==='keep')))) return;
+      const last=this.verLog[this.verLog.length-1];
+      if(last && JSON.stringify(last.result.schedule)===JSON.stringify(t.schedule)) return;
+      const edited=(this._originalSchedule ? this.getManualEditCount() : 0)>0;
+      if(!this.verPinned && !edited){ this._showResult(t); this._verPush(t, payload, true); this.rdSaved=false; this.activeTab='schedule'; return; }
+      const v=this._verPush(t, payload, false);
+      this.rdToast={msg:`${v.n}번 표가 나왔습니다 — ${edited?'고친 표':'보던 표'}는 그대로 두었습니다`, act:'보기', fn:()=>this.verShow(v.n)}; clearTimeout(this._rdToastTimer);
     },
     // 화면의 표를 떠날 때 손으로 고친 것이 있으면 그 번호에 붙여 둔다 — 다시 열면 고친 채로 나온다
     _verKeepScreen(){ const v=this.verLog.find(x=>x.n===this.verCur); if(v) v.screen=(this._originalSchedule&&this.getManualEditCount()>0) ? JSON.parse(JSON.stringify(this.schedule)) : null; },
@@ -875,7 +894,7 @@ window.RedesignModule = function() {
     _verDiffCount(A, B){ let n=0; const a=A.screen||A.result.schedule||{}, b=B.screen||B.result.schedule||{};
       for(const nu of this.nurses) for(const d of this.scheduleDays){ if(this.isCarryDay(d)) continue; const dk=this.dayKey(d); if((a[nu.id]?.[dk]||'')!==(b[nu.id]?.[dk]||'')) n++; } return n; },
     // 표가 떠 있는 채로 더 찾는 동안에는 계산 현황을 한 줄로 줄인다 — 아래 근무표가 보여야 한다
-    get rdSolveCompact(){ return !!(this.generating && this.continuing && this.rdSched); },
+    get rdSolveCompact(){ return !!(this.generating && this.rdSched); },   // 첫 찾기에서도 찾는 도중의 표가 뜨면 줄인다
 
     // ── 처음 나온 표와 견주기 (결정 1-94) — 초안(이번 만들기의 첫 표)과 지금 표. 손으로 고친 칸은 빼고 엔진이 낸 표끼리 본다.
     //    숫자는 여러 개 만들기의 견주기와 같은 것(multiStats). 달라진 칸이 없으면 null ──
@@ -996,10 +1015,10 @@ window.RedesignModule = function() {
 
     // 이어 찾는 동안의 중간 결과 한 줄 — 화면의 표가 어느 정도인지·몇 개를 찾았는지·모두 얼마나 걸렸는지 (찾기가 바뀌어도 처음부터 다시 세지 않는다)
     get rdMidFacts(){
-      if(!(this.generating && this.continuing && this.rdSched)) return [];
+      if(!(this.generating && this.rdSched)) return [];      // 첫 찾기에서도 찾는 도중의 표가 뜨면 보인다 (결정 1-97)
       const g=this.mipGapPercent, S=this.solveStats, sec=(this.genElapsedBase||0)+(this.generateElapsed||0);
-      return [['지금 화면의 표', g==null ? '저장해 둠' : `가능한 최고와 ${Math.round(g*100)/100}% 차이`], ['지금까지 찾은 표', `${(S&&S.found)||0}개`],
-        ['이어 찾기', `${Math.max(1,this.genRound-1)}번째`], ['처음부터', sec>=60 ? `${Math.floor(sec/60)}분 ${sec%60}초` : `${sec}초`]];
+      return [['지금 화면의 표', this.verCur!=null&&this.verLog.length ? `${this.verCur}번`+(g==null ? '' : (g>=100 ? ' · 가능한 최고와 차이 큼' : ` · 가능한 최고와 ${Math.round(g*100)/100}% 차이`)) : (g==null ? '저장해 둠' : `가능한 최고와 ${Math.round(g*100)/100}% 차이`)],
+        ['지금까지 찾은 표', `${(S&&S.found)||0}개`], ...(this.genRound>1 ? [['이어 찾기', `${this.genRound-1}번째`]] : []), ['처음부터', sec>=60 ? `${Math.floor(sec/60)}분 ${sec%60}초` : `${sec}초`]];
     },
     // 근무표 탭에서 칸 창을 닫으면 선택을 지운다 — 끌어 고르는 중(_isDragging)에는 두고, 사전입력 탭의 선택(키보드 입력용)은 건드리지 않는다
     rdPopClosed(){ if(this.activeTab==='schedule' && this._sel && this._sel.tab==='schedule' && !this._isDragging) this._sel=null; },

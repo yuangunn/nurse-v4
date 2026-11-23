@@ -36,6 +36,7 @@ window.SolverModule = function() {
         if(data.type==='log')this._pushLog(data.msg);
         else if(data.type==='hint')this._pushLog(data.msg,true);
         else if(data.type==='progress')this.solveProgress=data;
+        else if(data.type==='table'){if(!_readjust)this._verPartial(data.table,payload,!!_cont)}   // 찾는 도중의 표 (결정 1-97)
         else if(data.type==='done'){this.sseSource.close();this.sseSource=null}
       };
       const payload={...this._basePayload(),...(_cont?{}:this.genPrefPatch()),...(draft?{time_limit:this.DRAFT_SEC}:{}),...payloadPatch};
@@ -73,7 +74,10 @@ window.SolverModule = function() {
         // 13단계 진단이 짚은 셀 좌표 → 정밀분석과 동일한 '충돌 위치로 이동' 칩 표시
         if(!result.success&&((Array.isArray(result.anchored)&&result.anchored.length)||result.summary)){this.diagResult={anchored:result.anchored||[],summary:result.summary||''}}
         // 이번 만들기에서 처음 나온 표 — 더 찾은 표와 견준다 (결정 1-94). 손으로 고쳐도 바뀌지 않게 사본으로
-        if(result.success&&!_cont&&!_readjust)this.genFirst=JSON.parse(JSON.stringify({schedule:result.schedule||{},extended_schedule:result.extended_schedule||{},relaxed_cells:result.relaxed_cells||{},mip_gap_percent:result.mip_gap_percent??null,sec:this.generateElapsed||0}));
+        // 찾는 도중의 표를 보다가 손으로 고쳤거나 지난 번호를 보는 중이면, 끝난 표를 번호로 남긴 뒤 보던 표로 돌아간다 (첫 찾기 — 이어 찾기는 위에서 가른다)
+        const back=(result.success&&!_cont&&!_readjust&&this.verLog.length&&(this.verPinned||(this._originalSchedule?this.getManualEditCount():0)>0))?this.verCur:null;
+        if(back!=null)this._verKeepScreen();
+        if(result.success&&!_cont&&!_readjust&&!this.genFirst)this.genFirst=JSON.parse(JSON.stringify({schedule:result.schedule||{},extended_schedule:result.extended_schedule||{},relaxed_cells:result.relaxed_cells||{},mip_gap_percent:result.mip_gap_percent??null,sec:this.generateElapsed||0}));
         if(result.success){const oldRx=this.relaxedCells;this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=_readjust?this._wishRelaxed(oldRx,result.relaxed_cells):(result.relaxed_cells||{});this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.managerCheck||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':((this.managerCheck||[]).length?'warn':(this.vReport&&this.vReport.total?'v':'summary'));this.rdDoneAt=new Date();this.activeTab='schedule';this._autoSaveSchedule();   // 생성 성공 시 자동 저장 (같은 달 자동저장본 하나만)
           if(result.stopped)this.statusMessage+='\n⏹ 중지 요청으로 탐색 종료 — 현재까지 찾은 최선의 해를 표시합니다.';
           // 완화된 셀 상세 메시지
@@ -94,7 +98,9 @@ window.SolverModule = function() {
             this.statusMessage+=`\n\n📌 원티드 미반영 ${details.length}건${noted?` — 그중 메모(사유) 있는 셀 ${noted}건`:''}. 절대 못 바꾸는 날은 사전입력에서 🔒 잠금하세요.\n`+details.map(d=>d.line).join('\n');
           }
           this.trackEdits();story=!_readjust;
-          if(!_readjust)this._verPush(result,payload,true);   // 화면에 넣은 표에 번호를 붙여 표 기록에 남긴다 (결정 1-95)
+          if(!_readjust){const v=this._verPush(result,payload,true);   // 화면에 넣은 표에 번호를 붙여 표 기록에 남긴다 (결정 1-95)
+            if(back!=null&&v.n!==back){this.verShow(back);this.verSeen=Math.min(this.verSeen,v.n-1);quiet=true;
+              this.rdToast={msg:`${v.n}번 표가 나왔습니다 — 보던 표는 그대로 두었습니다`,act:'보기',fn:()=>this.verShow(v.n)};clearTimeout(this._rdToastTimer)}}
           if(!_readjust){this.readjustPins={};this.readjustChanged={};this.readjustSummary=''}
           if(result.warning){this.statusMessage=result.warning+'\n\n'+this.statusMessage;this.statusOk=false}
           if(_readjust)this.contBase=null;else this._setContBase(payload,result);   // '이 표에서 더 찾기'가 이을 문제 — 멈춘 표·이어 찾은 표도 같다 (다시 맞춘 표는 다른 문제)
