@@ -39,6 +39,7 @@ window.GridInteractionsModule = function() {
         [nightCodes,   middleCodes, 'N→중'],
         [middleCodes,  dayCodes,    '중→D'],
         [middleCodes,  day1Codes,   '중→D1'],
+        ...this.hoursTransitionRules(),   // 보탠 근무의 실제 휴식 시간 (결정 1-92)
       ];
 
       for(const nurse of this.nurses){

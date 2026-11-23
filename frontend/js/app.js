@@ -26,6 +26,7 @@ function app() {
       longRunLastResort:true, rareTransitionLastResort:true,
       maxConsecutiveNight:true, maxConsecutiveNightDays:3,
       restAfterNight:true, restAfterNightDays:2, restAfterNightMinConsec:2,
+      minRest:true, minRestHours:11,   // 보탠 근무가 낀 전환의 최소 휴식 시간 (결정 1-92)
       maxNightPerMonth:true, maxNightPerMonthCount:6,
       maxNightTwoMonth:false, maxNightTwoMonthCount:11,
       patternOptimization:true, autoMenstrualLeave:true, maxVPerMonth:1,

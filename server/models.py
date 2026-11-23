@@ -87,6 +87,10 @@ class Rules(BaseModel):
     restAfterNight: bool = True
     restAfterNightDays: int = 2          # 연속야간 후 보장할 휴무 일수
     restAfterNightMinConsec: int = 2     # 최소 연속야간 횟수 (이 이상이면 휴무 부여)
+    # 병동이 보탠 근무가 낀 전환은 근무 정의의 시간으로 실제 휴식을 재서, 이 시간 미만이면 금지한다 (결정 1-92).
+    # 기본 11시간 = 근로기준법 제59조 ②(보건업 등 특례 업종의 근로일 사이 연속 휴식). 기본 근무끼리는 역순 전환 9종 그대로.
+    minRest: bool = True
+    minRestHours: float = 11
     patternOptimization: bool = True
     autoMenstrualLeave: bool = True
     maxVPerMonth: int = 1        # V(연차) 월 최대 사용 횟수 (hard)

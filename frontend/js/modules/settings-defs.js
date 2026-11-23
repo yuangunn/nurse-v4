@@ -304,12 +304,52 @@ window.SettingsDefsModule = function() {
     // v2 호환용 (미사용이지만 보존)
     _shiftDarkBg(hex){const[h,s]=this._hexToHsl(hex);return`hsl(${h},${Math.max(s*0.8,35)}%,20%)`},
     _shiftDarkText(hex){const[h,s]=this._hexToHsl(hex);return`hsl(${h},${Math.min(s*1.2,80)}%,78%)`},
+    // ── 근무 시간 (결정 1-92) — 엔진이 이 시간으로 보탠 근무 앞뒤의 휴식을 잰다. 서버 parse_shift_hours·_hours_transition_rules 와 같아야 한다 ──
+    BUILTIN_WORK:['DC','D','D1','EC','E','중','NC','N'], WORK_PERIODS:['day','day1','evening','middle','night'],
+    // '06:00~14:00' → [시작 분, 끝 분]. 끝이 시작보다 이르거나 같으면 자정을 넘긴 근무. 읽을 수 없으면 null
+    parseShiftHours(text){
+      const m=/^\s*(\d{1,2}):(\d{2})\s*[~\-–—]\s*(\d{1,2}):(\d{2})\s*$/.exec(String(text||'')); if(!m) return null;
+      const [h1,m1,h2,m2]=m.slice(1).map(Number); if(h1>24||h2>24||m1>59||m2>59) return null;
+      const s=h1*60+m1; let e=h2*60+m2; if(e<=s) e+=1440; return [s,e];
+    },
+    // 시간대끼리의 역순 9종 — [앞 코드들, 뒤 코드들, 라벨, 마지막 수단인가]
+    categoryTransitionRules(){
+      const P=p=>this.shifts.filter(s=>s.period===p).map(s=>s.code), E=P('evening'), M=P('middle'), N=P('night'), D=P('day'), D1=P('day1');
+      const soft=(this.rules||{}).rareTransitionLastResort!==false;
+      return [[E,D,'E→D',false],[E,D1,'E→D1',soft],[E,M,'E→중',false],[N,E,'N→E',false],[N,D,'N→D',false],[N,D1,'N→D1',false],[N,M,'N→중',false],[M,D,'중→D',soft],[M,D1,'중→D1',false]];
+    },
+    // 보탠 근무가 낀 전환 가운데 실제 휴식이 모자란 쌍 — [[앞], [뒤], 라벨, false]. 기본 근무끼리는 역순 9종이 답이라 넣지 않는다
+    hoursTransitionRules(){
+      const r=this.rules||{}; if(r.minRest===false) return []; const need=(parseFloat(r.minRestHours)||0)*60; if(need<=0) return [];
+      const work=this.shifts.filter(s=>this.WORK_PERIODS.includes(s.period)), custom=new Set(work.filter(s=>!this.BUILTIN_WORK.includes(s.code)).map(s=>s.code)); if(!custom.size) return [];
+      const hrs=Object.fromEntries(work.map(s=>[s.code, this.parseShiftHours(s.hours)])), hard=this.categoryTransitionRules().filter(x=>!x[3]), out=[];
+      for(const a of work) for(const b of work){ if((!custom.has(a.code)&&!custom.has(b.code))||!hrs[a.code]||!hrs[b.code]) continue;
+        const rest=1440+hrs[b.code][0]-hrs[a.code][1]; if(rest>=need||hard.some(x=>x[0].includes(a.code)&&x[1].includes(b.code))) continue;
+        out.push([[a.code],[b.code],`${a.code}→${b.code}, 휴식 ${+(Math.max(0,rest)/60).toFixed(2)}시간`,false]); }
+      return out;
+    },
+    // 근무 정의 창의 시작·끝 시각 칸 (i=0 시작, 1 끝) — 값은 '06:00~14:00' 한 줄로 둔다
+    isWorkPeriod(p){ return this.WORK_PERIODS.includes(p); },
+    shiftHoursPart(i){ const m=/^\s*(\d{1,2}:\d{2})\s*[~\-–—]\s*(\d{1,2}:\d{2})\s*$/.exec(String(this.shiftModal.data.hours||'')); if(!m) return (this.shiftModal.parts||['',''])[i]||''; const v=m[i+1]; return (v.length===4?'0':'')+(v==='24:00'?'00:00':v); },
+    setShiftHoursPart(i, v){ const p=[this.shiftHoursPart(0), this.shiftHoursPart(1)]; p[i]=v||''; this.shiftModal.parts=p; this.shiftModal.data.hours=(p[0]&&p[1]) ? `${p[0]}~${p[1]}` : ''; },
+    // 보탠 근무인데 시간이 없으면 휴식 규칙을 걸 수 없다 — 근무 목록에 알린다
+    shiftNeedsHours(s){ return this.isWorkPeriod(s.period) && !this.BUILTIN_WORK.includes(s.code) && !this.parseShiftHours(s.hours); },
+    get shiftHoursHint(){ const d=(this.shiftModal||{}).data||{}; if(!this.isWorkPeriod(d.period)) return '';
+      const h=this.parseShiftHours(d.hours), len=h ? ` 근무 ${+((h[1]-h[0])/60).toFixed(2)}시간${h[1]>1440?' (자정을 넘깁니다)':''}.` : '';
+      return this.BUILTIN_WORK.includes(d.code)
+        ? '기본 근무끼리의 전환은 정해진 규칙(E→D 금지 등)을 따릅니다. 이 시간은 새로 보탠 근무와 이어질 때 휴식을 재는 데 씁니다.'+len
+        : `이 시간으로 앞뒤 근무 사이의 휴식을 잽니다 — ${(this.rules||{}).minRest===false ? '지금은 규칙이 꺼져 있습니다' : ((this.rules||{}).minRestHours??11)+'시간보다 짧으면 그 전환을 막습니다'}.`+len; },
     openShiftModal(shift){
       this.shiftModal.isNew=!shift;
+      this.shiftModal.parts=null;   // 시작·끝 중 하나만 넣은 값은 창을 새로 열면 버린다
       this.shiftModal.data=shift?JSON.parse(JSON.stringify(shift)):{code:'',name:'',period:'day',is_charge:false,auto_assign:true,hours:'',color_bg:'#dbeafe',color_text:'#1d4ed8',sort_order:this.shifts.length};
       this.shiftModal.open=true;
     },
-    async saveShift(){const d=this.shiftModal.data;if(!d.code.trim()){this.toast('코드를 입력하세요','error');return}if(!d.name.trim()){this.toast('이름을 입력하세요','error');return}await this.api('POST','/api/shifts',d);await this.loadShifts();this.shiftModal.open=false},
+    async saveShift(){const d=this.shiftModal.data;if(!d.code.trim()){this.toast('코드를 입력하세요','error');return}if(!d.name.trim()){this.toast('이름을 입력하세요','error');return}
+      if(!this.isWorkPeriod(d.period))d.hours='-';
+      else if(!this.BUILTIN_WORK.includes(d.code)&&!this.parseShiftHours(d.hours)){this.toast('근무 시작·끝 시각을 넣어 주세요 — 이 시간으로 앞뒤 근무 사이의 휴식을 잽니다','error',6000);return}
+      try{await this.api('POST','/api/shifts',d)}catch(e){this.toast(e.message||'근무를 저장하지 못했습니다','error',6000);return}
+      await this.loadShifts();this.shiftModal.open=false},
     async deleteShift(code){
       // V(연차)도 — 쉬는 칸을 V 로 채우는 병동이 지우면 생성이 막힌다 (2026-10-26, 서버 delete_shift 와 같은 목록)
       const PROTECTED=['DC','D','D1','EC','E','중','NC','N','OF','주','V'];

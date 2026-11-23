@@ -668,8 +668,9 @@ body.rd .tbl th { font-size: var(--fs-min); color: var(--ink-2); text-transform:
 body.rd .tbl td { color: var(--ink); }
 body.rd .modal { border-radius: var(--r-modal); padding: 20px; color: var(--ink); }
 body.rd .modal label { font-size: var(--fs-sub); color: var(--ink-2); }
-body.rd input[type="text"], body.rd input[type="number"], body.rd input[type="password"], body.rd input[type="date"], body.rd input[type="email"], body.rd input:not([type]), body.rd select, body.rd textarea { font-size: var(--fs-sub); min-height: 32px; box-shadow: inset 0 0 0 1.5px var(--rule-strong); color: var(--ink); }
-body.rd .modal input[type="text"], body.rd .modal input[type="number"], body.rd .modal input[type="password"], body.rd .modal input[type="date"], body.rd .modal input:not([type]), body.rd .modal select, body.rd .modal textarea { font-size: var(--fs-sub); }
+body.rd input[type="text"], body.rd input[type="number"], body.rd input[type="password"], body.rd input[type="date"], body.rd input[type="time"], body.rd input[type="email"], body.rd input:not([type]), body.rd select, body.rd textarea { font-size: var(--fs-sub); min-height: 32px; box-shadow: inset 0 0 0 1.5px var(--rule-strong); color: var(--ink); }
+body.rd .modal input[type="text"], body.rd .modal input[type="number"], body.rd .modal input[type="password"], body.rd .modal input[type="date"], body.rd .modal input[type="time"], body.rd .modal input:not([type]), body.rd .modal select, body.rd .modal textarea { font-size: var(--fs-sub); }
+html.dark input[type="time"] { color-scheme: dark; }   /* 시계 아이콘·고르는 창이 어두운 화면을 따른다 */
 body.rd kbd { font-size: var(--fs-min); color: var(--ink-2); }
 body.rd .toast { font-size: var(--fs-sub); color: var(--ink); }
 body.rd .toast button { min-width: 30px; min-height: 30px; font-size: 16px; }

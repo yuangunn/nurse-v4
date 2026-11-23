@@ -44,6 +44,8 @@ function makeCtx({ nurses, prev = {}, rules = {}, holidays = [], dayReqs = {}, p
     isHoliday(d) { return holidays.includes(this.dayKey(d)); },
     isNurseInactive() { return false; },
     flexWishCodes: defs.flexWishCodes, isFlexWish: defs.isFlexWish,
+    // 보탠 근무의 휴식 시간 규칙(결정 1-92)도 사전입력 참고에 든다
+    BUILTIN_WORK: defs.BUILTIN_WORK, WORK_PERIODS: defs.WORK_PERIODS, parseShiftHours: defs.parseShiftHours, categoryTransitionRules: defs.categoryTransitionRules, hoursTransitionRules: defs.hoursTransitionRules,
     ...mod,
   };
 }

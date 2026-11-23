@@ -7,6 +7,7 @@ NurseScheduler(HiGHS)와 CpSatScheduler(CP-SAT)가 공통 상속한다.
 """
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from datetime import date, timedelta
 from typing import Callable, Dict, List, Optional, Tuple
@@ -215,6 +216,26 @@ _FLEX_ONE_OF = {"D/E": ("day", "evening"), "E/N": ("evening", "night"), "D/N": (
 _FLEX_NOT = {"N제외": ("night",), "D제외": ("day",), "E제외": ("evening",),
              "D/OF": ("evening", "night"), "E/OF": ("day", "night"), "N/OF": ("day", "evening")}
 FLEX_WISH_CODES = frozenset(_FLEX_ONE_OF) | frozenset(_FLEX_NOT)
+
+
+# 기본 근무 코드 — 이 코드끼리의 전환은 병동이 정한 역순 9종이 답이고, 병동이 보탠 코드가 끼면 근무 시간으로 휴식을 잰다 (결정 1-92)
+BUILTIN_WORK_CODES = frozenset({"DC", "D", "D1", "EC", "E", "중", "NC", "N"})
+_HOURS_RE = re.compile(r"^\s*(\d{1,2}):(\d{2})\s*[~\-–—]\s*(\d{1,2}):(\d{2})\s*$")
+
+
+def parse_shift_hours(text):
+    """'06:00~14:00' → (시작 분, 끝 분). 끝이 시작보다 이르거나 같으면 자정을 넘긴 근무라 하루(1440분)를 더한다.
+    읽을 수 없으면 None ('-'·빈칸·'오전' 같은 글자)."""
+    m = _HOURS_RE.match(str(text or ""))
+    if not m:
+        return None
+    h1, m1, h2, m2 = (int(g) for g in m.groups())
+    if h1 > 24 or h2 > 24 or m1 > 59 or m2 > 59:
+        return None
+    start, end = h1 * 60 + m1, h2 * 60 + m2
+    if end <= start:
+        end += 1440
+    return start, end
 
 
 class _SchedulerBase:
@@ -802,7 +823,39 @@ class _SchedulerBase:
         return bool(self.rules.maxConsecutiveWork
                     and getattr(self.rules, "longRunLastResort", True))
 
+    def _hours_transition_rules(self) -> list:
+        """병동이 보탠 근무가 낀 전환 가운데 실제 휴식이 minRestHours 미만인 쌍 — [(라벨, [앞], [뒤], False)] (결정 1-92).
+        휴식 = 앞 근무의 끝 → 다음 날 뒤 근무의 시작 (근무 정의의 '06:00~14:00'. 끝이 시작보다 이르면 자정을 넘긴 근무).
+        기본 근무끼리의 쌍은 넣지 않는다 — 병동이 정한 역순 전환 9종(_transition_rules)이 그 답이다(E→D1 10.5시간은 마지막 수단으로 허용,
+        E→중 13시간은 금지 — 시간 하나로는 그 표가 나오지 않는다). 시간이 없는 근무는 잴 수 없어 건너뛴다.
+        역순 9종이 이미 하드로 막는 쌍은 겹쳐 걸지 않는다."""
+        if not getattr(self.rules, "minRest", True):
+            return []
+        need = float(getattr(self.rules, "minRestHours", 11) or 0) * 60
+        if need <= 0:
+            return []
+        hours = {s["code"]: parse_shift_hours(s.get("hours")) for s in self._shifts if s["code"] in set(self.WORK_SHIFTS)}
+        custom = [c for c in self.WORK_SHIFTS if c not in BUILTIN_WORK_CODES]
+        if not custom:
+            return []
+        hard = [(set(g1), set(g2)) for _lb, g1, g2, soft in self._category_transition_rules() if not soft]
+        out = []
+        for a in self.WORK_SHIFTS:
+            for b in self.WORK_SHIFTS:
+                if (a not in custom and b not in custom) or not hours.get(a) or not hours.get(b):
+                    continue
+                rest = 1440 + hours[b][0] - hours[a][1]
+                if rest >= need or any(a in g1 and b in g2 for g1, g2 in hard):
+                    continue
+                h = max(0, rest) / 60
+                out.append((f"{a}→{b}, 휴식 {h:g}시간", [a], [b], False))
+        return out
+
     def _transition_rules(self) -> list:
+        """엔진·분석기·진단이 쓰는 전환 규칙 전체 — 시간대끼리의 역순 9종 + 보탠 근무의 실제 휴식 시간 규칙."""
+        return self._category_transition_rules() + self._hours_transition_rules()
+
+    def _category_transition_rules(self) -> list:
         """역순 전환 9종 — (라벨, 앞 근무들, 뒤 근무들, 마지막 수단 여부).
         E→D1·중→D 는 '번표가 정 안 나오면 그렇게 근무한다'(2026-10-03) — 규칙
         rareTransitionLastResort 가 켜져 있으면 큰 감점으로만 막는다. 나머지 7개는 하드."""
@@ -2556,17 +2609,9 @@ class _SchedulerBase:
                          + ", ".join(diffs[:4]) + (" …" if len(diffs) > 4 else ""))
 
         # ② 금지 전환 (전월 내부 완결은 역사로 보고 제외)
-        forb = [
-            (set(self.EVENING_SHIFTS), set(self.DAY_SHIFTS), "E→D"),
-            (set(self.EVENING_SHIFTS), set(self.DAY1_SHIFTS), "E→D1"),
-            (set(self.EVENING_SHIFTS), set(self.MIDDLE_SHIFTS), "E→중"),
-            (set(self.NIGHT_SHIFTS), set(self.EVENING_SHIFTS), "N→E"),
-            (set(self.NIGHT_SHIFTS), set(self.DAY_SHIFTS), "N→D"),
-            (set(self.NIGHT_SHIFTS), set(self.DAY1_SHIFTS), "N→D1"),
-            (set(self.NIGHT_SHIFTS), set(self.MIDDLE_SHIFTS), "N→중"),
-            (set(self.MIDDLE_SHIFTS), set(self.DAY_SHIFTS), "중→D"),
-            (set(self.MIDDLE_SHIFTS), set(self.DAY1_SHIFTS), "중→D1"),
-        ]
+        # 역순 9종(마지막 수단 둘 포함) + 보탠 근무의 실제 휴식 시간 규칙 — 한 쌍에 한 줄만(시간 규칙을 먼저 본다)
+        forb = [(set(g1), set(g2), label) for label, g1, g2, _soft in
+                self._hours_transition_rules() + self._category_transition_rules()]
         for nid, days in sched.items():
             for i in range(len(self.all_dates) - 1):
                 d1, d2 = self.all_dates[i], self.all_dates[i + 1]
@@ -2579,6 +2624,7 @@ class _SchedulerBase:
                 for g1, g2, label in forb:
                     if c1 in g1 and c2 in g2:
                         notes.append(f"{name_of.get(nid, nid)} {md(d1)} {c1} → {md(d2)} {c2} ({label} 전환)")
+                        break
 
         # ③ 주별 OF 횟수 (야간전담 제외 — 완전한 주 기준 1회)
         for nurse in self.nurses:
