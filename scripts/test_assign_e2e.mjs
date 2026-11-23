@@ -14,7 +14,7 @@
  * [저장]을 누른 것처럼 메모리 속 파일 핸들을 돌려준다(읽기·쓰기는 진짜 경로를 탄다).
  */
 import { spawn, execSync } from 'node:child_process';
-import { mkdtempSync, copyFileSync, readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, readdirSync, readFileSync, writeFileSync, existsSync, statSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -576,6 +576,9 @@ try {
   console.log('\n오류: ' + e.message);
 } finally {
   try { chrome.kill(); } catch {}
+  // 임시 폴더(크롬 프로필·내려받은 파일, 한 번에 50MB 남짓)를 지운다 — 돌릴 때마다 남아 쌓였다. 크롬이 파일을 놓을 틈을 주고, 안 지워지면 그만
+  await sleep(300);
+  try { rmSync(WORK, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }); } catch {}
 }
 console.log(`\nassign e2e: ${pass}건 통과${fails.length ? ` · ${fails.length}건 실패` : ''}`);
 process.exit(fails.length ? 1 : 0);

@@ -63,7 +63,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const chrome = spawn(CHROME, [
   '--headless=new', `--remote-debugging-port=${PORT}`, '--disable-gpu', '--no-first-run', '--window-size=1920,1080',
   '--no-default-browser-check', '--no-sandbox', '--allow-file-access-from-files',
-  `--user-data-dir=${process.env.TMPDIR || '/tmp'}/assign-live-${process.pid}`, PAGE,
+  `--user-data-dir=${join(WORK, 'profile')}`, PAGE,   // 작업 폴더 안에 — 끝나면 함께 지운다 (밖에 두어 돌릴 때마다 남았다)
 ], { stdio: 'ignore' });
 
 let ws, seq = 0;
@@ -766,5 +766,6 @@ let code = 0;
 try { code = (await main()) ? 1 : 0; }
 catch (e) { console.log('FAIL  하네스: ' + e.message); code = 1; }
 chrome.kill();
-try { rmSync(WORK, { recursive: true, force: true }); } catch { /* 지워지면 그만 */ }
+await sleep(300);   // 크롬이 프로필 파일을 놓을 틈
+try { rmSync(WORK, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }); } catch { /* 지워지면 그만 */ }
 process.exit(code);
