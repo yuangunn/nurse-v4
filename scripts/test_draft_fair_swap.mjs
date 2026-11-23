@@ -90,6 +90,15 @@ const gens = (calls) => calls.filter(c => c.path === '/api/generate').map(c => c
   assert.match(a.rdFairNote, /합 = 이번 달 \+ 지난 석 달/);
 }
 
+// 주말·공휴일 근무 — D1·중간번·병동이 보탠 근무(시간대가 근무인 코드)도 센다. 이번 달 칸과 합이 같은 기준이어야 한다
+{
+  const { a } = make();
+  a.shifts = [...SHIFTS, { code: 'D1', period: 'day1', name: 'D1' }, { code: '중3', period: 'middle', name: '중간번3' }];
+  a.schedule = { a: row('OF OF OF OF D1 중3 OF') };   // 12/5 토 D1 · 12/6 일 중3
+  const r = a.rdFairRows[0];
+  assert.equal(r.wh, 2); assert.equal(r.totalWh, 2); assert.equal(r.weekendWork, 2);
+}
+
 // ③ 근무 바꾸기 검사 — 바꾸기 전·뒤를 서버에 묻고 차이만 보인다. 바꾸기는 되돌릴 수 있다
 {
   const notesOf = (s) => { const out = []; for (const [id, r] of Object.entries(s)) for (let d = 1; d < 7; d++) if (r[dk(d)] === 'N' && r[dk(d + 1)] === 'D') out.push(`${id} ${d + 1}일 N → D`); return out; };

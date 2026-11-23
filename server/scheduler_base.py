@@ -1955,6 +1955,16 @@ class _SchedulerBase:
         완화를 켜면 통째로 실패했다 (잠긴 V 셋·한 주 OF 둘·필요 2명인 날 D 셋, 리뷰 2026-10-20)."""
         return self._pin.get((nurse["id"], d)) or self._locked_code(nurse, d)   # 완화의 _pin 에는 지난달 표의 칸만 든다 — 잠근 칸은 _locked_code
 
+    def _rest_day_fact_work(self, nurse, rest_d, k) -> bool:
+        """야간 뒤 휴무일(rest_d)이 사람이 정한 **근무** 칸인가 — 사전입력(엄격)·잠근 칸·지난달 표의 칸.
+        첫 휴무일(k=0)의 N 은 야간이 이어지는 것이라 근무로 세지 않는다 (_c_rest_after_night 과 같게)."""
+        code = self._fact_code(nurse, rest_d)
+        return bool(code) and code in self.WORK_SHIFTS and (k > 0 or code not in self.NIGHT_SHIFTS)
+
+    def _nights_all_facts(self, nurse, d, n) -> bool:
+        """d 부터 n 일이 모두 사람이 정한 야간인가 — 그러면 그 뒤의 근무 칸과 어긋나도 사람이 넣은 사실끼리다."""
+        return all(self._fact_code(nurse, d + i) in self.NIGHT_SHIFTS for i in range(n))
+
     def _pin_day_period_count(self, d, codes) -> int:
         """그 날 사실 칸(_fact_code) 중 코드 그룹에 속하는 수 (D↔DC류 플렉스는 period 불변)."""
         codes = set(codes)

@@ -465,17 +465,26 @@ class _HighsConstraintsMixin:
                     # 전월(역사)·트레이닝 날에는 휴식 강제를 소급하지 않음
                     if self.all_dates[rest_d] < from_:
                         continue
-                    # 사실-클램프: 확정된 휴식일 셀은 사용자 선택 그대로
-                    if self._pin.get((nid, rest_d)):
-                        continue
-                    work_vars = [
-                        x[nid][rest_d][s]
-                        for s in self.WORK_SHIFTS
-                        if (k > 0 or s not in self.NIGHT_SHIFTS)
-                        and not isinstance(x[nid][rest_d][s], (int, float))
-                    ]
-                    if not work_vars:
-                        continue
+                    # 휴무일 칸을 사람이 **근무**로 정해 두었으면(잠근 D1·사전입력 등) 그 칸은 못 바꾼다 — 그 앞에 연속 야간을
+                    # 놓지 못하게 건다. 예전엔 이 칸을 건너뛰어, 잠근 D1 이틀 앞까지 N N N 을 놓았다 (2026-11-23).
+                    # 야간까지 사람이 넣은 것이면 사실끼리의 어긋남이라 걸지 않는다 — 안내(_pinned_rule_notes ⑧)만.
+                    fact_work = self._rest_day_fact_work(nurse, rest_d, k)
+                    if fact_work:
+                        if not night_sum or self._nights_all_facts(nurse, d, min_consec):
+                            continue
+                        work_vars = [1]
+                    else:
+                        # 사실-클램프: 확정된 휴식일 셀(쉬는 코드)은 사용자 선택 그대로
+                        if self._pin.get((nid, rest_d)):
+                            continue
+                        work_vars = [
+                            x[nid][rest_d][s]
+                            for s in self.WORK_SHIFTS
+                            if (k > 0 or s not in self.NIGHT_SHIFTS)
+                            and not isinstance(x[nid][rest_d][s], (int, float))
+                        ]
+                        if not work_vars:
+                            continue
                     # sum_N(d..d+min_consec-1) - sum_N(next_d) + sum_W(rest_d) <= min_consec
                     lhs = pulp.lpSum(night_sum) + night_sum_fixed
                     if night_next:

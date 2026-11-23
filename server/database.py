@@ -502,6 +502,23 @@ WISH_REST_LIKE = {"OF", "주", "P1"}
 WISH_LEAVE_LIKE = {"V", "생", "특", "공", "법", "병", "경가", "조가", "산전"}
 _WORK_CODES = {"DC", "D", "D1", "EC", "E", "중", "NC", "N"}
 _NIGHT_CODES = {"N", "NC"}
+_WORK_PERIODS = ("day", "day1", "evening", "middle", "night")
+
+
+def _ledger_codes(conn):
+    """(근무 코드, 야간 코드) — 기본 코드에 병동이 근무 정의에 보탠 코드를 시간대(period)로 더한다.
+    엔진은 시간대로 근무를 가른다(WORK_SHIFTS·NIGHT_SHIFTS). 이름으로만 세면 새로 만든 근무(예: 중간번을 하나 더)가
+    누적 야간·주말에서 빠져, 그 근무를 선 사람이 덜 일한 것으로 잡힌다 (2026-11-23)."""
+    work, night = set(_WORK_CODES), set(_NIGHT_CODES)
+    try:
+        for r in conn.execute("SELECT code, period FROM shifts").fetchall():
+            if r["period"] in _WORK_PERIODS:
+                work.add(r["code"])
+            if r["period"] == "night":
+                night.add(r["code"])
+    except Exception:
+        pass   # shifts 테이블이 없는 옛 DB — 기본 코드로
+    return work, night
 
 
 def _latest_saved(conn, year: int, month: int):
@@ -549,6 +566,7 @@ def compute_prev_month_nights(year: int, month: int) -> Dict[str, int]:
     out: Dict[str, int] = {}
     with get_conn() as conn:
         data = _latest_saved(conn, py, pm)
+        _, night_codes = _ledger_codes(conn)
     if not data:
         return out
     night_kept = _saved_night_kept(data, key)
@@ -556,7 +574,7 @@ def compute_prev_month_nights(year: int, month: int) -> Dict[str, int]:
         if nid in night_kept:
             continue                      # 나이트킵 달 — 수면오프와 무관
         c = sum(1 for dk, s in (days or {}).items()
-                if dk.startswith(prefix) and s in _NIGHT_CODES)
+                if dk.startswith(prefix) and s in night_codes)
         if c:
             out[nid] = c
     return out
@@ -597,6 +615,7 @@ def compute_fairness_ledger(year: int, month: int, months_back: int = 3) -> Dict
         targets.append((y, m))
     ledger: Dict = {}
     with get_conn() as conn:
+        work_codes, night_codes = _ledger_codes(conn)
         for ty, tm in targets:
             data = _latest_saved(conn, ty, tm)
             if not data:
@@ -610,10 +629,10 @@ def compute_fairness_ledger(year: int, month: int, months_back: int = 3) -> Dict
                     nid, {"nights": 0, "weekends": 0, "holiday_work": 0,
                           "weekend_holiday": 0, "months": 0})
                 for dk, s in (days or {}).items():
-                    if not dk.startswith(prefix) or s not in _WORK_CODES:
+                    if not dk.startswith(prefix) or s not in work_codes:
                         continue
                     touched = True
-                    if s in _NIGHT_CODES and nid not in night_kept:
+                    if s in night_codes and nid not in night_kept:
                         ent["nights"] += 1
                     is_weekend = False
                     try:
