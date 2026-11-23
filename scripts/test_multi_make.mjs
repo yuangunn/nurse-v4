@@ -50,7 +50,7 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
 {
   const { a } = make([]);
   const ids = a.rdMakeKeywords().map(k => k.id);
-  assert.deepEqual(ids, ['night.a', 'night.b', 'rest.a', 'rest.b', 'weekend.a', 'weekend.b', 'oneoff']);
+  assert.deepEqual(ids, ['night.a', 'night.b', 'rest.a', 'rest.b', 'weekend.a', 'weekend.b', 'oneoff', 'onecap']);
   a.multiToggle(0, 'night.a');
   assert.equal(a.multiClash(0, 'night.b'), '야간 묶어서', '야간 묶어서 ↔ 야간 고르게');
   assert.equal(a.multiClash(0, 'rest.b'), null); assert.equal(a.multiClash(0, 'night.a'), null, '이미 고른 것은 끌 수 있다');
@@ -63,6 +63,13 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   // 같은 묶음의 표는 한 번만 만든다 · 네 장까지
   a.multi.tables = [{ keys: [] }, { keys: ['oneoff'] }, { keys: [] }, { keys: ['oneoff'] }]; a.multiAdd();
   assert.equal(a.multi.tables.length, 4); assert.deepEqual(a.multiPlan.map(p => p.label), ['균형 (지금 설정 그대로)', '1오프 줄이기']);
+  // '1오프 몰지 않기'는 배점이 아니라 규칙을 켠다 (결정 1-98) — 다른 키워드와 겹치지 않고, 그 표의 요청에만 rules 를 바꿔 싣는다. 설정 값은 그대로
+  a.rules = { maxOneOff: false, maxOneOffCount: 3, weeklyOff: true };
+  assert.equal(a._kwClash(['oneoff', 'rest.a'], 'onecap'), null); assert.deepEqual(a._kwRules(['oneoff']), {});
+  assert.deepEqual(a._kwRules(['oneoff', 'onecap']), { rules: { maxOneOff: true, maxOneOffCount: 3, weeklyOff: true } }); assert.equal(a.rules.maxOneOff, false);
+  a.mk.count = 'one'; a.mk.keys = ['onecap']; assert.equal(a.makeHasCap, true); a.mk.keys = []; assert.equal(a.makeHasCap, false);
+  a.mk.count = 'multi'; a.multi.tables = [{ keys: [] }, { keys: ['onecap'] }]; assert.equal(a.makeHasCap, true);
+  assert.deepEqual(a.multiPlan.map(p => p.label), ['균형 (지금 설정 그대로)', '1오프 몰지 않기']);
 }
 // ② 차례로 한 장씩 — 공통 설정이 모든 요청에, 방향마다 배점이 곱해지고, 추가 생성은 하지 않는다. 만든 표는 이름 붙여 저장
 {

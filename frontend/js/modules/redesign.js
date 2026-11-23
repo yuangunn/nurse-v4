@@ -45,7 +45,9 @@ window.RedesignModule = function() {
   ];
   // 여러 개 만들기(결정 1-86)의 방향 키워드 — 위 축의 양쪽 + 따로 둔 것. 두 키워드가 같은 배점을 건드리면(fx 의 이름이 겹치면) 함께 고르지 못한다
   const MAKE_KEYWORDS = [...PREF_AXES.flatMap(a=>['a','b'].map(s=>({id:a.id+'.'+s, label:a[s].kw, hint:a[s].hint, fx:a[s].fx}))),
-    {id:'oneoff', label:'1오프 줄이기', hint:'OFF 를 주휴 옆에 더 세게 붙이고 근무-휴무-근무를 줄입니다', fx:{juhuOff:2, pongdang:2}}];
+    {id:'oneoff', label:'1오프 줄이기', hint:'OFF 를 주휴 옆에 더 세게 붙이고 근무-휴무-근무를 줄입니다', fx:{juhuOff:2, pongdang:2}},
+    // 배점이 아니라 규칙을 켜는 키워드 (결정 1-98) — 설정의 '한 사람의 1오프'가 꺼져 있어도 이 표에만 건다. 개수는 rules.maxOneOffCount
+    {id:'onecap', label:'1오프 몰지 않기', hint:'한 사람의 1오프(앞뒤가 근무인 하루짜리 휴무)를 정한 개수까지로 꼭 지킵니다. 시간이 더 걸리고 사전입력이 더 풀릴 수 있습니다', fx:{}, rules:{maxOneOff:true}}];
   const PREF_TIMES = [{v:20, label:'20분'}, {v:60, label:'60분'}, {v:'endless', label:'멈출 때까지 계속'}];
   const PREF_DEFAULT = {keys:[], time:20, quick:true};   // 하나만 만들 때의 선택 — 방향 키워드(MAKE_KEYWORDS 의 id) · 찾는 시간 · 초안 먼저
   const SRC = {B:'갈래를 나눠 따져 봄', C:'가운데 값에서 어림', F:'규칙을 맞추며 밀어 넣기', H:'어림 탐색', L:'작은 문제로 쪼개 풀기', P:'남은 것이 없는 문제', R:'무작위로 어림',
@@ -633,6 +635,7 @@ window.RedesignModule = function() {
       const p=this.genPrefGet()||this._genPrefClean(null), out={};
       const rules=this._rulesWithFx(p.keys.map(k=>MAKE_KEYWORDS.find(x=>x.id===k).fx));
       if(rules) out.scoring_rules=rules;
+      Object.assign(out, this._kwRules(p.keys));
       if(p.time==='endless') out.mip_gap=0;
       return out;
     },
@@ -680,6 +683,9 @@ window.RedesignModule = function() {
     get makeDirHint(){ const ks=MAKE_KEYWORDS.filter(k=>this.mk.keys.includes(k.id)); return ks.length ? ks.map(k=>`${k.label} — ${k.hint}`).join('\n') : '아무것도 고르지 않으면 지금 설정 그대로(균형)로 만듭니다.'; },
 
     // 배점 규칙에 곱하기 묶음(fx: {규칙 이름표: 배수})들을 건 사본 — 아무것도 걸리지 않으면 null (서버가 설정 값을 쓴다)
+    // 고른 키워드가 켜는 규칙 — 요청의 rules 를 이 표에만 바꿔 싣는다 (없으면 빈 객체)
+    _kwRules(keys){ const over=Object.assign({}, ...MAKE_KEYWORDS.filter(k=>k.rules&&(keys||[]).includes(k.id)).map(k=>k.rules)); return Object.keys(over).length ? {rules:{...this.rules, ...over}} : {}; },
+    get makeHasCap(){ return this.mk.count==='multi' ? this.multi.tables.some(t=>t.keys.includes('onecap')) : this.mk.keys.includes('onecap'); },
     _rulesWithFx(fxs){
       const mul=new Map();
       for(const fx of fxs) for(const [k,f] of Object.entries(fx||{})) for(const r of (this.scoringRules||[])) if(PREF_RULE[k]&&PREF_RULE[k](r)) mul.set(r, (mul.get(r)||1)*f);
@@ -709,7 +715,7 @@ window.RedesignModule = function() {
       try{
         for(let i=0;i<plan.length&&!M.stopped;i++){
           const R=M.results[i], rules=this._rulesWithFx(plan[i].keys.map(k=>MAKE_KEYWORDS.find(x=>x.id===k).fx));
-          const payload={...base, mip_gap:M.gap, time_limit:M.cap*60, ...(rules ? {scoring_rules:rules} : {})};
+          const payload={...base, mip_gap:M.gap, time_limit:M.cap*60, ...(rules ? {scoring_rules:rules} : {}), ...this._kwRules(plan[i].keys)};
           M.idx=i; M.started=Date.now(); R.state='run';
           this.solverLogs=[]; this._logSeq=0; this._solveReset(); this.solveProgress={gap_percent:null, nodes:0, has_solution:false, is_running:false};
           this.sseSource=new EventSource('/api/generate/stream');

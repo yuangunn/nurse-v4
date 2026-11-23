@@ -236,7 +236,7 @@ html.dark .rt-cell.is-sel { box-shadow: inset 0 0 0 100px rgba(138,168,255,0.24)
 .rtoast .rbtn:hover { background: #3A404A; }
 
 /* ── 툴팁 ── 0.3초 지연 · 포커스에도 · 최대 2줄 · 잉크 배경. (title 속성은 그대로 두고 커스텀 툴팁이 title 을 읽는다) */
-.rtip { position: absolute; z-index: 95; max-width: 380px; background: var(--ink-surface); color: #fff; border-radius: 8px; padding: 7px 10px;
+.rtip { position: absolute; z-index: 600;   /* 창(.rmodal-bg 100 · 인쇄 110 · 옛 모달 500) 위 — 95 일 때는 창 안 단추의 말풍선이 창 뒤에 가렸다 */ max-width: 380px; background: var(--ink-surface); color: #fff; border-radius: 8px; padding: 7px 10px;
   font-size: var(--fs-min); line-height: 1.5; font-weight: var(--fw-body); pointer-events: none; }
 .rtip .note { color: #B8BFC9; }   /* "[주의 한 마디]" 부분 */
 /* 칸 메모 — 풍선말 안에서 한 줄 내려 본문 크기로 */

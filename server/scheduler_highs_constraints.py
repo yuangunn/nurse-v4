@@ -417,6 +417,24 @@ class _HighsConstraintsMixin:
                     f"consec_night_{nid}_{start}"
                 )
 
+    def _c_max_oneoff(self, prob, x, cap: int):
+        """한 사람의 1오프(앞뒤가 근무인 하루짜리 휴무)를 cap 개까지 (결정 1-98). 창은 퐁당퐁당 배점과 같다(_score_windows).
+        감점으로는 안 됐다 — 퐁당퐁당 감점은 합만 줄이고, 사람마다 넘는 수를 깎는 감점은 '최고와 2% 안'에 묻혔다
+        (실제 12월: 감점을 넣어도 가장 많은 사람 5개 그대로, 한도 3으로 걸면 3개·합 40→31).
+        세 칸을 모두 사람이 정한 창은 세지 않는다 — 엔진이 바꿀 수 없는 칸 때문에 표를 못 만들지 않게."""
+        work, rest = self._resolve_group("work"), self._resolve_group("rest_leave")
+        pin = self._pin_view()
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            zs = []
+            for a, b, c in self._oneoff_windows(nid, pin):
+                z = pulp.LpVariable(f"one_{nid}_{b}", lowBound=0, upBound=1)   # 아래쪽만 묶으면 된다 — 정수일 필요 없음
+                prob += (z >= pulp.lpSum(x[nid][a][s] for s in work) + pulp.lpSum(x[nid][b][s] for s in rest)
+                         + pulp.lpSum(x[nid][c][s] for s in work) - 2, f"one_{nid}_{b}_ge")
+                zs.append(z)
+            if len(zs) > cap:
+                prob += pulp.lpSum(zs) <= cap, f"one_cap_{nid}"
+
     def _c_rest_after_night(self, prob, x):
         """연속 야간 후 연속 휴무 보장 — 설정 '야간 min_consec 회 이상이면 rest_days 일 휴무' (기본 2·2).
         제약: sum_N(d..) - sum_N(next) + sum_W(rest_d) <= min_consec

@@ -2073,6 +2073,12 @@ class _SchedulerBase:
         (사람마다 그 지난달 칸이 기록일 때만 — _score_window_ok)."""
         return [[e - n + 1 + k for k in range(n)] for e in self._score_days() if e - n + 1 >= 0]
 
+    def _oneoff_windows(self, nid: str, pin=None) -> list:
+        """한 사람의 1오프 한도(결정 1-98)가 세는 사흘 창 — 퐁당퐁당 배점과 같은 창에서, 세 칸을 모두 사람이 정한 창은 뺀다
+        (엔진이 바꿀 수 없는 칸 때문에 표를 못 만들지 않게). pin 이 None 이면 빼지 않는다(완성된 표를 셀 때)."""
+        return [w for w in self._score_windows(3) if self._score_window_ok(nid, w)
+                and not (pin and all(pin.get((nid, d)) for d in w))]
+
     def _score_window_ok(self, nid: str, window) -> bool:
         """창에 든 지난달 칸이 그 사람의 기록(사전입력)인가. 기록이 없는 지난달 칸은 이음새 규칙을 잇는 숨은 변수라
         (결과에 내지 않는다) 거기에 배점을 걸면 지어낸 값이 1일 배정을 끌고 간다."""
@@ -2689,6 +2695,13 @@ class _SchedulerBase:
                 mn = _max_run(lambda c: c in night_set)
                 if mn > self.rules.maxConsecutiveNightDays:
                     notes.append(f"{name_of[nid]} 연속 야간 {mn}일 (생성 규칙은 ≤{self.rules.maxConsecutiveNightDays}일)")
+            if getattr(self.rules, "maxOneOff", False):
+                rest_set = set(self._resolve_group("rest_leave"))
+                code = lambda d: days.get(self.all_dates[d].strftime("%Y-%m-%d"))
+                ones = sum(1 for a, b, c in self._oneoff_windows(nid)
+                           if code(a) in work_set and code(b) in rest_set and code(c) in work_set)
+                if ones > self.rules.maxOneOffCount:
+                    notes.append(f"{name_of[nid]} 1오프 {ones}개 (생성 규칙은 ≤{self.rules.maxOneOffCount}개)")
 
         # ⑧ 연속 야간 후 휴무 (restAfterNight) — 확정만으로 완결된 위반 안내
         if getattr(self.rules, "restAfterNight", False):

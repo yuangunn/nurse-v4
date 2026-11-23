@@ -281,6 +281,8 @@ class CpSatScheduler(_SchedulerBase):
             self._cs_max_consecutive_work(model, x, self.rules.maxConsecutiveWorkDays)
         if self.rules.maxConsecutiveNight:
             self._cs_max_consecutive_night(model, x, self.rules.maxConsecutiveNightDays)
+        if getattr(self.rules, "maxOneOff", False):
+            self._cs_max_oneoff(model, x, max(0, int(self.rules.maxOneOffCount)))
         if getattr(self.rules, "restAfterNight", False):
             self._cs_rest_after_night(model, x)
         self._cs_charge_seniority(model, x)
@@ -1005,6 +1007,23 @@ class CpSatScheduler(_SchedulerBase):
                 if all(pin.get((nid, d)) for d in window):
                     continue  # 사실-클램프
                 model.Add(sum(x[nid][d][s] for d in window for s in self.NIGHT_SHIFTS) <= max_nights)
+
+    def _cs_max_oneoff(self, model, x, cap: int, lit_of=None, pin=None):
+        """한 사람의 1오프를 cap 개까지 (결정 1-98, HiGHS _c_max_oneoff 대응). lit_of(nurse) 가 있으면 그 리터럴이 참일 때만(충돌 분석)."""
+        work, rest = self._resolve_group("work"), self._resolve_group("rest_leave")
+        pin = self._pin_view() if pin is None else pin
+        for nurse in self.nurses:
+            nid = nurse["id"]
+            zs = []
+            for a, b, c in self._oneoff_windows(nid, pin):
+                z = model.NewBoolVar(f"one_{nid}_{b}")
+                model.Add(z >= sum(x[nid][a][s] for s in work) + sum(x[nid][b][s] for s in rest)
+                          + sum(x[nid][c][s] for s in work) - 2)
+                zs.append(z)
+            if len(zs) > cap:
+                ct = model.Add(sum(zs) <= cap)
+                if lit_of:
+                    ct.OnlyEnforceIf(lit_of(nurse))
 
     def _cs_rest_after_night(self, model, x):
         """연속 야간(min_consec) 후 rest_days 일간 근무 불가 — 둘째 휴무일부터는 N 도 근무, 나이트킵도 같다.
