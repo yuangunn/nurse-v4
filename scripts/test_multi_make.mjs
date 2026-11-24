@@ -50,7 +50,7 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
 {
   const { a } = make([]);
   const ids = a.rdMakeKeywords().map(k => k.id);
-  assert.deepEqual(ids, ['night.a', 'night.b', 'rest.a', 'rest.b', 'weekend.a', 'weekend.b', 'oneoff', 'onecap']);
+  assert.deepEqual(ids, ['night.a', 'night.b', 'rest.a', 'rest.b', 'weekend.a', 'weekend.b', 'oneoff', 'onecap', 'nosix']);
   a.multiToggle(0, 'night.a');
   assert.equal(a.multiClash(0, 'night.b'), '야간 묶어서', '야간 묶어서 ↔ 야간 고르게');
   assert.equal(a.multiClash(0, 'rest.b'), null); assert.equal(a.multiClash(0, 'night.a'), null, '이미 고른 것은 끌 수 있다');
@@ -67,6 +67,8 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   a.rules = { maxOneOff: false, maxOneOffCount: 3, weeklyOff: true };
   assert.equal(a._kwClash(['oneoff', 'rest.a'], 'onecap'), null); assert.deepEqual(a._kwRules(['oneoff']), {});
   assert.deepEqual(a._kwRules(['oneoff', 'onecap']), { rules: { maxOneOff: true, maxOneOffCount: 3, weeklyOff: true } }); assert.equal(a.rules.maxOneOff, false);
+  // 6일 연속 없이 — 배점은 건드리지 않고 이 표의 요청에만 규칙을 끈다. 다른 키워드와 함께 고를 수 있다
+  assert.deepEqual(a._kwRules(['nosix']), { rules: { maxOneOff: false, maxOneOffCount: 3, weeklyOff: true, longRunLastResort: false } }); assert.equal(a._kwClash(['oneoff', 'night.a'], 'nosix'), null);
   a.mk.count = 'one'; a.mk.keys = ['onecap']; assert.equal(a.makeHasCap, true); a.mk.keys = []; assert.equal(a.makeHasCap, false);
   a.mk.count = 'multi'; a.multi.tables = [{ keys: [] }, { keys: ['onecap'] }]; assert.equal(a.makeHasCap, true);
   assert.deepEqual(a.multiPlan.map(p => p.label), ['균형 (지금 설정 그대로)', '1오프 몰지 않기']);

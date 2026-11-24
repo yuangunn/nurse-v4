@@ -81,14 +81,14 @@ def test_migration_adds_rule_once_and_never_revives_a_deleted_one(tmp_path, monk
         with sqlite3.connect(path) as c:
             return c.execute("PRAGMA user_version").fetchone()[0]
 
-    assert len(rows()) == 1 and rows()[0][1:] == (-400, 1) and version() == 7   # 마이그레이션이 늘면 이 숫자도 는다 (4 = 두 달 합산 야간 1-99, 5 = 생리휴가 보상 1-100, 6 = 감점 위주 배점 1-103, 7 = 고르게·5일 연속 1-107·1-109)
+    assert len(rows()) == 1 and rows()[0][1:] == (-400, 1) and version() == 8   # 마이그레이션이 늘면 이 숫자도 는다 (4 = 두 달 합산 야간 1-99, 5 = 생리휴가 보상 1-100, 6 = 감점 위주 배점 1-103, 7 = 고르게·5일 연속 1-107·1-109, 8 = 하나씩 넘어가기 줄이기 1-110)
     db.init_db()
     assert len(rows()) == 1, '다시 열어도 하나'
     with sqlite3.connect(path) as c:                               # 이 규칙이 없던 옛 DB
         c.execute("DELETE FROM scoring_rules WHERE params LIKE '%non_night%'")
         c.execute("PRAGMA user_version = 0")
     db.init_db()
-    assert len(rows()) == 1 and version() == 7, '옛 DB 엔 한 번 넣는다'
+    assert len(rows()) == 1 and version() == 8, '옛 DB 엔 한 번 넣는다'
     with sqlite3.connect(path) as c:                               # 사용자가 지웠다
         c.execute("DELETE FROM scoring_rules WHERE params LIKE '%non_night%'")
     db.init_db()
@@ -212,8 +212,8 @@ def test_migration_moves_untouched_defaults_to_the_penalty_first_scores_once(tmp
             return {name: score for name, score in c.execute("SELECT name, score FROM scoring_rules")}
 
     new = scores()
-    assert (new["생리휴가 보상"], new["D→E 순방향 보상"], new["연속 동일 낮 근무 보상"], new["연속 휴일 보상"], new["퐁당퐁당 회피"], new["단독 나이트 감점"]) == (0, 0, 80, 60, -150, -400)
-    assert (new["쉬고 나서 역방향 (저녁→휴무→낮)"], new["쉬고 나서 역방향 (야간→휴무→저녁)"]) == (-100, -100)
+    assert (new["생리휴가 보상"], new["D→E 순방향 보상"], new["연속 동일 낮 근무 보상"], new["연속 휴일 보상"], new["퐁당퐁당 회피"], new["단독 나이트 감점"]) == (0, 0, 80, 60, -300, -400)
+    assert (new["쉬고 나서 역방향 (저녁→휴무→낮)"], new["쉬고 나서 역방향 (야간→휴무→저녁)"], new["하나씩 넘어가기 (낮→저녁→야간)"]) == (-300, -300, -200)
     with sqlite3.connect(path) as c:      # 옛 DB — 옛 기본값, 역방향 규칙 없음, 퐁당퐁당만 사람이 고쳐 둠
         for name, score in (("생리휴가 보상", 1000), ("D→E 순방향 보상", 20), ("E→N 순방향 보상", 20), ("연속 동일 낮 근무 보상", 15),
                             ("연속 동일 저녁 근무 보상", 15), ("연속 동일 야간 근무 보상", 15), ("연속 휴일 보상", 30), ("퐁당퐁당 회피", -40), ("단독 나이트 감점", -200)):
@@ -230,4 +230,31 @@ def test_migration_moves_untouched_defaults_to_the_penalty_first_scores_once(tmp
     db.init_db()
     again = scores()
     assert "쉬고 나서 역방향 (저녁→휴무→낮)" not in again and again["연속 동일 낮 근무 보상"] == 15
+
+
+def test_migration_to_step_scores_once(tmp_path, monkeypatch):
+    """하나씩 넘어가기 줄이기 (결정 1-110) — 앞 기본값(-150 · -100) 그대로인 규칙만 -300 으로, 낮→저녁→야간 규칙은 없을 때만 넣는다."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    db.init_db()
+    path = db.get_db_path()
+
+    def scores():
+        with sqlite3.connect(path) as c:
+            return {name: score for name, score in c.execute("SELECT name, score FROM scoring_rules")}
+
+    step = "하나씩 넘어가기 (낮→저녁→야간)"
+    with sqlite3.connect(path) as c:      # 앞 판의 DB — 퐁당퐁당은 앞 기본값, 역방향 하나는 사람이 고쳐 둠, 낮→저녁→야간 규칙 없음
+        c.execute("UPDATE scoring_rules SET score=-150 WHERE name='퐁당퐁당 회피'")
+        c.execute("UPDATE scoring_rules SET score=-100 WHERE name='쉬고 나서 역방향 (저녁→휴무→낮)'")
+        c.execute("UPDATE scoring_rules SET score=-250 WHERE name='쉬고 나서 역방향 (야간→휴무→저녁)'")
+        c.execute("DELETE FROM scoring_rules WHERE name=?", (step,))
+        c.execute("PRAGMA user_version = 7")
+    db.init_db()
+    got = scores()
+    assert (got["퐁당퐁당 회피"], got["쉬고 나서 역방향 (저녁→휴무→낮)"], got["쉬고 나서 역방향 (야간→휴무→저녁)"], got[step]) == (-300, -300, -250, -200)
+    with sqlite3.connect(path) as c:
+        c.execute("DELETE FROM scoring_rules WHERE name=?", (step,))
+        c.execute("UPDATE scoring_rules SET score=-150 WHERE name='퐁당퐁당 회피'")
+    db.init_db()
+    assert step not in scores() and scores()["퐁당퐁당 회피"] == -150, "옮긴 뒤 지운 규칙 · 되돌린 값은 다시 건드리지 않는다"
 

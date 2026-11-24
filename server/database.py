@@ -289,6 +289,7 @@ def init_db(path: Optional[str] = None):
         _migrate_saeng_score(conn)
         _migrate_shape_scores(conn)
         _migrate_even_rules(conn)
+        _migrate_step_scores(conn)
 
         # 임부휴무(P1) 근무 코드 마이그레이션 (기존 DB에 없을 경우 추가)
         conn.execute(
@@ -1033,6 +1034,8 @@ def _seed_scoring_rules(conn: sqlite3.Connection):
     # 감점 위주 기본 배점 (결정 1-103) — 위 표의 값은 옛 기본값(마이그레이션이 견주는 값)이고, 새 병동은 여기서 새 값을 받는다
     rules = [(n, t, p, next((new for st, sp, _old, new in _SHAPE_SCORES if st == t and sp == json.loads(p)), s), e, o)
              for n, t, p, s, e, o in rules] + list(_BACK_REST_RULES) + list(_EVEN_RULES)
+    rules = [(n, t, p, next((new for st, sp, old, new in _STEP_SCORES if st == t and sp == json.loads(p) and s == old), s), e, o)
+             for n, t, p, s, e, o in rules] + list(_STEP_RULES)
     conn.executemany(
         "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
         rules,
@@ -1193,6 +1196,39 @@ _EVEN_RULES = [
     ("같은 근무 5일 연속 (저녁)", "pattern", json.dumps({"pattern": ["evening"] * 5}), -300, 1, 25),
     ("5일 연속 근무",             "pattern", json.dumps({"pattern": ["work"] * 5}), -100, 1, 26),
 ]
+
+
+# 하나씩 넘어가기 줄이기 (결정 1-110) — 낮→저녁→야간을 하루씩 넘어가는 사흘에 감점을 두고, 퐁당퐁당과 쉬고 나서 역방향을 더 크게 깎는다.
+# 1시간짜리 14개 조건을 견준 것 가운데 사전입력을 더 풀지 않으면서(3칸 그대로) 나아진 유일한 조합: 쉬고 나서 역방향 12 → 8, 1오프 48 → 45,
+# 풀이가 끝나는 시간 55분 → 32분. 대가는 하루짜리 근무 30 → 33, 단독 야간 8 → 9.
+# (같은 근무 5일 감점을 -600 · -1000 으로 올리거나 고르게를 더 세게 건 조합은 1시간에 풀이가 끝나지 않거나 야간 0회인 사람이 생겼다)
+_STEP_SCORES = [
+    ("pattern", {"pattern": ["work", "rest_leave", "work"]}, -150, -300),
+    ("pattern", {"pattern": ["evening", "rest_leave", "day"]}, -100, -300),
+    ("pattern", {"pattern": ["night", "rest_leave", "evening"]}, -100, -300),
+]
+_STEP_RULES = [
+    ("하나씩 넘어가기 (낮→저녁→야간)", "pattern", json.dumps({"pattern": ["day", "evening", "night"]}), -200, 1, 27),
+]
+
+
+def _migrate_step_scores(conn: sqlite3.Connection):
+    """'하나씩 넘어가기 줄이기' 배점으로 한 번 옮긴다 (PRAGMA user_version 8, 결정 1-110) — 앞 기본값 그대로인 규칙만 새 값으로 바꾸고,
+    낮→저녁→야간 패턴 규칙은 같은 조건이 없을 때만 넣는다. 사람이 고친 값·지운 규칙은 건드리지 않는다."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 8:
+        return
+    rows = conn.execute("SELECT id, rule_type, params, score FROM scoring_rules").fetchall()
+    for rid, rtype, params, score in rows:
+        p = json.loads(params or "{}")
+        for st, sp, old, new in _STEP_SCORES:
+            if st == rtype and sp == p and score == old:
+                conn.execute("UPDATE scoring_rules SET score=? WHERE id=?", (new, rid))
+    have = [json.loads(r[2] or "{}") for r in rows if r[1] == "pattern"]
+    for rule in _STEP_RULES:
+        if json.loads(rule[2]) not in have:
+            conn.execute(
+                "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)", rule)
+    conn.execute("PRAGMA user_version = 8")
 
 
 def _migrate_even_rules(conn: sqlite3.Connection):

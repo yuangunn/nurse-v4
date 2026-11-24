@@ -47,7 +47,9 @@ window.RedesignModule = function() {
   const MAKE_KEYWORDS = [...PREF_AXES.flatMap(a=>['a','b'].map(s=>({id:a.id+'.'+s, label:a[s].kw, hint:a[s].hint, fx:a[s].fx}))),
     {id:'oneoff', label:'1오프 줄이기', hint:'OFF 를 주휴 옆에 더 세게 붙이고 근무-휴무-근무를 줄입니다', fx:{juhuOff:2, pongdang:2}},
     // 배점이 아니라 규칙을 켜는 키워드 (결정 1-98) — 설정의 '한 사람의 1오프'가 꺼져 있어도 이 표에만 건다. 개수는 rules.maxOneOffCount
-    {id:'onecap', label:'1오프 몰지 않기', hint:'한 사람의 1오프(앞뒤가 근무인 하루짜리 휴무)를 정한 개수까지로 맞춥니다. 사전입력을 지킨 다음에 맞추므로 넘는 사람이 남을 수 있고, 그때는 결과에 알립니다', fx:{}, rules:{maxOneOff:true}}];
+    {id:'onecap', label:'1오프 몰지 않기', hint:'한 사람의 1오프(앞뒤가 근무인 하루짜리 휴무)를 정한 개수까지로 맞춥니다. 사전입력을 지킨 다음에 맞추므로 넘는 사람이 남을 수 있고, 그때는 결과에 알립니다', fx:{}, rules:{maxOneOff:true}},
+    // 6일 연속 없이 (결정 1-110) — 연속 근무 한도 +1일(마지막 수단, 규칙 longRunLastResort)을 이 표에서만 끈다. 설정은 그대로 둔다
+    {id:'nosix', label:'6일 연속 없이', hint:'연속 근무 한도를 하루 넘기는 것(6일 연속)을 마지막 수단으로도 쓰지 않습니다. 그 대신 사전입력이 한두 칸 더 풀릴 수 있습니다 — 사전입력끼리 6일이 이어지는 자리는 그 가운데 한 칸이 풀립니다', fx:{}, rules:{longRunLastResort:false}}];
   const PREF_TIMES = [{v:20, label:'20분'}, {v:60, label:'60분'}, {v:'endless', label:'멈출 때까지 계속'}];
   const PREF_DEFAULT = {keys:[], time:20, quick:true};   // 하나만 만들 때의 선택 — 방향 키워드(MAKE_KEYWORDS 의 id) · 찾는 시간 · 초안 먼저
   const SRC = {B:'갈래를 나눠 따져 봄', C:'가운데 값에서 어림', F:'규칙을 맞추며 밀어 넣기', H:'어림 탐색', L:'작은 문제로 쪼개 풀기', P:'남은 것이 없는 문제', R:'무작위로 어림',
