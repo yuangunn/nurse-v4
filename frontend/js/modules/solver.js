@@ -44,6 +44,8 @@ window.SolverModule = function() {
       this.api('POST','/api/estimate',payload).then(est=>{if(est&&est.estimated_seconds)this.estimatedSeconds=est.estimated_seconds}).catch(()=>{});
       try{
         const result=await this.api('POST','/api/generate',payload);
+        // 합쳐 푼 풀이(결정 1-106) — 끝난 표의 배점 점수·한계·차이를 계산 현황 카드에 넣는다 (푸는 동안에는 비어 있다)
+        if(result&&result.score_unit)this.solveProgress={...(this.solveProgress||{}),unit:result.score_unit,score:result.score_objective??null,score_bound:result.score_bound??null,gap_percent:result.mip_gap_percent??null};
         // 만드는 동안 병동·달이 바뀌었으면 지금 화면에 넣지 않는다 — 12월 화면에 11월 표를 넣고 '자동저장 2026-12'(12월 것을 지우고)로 저장했다.
         // 이어 찾기도 걸지 않는다. 받는 쪽(readjustSchedule)은 false 면 결과를 보지 않는다
         if(!this._resultHere({profile_id:pid,year:payload.year,month:payload.month})){this._offscreenResult(result,payload,pid,_readjust);return false}
@@ -117,7 +119,7 @@ window.SolverModule = function() {
             const solver=payload.solver==='race'&&result.engine?(result.engine==='CP-SAT'?'cpsat':'highs'):payload.solver;
             next={...payload,...(draft?{time_limit:fullMin*60}:{}),solver,warm_start:result.extended_schedule||result.schedule,prev_bound:result.mip_dual_bound??null,
               prev_fingerprint:result.model_fingerprint||null,prev_objective:result.objective??null,
-              _cont:{objective:result.objective??null,fingerprint:result.model_fingerprint||null,gap:result.mip_gap_percent,message:this.statusMessage,ok:this.statusOk}};
+              _cont:{objective:result.objective??null,fingerprint:result.model_fingerprint||null,unit:result.score_unit||null,offset:result.score_offset||0,gap:result.mip_gap_percent,message:this.statusMessage,ok:this.statusOk}};
           }
           if(!_readjust){this._roundDone(true);if(!next)next=this._endlessNext(result);if(!next&&_cont)next=this._draftMoreNext(result)}}
         return true;
@@ -132,7 +134,7 @@ window.SolverModule = function() {
     _setContBase(payload,r){
       const solver=payload.solver==='race'&&r.engine?(r.engine==='CP-SAT'?'cpsat':'highs'):payload.solver;
       this.contBase=(r&&r.success&&r.model_fingerprint&&r.objective!=null)
-        ? {year:+payload.year,month:+payload.month,payload:{...payload,solver},objective:r.objective,bound:r.mip_dual_bound??null,fingerprint:r.model_fingerprint} : null;
+        ? {year:+payload.year,month:+payload.month,payload:{...payload,solver},objective:r.objective,bound:r.mip_dual_bound??null,fingerprint:r.model_fingerprint,unit:r.score_unit||null,offset:r.score_offset||0} : null;
     },
     // 더 좋은 표가 없었어도 같은 문제에서 하한이 올랐으면 다음에 이을 때 그 하한부터 (차이를 처음부터 다시 재지 않는다)
     _contBaseBound(r){
@@ -156,7 +158,7 @@ window.SolverModule = function() {
       return {...c.payload,time_limit:Math.max(1,Math.min(60,parseInt(this.generateTimeout)||20))*60,mip_gap:mipGap,
         warm_start:this.extendedSchedule&&Object.keys(this.extendedSchedule).length?this.extendedSchedule:this.schedule,
         prev_bound:c.bound,prev_fingerprint:c.fingerprint,prev_objective:c.objective,
-        _cont:{objective:c.objective,fingerprint:c.fingerprint,gap:this.mipGapPercent,message:String(this.statusMessage||'').replace(/(\n\n🔁 이어 찾[^\n]*)+$/,''),ok:this.statusOk}};
+        _cont:{objective:c.objective,fingerprint:c.fingerprint,unit:c.unit||null,offset:c.offset||0,gap:this.mipGapPercent,message:String(this.statusMessage||'').replace(/(\n\n🔁 이어 찾[^\n]*)+$/,''),ok:this.statusOk}};
     },
     // 멈출 때까지 계속 (결정 1-77) — 한 번 끝날 때마다 그 표에서 다시 잇는다. 멈추기를 눌렀거나, 가장 좋은 표(차이 0.1% 안)이거나,
     // 그 사이 칸을 손으로 고쳤으면 끝. 오차는 0 — 목표 오차 안에 든 표에서 다시 이으면 바로 끝나 버린다
@@ -189,11 +191,17 @@ window.SolverModule = function() {
       return !!(r&&r.success&&r.improved);
     },
     // 앞 표를 그대로 둔다 — 같은 모델의 하한이 더 올랐으면 앞 표의 차이를 그만큼 줄여 보여 준다
+    // 합쳐 푼 풀이(배점 + 큰 수 × 사전입력 지키기)의 목적값·하한에서 배점만의 차이(%) — 서버 score_view 와 같은 셈 (결정 1-106).
+    // 하한이 같은 지키기 수준 안에 있지 않으면 말할 수 없다(null)
+    _scoreGap(obj,bound,unit,offset){
+      const s=obj+offset,b=bound+offset;
+      return (b>s-unit/2&&b<=s+1e-6)?Math.round(Math.max(0,s-b)/Math.max(1,Math.abs(s))*10000)/100:null;
+    },
     _contKeep(r,c,edited,ver){
       this.statusOk=c.ok;
       let g=c.gap;
       if(r&&r.success&&c.objective!=null&&r.mip_dual_bound!=null&&r.model_fingerprint&&r.model_fingerprint===c.fingerprint){
-        g=Math.round(Math.max(0,c.objective-r.mip_dual_bound)/Math.max(1,Math.abs(c.objective))*10000)/100;
+        g=c.unit?this._scoreGap(c.objective,r.mip_dual_bound,c.unit,c.offset||0):Math.round(Math.max(0,c.objective-r.mip_dual_bound)/Math.max(1,Math.abs(c.objective))*10000)/100;
       }
       if(!ver)this.mipGapPercent=g;   // 넣지 않은 새 표가 있으면 화면의 표와 그 차이는 그대로다
       this.statusMessage=c.message+(ver

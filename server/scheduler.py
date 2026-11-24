@@ -119,16 +119,34 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         return {"success": False, "schedule": {}, "extended_schedule": {},
                 "message": "중지 요청으로 멈췄습니다 — 그때까지 찾은 표가 없습니다."}
 
-    def _warm_highs(self, x, start=None, stage="score", **kw) -> "_WarmHiGHS":
-        """HiGHS 솔버 — 시작해는 start(완화 1단계의 해), 없으면 이어 찾기의 앞 표 (둘 다 없으면 보통 pulp.HiGHS 와 같다)."""
+    def _warm_highs(self, x, start=None, stage="score", unit=None, **kw) -> "_WarmHiGHS":
+        """HiGHS 솔버 — 시작해는 start(완화 1단계의 해), 없으면 이어 찾기의 앞 표 (둘 다 없으면 보통 pulp.HiGHS 와 같다).
+        unit = 합쳐 푸는 풀이(배점 + 큰 수 × 사전입력 지키기)의 눈금(큰 수 × 지키기 값의 최소 걸음) — 결과에서 배점만 떼어 보이는 데 쓴다 (결정 1-106)."""
         if not start and self.warm_start:
             start = self._mip_start_pairs(x, lambda v: isinstance(v, pulp.LpVariable))
+        self._score_unit, self._score_stage = unit, stage
         try:   # 찾는 도중의 표 (결정 1-97) — 이 풀이가 더 나은 답을 낼 때마다 표로 바꿔 보낼 함수를 맡긴다
             from . import solver_progress as _sp
+            _sp.set_score_unit(unit)
+            _sp.set_stage(stage)
             _sp.set_partial_builder(lambda vals: {**self._partial_table(x, vals), "stage": stage})
         except Exception:
             pass
         return _WarmHiGHS(start=start, msg=False, **kw)
+
+    def _score_fields(self, info: dict) -> dict:
+        """풀이 정보에 배점만의 점수를 붙인다 — 합쳐 푼 풀이면 차이(%)를 배점 기준으로 바꾸고 눈금·배점 점수·배점 하한을 싣는다.
+        objective·mip_dual_bound 는 그대로 둔다(이어 찾기가 같은 모델의 값끼리 견준다). (결정 1-106)"""
+        if getattr(self, "_score_stage", None) == "keep" and "mip_gap_percent" in info:
+            # 사전입력 지키기 단계에서 멈춘 표 — 솔버의 차이는 '얼마나 지킬 수 있나'의 것이라 표의 품질로 싣지 않는다
+            return {**info, "mip_gap_percent": None}
+        unit, keep = getattr(self, "_score_unit", None), getattr(self, "_score_keep", None)
+        if not unit or keep is None or info.get("objective") is None or info.get("mip_dual_bound") is None:
+            return info
+        from . import solver_progress as _sp
+        offset = float(keep[0]) * round(pulp.value(keep[1]) or 0)      # 큰 수 × 이 표의 지키기 값(정수) — 목적값에서 이만큼이 사전입력 몫이다
+        s, b, g = _sp.score_view(info["objective"], info["mip_dual_bound"], unit, offset)
+        return {**info, "score_unit": unit, "score_offset": offset, "score_objective": s, "score_bound": b, "mip_gap_percent": g}
 
     def _partial_table(self, x, vals) -> Dict:
         """솔버가 낸 답(변수 번호 차례의 값)을 근무표로 — 끝난 풀이와 같은 길(_extract_solution)에 값 읽기만 바꾼다.
@@ -721,7 +739,8 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 dom = int(scoring_bound // max(1, bonus_gcd)) + 2
                 prob.setObjective(obj + dom * bonus_expr)
                 # 가중 방식에선 gap=0 필수 — 상대 갭만큼 보존이 희생될 수 있음
-                solver = self._warm_highs(x, start=seed, timeLimit=self.time_limit, mip_rel_gap=0.0)
+                self._score_keep = (dom, bonus_expr)       # 끝난 표의 지키기 값을 읽어 배점만 떼어 낸다 (_score_fields)
+                solver = self._warm_highs(x, start=seed, unit=dom * max(1, bonus_gcd), timeLimit=self.time_limit, mip_rel_gap=0.0)
         else:
             prob.setObjective(obj)
             solver = self._warm_highs(x, timeLimit=self.time_limit, mip_rel_gap=self.mip_gap)
@@ -776,7 +795,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 "charge_promotions": charge_promotions,
                 "message": f"근무표가 생성되었습니다. (상태: {label})\n{relax_msg}",
                 "estimated_seconds": self.estimate_seconds(),
-                **self._highs_info(prob),
+                **self._score_fields(self._highs_info(prob)),
             })
         # 완화해도 해를 못 찾음 — 시간이 모자랐는지(진단 대신 시간 안내) 정말 안 되는지
         self._relax_timed_out = (status_str != "Infeasible" and not _sp.is_cancelled()

@@ -62,6 +62,40 @@ def _reset_recorder_locked():
     _rec_has_sol = False
     _rec_improve_t = None
     _prev_bound = _prev_fp = None
+    set_score_unit(None)
+    set_stage(None)
+
+
+# 합쳐 푸는 풀이의 눈금 (결정 1-106) — 완화 1단계가 제 시간에 끝나지 않으면 '배점 + 큰 수 × 사전입력 지키기'를 한 번에 푼다.
+# 그 목적값(천억 단위)을 그대로 보이면 점수도 차이(%)도 뜻이 없다. 풀이가 끝나면 그 표의 사전입력 지키기 값을 읽어 배점만 떼어 낸다.
+# 푸는 동안에는 그 값을 모르므로(더 좋은 답이 지키기 수준을 바꿀 수 있다) 점수·차이를 보이지 않는다.
+_score_unit = None
+_stage = None       # 지금 풀이의 단계 — "keep"(완화 1단계: 사전입력 지키기) 이면 솔버의 차이는 표의 품질이 아니다
+
+
+def set_stage(stage) -> None:
+    global _stage
+    _stage = stage or None
+
+
+def set_score_unit(unit) -> None:
+    """이번 풀이가 합쳐 푸는 풀이면 그 눈금, 아니면 None (풀이를 시작할 때마다 부른다)."""
+    global _score_unit
+    _score_unit = float(unit) if unit else None
+
+
+def score_unit():
+    return _score_unit
+
+
+def score_view(primal: float, dual: float, unit: float, offset: float):
+    """합친 목적값·하한 → (배점만의 답, 배점만의 하한 또는 None, 차이 % 또는 None). 모두 감점 점수(낮을수록 좋다).
+    답 = −(배점 + 큰 수 × 지키기 값), offset = 큰 수 × 그 표의 지키기 값, unit = 큰 수 × 지키기 값의 최소 걸음(배점이 낼 수 있는 가장 큰 차이보다 크다).
+    하한에서 같은 offset 을 뺀 값이 답보다 unit 의 절반 넘게 낮으면 '사전입력을 한 걸음 더 지킬 수 있을지 아직 모른다'는 뜻이라
+    배점만의 하한·차이는 말할 수 없다."""
+    s, b = primal + offset, dual + offset
+    ok = s - unit / 2 < b <= s + 1e-6
+    return s, (b if ok else None), (round(max(0.0, s - b) / max(1.0, abs(s)) * 100, 2) if ok else None)
 
 
 def combined_gap(primal: float, dual: float, prev_bound=None):
@@ -88,6 +122,12 @@ def _carry(p: dict) -> dict:
     """어댑터 진행에 앞 실행의 하한을 합친다 — 답·하한·모델 지문을 알려 주고 그 지문이 앞 실행과 같을 때만.
     (완화 1단계처럼 다른 모델을 풀 때 합치면 늘 0% 라 '가장 좋은 답이에요'가 떴다, 리뷰 2026-10-19)"""
     pb, primal, dual = _prev_bound, p.get("primal"), p.get("dual")
+    if _score_unit:      # 합쳐 푸는 풀이 — 솔버의 답·하한·차이는 배점의 것이 아니다. 끝날 때까지 보이지 않는다 (결정 1-106)
+        p.update(unit=_score_unit, score=None, score_bound=None, gap_percent=None)
+        return p
+    if _stage == "keep":     # 사전입력 지키기 단계 — 이 차이(2% → 0%)는 '얼마나 지킬 수 있나'이지 표의 점수가 아니다 (결정 1-106)
+        p.update(stage="keep", gap_percent=None)
+        return p
     if (pb is not None and primal is not None and dual is not None and p.get("has_solution")
             and p.get("fingerprint") == _prev_fp):
         p["gap_percent"] = combined_gap(primal, dual, pb)[0]

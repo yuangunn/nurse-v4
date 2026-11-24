@@ -339,7 +339,8 @@ window.RedesignModule = function() {
       if(!this.solveStats) this._solveReset();
       const S=this.solveStats, n=x=>Number(x).toLocaleString('ko-KR'); let P=S.phases[S.phases.length-1], m;
       const score=SCORE;
-      const ev=text=>{ const r=(P&&P.row)||{}; S.events.push({id:++S.seq, solve:S.phases.length, time:r.time??0, text, nodes:r.proc??0, sol:score(r.sol), gap:r.gap&&r.gap!=='inf'?r.gap:''}); if(S.events.length>200) S.events.splice(0, S.events.length-200); };
+      const u=this.solveProgress&&(this.solveProgress.unit||this.solveProgress.stage==='keep') ? this.solveProgress : null;   // 합쳐 푸는 풀이 — 기록의 값은 사전입력 지키기와 합친 수라 진행 정보의 배점 점수를 쓴다 (결정 1-106)
+      const ev=text=>{ const r=(P&&P.row)||{}; S.events.push({id:++S.seq, solve:S.phases.length, time:r.time??0, text, nodes:r.proc??0, sol:u?(u.score!=null?score(u.score):''):score(r.sol), gap:u?(u.gap_percent!=null?u.gap_percent+'%':''):(r.gap&&r.gap!=='inf'?r.gap:'')}); if(S.events.length>200) S.events.splice(0, S.events.length-200); };
       line=String(line??'');
       if(/^Presolving model/.test(line)){ S.phases.push({n:S.phases.length+1, rows0:null, cols0:null, rows:null, cols:null, restarts:0, status:'', row:null, start:null, had:false}); return; }
       if(!P) return;
@@ -367,15 +368,24 @@ window.RedesignModule = function() {
         const p=this.solveProgress||{}; if(!(p.nodes>0) && p.gap_percent==null) return [];
         return [{k:'따져 본 경우', v:n(p.nodes||0), tip:'지금까지 따져 본 경우의 수'}, {k:'가능한 최고와의 차이', v:p.gap_percent==null?'—':(Math.round(p.gap_percent*100)/100)+'%', tip:'지금 표가 이론상 가장 좋은 표와 얼마나 차이 나는지 — 0%면 가장 좋은 표'}];
       }
-      const r=P.row;
+      const now=P===S.phases[S.phases.length-1] ? (this.solveProgress||{}) : {};
+      const r=P.row, U=now.unit ? now : null, K=now.stage==='keep';   // K = 사전입력 지키기 단계 — 솔버의 값은 표의 점수가 아니다 (결정 1-106)
       return [
         {k:'따져 본 경우', v:n(r.proc), tip:'지금까지 끝까지 따져 본 경우의 수 (솔버 기록의 Proc.)'},
         {k:'아직 남은 경우', v:n(r.queue), tip:'더 따져 봐야 해서 줄 서 있는 경우의 수 (InQueue)'},
         {k:'쳐낸 경우', v:n(r.leaves), tip:'더 볼 필요가 없어 닫은 경우의 수 — 가망이 없거나 이미 답이 나온 갈래 (Leaves)'},
         {k:'살펴본 비율', v:r.expl+'%', tip:'전체 경우 가운데 살펴본 비율 (Expl.)'},
+        ...(K ? [
+        {k:'지금 하는 일', v:'사전입력 지키기 확인', tip:'먼저 사전입력을 얼마나 지킬 수 있는지 확인합니다. 이 단계의 숫자는 표의 점수가 아니라서 보이지 않습니다 — 점수와 차이는 다음 단계(배점)에서 나옵니다'},
+        ] : U ? [   // 합쳐 푸는 풀이 — 사전입력 지키기와 배점을 한 번에 푼다. 솔버 기록의 값(천억 단위)이 아니라 배점만의 점수를 보인다 (결정 1-106)
+        {k:'지금 표 점수', v:U.score!=null?SCORE(U.score):'끝나면 나옴', tip:'이 풀이는 사전입력 지키기와 배점을 함께 풉니다. 솔버의 값은 둘을 합친 수라, 배점만의 점수는 풀이가 끝나면 떼어 보입니다 — 높을수록 좋다'},
+        {k:'가능한 최고 점수', v:U.score_bound!=null?SCORE(U.score_bound):(U.score!=null?'확인 못 함':'끝나면 나옴'), tip:U.score_bound!=null?'어떤 표도 이 배점 점수를 넘을 수 없다는 한계':'사전입력을 지금보다 더 지킬 수 있는지 확인하지 못하면 배점만의 한계는 말할 수 없습니다'},
+        {k:'최고와의 차이', v:U.gap_percent!=null?U.gap_percent+'%':'—', tip:'지금 표의 배점 점수와 가능한 최고 점수의 차이 — 0%면 가장 좋은 표'},
+        ] : [
         {k:'지금 표 점수', v:SCORE(r.sol)||'—', tip:'지금까지 찾은 가장 좋은 표의 점수 — 높을수록 좋다 (BestSol 의 부호를 뒤집은 값)'},
         {k:'가능한 최고 점수', v:SCORE(r.bound)||'—', tip:'어떤 표도 이 점수를 넘을 수 없다는 한계 (BestBound)'},
         {k:'최고와의 차이', v:r.gap==='inf'?'—':r.gap, tip:'지금 표 점수와 가능한 최고 점수의 차이 — 0%면 가장 좋은 표 (Gap)'},
+        ]),
         {k:'방금 표를 찾은 방법', v:(r.src&&SRC[r.src])||'—', tip:'가장 최근 표를 어떻게 찾았는지 (Src '+(r.src||'-')+')'},
       ];
     },

@@ -144,6 +144,10 @@ try:
                     # 사전입력 지키기 단계(keep)의 차이는 다른 목적식의 것이라 싣지 않는다
                     table["mip_gap_percent"] = (round(gap * 100, 2) if gap is not None and math.isfinite(gap)
                                                 and table.get("stage") != "keep" else None)
+                    unit = solver_progress.score_unit()        # 합쳐 푸는 풀이 — 솔버의 차이는 배점의 것이 아니다 (결정 1-106)
+                    if unit:
+                        table["score_unit"] = unit
+                        table["mip_gap_percent"] = None
                     solver_progress.push_table(table)
                     last_emit = _time.monotonic()
                 except Exception as e:      # 표를 못 보내도 풀이는 계속된다
@@ -2278,7 +2282,12 @@ def _carry_bound(result: dict, request: GenerateRequest) -> None:
             or request.prev_fingerprint != result.get("model_fingerprint")
             or not (math.isfinite(obj) and math.isfinite(lb))):
         return
-    result["mip_gap_percent"], result["mip_dual_bound"] = solver_progress.combined_gap(obj, lb, request.prev_bound)
+    gap, bound = solver_progress.combined_gap(obj, lb, request.prev_bound)
+    result["mip_dual_bound"] = bound
+    unit = result.get("score_unit")
+    if unit:      # 합쳐 푼 풀이 — 이은 하한으로 배점만의 차이를 다시 잰다 (결정 1-106)
+        _s, result["score_bound"], gap = solver_progress.score_view(obj, bound, unit, result.get("score_offset") or 0.0)
+    result["mip_gap_percent"] = gap
 
 
 def _drop_non_finite(result: dict) -> None:
