@@ -1143,7 +1143,10 @@ class CpSatScheduler(_SchedulerBase):
                          if dt.month == self.month and dt.year == self.year]
             month_vars = [x[nid][d]["생"] for d in month_idx]
             if month_vars:
-                model.Add(sum(month_vars) <= self._cap_with_training(nurse, month_idx, "생", 1))
+                cap = self._cap_with_training(nurse, month_idx, "생", 1)
+                model.Add(sum(month_vars) <= cap)
+                if self._saeng_required(nurse, cap) and any(not isinstance(v, int) for v in month_vars):
+                    model.Add(sum(month_vars) >= 1)    # 꼭 한 번 (결정 1-102, HiGHS 패리티)
             # 이전달 overflow: 생 금지 — 사전입력된 전월 확정 기록은 존중
             for d, dt in enumerate(self.all_dates):
                 if dt < first_of_month:
@@ -1190,6 +1193,9 @@ class CpSatScheduler(_SchedulerBase):
                             if self._nurse_active_idx(nurse, d) and not self._pin.get((nid, d)))
             eff_target = min(max(night_target, pin_n), pin_n + free_days)
             model.Add(sum(x[nid][d][s] for d in month_idxs for s in self.NIGHT_SHIFTS) == eff_target)
+            leave = self._keeper_month_leave(nurse, active_days, month_days)     # 31일 달 — 여자 생휴 · 남자 V 하나 (결정 1-102)
+            if leave:
+                model.Add(sum(x[nid][d][leave] for d in month_idxs) >= 1)
             # (과거 '여성+31일달 생 정확히 1회' 강제는 제거 — 생휴는 보장이 아님.
             #  월 ≤1 상한은 _cs_menstrual_leave가 담당. HiGHS 패리티)
 

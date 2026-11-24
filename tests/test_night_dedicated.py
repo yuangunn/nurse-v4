@@ -110,7 +110,7 @@ def test_menstrual_leave_caps_female_at_one_per_month():
 
 
 def _two_month_request(night_months: dict, prev_nights: dict,
-                       night_only_a0: bool = False) -> GenerateRequest:
+                       night_only_a0: bool = False, month: int = 4) -> GenerateRequest:
     """6명 중 a0만 night_months 지정.
 
     night_only_a0=True 면 야간 가능자를 a0 하나로 좁혀서 '야간을 받을 수 있는가'가
@@ -125,7 +125,7 @@ def _two_month_request(night_months: dict, prev_nights: dict,
             if n.id != "a0":
                 n.capable_shifts = ["DC", "D", "EC", "E"]
     return GenerateRequest(
-        year=2026, month=3, nurses=nurses,
+        year=2026, month=month, nurses=nurses,
         requirements=_mini_requirements(1, 1, 1),
         rules=Rules(maxNightTwoMonth=True, maxNightTwoMonthCount=11),
         prev_schedule={},
@@ -144,7 +144,7 @@ def test_night_kept_month_excluded_from_two_month_sum(solver):
     """
     from .conftest import make_limited
 
-    req = _two_month_request({"2026-02": True}, {"a0": 14}, night_only_a0=True)
+    req = _two_month_request({"2026-03": True}, {"a0": 14}, night_only_a0=True)   # 4월 — 앞 홀수달(3월)이 나이트킵
     sched = make_limited(req, days=3, solver=solver)
     assert sched._two_month_rhs("a0") == 11, "나이트킵 달 야간이 합산에서 빠져야 한다"
 
@@ -161,6 +161,23 @@ def test_regular_prev_month_nights_still_capped():
     req = _two_month_request({}, {"a0": 6})
     sched = make_limited(req, days=7, solver="highs")
     assert sched._two_month_rhs("a0") == 5
+
+
+@pytest.mark.parametrize("solver", ["highs", "cpsat"])
+def test_two_month_sum_pairs_odd_then_even_month(solver):
+    """두 달 합산은 홀수달 + 그다음 짝수달 묶음(1+2월, 3+4월 …) — 홀수달은 그 달만 세고 지난달(짝수달) 야간을 더하지 않는다 (결정 1-101).
+    전에는 매달 '지난달 + 이달'로 세어, 지난달 야간이 한도를 넘은 사람은 홀수달에 야간을 못 받았다."""
+    from .conftest import make_limited
+
+    odd = make_limited(_two_month_request({}, {"a0": 14}, night_only_a0=True, month=3), days=3, solver=solver)
+    assert (odd._two_month_prev("a0"), odd._two_month_rhs("a0")) == (0, 11)
+    result = odd.solve()
+    assert result["success"], result.get("message")
+    assert sum(1 for c in result["schedule"]["a0"].values() if c in ("N", "NC")) == 3, "홀수달은 지난달 야간과 묶지 않는다"
+
+    even = make_limited(_two_month_request({}, {"a0": 6}, month=4), days=3, solver=solver)
+    assert (even._two_month_prev("a0"), even._two_month_rhs("a0")) == (6, 5), "짝수달은 앞 홀수달의 야간을 더한다"
+    assert make_limited(_two_month_request({}, {"a0": 6}, month=1), days=3, solver=solver)._two_month_rhs("a0") == 11, "1월은 12월과 묶지 않는다"
 
 
 # ── 나이트킵 공휴일 OF (2026-10-03 병동 확인) ─────────────────────────────────

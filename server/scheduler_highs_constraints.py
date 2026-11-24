@@ -612,6 +612,8 @@ class _HighsConstraintsMixin:
             if month_vars:
                 cap = self._cap_with_training(nurse, month_idx, "생", 1)   # 트레이닝 날 생도 그 달 몫
                 prob += pulp.lpSum(month_vars) <= cap, f"menstrual_{nid}"
+                if self._saeng_required(nurse, cap) and any(isinstance(v, pulp.LpVariable) for v in month_vars):
+                    prob += pulp.lpSum(month_vars) >= 1, f"menstrual_min_{nid}"   # 꼭 한 번 (결정 1-102)
             # 이전달 overflow: 생 금지 — 사전입력된 전월 확정 기록은 존중
             first_of_month = date(self.year, self.month, 1)
             for d, dt in enumerate(self.all_dates):
@@ -682,6 +684,9 @@ class _HighsConstraintsMixin:
                 for s in self.NIGHT_SHIFTS
             )
             prob += (night_sum == eff_target, f"night_monthly_{nid}")
+            leave = self._keeper_month_leave(nurse, active_days, month_days)     # 31일 달 — 여자 생휴 · 남자 V 하나 (결정 1-102)
+            if leave:
+                prob += pulp.lpSum(x[nid][d][leave] for d in month_idxs) >= 1, f"keeper_leave_{nid}"
 
             # (과거 규칙 4 '여성+31일달 생 정확히 1회'는 제거 — 생휴는 보장이
             #  아니라 '주어질 수 있다'는 원칙. 월 ≤1 상한은

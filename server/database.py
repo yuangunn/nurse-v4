@@ -287,6 +287,7 @@ def init_db(path: Optional[str] = None):
         _migrate_juhu_off_rules(conn)
         _migrate_two_month_night_count(conn)
         _migrate_saeng_score(conn)
+        _migrate_shape_scores(conn)
 
         # 임부휴무(P1) 근무 코드 마이그레이션 (기존 DB에 없을 경우 추가)
         conn.execute(
@@ -1004,6 +1005,9 @@ def _seed_scoring_rules(conn: sqlite3.Connection):
         _SINGLE_NIGHT_RULE,
         *_JUHU_OFF_RULES,
     ]
+    # 감점 위주 기본 배점 (결정 1-103) — 위 표의 값은 옛 기본값(마이그레이션이 견주는 값)이고, 새 병동은 여기서 새 값을 받는다
+    rules = [(n, t, p, next((new for st, sp, _old, new in _SHAPE_SCORES if st == t and sp == json.loads(p)), s), e, o)
+             for n, t, p, s, e, o in rules] + list(_BACK_REST_RULES)
     conn.executemany(
         "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
         rules,
@@ -1129,6 +1133,48 @@ def _migrate_saeng_score(conn: sqlite3.Connection):
         if json.loads(params or "{}").get("shift_code") == "생":
             conn.execute("UPDATE scoring_rules SET score=? WHERE id=?", (_SAENG_SCORE, rid))
     conn.execute("PRAGMA user_version = 5")
+
+
+# 감점 위주 기본 배점 (결정 1-103) — (종류, 조건, 옛 기본값, 새 값). 실제 12월 입력으로 견줘 고른 값:
+# · 생리휴가 보상 0 — 생휴는 규칙('여성 생휴 꼭 한 번', 1-102)이 맡는다. 누구나 받는 보상은 총점만 키워 '최고와 2%' 오차를 넓혔다
+# · 순방향 보상 0 — D→E→N 으로 하루씩 넘어가는 표에도 같은 점수를 줘 하루짜리 근무가 늘었다 (73개)
+# · 같은 근무 이어가기 +15 → +80 — 묶음을 길게 (하루짜리 근무 51 → 19~20개)
+# · 연속 휴일 +30 → +60 · 퐁당퐁당 -20 → -150 · 단독 나이트 -200 → -400
+_SHAPE_SCORES = [
+    ("specific_shift",   {"shift_code": "생", "condition": "female_only"}, 1000, 0),
+    ("transition",       {"from": "day", "to": "evening"}, 20, 0),
+    ("transition",       {"from": "evening", "to": "night"}, 20, 0),
+    ("consecutive_same", {"period": "day"}, 15, 80),
+    ("consecutive_same", {"period": "evening"}, 15, 80),
+    ("consecutive_same", {"period": "night"}, 15, 80),
+    ("consecutive_same", {"period": "rest"}, 30, 60),
+    ("pattern",          {"pattern": ["work", "rest_leave", "work"]}, -20, -150),
+    ("pattern",          {"pattern": ["non_night", "night", "non_night"]}, -200, -400),
+]
+# 쉬고 나서 역방향 — 바로 다음 날의 역방향(저녁→낮 등)은 금지지만, 하루 쉬고 거꾸로 가는 것은 감점이 없었다 (쉬고 역방향 19 → 7개)
+_BACK_REST_RULES = [
+    ("쉬고 나서 역방향 (저녁→휴무→낮)",   "pattern", json.dumps({"pattern": ["evening", "rest_leave", "day"]}), -100, 1, 21),
+    ("쉬고 나서 역방향 (야간→휴무→저녁)", "pattern", json.dumps({"pattern": ["night", "rest_leave", "evening"]}), -100, 1, 22),
+]
+
+
+def _migrate_shape_scores(conn: sqlite3.Connection):
+    """감점 위주 기본 배점으로 한 번 옮긴다 (PRAGMA user_version 6, 결정 1-103) — 옛 기본값 그대로인 규칙만 새 값으로 바꾸고,
+    '쉬고 나서 역방향' 두 규칙은 같은 조건의 규칙이 없을 때만 넣는다. 사람이 고친 값·끈 규칙·지운 규칙은 건드리지 않는다."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 6:
+        return
+    rows = conn.execute("SELECT id, rule_type, params, score FROM scoring_rules").fetchall()
+    for rid, rtype, params, score in rows:
+        p = json.loads(params or "{}")
+        for st, sp, old, new in _SHAPE_SCORES:
+            if st == rtype and sp == p and score == old:
+                conn.execute("UPDATE scoring_rules SET score=? WHERE id=?", (new, rid))
+    have = [json.loads(r[2] or "{}") for r in rows if r[1] == "pattern"]
+    for rule in _BACK_REST_RULES:
+        if json.loads(rule[2]) not in have:
+            conn.execute(
+                "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)", rule)
+    conn.execute("PRAGMA user_version = 6")
 
 
 def _migrate_two_month_night_count(conn: sqlite3.Connection):

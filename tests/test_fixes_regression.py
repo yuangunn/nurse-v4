@@ -150,7 +150,7 @@ def test_two_month_night_excess_prev_count_clamped(build_request, solver):
     nurses = _mini_nurses(6)
     rules = Rules(maxConsecutiveWorkDays=6, maxVPerMonth=1,
                   maxNightTwoMonth=True, maxNightTwoMonthCount=11)
-    req = build_request(nurses=nurses, rules=rules, days=7)
+    req = build_request(nurses=nurses, rules=rules, days=7, month=4)   # 짝수달 — 앞 홀수달(3월)과 묶음 (결정 1-101)
     req.prev_month_nights = {"a1": 14}
 
     result = make_limited(req, days=7, solver=solver).solve()

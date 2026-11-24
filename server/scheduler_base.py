@@ -1070,11 +1070,30 @@ class _SchedulerBase:
         (제외하지 않으면 전월 14회 → 당월 상한 0 이 되어 나이트킵을 마친 사람이
          다음 달에 야간을 아예 못 받는다.)
         """
-        py, pm = (self.year - 1, 12) if self.month == 1 else (self.year, self.month - 1)
-        if self._night_dedicated_in(nid, py, pm):
-            return self.rules.maxNightTwoMonthCount
-        prev_nights = getattr(self, "prev_month_nights", None) or {}
-        return max(0, self.rules.maxNightTwoMonthCount - (prev_nights.get(nid) or 0))
+        return max(0, self.rules.maxNightTwoMonthCount - self._two_month_prev(nid))
+
+    def _saeng_required(self, nurse: dict, cap: int) -> bool:
+        """이 달 생휴를 꼭 한 번 놓을 사람인가 (결정 1-102) — 규칙 '여성 생휴'가 켜져 있고, 여성이고, 임신 구간이 걸친 달이 아니고,
+        놓을 수 있을 때(cap ≥ 1 — 트레이닝 날에 이미 썼으면 0). 보상(+1000)으로 두면 누구나 받는 15,000점이 총점을 키워
+        '최고와 2%' 오차를 넓혔다 — 배점에서 빼고 규칙으로 옮긴다."""
+        return bool(getattr(self.rules, "autoMenstrualLeave", False) and "생" in self.ALL_SHIFTS and cap >= 1
+                    and nurse.get("gender") == "female" and nurse["id"] not in self._preg_in_month)
+
+    def _keeper_month_leave(self, nurse: dict, active_days: int, month_days: int):
+        """나이트킵 달이 31일이면 쉬는 날 하나는 휴가로 — 여자는 생휴, 남자는 연차(V). 어느 날이든 된다 (결정 1-102).
+        그 코드를 근무 정의에서 지웠거나 달 중간에 들어온 사람이면 None."""
+        if month_days != 31 or active_days < month_days:
+            return None
+        code = "생" if nurse.get("gender") == "female" else "V"
+        return code if code in self.ALL_SHIFTS else None
+
+    def _two_month_prev(self, nid: str) -> int:
+        """두 달 합산에 더하는 지난달 야간 수 — 합산은 **홀수달 + 그다음 짝수달** 묶음(1+2월, 3+4월 …)으로 센다 (결정 1-101).
+        홀수달은 묶음의 첫 달이라 0(그 달만 센다), 짝수달은 바로 앞 홀수달의 야간. 그 홀수달이 나이트킵 달이었으면 0.
+        (전에는 매달 '지난달 + 이달'로 세어, 12월 야간이 1월 한도를 깎았다.)"""
+        if self.month % 2 or self._night_dedicated_in(nid, self.year, self.month - 1):
+            return 0
+        return int((getattr(self, "prev_month_nights", None) or {}).get(nid) or 0)
 
     def _night_dedicated_quota(self, nurse: dict, month_idxs, month_days: int):
         """야간전담 (재적일수, 당월 야간 목표일수). 재적 0이면 (0, 0).
@@ -1101,9 +1120,8 @@ class _SchedulerBase:
         (야간전담·N 비자격·임산부·홀짝월 0 클램프)는 제외해야 range가 유효하다."""
         two_mo_blocked = set()
         if getattr(self.rules, "maxNightTwoMonth", False):
-            prev_n = getattr(self, "prev_month_nights", None) or {}
             lim = self.rules.maxNightTwoMonthCount
-            two_mo_blocked = {k for k, c in prev_n.items() if (c or 0) >= lim}
+            two_mo_blocked = {n["id"] for n in self.nurses if self._two_month_prev(n["id"]) >= lim}
         # 이번 달 안에서 독립한 신규도 뺀다 — 지난달까지 야간이 0(트레이닝 '/N' 은 안 센다)이라
         # 누적 오프셋과 견주면 첫 달부터 야간을 몰아 받는다 (화면 공정성 카드도 이 달 신규는 대상 아님)
         first = date(self.year, self.month, 1)

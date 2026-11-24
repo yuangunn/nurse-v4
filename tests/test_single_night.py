@@ -81,14 +81,14 @@ def test_migration_adds_rule_once_and_never_revives_a_deleted_one(tmp_path, monk
         with sqlite3.connect(path) as c:
             return c.execute("PRAGMA user_version").fetchone()[0]
 
-    assert len(rows()) == 1 and rows()[0][1:] == (-200, 1) and version() == 5   # 마이그레이션이 늘면 이 숫자도 는다 (4 = 두 달 합산 야간 1-99, 5 = 생리휴가 보상 1-100)
+    assert len(rows()) == 1 and rows()[0][1:] == (-400, 1) and version() == 6   # 마이그레이션이 늘면 이 숫자도 는다 (4 = 두 달 합산 야간 1-99, 5 = 생리휴가 보상 1-100, 6 = 감점 위주 배점 1-103)
     db.init_db()
     assert len(rows()) == 1, '다시 열어도 하나'
     with sqlite3.connect(path) as c:                               # 이 규칙이 없던 옛 DB
         c.execute("DELETE FROM scoring_rules WHERE params LIKE '%non_night%'")
         c.execute("PRAGMA user_version = 0")
     db.init_db()
-    assert len(rows()) == 1 and version() == 5, '옛 DB 엔 한 번 넣는다'
+    assert len(rows()) == 1 and version() == 6, '옛 DB 엔 한 번 넣는다'
     with sqlite3.connect(path) as c:                               # 사용자가 지웠다
         c.execute("DELETE FROM scoring_rules WHERE params LIKE '%non_night%'")
     db.init_db()
@@ -111,7 +111,7 @@ def test_migration_raises_the_first_default_score_once(tmp_path, monkeypatch):
             c.execute(f"PRAGMA user_version = {version}")
 
     set_(-10, 1); db.init_db()
-    assert score() == -200, '처음 값으로 둔 옛 DB 는 올린다'
+    assert score() == -400, '처음 값으로 둔 옛 DB 는 올린다 (-10 → -200 → 감점 위주 배점 -400, 결정 1-103)'
     set_(-50, 1); db.init_db()
     assert score() == -50, '사람이 고친 값은 그대로'
     set_(-10, 2); db.init_db()
@@ -186,9 +186,9 @@ def test_migration_raises_the_first_menstrual_leave_reward_once(tmp_path, monkey
             c.execute(f"UPDATE scoring_rules SET score=? WHERE {where}", (value,))
             c.execute(f"PRAGMA user_version = {version}")
 
-    assert score() == 1000, '새 DB 는 새 기본값'
+    assert score() == 0, '새 DB 는 0 — 생휴는 규칙이 맡는다 (결정 1-103)'
     set_(80, 4); db.init_db()
-    assert score() == 1000, '처음 값으로 둔 옛 DB 는 올린다'
+    assert score() == 0, '처음 값으로 둔 옛 DB 는 +1000 을 거쳐 0 으로 (1-100 → 1-103)'
     set_(200, 4); db.init_db()
     assert score() == 200, '사람이 고친 값은 그대로'
     set_(80, 5); db.init_db()
@@ -199,4 +199,35 @@ def test_migration_raises_the_first_menstrual_leave_reward_once(tmp_path, monkey
     db.init_db()
     with sqlite3.connect(path) as c:
         assert c.execute("SELECT score FROM scoring_rules WHERE rule_type='specific_shift' AND params LIKE '%\"V\"%'").fetchone()[0] == 80
+
+
+def test_migration_moves_untouched_defaults_to_the_penalty_first_scores_once(tmp_path, monkeypatch):
+    """감점 위주 기본 배점 (결정 1-103) — 옛 기본값 그대로인 규칙만 새 값으로, '쉬고 나서 역방향' 둘은 없을 때만 넣는다. 고친 값은 그대로."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    db.init_db()
+    path = db.get_db_path()
+
+    def scores():
+        with sqlite3.connect(path) as c:
+            return {name: score for name, score in c.execute("SELECT name, score FROM scoring_rules")}
+
+    new = scores()
+    assert (new["생리휴가 보상"], new["D→E 순방향 보상"], new["연속 동일 낮 근무 보상"], new["연속 휴일 보상"], new["퐁당퐁당 회피"], new["단독 나이트 감점"]) == (0, 0, 80, 60, -150, -400)
+    assert (new["쉬고 나서 역방향 (저녁→휴무→낮)"], new["쉬고 나서 역방향 (야간→휴무→저녁)"]) == (-100, -100)
+    with sqlite3.connect(path) as c:      # 옛 DB — 옛 기본값, 역방향 규칙 없음, 퐁당퐁당만 사람이 고쳐 둠
+        for name, score in (("생리휴가 보상", 1000), ("D→E 순방향 보상", 20), ("E→N 순방향 보상", 20), ("연속 동일 낮 근무 보상", 15),
+                            ("연속 동일 저녁 근무 보상", 15), ("연속 동일 야간 근무 보상", 15), ("연속 휴일 보상", 30), ("퐁당퐁당 회피", -40), ("단독 나이트 감점", -200)):
+            c.execute("UPDATE scoring_rules SET score=? WHERE name=?", (score, name))
+        c.execute("DELETE FROM scoring_rules WHERE name LIKE '쉬고 나서 역방향%'")
+        c.execute("PRAGMA user_version = 5")
+    db.init_db()
+    got = scores()
+    assert {k: got[k] for k in new if k != "퐁당퐁당 회피"} == {k: new[k] for k in new if k != "퐁당퐁당 회피"}
+    assert got["퐁당퐁당 회피"] == -40, "사람이 고친 값은 그대로"
+    with sqlite3.connect(path) as c:      # 옮긴 뒤 지운 규칙·되돌린 값은 다시 건드리지 않는다
+        c.execute("DELETE FROM scoring_rules WHERE name LIKE '쉬고 나서 역방향%'")
+        c.execute("UPDATE scoring_rules SET score=15 WHERE name='연속 동일 낮 근무 보상'")
+    db.init_db()
+    again = scores()
+    assert "쉬고 나서 역방향 (저녁→휴무→낮)" not in again and again["연속 동일 낮 근무 보상"] == 15
 

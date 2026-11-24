@@ -118,7 +118,7 @@ def test_analyzer_two_month_clamp_no_false_conflict():
     nurses = _mini_nurses(6)
     rules = Rules(maxConsecutiveWorkDays=5, maxVPerMonth=1,
                   maxNightTwoMonth=True, maxNightTwoMonthCount=11)
-    req = _full_request(2026, 3, nurses=nurses, rules=rules)
+    req = _full_request(2026, 4, nurses=nurses, rules=rules)   # 짝수달 — 앞 홀수달(3월)과 묶음 (결정 1-101)
     req.prev_month_nights = {"a1": 14}
     diag = analyze_conflicts(req)
     assert not any("홀짝월" in c for c in diag.get("conflicts", [])), diag

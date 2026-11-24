@@ -19,7 +19,7 @@ def test_preset_save_apply_delete_and_reset(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path))
     db.init_db()
     default = _snap()
-    assert ("단독 나이트 감점", -200) in [(n, s) for n, _, _, s, _, _ in default]
+    assert ("단독 나이트 감점", -400) in [(n, s) for n, _, _, s, _, _ in default]
 
     _edit("야간 근무 공평성", score=-120)
     _edit("퐁당퐁당 회피", enabled=False)

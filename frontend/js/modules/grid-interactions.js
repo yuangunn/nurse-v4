@@ -140,7 +140,7 @@ window.GridInteractionsModule = function() {
           // 나이트킵(야간전담) 달의 야간은 수면오프와 무관 → 합산에서 제외 (서버 동일)
           const pk=this.month===1?`${this.year-1}-12`:`${this.year}-${String(this.month-1).padStart(2,'0')}`;
           const prevKept=Object.keys(nm).length?!!nm[pk]:!!nurse.is_night_shift;
-          const prevN=prevKept?0:(+((this.prevMonthNights||{})[nid])||0);
+          const prevN=(this.month%2||prevKept)?0:(+((this.prevMonthNights||{})[nid])||0);   // 합산은 홀수달+짝수달 묶음 — 홀수달은 그 달만 (결정 1-101, 서버 _two_month_prev)
           const rhs=Math.max(0,(+r.maxNightTwoMonthCount||10)-prevN);
           if(nDays.length>rhs)notes.push({nid,dk:nDays[Math.min(rhs,nDays.length-1)],msg:`${nurse.name}: 당월 야간 ${nDays.length}회 + 전월 ${prevN}회 — 합산 ${r.maxNightTwoMonthCount}회 (확정분은 그대로 수용)`});
         }
