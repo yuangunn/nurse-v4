@@ -554,6 +554,30 @@ def _saved_night_kept(data: Dict, key: str) -> set:
     return kept
 
 
+def prev_month_tail_night_delta(year: int, month: int, prev_schedule: Dict) -> Dict[str, int]:
+    """이 달 표에 함께 보이는 지난달 칸(그 주 일요일~지난달 말일)에서, 사전입력에 적힌 것과 지난달 저장본의 야간 수 차이 — {간호사: +1·-1…}.
+    전월N 은 지난달 저장본에서 센다. 표의 지난달 칸을 사전입력에서 고치면(실제로 선 근무로) 저장본과 어긋나 두 달 합산이 틀렸다 —
+    11/29 를 N 으로 고쳐 11월 야간이 5회인데 4회로 세어 12월에 6회를 줬다(합 11회 = 수면오프). 사전입력에 적힌 칸만 견준다 (결정 1-104)."""
+    from datetime import date, timedelta
+    first = date(year, month, 1)
+    days = [(first - timedelta(days=k)).isoformat() for k in range(1, (first.weekday() + 1) % 7 + 1)]
+    out: Dict[str, int] = {}
+    if not days:
+        return out
+    with get_conn() as conn:
+        data = _latest_saved(conn, first.year - 1 if month == 1 else year, 12 if month == 1 else month - 1)
+        _, night_codes = _ledger_codes(conn)
+    if not data:
+        return out
+    saved = data.get("schedule") or {}
+    for nid, pre in (prev_schedule or {}).items():
+        d = sum((1 if pre[k] in night_codes else 0) - (1 if (saved.get(nid) or {}).get(k) in night_codes else 0)
+                for k in days if (pre or {}).get(k))
+        if d:
+            out[nid] = d
+    return out
+
+
 def compute_prev_month_nights(year: int, month: int) -> Dict[str, int]:
     """직전 달 최신 저장 근무표에서 간호사별 야간(N/NC) 횟수 — '전월N' 자동 인수인계.
     수동으로 옮겨 적다 빼먹으면 월초 연속야간 검증이 빠지는 문제를 막는다.

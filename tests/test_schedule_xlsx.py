@@ -73,7 +73,8 @@ def test_layout(res):
     ws = wb["11월"]
     # 1줄 제목 (A~날짜 끝 병합) · 2줄 주기 (7칸씩) — 날짜 B~AJ, 계 AK~AT
     assert ws["A1"].value == "2026년 11월 101병동 근무표 (11월 1일~12월 5일)"
-    assert {str(r) for r in ws.merged_cells.ranges} == {"A1:AJ1", "B2:H2", "I2:O2", "P2:V2", "W2:AC2", "AD2:AJ2"}
+    assert {str(r) for r in ws.merged_cells.ranges} == {"A1:AJ1", "B2:H2", "I2:O2", "P2:V2", "W2:AC2", "AD2:AJ2",
+                                                           "AK1:AL1", "AM1:AT1"}   # 제목 줄 오른쪽 — '강조' 이름표 + 고르는 칸 (결정 1-105)
     assert [ws[c].value for c in ("B2", "I2", "P2", "W2", "AD2")] == ["4주기", "1주기", "2주기", "3주기", "4주기"]
     # 3줄 진짜 날짜 · 4줄 이름 + 요일 + 계 이름
     assert ws["B3"].value == datetime.datetime(2026, 11, 1) and ws["B3"].number_format == 'm"/"d'
@@ -241,3 +242,21 @@ def test_bad_input_400(client, body):
     r = client.post("/api/schedules/export.xlsx", json=body)
     assert r.status_code == 400
     assert r.json()["detail"].startswith("근무표 형식이 맞지 않습니다")
+
+
+def test_highlight_picker(res):
+    """강조 (결정 1-105) — 제목 줄 오른쪽 칸의 목록에서 고르면 그 칸이 색으로 뜬다: 목록(데이터 유효성) + 조건부 서식 네 가지, 매크로 없음."""
+    ws = openpyxl.load_workbook(io.BytesIO(res.content))["11월"]
+    assert ws["AK1"].value == "강조" and ws["AM1"].value is None
+    dv = ws.data_validations.dataValidation
+    assert len(dv) == 1 and str(dv[0].sqref) == "AM1" and dv[0].type == "list"
+    picks = dv[0].formula1.strip('"').split(",")
+    assert picks[-3:] == ["1오프", "단독 나이트", "하루짜리 근무"] and {"D", "E", "N", "OF"} <= set(picks) and len(dv[0].formula1) <= 255
+    rules = {str(rng.sqref): [r.formula[0] for r in rs] for rng, rs in ws.conditional_formatting._cf_rules.items()}
+    grid = [k for k in rules if k.startswith("B5:AJ")]
+    inner = [k for k in rules if k.startswith("C5:AI")]         # 이웃 칸을 보는 것은 첫 칸·끝 칸을 뺀다
+    assert len(grid) == 1 and rules[grid[0]] == ['AND($AM$1<>"",B5=$AM$1)']
+    assert len(inner) == 1 and [f.split(",")[0] for f in rules[inner[0]]] == ['AND($AM$1="1오프"', 'AND($AM$1="단독 나이트"', 'AND($AM$1="하루짜리 근무"']
+    assert 'NOT(OR(C5="D",C5="E",C5="N",C5="중",C5="D1"))' in rules[inner[0]][0] and 'C5="N",B5<>"N",D5<>"N"' in rules[inner[0]][1]
+    assert not ws["AM1"].value and ws["B5"].fill.fgColor.rgb != "FFFFC000"      # 고르지 않으면 평소 모양
+
