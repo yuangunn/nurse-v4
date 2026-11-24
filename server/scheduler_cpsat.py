@@ -17,7 +17,7 @@ from typing import Dict
 from ortools.sat.python import cp_model
 
 from .models import GenerateRequest
-from .scheduler_base import (_SchedulerBase, WEEKDAY_KEYS, timeoff_class, _OFF_TEUKGEUN_PENALTY,
+from .scheduler_base import (_SchedulerBase, WEEKDAY_KEYS, timeoff_class, _OFF_TEUKGEUN_PENALTY, _SAENG_MISS_PENALTY, _ONEOFF_OVER_PENALTY,
                              _RARE_TRANSITION_PENALTY, _FIXED_DATE_LEAVE, _TAIL_KEEPER_SHORT_PENALTY,
                              _TRAINEE_PAIR_BONUS, _GROUP_LIMIT_PENALTY)
 
@@ -1009,9 +1009,10 @@ class CpSatScheduler(_SchedulerBase):
                 model.Add(sum(x[nid][d][s] for d in window for s in self.NIGHT_SHIFTS) <= max_nights)
 
     def _cs_max_oneoff(self, model, x, cap: int, lit_of=None, pin=None):
-        """한 사람의 1오프를 cap 개까지 (결정 1-98, HiGHS _c_max_oneoff 대응). lit_of(nurse) 가 있으면 그 리터럴이 참일 때만(충돌 분석)."""
+        """한 사람의 1오프를 cap 개까지 — 넘는 개수마다 목적함수에서 깎는다 (결정 1-98 · 1-108, HiGHS _c_max_oneoff 대응)."""
         work, rest = self._resolve_group("work"), self._resolve_group("rest_leave")
         pin = self._pin_view() if pin is None else pin
+        self._oneoff_over = []
         for nurse in self.nurses:
             nid = nurse["id"]
             zs = []
@@ -1021,9 +1022,9 @@ class CpSatScheduler(_SchedulerBase):
                           + sum(x[nid][c][s] for s in work) - 2)
                 zs.append(z)
             if len(zs) > cap:
-                ct = model.Add(sum(zs) <= cap)
-                if lit_of:
-                    ct.OnlyEnforceIf(lit_of(nurse))
+                over = model.NewIntVar(0, len(zs) - cap, f"one_over_{nid}")
+                model.Add(sum(zs) <= cap + over)
+                self._oneoff_over.append(over)
 
     def _cs_rest_after_night(self, model, x):
         """연속 야간(min_consec) 후 rest_days 일간 근무 불가 — 둘째 휴무일부터는 N 도 근무, 나이트킵도 같다.
@@ -1131,7 +1132,8 @@ class CpSatScheduler(_SchedulerBase):
                     model.Add(v_charge + v_reg <= 1)
 
     def _cs_menstrual_leave(self, model, x):
-        """생리휴가: 여성 당월 최대 1회 + overflow 처리."""
+        """생리휴가: 여성 당월 최대 1회 + overflow 처리. 규칙이 켜져 있으면 못 놓은 사람마다 목적함수에서 깎는다 (결정 1-108)."""
+        self._saeng_miss = []
         if "생" not in self.ALL_SHIFTS:
             return
         first_of_month = date(self.year, self.month, 1)
@@ -1146,7 +1148,9 @@ class CpSatScheduler(_SchedulerBase):
                 cap = self._cap_with_training(nurse, month_idx, "생", 1)
                 model.Add(sum(month_vars) <= cap)
                 if self._saeng_required(nurse, cap) and any(not isinstance(v, int) for v in month_vars):
-                    model.Add(sum(month_vars) >= 1)    # 꼭 한 번 (결정 1-102, HiGHS 패리티)
+                    miss = model.NewBoolVar(f"saeng_miss_{nid}")
+                    model.Add(sum(month_vars) + miss >= 1)
+                    self._saeng_miss.append(miss)
             # 이전달 overflow: 생 금지 — 사전입력된 전월 확정 기록은 존중
             for d, dt in enumerate(self.all_dates):
                 if dt < first_of_month:
@@ -1311,6 +1315,21 @@ class CpSatScheduler(_SchedulerBase):
                         except (ValueError, KeyError):
                             pass
 
+            elif rt == "shift_balance":
+                # 낮·저녁 고르게 (결정 1-107, HiGHS 패리티) — 그 달 낮 수와 저녁 수의 차이가 tolerance 를 넘는 만큼 감점
+                if sc >= 0:
+                    continue
+                tol = max(0, int(p.get("tolerance", 4)))
+                day, eve = self._resolve_group("day"), self._resolve_group("evening")
+                for nurse in self._shift_balance_pool():
+                    nid = nurse["id"]
+                    diff = (lin([x[nid][d][s] for d in month_days for s in day])
+                            - lin([x[nid][d][s] for d in month_days for s in eve]))
+                    over = model.NewIntVar(0, len(month_days), f"debal{rid}_{nid}")
+                    model.Add(over >= diff - tol)
+                    model.Add(over >= -diff - tol)
+                    terms.append(sc * over)
+
             elif rt == "night_fairness":
                 # 공정성 풀에서 야간전담(14 고정)·N 비자격·임산부 제외 — 포함 시
                 # range가 상수화되어 일반 간호사 간 편차를 벌점하지 못한다 (HiGHS 패리티)
@@ -1471,6 +1490,12 @@ class CpSatScheduler(_SchedulerBase):
         # ── 오프특근 페널티 (제1원칙 3, HiGHS 패리티) ────────────────────────
         for sl in getattr(self, "_off_slack", []):
             terms.append(-_OFF_TEUKGEUN_PENALTY * sl)
+
+        # ── 원티드 다음으로 먼저 맞추는 것 (결정 1-108, HiGHS 패리티) ──
+        for sl in getattr(self, "_saeng_miss", []):
+            terms.append(-_SAENG_MISS_PENALTY * sl)
+        for sl in getattr(self, "_oneoff_over", []):
+            terms.append(-_ONEOFF_OVER_PENALTY * sl)
 
         # ── 파트장 확인 마지막 수단 (제1원칙 13, HiGHS 패리티) ──────────────────
         for pen, sl in self._last_resort_terms():

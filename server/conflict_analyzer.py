@@ -74,10 +74,6 @@ class _ConflictAnalyzer(CpSatScheduler):
             self._g_consecutive_work(model, x, gate)
         if self.rules.maxConsecutiveNight:
             self._g_consecutive_night(model, x, gate)
-        if getattr(self.rules, 'maxOneOff', False):
-            cap = max(0, int(self.rules.maxOneOffCount))   # 한 사람의 1오프 한도 (결정 1-98) — 사람마다 리터럴 하나
-            self._cs_max_oneoff(model, x, cap, lambda nurse: gate(
-                f"{self._fmt_nurse_label(nurse)} 1오프 ≤{cap}개", nid=nurse["id"], kind="sequence"), pin=self._gate_pins()[1])
         if getattr(self.rules, 'restAfterNight', False):
             self._g_rest_after_night(model, x, gate)
         if self.rules.maxNightPerMonth:
@@ -634,10 +630,6 @@ class _ConflictAnalyzer(CpSatScheduler):
                                kind="rest_cap", code="생", used=self._pinned_dates(nid, month_idxs, "생"))
                     # 엔진과 같은 상한 — 확정 생만큼 올리고(신호등) 독립한 신규의 트레이닝 날 생도 센다
                     model.Add(sum(m_terms) <= self._cap_with_training(nurse, month_idxs, "생", 1)).OnlyEnforceIf(lit)
-                    if self._saeng_required(nurse, self._cap_with_training(nurse, month_idxs, "생", 1)):   # 꼭 한 번 (결정 1-102) — 엔진과 같게
-                        need = gate(f"{self._fmt_nurse_label(nurse)} 생리휴가 이 달 꼭 한 번", nid=nid, kind="rest_cap", code="생",
-                                    used=self._pinned_dates(nid, month_idxs, "생"))
-                        model.Add(sum(m_terms) >= 1).OnlyEnforceIf(need)
                 # 끝에 붙은 다음 달 며칠: 미리 넣은 생만 (엔진 _tail_saeng_cap 패리티 — 다음 달 몫)
                 t_terms = [x[nid][d]["생"] for d in tail_idxs]
                 if any(not isinstance(t, int) for t in t_terms):

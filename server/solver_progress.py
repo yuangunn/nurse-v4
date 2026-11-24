@@ -125,8 +125,8 @@ def _carry(p: dict) -> dict:
     if _score_unit:      # 합쳐 푸는 풀이 — 솔버의 답·하한·차이는 배점의 것이 아니다. 끝날 때까지 보이지 않는다 (결정 1-106)
         p.update(unit=_score_unit, score=None, score_bound=None, gap_percent=None)
         return p
-    if _stage == "keep":     # 사전입력 지키기 단계 — 이 차이(2% → 0%)는 '얼마나 지킬 수 있나'이지 표의 점수가 아니다 (결정 1-106)
-        p.update(stage="keep", gap_percent=None)
+    if _stage in ("keep", "priority"):     # 사전입력 지키기 · 먼저 맞추기 단계 — 이 차이는 그 단계 목적식의 것이지 표의 점수가 아니다 (결정 1-106 · 1-108)
+        p.update(stage=_stage, gap_percent=None)
         return p
     if (pb is not None and primal is not None and dual is not None and p.get("has_solution")
             and p.get("fingerprint") == _prev_fp):

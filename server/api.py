@@ -143,7 +143,7 @@ try:
                     table["objective"] = got[0]
                     # 사전입력 지키기 단계(keep)의 차이는 다른 목적식의 것이라 싣지 않는다
                     table["mip_gap_percent"] = (round(gap * 100, 2) if gap is not None and math.isfinite(gap)
-                                                and table.get("stage") != "keep" else None)
+                                                and table.get("stage") not in ("keep", "priority") else None)
                     unit = solver_progress.score_unit()        # 합쳐 푸는 풀이 — 솔버의 차이는 배점의 것이 아니다 (결정 1-106)
                     if unit:
                         table["score_unit"] = unit
