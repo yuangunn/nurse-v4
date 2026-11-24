@@ -1192,6 +1192,37 @@ def _xlsx_sheet(ws, body: dict, link: dict = None):
         if 0 <= int(k) < nr and 0 <= int(i) < nd and text:
             ws.cell(r0 + int(k), c0 + int(i)).comment = Comment(str(text), "근무표")
 
+    # 강조 (결정 1-105) — 제목 줄 오른쪽 칸에서 고르면 그 칸이 표에서 색으로 뜬다. 목록(데이터 유효성) + 조건부 서식이라 매크로가 없다.
+    # 이웃 칸을 보는 세 가지(1오프·단독 나이트·하루짜리 근무)는 첫 날짜 칸과 끝 칸에는 걸지 않는다 — 그 옆 날은 이 시트에 없다
+    from openpyxl.formatting.rule import FormulaRule
+    from openpyxl.worksheet.datavalidation import DataValidation
+    std = ("D", "E", "N", "중", "D1", "OF", "주", "생", "V", "법")
+    seen = {c for row in rows for c in row[1:] if c and "," not in c and '"' not in c}
+    picks = [c for c in std if c in seen] + sorted(seen - set(std))
+    while len(",".join(picks)) > 200:                          # 목록 글자는 255자까지 — 드문 코드부터 뺀다
+        picks.pop()
+    picks += ["1오프", "단독 나이트", "하루짜리 근무"]
+    put(1, t0, "강조", f8)
+    merge(1, t0, t0 + 1)
+    put(1, t0 + 2, None, f9, solid("FFFFF2CC"))
+    merge(1, t0 + 2, last)
+    dv = DataValidation(type="list", formula1='"' + ",".join(picks) + '"', allow_blank=True, showInputMessage=True,
+                        promptTitle="강조", prompt="고르면 그 칸이 표에서 색으로 표시됩니다. 지우면 평소 모양으로 돌아갑니다.")
+    ws.add_data_validation(dv)
+    dv.add(ws.cell(1, t0 + 2))
+    sel = f"${L(t0 + 2)}$1"
+    mark = dict(fill=PatternFill(start_color="FFFFC000", end_color="FFFFC000", fill_type="solid"), font=Font(bold=True, color="FF000000"))
+    is_work = lambda x: "OR(" + ",".join(f'{x}="{w}"' for w in work + ("D1",)) + ")"   # noqa: E731
+    cur = f"{L(c0)}{r0}"
+    ws.conditional_formatting.add(f"{cur}:{L(c0 + nd - 1)}{r1}", FormulaRule(formula=[f'AND({sel}<>"",{cur}={sel})'], **mark))
+    if nd >= 3:
+        lft, cur, rgt = (f"{L(c0 + k)}{r0}" for k in range(3))
+        area = f"{cur}:{L(c0 + nd - 2)}{r1}"
+        for name, cond in (("1오프", f'{cur}<>"",NOT({is_work(cur)}),{is_work(lft)},{is_work(rgt)}'),
+                           ("단독 나이트", f'{cur}="N",{lft}<>"N",{rgt}<>"N",{lft}<>"",{rgt}<>""'),
+                           ("하루짜리 근무", f'{is_work(cur)},{lft}<>{cur},{rgt}<>{cur}')):
+            ws.conditional_formatting.add(area, FormulaRule(formula=[f'AND({sel}="{name}",{cond})'], **mark))
+
     for j, t in enumerate(work + ("근무자수",)):
         r = rs + j
         put(r, 1, t, fill=yellow if t == "N" else solid("FF42C7F1") if t == "중" else None)
@@ -1978,6 +2009,29 @@ def _attach_fairness_offsets(request: GenerateRequest) -> Optional[dict]:
         return None
 
 
+def _attach_prev_tail_nights(request: GenerateRequest) -> list:
+    """전월N 을 이 달 표에 함께 보이는 지난달 칸(사전입력)에 맞춘다 — 돌려주는 것 = 바꾼 사람 [(id, 앞 값, 새 값)] (결정 1-104).
+    전월N 이 저장본에서 센 값 그대로일 때만 고친다 — 사람이 직접 적어 둔 값은 이미 맞춘 것으로 본다(두 번 더하지 않는다)."""
+    try:
+        if not getattr(request.rules, "maxNightTwoMonth", False) or not request.prev_schedule:
+            return []
+        delta = db.prev_month_tail_night_delta(request.year, request.month, request.prev_schedule)
+        if not delta:
+            return []
+        saved = db.compute_prev_month_nights(request.year, request.month)
+        nights, changed = dict(request.prev_month_nights or {}), []
+        for nid, d in delta.items():
+            old = int(nights.get(nid) or 0)
+            if old == int(saved.get(nid) or 0):
+                nights[nid] = max(0, old + d)
+                changed.append((nid, old, nights[nid]))
+        if changed:
+            request.prev_month_nights = nights
+        return changed
+    except Exception:
+        return []
+
+
 def _attach_prev_juhu(request: GenerateRequest) -> None:
     """주휴 이동 허용 + 블록 잠금일 때 지난달 저장본의 주휴 날짜를 주입 — 달이 블록 중간에서 시작하면
     엔진이 그 블록의 지난달 요일을 이어받는다 (결정 1-37). 저장본이 없으면 아무것도 안 한다."""
@@ -2344,6 +2398,11 @@ def generate(request: GenerateRequest):
         # 편차를 줄이도록 누적 오프셋을 자동 주입 (저장본 파생 — 별도 기록 불필요)
         fair_ctx = _attach_fairness_offsets(request)
         _attach_prev_juhu(request)
+        tail_fix = _attach_prev_tail_nights(request)
+        if tail_fix:      # 화면의 전월N 과 다른 값으로 풀었다는 것을 알린다
+            names = {n.id: n.name for n in request.nurses}
+            note = "전월 야간 수를 사전입력의 지난달 칸에 맞춰 셌습니다 — " + ", ".join(f"{names.get(i, i)} {a}→{b}회" for i, a, b in tail_fix)
+            warning = (warning + "\n\n" + note) if warning else note
         solver_progress.set_prev_bound(request.prev_bound, request.prev_fingerprint)   # 이어 찾기 — 같은 모델의 진행 차이를 앞 하한과 합친다
         if request.solver == "race":
             result = _run_race(request)
