@@ -1203,9 +1203,9 @@ def _xlsx_sheet(ws, body: dict, link: dict = None):
     std = ("D", "E", "N", "중", "D1", "OF", "주", "생", "V", "법")
     seen = {c for row in rows for c in row[1:] if c and "," not in c and '"' not in c}
     picks = [c for c in std if c in seen] + sorted(seen - set(std))
-    while len(",".join(picks)) > 200:                          # 목록 글자는 255자까지 — 드문 코드부터 뺀다
+    while len(",".join(picks)) > 160:                          # 목록 글자는 255자까지 — 드문 코드부터 뺀다
         picks.pop()
-    picks += ["1오프", "단독 나이트", "하루짜리 근무"]
+    picks += ["1오프", "단독 나이트", "하루짜리 근무", "쉬고 나서 역방향", "하나씩 넘어가기", "같은 근무 5일", "6일 연속 근무"]
     put(1, t0, "강조", f8)
     merge(1, t0, t0 + 1)
     put(1, t0 + 2, None, f9, solid("FFFFF2CC"))
@@ -1224,8 +1224,30 @@ def _xlsx_sheet(ws, body: dict, link: dict = None):
         area = f"{cur}:{L(c0 + nd - 2)}{r1}"
         for name, cond in (("1오프", f'{cur}<>"",NOT({is_work(cur)}),{is_work(lft)},{is_work(rgt)}'),
                            ("단독 나이트", f'{cur}="N",{lft}<>"N",{rgt}<>"N",{lft}<>"",{rgt}<>""'),
-                           ("하루짜리 근무", f'{is_work(cur)},{lft}<>{cur},{rgt}<>{cur}')):
+                           ("하루짜리 근무", f'{is_work(cur)},{lft}<>{cur},{rgt}<>{cur}'),
+                           # 쉬고 나서 역방향 = 저녁→휴무→낮 · 야간→휴무→낮/저녁 의 그 쉬는 날, 하나씩 넘어가기 = 낮→저녁→야간의 가운데 칸
+                           ("쉬고 나서 역방향", f'{cur}<>"",NOT({is_work(cur)}),OR(AND(OR({lft}="E",{lft}="중"),OR({rgt}="D",{rgt}="D1")),'
+                                                f'AND({lft}="N",{is_work(rgt)},{rgt}<>"N"))'),
+                           ("하나씩 넘어가기", f'OR({lft}="D",{lft}="D1"),OR({cur}="E",{cur}="중"),{rgt}="N"')):
             ws.conditional_formatting.add(area, FormulaRule(formula=[f'AND({sel}="{name}",{cond})'], **mark))
+    # 길게 이어진 것(같은 근무 5일 · 6일 연속 근무)은 이웃 칸만으로는 못 가린다 — 표 오른쪽 숨긴 칸에 '여기까지 며칠째'를 수식으로 세고,
+    # 어느 칸이든 그 칸부터 오른쪽 넷(다섯) 안에 5(6) 이상이 있으면 그 묶음에 든 칸이다. 수식이라 엑셀에서 칸을 고쳐도 따라 바뀐다
+    cur = f"{L(c0)}{r0}"
+    codes = [[c.upper() for c in row[1:]] for row in rows]
+    for name, need, h0, step, count in (
+            ("같은 근무 5일", 5, last + 2, lambda c, p, ph: f'=IF(OR({c}="D",{c}="E"),IF({c}={p},{ph}+1,1),0)',
+             lambda row, k, n: (n + 1 if k and row[k] == row[k - 1] else 1) if row[k] in ("D", "E") else 0),
+            ("6일 연속 근무", 6, last + nd + 8, lambda c, p, ph: f'=IF({is_work(c)},{ph}+1,0)',
+             lambda row, k, n: n + 1 if row[k] in work + ("D1",) else 0)):
+        for j, r in enumerate(range(r0, r1 + 1)):
+            n = 0
+            for k in range(nd):
+                n = count(codes[j], k, n)                      # 수식과 같은 셈 — 엑셀을 거치지 않고 읽어도 값이 보이게 넣어 둔다
+                put(r, h0 + k, step(f"{L(c0 + k)}{r}", f"{L(c0 + k - 1)}{r}", f"{L(h0 + k - 1)}{r}"), calc=n)
+        for k in range(-1, nd + need):
+            ws.column_dimensions[L(h0 + k)].hidden = True
+        ws.conditional_formatting.add(f"{cur}:{L(c0 + nd - 1)}{r1}", FormulaRule(
+            formula=[f'AND({sel}="{name}",MAX({L(h0)}{r0}:{L(h0 + need - 1)}{r0})>={need})'], **mark))
 
     for j, t in enumerate(work + ("근무자수",)):
         r = rs + j
