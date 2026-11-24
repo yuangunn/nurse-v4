@@ -159,7 +159,7 @@ class _HighsDiagnosisMixin:
             if nurse.get("is_night_shift"):
                 continue
             nid = nurse["id"]
-            prev_n = int(self.prev_month_nights.get(nid, 0) or 0)
+            prev_n = self._two_month_prev(nid)     # 홀수달은 0 — 묶음의 첫 달 (결정 1-101)
             cur_dates = []
             for dt in self.all_dates:
                 if dt.month != self.month:

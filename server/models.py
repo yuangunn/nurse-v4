@@ -94,7 +94,7 @@ class Rules(BaseModel):
     minRest: bool = True
     minRestHours: float = 11
     patternOptimization: bool = True
-    autoMenstrualLeave: bool = True
+    autoMenstrualLeave: bool = False     # 여성 생휴를 이 달 꼭 한 번 (결정 1-102). 화면 기본값은 켬 — 요청에 실려 온다. 요청에 없으면 끔
     maxVPerMonth: int = 1        # V(연차) 월 최대 사용 횟수 (hard)
     maxNightPerMonth: bool = True
     maxNightPerMonthCount: int = 6   # 월 최대 야간 횟수 (7회부터 수면OFF 발생)

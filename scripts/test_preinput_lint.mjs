@@ -160,4 +160,14 @@ assert.equal(m.n.length, 0, m.n.join('\n'));
 m = run({ nurses: [nurse('a')], prev: { a: { '2026-03-02': 'D/X' } } });
 assert.ok(has(m.v, '알 수 없는'), m.v.join('\n'));
 
+// 두 달 합산 야간은 홀수달 + 그다음 짝수달 묶음 (결정 1-101) — 홀수달은 지난달 야간을 더하지 않고, 짝수달은 더한다
+{
+  const notes = month => { const mm = String(month).padStart(2, '0');
+    const c = makeCtx({ nurses: [nurse('a')], prev: { a: { [`2026-${mm}-02`]: 'N', [`2026-${mm}-03`]: 'N', [`2026-${mm}-09`]: 'N' } }, rules: { maxNightTwoMonth: true }, prevMonthNights: { a: 9 } });
+    c.month = month; c.scheduleDays = Array.from({ length: 28 }, (_, i) => new Date(2026, month - 1, i + 1)); c.isOverflow = d => d.getMonth() !== month - 1;
+    c._checkViolations(); return [...c.prevViolations, ...c.prevPinNotes].map(x => x.msg); };
+  assert.ok(!has(notes(3), '합산'), notes(3).join('\n'));
+  assert.ok(has(notes(4), '당월 야간 3회 + 전월 9회 — 합산 10회'), notes(4).join('\n'));
+}
+
 console.log('preinput-lint: 모든 검증 통과');

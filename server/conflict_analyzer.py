@@ -634,6 +634,10 @@ class _ConflictAnalyzer(CpSatScheduler):
                                kind="rest_cap", code="생", used=self._pinned_dates(nid, month_idxs, "생"))
                     # 엔진과 같은 상한 — 확정 생만큼 올리고(신호등) 독립한 신규의 트레이닝 날 생도 센다
                     model.Add(sum(m_terms) <= self._cap_with_training(nurse, month_idxs, "생", 1)).OnlyEnforceIf(lit)
+                    if self._saeng_required(nurse, self._cap_with_training(nurse, month_idxs, "생", 1)):   # 꼭 한 번 (결정 1-102) — 엔진과 같게
+                        need = gate(f"{self._fmt_nurse_label(nurse)} 생리휴가 이 달 꼭 한 번", nid=nid, kind="rest_cap", code="생",
+                                    used=self._pinned_dates(nid, month_idxs, "생"))
+                        model.Add(sum(m_terms) >= 1).OnlyEnforceIf(need)
                 # 끝에 붙은 다음 달 며칠: 미리 넣은 생만 (엔진 _tail_saeng_cap 패리티 — 다음 달 몫)
                 t_terms = [x[nid][d]["생"] for d in tail_idxs]
                 if any(not isinstance(t, int) for t in t_terms):
@@ -878,7 +882,7 @@ class _ConflictAnalyzer(CpSatScheduler):
             if nurse.get("is_night_shift"):
                 continue
             nid = nurse["id"]
-            prev_count = prev_nights.get(nid, 0)
+            prev_count = self._two_month_prev(nid)    # 홀수달은 0 — 묶음(홀수달 + 짝수달)의 첫 달 (결정 1-101)
             night_vars = [x[nid][d][s] for d, dt in enumerate(self.all_dates)
                           if dt.month == self.month and dt.year == self.year
                           for s in self.NIGHT_SHIFTS]
@@ -891,7 +895,9 @@ class _ConflictAnalyzer(CpSatScheduler):
                 cap = max(rhs, self._pin_nurse_count(nid, month_idx, self.NIGHT_SHIFTS))   # 엔진과 같은 사실-클램프
                 py, pm = ((self.year - 1, 12) if self.month == 1
                           else (self.year, self.month - 1))
-                if self._night_dedicated_in(nid, py, pm):
+                if self.month % 2:
+                    label = f"{self._fmt_nurse_label(nurse)} 홀짝월 합산 야간 ≤{max_n}회 (홀수달 — 이 달부터 센다)"
+                elif self._night_dedicated_in(nid, py, pm):
                     # 나이트킵 달의 야간은 수면오프와 무관 — 합산에서 제외됨
                     label = (f"{self._fmt_nurse_label(nurse)} 홀짝월 합산 야간 ≤{max_n}회"
                              f" (전월 나이트킵은 합산 제외)")
