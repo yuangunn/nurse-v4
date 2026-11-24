@@ -32,6 +32,35 @@ def test_every_woman_gets_one_when_on(build_request, solver):
     assert all(v == 1 for v in got.values()), got
 
 
+def test_it_is_a_big_penalty_not_a_hard_rule(build_request):
+    """못 놓으면 표가 안 나오는 조건이 아니다 — 사람마다 '못 놓음' 변수를 두고 목적함수에서 깎는다 (결정 1-108)."""
+    nurses = _mini_nurses(6)
+    s = make_limited(build_request(nurses=nurses, rules=Rules(maxConsecutiveWorkDays=6, autoMenstrualLeave=True), days=7), days=7)
+    r = s.solve()
+    assert r["success"] and len(s._saeng_miss) == sum(n.gender == "female" for n in nurses)
+    assert not r.get("priority_miss")
+    assert s._priority_miss_report({n.id: {} for n in nurses}, {}) and all("생리휴가 없음" in t for t in s._priority_miss_report({n.id: {} for n in nurses}, {}))
+
+
+def test_it_is_solved_before_the_shape(build_request):
+    """생휴 · 1오프 한도는 모양보다 먼저 푼다 — 그 둘만 목적식으로 풀어 닿은 수준을 못 박고 그 안에서 모양을 푼다 (결정 1-108).
+    감점 크기만으로는 '최고와 2% 안'에서 멈출 때 생휴 한 명 몫이 묻혔다."""
+    nurses = _mini_nurses(6)
+    s = make_limited(build_request(nurses=nurses, rules=Rules(maxConsecutiveWorkDays=6, autoMenstrualLeave=True), days=7), days=7)
+    stages, warm = [], s._warm_highs
+    s._warm_highs = lambda x, start=None, stage="score", **kw: (stages.append(stage), warm(x, start=start, stage=stage, **kw))[1]
+    r = s.solve()
+    assert r["success"] and stages == ["priority", "score"], stages
+    off = make_limited(build_request(nurses=nurses, rules=Rules(maxConsecutiveWorkDays=6), days=7), days=7)
+    stages2, warm2 = [], off._warm_highs
+    off._warm_highs = lambda x, start=None, stage="score", **kw: (stages2.append(stage), warm2(x, start=start, stage=stage, **kw))[1]
+    assert off.solve()["success"] and stages2 == ["score"], "규칙이 꺼져 있으면 단계를 끼우지 않는다"
+    both = make_limited(build_request(nurses=nurses, rules=Rules(maxConsecutiveWorkDays=6, autoMenstrualLeave=True, maxOneOff=True, maxOneOffCount=0), days=7), days=7)
+    stages3, warm3 = [], both._warm_highs
+    both._warm_highs = lambda x, start=None, stage="score", **kw: (stages3.append(stage), warm3(x, start=start, stage=stage, **kw))[1]
+    assert both.solve()["success"] and stages3 == ["priority", "priority", "score"], "생휴 먼저, 그다음 1오프 한도, 그다음 모양"
+
+
 def test_pregnant_month_and_men_are_left_out(build_request):
     nurses = _mini_nurses(6)
     nurses[0].is_pregnant = True

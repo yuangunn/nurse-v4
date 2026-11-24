@@ -52,6 +52,12 @@ _OFF_TEUKGEUN_PENALTY = 1_000_000
 _LONG_RUN_PENALTY = 3000          # 연속 근무 한도를 하루 넘김
 _LONG_RUN_WEEKEND_RELIEF = 500    # 그 연속 안의 토·일·공휴일 하루마다 덜 깎는다
 _LONG_RUN_MIN_PENALTY = 1500
+# 원티드를 지킨 다음 가장 먼저 맞추는 것 (결정 1-108) — 꼭 지키는 조건이 아니라 큰 감점이다. 사전입력 지키기(완화 1단계)에는 넣지 않는다.
+# 꼭 지키는 조건으로 두었을 때는 원티드와 같은 급이 되어, 한 사람의 1오프 한도를 지키느라 사전입력이 3칸 → 11칸 풀리고
+# 30분에도 풀이를 끝내지 못했다. 크기는 파트장 확인 마지막 수단(1500~)보다 작게 — 생휴를 주려고 6일 연속을 만들지 않는다.
+# 순서: 생휴 없음 > 1오프 한도 넘김 > 모양 감점(단독 나이트 -400 · 퐁당퐁당 -150 …)
+_SAENG_MISS_PENALTY = 1200        # 생휴를 받아야 할 사람이 이 달 생휴가 없음
+_ONEOFF_OVER_PENALTY = 600        # 한 사람의 1오프가 한도를 넘은 개수마다
 _RARE_TRANSITION_PENALTY = 2000   # E→D1 · 중→D
 # 끝에 붙은 다음 달 며칠 — 다음 달 나이트킵의 야간 몫이 하나 모자랄 때 (2026-10-18, _tail_keeper_targets).
 # 꼬리 V(-500)보다 커서 남는 휴무를 나이트킵 OF 가 아니라 다른 사람의 V 로 돌리고, 근무 원티드를 깨고 V 를 주는 값
@@ -1073,7 +1079,7 @@ class _SchedulerBase:
         return max(0, self.rules.maxNightTwoMonthCount - self._two_month_prev(nid))
 
     def _saeng_required(self, nurse: dict, cap: int) -> bool:
-        """이 달 생휴를 꼭 한 번 놓을 사람인가 (결정 1-102) — 규칙 '여성 생휴'가 켜져 있고, 여성이고, 임신 구간이 걸친 달이 아니고,
+        """이 달 생휴를 놓아야 할 사람인가 (결정 1-102 · 1-108 — 못 놓으면 큰 감점) — 규칙 '여성 생휴'가 켜져 있고, 여성이고, 임신 구간이 걸친 달이 아니고,
         놓을 수 있을 때(cap ≥ 1 — 트레이닝 날에 이미 썼으면 0). 보상(+1000)으로 두면 누구나 받는 15,000점이 총점을 키워
         '최고와 2%' 오차를 넓혔다 — 배점에서 빼고 규칙으로 옮긴다."""
         return bool(getattr(self.rules, "autoMenstrualLeave", False) and "생" in self.ALL_SHIFTS and cap >= 1
@@ -1086,6 +1092,19 @@ class _SchedulerBase:
             return None
         code = "생" if nurse.get("gender") == "female" else "V"
         return code if code in self.ALL_SHIFTS else None
+
+    def _shift_balance_pool(self) -> list:
+        """낮·저녁 고르게(결정 1-107)의 대상 — 낮과 저녁을 둘 다 설 수 있고, 그 달 나이트킵·임신 중이 아니고, 낮·저녁 성향을 정하지 않은 사람.
+        (성향을 정한 사람은 일부러 다르게 받는다 — 야간 공평성과 같다, 결정 1-70)"""
+        day, eve = set(self._resolve_group("day")), set(self._resolve_group("evening"))
+        pref = {n["id"] for n, key, _s, _c, _g in self._shift_pref_items() if key in ("D", "E")}
+        out = []
+        for nurse in self.nurses:
+            caps = set(nurse.get("capable_shifts", self.WORK_SHIFTS))
+            if (not nurse.get("is_night_shift") and nurse["id"] not in pref and caps & day and caps & eve
+                    and not (nurse.get("is_pregnant") and self._preg_active_in_month(nurse))):
+                out.append(nurse)
+        return out
 
     def _two_month_prev(self, nid: str) -> int:
         """두 달 합산에 더하는 지난달 야간 수 — 합산은 **홀수달 + 그다음 짝수달** 묶음(1+2월, 3+4월 …)으로 센다 (결정 1-101).
@@ -1215,6 +1234,8 @@ class _SchedulerBase:
                     soft_vars += N * max(0, T - n_steps + 1)
             elif rt in ("night_fairness", "weekend_fairness"):
                 soft_vars += N + 2
+            elif rt == "shift_balance":
+                soft_vars += N
 
         total_vars = base_vars + soft_vars
         estimated = total_vars * 0.12
@@ -1314,6 +1335,19 @@ class _SchedulerBase:
                                for k, d in enumerate(w)):
                             scores[nid] += sc
                             counts[nid] += 1
+
+            elif rt == "shift_balance":
+                # 낮·저녁 고르게 (결정 1-107) — 그 달 낮 수와 저녁 수의 차이가 tolerance 를 넘는 만큼. 엔진과 같게 감점일 때만
+                if sc >= 0:
+                    continue
+                tol = max(0, int(p.get("tolerance", 4)))
+                day, eve = set(self._resolve_group("day")), set(self._resolve_group("evening"))
+                for nurse in self._shift_balance_pool():
+                    nid = nurse["id"]
+                    codes = [schedule.get(nid, {}).get(k, "") for k in dt_keys]
+                    over = max(0, abs(sum(c in day for c in codes) - sum(c in eve for c in codes)) - tol)
+                    scores[nid] += sc * over
+                    counts[nid] += over
 
             elif rt == "wish":
                 for nurse in self.nurses:
@@ -1791,6 +1825,25 @@ class _SchedulerBase:
                     "start": dks[0],
                     "end": dks[-1],
                 })
+        return out
+
+    def _priority_miss_report(self, schedule: dict, extended: dict) -> list:
+        """원티드 다음으로 먼저 맞추는 것을 못 맞춘 곳 — '이름 무엇' 글자 목록. 생휴(규칙이 켜져 있을 때)와 한 사람의 1오프 한도."""
+        out = []
+        month = [dt.strftime("%Y-%m-%d") for dt in self.all_dates if dt.month == self.month and dt.year == self.year]
+        work, rest = set(self._resolve_group("work")), set(self._resolve_group("rest_leave"))
+        cap = max(0, int(self.rules.maxOneOffCount)) if getattr(self.rules, "maxOneOff", False) else None
+        for nurse in self.nurses:
+            nid, name = nurse["id"], nurse.get("name") or nurse["id"]
+            row = {**self.prev.get(nid, {}), **(extended.get(nid) or {}), **(schedule.get(nid) or {})}
+            if self._saeng_required(nurse, 1) and not any(row.get(k) == "생" for k in month):
+                out.append(f"{name} 생리휴가 없음")
+            if cap is not None:
+                code = lambda d: row.get(self.all_dates[d].strftime("%Y-%m-%d"))      # noqa: E731
+                ones = sum(1 for a, b, c in self._oneoff_windows(nid, self._pin_view())
+                           if code(a) in work and code(b) in rest and code(c) in work)
+                if ones > cap:
+                    out.append(f"{name} 1오프 {ones}개(한도 {cap})")
         return out
 
     def _manager_check_report(self, schedule: dict) -> list:
@@ -2433,6 +2486,12 @@ class _SchedulerBase:
             result["message"] += (
                 f"\n\n⚠ 오프특근 {len(rows)}건 — 휴무 공급이 모자라 OF를 반납한 주가 "
                 f"있습니다 (주휴는 유지): {shown}{more}")
+        # 원티드 다음으로 먼저 맞추는 것(생휴 · 한 사람의 1오프 한도)을 못 맞춘 곳 (결정 1-108)
+        pm = self._priority_miss_report(result.get("schedule") or {}, result.get("extended_schedule") or {})
+        if pm:
+            result["priority_miss"] = pm
+            result["message"] += (f"\n\n⚠ 맞추지 못한 것 {len(pm)}건 — 사전입력을 지키고 나니 이렇게 남았습니다: "
+                                  + ", ".join(pm[:8]) + (f" 외 {len(pm) - 8}건" if len(pm) > 8 else ""))
         # 파트장 확인 필요 — 마지막 수단(제1원칙 13)으로 놓인 6일 연속·E→D1·중→D
         mc = self._manager_check_report(result.get("schedule") or {})
         if mc:

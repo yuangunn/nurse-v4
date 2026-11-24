@@ -35,6 +35,18 @@ def _solve(engine, cap=None, prev=None):
     return ones, r
 
 
+def test_the_cap_is_a_big_penalty_not_a_hard_rule():
+    """꼭 지키는 조건이면 원티드와 같은 급이 된다 — 사전입력 지키기 단계에는 없고, 넘는 개수마다 목적함수에서 깎는다 (결정 1-108)."""
+    from server.scheduler_base import _LONG_RUN_MIN_PENALTY, _ONEOFF_OVER_PENALTY, _SAENG_MISS_PENALTY
+    assert 0 < _ONEOFF_OVER_PENALTY < _SAENG_MISS_PENALTY < _LONG_RUN_MIN_PENALTY, "생휴 > 1오프 한도, 둘 다 파트장 확인 마지막 수단보다 작다"
+    req = _request({}, mip_gap=0.0)
+    req.rules.maxOneOff, req.rules.maxOneOffCount = True, 1
+    s = _engine("highs", LO, HI)(req)
+    r = s.solve()
+    assert r["success"] and len(s._oneoff_over) == len(s.nurses), "사람마다 넘침 변수 하나"
+    assert not r.get("priority_miss"), "맞출 수 있으면 넘지 않는다"
+
+
 def test_off_by_default():
     assert Rules().maxOneOff is False and Rules().maxOneOffCount == 3
 

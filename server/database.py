@@ -288,6 +288,7 @@ def init_db(path: Optional[str] = None):
         _migrate_two_month_night_count(conn)
         _migrate_saeng_score(conn)
         _migrate_shape_scores(conn)
+        _migrate_even_rules(conn)
 
         # 임부휴무(P1) 근무 코드 마이그레이션 (기존 DB에 없을 경우 추가)
         conn.execute(
@@ -1031,7 +1032,7 @@ def _seed_scoring_rules(conn: sqlite3.Connection):
     ]
     # 감점 위주 기본 배점 (결정 1-103) — 위 표의 값은 옛 기본값(마이그레이션이 견주는 값)이고, 새 병동은 여기서 새 값을 받는다
     rules = [(n, t, p, next((new for st, sp, _old, new in _SHAPE_SCORES if st == t and sp == json.loads(p)), s), e, o)
-             for n, t, p, s, e, o in rules] + list(_BACK_REST_RULES)
+             for n, t, p, s, e, o in rules] + list(_BACK_REST_RULES) + list(_EVEN_RULES)
     conn.executemany(
         "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)",
         rules,
@@ -1180,6 +1181,32 @@ _BACK_REST_RULES = [
     ("쉬고 나서 역방향 (저녁→휴무→낮)",   "pattern", json.dumps({"pattern": ["evening", "rest_leave", "day"]}), -100, 1, 21),
     ("쉬고 나서 역방향 (야간→휴무→저녁)", "pattern", json.dumps({"pattern": ["night", "rest_leave", "evening"]}), -100, 1, 22),
 ]
+
+
+# 고르게 · 5일 연속 (결정 1-107 · 1-109) — '같은 근무 이어가기'(+80)는 길수록 점수를 줘, 한 사람을 한 달 내내 낮(또는 저녁)에 두거나
+# 같은 근무를 닷새 잇는 것이 가장 유리했다. 실제 12월: 낮−저녁 차이 합 56 → 88~110(낮 15·저녁 3), 같은 근무 5일 연속 10곳.
+# · 낮·저녁 고르게 — 한 사람의 그 달 낮·저녁 차이가 4를 넘는 만큼 -100 (차이 합 88 → 42, 한 사람 최대 12 → 4)
+# · 같은 근무 5일 연속(낮·저녁) -300 · 5일 연속 근무 -100 (같은 근무 5일 연속 10 → 5)
+_EVEN_RULES = [
+    ("낮·저녁 고르게",            "shift_balance", json.dumps({"tolerance": 4}), -100, 1, 23),
+    ("같은 근무 5일 연속 (낮)",   "pattern", json.dumps({"pattern": ["day"] * 5}), -300, 1, 24),
+    ("같은 근무 5일 연속 (저녁)", "pattern", json.dumps({"pattern": ["evening"] * 5}), -300, 1, 25),
+    ("5일 연속 근무",             "pattern", json.dumps({"pattern": ["work"] * 5}), -100, 1, 26),
+]
+
+
+def _migrate_even_rules(conn: sqlite3.Connection):
+    """'낮·저녁 고르게'와 5일 연속 감점 셋을 한 번만 넣는다 (PRAGMA user_version 7) — 같은 종류·조건의 규칙이 이미 있으면 넣지 않고,
+    사용자가 지운 규칙을 다음 실행 때 되살리지 않는다."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 7:
+        return
+    have = [(r[0], json.loads(r[1] or "{}")) for r in conn.execute("SELECT rule_type, params FROM scoring_rules").fetchall()]
+    for rule in _EVEN_RULES:
+        same = (lambda t, p: t == "shift_balance") if rule[1] == "shift_balance" else (lambda t, p, q=json.loads(rule[2]): t == "pattern" and p == q)
+        if not any(same(t, p) for t, p in have):
+            conn.execute(
+                "INSERT INTO scoring_rules (name, rule_type, params, score, enabled, sort_order) VALUES (?,?,?,?,?,?)", rule)
+    conn.execute("PRAGMA user_version = 7")
 
 
 def _migrate_shape_scores(conn: sqlite3.Connection):

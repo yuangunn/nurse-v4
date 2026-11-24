@@ -8,7 +8,7 @@ from datetime import date
 
 import pulp
 
-from .scheduler_base import (WEEKDAY_KEYS, _OFF_TEUKGEUN_PENALTY, _RARE_TRANSITION_PENALTY, _TAIL_KEEPER_SHORT_PENALTY,
+from .scheduler_base import (WEEKDAY_KEYS, _OFF_TEUKGEUN_PENALTY, _SAENG_MISS_PENALTY, _ONEOFF_OVER_PENALTY, _RARE_TRANSITION_PENALTY, _TAIL_KEEPER_SHORT_PENALTY,
                              _TRAINEE_PAIR_BONUS, _GROUP_LIMIT_PENALTY)
 
 
@@ -418,12 +418,14 @@ class _HighsConstraintsMixin:
                 )
 
     def _c_max_oneoff(self, prob, x, cap: int):
-        """한 사람의 1오프(앞뒤가 근무인 하루짜리 휴무)를 cap 개까지 (결정 1-98). 창은 퐁당퐁당 배점과 같다(_score_windows).
+        """한 사람의 1오프(앞뒤가 근무인 하루짜리 휴무)를 cap 개까지 — 넘는 개수마다 목적함수에서 깎는다(_oneoff_over, 결정 1-98 · 1-108).
+        창은 퐁당퐁당 배점과 같다(_score_windows).
         감점으로는 안 됐다 — 퐁당퐁당 감점은 합만 줄이고, 사람마다 넘는 수를 깎는 감점은 '최고와 2% 안'에 묻혔다
         (실제 12월: 감점을 넣어도 가장 많은 사람 5개 그대로, 한도 3으로 걸면 3개·합 40→31).
         세 칸을 모두 사람이 정한 창은 세지 않는다 — 엔진이 바꿀 수 없는 칸 때문에 표를 못 만들지 않게."""
         work, rest = self._resolve_group("work"), self._resolve_group("rest_leave")
         pin = self._pin_view()
+        self._oneoff_over = []
         for nurse in self.nurses:
             nid = nurse["id"]
             zs = []
@@ -433,7 +435,9 @@ class _HighsConstraintsMixin:
                          + pulp.lpSum(x[nid][c][s] for s in work) - 2, f"one_{nid}_{b}_ge")
                 zs.append(z)
             if len(zs) > cap:
-                prob += pulp.lpSum(zs) <= cap, f"one_cap_{nid}"
+                over = pulp.LpVariable(f"one_over_{nid}", lowBound=0, upBound=len(zs) - cap)
+                prob += pulp.lpSum(zs) <= cap + over, f"one_cap_{nid}"
+                self._oneoff_over.append(over)
 
     def _c_rest_after_night(self, prob, x):
         """연속 야간 후 연속 휴무 보장 — 설정 '야간 min_consec 회 이상이면 rest_days 일 휴무' (기본 2·2).
@@ -598,7 +602,9 @@ class _HighsConstraintsMixin:
                 prob += pulp.lpSum(night_vars) <= cap, f"max_night_2mo_{nid}"
 
     def _c_menstrual_leave(self, prob, x):
-        """생리휴가: 여성 간호사당 당월 최대 1회 + 지난달 칸 금지 + 끝에 붙은 다음 달 며칠은 미리 넣은 생만"""
+        """생리휴가: 여성 간호사당 당월 최대 1회 + 지난달 칸 금지 + 끝에 붙은 다음 달 며칠은 미리 넣은 생만.
+        규칙 '여성 생휴'가 켜져 있으면 한 번은 놓게 하되 꼭은 아니다 — 못 놓은 사람마다 목적함수에서 깎는다(_saeng_miss, 결정 1-108)."""
+        self._saeng_miss = []
         if "생" not in self.ALL_SHIFTS:
             return
         for nurse in self.nurses:
@@ -613,7 +619,9 @@ class _HighsConstraintsMixin:
                 cap = self._cap_with_training(nurse, month_idx, "생", 1)   # 트레이닝 날 생도 그 달 몫
                 prob += pulp.lpSum(month_vars) <= cap, f"menstrual_{nid}"
                 if self._saeng_required(nurse, cap) and any(isinstance(v, pulp.LpVariable) for v in month_vars):
-                    prob += pulp.lpSum(month_vars) >= 1, f"menstrual_min_{nid}"   # 꼭 한 번 (결정 1-102)
+                    miss = pulp.LpVariable(f"saeng_miss_{nid}", lowBound=0, upBound=1)
+                    prob += pulp.lpSum(month_vars) + miss >= 1, f"menstrual_min_{nid}"
+                    self._saeng_miss.append(miss)
             # 이전달 overflow: 생 금지 — 사전입력된 전월 확정 기록은 존중
             first_of_month = date(self.year, self.month, 1)
             for d, dt in enumerate(self.all_dates):
@@ -816,6 +824,23 @@ class _HighsConstraintsMixin:
                         except (ValueError, KeyError):
                             pass
 
+            elif rt == "shift_balance":
+                # 낮·저녁 고르게 (결정 1-107) — 한 사람의 그 달 낮 수와 저녁 수의 차이가 tolerance 를 넘는 만큼 감점.
+                # '같은 근무 이어가기'는 묶음을 길게 만들 뿐 누구의 낮·저녁이 얼마인지는 보지 않아, 원티드가 없는 사람이
+                # 한 달 내내 낮(또는 저녁)만 받았다 (실제 12월: 낮 15·저녁 3). 깎이는 값이라 아래쪽만 묶는다
+                if sc >= 0:
+                    continue
+                tol = max(0, int(p.get("tolerance", 4)))
+                day, eve = self._resolve_group("day"), self._resolve_group("evening")
+                for nurse in self._shift_balance_pool():
+                    nid = nurse["id"]
+                    diff = (pulp.lpSum(x[nid][d][s] for d in month_days for s in day)
+                            - pulp.lpSum(x[nid][d][s] for d in month_days for s in eve))
+                    over = pulp.LpVariable(f"debal{rid}_{nid}", lowBound=0)
+                    prob += over >= diff - tol, f"debal{rid}_{nid}_d"
+                    prob += over >= -diff - tol, f"debal{rid}_{nid}_e"
+                    terms.append(sc * over)
+
             elif rt == "night_fairness":
                 # 공정성 풀에서 제외: 야간전담(월 14회 고정 → max 핀),
                 # N 비자격·임산부(야간 0 고정 → min 핀). 포함하면 range가
@@ -1004,6 +1029,12 @@ class _HighsConstraintsMixin:
         # 것은 '그러지 않으면 근무표가 성립하지 않을 때'뿐이다.
         for sl in getattr(self, "_off_slack", []):
             terms.append(-_OFF_TEUKGEUN_PENALTY * sl)
+
+        # ── 원티드 다음으로 먼저 맞추는 것 (결정 1-108) — 생휴 없음 · 한 사람의 1오프 한도 넘김 ──
+        for sl in getattr(self, "_saeng_miss", []):
+            terms.append(-_SAENG_MISS_PENALTY * sl)
+        for sl in getattr(self, "_oneoff_over", []):
+            terms.append(-_ONEOFF_OVER_PENALTY * sl)
 
         # ── 파트장 확인 마지막 수단 (제1원칙 13) ───────────────────────────
         # 연속 근무 한도+1 · E→D1 · 중→D — 그러지 않으면 근무표가 안 나올 때만 쓴다.

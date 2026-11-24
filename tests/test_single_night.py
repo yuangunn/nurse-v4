@@ -81,14 +81,14 @@ def test_migration_adds_rule_once_and_never_revives_a_deleted_one(tmp_path, monk
         with sqlite3.connect(path) as c:
             return c.execute("PRAGMA user_version").fetchone()[0]
 
-    assert len(rows()) == 1 and rows()[0][1:] == (-400, 1) and version() == 6   # 마이그레이션이 늘면 이 숫자도 는다 (4 = 두 달 합산 야간 1-99, 5 = 생리휴가 보상 1-100, 6 = 감점 위주 배점 1-103)
+    assert len(rows()) == 1 and rows()[0][1:] == (-400, 1) and version() == 7   # 마이그레이션이 늘면 이 숫자도 는다 (4 = 두 달 합산 야간 1-99, 5 = 생리휴가 보상 1-100, 6 = 감점 위주 배점 1-103, 7 = 고르게·5일 연속 1-107·1-109)
     db.init_db()
     assert len(rows()) == 1, '다시 열어도 하나'
     with sqlite3.connect(path) as c:                               # 이 규칙이 없던 옛 DB
         c.execute("DELETE FROM scoring_rules WHERE params LIKE '%non_night%'")
         c.execute("PRAGMA user_version = 0")
     db.init_db()
-    assert len(rows()) == 1 and version() == 6, '옛 DB 엔 한 번 넣는다'
+    assert len(rows()) == 1 and version() == 7, '옛 DB 엔 한 번 넣는다'
     with sqlite3.connect(path) as c:                               # 사용자가 지웠다
         c.execute("DELETE FROM scoring_rules WHERE params LIKE '%non_night%'")
     db.init_db()

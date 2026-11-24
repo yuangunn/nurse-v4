@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Tuple
 import pulp
 
 from .models import GenerateRequest, Nurse, Requirements, Rules, ScoringRule
-from .scheduler_base import _SchedulerBase, timeoff_class, _FIXED_DATE_LEAVE
+from .scheduler_base import _SchedulerBase, timeoff_class, _FIXED_DATE_LEAVE, _SAENG_MISS_PENALTY, _ONEOFF_OVER_PENALTY
 from .scheduler_highs_constraints import _HighsConstraintsMixin
 from .scheduler_highs_diagnosis import _HighsDiagnosisMixin
 
@@ -134,11 +134,38 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             pass
         return _WarmHiGHS(start=start, msg=False, **kw)
 
+    def _priority_pass(self, prob, x, start=None):
+        """원티드 다음으로 먼저 맞추는 것(생휴 · 한 사람의 1오프 한도)을 **모양보다 먼저** 푼다 (결정 1-108).
+        감점 크기만으로는 순서를 못 지킨다 — 엔진은 '최고와 2% 안'이면 멈추고, 보상이 총점을 키우면 생휴 한 명 몫(-1200)이 그 안에 든다
+        (실제 12월 · 마법사 선택: 생휴 없는 사람 1명, 한도 넘긴 사람 4명). 그래서 이 둘만 목적식으로 짧게 풀어 닿은 수준을 못 박고,
+        그 안에서 모양을 푼다. 돌려주는 것 = 이어 풀 때의 시작해(이 풀이가 표를 못 냈으면 받은 start 그대로).
+        prob 의 목적식은 바뀐 채 돌아간다 — 부른 쪽이 다시 정한다."""
+        import math
+        # 생휴 먼저, 그다음 1오프 한도 — 따로 푼다. 생휴는 다 줄 수 있으면 답이 0 이라 찾는 즉시 끝난다(하한이 0).
+        # 둘을 한 목적식으로 풀었더니 2분 안에 '생휴 없음 1 · 한도 넘김 6'에서 멈췄다 — 시간을 주면 '0 · 5'까지 간다.
+        # 실제 12월(혼자 돌릴 때): 사전입력 지키기 35초 → 생휴 11명 없음에서 0명까지 107초 → 1오프 한도 넘김 5개 증명까지 692초.
+        # 생휴에 1분만 줬을 때는 1명이 남았다 — 시간의 1/5 까지(5분 상한), 1오프 한도는 1/6 까지 닿는 데까지만
+        for name, slack, limit in (("priority_saeng", getattr(self, "_saeng_miss", []), min(300, max(30, int(self.time_limit) // 5))),
+                                   ("priority_oneoff", getattr(self, "_oneoff_over", []), min(300, max(30, int(self.time_limit) // 6)))):
+            if not slack or (start and self._halted()):
+                continue
+            prob.setObjective(-pulp.lpSum(slack))
+            solver = self._warm_highs(x, start=start, stage="priority", timeLimit=int(limit), mip_rel_gap=0.0)
+            try:
+                prob.solve(solver)
+            except Exception:
+                pass    # 중지(kInterrupt)는 pulp 가 못 읽는다 — 그때까지 찾은 해는 변수값에 남는다
+            if pulp.constants.LpStatus.get(prob.status, "Unknown") == "Infeasible" or self._highs_no_solution(prob):
+                return start
+            prob += pulp.lpSum(slack) <= math.ceil(sum(v.varValue or 0 for v in slack) - 1e-6), name
+            start = [(v, v.varValue) for v in prob.variables() if v.varValue is not None]
+        return start
+
     def _score_fields(self, info: dict) -> dict:
         """풀이 정보에 배점만의 점수를 붙인다 — 합쳐 푼 풀이면 차이(%)를 배점 기준으로 바꾸고 눈금·배점 점수·배점 하한을 싣는다.
         objective·mip_dual_bound 는 그대로 둔다(이어 찾기가 같은 모델의 값끼리 견준다). (결정 1-106)"""
-        if getattr(self, "_score_stage", None) == "keep" and "mip_gap_percent" in info:
-            # 사전입력 지키기 단계에서 멈춘 표 — 솔버의 차이는 '얼마나 지킬 수 있나'의 것이라 표의 품질로 싣지 않는다
+        if getattr(self, "_score_stage", None) in ("keep", "priority") and "mip_gap_percent" in info:
+            # 사전입력 지키기·먼저 맞추기 단계에서 멈춘 표 — 솔버의 차이는 그 단계 목적식의 것이라 표의 품질로 싣지 않는다
             return {**info, "mip_gap_percent": None}
         unit, keep = getattr(self, "_score_unit", None), getattr(self, "_score_keep", None)
         if not unit or keep is None or info.get("objective") is None or info.get("mip_dual_bound") is None:
@@ -342,9 +369,12 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                              vars=prob.numVariables(), cons=prob.numConstraints())
         except Exception:
             pass
-        solver = self._warm_highs(x, timeLimit=self.time_limit, mip_rel_gap=self.mip_gap)
+        seed = self._priority_pass(prob, x)        # 생휴 · 1오프 한도를 모양보다 먼저 (결정 1-108)
+        prob.setObjective(obj)
+        solver = self._warm_highs(x, start=seed, timeLimit=self.time_limit, mip_rel_gap=self.mip_gap)
         try:
-            status = prob.solve(solver)
+            if not (seed and self._halted()):       # 먼저 맞추기 단계에서 멈췄으면 그 표를 낸다 — 새 풀이를 시작하지 않는다
+                status = prob.solve(solver)
         except Exception:
             # kInterrupt 등 PuLP가 매핑 못하는 상태 → status를 직접 확인
             pass
@@ -715,8 +745,12 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
             elif self._highs_proved_optimal(prob):   # 시간 제한으로 끝난 1단계는 증명이 아니다 — 폴백으로
                 best_keep = int(round(pulp.value(bonus_expr) or 0))
                 prob += bonus_expr >= best_keep - 0.5, "keep_bonus_floor"   # 값은 정수 — 부동소수 여유만
+                seed = self._priority_pass(prob, x, seed)                 # 생휴 · 1오프 한도를 모양보다 먼저 (결정 1-108)
                 prob.setObjective(obj)
-                solver = self._warm_highs(x, start=seed, timeLimit=self.time_limit, mip_rel_gap=self.mip_gap)
+                if self._halted():
+                    solver, stopped = None, True
+                else:
+                    solver = self._warm_highs(x, start=seed, timeLimit=self.time_limit, mip_rel_gap=self.mip_gap)
             else:
                 # 폴백: dom 가중 단일 솔브 — 사전순 지배 스케일.
                 # 배점 상한: 이진 변수는 |계수|, 정수 보조변수(night_range·v2/v3
