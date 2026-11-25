@@ -559,7 +559,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                 model.Add(sum(v_vars) <= cap).OnlyEnforceIf(lit)
             t_vars = [x[nid][d]["V"] for d in n_idx]
             if t_vars:
-                cap = self._cap_with_training(nurse, n_idx, "V", self._v_tail_base())
+                cap = self._v_cap(nurse, n_idx, self._v_tail_base())
                 lit = gate(f"{self._fmt_nurse_label(nurse)} {self._week_span(n_idx)} V(연차) {self._v_tail_base()}회 이하", nid=nid,
                            dt=self.all_dates[n_idx[0]], kind="rest_cap", code="V",
                            used=self._pinned_dates(nid, n_idx, "V"))

@@ -133,8 +133,10 @@ window.GridInteractionsModule = function() {
 
         // 숫자 설정은 num 으로 읽는다 — `||기본값`은 0 을 기본값으로 바꾼다. 0 은 0 이다 (결정 1-116)
         const num=(v,d)=>(v===null||v===undefined||v===''||!Number.isFinite(+v))?d:+v;
+        // 사전입력한 연차(V)는 월 한도와 따로 받는다 (결정 1-117) — 한도는 자동으로 넣는 수다. 한도가 1 이상이면 그보다 많다는 것만 참고로 알리고,
+        // 0('자동으로 넣지 않는다')이면 알리지 않는다 — 사전입력 V 마다 '월 최대 0회'가 떠서 못 넣는 것처럼 보였다
         const maxV=num(r.maxVPerMonth,1);
-        if(!this.unlimitedV&&vDays.length>maxV)notes.push({nid,dk:vDays[maxV],msg:`${nurse.name}: V ${vDays.length}회 — 월 최대 ${maxV}회 (확정분은 그대로 수용)`});
+        if(maxV>=1&&!this.unlimitedV&&vDays.length>maxV)notes.push({nid,dk:vDays[maxV],msg:`${nurse.name}: V ${vDays.length}회 — 자동으로 넣는 한도는 월 ${maxV}회 (사전입력한 V 는 그대로 둡니다)`});
         if(mDays.length>1)notes.push({nid,dk:mDays[1],msg:`${nurse.name}: 생리휴가 ${mDays.length}회 — 월 1회 한도 (확정분은 그대로 수용)`});
         if(!nightDed&&r.maxNightPerMonth&&nDays.length>num(r.maxNightPerMonthCount,6))
           notes.push({nid,dk:nDays[num(r.maxNightPerMonthCount,6)],msg:`${nurse.name}: 야간 ${nDays.length}회 — 월 최대 ${r.maxNightPerMonthCount}회 (확정분은 그대로 수용)`});

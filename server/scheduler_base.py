@@ -2293,7 +2293,7 @@ class _SchedulerBase:
         max_v = int(getattr(self.rules, "maxVPerMonth", 1) or 0)
         if self.unlimited_v or max_v < 0:
             return None
-        cap = self._cap_with_training(nurse, month_idx, "V", max_v)
+        cap = self._v_cap(nurse, month_idx, max_v)
         if nurse.get("is_night_shift") and cap < 1:
             import calendar
             month_days = calendar.monthrange(self.year, self.month)[1]
@@ -2302,10 +2302,19 @@ class _SchedulerBase:
                 cap = 1
         return cap
 
+    def _v_cap(self, nurse, idxs, base: int) -> int:
+        """V 상한(그 달 · 끝에 붙은 다음 달 며칠) — **사전입력으로 넣은 V 는 한도와 따로 받는다** (결정 1-117).
+        한도는 엔진이 자동으로 넣는 연차의 수다. 사전입력 V 는 사람이 정한 것이라, 그 수만큼은 늘 들어갈 자리가 있어야 한다.
+        엄격 풀이에서는 확정 칸이라 이미 그랬지만(사실-클램프), 완화에서는 잠근 칸만 사실이라 한도 0 이 잠그지 않은 사전입력 V 를 풀어 버렸다."""
+        row = self.prev.get(nurse["id"], {})
+        pre_v = sum(1 for d in idxs if row.get(self.all_dates[d].strftime("%Y-%m-%d")) == "V")
+        pre_v -= self._train_own_count(nurse, idxs, "V")      # 트레이닝 날의 자기 V 는 이 줄의 칸이 아니다 — 한도에서 이미 뺐다
+        return max(self._cap_with_training(nurse, idxs, "V", base), pre_v)
+
     def _v_tail_base(self) -> int:
-        """표 끝에 붙은 다음 달 며칠의 연차 상한 — 1개, 월 한도가 0 이면 0 (결정 1-116). 예전엔 늘 1 이라 0 으로 두어도 그 며칠에는 들어갔다."""
-        max_v = int(getattr(self.rules, "maxVPerMonth", 1) or 0)
-        return 1 if (self.unlimited_v or max_v != 0) else 0
+        """표 끝에 붙은 다음 달 며칠의 연차 상한 — 늘 1개. 그 며칠은 다음 달 몫이고, 생휴를 새로 놓지 않는 자리라 쉴 코드가 OF 와 V 뿐이다.
+        월 한도 0 을 여기까지 걸었더니(1-116 의 첫 판) 그 며칠에 남는 사람이 쉴 코드가 없어 표가 아예 나오지 않았다 (결정 1-117)."""
+        return 1
 
     def _rest_supply_words(self) -> str:
         """원인 안내의 '솔버가 놓을 수 있는 휴무' — 설정을 따라 말한다 (예전엔 'V(월1)'·'OF(주1)'로 박혀 있어 설정이 달라도 같은 말이었다)."""
@@ -2776,9 +2785,12 @@ class _SchedulerBase:
             nid = nurse["id"]
             days = sched.get(nid, {})
             month_codes = [days.get(self.all_dates[i].strftime("%Y-%m-%d")) for i in month_idxs]
-            if not self.unlimited_v:                       # 0 도 한도다 (결정 1-115)
+            # 확정한 표의 '규칙 차이' 안내 — 한도가 1 이상일 때 그보다 많으면 알린다(막지 않는다). 한도 0 은 '자동으로 넣지 않는다'는 뜻이고
+            # 확정한 표의 V 는 모두 사람이 넣은 것이라 차이로 치지 않는다 (결정 1-117)
+            v_rule = int(self.rules.maxVPerMonth)
+            if v_rule >= 1 and not self.unlimited_v:
                 v = sum(1 for c in month_codes if c == "V")
-                if v > self.rules.maxVPerMonth:
+                if v > v_rule:
                     notes.append(f"{name_of[nid]} V {v}회 (생성 규칙은 월 {self.rules.maxVPerMonth}회)")
             if self.rules.maxNightPerMonth and not nurse.get("is_night_shift"):
                 n_cnt = sum(1 for c in month_codes if c in night_set)

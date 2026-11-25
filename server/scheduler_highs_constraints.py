@@ -553,7 +553,7 @@ class _HighsConstraintsMixin:
                         if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month]
             next_v_vars = [x[nid][d]["V"] for d in next_idx]
             if next_v_vars:
-                cap = self._cap_with_training(nurse, next_idx, "V", self._v_tail_base())
+                cap = self._v_cap(nurse, next_idx, self._v_tail_base())
                 prob += pulp.lpSum(next_v_vars) <= cap, f"max_v_next_{nid}"
 
     def _c_max_night_per_month(self, prob, x):

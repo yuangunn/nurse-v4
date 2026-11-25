@@ -989,21 +989,12 @@ class _HighsDiagnosisMixin:
         self._c_max_v_per_month(p, x)
         p += 0
         if not _try(p):
-            over = self._scan_pre_code_excess("V", self.rules.maxVPerMonth) if scan else []
+            # 사전입력 V 는 한도와 따로 받는다(결정 1-117) — 사전입력 V 가 많은 것은 원인이 아니다. 예전엔 그 사람들을 '한도 초과'로 늘어놓았다
             lines.append(
                 f"  [원인] V(연차) 월 최대 {self.rules.maxVPerMonth}회 한도를 건 단계에서 처음 막혔습니다 — "
-                "사전입력한 V 는 한도와 상관없이 받아들이므로, 대개 쉴 수 있는 코드가 모자란 것입니다."
+                "사전입력한 V 는 한도와 따로 받아들이므로, 대개 쉴 수 있는 코드가 모자란 것입니다."
             )
-            if over:
-                lines.append("  사전입력에서 V 횟수가 한도 초과인 간호사:")
-                for o in over[:8]:
-                    lines.append(
-                        f"    · {o['nurse_label']}  V {o['count']}회 (한도 {o['limit']}회): "
-                        f"{', '.join(o['dates'])}"
-                    )
-                if len(over) > 8:
-                    lines.append(f"    ... 외 {len(over)-8}명")
-            lines.append("  → 해결: 위 V 사전입력 일부를 제거하거나, 규칙에서 V 월 최대 횟수를 늘리세요.")
+            lines.append("  → 해결: 주휴(주)를 사전입력하거나, 규칙에서 V 월 최대 횟수를 늘리거나 '연차(V) 무제한'을 켜세요.")
             return "\n".join(lines)
 
         # ── Phase 8: 야간전담 전용 제약 ─────────────────────────────────────
