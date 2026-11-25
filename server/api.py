@@ -1146,7 +1146,7 @@ def _xlsx_sheet(ws, body: dict, link: dict = None):
               f"({days[0].month}월 {days[0].day}일~{days[-1].month}월 {days[-1].day}일)", ko(12))
     merge(1, 1, t0 - 1)
     ref = _SchedulerBase._CYCLE_REF                            # 화면 getCycleNum 과 같은 기준일·산식
-    starts = [i for i, d in enumerate(days) if i == 0 or d.weekday() == 6]   # 주기 = 일요일~토요일. 표는 1일에 시작해 첫 묶음이 짧을 수 있다
+    starts = [i for i, d in enumerate(days) if i == 0 or d.weekday() == 6]   # 주기 = 일요일~토요일. 받은 날짜가 주 가운데서 시작하면 첫 묶음이 짧다
     for i, nxt in zip(starts, starts[1:] + [nd]):
         put(2, c0 + i, f"{(days[i] - ref).days % 28 // 7 + 1}주기", f8)
         merge(2, c0 + i, c0 + nxt - 1)
