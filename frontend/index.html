@@ -1682,7 +1682,7 @@
       <tbody><template x-for="(r,ri) in verNumRows()" :key="'vr'+ri"><tr><td class="lbl" :title="r.tip" x-text="r.label"></td><template x-for="(c,ci) in r.cells" :key="'vc'+ri+ci"><td :class="[c.best?'best':'',verLog[ci]&&verLog[ci].n===verCur?'cur':'']" x-text="c.text"></td></template></tr></template>
         <tr class="acts"><td class="lbl">표 열기 · 저장</td><template x-for="v in verLog" :key="'va'+v.n"><td :class="v.n===verCur?'cur':''"><button x-show="v.n!==verCur" @click="verShow(v.n);verNums.open=false" class="rbtn rbtn-sm rbtn-secondary" :title="`${v.n}번 표를 화면에 엽니다.`">보기</button><span x-show="v.n===verCur" class="curlbl">화면의 표</span> <button @click="verSave(v.n)" class="rbtn rbtn-sm rbtn-quiet" :title="`${v.n}번 표를 저장한 근무표 목록에 따로 남깁니다.`">따로 저장</button></td></template></tr></tbody>
     </table></template></div>
-    <div class="rfair-note">표 기록은 이번 만들기 동안 남고, 새로고침한 뒤 이 달 자동저장본을 열면 되살아납니다. 저장한 근무표 목록에는 섞이지 않으니 남기고 싶은 번호만 ‘따로 저장’하세요. 새로 만들기를 시작하면 기록은 새 표들로 바뀝니다.</div>
+    <div class="rfair-note">근무표를 저장하면(자동 저장 포함) 그때의 표 기록도 함께 저장되어, 그 저장본을 불러오면 번호들이 되살아납니다. 번호 하나만 따로 남기려면 ‘따로 저장’하세요. 새로 만들기를 시작하면 화면의 기록은 새 표들로 바뀝니다.</div>
   </div>
 </div>
 

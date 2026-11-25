@@ -614,6 +614,8 @@ function app() {
         // 먼저 지우면 그 사이 프로필 닫기(409)·실패에 그 달 자동저장본이 아예 없어졌다 (리뷰 2026-10-21)
         let old=[];
         try{ old=((await this.api('GET','/api/schedules'))||[]).filter(s=>s.name===name&&+s.year===+year&&+s.month===+month).map(s=>s.id); }catch(e){}
+        // 표 기록도 함께 (결정 1-112) — 여기서 묶는다: 자동저장은 새 표에 번호를 붙이기(_verPush) 전에 불리고, 위의 목록 요청을 기다리는 사이 번호가 붙는다
+        body.versions=this._verPackFor(body.schedule);
         await this.api('POST','/api/schedules',body);
         for(const id of old){ try{ await this.api('DELETE',`/api/schedules/${id}`); }catch(e){} }
         if(!over)this.rdSaved=true;

@@ -692,7 +692,10 @@ window.RedesignModule = function() {
       const hit=(keys||[]).map(k=>MAKE_KEYWORDS.find(x=>x.id===k)).find(o=>o && Object.keys(o.fx).some(f=>f in kw.fx)); return hit ? hit.label : null; },
     makeClash(id){ return this._kwClash(this.mk.keys, id); },
     makeToggle(id){ const k=this.mk.keys; this.mk.keys=k.includes(id) ? k.filter(x=>x!==id) : (this._kwClash(k, id) ? k : [...k, id]); },
-    get makeDirHint(){ const ks=MAKE_KEYWORDS.filter(k=>this.mk.keys.includes(k.id)); return ks.length ? ks.map(k=>`${k.label} — ${k.hint}`).join('\n') : '추천 — 키워드를 고르지 않고 지금 설정 그대로 만듭니다. 견줘 본 조합 가운데 사전입력(원티드)을 가장 적게 풀었습니다.'; },
+    get makeDirHint(){ const ks=MAKE_KEYWORDS.filter(k=>this.mk.keys.includes(k.id)); return ks.length ? ks.map(k=>`${k.label} — ${k.hint}`).join('\n') : `추천 — 키워드를 고르지 않고 설정 > 배점의 지금 값 그대로 만듭니다. 견줘 본 조합 가운데 사전입력(원티드)을 가장 적게 풀었습니다.\n지금 값: ${this.makeRecText}`; },
+    // 추천이 쓰는 값 — 추천은 키워드를 켜는 것이 아니라 '설정 > 배점 그대로'라, 무엇이 걸려 있는지 여기서 보인다 (켜 둔 것 가운데 표 모양·공평성을 가르는 것, 0점 제외)
+    get makeRecText(){ const kinds=['consecutive_same','pattern','shift_balance','transition','night_fairness','weekend_fairness'];
+      return (this.scoringRules||[]).filter(r=>r.enabled&&r.score&&kinds.includes(r.rule_type)).map(r=>`${r.name} ${r.score>0?'+':''}${r.score}`).join(' · ') || '켜 둔 배점이 없습니다'; },
 
     // 배점 규칙에 곱하기 묶음(fx: {규칙 이름표: 배수})들을 건 사본 — 아무것도 걸리지 않으면 null (서버가 설정 값을 쓴다)
     // 고른 키워드가 켜는 규칙 — 요청의 rules 를 이 표에만 바꿔 싣는다 (없으면 빈 객체)
@@ -739,6 +742,7 @@ window.RedesignModule = function() {
           if(!this._resultHere({profile_id:pid, ...ym})){ M.stopped=true; R.state='fail'; R.msg='만드는 동안 병동이나 달이 바뀌어 멈췄습니다'; break; }
           R.result=r; R.payload=payload; R.log=this.solverLogs.map(l=>l.msg).join('\n');
           if(r&&r.success){ R.state='done'; R.stats=this.multiStats(r); R.saveName=`${ym.month}월 · ${plan[i].label}`; await this._multiSave(R, ym); }
+          else if(r&&r.stopped) R.state='skip';      // 표를 찾기 전에 멈춤 — 못 만든 것이 아니라 만들지 않은 것
           else { R.state='fail'; R.msg=String((r&&r.message)||'만들지 못했습니다').split('\n')[0]; }
           if(r&&r.stopped) M.stopped=true;
         }
@@ -846,17 +850,26 @@ window.RedesignModule = function() {
       const R={result:{...v.result, schedule:v.screen||v.result.schedule}, saveName:`${this.month}월 · ${n}번 표${n===1?'(초안)':''}`, log:''};
       await this._multiSave(R, {year:+this.year, month:+this.month}); this.loadSavedList&&this.loadSavedList();
       this.toast(R.saved ? `‘${R.saveName}’로 저장했습니다 — 불러오기에서 열 수 있어요` : '저장하지 못했습니다', R.saved?'success':'error', 5000); },
+    _verList(lite){ return this.verLog.map(v=>({n:v.n, sec:v.sec, gap:v.gap, stats:v.stats, screen:v.screen, result:lite ? {schedule:v.result.schedule, extended_schedule:v.result.extended_schedule, relaxed_cells:v.result.relaxed_cells, mip_gap_percent:v.result.mip_gap_percent, message:v.result.message, stopped:v.result.stopped} : {...v.result, solver_log:undefined}})); },
+    // 저장본에 함께 넣는 표 기록 (결정 1-112) — 저장하는 표가 기록의 한 번호와 같을 때만 넣고, 그 번호를 '보는 번호'로 적는다.
+    // 같지 않으면(다른 달의 표 · 기록과 상관없는 표) 넣지 않는다 — 불러왔을 때 번호 줄이 화면의 표와 어긋나지 않게
+    _verPackFor(schedule){ if(!this.verLog.length) return null; const now=JSON.stringify(schedule||{});
+      const hit=[...this.verLog].reverse().find(v=>JSON.stringify(v.screen||v.result.schedule)===now);
+      return hit ? {cur:hit.n, seen:this.verSeen, list:this._verList(false)} : null; },
     _verStore(){
-      const pack=lite=>JSON.stringify({cur:this.verCur, seen:this.verSeen, list:this.verLog.map(v=>({n:v.n, sec:v.sec, gap:v.gap, stats:v.stats, screen:v.screen, result:lite ? {schedule:v.result.schedule, extended_schedule:v.result.extended_schedule, relaxed_cells:v.result.relaxed_cells, mip_gap_percent:v.result.mip_gap_percent, message:v.result.message, stopped:v.result.stopped} : {...v.result, solver_log:undefined}}))});
+      const pack=lite=>JSON.stringify({cur:this.verCur, seen:this.verSeen, list:this._verList(lite)});
       try{ localStorage.setItem(this._verKey(), pack(false)); }catch(e){ try{ localStorage.setItem(this._verKey(), pack(true)); }catch(e2){ try{ localStorage.removeItem(this._verKey()); }catch(e3){} } }
     },
-    // 저장본을 연 뒤 — 그 표가 보관해 둔 기록의 한 번호와 같으면 기록을 되살리고(새로고침 뒤 자동저장본 열기), 아니면 기록을 지운다
-    verAfterLoad(){
-      let o=null; try{ o=JSON.parse(localStorage.getItem(this._verKey())||'null'); }catch(e){}
+    // 저장본을 연 뒤 — 저장본에 든 표 기록(결정 1-112)을 먼저 보고, 없으면 이 브라우저에 보관해 둔 기록을 본다.
+    // 연 표가 그 기록의 한 번호와 같으면 기록을 되살리고, 아니면 기록을 지운다
+    verAfterLoad(saved){
+      let o=(saved&&Array.isArray(saved.list)&&saved.list.length) ? saved : null; const own=!!o;
+      if(!o){ try{ o=JSON.parse(localStorage.getItem(this._verKey())||'null'); }catch(e){} }
       const now=JSON.stringify(this.schedule||{}), list=(o&&Array.isArray(o.list)) ? o.list.filter(v=>v&&v.result&&v.result.schedule) : [];
       const hit=[...list].reverse().find(v=>JSON.stringify(v.screen||v.result.schedule)===now);
       if(!hit){ this.verClear(); return; }
       this.verLog=list.map(v=>({...v, payload:null})); this.verCur=hit.n; this.verSeen=Math.max(o.seen||0, hit.n); this.verCmpOff();
+      if(own) this._verStore();   // 저장본에서 되살린 기록을 이 브라우저에도 둔다 — 새로고침 뒤에도 같은 기록
     },
 
     // 견주기 — 화면의 표(뒤)와 앞 번호 a 를 한 달력에. 칸마다 그대로·쉬게 됨·근무하게 됨·다른 근무로
@@ -1042,8 +1055,8 @@ window.RedesignModule = function() {
     rdPopClosed(){ if(this.activeTab==='schedule' && this._sel && this._sel.tab==='schedule' && !this._isDragging) this._sel=null; },
     // 저장한 근무표를 불러왔음을 알린다 (결정 1-88) — 알림 한 줄 + 표가 한 번 떠오르는 움직임 + 목록에서 그 줄에 '열려 있음'
     loadedSavedId: null, tableFlash: false,
-    rdLoadedNotice(id, name){
-      this.loadedSavedId=id; this.verAfterLoad(); this.toast(`‘${name||'근무표'}’를 불러왔습니다`, 'success', 3500);
+    rdLoadedNotice(id, name, versions){
+      this.loadedSavedId=id; this.verAfterLoad(versions); this.toast(`‘${name||'근무표'}’를 불러왔습니다`, 'success', 3500);
       this.tableFlash=false; clearTimeout(this._flashT);
       const on=()=>{ this.tableFlash=true; this._flashT=setTimeout(()=>{ this.tableFlash=false; }, 900); };
       this.$nextTick ? this.$nextTick(on) : on();

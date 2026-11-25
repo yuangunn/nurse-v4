@@ -156,6 +156,17 @@ def test_saved_relaxed_cells_drive_the_relax_ledger(client):
     assert client.get("/api/relax_ledger", params={"year": 2026, "month": 11}).json() == {}
 
 
+def test_saved_schedule_keeps_its_table_history(client):
+    """표 기록(결정 1-112) — 저장할 때 함께 보낸 번호들이 저장본에 그대로 남고, 보내지 않은 저장본에는 그 칸이 없다 (화면이 만들고 화면이 읽는다)."""
+    sched = {"간호01": {"2026-12-01": "D"}}
+    hist = {"cur": 2, "seen": 2, "list": [{"n": 1, "sec": 55, "result": {"schedule": {"간호01": {"2026-12-01": "E"}}}},
+                                           {"n": 2, "sec": 93, "result": {"schedule": sched}}]}
+    with_hist, plain = _save(client, 12, sched, versions=hist), _save(client, 12, sched)
+    assert client.get(f"/api/schedules/{with_hist}").json()["data"]["versions"] == hist
+    assert "versions" not in client.get(f"/api/schedules/{plain}").json()["data"]
+    assert all("data" not in row for row in client.get("/api/schedules").json()), "목록은 가볍게 — 기록이 들어가도 목록에는 싣지 않는다"
+
+
 def test_relax_ledger_fallback_for_old_saves(client):
     """구버전 저장본(relaxed_cells 없음) 폴백 — 지켜 준 원티드(D/E·E/N·N제외)·번표 표기(OFF)·신규 트레이닝 칸('/')은
     뒤집힘이 아니다. 실제로 뒤집힌 사람보다 지켜진 사람을 더 보호했다."""

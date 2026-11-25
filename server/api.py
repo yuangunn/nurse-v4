@@ -2664,6 +2664,7 @@ def save_schedule(body: ScheduleSave):
             "prev_day_reqs": body.prev_day_reqs or {},
             "prev_month_nights": body.prev_month_nights or {},
             "solver_log": body.solver_log or "",
+            **({"versions": body.versions} if body.versions else {}),
         },
         name=body.name,
     )

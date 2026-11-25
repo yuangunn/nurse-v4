@@ -66,6 +66,9 @@ window.SolverModule = function() {
         if(draft&&!result.success&&!result.stopped&&!this.stopRequested&&(result.relax_timed_out||/제한 시간/.test(result.message||''))){
           this.toast('초안 시간(1분 30초) 안에 표가 나오지 않아, 고른 시간으로 다시 찾습니다','info',7000);
           next={time_limit:Math.max(1,Math.min(60,parseInt(this.generateTimeout)||20))*60};return}
+        // 표를 찾기 전에 멈춘 것은 실패가 아니다 — 실패 배너(원인 · 고칠 칸)는 '이 조건으로는 못 만든다'는 뜻이라 띄우지 않고, 멈췄다고만 알린다.
+        // (멈춤을 누른 뒤 온 실패도 같다 — 풀이를 끝까지 하지 않은 답이라 원인이 아니다)
+        if(!result.success&&(result.stopped||this.stopRequested)){this.toast(this.rdSched?'멈췄습니다 — 새 표를 찾기 전에 멈춰서, 보던 표 그대로입니다':'멈췄습니다 — 표를 찾기 전에 멈춰서 만들어진 표가 없습니다','info',8000);return}
         this.statusOk=result.success;this.statusMessage=result.message;this.genFailed=!result.success;
         this.generationReport=result.generation_report||null;
         this.wishReport=result.wish_report||null;

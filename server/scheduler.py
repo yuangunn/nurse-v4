@@ -116,7 +116,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
     @staticmethod
     def _stopped_result() -> Dict:
         """중지 요청으로 표 없이 끝남 — '제한 시간 안에 못 만들었다'·원인 진단이 아니다."""
-        return {"success": False, "schedule": {}, "extended_schedule": {},
+        return {"success": False, "stopped": True, "schedule": {}, "extended_schedule": {},     # stopped — 화면이 실패와 가른다
                 "message": "중지 요청으로 멈췄습니다 — 그때까지 찾은 표가 없습니다."}
 
     def _warm_highs(self, x, start=None, stage="score", unit=None, **kw) -> "_WarmHiGHS":

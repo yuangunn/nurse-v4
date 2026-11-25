@@ -184,6 +184,7 @@ class ScheduleSave(BaseModel):
     nurse_score_details: Optional[Dict[str, Any]] = None
     locked_cells: Optional[Dict[str, Any]] = None
     cell_notes: Optional[Dict[str, Any]] = None
+    versions: Optional[Dict[str, Any]] = None       # 표 기록 — 이 표를 만들 때 나온 번호들 {cur, seen, list} (결정 1-112). 화면이 만들고 화면이 읽는다
     relaxed_cells: Optional[Dict[str, Any]] = None   # 완화로 뒤집힌 원티드 — 빠져 있어 원장이 늘 '차이'로 셌다
     holidays: Optional[List[str]] = None
     prev_day_reqs: Optional[Dict[str, Any]] = None
