@@ -795,8 +795,18 @@ window.RedesignModule = function() {
     get verFresh(){ return this.verLog.filter(v=>v.n>this.verSeen).map(v=>v.n); },
     _verKey(){ return `ns_verlog:${this.currentProfile||''}:${this.year}-${String(this.month).padStart(2,'0')}`; },
     _verTime(sec){ sec=Math.round(sec||0); return sec>=60 ? `${Math.floor(sec/60)}분 ${String(sec%60).padStart(2,'0')}초` : `${sec}초`; },
-    verChipSub(v){ return [this._verTime(v.sec), v.gap==null ? null : (v.gap>=100 ? '최고와 차이 큼' : `최고와 ${Math.round(v.gap*10)/10}% 차이`)].filter(Boolean).join(' · '); },   // 처음 나온 답은 차이가 몇백 %일 수 있다 — 숫자 대신 '큼'
-    verChipName(v){ return `${v.n}번`+(v.n===1 ? ' · 초안' : '')+(v.n===this.verLast&&this.verLog.length>1 ? ' · 최신' : ''); },
+    verChipSub(v){ return [v.sec==null ? null : this._verTime(v.sec), v.gap==null ? null : (v.gap>=100 ? '최고와 차이 큼' : `최고와 ${Math.round(v.gap*10)/10}% 차이`)].filter(Boolean).join(' · '); },   // 처음 나온 답은 차이가 몇백 %일 수 있다 — 숫자 대신 '큼'
+    // kind — 만들기가 낸 표가 아닌 것: base 고치기 전(불러온 표) · edit 손으로 고친 표 · readjust 다시 맞춘 표 (결정 1-120)
+    VER_KIND:{base:'고치기 전', edit:'손으로 고침', readjust:'다시 맞춤'},
+    verChipName(v){ return `${v.n}번`+(v.kind ? ' · '+this.VER_KIND[v.kind] : (v.n===1 ? ' · 초안' : ''))+(v.n===this.verLast&&this.verLog.length>1 ? ' · 최신' : ''); },
+    // 만들기가 낸 것이 아닌 표를 표 기록에 넣는다 — 같은 표가 이미 있으면 그 번호를 돌려준다(넣지 않는다)
+    _verAddRaw(kind, t){
+      const now=JSON.stringify(t.schedule||{}), same=this.verLog.find(v=>JSON.stringify(v.screen||v.result.schedule)===now);
+      if(same) return {v:same, added:false};
+      const r={schedule:t.schedule, extended_schedule:t.extended||{}, relaxed_cells:t.relaxed||{}, nurse_scores:t.scores||{}, nurse_score_details:t.details||{}, message:t.message||'', mip_gap_percent:null};
+      const v={n:(this.verLast||0)+1, sec:null, gap:null, result:r, payload:null, stats:this.multiStats(r), screen:null, kind};
+      const L=this.verLog.length>=8 ? [this.verLog[0], ...this.verLog.slice(2)] : this.verLog;
+      this.verLog=[...L, v]; return {v, added:true}; },
     verReset(){ this.verLog=[]; this.verCur=null; this.verSeen=0; this.verCmpOff(); this.verNums.open=false; },   // 화면에서만 지운다 (병동을 바꿀 때)
     verClear(){ try{ localStorage.removeItem(this._verKey()); }catch(e){} this.verReset(); },
     _verPush(r, payload, shown){
@@ -840,7 +850,7 @@ window.RedesignModule = function() {
       if(n!==this.verCur){ this._verKeepScreen(); this._showResult(v.result);
         if(v.screen) this.schedule=JSON.parse(JSON.stringify(v.screen));
         this.verCur=n; this.activeTab='schedule'; this.loadedSavedId=null; this.rdSaved=(n===this.verLast&&!v.screen);
-        if(!this.generating&&v.payload) this._setContBase(v.payload, v.result);
+        if(!this.generating){ if(v.payload) this._setContBase(v.payload, v.result); else this.contBase=null; }   // 요청을 모르는 표(고치기 전 · 손으로 고친 · 다시 맞춘 · 저장본에서 되살린)는 '더 찾기'의 출발점이 아니다
         this.checkScheduleViolations&&this.checkScheduleViolations(); }
       this.verSeen=Math.max(this.verSeen, n); this.rdToast=null;
       if(this.verCmp.on&&!this.verCmp.saved){ if(!(this.verCmp.a<n&&this.verLog.some(x=>x.n===this.verCmp.a))) this.verCmp.a=this._verPrevOf(n);   // 견주는 앞 표는 화면의 번호보다 앞이어야 한다
@@ -853,7 +863,7 @@ window.RedesignModule = function() {
       const R={result:{...v.result, schedule:v.screen||v.result.schedule}, saveName:`${this.month}월 · ${n}번 표${n===1?'(초안)':''}`, log:''};
       await this._multiSave(R, {year:+this.year, month:+this.month}); this.loadSavedList&&this.loadSavedList();
       this.toast(R.saved ? `‘${R.saveName}’로 저장했습니다 — 불러오기에서 열 수 있어요` : '저장하지 못했습니다', R.saved?'success':'error', 5000); },
-    _verList(lite){ return this.verLog.map(v=>({n:v.n, sec:v.sec, gap:v.gap, stats:v.stats, screen:v.screen, result:lite ? {schedule:v.result.schedule, extended_schedule:v.result.extended_schedule, relaxed_cells:v.result.relaxed_cells, mip_gap_percent:v.result.mip_gap_percent, message:v.result.message, stopped:v.result.stopped} : {...v.result, solver_log:undefined}})); },
+    _verList(lite){ return this.verLog.map(v=>({n:v.n, sec:v.sec, gap:v.gap, stats:v.stats, screen:v.screen, ...(v.kind?{kind:v.kind}:{}), result:lite ? {schedule:v.result.schedule, extended_schedule:v.result.extended_schedule, relaxed_cells:v.result.relaxed_cells, mip_gap_percent:v.result.mip_gap_percent, message:v.result.message, stopped:v.result.stopped} : {...v.result, solver_log:undefined}})); },
     // 저장본에 함께 넣는 표 기록 (결정 1-112) — 저장하는 표가 기록의 한 번호와 같을 때만 넣고, 그 번호를 '보는 번호'로 적는다.
     // 같지 않으면(다른 달의 표 · 기록과 상관없는 표) 넣지 않는다 — 불러왔을 때 번호 줄이 화면의 표와 어긋나지 않게
     _verPackFor(schedule){ if(!this.verLog.length) return null; const now=JSON.stringify(schedule||{});

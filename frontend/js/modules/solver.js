@@ -105,6 +105,7 @@ window.SolverModule = function() {
             this.statusMessage+=`\n\n📌 원티드 미반영 ${details.length}건${noted?` — 그중 메모(사유) 있는 셀 ${noted}건`:''}. 절대 못 바꾸는 날은 사전입력에서 🔒 잠금하세요.\n`+details.map(d=>d.line).join('\n');
           }
           this.trackEdits();story=!_readjust;
+          if(_readjust){this._verPush(result,null,true).kind='readjust'}   // 다시 맞춘 표도 번호로 남긴다 — 앞 번호들과 견줄 수 있게 (결정 1-120). 요청은 남기지 않는다(다른 문제)
           if(!_readjust){const v=this._verPush(result,payload,true);   // 화면에 넣은 표에 번호를 붙여 표 기록에 남긴다 (결정 1-95)
             if(back!=null&&v.n!==back){this.verShow(back);this.verSeen=Math.min(this.verSeen,v.n-1);quiet=true;
               this.rdToast={msg:`${v.n}번 표가 나왔습니다 — 보던 표는 그대로 두었습니다`,act:'보기',fn:()=>this.verShow(v.n)};clearTimeout(this._rdToastTimer)}}

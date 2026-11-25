@@ -318,7 +318,11 @@ const fresh = () => { store.clear(); ticks.length = 0; unload.length = 0; };
   // 다시 맞춘 표는 그 달 자동저장본(만든 표)을 덮지 않고 따로 저장하고, 누르기 직전의 표로 되돌릴 수 있다 — 고친 칸 표시도 돌아온다 (결정 1-119)
   assert.equal(s.db.A.saved.at(-1).name, '자동저장 2026-11 · 다시 맞춘 표');
   assert.equal(a.schedule.a2['2026-11-10'], 'V'); assert.ok(a.readjustUndo);
-  a.readjustRevert();
+  // 표 기록에 번호로 남는다 (결정 1-120) — 고치기 전 · 손으로 고친 표 · 다시 맞춘 표. 앞 번호를 열면 그 표가 나온다
+  assert.deepEqual(a.verLog.map(v => [v.n, v.kind]), [[1, 'base'], [2, 'edit'], [3, 'readjust']]); assert.equal(a.verCur, 3);
+  assert.deepEqual(a.verLog.map(v => a.verChipName(v)), ['1번 · 고치기 전', '2번 · 손으로 고침', '3번 · 다시 맞춤 · 최신']);
+  assert.equal(a.verLog[0].result.schedule.a1['2026-11-02'], 'D'); assert.equal(a.verLog[1].result.schedule.a1['2026-11-02'], 'E');
+  a.readjustRevert(); assert.equal(a.verCur, 2);
   assert.deepEqual(a.schedule, { a1: { '2026-11-02': 'E', '2026-11-10': 'V' }, a2: { '2026-11-02': 'E', '2026-11-10': 'D' } });
   assert.equal(a.getManualEditCount(), 1); assert.equal(a.readjustUndo, null); assert.equal(a.readjustSummary, '');
   // 엔진이 맞추는 표를 찾지 못해 보낸 표를 그대로 확정해 돌려주면(pinned_confirmed) '재조정 완료'가 아니다 — 못 맞췄다고 알리고 요약을 남기지 않는다 (결정 1-118)

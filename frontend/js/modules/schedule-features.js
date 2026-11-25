@@ -285,6 +285,12 @@ window.ScheduleFeaturesModule = function() {
       const copy=o=>JSON.parse(JSON.stringify(o||{}));
       const keep={year:this.year,month:this.month,schedule:before,extended:copy(this.extendedSchedule),original:copy(this._originalSchedule),relaxed:copy(this.relaxedCells),
         scores:copy(this.nurseScores),details:copy(this.nurseScoreDetails),message:this.statusMessage,ok:this.statusOk,gap:this.mipGapPercent,stopped:this.scheduleStopped};
+      // 표 기록에 남긴다 (결정 1-120) — 고치기 전의 표(기록이 비어 있을 때 — 저장본을 열어 고친 경우)와 손으로 고친 표를 번호로 넣어 두면,
+      // 다시 맞춘 표가 그다음 번호로 들어가 셋을 나란히 견줄 수 있다. 다시 맞추지 못하면 방금 넣은 번호는 뺀다
+      const hadLog=this.verLog.length>0, addedN=[];
+      if(!hadLog){ const b=this._verAddRaw('base',{...keep,schedule:keep.original}); if(b.added){ addedN.push(b.v.n); this.verCur=b.v.n; this.verSeen=b.v.n; } }
+      { const e=this._verAddRaw('edit',keep); if(e.added) addedN.push(e.v.n); }
+      const dropAdded=()=>{ if(!addedN.length) return; this.verLog=this.verLog.filter(v=>!addedN.includes(v.n)); if(!this.verLog.length) this.verReset(); else if(!this.verLog.some(v=>v.n===this.verCur)) this.verCur=this.verLog[this.verLog.length-1].n; this._verStore(); };
       const here=await this.generate({
         prev_schedule:prevPayload,
         locked_cells:locked,
@@ -295,10 +301,11 @@ window.ScheduleFeaturesModule = function() {
         allow_pre_relax:true,
         _readjust:true,
       });
-      if(!here||!this.statusOk)return;   // 실패 시 수정본 유지 + 기존 진단 표시 (그동안 달이 바뀌었으면 화면에 넣지 않았다)
+      if(!here||!this.statusOk){dropAdded();return}   // 실패 시 수정본 유지 + 기존 진단 표시 (그동안 달이 바뀌었으면 화면에 넣지 않았다)
       // 엔진이 맞추는 표를 찾지 못하면 보낸 표를 그대로 확정해 돌려준다(빈칸 없는 표의 길) — 그것은 다시 맞춘 것이 아니다.
       // 예전엔 '재조정 완료 — 따라 고침 0칸'으로 보여, 눌러도 아무 일이 없는 것처럼 보였다 (결정 1-118)
       if(this.pinnedConfirmed){
+        dropAdded();
         this.readjustSummary='';
         this.statusOk=false;
         this.statusMessage='⚠ 다시 맞추지 못했습니다 — 고친 칸을 그대로 두고는 인원·규칙이 맞는 표를 찾지 못해, 표는 고친 그대로입니다.\n'
@@ -335,6 +342,7 @@ window.ScheduleFeaturesModule = function() {
       this.statusMessage=k.message;this.statusOk=k.ok;this.mipGapPercent=k.gap;this.scheduleStopped=k.stopped;this.genFailed=false;
       this._originalSchedule=k.original;this._schedUndo=[];this._schedRedo=[];   // 고친 칸 표시가 그대로 돌아온다 (기준 표를 새로 잡지 않는다)
       this.readjustPins={};this.readjustChanged={};this.readjustSummary='';this.readjustUndo=null;this.contBase=null;this.rdSaved=false;
+      { const now=JSON.stringify(k.schedule), e=this.verLog.find(v=>JSON.stringify(v.screen||v.result.schedule)===now); if(e) this.verCur=e.n; }   // 표 기록의 번호도 그 표로
       this.checkScheduleViolations();
       this.toast('다시 맞추기 전의 표로 되돌렸습니다','success',4000);
     },
