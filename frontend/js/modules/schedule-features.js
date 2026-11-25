@@ -292,6 +292,16 @@ window.ScheduleFeaturesModule = function() {
         _readjust:true,
       });
       if(!here||!this.statusOk)return;   // 실패 시 수정본 유지 + 기존 진단 표시 (그동안 달이 바뀌었으면 화면에 넣지 않았다)
+      // 엔진이 맞추는 표를 찾지 못하면 보낸 표를 그대로 확정해 돌려준다(빈칸 없는 표의 길) — 그것은 다시 맞춘 것이 아니다.
+      // 예전엔 '재조정 완료 — 따라 고침 0칸'으로 보여, 눌러도 아무 일이 없는 것처럼 보였다 (결정 1-118)
+      if(this.pinnedConfirmed){
+        this.readjustSummary='';
+        this.statusOk=false;
+        this.statusMessage='⚠ 다시 맞추지 못했습니다 — 고친 칸을 그대로 두고는 인원·규칙이 맞는 표를 찾지 못해, 표는 고친 그대로입니다.\n'
+          +'고친 칸 때문에 그날 인원이 맞지 않거나 연속 근무·야간 뒤 휴무 같은 규칙과 부딪힐 수 있습니다. 칸을 다르게 고치거나, 사전입력 화면의 신호등과 ‘왜 안 되는지 자세히 보기’로 막힌 곳을 확인해 보세요.';
+        this.toast('다시 맞추지 못했습니다 — 표는 고친 그대로입니다','error',7000);
+        return;
+      }
       const changed={}; const detail=[];
       const nids=new Set([...Object.keys(this.schedule||{}),...Object.keys(before)]);
       let nChg=0;
