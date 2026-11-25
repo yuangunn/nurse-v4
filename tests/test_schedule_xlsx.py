@@ -254,6 +254,26 @@ def test_bad_input_400(client, body):
     assert r.json()["detail"].startswith("근무표 형식이 맞지 않습니다")
 
 
+def test_leading_days_of_the_previous_month(client):
+    """이 달 시트가 화면처럼 지난달 며칠부터 시작할 때 (결정 1-114) — 앞에 붙은 지난달 며칠(11/29·11/30)도 앞 달 시트의 같은 날짜를 가리키고,
+    계는 12/1~12/31 칸만 센다. 주기 줄은 첫 주가 온전한 한 주(일~토)다."""
+    days = [(date(2026, 11, 29) + timedelta(i)).isoformat() for i in range(35)]          # 11/29(일) ~ 1/2(토)
+    prev = {"year": 2026, "month": 11, "days": DAYS, "rows": [["간호01", *(["D"] * 28), "N", "E", *(["OF"] * 5)]]}   # 11/29 N · 11/30 E
+    r = client.post("/api/schedules/export.xlsx", json={"year": 2026, "month": 12, "days": days, "prev": prev, "rows": [
+        ["간호01", "V", "V", *(["V"] * 5), *(["N"] * 28)],                                # 앞 일곱 칸에 보낸 값(V)은 쓰지 않는다 — 11월 시트 값
+        ["간호02", "N", "N", *(["D"] * 33)]]})                                            # 11월 시트에 없는 사람 — 보낸 값 그대로
+    assert r.status_code == 200, r.text
+    wb = openpyxl.load_workbook(io.BytesIO(r.content))
+    ws, wv = wb["12월"], openpyxl.load_workbook(io.BytesIO(r.content), data_only=True)["12월"]
+    ref = lambda c: f"""=IF('11월'!{c}="","",'11월'!{c})"""                               # noqa: E731
+    assert [ws[c].value for c in ("B5", "C5", "D5", "H5")] == [ref("AD5"), ref("AE5"), ref("AF5"), ref("AJ5")] and ws["I5"].value == "N"
+    assert [wv[c].value for c in ("B5", "C5", "D5")] == ["N", "E", "OF"] and [ws[c].value for c in ("B6", "C6")] == ["N", "N"]
+    assert ws["AM5"].value == '=COUNTIF(D5:AH5,"N")' and wv["AM5"].value == 26          # 12/6~12/31 의 N — 11/29 의 N 은 세지 않는다
+    assert ws["AK6"].value == '=COUNTIF(D6:AH6,"D")' and wv["AK6"].value == 31 and wv["AM6"].value == 0   # 간호02 의 11/29·11/30 N 도 세지 않는다
+    assert ws["B3"].value.date() == date(2026, 11, 29) and str(ws.merged_cells).count("B2:H2") == 1    # 첫 주기 칸이 일곱 날
+    assert _stale(r.content) == []
+
+
 def test_highlight_picker(res):
     """강조 (결정 1-105) — 제목 줄 오른쪽 칸의 목록에서 고르면 그 칸이 색으로 뜬다: 목록(데이터 유효성) + 조건부 서식 네 가지, 매크로 없음."""
     ws = openpyxl.load_workbook(io.BytesIO(res.content))["11월"]

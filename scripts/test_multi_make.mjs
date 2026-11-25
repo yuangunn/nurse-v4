@@ -69,6 +69,10 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   assert.deepEqual(a._kwRules(['oneoff', 'onecap']), { rules: { maxOneOff: true, maxOneOffCount: 3, weeklyOff: true } }); assert.equal(a.rules.maxOneOff, false);
   // 6일 연속 없이 — 배점은 건드리지 않고 이 표의 요청에만 규칙을 끈다. 다른 키워드와 함께 고를 수 있다
   assert.deepEqual(a._kwRules(['nosix']), { rules: { maxOneOff: false, maxOneOffCount: 3, weeklyOff: true, longRunLastResort: false } }); assert.equal(a._kwClash(['oneoff', 'night.a'], 'nosix'), null);
+  // 곱할 배점 규칙이 없는 키워드는 고르지 못한다 — 규칙을 끄면 죽고, 다시 켜면 살아난다. 규칙만 켜는 키워드(onecap · nosix)는 늘 산다
+  { const keep = a.scoringRules; assert.equal(a.kwDead('oneoff'), false); assert.equal(a.kwDead('onecap'), false); assert.equal(a.kwDead('nosix'), false);
+    a.scoringRules = keep.map(r => ({ ...r, enabled: false })); assert.equal(a.kwDead('oneoff'), true); assert.equal(a.kwDead('night.a'), true); assert.equal(a.kwDead('nosix'), false);
+    a.scoringRules = keep; }
   a.mk.count = 'one'; a.mk.keys = ['onecap']; assert.equal(a.makeHasCap, true); a.mk.keys = []; assert.equal(a.makeHasCap, false);
   a.mk.count = 'multi'; a.multi.tables = [{ keys: [] }, { keys: ['onecap'] }]; assert.equal(a.makeHasCap, true);
   assert.deepEqual(a.multiPlan.map(p => p.label), ['추천 (지금 설정 그대로)', '1오프 몰지 않기']);

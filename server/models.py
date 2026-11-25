@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Dict, List, Literal, Optional
 
 
@@ -57,6 +57,9 @@ class DayRequirement(BaseModel):
     예) D=3 이면 DC 1명 + D 2명 = 합계 3명.
     스케줄러 내부에서 charge 1명을 자동으로 배정.
     """
+    # 병동이 보탠 자동배정 근무(중 · D1 …)의 줄은 그 근무 코드가 키다 — 모르는 키를 버리면 요일 표에 넣은 값이 엔진에 닿지 않는다
+    # (날짜별 인원은 닿는데 요일 기본값만 버려졌다). 엔진은 코드로 읽는다 (_c_daily_requirements 의 period_map)
+    model_config = ConfigDict(extra="allow")
     D: int = 3   # Day 시간대 총 인원 (DC 포함)
     E: int = 3   # Evening 시간대 총 인원 (EC 포함)
     N: int = 3   # Night 시간대 총 인원 (NC 포함)
@@ -73,41 +76,41 @@ class Requirements(BaseModel):
 
 
 class Rules(BaseModel):
+    # 숫자 칸의 뜻 — **0 은 0 이다**. '0 = 끔 · 무제한 · 기본값'으로 읽지 않는다(끄는 것은 짝이 되는 켬/끔 값이 맡는다, 결정 1-116).
+    # 아래 ge 는 화면 입력의 최소와 같다 — 범위를 벗어난 값은 저장(POST /api/rules)에서 거절하고 요청에서도 거절한다.
     weeklyOff: bool = True
     noNOD: bool = True          # N→OF→D 금지
-    avoidDN: bool = True         # D→N 회피 (soft)
     maxConsecutiveWork: bool = True
-    maxConsecutiveWorkDays: int = 5
+    maxConsecutiveWorkDays: int = Field(5, ge=1)
     # 파트장 확인 하에 쓰는 마지막 수단 (제1원칙 13, 2026-10-03) — 하드 금지 대신 큰 감점.
     # 쓴 곳은 결과 manager_check 로 '파트장 확인 필요'를 알린다.
     longRunLastResort: bool = True          # 연속 근무 한도 +1일 (주말·공휴일이 끼면 덜 깎는다)
     rareTransitionLastResort: bool = True   # E→D1 · 중→D (나머지 7개 전환은 그대로 금지)
     maxConsecutiveNight: bool = True
-    maxConsecutiveNightDays: int = 3
+    maxConsecutiveNightDays: int = Field(3, ge=1)
     restAfterNight: bool = True
-    restAfterNightDays: int = 2          # 연속야간 후 보장할 휴무 일수
-    restAfterNightMinConsec: int = 2     # 최소 연속야간 횟수 (이 이상이면 휴무 부여)
+    restAfterNightDays: int = Field(2, ge=1)          # 연속야간 후 보장할 휴무 일수
+    restAfterNightMinConsec: int = Field(2, ge=1)     # 최소 연속야간 횟수 (이 이상이면 휴무 부여)
     # 병동이 보탠 근무가 낀 전환은 근무 정의의 시간으로 실제 휴식을 재서, 이 시간 미만이면 금지한다 (결정 1-92).
     # 기본 11시간 = 근로기준법 제59조 ②(보건업 등 특례 업종의 근로일 사이 연속 휴식). 기본 근무끼리는 역순 전환 9종 그대로.
     maxOneOff: bool = False          # 한 사람의 1오프 한도 (결정 1-98) — 기본은 끔
-    maxOneOffCount: int = 3
+    maxOneOffCount: int = Field(3, ge=0)
     minRest: bool = True
-    minRestHours: float = 11
-    patternOptimization: bool = True
+    minRestHours: float = Field(11, ge=0)
     autoMenstrualLeave: bool = False     # 여성 생휴를 이 달 꼭 한 번 (결정 1-102). 화면 기본값은 켬 — 요청에 실려 온다. 요청에 없으면 끔
-    maxVPerMonth: int = 1        # V(연차) 월 최대 사용 횟수 (hard)
+    maxVPerMonth: int = Field(1, ge=0)   # V(연차) 월 최대 — 자동으로 넣는 수. 0 = 넣지 않는다 (결정 1-115). 한도를 없애는 것은 요청의 unlimited_v
     maxNightPerMonth: bool = True
-    maxNightPerMonthCount: int = 6   # 월 최대 야간 횟수 (7회부터 수면OFF 발생)
+    maxNightPerMonthCount: int = Field(6, ge=0)   # 월 최대 야간 횟수 (7회부터 수면OFF 발생)
     maxNightTwoMonth: bool = False
-    maxNightTwoMonthCount: int = 10  # 홀짝월 합산 최대 야간 (11개부터 수면OFF 발생, 결정 1-99)
+    maxNightTwoMonthCount: int = Field(10, ge=0)  # 홀짝월 합산 최대 야간 (11개부터 수면OFF 발생, 결정 1-99)
     # 사전입력 완화 차등 보너스 — 높을수록 늦게 뒤집힌다 (사전순 최소 침습, 결정 1-9)
     #   휴가 5000 > 쉬는 날(OF·P1) 3000 > 근무 500 > 주휴 300(주휴 무시를 켰을 때만 변수)
     # 원티드(사전입력)에는 사연이 있다(제1원칙 8) — 쉬는 날은 근무보다 강하게 보호한다.
     # '절대 못 건드리는' 셀은 잠금(🔒, locked_cells)으로 — 그건 완화에서도 하드다.
-    preBonusLeave: int = 5000  # V/생/특/공/법/병/경가/조가/산전 (휴가) — 간호사 요청 사항
-    preBonusOff: int = 3000    # OF/P1 (쉬는 날·임부휴무) — 개인의 시간, 강하게 보호
-    preBonusWork: int = 500    # D/E/N/DC/EC/NC/중/D1 (근무) — 가장 먼저 교체
-    preBonusRest: int = 300    # 주(주휴) — allow_juhu_relax 를 켰을 때만 변수가 된다
+    preBonusLeave: int = Field(5000, ge=0)  # V/생/특/공/법/병/경가/조가/산전 (휴가) — 간호사 요청 사항
+    preBonusOff: int = Field(3000, ge=0)    # OF/P1 (쉬는 날·임부휴무) — 개인의 시간, 강하게 보호
+    preBonusWork: int = Field(500, ge=0)    # D/E/N/DC/EC/NC/중/D1 (근무) — 가장 먼저 교체
+    preBonusRest: int = Field(300, ge=0)    # 주(주휴) — allow_juhu_relax 를 켰을 때만 변수가 된다
     # 병원 휴일 (매년 MM-DD) — 프론트 '공휴일 채우기'가 법정공휴일과 함께 holidays 에 넣는다.
     # 엔진은 이 목록을 직접 읽지 않는다 (holidays 하나만 본다 — 화면·검사·엔진이 같은 날짜를 보게).
     hospitalHolidays: List[Dict[str, str]] = [
@@ -184,6 +187,7 @@ class ScheduleSave(BaseModel):
     nurse_score_details: Optional[Dict[str, Any]] = None
     locked_cells: Optional[Dict[str, Any]] = None
     cell_notes: Optional[Dict[str, Any]] = None
+    versions: Optional[Dict[str, Any]] = None       # 표 기록 — 이 표를 만들 때 나온 번호들 {cur, seen, list} (결정 1-112). 화면이 만들고 화면이 읽는다
     relaxed_cells: Optional[Dict[str, Any]] = None   # 완화로 뒤집힌 원티드 — 빠져 있어 원장이 늘 '차이'로 셌다
     holidays: Optional[List[str]] = None
     prev_day_reqs: Optional[Dict[str, Any]] = None

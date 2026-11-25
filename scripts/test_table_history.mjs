@@ -114,9 +114,17 @@ const gens = (calls) => calls.filter(c => c.path === '/api/generate');
   b.schedule = JSON.parse(JSON.stringify(S1)); b.verAfterLoad();
   assert.deepEqual([b.verLog.map(v => v.n), b.verCur, b.verPinned], [[1, 2], 1, true]);
   b.verShow(2); assert.equal(b.schedule.a[dk(6)], 'E', '고친 채로 되살아난다');
+  // 저장본에 함께 넣는 기록 (결정 1-112) — 저장하는 표가 기록의 한 번호와 같을 때만 묶고, 그 번호를 보는 번호로 적는다.
+  // 이 브라우저에 보관해 둔 것이 없어도, 저장본에 든 기록으로 되살아난다
+  const pack = b._verPackFor(b.schedule);
+  assert.deepEqual([pack.cur, pack.list.map(v => v.n), 'solver_log' in pack.list[0].result && pack.list[0].result.solver_log], [2, [1, 2], undefined]);
+  assert.equal(b._verPackFor({ a: row('OF OF OF OF OF OF OF') }), null, '기록과 상관없는 표에는 넣지 않는다');
   const { a: c } = make();
   c.schedule = { a: row('OF OF OF OF OF OF OF') }; c.verAfterLoad();
   assert.deepEqual([c.verLog.length, c.verCur, store.has(c._verKey())], [0, null, false]);
+  const { a: d } = make();
+  d.schedule = JSON.parse(JSON.stringify(b.schedule)); d.verAfterLoad(JSON.parse(JSON.stringify(pack)));
+  assert.deepEqual([d.verLog.map(v => v.n), d.verCur, store.has(d._verKey())], [[1, 2], 2, true]);
 }
 
 // ⑥ 새로 만들면 기록은 새 표들로 바뀐다 · 한 장뿐이면 지난 번호가 없다 · 병동을 바꾸면 화면에서만 지운다

@@ -171,7 +171,8 @@ window.PreinputIoModule = function() {
     // ── 저장/불러오기 ────────────────────────────────────────
     async saveSchedule(){
       const name=this._safePrompt('저장 이름을 입력하세요 (선택)',`${this.year}년 ${this.month}월`);if(name===null)return;
-      await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name:name||null,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights,relaxed_cells:this.relaxedCells});
+      this._verKeepScreen();   // 고친 표를 저장하면 그 번호의 표도 고친 모양으로 — 불러왔을 때 화면의 표와 번호가 맞는다
+      await this.api('POST','/api/schedules',{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,versions:this._verPackFor(this.schedule),name:name||null,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights,relaxed_cells:this.relaxedCells});
       await this.loadSavedList();this.toast('저장되었습니다','info');
     },
     async loadSavedList(){this.savedSchedules=await this.api('GET','/api/schedules')},
@@ -180,7 +181,7 @@ window.PreinputIoModule = function() {
     async loadSaved(id){const data=await this.api('GET',`/api/schedules/${id}`);const d=data.data||{};this.year=d.year||data.year;this.month=d.month||data.month;this.schedule=d.schedule||{};this.extendedSchedule={};this.relaxedCells=d.relaxed_cells||{};this.nurseScores=d.nurse_scores||{};this.nurseScoreDetails=d.nurse_score_details||{};const log=d.solver_log||'';if(log){this.solverLogs=log.split('\n').map((m,i)=>({id:i+1,msg:m}));this._logSeq=this.solverLogs.length}/* 줄 번호를 이어 간다 — 만드는 중에 열면 새 줄이 같은 번호를 받아 목록(키)이 깨졌다 */this._solveReset();for(const m of log.split('\n'))this._solveFeed(m);this.story.open=false;this.rdWhy=false;this.cellWhy={};this.genFailed=false;this.contBase=null;this.genRound=1;this.genElapsedBase=0;this.genRounds=[];this.activeTab='schedule';this._resetGridHistory();this.trackEdits();   // 불러온 표가 새 기준 — Ctrl+Z 로 앞 표가 되살아나지 않게
       this._preAtMake=Object.keys(d.prev_schedule||{}).length?this._preKey(d.prev_schedule):null;   // 저장할 때의 사전입력과 견준다 — 없으면(올린 표) 알리지 않는다
       const gone=Object.keys(this.schedule).filter(nid=>!this.nurses.some(n=>n.id===nid)).length;
-      this.rdLoadedNotice(id,data.name||d.name||`${this.year}년 ${this.month}월 근무표`);
+      this.rdLoadedNotice(id,data.name||d.name||`${this.year}년 ${this.month}월 근무표`,d.versions);
       if(gone)this.toast(`이 저장본의 ${gone}명은 지금 명부에 없어 표에 나오지 않습니다`,'info',5000)},
     async deleteSaved(id){if(!confirm('삭제하시겠습니까?'))return;await this.api('DELETE',`/api/schedules/${id}`);await this.loadSavedList()},
 

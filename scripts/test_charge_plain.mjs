@@ -91,11 +91,11 @@ Object.assign(ctx, {
   keepers: ['c'], rules: { teamColors: { A: '#123456' } },
 });
 body = ctx._xlsxBody();
-assert.equal(body.days[0], '2026-11-01');
-assert.equal(body.days.length, 35);
+assert.equal(body.days[0], '2026-10-25');                            // 화면과 똑같이 — 1일이 일요일인 달은 지난달 마지막 한 주도 (결정 1-114)
+assert.equal(body.days.length, 42);
 assert.equal(body.days.at(-1), '2026-12-05');
-assert.deepEqual([body.rows[0][1], body.rows[0][35]], ['D', 'E']);   // 11/1 DC · 12/5 EC
-assert.deepEqual(body.rows[1].slice(0, 4), ['간호02', '', '', 'D']);  // 11/2 는 전입 전
+assert.deepEqual([body.rows[0][7], body.rows[0][8], body.rows[0][42]], ['N', 'D', 'E']);   // 10/31 NC · 11/1 DC · 12/5 EC
+assert.deepEqual([body.rows[1][0], ...body.rows[1].slice(8, 11)], ['간호02', '', '', 'D']);  // 11/2 는 전입 전
 assert.deepEqual(body.holidays, ['2026-11-03']);
 // 팀 색 — 고른 색(A)이 먼저, 나머지는 명부에 처음 나오는 순서로. 팀이 없으면 색도 없다
 assert.deepEqual(body.teams, ['B', 'A', 'B', '']);
@@ -104,33 +104,35 @@ assert.equal(ctx.rdTeamStyle(ctx.nurses[1]), '--team-bg:#123456;--team-fg:#FFFFF
 assert.equal(ctx.rdTeamStyle(ctx.nurses[0]), '--team-bg:#DDEBF7;--team-fg:#1A1A1A');
 assert.equal(ctx.rdTeamStyle(ctx.nurses[3]), '');
 // 표식 — 화면과 같다: 원티드 그대로 w(끝에 붙은 다음 달 날도 — 결정 1-75) · 풀린 칸 r · 손으로 고친 칸·전입 전은 빈 표식 · 나이트킵 줄은 k
-assert.equal(body.marks[0].slice(0, 5), ' wr  ');
-assert.equal(body.marks[0][34], 'w');
-assert.equal(body.marks[1].slice(0, 3), '   ');
-assert.equal(body.marks[2], 'k'.repeat(35));
-assert.equal(body.marks[3], ' '.repeat(35));
+assert.equal(body.marks[0].slice(7, 12), ' wr  ');
+assert.equal(body.marks[0].slice(0, 7), ' '.repeat(7));              // 앞에 붙은 지난달 한 주는 원티드 색을 칠하지 않는다
+assert.equal(body.marks[0][41], 'w');
+assert.equal(body.marks[1].slice(7, 10), '   ');
+assert.equal(body.marks[2], 'k'.repeat(42));
+assert.equal(body.marks[3], ' '.repeat(42));
 assert.deepEqual(body.charge, ['DN', '', '', '']);
-assert.deepEqual(body.notes, [[0, 1, '개인 사정']]);
+assert.deepEqual(body.notes, [[0, 8, '개인 사정'], [1, 5, '표 밖']]);  // 10/30 의 메모도 이제 표 안이다
 Object.assign(ctx, { month: 12, scheduleDays: range([2026, 10, 29], [2027, 0, 2]) });
 body = ctx._xlsxBody();
-assert.equal(body.days[0], '2026-12-01');                            // 12월은 한 시트에 다 — 11/29·11/30 만 뺀다
-assert.equal(body.days.length, 33);
-assert.equal(body.rows[0][5], 'E');                                  // 12/5 EC — 화면 값
+assert.equal(body.days[0], '2026-11-29');                            // 12월은 1일이 든 주의 일요일부터 — 앞에 붙은 11/29·11/30 도 함께 (결정 1-114)
+assert.equal(body.days.length, 35);
+assert.equal(body.rows[0][7], 'E');                                  // 12/5 EC — 화면 값
 assert.equal(body.days.at(-1), '2027-01-02');
+assert.equal(body.marks[0].slice(0, 2), '  ');                       // 앞에 붙은 지난달 며칠은 원티드 색을 칠하지 않는다
 
-// 앞 달 시트 본문(_xlsxPrev) — 12/1~12/5 는 11월 표에도 있어, 11월 저장본이 있으면 그 표가 앞 시트로 같이 나간다. 없으면 시트 하나
+// 앞 달 시트 본문(_xlsxPrev) — 11/29~12/5 는 11월 표에도 있어, 11월 저장본이 있으면 그 표가 앞 시트로 같이 나간다. 없으면 시트 하나
 assert.equal(await ctx._xlsxPrev(), null);
-// 저장본이 있으면 그 표를 연 것처럼 — 근무표·풀린 칸은 저장본(가장 최근 것), 명부·사전입력·메모는 지금 것. 11/1~12/5
+// 저장본이 있으면 그 표를 연 것처럼 — 근무표·풀린 칸은 저장본(가장 최근 것), 명부·사전입력·메모는 지금 것. 10/25~12/5 (11월 화면 그대로)
 Object.defineProperty(ctx, 'scheduleDays', { configurable: true, get() { return this.month === 11 ? range([2026, 9, 25], [2026, 11, 5]) : range([2026, 10, 29], [2027, 0, 2]); } });
 let asked, prev;
 Object.assign(ctx, { savedSchedules: [{ id: 7, year: 2026, month: 11 }, { id: 3, year: 2026, month: 11 }, { id: 9, year: 2025, month: 11 }],
   api: async (m, url) => { asked = `${m} ${url}`; return { data: { schedule: { a: { '2026-11-02': 'NC', '2026-12-01': 'N' } }, relaxed_cells: { a: { '2026-11-02': 1 } } } }; } });
 prev = await ctx._xlsxPrev();
 assert.equal(asked, 'GET /api/schedules/7');
-assert.deepEqual([prev.year, prev.month, prev.days[0], prev.days.at(-1), prev.days.length], [2026, 11, '2026-11-01', '2026-12-05', 35]);
-assert.deepEqual([prev.rows[0][1], prev.rows[0][2], prev.rows[0][31], prev.rows[0][35]], ['', 'N', 'N', '']);   // 화면의 11/1 DC·12/5 EC 는 섞이지 않는다
-assert.equal(prev.marks[0].slice(0, 5), ' rww ');                    // 풀린 칸은 저장본 것, 손으로 고친 칸 표시는 이 달 것이라 쓰지 않는다
-assert.deepEqual(prev.notes, [[0, 1, '개인 사정']]);
+assert.deepEqual([prev.year, prev.month, prev.days[0], prev.days.at(-1), prev.days.length], [2026, 11, '2026-10-25', '2026-12-05', 42]);
+assert.deepEqual([prev.rows[0][8], prev.rows[0][9], prev.rows[0][38], prev.rows[0][42]], ['', 'N', 'N', '']);   // 화면의 11/1 DC·12/5 EC 는 섞이지 않는다
+assert.equal(prev.marks[0].slice(7, 12), ' rww ');                   // 풀린 칸은 저장본 것, 손으로 고친 칸 표시는 이 달 것이라 쓰지 않는다
+assert.deepEqual(prev.notes, [[0, 8, '개인 사정'], [1, 5, '표 밖']]);
 assert.deepEqual([ctx.year, ctx.month, Object.keys(ctx.schedule.a).length, Object.keys(ctx.relaxedCells.a)], [2026, 12, 6, ['2026-11-03']]);   // 화면 상태는 그대로
 
 // 엑셀 내려받기 — 서버에 POST 하고 '근무표_2026년12월.xlsx' 로 저장
@@ -143,11 +145,12 @@ assert.equal(sent.url, '/api/schedules/export.xlsx');
 assert.equal(sent.method, 'POST');
 assert.deepEqual(JSON.parse(sent.body), { ...body, prev });
 assert.equal(saved, '근무표_2026년12월.xlsx');
-// 1일이 일요일인 달은 앞 달 표에 물린 주가 없다 — 시트 하나
+// 1일이 일요일인 달도 지난달 마지막 한 주(10/25~10/31)가 앞 달 표에 있다 — 그 달 저장본이 없으면 시트 하나
 ctx.month = 11;
-assert.equal(await ctx._xlsxPrev(), null);
+assert.equal(await ctx._xlsxPrev(), null);                           // 10월 저장본 없음
 await ctx.exportToXlsx();
 assert.equal(JSON.parse(sent.body).prev, null);
+assert.equal(JSON.parse(sent.body).days[0], '2026-10-25');
 ctx.month = 12;
 
 // 표를 만든 뒤 사전입력이 바뀌었는가(rdPreChanged) — 새 표가 설 때(trackEdits)의 사전입력과 견준다. 되돌리면 꺼지고, 기준을 모르면 알리지 않는다

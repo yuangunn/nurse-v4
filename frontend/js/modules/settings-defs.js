@@ -11,7 +11,23 @@ window.SettingsDefsModule = function() {
       const loaded=await this.api('GET','/api/rules');
       this.rules={...this.rules,...loaded};
     },
-    async saveRules(){await this.api('POST','/api/rules',this.rules);this.toast('규칙이 저장되었습니다','info')},
+    // 숫자 설정 읽기 — 숫자면 그 값(0 도), 아니면(빈칸 · null · 글자) 기본값. `x||기본값`으로 읽지 않는다: 0 을 기본값으로 바꾼다 (결정 1-116)
+    _num(v, dflt){ return (v===null||v===undefined||v===''||!Number.isFinite(+v)) ? dflt : +v; },
+    // 규칙의 숫자 칸 — [최소, 최대, 기본값, 정수인가]. 화면 입력(min · max) · ± 단추 · 서버 모델(Rules 의 ge)과 같은 범위
+    RULE_NUM:{maxConsecutiveWorkDays:[1,10,5,1], maxConsecutiveNightDays:[1,7,3,1], restAfterNightDays:[1,4,2,1], restAfterNightMinConsec:[2,5,2,1],
+      maxOneOffCount:[0,10,3,1], minRestHours:[1,24,11,0], maxVPerMonth:[0,10,1,1], maxNightPerMonthCount:[1,15,6,1], maxNightTwoMonthCount:[1,20,10,1],
+      preBonusLeave:[0,100000,5000,1], preBonusOff:[0,100000,3000,1], preBonusWork:[0,100000,500,1], preBonusRest:[0,100000,300,1]},
+    // 숫자 칸을 비웠거나 범위 밖이면 바로잡는다 — 빈칸(null)이 저장 · 요청에 실리면 서버가 거절해 만들기가 통째로 막혔다.
+    // 입력이 바뀔 때 · 저장할 때 · 만들기 요청을 만들 때 부른다
+    rulesFix(){ let fixed=0;
+      for(const [k,[lo,hi,dflt,int]] of Object.entries(this.RULE_NUM)){ let v=this._num(this.rules[k],dflt); if(int) v=Math.round(v); v=Math.max(lo,Math.min(hi,v)); if(this.rules[k]!==v){ this.rules[k]=v; fixed++; } }
+      return fixed; },
+    async saveRules(){
+      if(this.rulesFix()) this.toast('비었거나 범위를 벗어난 숫자 칸은 기본값·가까운 값으로 고쳤습니다','info',5000);
+      try{ await this.api('POST','/api/rules',this.rules); this.toast('규칙이 저장되었습니다','info'); }
+      catch(e){ this.toast('규칙을 저장하지 못했습니다 — '+(e.message||''),'error',7000); } },
+    // 설정 화면 밖에서 바꾸는 규칙 값(마법사의 1오프 개수 · 완화 순서)도 바꿀 때 저장한다 — 예전엔 새로고침하면 사라졌다
+    async saveRuleKeys(...keys){ this.rulesFix(); try{ await this.api('POST','/api/rules',Object.fromEntries(keys.map(k=>[k,this.rules[k]]))); }catch(e){} },
 
     // ── 병원 휴일 (매년) — 설정 → 규칙. 저장은 위의 규칙 저장 버튼 ──
     // 옛 저장본·템플릿을 불러와 rules 에 목록이 없으면 기본값(misc-features.js)을 보여 준다
@@ -43,19 +59,22 @@ window.SettingsDefsModule = function() {
     removeHospitalHoliday(i){ this._ownHospitalHolidays().splice(i,1); },
 
     // ── 규칙 프리셋 ──────────────────────────────────────────
+    // 프리셋 · 템플릿에는 규칙 값만 — 그룹(그룹원 id) · 팀 색 · 병원 휴일은 그 병동의 자료라 담지도 덮지도 않는다.
+    // 예전엔 통째로 담아, 옛 프리셋을 적용하면 그 뒤에 만든 그룹 · 색 · 휴일이 옛 값으로 돌아갔다 (결정 1-116)
+    _presetRules(r){ const {nurseGroups, teamColors, hospitalHolidays, ...rest}=JSON.parse(JSON.stringify(r||{})); return rest; },
     rulePresets:JSON.parse(localStorage.getItem('ns_rule_presets')||'[]'),
     showRulePresets:false,
     saveRulePreset(){
       const name=this._safePrompt('프리셋 이름을 입력하세요 (예: 엄격/유연/야간 중심)','새 프리셋');
       if(!name)return;
-      this.rulePresets.push({name,rules:JSON.parse(JSON.stringify(this.rules)),created:new Date().toISOString().slice(0,16)});
+      this.rulePresets.push({name,rules:this._presetRules(this.rules),created:new Date().toISOString().slice(0,16)});
       localStorage.setItem('ns_rule_presets',JSON.stringify(this.rulePresets));
       this.toast(`규칙 프리셋 "${name}" 저장 완료`);
     },
     loadRulePreset(idx){
       const p=this.rulePresets[idx];if(!p)return;
       if(!confirm(`"${p.name}" 프리셋을 불러오시겠습니까?\n현재 규칙 설정이 교체됩니다.`))return;
-      this.rules={...this.rules,...p.rules};
+      this.rules={...this.rules,...this._presetRules(p.rules)}; this.rulesFix();
       this.toast(`프리셋 "${p.name}" 적용됨. '저장' 버튼으로 서버에 반영하세요.`,'info',5000);
     },
     deleteRulePreset(idx){
@@ -293,7 +312,7 @@ window.SettingsDefsModule = function() {
     },
     // 보탠 근무가 낀 전환 가운데 실제 휴식이 모자란 쌍 — [[앞], [뒤], 라벨, false]. 기본 근무끼리는 역순 9종이 답이라 넣지 않는다
     hoursTransitionRules(){
-      const r=this.rules||{}; if(r.minRest===false) return []; const need=(parseFloat(r.minRestHours)||0)*60; if(need<=0) return [];
+      const r=this.rules||{}; if(r.minRest===false) return []; const restH=parseFloat(r.minRestHours), need=(Number.isFinite(restH)?restH:0)*60; if(need<=0) return [];
       const work=this.shifts.filter(s=>this.WORK_PERIODS.includes(s.period)), custom=new Set(work.filter(s=>!this.BUILTIN_WORK.includes(s.code)).map(s=>s.code)); if(!custom.size) return [];
       const hrs=Object.fromEntries(work.map(s=>[s.code, this.parseShiftHours(s.hours)])), hard=this.categoryTransitionRules().filter(x=>!x[3]), out=[];
       for(const a of work) for(const b of work){ if((!custom.has(a.code)&&!custom.has(b.code))||!hrs[a.code]||!hrs[b.code]) continue;
@@ -393,7 +412,11 @@ window.SettingsDefsModule = function() {
       else if(rt==='weekend_work')this.scoringModal.data.params={slots:[{weekday:5,periods:['evening','night']},{weekday:6,periods:['day']}]};
       else this.scoringModal.data.params={};
     },
-    async saveScoringRule(){const d=this.scoringModal.data;if(!d.name.trim()){this.toast('규칙 이름을 입력하세요','error');return}await this.api('POST','/api/scoring_rules',d);await this.loadScoringRules();this.scoringModal.open=false},
+    async saveScoringRule(){const d=this.scoringModal.data;if(!d.name.trim()){this.toast('규칙 이름을 입력하세요','error');return}
+      if(d.rule_type==='shift_balance') d.params={...d.params, tolerance:Math.max(0,Math.round(this._num((d.params||{}).tolerance,4)))};   // 빈칸은 4 — null 로 저장되면 엔진이 죽었다
+      if(!Number.isFinite(+d.score)||d.score===null||d.score===''){this.toast('점수를 숫자로 넣어 주세요','error');return}
+      try{await this.api('POST','/api/scoring_rules',d)}catch(e){this.toast('저장하지 못했습니다 — '+(e.message||''),'error',7000);return}
+      await this.loadScoringRules();this.scoringModal.open=false},
     async toggleScoringRule(rule){await this.api('POST','/api/scoring_rules',{...rule,enabled:!rule.enabled});await this.loadScoringRules()},
     async deleteScoringRule(id){if(!confirm('이 배점 규칙을 삭제하시겠습니까?'))return;await this.api('DELETE',`/api/scoring_rules/${id}`);await this.loadScoringRules()},
 

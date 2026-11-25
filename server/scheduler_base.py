@@ -1093,6 +1093,16 @@ class _SchedulerBase:
         code = "생" if nurse.get("gender") == "female" else "V"
         return code if code in self.ALL_SHIFTS else None
 
+    @staticmethod
+    def _balance_tolerance(params: dict) -> int:
+        """낮·저녁 고르게의 '감점 없이 두는 차이' — 값이 없거나 숫자가 아니면 4. **0 은 0**(차이가 조금만 나도 깎는다).
+        칸을 비운 채 저장하면 키는 있고 값이 None 이라 int(None) 으로 만들기가 통째로 죽었다 (결정 1-116)."""
+        v = (params or {}).get("tolerance")
+        try:
+            return max(0, int(v))
+        except (TypeError, ValueError):
+            return 4
+
     def _shift_balance_pool(self) -> list:
         """낮·저녁 고르게(결정 1-107)의 대상 — 낮과 저녁을 둘 다 설 수 있고, 그 달 나이트킵·임신 중이 아니고, 낮·저녁 성향을 정하지 않은 사람.
         (성향을 정한 사람은 일부러 다르게 받는다 — 야간 공평성과 같다, 결정 1-70)"""
@@ -1340,7 +1350,7 @@ class _SchedulerBase:
                 # 낮·저녁 고르게 (결정 1-107) — 그 달 낮 수와 저녁 수의 차이가 tolerance 를 넘는 만큼. 엔진과 같게 감점일 때만
                 if sc >= 0:
                     continue
-                tol = max(0, int(p.get("tolerance", 4)))
+                tol = self._balance_tolerance(p)
                 day, eve = set(self._resolve_group("day")), set(self._resolve_group("evening"))
                 for nurse in self._shift_balance_pool():
                     nid = nurse["id"]
@@ -1637,9 +1647,9 @@ class _SchedulerBase:
                       and dt.year == self.year]
 
         # 월 단위 한도(V·생)는 그 달 사전입력으로 이미 쓴 만큼 차감.
-        # V 월 한도는 엔진과 같다(_c_max_v_per_month): 무제한이거나 규칙이 0 이하이면 상한 없음 (v_cap None)
+        # V 월 한도는 엔진과 같다(_v_month_cap): 무제한이면 상한 없음 (v_cap None). 0 은 '자동으로 넣지 않는다' (결정 1-115)
         rule_v = int(getattr(self.rules, "maxVPerMonth", 0) or 0)
-        v_cap = None if (self.unlimited_v or rule_v <= 0) else rule_v
+        v_cap = None if (self.unlimited_v or rule_v < 0) else rule_v
         def eff_pre(nurse, d):
             """엔진이 보는 사전입력 — 일반 간호사의 공휴일 OF·모성보호로 지워지는 칸은 빈칸."""
             dt = self.all_dates[d]
@@ -1750,7 +1760,7 @@ class _SchedulerBase:
                     if in_month:
                         slots += free_in if v_cap is None else min(max(0, v_cap - used[nid]["V"]), free_in)
                     if in_tail and not used[nid]["V_tail"]:
-                        slots += 1      # 다음 달 몫 V — 무제한이어도 꼬리 며칠은 1회
+                        slots += self._v_tail_base()      # 다음 달 몫 V — 무제한이어도 꼬리 며칠은 1회, 월 한도가 0 이면 0
                 # 생은 이번 달 몫만 — 꼬리 며칠의 생은 미리 넣은 것뿐이고 그건 pinned_rest 에 들어 있다
                 if ("생" in self.SOLVER_SHIFTS and nurse.get("gender") == "female"
                         and in_month and used[nid]["생"] < 1):
@@ -1774,8 +1784,7 @@ class _SchedulerBase:
                 })
         return out
 
-    @staticmethod
-    def rest_supply_message(rows: list) -> str:
+    def rest_supply_message(self, rows: list) -> str:
         """rest_supply_shortfall() 결과를 사람 문장으로. 비어 있으면 ''."""
         if not rows:
             return ""
@@ -1786,7 +1795,7 @@ class _SchedulerBase:
                 f"휴무 {w['demand']}칸이 필요한데 "
                 f"놓을 수 있는 휴무는 {w['supply']}칸뿐입니다 (부족 {w['shortfall']}칸).")
         why = ("일별 인원이 '정확히 일치'라 남는 인력은 반드시 쉬어야 하는데, "
-               "솔버가 놓을 수 있는 휴무는 OF(주1)·V(월1)·생(월1)뿐입니다. "
+               f"솔버가 놓을 수 있는 휴무는 {self._rest_supply_words()}뿐입니다. "
                "주휴(주)는 사전입력 전용이라 사람이 넣어야 합니다.")
         if w.get("boundary"):
             why += " 끝에 붙은 다음 달 며칠의 주휴도 이 근무표에서 넣습니다 — 거기엔 생을 새로 놓지 않습니다(다음 달 몫)."
@@ -2277,6 +2286,34 @@ class _SchedulerBase:
                 n += 1
         return n
 
+    def _v_month_cap(self, nurse, month_idx):
+        """그 달 연차(V) 상한 — None 이면 상한 없음('연차 무제한'). 양 엔진 · 충돌 분석이 같은 값을 쓴다.
+        **0 은 '자동으로 넣지 않는다'** (결정 1-115) — 예전엔 0 을 '상한 없음'으로 읽어, 0 으로 낮추면 오히려 연차가 마음껏 들어갔다.
+        사전입력으로 정해진 V 는 한도 위에 받고(사실-클램프), 나이트킵 31일 달의 남자 연차 하나(1-102)도 받는다 — 그 규칙이 V 를 요구한다."""
+        max_v = int(getattr(self.rules, "maxVPerMonth", 1) or 0)
+        if self.unlimited_v or max_v < 0:
+            return None
+        cap = self._cap_with_training(nurse, month_idx, "V", max_v)
+        if nurse.get("is_night_shift") and cap < 1:
+            import calendar
+            month_days = calendar.monthrange(self.year, self.month)[1]
+            active_days, _target = self._night_dedicated_quota(nurse, month_idx, month_days)
+            if active_days > 0 and self._keeper_month_leave(nurse, active_days, month_days) == "V":
+                cap = 1
+        return cap
+
+    def _v_tail_base(self) -> int:
+        """표 끝에 붙은 다음 달 며칠의 연차 상한 — 1개, 월 한도가 0 이면 0 (결정 1-116). 예전엔 늘 1 이라 0 으로 두어도 그 며칠에는 들어갔다."""
+        max_v = int(getattr(self.rules, "maxVPerMonth", 1) or 0)
+        return 1 if (self.unlimited_v or max_v != 0) else 0
+
+    def _rest_supply_words(self) -> str:
+        """원인 안내의 '솔버가 놓을 수 있는 휴무' — 설정을 따라 말한다 (예전엔 'V(월1)'·'OF(주1)'로 박혀 있어 설정이 달라도 같은 말이었다)."""
+        of = "OF(주 1회)" if getattr(self.rules, "weeklyOff", True) else "OF"
+        max_v = int(getattr(self.rules, "maxVPerMonth", 1) or 0)
+        v = "V(무제한)" if self.unlimited_v else (f"V(월 {max_v}회)" if max_v > 0 else "V(월 최대 0회라 자동으로 넣지 않음)")
+        return f"{of}·{v}·생(월 1회·여성)"
+
     def _cap_with_training(self, nurse, day_idxs, code: str, base: int, train_idxs=None) -> int:
         """한도 base 인 x 합(day_idxs)의 상한 — 트레이닝 날 자기 사전입력분(train_idxs, 없으면 day_idxs)을 한도에서 빼고,
         사실 칸(_fact_code — 엄격은 확정분, 완화는 잠긴 칸) 수 아래로는 내리지 않는다 (잠긴 칸은 완화에서도 상수 1).
@@ -2306,7 +2343,8 @@ class _SchedulerBase:
         아닐 때만 (나이트킵의 주휴는 미리 넣은 것만 — 제1원칙 10). 그 날 근무할 수 있는 사람이 필요 인원보다 많을 때만
         (주휴 하나가 인원을 깨면 넣지 않고 '주휴 없는 주' 안내로 남긴다). 주휴 무시(allow_juhu_relax)면 엔진이 주휴를
         직접 놓으므로 넣지 않는다. 넣은 칸은 사람이 넣은 주휴와 같다 — 결과에 auto_juhu 로 알린다."""
-        if self.allow_juhu_relax or "주" not in self.ALL_SHIFTS or not self.weeks:
+        # 주휴를 직접 놓는 것은 완화 경로뿐이다 — '주휴 이동 허용'만 켜고 완화를 끄면 옮기지도 않으면서 이 채우기만 꺼졌다 (결정 1-116)
+        if (self.allow_juhu_relax and self.allow_pre_relax) or "주" not in self.ALL_SHIFTS or not self.weeks:
             return []
         first = date(self.year, self.month, 1)
         last = self._month_last_day()
@@ -2738,7 +2776,7 @@ class _SchedulerBase:
             nid = nurse["id"]
             days = sched.get(nid, {})
             month_codes = [days.get(self.all_dates[i].strftime("%Y-%m-%d")) for i in month_idxs]
-            if self.rules.maxVPerMonth > 0 and not self.unlimited_v:
+            if not self.unlimited_v:                       # 0 도 한도다 (결정 1-115)
                 v = sum(1 for c in month_codes if c == "V")
                 if v > self.rules.maxVPerMonth:
                     notes.append(f"{name_of[nid]} V {v}회 (생성 규칙은 월 {self.rules.maxVPerMonth}회)")

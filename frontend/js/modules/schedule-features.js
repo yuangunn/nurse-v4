@@ -31,6 +31,7 @@ window.ScheduleFeaturesModule = function() {
       this.extendedSchedule=null; this.nurseScores={}; this.nurseScoreDetails={};
       this.relaxedCells={}; this.scheduleStopped=false; this.mipGapPercent=null;
       this.solverLog=[]; this.generateResult=null;
+      this.contBase=null; this.genRound=1; this.genRounds=[];   // 사람이 확정한 표다 — '이 표에서 더 찾기'가 앞 생성의 사전입력 · 규칙으로 다시 풀어 이 표를 바꾸지 않게 (결정 1-116)
       this.activeTab='schedule';
       this.trackEdits();   // 확정한 표가 새 기준 (고친 칸·근무표 되돌리기)
       this.rdDoneAt=new Date(); this._autoSaveSchedule();   // 확정도 생성과 같이 자동 저장
@@ -132,30 +133,30 @@ window.ScheduleFeaturesModule = function() {
       const url=URL.createObjectURL(await this._scheduleImageBlob()), a=document.createElement('a');
       a.href=url; a.download=`근무표_${this.year}년${this.month}월.png`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     },
-    // 날짜 = 그 달 1일부터 화면 끝까지 (12월 = 12/1~1/2) — 그 달은 한 시트에 다 보이고, 계는 1일~말일 칸만 센다.
-    // 화면 앞에 붙은 지난달 날짜(11/29·11/30)는 뺀다. 1일~첫 토요일은 앞 달 표에도 있는 칸이다 (_xlsxPrev).
+    // 날짜 = 화면(사전입력 · 근무표)과 똑같다 (결정 1-114) — 앞에 붙은 지난달 며칠부터 끝에 붙은 다음 달 며칠까지 (12월 = 11/29~1/2).
+    // 1일이 일요일인 달은 화면처럼 지난달 마지막 한 주도 함께 나간다 (11월 = 10/25~12/5). 계는 1일~말일 칸만 센다(서버).
+    // 앞에 붙은 지난달 며칠은 지난달 근무 그대로라 원티드 색을 칠하지 않는다. 앞 달 표에도 있는 날짜는 그 시트를 가리킨다 (_xlsxPrev).
     // 칸은 인쇄와 같다 — 차지 없이 D/E/N (rdPrintCode), 전입 전·전출 뒤는 빈칸.
     // marks = 줄마다 날짜 수만큼 한 글자, 화면 표식과 같은 기준: r 사전입력이 풀린 칸 · w 원티드(분홍) · k 나이트킵 줄(노랑).
     // charge = 그 사람이 차지를 설 수 있는 근무(D·E·N) — 아래 차지 줄 수식이 이 줄들에서 센다.
     _xlsxBody(){
       const first=new Date(this.year,this.month-1,1);
-      const days=this.scheduleDays.filter(d=>d>=first),ns=this.nurses,notes=[];
+      const days=this.scheduleDays,ns=this.nurses,notes=[];
       ns.forEach((n,k)=>days.forEach((d,i)=>{const t=this.getNote(n.id,d);if(t)notes.push([k,i,t])}));
       return{year:this.year,month:this.month,title:`${this.year}년 ${this.month}월 ${this.rdWard} 근무표`,
         days:days.map(d=>this.dayKey(d)),holidays:this.holidays||[],
         rows:ns.map(n=>[n.name,...days.map(d=>this.isNurseInactive(n,d)?'':this.rdPrintCode(n,d))]),
         teams:ns.map(n=>n.group||''),team_colors:this.teamColorMap,
         marks:ns.map(n=>days.map(d=>this.isNurseInactive(n,d)?' ':this.isRelaxed(n.id,d)?'r'
-          :this.rdIsPre(n.id,d)&&this.isWanted(n.id,d)?'w':this.isKeeperDay(n,d)?'k':' ').join('')),
+          :d>=first&&this.rdIsPre(n.id,d)&&this.isWanted(n.id,d)?'w':this.isKeeperDay(n,d)?'k':' ').join('')),
         charge:ns.map(n=>['D','E','N'].filter(s=>(n.capable_shifts||[]).includes(s+'C')).join('')),
         notes};
     },
-    // 앞 달 시트 본문 — 이 달 1일~첫 토요일은 앞 달 표에도 있다. 앞 달 저장본이 있으면 그 표를 앞 시트로 같이 내고,
+    // 앞 달 시트 본문 — 이 달 시트의 앞쪽 며칠(지난달 날짜와 1일~첫 토요일)은 앞 달 표에도 있다. 앞 달 저장본이 있으면 그 표를 앞 시트로 같이 내고,
     // 이 달 시트의 그 칸은 앞 달 시트를 가리킨다 (서버, 결정 1-61). 저장본을 열었을 때처럼(loadSaved) 근무표·풀린 칸은 저장본,
-    // 명부·사전입력·메모는 지금 것. 앞 달 저장본이 없거나 1일이 일요일이면 null — 이 달 시트에 화면 값이 그대로 들어간다.
+    // 명부·사전입력·메모는 지금 것. 앞 달 저장본이 없으면 null — 이 달 시트에 화면 값이 그대로 들어간다.
     // ponytail: 화면 함수들을 그대로 쓰려고 년월·근무표만 바꾼 this 의 사본(Object.create)으로 _xlsxBody 를 부른다
     async _xlsxPrev(){
-      if(new Date(this.year,this.month-1,1).getDay()===0)return null;
       const pd=new Date(this.year,this.month-2,1),y=pd.getFullYear(),m=pd.getMonth()+1,v=x=>({value:x});
       const sv=(this.savedSchedules||[]).find(s=>s.year===y&&s.month===m);
       if(!sv)return null;
@@ -384,7 +385,8 @@ window.ScheduleFeaturesModule = function() {
     loadTemplate(idx){
       const t=this.templates[idx];if(!t)return;
       if(!confirm(`'${t.name}' 템플릿을 불러오시겠습니까?\n현재 간호사/규칙/인원 설정이 교체됩니다.`))return;
-      this.nurses=t.nurses;this.requirements=t.requirements;this.rules=t.rules;
+      this.nurses=t.nurses;this.requirements=t.requirements;this.rules={...this.rules,...this._presetRules(t.rules)};this.rulesFix();   // 옛 템플릿에 없는 새 규칙 키 · 이 병동의 그룹 · 색 · 휴일은 지금 것 그대로
+      this.contBase=null;   // 명부가 바뀌었다 — 앞 생성의 요청으로 '더 찾기'를 하지 않는다
       if(t.shifts)this.shifts=t.shifts;
     },
     deleteTemplate(idx){this.templates.splice(idx,1);localStorage.setItem('ns_templates',JSON.stringify(this.templates))},

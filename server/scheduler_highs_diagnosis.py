@@ -377,7 +377,7 @@ class _HighsDiagnosisMixin:
                 f"    · {w['start'][5:].replace('-', '/')}~{w['end'][5:].replace('-', '/')} 주 ("
                 f"재적 {w['nurses']}명): 휴무 필요 {w['demand']}칸 / "
                 f"놓을 수 있는 휴무 {w['supply']}칸 — 부족 {w['shortfall']}칸")
-        block.append("    ※ 솔버가 놓을 수 있는 휴무는 OF(주1)·V(월1)·생(월1·여성)뿐입니다.")
+        block.append(f"    ※ 솔버가 놓을 수 있는 휴무는 {self._rest_supply_words()}뿐입니다.")
         block.append("       주휴(주)·특·공·법·병·경가·조가·산전은 사전입력 전용이라 사람이 넣어야 합니다.")
         if any(w.get("boundary") for w in rest_short):
             block.append("    ※ 끝에 붙은 다음 달 며칠의 주휴도 이 근무표에서 넣습니다 — 그 며칠엔 생을 새로 놓지 않습니다(다음 달 몫).")
@@ -991,7 +991,8 @@ class _HighsDiagnosisMixin:
         if not _try(p):
             over = self._scan_pre_code_excess("V", self.rules.maxVPerMonth) if scan else []
             lines.append(
-                f"  [원인] V(연차) 사전입력이 월 최대 {self.rules.maxVPerMonth}회 한도를 초과했습니다."
+                f"  [원인] V(연차) 월 최대 {self.rules.maxVPerMonth}회 한도를 건 단계에서 처음 막혔습니다 — "
+                "사전입력한 V 는 한도와 상관없이 받아들이므로, 대개 쉴 수 있는 코드가 모자란 것입니다."
             )
             if over:
                 lines.append("  사전입력에서 V 횟수가 한도 초과인 간호사:")
@@ -1323,7 +1324,7 @@ class _HighsDiagnosisMixin:
             else:
                 lines.append("    사전입력에서 직접 충돌은 발견되지 않음.")
                 lines.append("    이 단계까지 쌓았을 때 처음 막힌 것일 뿐, 대개 원인은 생휴가 아니라 '쉴 수 있는 코드의 공급 부족'입니다:")
-                lines.append("    솔버가 놓을 수 있는 휴무는 OF(주당 정확히 1회)·V(월 1회)·생(월 1회, 여성)뿐이라,")
+                lines.append(f"    솔버가 놓을 수 있는 휴무는 {self._rest_supply_words()}뿐이라,")
                 lines.append("    빈 칸(잉여 인력)이 그보다 많으면 채울 코드가 없어 실패합니다.")
                 if self.all_dates and self.all_dates[-1] > self._month_last_day():
                     lines.append("    끝에 붙은 다음 달 며칠엔 생을 새로 놓지 않습니다(다음 달 몫) — 그 며칠의 주휴도 이 근무표에서 넣어야 합니다.")

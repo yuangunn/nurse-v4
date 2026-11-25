@@ -1146,7 +1146,7 @@ def _xlsx_sheet(ws, body: dict, link: dict = None):
               f"({days[0].month}월 {days[0].day}일~{days[-1].month}월 {days[-1].day}일)", ko(12))
     merge(1, 1, t0 - 1)
     ref = _SchedulerBase._CYCLE_REF                            # 화면 getCycleNum 과 같은 기준일·산식
-    starts = [i for i, d in enumerate(days) if i == 0 or d.weekday() == 6]   # 주기 = 일요일~토요일. 표는 1일에 시작해 첫 묶음이 짧을 수 있다
+    starts = [i for i, d in enumerate(days) if i == 0 or d.weekday() == 6]   # 주기 = 일요일~토요일. 받은 날짜가 주 가운데서 시작하면 첫 묶음이 짧다
     for i, nxt in zip(starts, starts[1:] + [nd]):
         put(2, c0 + i, f"{(days[i] - ref).days % 28 // 7 + 1}주기", f8)
         merge(2, c0 + i, c0 + nxt - 1)
@@ -1888,15 +1888,39 @@ def reorder_nurses(body: dict):
 
 # ── 규칙 API ──────────────────────────────────────────────────────────────────
 
+def _bad_rule_keys(rules: dict) -> list:
+    """규칙 모델이 못 읽는 값의 키 — 빈칸으로 저장된 null · 글자 · 정수 칸의 소수 · 범위 밖 숫자."""
+    from pydantic import ValidationError
+
+    from .models import Rules
+    bad = []
+    for k, v in rules.items():
+        if k in Rules.model_fields:
+            try:
+                Rules(**{k: v})
+            except ValidationError:
+                bad.append(k)
+    return bad
+
+
 @app.get("/api/rules")
 def get_rules():
-    # 기본값 위에 저장값 — 새로 생긴 규칙 키(병원 휴일 등)도 옛 DB 에서 기본값으로 보인다
+    # 기본값 위에 저장값 — 새로 생긴 규칙 키(병원 휴일 등)도 옛 DB 에서 기본값으로 보인다.
+    # '여성 생휴 먼저 챙기기'는 화면 기본값이 켬이다(결정 1-102) — 규칙을 한 번도 저장하지 않은 병동이 모델 기본값(끔)을 받아
+    # 병동마다 다르게 시작했다. 모델 기본값은 '요청에 없으면 끔'이라 그대로 둔다.
+    # 예전에 빈칸으로 저장된 값(null)은 버리고 기본값으로 읽는다 — 그 값이 요청에 실리면 만들기가 매번 422 로 막혔다 (결정 1-116)
     from .models import Rules
-    return {**Rules().model_dump(), **db.get_rules()}
+    stored = db.get_rules()
+    bad = set(_bad_rule_keys(stored))
+    return {**Rules().model_dump(), "autoMenstrualLeave": True, **{k: v for k, v in stored.items() if k not in bad}}
 
 
 @app.post("/api/rules")
 def save_rules(rules: dict):
+    # 받은 값을 모델로 검사한다 (결정 1-116) — 숫자 칸을 비운 채 저장하면 null 이 들어가, 그 뒤 만들기 · 자동 저장 · 신호등이 모두 422 로 막혔다
+    bad = _bad_rule_keys(rules)
+    if bad:
+        raise HTTPException(status_code=422, detail=f"규칙 값이 맞지 않습니다 ({', '.join(bad)}) — 숫자 칸이 비었거나 범위를 벗어났습니다")
     db.save_rules(rules)
     return {"ok": True}
 
@@ -1914,6 +1938,13 @@ def get_requirements():
 
 @app.post("/api/requirements")
 def save_requirements(body: dict):
+    from pydantic import ValidationError
+
+    from .models import Requirements
+    try:
+        Requirements(**body)                 # 빈칸(null) · 글자를 저장하지 않는다 — 요청에 실리면 만들기가 막힌다 (결정 1-116)
+    except ValidationError:
+        raise HTTPException(status_code=422, detail="필요 인원 값이 맞지 않습니다 — 숫자 칸이 비었습니다")
     db.save_requirements(body)
     return {"ok": True}
 
@@ -2664,6 +2695,7 @@ def save_schedule(body: ScheduleSave):
             "prev_day_reqs": body.prev_day_reqs or {},
             "prev_month_nights": body.prev_month_nights or {},
             "solver_log": body.solver_log or "",
+            **({"versions": body.versions} if body.versions else {}),
         },
         name=body.name,
     )

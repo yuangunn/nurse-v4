@@ -12,6 +12,7 @@ from tests.conftest import _juhu_prev, _mini_nurses, _mini_requirements, make_li
 from tests.test_exact_fit_characterization import PROD_SHIFTS
 
 STOPPED = NurseScheduler._stopped_result()["message"]   # 멈춤 문구는 HiGHS 와 같다
+assert NurseScheduler._stopped_result()["stopped"] is True   # 표 없이 멈춘 것 — 화면이 실패(원인 · 고칠 칸)와 가른다
 
 
 @pytest.fixture(autouse=True)

@@ -9,7 +9,7 @@ window.SolverModule = function() {
     _scrollLogs(){ this.$nextTick(()=>{ for(const el of document.querySelectorAll('#logPanel,#liveLogPanel')) el.scrollTop=el.scrollHeight; }); },
     // ── 스케줄 생성 ──────────────────────────────────────────
     // 지금 화면의 입력으로 만드는 생성 요청 본문 — 한 장 만들기(generate)와 여러 개 만들기(multiRun)가 같이 쓴다
-    _basePayload(){return{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60,allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,juhu_block_lock:this.juhuBlockLock,unlimited_v:this.unlimitedV,solver:this.solver}},
+    _basePayload(){this.rulesFix&&this.rulesFix();return{year:this.year,month:this.month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,prev_schedule:Object.keys(this.prevSchedule).length?this.prevSchedule:null,locked_cells:Object.keys(this.lockedCells).length?this.lockedCells:null,per_day_requirements:Object.keys(this.prevDayReqs).length?this.prevDayReqs:null,holidays:this.holidays,shifts:this.shifts,prev_month_nights:Object.keys(this.prevMonthNights).length?this.prevMonthNights:null,mip_gap:this.mipGap,time_limit:this.generateTimeout*60,allow_pre_relax:this.allowPreRelax,allow_juhu_relax:this.allowJuhuRelax,juhu_block_lock:this.juhuBlockLock,unlimited_v:this.unlimitedV,solver:this.solver}},
     // patch: 재조정 등에서 payload 일부를 덮어쓸 때 사용 (_readjust·_cont 플래그는 전송 전 제거)
     // _cont: 이어 찾기(결정 1-50) — 앞 표·안내를 그대로 둔 채 그 표에서 다시 찾고, 더 좋은 표가 나올 때만 바꾼다
     async generate(patch){
@@ -66,6 +66,9 @@ window.SolverModule = function() {
         if(draft&&!result.success&&!result.stopped&&!this.stopRequested&&(result.relax_timed_out||/제한 시간/.test(result.message||''))){
           this.toast('초안 시간(1분 30초) 안에 표가 나오지 않아, 고른 시간으로 다시 찾습니다','info',7000);
           next={time_limit:Math.max(1,Math.min(60,parseInt(this.generateTimeout)||20))*60};return}
+        // 표를 찾기 전에 멈춘 것은 실패가 아니다 — 실패 배너(원인 · 고칠 칸)는 '이 조건으로는 못 만든다'는 뜻이라 띄우지 않고, 멈췄다고만 알린다.
+        // (멈춤을 누른 뒤 온 실패도 같다 — 풀이를 끝까지 하지 않은 답이라 원인이 아니다)
+        if(!result.success&&(result.stopped||this.stopRequested)){this.toast(this.rdSched?'멈췄습니다 — 새 표를 찾기 전에 멈춰서, 보던 표 그대로입니다':'멈췄습니다 — 표를 찾기 전에 멈춰서 만들어진 표가 없습니다','info',8000);return}
         this.statusOk=result.success;this.statusMessage=result.message;this.genFailed=!result.success;
         this.generationReport=result.generation_report||null;
         this.wishReport=result.wish_report||null;

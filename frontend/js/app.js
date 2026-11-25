@@ -20,7 +20,7 @@ function app() {
       sun:{DC:1,D:1,EC:1,E:1,NC:1,N:1},
     },
     rules: {
-      weeklyOff:true, noNOD:true, avoidDN:true,
+      weeklyOff:true, noNOD:true,
       maxConsecutiveWork:true, maxConsecutiveWorkDays:5,
       // 파트장 확인 하에 쓰는 마지막 수단 (제1원칙 13) — 연속 근무 한도+1 · E→D1 · 중→D
       longRunLastResort:true, rareTransitionLastResort:true,
@@ -30,7 +30,7 @@ function app() {
       minRest:true, minRestHours:11,   // 보탠 근무가 낀 전환의 최소 휴식 시간 (결정 1-92)
       maxNightPerMonth:true, maxNightPerMonthCount:6,
       maxNightTwoMonth:false, maxNightTwoMonthCount:10,   // 합산 11회부터 수면오프 (결정 1-99)
-      patternOptimization:true, autoMenstrualLeave:true, maxVPerMonth:1,
+      autoMenstrualLeave:true, maxVPerMonth:1,
       preBonusLeave:5000, preBonusOff:3000, preBonusWork:500, preBonusRest:300,
       // 병원 휴일 (매년) — 공휴일 채우기가 법정공휴일과 함께 넣는다 (misc-features.js _hospitalHolidays)
       hospitalHolidays:[{md:'05-01',name:'근로자의 날'},{md:'05-09',name:'의료원 설립일'},{md:'07-17',name:'제헌절'},{md:'07-21',name:'노조 설립일'}],
@@ -275,7 +275,9 @@ function app() {
       const holSet=new Set(this.holidays||[]);
       const md=d=>`${d.getMonth()+1}/${d.getDate()}`;
       // 연속 근무 한도 — 한도+1 은 '파트장 확인 필요'(마지막 수단, 제1원칙 13), 그 위는 손으로 고친 뒤에만 생긴다
-      const consecLimit=(r.maxConsecutiveWork&&r.maxConsecutiveWorkDays)||5;
+      // 규칙을 끄면 한도가 없다(엔진과 같다) — 예전엔 꺼도 5일 · 7회로 경고했다 (결정 1-116)
+      const num=(v,d)=>(v===null||v===undefined||v===''||!Number.isFinite(+v))?d:+v;
+      const consecLimit=r.maxConsecutiveWork?num(r.maxConsecutiveWorkDays,5):Infinity;
       const softRun=!!r.maxConsecutiveWork&&r.longRunLastResort!==false;
       const softTr=r.rareTransitionLastResort!==false;
       // 사전입력으로 정해 둔 칸(그대로 지켜진 것)만으로 된 연속·전환은 사람이 넣은 사실 — 엔진도 manager_check 에서 뺀다.
@@ -327,7 +329,7 @@ function app() {
         const nightKeep=Object.keys(nm).length?!!nm[mk]:!!nurse.is_night_shift;
         // 그 달 칸만 — 결과 표엔 끝에 붙은 다음 달 며칠·1일 앞 지난달 칸도 들어 있다 (엔진 _c_max_night_per_month 와 같게)
         const nCount=Object.entries(sched).filter(([k,v])=>k.startsWith(mk)&&nightCodes.includes(v)).length;
-        const nightLimit=(r.maxNightPerMonth&&r.maxNightPerMonthCount)||7;
+        const nightLimit=r.maxNightPerMonth?num(r.maxNightPerMonthCount,6):Infinity;
         if(!nightKeep&&nCount>nightLimit)warns.push({type:'warn',nurse:nurse.name,msg:`야간 ${nCount}회 (월 한도 ${nightLimit}회)`});
         // 주말 근무 횟수 경고는 뺐다 — 정상 근무표에서도 병동 절반에게 매달 뜨던 통계라
         // 요약 표의 '주말·공휴일' 열과 누적 합(편차 색)으로 옮겼다 (M7-C)
@@ -614,6 +616,8 @@ function app() {
         // 먼저 지우면 그 사이 프로필 닫기(409)·실패에 그 달 자동저장본이 아예 없어졌다 (리뷰 2026-10-21)
         let old=[];
         try{ old=((await this.api('GET','/api/schedules'))||[]).filter(s=>s.name===name&&+s.year===+year&&+s.month===+month).map(s=>s.id); }catch(e){}
+        // 표 기록도 함께 (결정 1-112) — 여기서 묶는다: 자동저장은 새 표에 번호를 붙이기(_verPush) 전에 불리고, 위의 목록 요청을 기다리는 사이 번호가 붙는다
+        body.versions=this._verPackFor(body.schedule);
         await this.api('POST','/api/schedules',body);
         for(const id of old){ try{ await this.api('DELETE',`/api/schedules/${id}`); }catch(e){} }
         if(!over)this.rdSaved=true;
