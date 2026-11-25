@@ -50,7 +50,7 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
 {
   const { a } = make([]);
   const ids = a.rdMakeKeywords().map(k => k.id);
-  assert.deepEqual(ids, ['night.a', 'night.b', 'rest.a', 'rest.b', 'weekend.a', 'weekend.b', 'oneoff', 'onecap']);
+  assert.deepEqual(ids, ['night.a', 'night.b', 'rest.a', 'rest.b', 'weekend.a', 'weekend.b', 'oneoff', 'onecap', 'nosix']);
   a.multiToggle(0, 'night.a');
   assert.equal(a.multiClash(0, 'night.b'), '야간 묶어서', '야간 묶어서 ↔ 야간 고르게');
   assert.equal(a.multiClash(0, 'rest.b'), null); assert.equal(a.multiClash(0, 'night.a'), null, '이미 고른 것은 끌 수 있다');
@@ -58,18 +58,20 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   a.multiToggle(0, 'rest.b');
   assert.equal(a.multiClash(0, 'oneoff'), '연속 휴일 길게', '둘 다 주휴 옆 OFF·퐁당퐁당을 건드린다');
   assert.equal(a.multiClash(0, 'rest.a'), '연속 휴일 길게');
-  assert.equal(a.multiLabel(a.multi.tables[0].keys), '야간 묶어서 + 연속 휴일 길게'); assert.equal(a.multiLabel([]), '균형 (지금 설정 그대로)');
+  assert.equal(a.multiLabel(a.multi.tables[0].keys), '야간 묶어서 + 연속 휴일 길게'); assert.equal(a.multiLabel([]), '추천 (지금 설정 그대로)');
   a.multiToggle(0, 'night.a'); assert.deepEqual(a.multi.tables[0].keys, ['rest.b']);
   // 같은 묶음의 표는 한 번만 만든다 · 네 장까지
   a.multi.tables = [{ keys: [] }, { keys: ['oneoff'] }, { keys: [] }, { keys: ['oneoff'] }]; a.multiAdd();
-  assert.equal(a.multi.tables.length, 4); assert.deepEqual(a.multiPlan.map(p => p.label), ['균형 (지금 설정 그대로)', '1오프 줄이기']);
+  assert.equal(a.multi.tables.length, 4); assert.deepEqual(a.multiPlan.map(p => p.label), ['추천 (지금 설정 그대로)', '1오프 줄이기']);
   // '1오프 몰지 않기'는 배점이 아니라 규칙을 켠다 (결정 1-98) — 다른 키워드와 겹치지 않고, 그 표의 요청에만 rules 를 바꿔 싣는다. 설정 값은 그대로
   a.rules = { maxOneOff: false, maxOneOffCount: 3, weeklyOff: true };
   assert.equal(a._kwClash(['oneoff', 'rest.a'], 'onecap'), null); assert.deepEqual(a._kwRules(['oneoff']), {});
   assert.deepEqual(a._kwRules(['oneoff', 'onecap']), { rules: { maxOneOff: true, maxOneOffCount: 3, weeklyOff: true } }); assert.equal(a.rules.maxOneOff, false);
+  // 6일 연속 없이 — 배점은 건드리지 않고 이 표의 요청에만 규칙을 끈다. 다른 키워드와 함께 고를 수 있다
+  assert.deepEqual(a._kwRules(['nosix']), { rules: { maxOneOff: false, maxOneOffCount: 3, weeklyOff: true, longRunLastResort: false } }); assert.equal(a._kwClash(['oneoff', 'night.a'], 'nosix'), null);
   a.mk.count = 'one'; a.mk.keys = ['onecap']; assert.equal(a.makeHasCap, true); a.mk.keys = []; assert.equal(a.makeHasCap, false);
   a.mk.count = 'multi'; a.multi.tables = [{ keys: [] }, { keys: ['onecap'] }]; assert.equal(a.makeHasCap, true);
-  assert.deepEqual(a.multiPlan.map(p => p.label), ['균형 (지금 설정 그대로)', '1오프 몰지 않기']);
+  assert.deepEqual(a.multiPlan.map(p => p.label), ['추천 (지금 설정 그대로)', '1오프 몰지 않기']);
 }
 // ② 차례로 한 장씩 — 공통 설정이 모든 요청에, 방향마다 배점이 곱해지고, 추가 생성은 하지 않는다. 만든 표는 이름 붙여 저장
 {
@@ -88,7 +90,7 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   assert.deepEqual([score(calls[2], 4), score(calls[2], 5), score(calls[2], 1)], [-1000, 15, -200]);
   assert.deepEqual(a.multi.results.map(r => r.state), ['done', 'done', 'fail']); assert.equal(a.multi.results[2].msg, '만들 수 없습니다');
   assert.deepEqual([a.generating, a.multi.running, a.mk.step], [false, false, 'cmp']);
-  assert.deepEqual(saved.map(s => [s.name, s.year, s.month]), [['12월 · 균형 (지금 설정 그대로)', 2026, 12], ['12월 · 야간 묶어서 + 1오프 줄이기', 2026, 12]]);
+  assert.deepEqual(saved.map(s => [s.name, s.year, s.month]), [['12월 · 추천 (지금 설정 그대로)', 2026, 12], ['12월 · 야간 묶어서 + 1오프 줄이기', 2026, 12]]);
   assert.deepEqual(saved[1].schedule, S2);
   // 숫자 — 12/6 부터(지난달 표의 주는 뺀다). a: 4-1-4 인 1오프 하나(긴 근무 사이). b: 단독 야간 하나 · D D V E E 의 V 도 하루짜리 휴무
   const st = a.multi.results[0].stats;
@@ -106,7 +108,7 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   // 다시 만들면 같은 이름의 옛 저장본을 바꾼다
   a.api = ((orig) => async (m, p, b) => (p === '/api/generate' ? res(S1) : orig(m, p, b)))(a.api);
   a.multi.tables = [{ keys: [] }]; await a.multiRun();
-  assert.equal(saved.filter(s => s.name === '12월 · 균형 (지금 설정 그대로)' && !s.deleted).length, 1);
+  assert.equal(saved.filter(s => s.name === '12월 · 추천 (지금 설정 그대로)' && !s.deleted).length, 1);
 }
 // ④ 멈추면 남은 표는 만들지 않는다
 {
@@ -143,7 +145,7 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
   a.multi.tables = [{ keys: [] }, { keys: ['oneoff'] }]; a.makeNext(); assert.equal(a.mk.step, 'time'); a.multi.gap = 0.05; a.multi.cap = 10;
   a.makeStart(); await sleep(5); assert.equal(a.mk.step, 'run'); while (a.multi.running) await sleep(5);
   assert.deepEqual([a.mk.step, calls.length, a.mk.open], ['cmp', 2, true]);
-  assert.equal(a.makeLastText, '여러 개 · 2장 (균형 / 1오프 줄이기)');
+  assert.equal(a.makeLastText, '여러 개 · 2장 (추천 / 1오프 줄이기)');
   a.makeBack(); assert.equal(a.mk.step, 'dir', '견주기에서 방향을 바꿔 다시');
   // 새로 열면 지난번 표들이 채워져 있고, 지난번처럼 만들기가 그대로 다시 만든다
   a.multi.tables = [{ keys: [] }]; a.mk.open = false; a.makeOpen();

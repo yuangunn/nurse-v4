@@ -56,6 +56,16 @@ def _calc(ws, v):
     ref = re.fullmatch(r"""=IF\('([^']+)'!([A-Z]+\d+)="","",'\1'!\2\)""", v)
     if ref:
         return ws.parent[ref.group(1)][ref.group(2)].value or ""
+    # 강조의 숨긴 계산 칸 — '여기까지 며칠째'(같은 근무 · 연속 근무). 글자 비교는 엑셀처럼 대소문자를 가리지 않는다
+    txt = lambda c: str(_calc(ws, ws[c].value) or "").upper()   # noqa: E731
+    run = re.fullmatch(r'=IF\(OR\(((?:[A-Z]+\d+="[^"]+",?)+)\),(?:IF\(([A-Z]+\d+)=([A-Z]+\d+),([A-Z]+\d+)\+1,1\)|([A-Z]+\d+)\+1),0\)', v)
+    if run:
+        cell, kinds = re.match(r"[A-Z]+\d+", run.group(1)).group(0), re.findall(r'="([^"]+)"', run.group(1))
+        if txt(cell) not in kinds:
+            return 0
+        if run.group(5):
+            return (_calc(ws, ws[run.group(5)].value) or 0) + 1
+        return (_calc(ws, ws[run.group(4)].value) or 0) + 1 if txt(run.group(2)) == txt(run.group(3)) else 1
     total = 0
     for fn, rng, arg in re.findall(r'(COUNTIF|SUM)\(([A-Z$]+\d+:[A-Z$]+\d+)(?:,"([^"]*)")?\)', v):
         got = [_calc(ws, c.value) for row in ws[rng.replace("$", "")] for c in row]
@@ -134,7 +144,7 @@ def test_formulas_match_cached_values(res):
     ws = openpyxl.load_workbook(io.BytesIO(res.content))["11월"]
     wv = openpyxl.load_workbook(io.BytesIO(res.content), data_only=True)["11월"]
     fx = [c for row in ws.iter_rows() for c in row if c.data_type == "f"]
-    assert len(fx) == 4 * 10 + 8 * 35                         # 사람 줄 계 + 아래 여덟 줄
+    assert len(fx) == 4 * 10 + 8 * 35 + 2 * 4 * 35            # 사람 줄 계 + 아래 여덟 줄 + 강조의 숨긴 계산 칸 두 묶음
     assert [c.coordinate for c in fx if wv[c.coordinate].value != _calc(ws, c.value)] == []
     # 오른쪽 계 — 모두 그 달(11/1~11/30 = B~AE) 칸만 (12/1~12/5 는 12월 표가 센다), 총근무 = D+E+N+중
     assert _row(ws, 5, 37, 46) == [f'=COUNTIF(B5:AE5,"{t}")' for t in TOTALS[:-1]] + ["=SUM(AK5:AN5)"]
@@ -251,12 +261,17 @@ def test_highlight_picker(res):
     dv = ws.data_validations.dataValidation
     assert len(dv) == 1 and str(dv[0].sqref) == "AM1" and dv[0].type == "list"
     picks = dv[0].formula1.strip('"').split(",")
-    assert picks[-3:] == ["1오프", "단독 나이트", "하루짜리 근무"] and {"D", "E", "N", "OF"} <= set(picks) and len(dv[0].formula1) <= 255
+    assert picks[-7:] == ["1오프", "단독 나이트", "하루짜리 근무", "쉬고 나서 역방향", "하나씩 넘어가기", "같은 근무 5일", "6일 연속 근무"]
+    assert {"D", "E", "N", "OF"} <= set(picks) and len(dv[0].formula1) <= 255
     rules = {str(rng.sqref): [r.formula[0] for r in rs] for rng, rs in ws.conditional_formatting._cf_rules.items()}
     grid = [k for k in rules if k.startswith("B5:AJ")]
     inner = [k for k in rules if k.startswith("C5:AI")]         # 이웃 칸을 보는 것은 첫 칸·끝 칸을 뺀다
-    assert len(grid) == 1 and rules[grid[0]] == ['AND($AM$1<>"",B5=$AM$1)']
-    assert len(inner) == 1 and [f.split(",")[0] for f in rules[inner[0]]] == ['AND($AM$1="1오프"', 'AND($AM$1="단독 나이트"', 'AND($AM$1="하루짜리 근무"']
+    # 길게 이어진 둘은 오른쪽 숨긴 칸(AV~ · CK~)에 '여기까지 며칠째'를 세고, 그 칸부터 오른쪽 넷(다섯) 안에 5(6) 이상이 있는지 본다
+    assert len(grid) == 1 and rules[grid[0]] == ['AND($AM$1<>"",B5=$AM$1)', 'AND($AM$1="같은 근무 5일",MAX(AV5:AZ5)>=5)', 'AND($AM$1="6일 연속 근무",MAX(CK5:CP5)>=6)']
+    assert ws["AV5"].value == '=IF(OR(B5="D",B5="E"),IF(B5=A5,AU5+1,1),0)' and ws["CK6"].value.startswith('=IF(OR(B6="D",') and ws["CK6"].value.endswith(',CJ6+1,0)')
+    assert ws.column_dimensions["AV"].hidden and ws.column_dimensions["CK"].hidden and not ws.column_dimensions["AT"].hidden
+    assert len(inner) == 1 and [f.split(",")[0] for f in rules[inner[0]]] == [
+        'AND($AM$1="1오프"', 'AND($AM$1="단독 나이트"', 'AND($AM$1="하루짜리 근무"', 'AND($AM$1="쉬고 나서 역방향"', 'AND($AM$1="하나씩 넘어가기"']
     assert 'NOT(OR(C5="D",C5="E",C5="N",C5="중",C5="D1"))' in rules[inner[0]][0] and 'C5="N",B5<>"N",D5<>"N"' in rules[inner[0]][1]
     assert not ws["AM1"].value and ws["B5"].fill.fgColor.rgb != "FFFFC000"      # 고르지 않으면 평소 모양
 

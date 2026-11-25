@@ -47,7 +47,9 @@ window.RedesignModule = function() {
   const MAKE_KEYWORDS = [...PREF_AXES.flatMap(a=>['a','b'].map(s=>({id:a.id+'.'+s, label:a[s].kw, hint:a[s].hint, fx:a[s].fx}))),
     {id:'oneoff', label:'1오프 줄이기', hint:'OFF 를 주휴 옆에 더 세게 붙이고 근무-휴무-근무를 줄입니다', fx:{juhuOff:2, pongdang:2}},
     // 배점이 아니라 규칙을 켜는 키워드 (결정 1-98) — 설정의 '한 사람의 1오프'가 꺼져 있어도 이 표에만 건다. 개수는 rules.maxOneOffCount
-    {id:'onecap', label:'1오프 몰지 않기', hint:'한 사람의 1오프(앞뒤가 근무인 하루짜리 휴무)를 정한 개수까지로 맞춥니다. 사전입력을 지킨 다음에 맞추므로 넘는 사람이 남을 수 있고, 그때는 결과에 알립니다', fx:{}, rules:{maxOneOff:true}}];
+    {id:'onecap', label:'1오프 몰지 않기', hint:'한 사람의 1오프(앞뒤가 근무인 하루짜리 휴무)를 정한 개수까지로 맞춥니다. 사전입력을 지킨 다음에 맞추므로 넘는 사람이 남을 수 있고, 그때는 결과에 알립니다', fx:{}, rules:{maxOneOff:true}},
+    // 6일 연속 없이 (결정 1-110) — 연속 근무 한도 +1일(마지막 수단, 규칙 longRunLastResort)을 이 표에서만 끈다. 설정은 그대로 둔다
+    {id:'nosix', label:'6일 연속 없이', hint:'연속 근무 한도를 하루 넘기는 것(6일 연속)을 마지막 수단으로도 쓰지 않습니다. 그 대신 사전입력이 한두 칸 더 풀릴 수 있습니다 — 사전입력끼리 6일이 이어지는 자리는 그 가운데 한 칸이 풀립니다', fx:{}, rules:{longRunLastResort:false}}];
   const PREF_TIMES = [{v:20, label:'20분'}, {v:60, label:'60분'}, {v:'endless', label:'멈출 때까지 계속'}];
   const PREF_DEFAULT = {keys:[], time:20, quick:true};   // 하나만 만들 때의 선택 — 방향 키워드(MAKE_KEYWORDS 의 id) · 찾는 시간 · 초안 먼저
   const SRC = {B:'갈래를 나눠 따져 봄', C:'가운데 값에서 어림', F:'규칙을 맞추며 밀어 넣기', H:'어림 탐색', L:'작은 문제로 쪼개 풀기', P:'남은 것이 없는 문제', R:'무작위로 어림',
@@ -637,7 +639,7 @@ window.RedesignModule = function() {
       try{ localStorage.setItem(this._genPrefKey(), JSON.stringify(p)); localStorage.setItem('ns_genpref_last:'+(this.currentProfile||''), JSON.stringify(p)); }catch(e){}
       if(typeof p.time==='number') this.generateTimeout=p.time;
       this.genPrefTick++; return p; },
-    _prefText(p){ return [p.keys.length ? this.multiLabel(p.keys) : '고르게 균형', p.time==='endless' ? '멈출 때까지' : `${p.time}분`, ...(p.quick!==false?['초안 먼저']:[])].join(' · '); },
+    _prefText(p){ return [p.keys.length ? this.multiLabel(p.keys) : '추천', p.time==='endless' ? '멈출 때까지' : `${p.time}분`, ...(p.quick!==false?['초안 먼저']:[])].join(' · '); },
     // 만들기 단추 옆 한 줄
     get rdPrefSummary(){ const p=this.genPrefGet(); return p ? this._prefText(p) : ''; },
     // 요청에 싣는 것 — 고른 방향의 배점을 곱한 규칙 목록(고른 것이 없으면 싣지 않는다 → 서버가 설정 값을 쓴다)과, 계속 찾기면 오차 0
@@ -690,7 +692,7 @@ window.RedesignModule = function() {
       const hit=(keys||[]).map(k=>MAKE_KEYWORDS.find(x=>x.id===k)).find(o=>o && Object.keys(o.fx).some(f=>f in kw.fx)); return hit ? hit.label : null; },
     makeClash(id){ return this._kwClash(this.mk.keys, id); },
     makeToggle(id){ const k=this.mk.keys; this.mk.keys=k.includes(id) ? k.filter(x=>x!==id) : (this._kwClash(k, id) ? k : [...k, id]); },
-    get makeDirHint(){ const ks=MAKE_KEYWORDS.filter(k=>this.mk.keys.includes(k.id)); return ks.length ? ks.map(k=>`${k.label} — ${k.hint}`).join('\n') : '아무것도 고르지 않으면 지금 설정 그대로(균형)로 만듭니다.'; },
+    get makeDirHint(){ const ks=MAKE_KEYWORDS.filter(k=>this.mk.keys.includes(k.id)); return ks.length ? ks.map(k=>`${k.label} — ${k.hint}`).join('\n') : '추천 — 키워드를 고르지 않고 지금 설정 그대로 만듭니다. 견줘 본 조합 가운데 사전입력(원티드)을 가장 적게 풀었습니다.'; },
 
     // 배점 규칙에 곱하기 묶음(fx: {규칙 이름표: 배수})들을 건 사본 — 아무것도 걸리지 않으면 null (서버가 설정 값을 쓴다)
     // 고른 키워드가 켜는 규칙 — 요청의 rules 를 이 표에만 바꿔 싣는다 (없으면 빈 객체)
@@ -711,7 +713,7 @@ window.RedesignModule = function() {
     multiToggle(ti, id){ const t=this.multi.tables[ti]; if(!t) return; if(t.keys.includes(id)) t.keys=t.keys.filter(k=>k!==id); else if(!this.multiClash(ti, id)) t.keys=[...t.keys, id]; },
     multiAdd(){ if(this.multi.tables.length<4) this.multi.tables.push({keys:[]}); },
     multiRemove(ti){ if(this.multi.tables.length>1) this.multi.tables.splice(ti, 1); },
-    multiLabel(keys){ const ls=MAKE_KEYWORDS.filter(k=>(keys||[]).includes(k.id)).map(k=>k.label); return ls.length ? ls.join(' + ') : '균형 (지금 설정 그대로)'; },
+    multiLabel(keys){ const ls=MAKE_KEYWORDS.filter(k=>(keys||[]).includes(k.id)).map(k=>k.label); return ls.length ? ls.join(' + ') : '추천 (지금 설정 그대로)'; },
     // 실제로 만들 표 — 같은 묶음은 한 번만
     get multiPlan(){ const seen=new Set(), out=[]; for(const t of this.multi.tables){ const keys=MAKE_KEYWORDS.filter(k=>t.keys.includes(k.id)).map(k=>k.id), sig=keys.join('|'); if(seen.has(sig)) continue; seen.add(sig); out.push({keys, label:this.multiLabel(keys)}); } return out; },
     get multiElapsed(){ this.multi.tick; return this.multi.running&&this.multi.started ? Math.floor((Date.now()-this.multi.started)/1000) : 0; },

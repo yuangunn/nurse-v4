@@ -118,7 +118,7 @@ const score = (body, id) => body.scoring_rules.find(r => r.id === id).score;
       ` L       ${n}       0         0   0.00%   -4300           -${4200 - n * 10}              2.38%        5      3      0        40     1.0s`);
   });
   store.set(a._genPrefKey(), JSON.stringify({ quick: false, night: 'mid', rest: 'mid', weekend: 'mid', time: 'endless' }));
-  assert.equal(a.rdPrefSummary, '고르게 균형 · 멈출 때까지');
+  assert.equal(a.rdPrefSummary, '추천 · 멈출 때까지');
   await a.generate(); await sleep(5);
   for (let i = 0; i < 400 && (a.generating || calls.length < 4); i++) await sleep(5);
   assert.equal(calls.length, 4, '가장 좋은 표가 나올 때까지 네 번');

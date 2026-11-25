@@ -31,7 +31,10 @@ ORDER = {"D": 0, "E": 1, "N": 2}
 # (키, 이름) — 표에 찍는 순서. 모두 작을수록 좋다
 ROWS = [("relaxed", "풀린 사전입력 칸"), ("no_saeng", "생휴 없는 여성"), ("one_sum", "1오프 합"), ("one_max", "한 사람 최대 1오프"),
         ("single_night", "단독 야간"), ("six_run", "6일 연속 근무"), ("five_same", "같은 근무 5일 연속"), ("lone_work", "하루짜리 근무"),
-        ("back_rest", "쉬고 나서 역방향"), ("de_skew", "낮·저녁 치우침(차이 합)"), ("de_skew_max", "낮·저녁 치우침(한 사람 최대)"),
+        ("back_rest", "쉬고 나서 역방향"), ("back_direct", "바로 다음 날 역방향"), ("week_no_rest", "주휴·OFF 없는 주"),
+        ("group_over", "그룹 규칙 어긴 수"), ("de_skew", "낮·저녁 치우침(차이 합)"), ("de_skew_max", "낮·저녁 치우침(한 사람 최대)"),
+        ("den_skew", "낮·저녁·야간이 평균에서 벗어난 합"),
+        ("bad_max", "한 사람 최대 나쁜 모양"), ("free_sum", "엔진이 만든 나쁜 모양(합)"), ("free_max", "엔진이 만든 나쁜 모양(한 사람 최대)"), ("bad_gap", "사전입력 적은 1/3 이 더 받은 나쁜 모양(평균 차)"),
         ("night_range", "야간 횟수 차이"), ("v_auto", "자동 연차"),
         ("sec_first_table", "첫 표까지(초)"), ("sec_total", "끝날 때까지(초)")]
 
@@ -50,22 +53,33 @@ def metrics(payload: dict, result: dict) -> dict:
     out = {"one": [], "relaxed": sum(len(v) for v in (result.get("relaxed_cells") or {}).values()),
            "single_night": 0, "six_run": 0, "five_same": 0, "lone_work": 0, "back_rest": 0, "no_saeng": 0, "no_saeng_rows": []}
     v_now = v_pre = 0
-    nights, work_days, skew = {}, [], {}
+    nights, work_days, skew, den, kinds_of, bad, pre_n, free = {}, [], {}, {}, {}, {}, {}, {}
+    out.update(back_direct=0, week_no_rest=0)
+    rest_codes = {c for c, p in period.items() if p == "rest"}                 # 주휴·OFF(·임부휴무) — 휴가는 세지 않는다
+    weeks = [list(range(i, i + 7)) for i in range(0, len(days) - 6) if days[i].weekday() == 6 and any(in_month[i:i + 7])]   # 일~토, 그 달에 걸친 주
     for idx, n in enumerate(nurses, 1):
         nid = n["id"]
         cell = lambda d: (sch.get(nid) or {}).get(d.isoformat()) or (ext.get(nid) or {}).get(d.isoformat()) or (pre.get(nid) or {}).get(d.isoformat()) or ""   # noqa: E731
         code = [cell(d) for d in days]
+        before = sum(out[k] for k in ("single_night", "six_run", "five_same", "lone_work", "back_rest", "back_direct"))
         kind = ["-" if period.get(c) is None else ("R" if period[c] in ("rest", "leave") else KIND.get(period[c], "W")) for c in code]
         work = [k not in ("-", "R") for k in kind]
         one = run = 0
+        free[idx] = 0
         for i in range(1, len(days) - 1):
             if not in_month[i]:
                 continue
             a, k, b = kind[i - 1], kind[i], kind[i + 1]
+            # 엔진이 만든 나쁜 모양 — 가운데 칸이 사전입력이 아닌 1오프 · 단독 야간 · 하루짜리 근무 · 쉬고 나서 역방향.
+            # 근무 사이에 OFF 하루를 사전입력하면 그 자체가 1오프다 — 그런 것까지 세면 사전입력이 많은 사람이 늘 나쁘게 나온다
+            if not (pre.get(nid) or {}).get(days[i].isoformat()):
+                free[idx] += ((k == "R" and work[i - 1] and work[i + 1]) + (k == "N" and a not in "N-" and b not in "N-")
+                              + (k in ORDER and a != k and b != k) + (k == "R" and a in ORDER and b in ORDER and ORDER[b] < ORDER[a]))
             one += k == "R" and work[i - 1] and work[i + 1]
             out["single_night"] += k == "N" and a != "N" and b != "N" and a != "-" and b != "-"
             out["lone_work"] += k in ORDER and a != k and b != k
             out["back_rest"] += k == "R" and a in ORDER and b in ORDER and ORDER[b] < ORDER[a]
+            out["back_direct"] += k in ORDER and a in ORDER and ORDER[k] < ORDER[a]
             out["five_same"] += i >= 4 and k in ("D", "E") and all(kind[i - t] == k for t in range(5))
         hit = False
         for i in range(len(days) + 1):
@@ -75,6 +89,11 @@ def metrics(payload: dict, result: dict) -> dict:
                 out["six_run"] += run >= 6 and hit
                 run, hit = 0, False
         out["one"].append(one)
+        # 나쁜 모양 = 이 사람의 1오프 · 단독 야간 · 6일 연속 · 같은 근무 5일 · 하루짜리 근무 · 역방향. 사전입력(주휴 뺌)이 적은 사람에게 몰리는지 본다
+        bad[idx] = one + sum(out[k] for k in ("single_night", "six_run", "five_same", "lone_work", "back_rest", "back_direct")) - before
+        pre_n[idx] = sum(1 for d, ok in zip(days, in_month) if ok and (pre.get(nid) or {}).get(d.isoformat(), "주") != "주")
+        out["week_no_rest"] += sum(1 for w in weeks if all(code[i] for i in w) and not any(code[i] in rest_codes for i in w))
+        kinds_of[nid] = kind
         month_codes = [c for c, ok in zip(code, in_month) if ok]
         v_now += month_codes.count("V")
         v_pre += sum(1 for d in days if first <= d <= last and (pre.get(nid) or {}).get(d.isoformat()) == "V")
@@ -89,6 +108,8 @@ def metrics(payload: dict, result: dict) -> dict:
                 and not {"D", "E"} & set(n.get("shift_prefs") or {})):
             month_kind = [k for k, ok in zip(kind, in_month) if ok]
             skew[idx] = abs(month_kind.count("D") - month_kind.count("E"))
+            if "N" in caps and "N" not in (n.get("shift_prefs") or {}):       # 셋 다 서는 사람 — 낮·저녁·야간을 평균과 견준다
+                den[idx] = [month_kind.count(x) for x in "DEN"]
         night_codes = {c for c, p in period.items() if p == "night"}
         if (not night_keeper_in_month(n, y, m) and not pregnant and night_codes & set(n.get("capable_shifts") or night_codes)
                 and "N" not in (n.get("shift_prefs") or {})):
@@ -98,6 +119,26 @@ def metrics(payload: dict, result: dict) -> dict:
                work_min=min(work_days, default=0), work_max=max(work_days, default=0))
     out["night_range"] = out["night_max"] - out["night_min"]
     out.update(de_skew=sum(skew.values()), de_skew_max=max(skew.values(), default=0), de_skew_rows=skew)
+    avg = [sum(v[j] for v in den.values()) / len(den) for j in range(3)] if den else [0, 0, 0]
+    out.update(den_skew=round(sum(abs(v[j] - avg[j]) for v in den.values() for j in range(3)), 1), den_rows=den, den_avg=[round(a, 1) for a in avg])
+    # 그룹 규칙 — 한 근무(낮·저녁·야간)에 그룹원이 최대보다 많거나 최소보다 적은 사람 수 (그 달의 날마다)
+    over = 0
+    for g in (payload.get("rules") or {}).get("nurseGroups") or []:
+        mem = [kinds_of[m] for m in g.get("members") or [] if m in kinds_of]
+        for i in range(len(days)):
+            if in_month[i]:
+                for x in "DEN":
+                    c = sum(k[i] == x for k in mem)
+                    if g.get("maxPerShift"):
+                        over += max(0, c - int(g["maxPerShift"]))
+                    if g.get("minPerShift") and c:
+                        over += max(0, int(g["minPerShift"]) - c)
+    out["group_over"] = over
+    few = sorted(bad, key=lambda i: (pre_n[i], i))[:max(1, len(bad) // 3)] if bad else []
+    rest = [i for i in bad if i not in few]
+    out.update(free_rows=free, free_sum=sum(free.values()), free_max=max(free.values(), default=0))
+    out.update(bad_rows=bad, pre_rows=pre_n, bad_max=max(bad.values(), default=0),
+               bad_gap=round(sum(bad[i] for i in few) / len(few) - sum(bad[i] for i in rest) / len(rest), 1) if few and rest else 0)
     return out
 
 
