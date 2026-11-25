@@ -76,6 +76,7 @@ window.RedesignModule = function() {
     verLog: [], verCur: null, verSeen: 0,   // 표 기록 (결정 1-95) — 이번 만들기에서 나온 표들 [{n, sec, gap, result, payload, stats, screen}] · 화면의 번호 · 본 적 있는 가장 큰 번호
     verCmp: {on:false, a:null, saved:null, mode:'overlay', onlyChanged:false, dim:true, color:true, old:true, kinds:{rest:true, work:true, swap:true}},   // 견주기 — a: 견주는 앞 번호(화면의 표가 뒤) · saved: 번호 대신 저장한 근무표와 견줄 때 {id, name, schedule, stats}
     verNums: {open:false},       // '번호마다 숫자' 창
+    verSaved: [],                // 이 달에 저장한 표의 숫자 — 그 창을 열 때 읽는다 [{id, name, when, stats}] (결정 1-121)
     solveOpen: false,            // 표가 떠 있는 채로 더 찾는 동안 계산 현황을 펼쳐 볼지 (기본은 한 줄)
     genFirst: null,              // 이번 만들기에서 처음 나온 표 — 더 찾은 표와 견준다 {schedule, extended_schedule, relaxed_cells, mip_gap_percent, sec}
     genPrefTick: 0,              // 저장한 선택을 다시 읽게 하는 값 (localStorage 는 반응하지 않는다)
@@ -902,6 +903,8 @@ window.RedesignModule = function() {
     get verCmpAVal(){ const c=this.verCmp; return c.saved ? 's'+c.saved.id : (c.a!=null ? 'v'+c.a : ''); },
     get verCmpName(){ const A=this.verCmpA; return !A ? '' : (A.n==null ? `‘${A.name}’` : `${A.n}번`); },
     verCmpToggle(){ const c=this.verCmp; if(c.on){ this.verCmpOff(); return; } c.saved=null;
+      // 번호가 없거나 하나뿐이면(저장본을 연 화면) 이 달에 저장한 다른 표와 견준다 (결정 1-121)
+      if(this.verLog.length<2){ const s=this.rdSavedOfMonth.find(x=>x.id!==this.loadedSavedId); if(s) this.verCmpSaved(s.id); return; }
       if(this._verPrevOf(this.verCur)==null){ const nx=this.verLog.find(x=>x.n>this.verCur); if(!nx) return; this.verShow(nx.n); }   // 초안을 보는 중이면 그다음 번호로 가서 초안과 견준다
       c.a=this._verPrevOf(this.verCur); c.on=c.a!=null; },
     verCmpPick(a, b){ if(b!=null&&b!==this.verCur) this.verShow(b); if(a!=null&&a<this.verCur){ this.verCmp.a=a; this.verCmp.on=true; } },
@@ -932,11 +935,22 @@ window.RedesignModule = function() {
       return this.rdMultiCols().filter(c=>c[0]!=='gap').map(c=>({label:c[1], tip:c[2], a:A.stats[c[0]], b:B[c[0]]})).filter(f=>f.a!=null&&f.b!=null&&f.a!==f.b)
         .map(f=>({...f, text:`${f.a} → ${f.b}`, tone:f.b<f.a ? 'good' : 'bad', word:f.b<f.a ? '나아짐' : '나빠짐'})); },
     // 번호마다 숫자 창 — 줄 = 견주는 것, 열 = 번호. 줄마다 가장 좋은(작은) 값을 진하게
-    verNumRows(){ const L=this.verLog; return [...this.rdMultiCols().map(c=>{ const vals=L.map(v=>v.stats ? v.stats[c[0]] : null), nums=vals.filter(x=>x!=null), min=nums.length ? Math.min(...nums) : null;
+    // 숫자 표의 열 — 표 기록의 번호들 + 이 달에 저장한 표들 (결정 1-121). 저장한 표는 따로 저장되어 흩어져 있어 한눈에 견줄 수 없었다
+    verNumCols(){ return [...this.verLog.map(v=>({key:'v'+v.n, n:v.n, name:this.verChipName(v), sub:v.sec==null ? '' : this._verTime(v.sec), stats:v.stats, cur:v.n===this.verCur})),
+      ...this.verSaved.map(s=>({key:'s'+s.id, sid:s.id, name:s.name, sub:'저장 '+s.when, stats:s.stats, cur:this.verCur==null&&s.id===this.loadedSavedId}))]; },
+    async verSavedLoad(){ const out=[];
+      for(const s of this.rdSavedOfMonth.slice(0, 6)){
+        try{ const d=await this.api('GET', `/api/schedules/${s.id}`), x=d.data||{};
+          out.push({id:s.id, name:s.name||`${s.month}월 근무표`, when:(s.created_at||'').slice(5, 16), stats:this.multiStats({schedule:x.schedule||{}, extended_schedule:{}, relaxed_cells:x.relaxed_cells||{}})}); }catch(e){} }
+      this.verSaved=out; },
+    verNumsOpen(){ this.verNums.open=true; this.verSavedLoad(); },
+    verNumRows(){ const L=this.verLog, C=this.verNumCols(); return [...this.rdMultiCols().map(c=>{ const vals=C.map(v=>v.stats ? (v.stats[c[0]]??null) : null), nums=vals.filter(x=>x!=null), min=nums.length ? Math.min(...nums) : null;
         return {label:c[1], tip:c[2], cells:vals.map(x=>({text:x==null ? '—' : x+(c[0]==='gap'?'%':''), best:x!=null&&x===min&&nums.some(y=>y!==min)}))}; }),
-      {label:'앞 번호와 달라진 칸', tip:'바로 앞 번호의 표와 근무가 다른 칸 수', cells:L.map((v, i)=>({text:i===0 ? '—' : this._verDiffCount(L[i-1], v)+'칸', best:false}))}]; },
-    _verDiffCount(A, B){ let n=0; const a=A.screen||A.result.schedule||{}, b=B.screen||B.result.schedule||{};
-      for(const nu of this.nurses) for(const d of this.scheduleDays){ if(this.isCarryDay(d)) continue; const dk=this.dayKey(d); if((a[nu.id]?.[dk]||'')!==(b[nu.id]?.[dk]||'')) n++; } return n; },
+      {label:'앞 번호와 달라진 칸', tip:'바로 앞 번호의 표와 근무가 다른 칸 수', cells:C.map((c, i)=>({text:(c.n==null||i===0) ? '—' : this._verDiffCount(L[i-1], L[i])+'칸', best:false}))}]; },
+    // 근무가 다른 칸 — 차지(DC·EC·NC)는 그 근무(D·E·N)로 본다. 차지 표시가 없는 표(엑셀에서 올린 표 등)를 다시 맞추면 엔진이 차지를 새로 정해,
+    // 근무는 두 칸만 바뀌었는데 '달라진 칸 86칸'으로 나왔다 (결정 1-121)
+    _verDiffCount(A, B){ let n=0; const a=A.screen||A.result.schedule||{}, b=B.screen||B.result.schedule||{}, pl=c=>c ? this.plainShift(c) : '';
+      for(const nu of this.nurses) for(const d of this.scheduleDays){ if(this.isCarryDay(d)) continue; const dk=this.dayKey(d); if(pl(a[nu.id]?.[dk])!==pl(b[nu.id]?.[dk])) n++; } return n; },
     // 표가 떠 있는 채로 더 찾는 동안에는 계산 현황을 한 줄로 줄인다 — 아래 근무표가 보여야 한다
     get rdSolveCompact(){ return !!(this.generating && this.rdSched); },   // 첫 찾기에서도 찾는 도중의 표가 뜨면 줄인다
 
