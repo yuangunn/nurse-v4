@@ -88,7 +88,7 @@ window.ProfilesModule = function() {
         this.mipGapPercent=null;this.scheduleStopped=false;this.rdSaved=false;this.rdDoneAt=null;
         this.contBase=null;   // 앞 병동의 생성 요청(명부 · 사전입력)으로 '더 찾기'를 하지 않게
         this.analysisResult=null;this.analysisWarnings=[];this.juhuRecommendation=null;this._lastAnalysisKey='';
-        this.readjustPins={};this.readjustChanged={};this.readjustSummary='';this.closeCompare();this.multi.results=[];this.multi.picked=null;this.mk.open=false;this.genFirst=null;this.verReset();   /* 여러 개 만들기의 표는 앞 병동의 것 */
+        this.readjustPins={};this.readjustChanged={};this.readjustSummary='';this.readjustUndo=null;this.closeCompare();this.multi.results=[];this.multi.picked=null;this.mk.open=false;this.genFirst=null;this.verReset();   /* 여러 개 만들기의 표는 앞 병동의 것 */
         this.scheduleViolations=[];this._feasSeq++;this.feas=null;this.staffingAlerts=null;   // 날아오는 중인 신호등 응답도 버린다
         this.selectedNurseMap={};this._rosterAnchor=null;
         await this._initApp();

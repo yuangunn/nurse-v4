@@ -833,7 +833,7 @@ window.RedesignModule = function() {
       this.relaxBoosts=r.relax_boosts||{}; this.fairnessOffsets=r.fairness_offsets||null; this.weekendOffsets=r.weekend_offsets||null;
       this.schedule=JSON.parse(JSON.stringify(r.schedule||{})); this.extendedSchedule=r.extended_schedule||{}; this.nurseScores=r.nurse_scores||{}; this.nurseScoreDetails=r.nurse_score_details||{};
       this.mipGapPercent=r.mip_gap_percent!=null ? r.mip_gap_percent : null; this.scheduleStopped=r.stopped===true; this.relaxedCells=r.relaxed_cells||{};
-      this.readjustPins={}; this.readjustChanged={}; this.readjustSummary=''; this.trackEdits();
+      this.readjustPins={}; this.readjustChanged={}; this.readjustSummary=''; this.readjustUndo=null; this.trackEdits();
     },
     verShow(n){
       const v=this.verLog.find(x=>x.n===n); if(!v||!v.result) return;

@@ -604,11 +604,12 @@ function app() {
     // #13 스케줄 자동 저장
     // over = 화면에 넣지 않은 결과 {year,month,schedule,nurse_scores,nurse_score_details,relaxed_cells} — 만드는 동안 달이 바뀐 생성
     // (solver.js _offscreenResult). 이름·년월은 그 결과의 달로 — 지금 보는 달로 저장해 그 달 자동저장본을 지웠다 (2026-10-21)
-    async _autoSaveSchedule(over){
+    // tag = 저장 이름에 붙이는 꼬리 — 다시 맞춘 표는 그 달 자동저장본(만든 표)을 덮지 않고 따로 둔다 (결정 1-119)
+    async _autoSaveSchedule(over, tag=''){
       // 저장할 본문은 기다리기 전에 만든다 — 그 사이 이어 찾기(결정 1-50)가 계산 기록을 비워 빈 기록이 저장됐다 (리뷰 2026-10-19)
       // 수동 저장(saveSchedule)과 동일한 스키마 — 이전 payload는 ScheduleSave 필수 필드가 없어 항상 422로 무음 실패했다.
       const year=over?over.year:this.year, month=over?over.month:this.month;
-      const name=`자동저장 ${year}-${String(month).padStart(2,'0')}`;
+      const name=`자동저장 ${year}-${String(month).padStart(2,'0')}${tag}`;
       const body={year,month,nurses:this.nurses,requirements:this.requirements,rules:this.rules,schedule:this.schedule,name,solver_log:this.solverLogs.map(l=>l.msg).join('\n'),prev_schedule:this.prevSchedule,nurse_scores:this.nurseScores,nurse_score_details:this.nurseScoreDetails,locked_cells:this.lockedCells,cell_notes:this.cellNotes,holidays:this.holidays,prev_day_reqs:this.prevDayReqs,prev_month_nights:this.prevMonthNights,relaxed_cells:this.relaxedCells,...over};
       if(!body.schedule||!Object.keys(body.schedule).length)return;
       try{
