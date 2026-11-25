@@ -843,7 +843,7 @@ class CpSatScheduler(_SchedulerBase):
                         if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month]
             next_v_vars = [x[nid][d]["V"] for d in next_idx]
             if next_v_vars:
-                model.Add(sum(next_v_vars) <= self._cap_with_training(nurse, next_idx, "V", self._v_tail_base()))
+                model.Add(sum(next_v_vars) <= self._v_cap(nurse, next_idx, self._v_tail_base()))
 
     def _cs_max_night_per_month(self, model, x):
         max_n = self.rules.maxNightPerMonthCount
