@@ -182,52 +182,6 @@ window.MiscFeaturesModule = function() {
       }
     },
 
-    // ═══ 배점 슬라이더 시스템 ═════════════════════════════
-    scoringSliders:{
-      continuity:5,    // 근무 연속성 0~10
-      forward:5,       // 순방향 전환 0~10
-      nightFairness:5, // 야간 공평성 0~10
-      weekendFairness:5,// 주말 공평성 0~10
-      wishWeight:5,    // 희망 반영도 0~10
-    },
-    showScoringSliders:false,
-    _initScoringSliders(){
-      try{const raw=localStorage.getItem('ns_scoring_sliders');if(raw)this.scoringSliders=JSON.parse(raw)}catch(e){}
-    },
-    _saveScoringSliders(){
-      try{localStorage.setItem('ns_scoring_sliders',JSON.stringify(this.scoringSliders))}catch(e){}
-    },
-    applyScoringSliders(){
-      // 슬라이더 값을 기존 scoringRules의 점수에 반영
-      const s=this.scoringSliders;
-      const map={
-        // rule name → {slider, base, multiplier}
-        '연속 동일 근무 보상':{slider:s.continuity, base:15, field:'score'},
-        '순방향 D→E':{slider:s.forward, base:20, field:'score'},
-        '순방향 E→N':{slider:s.forward, base:20, field:'score'},
-        'D→N 전환 페널티':{slider:s.forward, base:-30, field:'score'},
-        '야간 공평성':{slider:s.nightFairness, base:-10, field:'score'},
-        '야간 근무 공평성':{slider:s.nightFairness, base:-50, field:'score'},          // 시드 이름
-        '주말·공휴일 근무 공평성':{slider:s.weekendFairness, base:-30, field:'score'}, // M6 P3②
-        '희망 근무 반영':{slider:s.wishWeight, base:50, field:'score'},
-        '연속 휴일 보상':{slider:s.continuity, base:30, field:'score'},
-      };
-      let updated=0;
-      for(const rule of this.scoringRules){
-        const m=map[rule.name];
-        if(m){
-          const newScore=Math.round(m.base*(m.slider/5));
-          if(rule.score!==newScore){rule.score=newScore;updated++}
-        }
-      }
-      this._saveScoringSliders();
-      if(updated>0)this.toast(`배점 ${updated}건 조정됨`,'info');
-      // 서버에 저장
-      for(const rule of this.scoringRules){
-        this.api('POST','/api/scoring_rules',rule).catch(()=>{});
-      }
-    },
-
     // ═══ 토스트 알림 시스템 ══════════════════════════════
     _toasts:[],
     _toastId:0,

@@ -474,7 +474,7 @@ window.RedesignModule = function() {
       (prev[nid]=prev[nid]||{})[dk]=info.original;
       this.cellWhy={...this.cellWhy, [key]:{loading:true}};
       let res;
-      try{ res=await this.api('POST','/api/diagnose',{...this._diagPayload(), prev_schedule:prev}); }
+      try{ res=await this.api('POST','/api/diagnose',{...this._diagPayload(), ...this._madeRules(), prev_schedule:prev}); }
       catch(e){ res={status:'error', message:'계산하지 못했습니다'+(e&&e.message?` — ${e.message}`:'')}; }
       this.cellWhy={...this.cellWhy, [key]:{res:res||{status:'error', message:'계산하지 못했습니다'}}};
     },
@@ -701,6 +701,9 @@ window.RedesignModule = function() {
     // 고른 키워드가 켜는 규칙 — 요청의 rules 를 이 표에만 바꿔 싣는다 (없으면 빈 객체)
     _kwRules(keys){ const over=Object.assign({}, ...MAKE_KEYWORDS.filter(k=>k.rules&&(keys||[]).includes(k.id)).map(k=>k.rules)); return Object.keys(over).length ? {rules:{...this.rules, ...over}} : {}; },
     get makeHasCap(){ return this.mk.count==='multi' ? this.multi.tables.some(t=>t.keys.includes('onecap')) : this.mk.keys.includes('onecap'); },
+    // 키워드가 곱할 배점 규칙이 하나도 없다(지웠거나 껐거나 0점) — 고르면 말없이 '추천'과 같은 표가 나왔다. 고르지 못하게 하고 까닭을 보인다
+    kwDead(id){ const kw=MAKE_KEYWORDS.find(k=>k.id===id), keys=Object.keys((kw&&kw.fx)||{}); if(!keys.length) return false;
+      return !(this.scoringRules||[]).some(r=>r.enabled&&r.score&&keys.some(k=>PREF_RULE[k]&&PREF_RULE[k](r))); },
     _rulesWithFx(fxs){
       const mul=new Map();
       for(const fx of fxs) for(const [k,f] of Object.entries(fx||{})) for(const r of (this.scoringRules||[])) if(PREF_RULE[k]&&PREF_RULE[k](r)) mul.set(r, (mul.get(r)||1)*f);
@@ -1031,7 +1034,7 @@ window.RedesignModule = function() {
       const s=this.swap; s.res=null; if(!s.a||!s.b||s.a===s.b||!s.days.length) return;
       if(this.swapPairs.every(p=>p.a===p.b)){ s.res={same:true, added:[], removed:[], capable:[], wanted:[]}; return; }
       const seq=++s.seq; s.busy=true;
-      try{ const base={...this._basePayload()}, [before, after]=await Promise.all([this.api('POST', '/api/check_schedule', {...base, schedule:this.schedule}), this.api('POST', '/api/check_schedule', {...base, schedule:this._swapTable()})]);
+      try{ const base={...this._basePayload(), ...this._madeRules()}, [before, after]=await Promise.all([this.api('POST', '/api/check_schedule', {...base, schedule:this.schedule}), this.api('POST', '/api/check_schedule', {...base, schedule:this._swapTable()})]);
         if(seq!==this.swap.seq) return;
         const b=new Set(before.notes||[]), a=new Set(after.notes||[]), g=this._swapGroupDiff(this._swapGroupNotes(this.schedule), this._swapGroupNotes(this._swapTable()));
         s.res={added:[...[...a].filter(x=>!b.has(x)), ...g.added], removed:[...[...b].filter(x=>!a.has(x)), ...g.removed], capable:this._swapCapable(), wanted:this._swapWanted()};
@@ -1093,8 +1096,12 @@ window.RedesignModule = function() {
       const v=Math.max(0, Math.min(20, (parseInt(this.requirements[key][shift])||0)+delta));
       this.requirements[key][shift]=v;
     },
+    // 화면의 표를 만든 규칙 — '이 칸을 지키면?' · 근무 바꾸기 검사는 지금 설정이 아니라 그 표를 만든 규칙으로 따진다
+    // ('6일 연속 없이'로 만든 표를 6일을 허용하는 설정으로 따지면 틀린 답이 나온다). 그 표의 요청을 모르면 지금 설정
+    _madeRules(){ const p=!this.genFailed&&this.contBase&&this.contBase.payload;
+      return (p&&+p.year===+this.year&&+p.month===+this.month&&p.rules) ? {rules:p.rules, unlimited_v:!!p.unlimited_v} : {}; },
     bumpRule(field, delta, min, max){
-      const v=Math.max(min, Math.min(max, (parseInt(this.rules[field])||0)+delta));
+      const v=Math.max(min, Math.min(max, (Number.isFinite(+this.rules[field])&&this.rules[field]!==null&&this.rules[field]!=='' ? +this.rules[field] : min)+delta));   // parseInt 는 11.5 시간의 .5 를 버렸다
       this.rules[field]=v;
     },
     bumpTimeout(delta){ this.generateTimeout=Math.max(1, Math.min(60, (parseInt(this.generateTimeout)||20)+delta)); },

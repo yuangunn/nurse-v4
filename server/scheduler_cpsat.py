@@ -843,7 +843,7 @@ class CpSatScheduler(_SchedulerBase):
                         if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month]
             next_v_vars = [x[nid][d]["V"] for d in next_idx]
             if next_v_vars:
-                model.Add(sum(next_v_vars) <= self._cap_with_training(nurse, next_idx, "V", 1))
+                model.Add(sum(next_v_vars) <= self._cap_with_training(nurse, next_idx, "V", self._v_tail_base()))
 
     def _cs_max_night_per_month(self, model, x):
         max_n = self.rules.maxNightPerMonthCount
@@ -1317,7 +1317,7 @@ class CpSatScheduler(_SchedulerBase):
                 # 낮·저녁 고르게 (결정 1-107, HiGHS 패리티) — 그 달 낮 수와 저녁 수의 차이가 tolerance 를 넘는 만큼 감점
                 if sc >= 0:
                     continue
-                tol = max(0, int(p.get("tolerance", 4)))
+                tol = self._balance_tolerance(p)
                 day, eve = self._resolve_group("day"), self._resolve_group("evening")
                 for nurse in self._shift_balance_pool():
                     nid = nurse["id"]

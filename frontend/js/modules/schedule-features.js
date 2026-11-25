@@ -31,6 +31,7 @@ window.ScheduleFeaturesModule = function() {
       this.extendedSchedule=null; this.nurseScores={}; this.nurseScoreDetails={};
       this.relaxedCells={}; this.scheduleStopped=false; this.mipGapPercent=null;
       this.solverLog=[]; this.generateResult=null;
+      this.contBase=null; this.genRound=1; this.genRounds=[];   // 사람이 확정한 표다 — '이 표에서 더 찾기'가 앞 생성의 사전입력 · 규칙으로 다시 풀어 이 표를 바꾸지 않게 (결정 1-116)
       this.activeTab='schedule';
       this.trackEdits();   // 확정한 표가 새 기준 (고친 칸·근무표 되돌리기)
       this.rdDoneAt=new Date(); this._autoSaveSchedule();   // 확정도 생성과 같이 자동 저장
@@ -384,7 +385,8 @@ window.ScheduleFeaturesModule = function() {
     loadTemplate(idx){
       const t=this.templates[idx];if(!t)return;
       if(!confirm(`'${t.name}' 템플릿을 불러오시겠습니까?\n현재 간호사/규칙/인원 설정이 교체됩니다.`))return;
-      this.nurses=t.nurses;this.requirements=t.requirements;this.rules=t.rules;
+      this.nurses=t.nurses;this.requirements=t.requirements;this.rules={...this.rules,...this._presetRules(t.rules)};this.rulesFix();   // 옛 템플릿에 없는 새 규칙 키 · 이 병동의 그룹 · 색 · 휴일은 지금 것 그대로
+      this.contBase=null;   // 명부가 바뀌었다 — 앞 생성의 요청으로 '더 찾기'를 하지 않는다
       if(t.shifts)this.shifts=t.shifts;
     },
     deleteTemplate(idx){this.templates.splice(idx,1);localStorage.setItem('ns_templates',JSON.stringify(this.templates))},

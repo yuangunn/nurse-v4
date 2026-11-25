@@ -307,7 +307,7 @@
       <span class="rhdr-mark" aria-hidden="true"></span>
       <span class="rhdr-name" data-rd="brand-name">NurseScheduler</span>
       <span class="rhdr-meta" x-text="`${rdWard} 병동 · 간호사 ${nurses.length}명`"></span>
-      <span class="rhdr-ver" @click="trackVersionClick()" title="버전 정보. 다섯 번 누르면 개발자 설정이 켜집니다.">v4.35.0</span>
+      <span class="rhdr-ver" @click="trackVersionClick()" title="버전 정보. 다섯 번 누르면 개발자 설정이 켜집니다.">v4.36.0</span>
     </div>
     <div class="rym" title="대상 년월 — 사전입력·분석·근무표 모든 화면에 함께 적용됩니다">
       <button @click="prevMonth()" data-rd="ym-prev" title="한 달 앞으로 갑니다."><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
@@ -517,7 +517,7 @@
       </div>
       <div class="rcard">
         <h4>꼭 지킬 규칙</h4>
-        <div class="rrules">
+        <div class="rrules" @change="rulesFix()">
           <label class="rcheck" title="완전한 주마다 오프 1회를 둡니다. 휴무 자리가 모자라면 마지막 수단으로 반납되고(오프특근) 리포트에 보고됩니다."><input type="checkbox" x-model="rules.weeklyOff"/><span class="box"></span>주 1회 오프</label>
           <label class="rcheck" title="야간 다음 날 쉬고 바로 낮 근무로 들어가는 것을 막습니다."><input type="checkbox" x-model="rules.noNOD"/><span class="box"></span>야간 → 휴무 → 낮 금지</label>
           <div class="with-num"><label class="rcheck" title="이 일수보다 길게 연속으로 근무하지 않습니다."><input type="checkbox" x-model="rules.maxConsecutiveWork"/><span class="box"></span>최대 연속 근무</label><div class="rnum rnum-sm"><button @click="bumpRule('maxConsecutiveWorkDays',-1,1,10)" title="하루 줄입니다.">−</button><input type="number" x-model.number="rules.maxConsecutiveWorkDays" min="1" max="10" title="최대 연속 근무 일수"/><button @click="bumpRule('maxConsecutiveWorkDays',1,1,10)" title="하루 늘립니다.">+</button></div><span>일</span></div>
@@ -862,10 +862,10 @@
               <span class="sub" x-text="mipGap===0?'가장 좋은 답을 끝까지 찾습니다':`가장 좋은 답과 ${(mipGap*100).toFixed(0)}% 안이면 멈춥니다`"></span></div>
           </div>
         </div>
-        <div class="row"><span class="lbl">최대 기다릴 시간</span>
+        <div class="row"><span class="lbl" title="‘이 표에서 더 찾기’가 쓰는 시간입니다. 새로 만들 때의 시간은 만들기 창에서 고르고, 고르면 이 값도 그 시간으로 바뀝니다.">더 찾을 때 기다릴 시간</span>
           <div class="ctl">
             <div class="rseg"><template x-for="v in [5,10,20,60]" :key="'tm'+v"><button :class="generateTimeout===v?'on':''" @click="generateTimeout=v" x-text="v+'분'" :title="`최대 ${v}분까지 기다립니다. 그 전에 답을 찾으면 바로 끝납니다.`"></button></template></div>
-            <div class="rnum rnum-sm"><button @click="bumpTimeout(-1)" title="1분 줄입니다.">−</button><input type="number" min="1" max="60" x-model.number="generateTimeout" title="최대 기다릴 시간 (분)"/><button @click="bumpTimeout(1)" title="1분 늘립니다.">+</button></div><span class="sub unit">분</span>
+            <div class="rnum rnum-sm"><button @click="bumpTimeout(-1)" title="1분 줄입니다.">−</button><input type="number" min="1" max="60" x-model.number="generateTimeout" @change="bumpTimeout(0)" title="더 찾을 때 기다릴 시간 (분)"/><button @click="bumpTimeout(1)" title="1분 늘립니다.">+</button></div><span class="sub unit">분</span>
             <div class="line"><input type="range" min="1" max="60" step="1" x-model.number="generateTimeout" title="최대 기다릴 시간을 미세하게 조정합니다."/></div>
           </div>
         </div>
@@ -887,22 +887,11 @@
           <button @click="showPreBonusSettings=!showPreBonusSettings" class="rbtn rbtn-quiet" title="완화할 때 무엇을 먼저 바꿀지(근무 → 쉬는 날 → 휴가) 유지 점수를 조절합니다. 사연 있는 칸은 잠금이 확실합니다."><span x-text="showPreBonusSettings?'완화 순서 조절 접기':'완화 순서 조절 펼치기'"></span></button>
           <div x-show="showPreBonusSettings" x-cloak style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
             <div class="sub">높을수록 늦게 바뀝니다. 휴가와 쉬는 날은 간호사 개인의 시간 — 낮추지 마세요. 절대 못 바꾸는 날은 사전입력에서 잠그세요.</div>
-            <div class="slider-row"><span>휴가 (V·생·법)</span><input type="range" min="0" max="10000" step="100" x-model.number="rules.preBonusLeave" title="휴가 유지 점수 (기본 5000)"/><b x-text="rules.preBonusLeave"></b><span class="sub">기본 5000</span></div>
-            <div class="slider-row"><span>쉬는 날 (OF·P1)</span><input type="range" min="0" max="10000" step="100" x-model.number="rules.preBonusOff" title="쉬는 날 유지 점수 (기본 3000)"/><b x-text="rules.preBonusOff"></b><span class="sub">기본 3000</span></div>
-            <div class="slider-row"><span>근무 (D·E·N…)</span><input type="range" min="0" max="5000" step="50" x-model.number="rules.preBonusWork" title="근무 유지 점수 (기본 500)"/><b x-text="rules.preBonusWork"></b><span class="sub">기본 500</span></div>
+            <div class="slider-row"><span>휴가 (V·생·법)</span><input type="range" min="0" max="10000" step="100" x-model.number="rules.preBonusLeave" @change="saveRuleKeys('preBonusLeave')" title="휴가 유지 점수 (기본 5000)"/><b x-text="rules.preBonusLeave"></b><span class="sub">기본 5000</span></div>
+            <div class="slider-row"><span>쉬는 날 (OF·P1)</span><input type="range" min="0" max="10000" step="100" x-model.number="rules.preBonusOff" @change="saveRuleKeys('preBonusOff')" title="쉬는 날 유지 점수 (기본 3000)"/><b x-text="rules.preBonusOff"></b><span class="sub">기본 3000</span></div>
+            <div class="slider-row"><span>근무 (D·E·N…)</span><input type="range" min="0" max="5000" step="50" x-model.number="rules.preBonusWork" @change="saveRuleKeys('preBonusWork')" title="근무 유지 점수 (기본 500)"/><b x-text="rules.preBonusWork"></b><span class="sub">기본 500</span></div>
             <div class="sub">날이 정해진 휴가(특·공·병·경가·조가·산전)는 오프특근보다도 늦게 바뀝니다 — 기본 25500, 위 세 슬라이더 중 가장 큰 값을 따라 올라갑니다.</div>
-            <div class="slider-row"><span>주휴 (주휴 이동 허용 시)</span><input type="range" min="0" max="5000" step="50" x-model.number="rules.preBonusRest" title="주휴 유지 점수 (기본 300)"/><b x-text="rules.preBonusRest"></b><span class="sub">기본 300</span></div>
-          </div>
-        </div>
-        <div class="fold">
-          <button @click="showScoringSliders=!showScoringSliders" class="rbtn rbtn-quiet" title="자동 배정이 무엇을 더 중요하게 볼지 다섯 가지를 조절합니다. ‘우선순위 적용’을 눌러야 반영됩니다."><span x-text="showScoringSliders?'우선순위 조절 접기':'우선순위 조절 펼치기'"></span></button>
-          <div x-show="showScoringSliders" x-cloak style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-            <div class="slider-row"><span>같은 근무 이어가기</span><input type="range" min="0" max="10" step="1" x-model.number="scoringSliders.continuity" title="같은 근무를 연속으로 두는 것을 얼마나 선호할지"/><b x-text="scoringSliders.continuity"></b><span class="sub">같은 근무 연속 선호</span></div>
-            <div class="slider-row"><span>낮→저녁→야간 순서</span><input type="range" min="0" max="10" step="1" x-model.number="scoringSliders.forward" title="D→E→N 순서로 바뀌는 것을 얼마나 선호할지"/><b x-text="scoringSliders.forward"></b><span class="sub">순방향 전환 유도</span></div>
-            <div class="slider-row"><span>야간 공평</span><input type="range" min="0" max="10" step="1" x-model.number="scoringSliders.nightFairness" title="야간 횟수를 사람마다 고르게"/><b x-text="scoringSliders.nightFairness"></b><span class="sub">야간 균등 배분</span></div>
-            <div class="slider-row"><span>주말·공휴일 공평</span><input type="range" min="0" max="10" step="1" x-model.number="scoringSliders.weekendFairness" title="주말·공휴일 근무를 사람마다 고르게"/><b x-text="scoringSliders.weekendFairness"></b><span class="sub">주말 근무 균등 배분</span></div>
-            <div class="slider-row"><span>희망 근무 반영</span><input type="range" min="0" max="10" step="1" x-model.number="scoringSliders.wishWeight" title="희망 근무를 얼마나 세게 반영할지"/><b x-text="scoringSliders.wishWeight"></b><span class="sub">희망 근무 반영 강도</span></div>
-            <div><button @click="applyScoringSliders()" class="rbtn rbtn-secondary" title="위 조절값을 우선순위 규칙에 적용합니다. 그다음 근무표를 다시 만드세요.">우선순위 적용</button></div>
+            <div class="slider-row"><span>주휴 (주휴 이동 허용 시)</span><input type="range" min="0" max="5000" step="50" x-model.number="rules.preBonusRest" @change="saveRuleKeys('preBonusRest')" title="주휴 유지 점수 (기본 300)"/><b x-text="rules.preBonusRest"></b><span class="sub">기본 300</span></div>
           </div>
         </div>
       </div>
@@ -1603,20 +1592,20 @@
       <div x-show="mk.step==='dir'&&mk.count==='one'" class="rmulti-tables">
         <div class="rmulti-table" data-table="one">
           <div class="head"><b>이 표의 방향</b><span x-text="multiLabel(mk.keys)"></span></div>
-          <div class="chips"><button class="rkw" :class="mk.keys.length?'':'on'" @click="mk.keys=[]" data-kw="recommend" title="키워드를 고르지 않고 지금 설정 그대로 만듭니다. 견줘 본 조합 가운데 사전입력(원티드)을 가장 적게 풀었습니다.">추천</button><template x-for="k in rdMakeKeywords()" :key="'ok'+k.id"><button class="rkw" :class="mk.keys.includes(k.id)?'on':''" :disabled="!!makeClash(k.id)" @click="makeToggle(k.id)" :data-kw="k.id" :title="makeClash(k.id) ? `‘${makeClash(k.id)}’와 같은 배점을 건드려 함께 고를 수 없습니다.` : k.hint" x-text="k.label"></button></template></div>
+          <div class="chips"><button class="rkw" :class="mk.keys.length?'':'on'" @click="mk.keys=[]" data-kw="recommend" title="키워드를 고르지 않고 지금 설정 그대로 만듭니다. 견줘 본 조합 가운데 사전입력(원티드)을 가장 적게 풀었습니다.">추천</button><template x-for="k in rdMakeKeywords()" :key="'ok'+k.id"><button class="rkw" :class="mk.keys.includes(k.id)?'on':''" :disabled="!!makeClash(k.id)||kwDead(k.id)" @click="makeToggle(k.id)" :data-kw="k.id" :title="kwDead(k.id) ? '이 키워드가 조절하는 배점 규칙이 꺼져 있거나 없습니다 — 설정 > 배점에서 켜야 효과가 있습니다.' : makeClash(k.id) ? `‘${makeClash(k.id)}’와 같은 배점을 건드려 함께 고를 수 없습니다.` : k.hint" x-text="k.label"></button></template></div>
         </div>
         <div class="rmulti-note" style="white-space:pre-line" x-text="makeDirHint" data-rd="make-dir-hint"></div>
-        <div class="rmulti-note" x-show="makeHasCap" data-rd="make-onecap"><div class="with-num" style="display:flex;align-items:center;gap:8px"><span>‘1오프 몰지 않기’를 고른 표는 한 사람의 1오프를</span><div class="rnum rnum-sm"><button @click="bumpRule('maxOneOffCount',-1,0,10)" title="하나 줄입니다.">−</button><input type="number" x-model.number="rules.maxOneOffCount" min="0" max="10" title="한 사람에게 둘 수 있는 1오프 개수"/><button @click="bumpRule('maxOneOffCount',1,0,10)" title="하나 늘립니다.">+</button></div><span>개까지로 맞춥니다.</span></div></div>
+        <div class="rmulti-note" x-show="makeHasCap" data-rd="make-onecap"><div class="with-num" style="display:flex;align-items:center;gap:8px"><span>‘1오프 몰지 않기’를 고른 표는 한 사람의 1오프를</span><div class="rnum rnum-sm"><button @click="bumpRule('maxOneOffCount',-1,0,10);saveRuleKeys('maxOneOffCount')" title="하나 줄입니다.">−</button><input type="number" x-model.number="rules.maxOneOffCount" @change="saveRuleKeys('maxOneOffCount')" min="0" max="10" title="한 사람에게 둘 수 있는 1오프 개수"/><button @click="bumpRule('maxOneOffCount',1,0,10);saveRuleKeys('maxOneOffCount')" title="하나 늘립니다.">+</button></div><span>개까지로 맞춥니다.</span></div></div>
       </div>
       <!-- 방향 — 여러 개 -->
       <div x-show="mk.step==='dir'&&mk.count==='multi'" class="rmulti-tables">
         <template x-for="(t,ti) in multi.tables" :key="'mt'+ti"><div class="rmulti-table" :data-table="ti">
           <div class="head"><b x-text="`${ti+1}번 표`"></b><span x-text="multiLabel(t.keys)"></span>
             <button x-show="multi.tables.length>1" @click="multiRemove(ti)" class="rbtn rbtn-sm rbtn-quiet" title="이 표를 뺍니다.">빼기</button></div>
-          <div class="chips"><button class="rkw" :class="t.keys.length?'':'on'" @click="t.keys=[]" data-kw="recommend" title="키워드를 고르지 않고 지금 설정 그대로 만듭니다. 견줘 본 조합 가운데 사전입력(원티드)을 가장 적게 풀었습니다.">추천</button><template x-for="k in rdMakeKeywords()" :key="'mk'+ti+k.id"><button class="rkw" :class="t.keys.includes(k.id)?'on':''" :disabled="!!multiClash(ti,k.id)" @click="multiToggle(ti,k.id)" :data-kw="k.id" :title="multiClash(ti,k.id) ? `‘${multiClash(ti,k.id)}’와 같은 배점을 건드려 함께 고를 수 없습니다.` : k.hint" x-text="k.label"></button></template></div>
+          <div class="chips"><button class="rkw" :class="t.keys.length?'':'on'" @click="t.keys=[]" data-kw="recommend" title="키워드를 고르지 않고 지금 설정 그대로 만듭니다. 견줘 본 조합 가운데 사전입력(원티드)을 가장 적게 풀었습니다.">추천</button><template x-for="k in rdMakeKeywords()" :key="'mk'+ti+k.id"><button class="rkw" :class="t.keys.includes(k.id)?'on':''" :disabled="!!multiClash(ti,k.id)||kwDead(k.id)" @click="multiToggle(ti,k.id)" :data-kw="k.id" :title="kwDead(k.id) ? '이 키워드가 조절하는 배점 규칙이 꺼져 있거나 없습니다 — 설정 > 배점에서 켜야 효과가 있습니다.' : multiClash(ti,k.id) ? `‘${multiClash(ti,k.id)}’와 같은 배점을 건드려 함께 고를 수 없습니다.` : k.hint" x-text="k.label"></button></template></div>
         </div></template>
         <button x-show="multi.tables.length<4" @click="multiAdd()" class="rbtn rbtn-secondary rmulti-add" data-rd="multi-add" title="표를 하나 더 만듭니다 (네 장까지).">+ 표 추가</button>
-        <div class="rmulti-note" x-show="makeHasCap" data-rd="make-onecap"><div class="with-num" style="display:flex;align-items:center;gap:8px"><span>‘1오프 몰지 않기’를 고른 표는 한 사람의 1오프를</span><div class="rnum rnum-sm"><button @click="bumpRule('maxOneOffCount',-1,0,10)" title="하나 줄입니다.">−</button><input type="number" x-model.number="rules.maxOneOffCount" min="0" max="10" title="한 사람에게 둘 수 있는 1오프 개수"/><button @click="bumpRule('maxOneOffCount',1,0,10)" title="하나 늘립니다.">+</button></div><span>개까지로 맞춥니다.</span></div></div>
+        <div class="rmulti-note" x-show="makeHasCap" data-rd="make-onecap"><div class="with-num" style="display:flex;align-items:center;gap:8px"><span>‘1오프 몰지 않기’를 고른 표는 한 사람의 1오프를</span><div class="rnum rnum-sm"><button @click="bumpRule('maxOneOffCount',-1,0,10);saveRuleKeys('maxOneOffCount')" title="하나 줄입니다.">−</button><input type="number" x-model.number="rules.maxOneOffCount" @change="saveRuleKeys('maxOneOffCount')" min="0" max="10" title="한 사람에게 둘 수 있는 1오프 개수"/><button @click="bumpRule('maxOneOffCount',1,0,10);saveRuleKeys('maxOneOffCount')" title="하나 늘립니다.">+</button></div><span>개까지로 맞춥니다.</span></div></div>
         <div class="rmulti-note" x-show="multiPlan.length<multi.tables.length">방향이 같은 표는 한 번만 만듭니다 — 실제로 만드는 표는 <b x-text="multiPlan.length+'장'"></b>입니다.</div>
       </div>
       <!-- 찾는 시간 — 하나만 -->
@@ -2703,7 +2692,7 @@
       <div x-show="helpTab==='about'" class="text-center" style="padding:24px 0">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" style="margin:0 auto 12px"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <h3 style="font-size:1.2rem;font-weight:600;margin-bottom:4px">NurseScheduler</h3>
-        <p class="text-dim text-xs" x-text="'v4.35.0 · Electron ' + (window.electronInfo?.version||'')"></p>
+        <p class="text-dim text-xs" x-text="'v4.36.0 · Electron ' + (window.electronInfo?.version||'')"></p>
         <p class="text-dim text-xs mt-2">간호사 3교대 근무표 자동 생성 앱</p>
         <p class="text-dim text-xs mt-1">기본 계산 방식 · 다른 계산 방식 듀얼 자동 배정 · 완전 오프라인</p>
         <p class="text-dim text-xs mt-1">모성보호(임산부 P1) · 최소 침습 완화 · 왜 안 되는지 자세히 보기</p>

@@ -131,23 +131,25 @@ window.GridInteractionsModule = function() {
           }
         }
 
-        const maxV=+r.maxVPerMonth||0;
-        if(maxV>0&&vDays.length>maxV)notes.push({nid,dk:vDays[maxV],msg:`${nurse.name}: V ${vDays.length}회 — 월 최대 ${maxV}회 (확정분은 그대로 수용)`});
+        // 숫자 설정은 num 으로 읽는다 — `||기본값`은 0 을 기본값으로 바꾼다. 0 은 0 이다 (결정 1-116)
+        const num=(v,d)=>(v===null||v===undefined||v===''||!Number.isFinite(+v))?d:+v;
+        const maxV=num(r.maxVPerMonth,1);
+        if(!this.unlimitedV&&vDays.length>maxV)notes.push({nid,dk:vDays[maxV],msg:`${nurse.name}: V ${vDays.length}회 — 월 최대 ${maxV}회 (확정분은 그대로 수용)`});
         if(mDays.length>1)notes.push({nid,dk:mDays[1],msg:`${nurse.name}: 생리휴가 ${mDays.length}회 — 월 1회 한도 (확정분은 그대로 수용)`});
-        if(!nightDed&&r.maxNightPerMonth&&nDays.length>(+r.maxNightPerMonthCount||6))
-          notes.push({nid,dk:nDays[+r.maxNightPerMonthCount||6],msg:`${nurse.name}: 야간 ${nDays.length}회 — 월 최대 ${r.maxNightPerMonthCount}회 (확정분은 그대로 수용)`});
+        if(!nightDed&&r.maxNightPerMonth&&nDays.length>num(r.maxNightPerMonthCount,6))
+          notes.push({nid,dk:nDays[num(r.maxNightPerMonthCount,6)],msg:`${nurse.name}: 야간 ${nDays.length}회 — 월 최대 ${r.maxNightPerMonthCount}회 (확정분은 그대로 수용)`});
         if(!nightDed&&r.maxNightTwoMonth){
           // 나이트킵(야간전담) 달의 야간은 수면오프와 무관 → 합산에서 제외 (서버 동일)
           const pk=this.month===1?`${this.year-1}-12`:`${this.year}-${String(this.month-1).padStart(2,'0')}`;
           const prevKept=Object.keys(nm).length?!!nm[pk]:!!nurse.is_night_shift;
           const prevN=(this.month%2||prevKept)?0:(+((this.prevMonthNights||{})[nid])||0);   // 합산은 홀수달+짝수달 묶음 — 홀수달은 그 달만 (결정 1-101, 서버 _two_month_prev)
-          const rhs=Math.max(0,(+r.maxNightTwoMonthCount||10)-prevN);
+          const rhs=Math.max(0,num(r.maxNightTwoMonthCount,10)-prevN);
           if(nDays.length>rhs)notes.push({nid,dk:nDays[Math.min(rhs,nDays.length-1)],msg:`${nurse.name}: 당월 야간 ${nDays.length}회 + 전월 ${prevN}회 — 합산 ${r.maxNightTwoMonthCount}회 (확정분은 그대로 수용)`});
         }
 
         // 연속 근무/야간 — 선입력만으로 이미 확정된 초과 (빈칸은 보수적으로 run을 끊음)
-        const maxW=r.maxConsecutiveWork?(+r.maxConsecutiveWorkDays||5):0;
-        const maxCN=r.maxConsecutiveNight?(+r.maxConsecutiveNightDays||3):0;
+        const maxW=r.maxConsecutiveWork?num(r.maxConsecutiveWorkDays,5):0;
+        const maxCN=r.maxConsecutiveNight?num(r.maxConsecutiveNightDays,3):0;
         let runW=0,runN=0,flagW=false,flagN=false;
         for(const day of days){
           const dk=this.dayKey(day);

@@ -85,7 +85,8 @@ def test_skips_when_week_already_has_juhu_or_weekday_is_unclear():
 
 def test_keeper_days_and_juhu_relax_are_left_alone():
     """나이트킵의 주휴는 미리 넣은 것만 (제1원칙 10) — 12월 나이트킵의 12/02 는 나이트킵의 날.
-    주휴 무시(allow_juhu_relax)면 엔진이 주휴를 직접 놓으므로 채우지 않는다."""
+    주휴 이동 허용(allow_juhu_relax)은 완화와 함께 켰을 때만 엔진이 주휴를 직접 놓는다 — 그때만 채우지 않는다.
+    완화 없이 그것만 켜면 주휴는 옮겨지지 않으므로 채우기는 그대로 한다 (결정 1-116)."""
     prev = _juhu_on({}, "a0", BLOCK_WEEKS[:3], 3)
     _juhu_on(prev, "a1", BLOCK_WEEKS[:3], 3)
     nurses = [Nurse(id=f"a{i}", name=f"간호{i + 1:02d}", group="A", gender="female",
@@ -94,6 +95,8 @@ def test_keeper_days_and_juhu_relax_are_left_alone():
     s = NurseScheduler(_request(prev, nurses=nurses))
     assert _added(s) == {("a1", "2026-12-02")}           # 간호01 은 12월 나이트킵
     s = NurseScheduler(_request(prev, nurses=nurses, allow_juhu_relax=True))
+    assert _added(s) == {("a1", "2026-12-02")}
+    s = NurseScheduler(_request(prev, nurses=nurses, allow_juhu_relax=True, allow_pre_relax=True))
     assert _added(s) == set()
 
 

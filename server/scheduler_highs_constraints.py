@@ -553,7 +553,7 @@ class _HighsConstraintsMixin:
                         if (dt.month != self.month or dt.year != self.year) and dt >= first_of_month]
             next_v_vars = [x[nid][d]["V"] for d in next_idx]
             if next_v_vars:
-                cap = self._cap_with_training(nurse, next_idx, "V", 1)
+                cap = self._cap_with_training(nurse, next_idx, "V", self._v_tail_base())
                 prob += pulp.lpSum(next_v_vars) <= cap, f"max_v_next_{nid}"
 
     def _c_max_night_per_month(self, prob, x):
@@ -828,7 +828,7 @@ class _HighsConstraintsMixin:
                 # 한 달 내내 낮(또는 저녁)만 받았다 (실제 12월: 낮 15·저녁 3). 깎이는 값이라 아래쪽만 묶는다
                 if sc >= 0:
                     continue
-                tol = max(0, int(p.get("tolerance", 4)))
+                tol = self._balance_tolerance(p)
                 day, eve = self._resolve_group("day"), self._resolve_group("evening")
                 for nurse in self._shift_balance_pool():
                     nid = nurse["id"]
