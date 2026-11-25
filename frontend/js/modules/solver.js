@@ -21,6 +21,7 @@ window.SolverModule = function() {
       const draft=!patch&&(this.genPrefGet()||{}).quick!==false;
       if(this._recoverPoll){clearInterval(this._recoverPoll);this._recoverPoll=null}
       this.generating=true;this.continuing=!!_cont;this.stopRequested=false;
+      if(!_readjust)this.readjustUndo=null;   // 새로 만들거나 이어 찾으면 '다시 맞추기 전' 표는 더는 앞 표가 아니다
       if(!_cont){this.genFailed=false;this.mipGapPercent=null;this.scheduleStopped=false;this.rdSaved=false;this.diagResult=null;this.fixResult=null;this.statusMessage=''}
       this.estimatedSeconds=0;this.generateStartTime=Date.now();this.generateElapsed=0;
       let next=null,story=false,quiet=false;   // quiet: 화면에 넣지 않은 새 표가 나온 채로 끝났다 — 결과 요약 창을 띄우지 않는다(알림의 '보기'를 가린다)
@@ -84,7 +85,7 @@ window.SolverModule = function() {
         if(back!=null)this._verKeepScreen();
         if(result.success&&!_cont&&!_readjust&&!this.genFirst)this.genFirst=JSON.parse(JSON.stringify({schedule:result.schedule||{},extended_schedule:result.extended_schedule||{},relaxed_cells:result.relaxed_cells||{},mip_gap_percent:result.mip_gap_percent??null,sec:this.generateElapsed||0}));
         this.pinnedConfirmed=!!(result.success&&result.pinned_confirmed);   // 엔진이 풀지 못해 받은 표를 그대로 확정했다 — 다시 맞추기는 이것을 '맞췄다'로 치지 않는다
-        if(result.success){const oldRx=this.relaxedCells;this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=_readjust?this._wishRelaxed(oldRx,result.relaxed_cells):(result.relaxed_cells||{});this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.managerCheck||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':((this.managerCheck||[]).length?'warn':(this.vReport&&this.vReport.total?'v':'summary'));this.rdDoneAt=new Date();this.activeTab='schedule';this._autoSaveSchedule();   // 생성 성공 시 자동 저장 (같은 달 자동저장본 하나만)
+        if(result.success){const oldRx=this.relaxedCells;this.schedule=result.schedule;this.extendedSchedule=result.extended_schedule;this.nurseScores=result.nurse_scores||{};this.nurseScoreDetails=result.nurse_score_details||{};this.mipGapPercent=result.mip_gap_percent!==undefined?result.mip_gap_percent:null;this.scheduleStopped=result.stopped===true;this.relaxedCells=_readjust?this._wishRelaxed(oldRx,result.relaxed_cells):(result.relaxed_cells||{});this.showReports=!!(Object.keys(this.relaxedCells).length||(this.offTeukgeun||[]).length||(this.managerCheck||[]).length||(this.vReport&&this.vReport.total));this.reportTab=Object.keys(this.relaxedCells).length?'relaxed':((this.managerCheck||[]).length?'warn':(this.vReport&&this.vReport.total?'v':'summary'));this.rdDoneAt=new Date();this.activeTab='schedule';this._autoSaveSchedule(null,_readjust?' · 다시 맞춘 표':'');   // 생성 성공 시 자동 저장 (같은 달 자동저장본 하나만). 다시 맞춘 표는 따로 — 만든 표의 자동저장본을 덮지 않는다
           if(result.stopped)this.statusMessage+='\n⏹ 중지 요청으로 탐색 종료 — 현재까지 찾은 최선의 해를 표시합니다.';
           // 완화된 셀 상세 메시지
           if(Object.keys(this.relaxedCells).length>0){

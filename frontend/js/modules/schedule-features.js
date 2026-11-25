@@ -223,6 +223,7 @@ window.ScheduleFeaturesModule = function() {
     // 고친 칸은 잠그고 나머지 전체를 사전입력(유지 보너스)으로 되먹여 재생성 —
     // 하드 제약을 다시 맞추는 데 필요한 최소한의 칸만 따라 움직인다.
     readjustPins:{}, readjustChanged:{}, readjustSummary:'',
+    readjustUndo:null,   // 다시 맞추기를 누르기 직전의 화면 — 되돌리기 (결정 1-119). 다시 맞추면 표가 통째로 바뀌어 Ctrl+Z 로 돌아갈 수 없었다
     getEditedCells(){
       if(!this._originalSchedule)return {};
       const out={};
@@ -281,6 +282,9 @@ window.ScheduleFeaturesModule = function() {
         }
       }
       const before=JSON.parse(JSON.stringify(this.schedule));
+      const copy=o=>JSON.parse(JSON.stringify(o||{}));
+      const keep={year:this.year,month:this.month,schedule:before,extended:copy(this.extendedSchedule),original:copy(this._originalSchedule),relaxed:copy(this.relaxedCells),
+        scores:copy(this.nurseScores),details:copy(this.nurseScoreDetails),message:this.statusMessage,ok:this.statusOk,gap:this.mipGapPercent,stopped:this.scheduleStopped};
       const here=await this.generate({
         prev_schedule:prevPayload,
         locked_cells:locked,
@@ -315,11 +319,24 @@ window.ScheduleFeaturesModule = function() {
         }
       }
       this.readjustPins=pins; this.readjustChanged=changed;
+      this.readjustUndo=keep;
       this.readjustSummary=`📌 고정 ${nPin}칸 · 따라 고침 ${nChg}칸`;
       this.statusMessage=`✅ 재조정 완료 — 고친 ${nPin}칸은 그대로, 솔버가 ${nChg}칸을 따라 고쳤습니다.`+
         (nChg?'\n\n📋 따라 고친 칸:\n'+detail.slice(0,20).join('\n')+(detail.length>20?`\n  … 외 ${detail.length-20}건`:''):'')+
         '\n\n'+this.statusMessage;
       this.toast(`재조정 완료 — 고정 ${nPin}칸, 따라 고침 ${nChg}칸`,'success',4000);
+    },
+
+    // 다시 맞추기 전으로 — 누르기 직전의 표(손으로 고친 그대로)와 고친 칸 기준을 되살린다. 저장본은 건드리지 않는다
+    readjustRevert(){
+      const k=this.readjustUndo; if(!k||this.generating)return;
+      if(+k.year!==+this.year||+k.month!==+this.month){this.readjustUndo=null;this.toast('다른 달의 표라 되돌릴 수 없습니다','info');return}
+      this.schedule=k.schedule;this.extendedSchedule=k.extended;this.relaxedCells=k.relaxed;this.nurseScores=k.scores;this.nurseScoreDetails=k.details;
+      this.statusMessage=k.message;this.statusOk=k.ok;this.mipGapPercent=k.gap;this.scheduleStopped=k.stopped;this.genFailed=false;
+      this._originalSchedule=k.original;this._schedUndo=[];this._schedRedo=[];   // 고친 칸 표시가 그대로 돌아온다 (기준 표를 새로 잡지 않는다)
+      this.readjustPins={};this.readjustChanged={};this.readjustSummary='';this.readjustUndo=null;this.contBase=null;this.rdSaved=false;
+      this.checkScheduleViolations();
+      this.toast('다시 맞추기 전의 표로 되돌렸습니다','success',4000);
     },
 
     // ═══ 5. 간호사별 월간 요약 ═══════════════════════════
