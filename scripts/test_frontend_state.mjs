@@ -315,6 +315,11 @@ const fresh = () => { store.clear(); ticks.length = 0; unload.length = 0; };
   assert.deepEqual(a.relaxedCells, { a1: { '2026-11-10': { original: 'V', assigned: 'D' } } });
   assert.match(a.statusMessage, /원티드 미반영 1건/);
   assert.deepEqual(s.db.A.saved.at(-1).relaxed_cells, a.relaxedCells);
+  // 엔진이 맞추는 표를 찾지 못해 보낸 표를 그대로 확정해 돌려주면(pinned_confirmed) '재조정 완료'가 아니다 — 못 맞췄다고 알리고 요약을 남기지 않는다 (결정 1-118)
+  a.trackEdits(); a.schedule.a1['2026-11-02'] = 'D';
+  s.gen = () => ({ success: true, pinned_confirmed: true, message: '그대로 확정', schedule: JSON.parse(JSON.stringify(a.schedule)), extended_schedule: {}, relaxed_cells: {} });
+  await a.readjustSchedule(); await sleep(5);
+  assert.equal(a.readjustSummary, ''); assert.equal(a.statusOk, false); assert.match(a.statusMessage, /다시 맞추지 못했습니다/);
 }
 // 왜 안 되는지 창 — 따로 풀어야 하는 막힌 곳마다 한 묶음, 줄마다 갈 칸. 묶음이 없으면 충돌 목록 하나로
 {
