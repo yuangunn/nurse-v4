@@ -529,18 +529,16 @@ class _HighsConstraintsMixin:
         unlimited_v=True일 때는 당월 V 상한 제거 (목적함수 페널티로 대체)"""
         if "V" not in self.ALL_SHIFTS:
             return   # 근무 정의에서 V 를 지웠으면 걸 칸이 없다 — x[..]["V"] KeyError 500 (CP-SAT 과 같게, 리뷰 2026-10-21)
-        max_v = self.rules.maxVPerMonth
+        month_idx = [d for d, dt in enumerate(self.all_dates)
+                     if dt.month == self.month and dt.year == self.year]
         for nurse in self.nurses:
             nid = nurse["id"]
-            # 당월 V 제한 (unlimited_v면 상한 제거)
-            if max_v > 0 and not self.unlimited_v:
-                month_idx = [d for d, dt in enumerate(self.all_dates)
-                             if dt.month == self.month and dt.year == self.year]
-                v_vars = [x[nid][d]["V"] for d in month_idx]
-                if v_vars:
-                    # 사실-클램프: 확정 V만큼 상한 상향 (자유 셀 추가는 여전히 한도 내) — 독립한 신규의 트레이닝 날 V 도 센다
-                    cap = self._cap_with_training(nurse, month_idx, "V", max_v)
-                    prob += pulp.lpSum(v_vars) <= cap, f"max_v_{nid}"
+            # 당월 V 제한 (unlimited_v면 상한 제거 · 0 은 자동으로 넣지 않는다 — _v_month_cap, 결정 1-115)
+            # 사실-클램프: 확정 V만큼 상한 상향 (자유 셀 추가는 여전히 한도 내) — 독립한 신규의 트레이닝 날 V 도 센다
+            cap = self._v_month_cap(nurse, month_idx)
+            v_vars = [x[nid][d]["V"] for d in month_idx]
+            if cap is not None and v_vars:
+                prob += pulp.lpSum(v_vars) <= cap, f"max_v_{nid}"
             # 이전달 overflow: V 금지 — 단 사전입력으로 확정된 전월 기록(V)은
             # 존중한다. 무조건 금지하면 1일1근무(==1)와 모순돼 전체 infeasible.
             first_of_month = date(self.year, self.month, 1)

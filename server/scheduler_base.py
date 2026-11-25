@@ -1637,9 +1637,9 @@ class _SchedulerBase:
                       and dt.year == self.year]
 
         # 월 단위 한도(V·생)는 그 달 사전입력으로 이미 쓴 만큼 차감.
-        # V 월 한도는 엔진과 같다(_c_max_v_per_month): 무제한이거나 규칙이 0 이하이면 상한 없음 (v_cap None)
+        # V 월 한도는 엔진과 같다(_v_month_cap): 무제한이면 상한 없음 (v_cap None). 0 은 '자동으로 넣지 않는다' (결정 1-115)
         rule_v = int(getattr(self.rules, "maxVPerMonth", 0) or 0)
-        v_cap = None if (self.unlimited_v or rule_v <= 0) else rule_v
+        v_cap = None if (self.unlimited_v or rule_v < 0) else rule_v
         def eff_pre(nurse, d):
             """엔진이 보는 사전입력 — 일반 간호사의 공휴일 OF·모성보호로 지워지는 칸은 빈칸."""
             dt = self.all_dates[d]
@@ -2276,6 +2276,22 @@ class _SchedulerBase:
             if trainee is None or self._nurse_active_on(trainee, dt):
                 n += 1
         return n
+
+    def _v_month_cap(self, nurse, month_idx):
+        """그 달 연차(V) 상한 — None 이면 상한 없음('연차 무제한'). 양 엔진 · 충돌 분석이 같은 값을 쓴다.
+        **0 은 '자동으로 넣지 않는다'** (결정 1-115) — 예전엔 0 을 '상한 없음'으로 읽어, 0 으로 낮추면 오히려 연차가 마음껏 들어갔다.
+        사전입력으로 정해진 V 는 한도 위에 받고(사실-클램프), 나이트킵 31일 달의 남자 연차 하나(1-102)도 받는다 — 그 규칙이 V 를 요구한다."""
+        max_v = int(getattr(self.rules, "maxVPerMonth", 1) or 0)
+        if self.unlimited_v or max_v < 0:
+            return None
+        cap = self._cap_with_training(nurse, month_idx, "V", max_v)
+        if nurse.get("is_night_shift") and cap < 1:
+            import calendar
+            month_days = calendar.monthrange(self.year, self.month)[1]
+            active_days, _target = self._night_dedicated_quota(nurse, month_idx, month_days)
+            if active_days > 0 and self._keeper_month_leave(nurse, active_days, month_days) == "V":
+                cap = 1
+        return cap
 
     def _cap_with_training(self, nurse, day_idxs, code: str, base: int, train_idxs=None) -> int:
         """한도 base 인 x 합(day_idxs)의 상한 — 트레이닝 날 자기 사전입력분(train_idxs, 없으면 day_idxs)을 한도에서 빼고,

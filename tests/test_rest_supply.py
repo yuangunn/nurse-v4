@@ -211,7 +211,7 @@ def test_D1_중_확정은_쉬는_칸도_DEN_칸도_아니다():
 
 def test_V_월_한도가_2회_이상이면_한_주에_그만큼_쉴_수_있다():
     """공급은 상한 — 월 2회면 한 주에 V 둘도 된다. 1개로만 세면 엔진이 만드는 표에 거짓 '쉴 코드 부족'이 뜬다
-    (2026-10-16 검토). 규칙이 0 이면 엔진은 V 월 한도를 걸지 않는다 — 부족으로 보지 않는다."""
+    (2026-10-16 검토). 규칙이 0 이면 V 를 자동으로 넣지 않는다(결정 1-115) — 쉴 코드가 그만큼 준다. 한도를 없애는 것은 '연차 무제한'이다."""
     req = _req()
     one = LimitedScheduler(req, max_days=7).rest_supply_shortfall()
     assert one and (one[0]["demand"], one[0]["supply"]) == (21, 16), one
@@ -219,4 +219,7 @@ def test_V_월_한도가_2회_이상이면_한_주에_그만큼_쉴_수_있다()
     req.rules = Rules(**{**req.rules.model_dump(), "maxVPerMonth": 2})
     assert LimitedScheduler(req, max_days=7).rest_supply_shortfall() == []
     req.rules = Rules(**{**req.rules.model_dump(), "maxVPerMonth": 0})
+    zero = LimitedScheduler(req, max_days=7).rest_supply_shortfall()
+    assert zero and (zero[0]["demand"], zero[0]["supply"]) == (21, 10), zero        # OF 6 + 생 4 — V 는 0
+    req.unlimited_v = True
     assert LimitedScheduler(req, max_days=7).rest_supply_shortfall() == []

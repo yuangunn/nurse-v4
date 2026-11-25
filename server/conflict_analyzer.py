@@ -531,7 +531,7 @@ class _ConflictAnalyzer(CpSatScheduler):
 
     def _g_max_v(self, model, x, gate):
         max_v = self.rules.maxVPerMonth
-        month_cap = max_v > 0 and not self.unlimited_v
+        month_cap = max_v >= 0 and not self.unlimited_v      # 0 = 자동으로 넣지 않는다 (엔진 _v_month_cap, 결정 1-115)
         if "V" not in self.ALL_SHIFTS:
             return
         first = date(self.year, self.month, 1)
@@ -553,7 +553,7 @@ class _ConflictAnalyzer(CpSatScheduler):
                     model.Add(v == 0)
             v_vars = [x[nid][d]["V"] for d in m_idx] if month_cap else []
             if v_vars:
-                cap = self._cap_with_training(nurse, m_idx, "V", max_v)   # 엔진과 같은 값
+                cap = self._v_month_cap(nurse, m_idx)                     # 엔진과 같은 값
                 lit = gate(f"{self._fmt_nurse_label(nurse)} V(연차) 월 {max_v}회 이하", nid=nid,
                            kind="rest_cap", code="V", used=self._pinned_dates(nid, m_idx, "V"))
                 model.Add(sum(v_vars) <= cap).OnlyEnforceIf(lit)

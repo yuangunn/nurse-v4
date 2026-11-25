@@ -822,17 +822,15 @@ class CpSatScheduler(_SchedulerBase):
     def _cs_max_v_per_month(self, model, x):
         if "V" not in self.ALL_SHIFTS:
             return   # 근무 설정에서 V 를 지웠다 — V 상한도 없다
-        max_v = self.rules.maxVPerMonth
         first_of_month = date(self.year, self.month, 1)
+        month_idx = [d for d, dt in enumerate(self.all_dates)
+                     if dt.month == self.month and dt.year == self.year]
         for nurse in self.nurses:
             nid = nurse["id"]
-            if max_v > 0 and not self.unlimited_v:
-                month_idx = [d for d, dt in enumerate(self.all_dates)
-                             if dt.month == self.month and dt.year == self.year]
-                v_vars = [x[nid][d]["V"] for d in month_idx]
-                if v_vars:
-                    cap = self._cap_with_training(nurse, month_idx, "V", max_v)   # 트레이닝 날 V 도 센다 (HiGHS 패리티)
-                    model.Add(sum(v_vars) <= cap)
+            cap = self._v_month_cap(nurse, month_idx)   # None = 상한 없음 · 0 = 자동으로 넣지 않는다 (HiGHS 패리티, 결정 1-115)
+            v_vars = [x[nid][d]["V"] for d in month_idx]
+            if cap is not None and v_vars:
+                model.Add(sum(v_vars) <= cap)
             # 이전달 overflow: V 금지 — 사전입력으로 확정된 전월 기록은 존중
             # (무조건 금지하면 1일1근무와 모순돼 전체 infeasible)
             for d, dt in enumerate(self.all_dates):
