@@ -216,3 +216,30 @@ const days0 = (a) => a.scheduleDays.findIndex((d) => a.dayKey(d) === dk(1));   /
   assert.deepEqual(calls, ['GET /api/schedules', 'POST /api/schedules', 'DELETE /api/schedules/7']);
 }
 console.log('test_grid_select: OK');
+
+// 고른 칸 잠그기 · 풀기 (결정 1-122) — 사전입력이 든 칸만 잠그고 빈칸은 건너뛴다. 모두 잠겨 있으면 푼다. 되돌리기 한 번. 키보드 L
+{
+  const a = make(), c0 = days0(a);
+  a.prevSchedule = { a: { [dk(1)]: 'D', [dk(2)]: 'OF' }, b: { [dk(2)]: 'V' } }; a.lockedCells = {};
+  a._setSel('preinput', 0, c0, 1, c0 + 1);                            // 간호01·02 의 3/1~3/2 네 칸 — 사전입력은 셋
+  const cells = a._rectCells(a._selRect());
+  assert.equal(a.selLockState(cells), 'some');
+  a.lockSelected(cells);
+  assert.deepEqual(a.lockedCells, { a: { [dk(1)]: true, [dk(2)]: true }, b: { [dk(2)]: true } });
+  assert.match(a.toasts.at(-1), /3칸을 잠갔습니다 — 빈칸 1칸은 건너뜀/); assert.equal(a.selLockState(cells), 'all');
+  a.undo(); assert.deepEqual(a.lockedCells, {}); a.redo();            // 한 번에 되돌아간다
+  a.gridKey(key('l'));                                                // 모두 잠겨 있으면 L 은 푼다
+  assert.deepEqual(a.lockedCells, {}); assert.match(a.toasts.at(-1), /3칸의 잠금을 풀었습니다/);
+  delete a.lockedCells.zzz; a.lockedCells = { a: { [dk(1)]: true } };  // 일부만 잠겨 있으면 나머지를 잠근다
+  a.gridKey(key('ㅣ')); assert.deepEqual(a.lockedCells, { a: { [dk(1)]: true, [dk(2)]: true }, b: { [dk(2)]: true } });
+  a._setSel('preinput', 2, c0, 2, c0 + 1);                            // 사전입력이 없는 줄 — 잠글 칸이 없다
+  const empty = a._rectCells(a._selRect()); assert.equal(a.selLockState(empty), 'none');
+  a.lockSelected(empty); assert.match(a.toasts.at(-1), /잠글 칸이 없습니다/);
+  // 여러 칸 창이 열려 있을 때의 L — 고른 칸을 잠그고(풀고) 창을 닫는다
+  a.lockedCells = {}; a._setSel('preinput', 0, c0, 1, c0 + 1); a._openMultiEdit(a._selRect());
+  assert.equal(a.shiftEdit.mode, 'prev_multi'); a.rdPopupKey(key('L'));
+  assert.deepEqual(a.lockedCells, { a: { [dk(1)]: true, [dk(2)]: true }, b: { [dk(2)]: true } }); assert.equal(a.shiftEdit.open, false);
+  a._setSel('schedule', 0, c0, 0, c0 + 1); const before = JSON.stringify(a.lockedCells);
+  a.gridKey(key('l')); assert.equal(JSON.stringify(a.lockedCells), before, '근무표 표에서는 L 이 잠그지 않는다');
+}
+

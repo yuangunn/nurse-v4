@@ -135,7 +135,12 @@ window.RedesignModule = function() {
       if(e.key==='Delete'||e.key==='Backspace') return apply('__CLEAR__');
       const key=(e.key||'').toUpperCase();
       const code={D:'D',E:'E',N:'N',V:'V',O:'OF',W:'주'}[key]||{'ㅈ':'주','ㅂ':'병','ㅃ':'법','ㅅ':'생','ㅌ':'특','ㄱ':'공','ㄲ':'경가','ㅉ':'조가','ㅆ':'산전'}[e.key]||(this.shifts.find(s=>s.code.toUpperCase()===key)||{}).code;
-      if(code) apply(code);
+      if(code) return apply(code);
+      // L(ㅣ) = 잠금 — 사전입력 창에서, 그 글자가 근무 코드가 아닐 때. 여러 칸은 고른 칸 모두(결정 1-122), 한 칸은 그 칸
+      if(key==='L'||e.key==='ㅣ'){
+        if(se.mode==='prev_multi'){ e.preventDefault(); this.lockSelected(this._dragCells); se.open=false; }
+        else if(se.mode==='prev'&&se.nurse){ e.preventDefault(); this.toggleLock(se.nurse.id, se.day); se.open=false; }
+      }
     },
 
     // ── 공통 ──

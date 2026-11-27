@@ -75,7 +75,7 @@ window.DragSelectModule = function() {
       if (this._dragRows) {                   // 이름 칸으로 고른 줄 — 팝업 대신 할 수 있는 것을 한 번 알린다
         if (!this._rowSelHinted) {
           this._rowSelHinted = true;
-          this.toast(`${q.rB - q.rA + 1}명 줄을 골랐어요 — 근무 키(D·E·N…)로 채우고, Ctrl+V 로 붙여 넣고, Ctrl+C 로 엑셀에 복사합니다`, 'info', 5000);
+          this.toast(`${q.rB - q.rA + 1}명 줄을 골랐어요 — 근무 키(D·E·N…)로 채우고, L 로 잠그고, Ctrl+V 로 붙여 넣고, Ctrl+C 로 엑셀에 복사합니다`, 'info', 5000);
         }
         return;
       }
@@ -92,6 +92,22 @@ window.DragSelectModule = function() {
       const end = cells[cells.length - 1];   // 팝업은 범위 오른쪽 끝 옆에 — 첫 칸 옆이면 고른 칸을 가렸다
       this.shiftEdit = { open: true, nurse: this._dragCells[0], day: cells[0].day, dateLabel: `${cells.length}칸 선택`,
                          mode: q.tab === 'schedule' ? 'sched_multi' : 'prev_multi', anchorEnd: { nid: end.nid, dk: end.dk } };
+    },
+    // ── 고른 칸 잠그기 · 풀기 (결정 1-122) — 사전입력이 든 칸만(빈칸은 잠글 것이 없다). 모두 잠겨 있으면 풀고, 하나라도 안 잠겨 있으면 모두 잠근다.
+    //    한 칸씩 팝업을 열어 잠그던 것을 한 번에 — 되돌리기도 한 번
+    _lockTargets(cells) { return (cells || []).filter(c => { const v = (this.prevSchedule[c.nid] || {})[c.dk]; return v && v !== '__CLEAR__'; }); },
+    selLockState(cells) { const t = this._lockTargets(cells); return !t.length ? 'none' : (t.every(c => this.lockedCells[c.nid]?.[c.dk]) ? 'all' : 'some'); },
+    lockSelected(cells) {
+      const t = this._lockTargets(cells), skipped = (cells || []).length - t.length;
+      if (!t.length) { this.toast('고른 칸에 사전입력이 없어 잠글 칸이 없습니다', 'info'); return; }
+      const unlock = t.every(c => this.lockedCells[c.nid]?.[c.dk]);
+      this._pushUndo();
+      for (const c of t) {
+        if (!unlock) { (this.lockedCells[c.nid] = this.lockedCells[c.nid] || {})[c.dk] = true; continue; }
+        delete this.lockedCells[c.nid][c.dk];
+        if (!Object.keys(this.lockedCells[c.nid]).length) delete this.lockedCells[c.nid];
+      }
+      this.toast(unlock ? `${t.length}칸의 잠금을 풀었습니다` : `${t.length}칸을 잠갔습니다` + (skipped ? ` — 빈칸 ${skipped}칸은 건너뜀` : ''), 'success', 3500);
     },
     applyMultiShiftEdit(shift) {
       const tab = this.shiftEdit.mode === 'sched_multi' ? 'schedule' : 'preinput';
@@ -194,6 +210,11 @@ window.DragSelectModule = function() {
         e.preventDefault(); return true;
       }
       const code = this._keyCode(e);
+      // L(ㅣ) = 고른 칸 잠그기 · 풀기 — 사전입력 표에서, 그 글자가 근무 코드가 아닐 때
+      if (!code && !e.altKey && tab === 'preinput' && (k === 'l' || k === 'L' || k === 'ㅣ')) {
+        this.lockSelected(this._rectCells(this._selRect()));
+        e.preventDefault(); return true;
+      }
       if (code && !e.altKey) {
         this._gridWrite(tab, this._rectCells(this._selRect()).map(x => ({ nid: x.nid, dk: x.dk, code })));
         e.preventDefault(); return true;
