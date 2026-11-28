@@ -135,7 +135,7 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         return _WarmHiGHS(start=start, msg=False, **kw)
 
     def _priority_pass(self, prob, x, start=None):
-        """원티드 다음으로 먼저 맞추는 것(생휴 · 한 사람의 1오프 한도)을 **모양보다 먼저** 푼다 (결정 1-108).
+        """원티드 다음으로 먼저 맞추는 것(생휴 · 한 사람의 1오프 한도 · 자동 연차 · 이 달 야간 고르기)을 **모양보다 먼저** 푼다 (결정 1-108).
         감점 크기만으로는 순서를 못 지킨다 — 엔진은 '최고와 2% 안'이면 멈추고, 보상이 총점을 키우면 생휴 한 명 몫(-1200)이 그 안에 든다
         (실제 12월 · 마법사 선택: 생휴 없는 사람 1명, 한도 넘긴 사람 4명). 그래서 이 둘만 목적식으로 짧게 풀어 닿은 수준을 못 박고,
         그 안에서 모양을 푼다. 돌려주는 것 = 이어 풀 때의 시작해(이 풀이가 표를 못 냈으면 받은 start 그대로).
@@ -145,11 +145,24 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
         # 둘을 한 목적식으로 풀었더니 2분 안에 '생휴 없음 1 · 한도 넘김 6'에서 멈췄다 — 시간을 주면 '0 · 5'까지 간다.
         # 실제 12월(혼자 돌릴 때): 사전입력 지키기 35초 → 생휴 11명 없음에서 0명까지 107초 → 1오프 한도 넘김 5개 증명까지 692초.
         # 생휴에 1분만 줬을 때는 1명이 남았다 — 시간의 1/5 까지(5분 상한), 1오프 한도는 1/6 까지 닿는 데까지만
-        for name, slack, limit in (("priority_saeng", getattr(self, "_saeng_miss", []), min(300, max(30, int(self.time_limit) // 5))),
-                                   ("priority_oneoff", getattr(self, "_oneoff_over", []), min(300, max(30, int(self.time_limit) // 6)))):
-            if not slack or (start and self._halted()):
+        # 그다음 자동 연차 수, 이 달 야간의 고르기 (결정 1-124 · 1-125) — 감점만으로는 야간이 사람마다 3~6회로 벌어졌다.
+        # 한 단계에 식이 둘이면 앞의 것을 먼저 줄이고(앞 식 1 이 뒤 식 전체보다 무겁다) 둘 다 못 박는다.
+        # 이 두 단계는 HiGHS 로는 오래 걸린다(실제 12월: 연차 1~2분에 증명, 야간은 10분을 다 써서 차이 1) — 20분 넘게 찾는 풀이에만 넣는다.
+        # 짧은 풀이에 넣으면 그 시간 안에 한 걸음도 못 가 시간만 쓴다. CP-SAT 은 같은 단계를 30초 안에 푼다(scheduler_cpsat._priority_pass)
+        tl = int(self.time_limit)
+        short = getattr(self, "_priority_short", None) or (min(600, tl // 6) if tl > 1200 else 0)
+        for name, exprs, limit in (("priority_saeng", [getattr(self, "_saeng_miss", [])], min(300, max(30, tl // 5))),
+                                   ("priority_oneoff", [getattr(self, "_oneoff_over", [])], min(300, max(30, tl // 6))),
+                                   ("priority_v", self._auto_v_terms(x) if short else [], short),
+                                   ("priority_night", self._night_even_terms(prob, x) if short else [], short)):
+            if not limit or not exprs or not exprs[-1] or (start and self._halted()):
                 continue
-            prob.setObjective(-pulp.lpSum(slack))
+            exprs = [e for e in exprs if e]
+            goal, big = 0, 1
+            for e in reversed(exprs):
+                goal += big * pulp.lpSum(e)
+                big *= int(sum((v.upBound if v.upBound is not None else self.T) for v in e)) + 1
+            prob.setObjective(-goal)
             solver = self._warm_highs(x, start=start, stage="priority", timeLimit=int(limit), mip_rel_gap=0.0)
             try:
                 prob.solve(solver)
@@ -157,9 +170,47 @@ class NurseScheduler(_HighsConstraintsMixin, _HighsDiagnosisMixin, _SchedulerBas
                 pass    # 중지(kInterrupt)는 pulp 가 못 읽는다 — 그때까지 찾은 해는 변수값에 남는다
             if pulp.constants.LpStatus.get(prob.status, "Unknown") == "Infeasible" or self._highs_no_solution(prob):
                 return start
-            prob += pulp.lpSum(slack) <= math.ceil(sum(v.varValue or 0 for v in slack) - 1e-6), name
+            for i, e in enumerate(exprs):
+                prob += pulp.lpSum(e) <= math.ceil(sum(v.varValue or 0 for v in e) - 1e-6), f"{name}_{i}" if i else name
             start = [(v, v.varValue) for v in prob.variables() if v.varValue is not None]
         return start
+
+    def _auto_v_terms(self, x) -> list:
+        """[마지막 수단·오프특근 슬랙, 엔진이 넣는 연차 칸] — 연차를 줄이려고 6일 연속 근무나 오프특근을 만들지 않게 그것부터 줄인다.
+        사전입력 V 는 세지 않는다(넣은 사람의 것). 연차를 넉넉히 주기로 한 요청(unlimited_v)은 줄이지 않는다."""
+        if getattr(self, "unlimited_v", False):
+            return []
+        first = date(self.year, self.month, 1)
+        auto = [x[n["id"]][d]["V"] for n in self.nurses for d, dt in enumerate(self.all_dates)
+                if dt >= first and isinstance(x[n["id"]][d].get("V"), pulp.LpVariable)
+                and self.prev.get(n["id"], {}).get(dt.strftime("%Y-%m-%d")) != "V"]
+        guard = [sl for _pen, sl in self._last_resort_terms()] + list(getattr(self, "_off_slack", []))
+        return [guard, auto]
+
+    def _night_even_terms(self, prob, x) -> list:
+        """[야간을 기피하는 사람의 야간, 이 달 야간의 최대−최소, 평균에서 벗어난 합] — 야간 공정 배분 대상(_night_fairness_pool)끼리,
+        지난달 누적은 보지 않는다. 누적까지 본 차이(night_fairness 배점)는 이 안에서 모양과 함께 푼다. 야간은 수당이 걸려 이 달 횟수가 고른 것이 먼저다.
+        기피를 맨 앞에 두는 까닭 — 대상끼리의 차이만 줄이면 대상 밖 사람(야간 성향을 정한 사람)에게 야간을 몰아 차이 0 을 만든다."""
+        pool = self._night_fairness_pool()
+        month = [d for d, dt in enumerate(self.all_dates) if dt.year == self.year and dt.month == self.month]
+        if len(pool) < 2 or not month:
+            return []
+        k, cnt = len(pool), {n["id"]: pulp.lpSum(x[n["id"]][d][s] for d in month for s in self.NIGHT_SHIFTS) for n in pool}
+        hi = pulp.LpVariable("pri_night_hi", lowBound=0, upBound=len(month), cat="Integer")
+        lo = pulp.LpVariable("pri_night_lo", lowBound=0, upBound=len(month), cat="Integer")
+        rng = pulp.LpVariable("pri_night_rng", lowBound=0, upBound=len(month), cat="Integer")
+        prob += rng >= hi - lo, "pri_night_rng_def"
+        total, devs = pulp.lpSum(cnt.values()), []
+        for nid, c in cnt.items():
+            prob += hi >= c, f"pri_night_hi_{nid}"
+            prob += lo <= c, f"pri_night_lo_{nid}"
+            dev = pulp.LpVariable(f"pri_night_dev_{nid}", lowBound=0, upBound=k * len(month))
+            prob += dev >= k * c - total, f"pri_night_dev_a_{nid}"
+            prob += dev >= total - k * c, f"pri_night_dev_b_{nid}"
+            devs.append(dev)
+        avoid = [x[n["id"]][d][s] for n, key, shifts, _cap, sign in self._shift_pref_items() if key == "N" and sign < 0
+                 for d in month for s in shifts if isinstance(x[n["id"]][d].get(s), pulp.LpVariable)]
+        return [avoid, [rng], devs]
 
     def _score_fields(self, info: dict) -> dict:
         """풀이 정보에 배점만의 점수를 붙인다 — 합쳐 푼 풀이면 차이(%)를 배점 기준으로 바꾸고 눈금·배점 점수·배점 하한을 싣는다.
