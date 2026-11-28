@@ -330,6 +330,11 @@ const fresh = () => { store.clear(); ticks.length = 0; unload.length = 0; };
   s.gen = () => ({ success: true, pinned_confirmed: true, message: '그대로 확정', schedule: JSON.parse(JSON.stringify(a.schedule)), extended_schedule: {}, relaxed_cells: {} });
   await a.readjustSchedule(); await sleep(5);
   assert.equal(a.readjustSummary, ''); assert.equal(a.statusOk, false); assert.match(a.statusMessage, /다시 맞추지 못했습니다/);
+  // 차지 글자만 달라진 칸(N→NC)은 따라 고친 칸이 아니다 — 차지를 감춘 화면에서는 글자가 같다 (결정 1-123)
+  a.schedule = { a1: { '2026-11-02': 'E', '2026-11-03': 'N' }, a2: { '2026-11-02': 'N', '2026-11-03': 'D' } }; a.trackEdits(); a.schedule.a1['2026-11-02'] = 'N';
+  s.gen = () => ({ success: true, message: '생성', schedule: { a1: { '2026-11-02': 'N', '2026-11-03': 'NC' }, a2: { '2026-11-02': 'E', '2026-11-03': 'DC' } }, extended_schedule: {}, relaxed_cells: {} });
+  await a.readjustSchedule(); await sleep(5);
+  assert.deepEqual(a.readjustChanged, { a2: { '2026-11-02': true } }); assert.match(a.readjustSummary, /따라 고침 1칸/);
 }
 // 왜 안 되는지 창 — 따로 풀어야 하는 막힌 곳마다 한 묶음, 줄마다 갈 칸. 묶음이 없으면 충돌 목록 하나로
 {

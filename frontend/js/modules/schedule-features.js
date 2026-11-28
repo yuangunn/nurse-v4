@@ -319,7 +319,8 @@ window.ScheduleFeaturesModule = function() {
       for(const nid of nids){
         const cur=this.schedule[nid]||{}, prev=before[nid]||{};
         for(const dk of new Set([...Object.keys(cur),...Object.keys(prev)])){
-          if((cur[dk]||'')===(prev[dk]||'')||pins[nid]?.[dk])continue;
+          // 차지 글자만 달라진 칸(N→NC)은 근무가 바뀐 것이 아니다 — 차지를 감춘 화면에서는 글자가 같은데 '바뀜'으로 칠해졌다 (결정 1-123)
+          if(this.plainShift(cur[dk]||'')===this.plainShift(prev[dk]||'')||pins[nid]?.[dk])continue;
           (changed[nid]=changed[nid]||{})[dk]=true; nChg++;
           const nurse=this.nurses.find(n=>n.id===nid);
           detail.push(`  ${nurse?nurse.name:nid} ${dk.slice(5).replace('-','/')}: ${prev[dk]||'(빈칸)'} → ${cur[dk]||'(빈칸)'}`);
