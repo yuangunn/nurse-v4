@@ -104,6 +104,79 @@ class CpSatScheduler(_SchedulerBase):
         from . import solver_progress
         return prog.cancelled or solver_progress.is_cancelled() or solver_progress.was_cancel_all()
 
+    def _priority_pass(self, model, x) -> bool:
+        """원티드 다음으로 먼저 맞추는 것을 **모양보다 먼저** 푼다 — 생휴 → 한 사람의 1오프 한도 → 자동 연차 → 이 달 야간 고르기
+        (결정 1-108 · 1-124 · 1-125, HiGHS _priority_pass 와 같은 차례). 단계마다 그 식만 줄여 닿은 수준을 못 박고, 그 표를 다음 풀이의 힌트로 준다.
+        한 단계에 식이 둘이면 앞의 것이 먼저다(앞 식 1 이 뒤 식 전체보다 무겁다). 표를 낸 단계가 하나라도 있으면 True.
+        모델의 목적식과 힌트는 바뀐 채 돌아간다 — 부른 쪽이 목적식을 다시 정한다."""
+        from . import solver_progress
+        tl = float(self.time_limit)
+        short = min(120.0, max(15.0, tl / 8))
+        first, any_hint = date(self.year, self.month, 1), False
+        auto_v = [] if self.unlimited_v else [
+            x[n["id"]][d]["V"] for n in self.nurses for d, dt in enumerate(self.all_dates)
+            if dt >= first and not isinstance(x[n["id"]][d].get("V", 0), int)
+            and self.prev.get(n["id"], {}).get(dt.strftime("%Y-%m-%d")) != "V"]
+        guard = [sl for _pen, sl in self._last_resort_terms()] + list(getattr(self, "_off_slack", []))
+        for name, exprs, limit in (("saeng", [list(getattr(self, "_saeng_miss", []))], min(300.0, max(30.0, tl / 5))),
+                                   ("oneoff", [list(getattr(self, "_oneoff_over", []))], min(300.0, max(30.0, tl / 6))),
+                                   ("v", [guard, auto_v], short),
+                                   ("night", self._night_even_terms(model, x), short)):
+            if not exprs or not exprs[-1]:
+                continue
+            exprs = [e for e in exprs if e]
+            goal, big = 0, 1
+            for e in reversed(exprs):
+                goal += big * sum(e)
+                big *= sum(int(v.Proto().domain[-1]) for v in e) + 1
+            model.Minimize(goal)
+            s = cp_model.CpSolver()
+            s.parameters.max_time_in_seconds = limit
+            s.parameters.num_workers = max(1, min(8, os.cpu_count() or 4))
+            s.parameters.random_seed = 1
+            p = _CpSatProgress()
+            p.solver = s
+            solver_progress.register(p)                      # 중지·레이스 패자 정리가 닿게
+            try:
+                st = None if self._halted(p) else s.Solve(model)
+            finally:
+                solver_progress.unregister(p)
+            if st not in (cp_model.OPTIMAL, cp_model.FEASIBLE) or p.cancelled:
+                break
+            for i, e in enumerate(exprs):
+                model.Add(sum(e) <= sum(int(s.Value(v)) for v in e))
+            model.ClearHints()
+            for days in x.values():
+                for cell in days.values() if isinstance(days, dict) else days:
+                    for v in cell.values():
+                        if not isinstance(v, int):
+                            model.AddHint(v, s.Value(v))
+            any_hint = True
+        return any_hint
+
+    def _night_even_terms(self, model, x) -> list:
+        """[야간을 기피하는 사람의 야간, 이 달 야간의 최대−최소, 평균에서 벗어난 합] — 야간 공정 배분 대상끼리, 지난달 누적은 보지 않는다
+        (HiGHS 와 같은 식). 기피가 맨 앞 — 대상끼리의 차이만 줄이면 대상 밖 사람에게 야간을 몰아 차이 0 을 만든다."""
+        pool = self._night_fairness_pool()
+        month = [d for d, dt in enumerate(self.all_dates) if dt.year == self.year and dt.month == self.month]
+        if len(pool) < 2 or not month:
+            return []
+        k, m = len(pool), len(month)
+        cnt = {n["id"]: sum(x[n["id"]][d].get(s, 0) for d in month for s in self.NIGHT_SHIFTS) for n in pool}
+        hi, lo, rng = (model.NewIntVar(0, m, f"pri_night_{w}") for w in ("hi", "lo", "rng"))
+        model.Add(rng >= hi - lo)
+        total, devs = sum(cnt.values()), []
+        for nid, c in cnt.items():
+            model.Add(hi >= c)
+            model.Add(lo <= c)
+            dev = model.NewIntVar(0, k * m, f"pri_night_dev_{nid}")
+            model.Add(dev >= k * c - total)
+            model.Add(dev >= total - k * c)
+            devs.append(dev)
+        avoid = [x[n["id"]][d][s] for n, key, shifts, _cap, sign in self._shift_pref_items() if key == "N" and sign < 0
+                 for d in month for s in shifts if not isinstance(x[n["id"]][d].get(s, 0), int)]
+        return [avoid, [rng], devs]
+
     def _apply_hints(self, model, x) -> int:
         """이어 찾기 — 앞 실행이 낸 표의 칸을 CP-SAT 힌트로 (결정 1-50). 넣은 힌트 수."""
         pairs = self._mip_start_pairs(x, lambda v: isinstance(v, cp_model.IntVar)) if self.warm_start else []
@@ -141,10 +214,10 @@ class CpSatScheduler(_SchedulerBase):
 
         # ── Objective (Soft Constraints) — 4d ────────────────────────────────
         obj_terms = self._build_objective_cpsat(model, x)
-        if obj_terms:
-            model.Maximize(sum(obj_terms))
+        self._apply_hints(model, x)                     # 이어 찾기 — 앞 실행이 낸 표 (결정 1-50). 단계 풀이도 그 표에서 시작한다
+        self._priority_pass(model, x)                   # 생휴 · 1오프 한도 · 자동 연차 · 야간 고르기를 모양보다 먼저
+        model.Maximize(sum(obj_terms) if obj_terms else 0)
         fingerprint = _proto_fingerprint(model)
-        self._apply_hints(model, x)                     # 이어 찾기 — 앞 실행이 낸 표 (결정 1-50)
 
         # ── Solve (진행/중지/로그 콜백 — HiGHS 패리티) ──────────────────────
         from . import solver_progress
@@ -506,6 +579,7 @@ class CpSatScheduler(_SchedulerBase):
             if st1 == cp_model.OPTIMAL:
                 best_keep = int(round(s1.ObjectiveValue()))
                 model.Add(sum(keep_terms) >= best_keep)
+                self._priority_pass(model, x)                 # 생휴 · 1오프 한도 · 자동 연차 · 야간 고르기를 모양보다 먼저
                 model.Maximize(sum(obj_terms) if obj_terms else 0)
                 stage2_gap = float(self.mip_gap)
             else:
